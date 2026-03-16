@@ -22,8 +22,8 @@ public class TaskingRepository : ITaskingRepository
 
         switch (workerTask)
         {
-            case DataGenerationTemplateWorkerTask dataGenerationTemplateWorkerTask:
-                Repository.Database.DataGenerationTemplateWorkerTasks.Add(dataGenerationTemplateWorkerTask);
+            case ExampleDataTemplateWorkerTask dataGenerationTemplateWorkerTask:
+                Repository.Database.ExampleDataTemplateWorkerTasks.Add(dataGenerationTemplateWorkerTask);
                 await Repository.Database.SaveChangesAsync();
                 break;
             case SynchronisationWorkerTask synchronisationWorkerTask:
@@ -135,15 +135,15 @@ public class TaskingRepository : ITaskingRepository
         return await Repository.Database.WorkerTasks.Include(st => st.Activity).Where(q => workerTaskIds.Contains(q.Id) && q.Status == WorkerTaskStatus.CancellationRequested).ToListAsync();
     }
 
-    public async Task<DataGenerationTemplateWorkerTask?> GetFirstDataGenerationWorkerTaskAsync(int dataGenerationTemplateId)
+    public async Task<ExampleDataTemplateWorkerTask?> GetFirstExampleDataWorkerTaskAsync(int dataGenerationTemplateId)
     {
-        return await Repository.Database.DataGenerationTemplateWorkerTasks.OrderBy(q => q.Timestamp).FirstOrDefaultAsync(q => q.TemplateId == dataGenerationTemplateId);
+        return await Repository.Database.ExampleDataTemplateWorkerTasks.OrderBy(q => q.Timestamp).FirstOrDefaultAsync(q => q.TemplateId == dataGenerationTemplateId);
     }
 
-    public async Task<WorkerTaskStatus?> GetFirstDataGenerationTemplateWorkerTaskStatus(int templateId)
+    public async Task<WorkerTaskStatus?> GetFirstExampleDataTemplateWorkerTaskStatus(int templateId)
     {
         await using var db = new JimDbContext();
-        var result = await db.DataGenerationTemplateWorkerTasks.Where(q => q.TemplateId == templateId).Select(q => q.Status).Take(1).ToListAsync();
+        var result = await db.ExampleDataTemplateWorkerTasks.Where(q => q.TemplateId == templateId).Select(q => q.Status).Take(1).ToListAsync();
         if (result.Count == 1)
             return result[0];
 
@@ -154,17 +154,17 @@ public class TaskingRepository : ITaskingRepository
     {
         switch (workerTask)
         {
-            case DataGenerationTemplateWorkerTask dataGenerationTemplateWorkerTask:
+            case ExampleDataTemplateWorkerTask dataGenerationTemplateWorkerTask:
             {
-                var dbDataGenerationTemplateWorkerTask = await Repository.Database.DataGenerationTemplateWorkerTasks.Include(st => st.Activity).SingleOrDefaultAsync(q => q.Id == workerTask.Id);
-                if (dbDataGenerationTemplateWorkerTask == null)
+                var dbExampleDataTemplateWorkerTask = await Repository.Database.ExampleDataTemplateWorkerTasks.Include(st => st.Activity).SingleOrDefaultAsync(q => q.Id == workerTask.Id);
+                if (dbExampleDataTemplateWorkerTask == null)
                 {
-                    Log.Error("UpdateWorkerTaskAsync: Could not retrieve a DataGenerationTemplateWorkerTask object to update.");
+                    Log.Error("UpdateWorkerTaskAsync: Could not retrieve a ExampleDataTemplateWorkerTask object to update.");
                     return;
                 }
 
                 // map scalar value updates to the db version of the object
-                Repository.Database.Entry(dbDataGenerationTemplateWorkerTask).CurrentValues.SetValues(dataGenerationTemplateWorkerTask);
+                Repository.Database.Entry(dbExampleDataTemplateWorkerTask).CurrentValues.SetValues(dataGenerationTemplateWorkerTask);
                 break;
             }
             case SynchronisationWorkerTask synchronisationWorkerTask:
@@ -287,9 +287,9 @@ public class TaskingRepository : ITaskingRepository
         await using var db = new JimDbContext();
         switch (workerTask)
         {
-            case DataGenerationTemplateWorkerTask dataGenerationTemplateWorkerTask:
+            case ExampleDataTemplateWorkerTask dataGenerationTemplateWorkerTask:
             {
-                var templatePart = await db.DataGenerationTemplates.Select(q => new { q.Id, q.Name }).SingleOrDefaultAsync(q => q.Id == dataGenerationTemplateWorkerTask.TemplateId);
+                var templatePart = await db.ExampleDataTemplates.Select(q => new { q.Id, q.Name }).SingleOrDefaultAsync(q => q.Id == dataGenerationTemplateWorkerTask.TemplateId);
                 return templatePart != null ? templatePart.Name : "template not found!";
             }
             case SynchronisationWorkerTask synchronisationWorkerTask:
@@ -315,7 +315,7 @@ public class TaskingRepository : ITaskingRepository
     {
         return workerTask switch
         {
-            DataGenerationTemplateWorkerTask => nameof(DataGenerationTemplateWorkerTask).SplitOnCapitalLetters(),
+            ExampleDataTemplateWorkerTask => nameof(ExampleDataTemplateWorkerTask).SplitOnCapitalLetters(),
             SynchronisationWorkerTask => nameof(SynchronisationWorkerTask).SplitOnCapitalLetters(),
             ClearConnectedSystemObjectsWorkerTask => nameof(ClearConnectedSystemObjectsWorkerTask).SplitOnCapitalLetters(),
             DeleteConnectedSystemWorkerTask => nameof(DeleteConnectedSystemWorkerTask).SplitOnCapitalLetters(),

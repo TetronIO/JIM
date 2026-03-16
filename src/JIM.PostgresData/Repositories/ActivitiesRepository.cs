@@ -412,7 +412,7 @@ public class ActivityRepository : IActivityRepository
     private IQueryable<Activity> BuildWorkerTaskQuery()
     {
         // Worker task activity types - run profile executions and connected system operations
-        // Note: DataGenerationTemplate and HistoryRetentionCleanup are intentionally excluded
+        // Note: ExampleDataTemplate and HistoryRetentionCleanup are intentionally excluded
         var workerTaskTargetTypes = new[]
         {
             ActivityTargetType.ConnectedSystemRunProfile,

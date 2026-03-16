@@ -387,7 +387,7 @@ public class ActivityDetailDto
     /// <summary>
     /// The data generation template ID if applicable.
     /// </summary>
-    public int? DataGenerationTemplateId { get; set; }
+    public int? ExampleDataTemplateId { get; set; }
 
     /// <summary>
     /// Execution statistics for run profile activities.
@@ -425,7 +425,7 @@ public class ActivityDetailDto
             ConnectedSystemRunProfileId = activity.ConnectedSystemRunProfileId,
             SyncRuleId = activity.SyncRuleId,
             MetaverseObjectId = activity.MetaverseObjectId,
-            DataGenerationTemplateId = activity.DataGenerationTemplateId,
+            ExampleDataTemplateId = activity.ExampleDataTemplateId,
             ExecutionStats = stats != null ? ActivityRunProfileExecutionStatsDto.FromEntity(stats) : null
         };
     }

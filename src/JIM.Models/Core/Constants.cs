@@ -174,7 +174,7 @@ public static class Constants
         public static string GroupStatuses => "Group Statuses";
     }
 
-    public static class BuiltInDataGenerationTemplates
+    public static class BuiltInExampleDataTemplates
     {
         public static string UsersEn => "Users En";
         public static string GroupsEn => "Groups En";

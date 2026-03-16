@@ -204,7 +204,7 @@ public class Activity
     // context specific properties
     // -----------------------------------------------------------------------------------------------------------------
 
-    public int? DataGenerationTemplateId { get; set; }
+    public int? ExampleDataTemplateId { get; set; }
 
     public int? ConnectedSystemId { get; set; }
 

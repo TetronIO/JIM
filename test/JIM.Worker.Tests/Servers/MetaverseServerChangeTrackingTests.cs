@@ -86,13 +86,13 @@ public class MetaverseServerChangeTrackingTests
             ActivityInitiatorType.User,
             userId,
             "Test User",
-            MetaverseObjectChangeInitiatorType.DataGeneration);
+            MetaverseObjectChangeInitiatorType.ExampleData);
 
         // Assert
         Assert.That(mvo.Changes, Has.Count.EqualTo(1));
         var change = mvo.Changes[0];
         Assert.That(change.ChangeType, Is.EqualTo(ObjectChangeType.Created));
-        Assert.That(change.ChangeInitiatorType, Is.EqualTo(MetaverseObjectChangeInitiatorType.DataGeneration));
+        Assert.That(change.ChangeInitiatorType, Is.EqualTo(MetaverseObjectChangeInitiatorType.ExampleData));
         Assert.That(change.InitiatedByType, Is.EqualTo(ActivityInitiatorType.User));
         Assert.That(change.InitiatedById, Is.EqualTo(userId));
         Assert.That(change.InitiatedByName, Is.EqualTo("Test User"));
@@ -118,7 +118,7 @@ public class MetaverseServerChangeTrackingTests
         // Act
         await _jim.Metaverse.CreateMetaverseObjectAsync(
             mvo,
-            changeInitiatorType: MetaverseObjectChangeInitiatorType.DataGeneration);
+            changeInitiatorType: MetaverseObjectChangeInitiatorType.ExampleData);
 
         // Assert
         var change = mvo.Changes[0];
@@ -160,7 +160,7 @@ public class MetaverseServerChangeTrackingTests
         // Act
         await _jim.Metaverse.CreateMetaverseObjectAsync(
             mvo,
-            changeInitiatorType: MetaverseObjectChangeInitiatorType.DataGeneration);
+            changeInitiatorType: MetaverseObjectChangeInitiatorType.ExampleData);
 
         // Assert
         Assert.That(mvo.Changes, Has.Count.EqualTo(0));

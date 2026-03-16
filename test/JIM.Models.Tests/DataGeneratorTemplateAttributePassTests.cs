@@ -1,5 +1,5 @@
 using JIM.Models.Core;
-using JIM.Models.DataGeneration;
+using JIM.Models.ExampleData;
 using JIM.Models.Staging;
 using NUnit.Framework;
 using System;
@@ -16,7 +16,7 @@ public class DataGeneratorTemplateAttributePassTests
     [Test]
     public void TestIsValidMvAttributePass()
     {
-        var subject = new DataGenerationTemplateAttribute
+        var subject = new ExampleDataTemplateAttribute
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
@@ -29,7 +29,7 @@ public class DataGeneratorTemplateAttributePassTests
     [Test]
     public void TestIsValidCsAttributePass()
     {
-        var subject = new DataGenerationTemplateAttribute
+        var subject = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
@@ -41,7 +41,7 @@ public class DataGeneratorTemplateAttributePassTests
     [Test]
     public void TestIsValidPopulatedValuesPercentagePass()
     {
-        var subject1 = new DataGenerationTemplateAttribute
+        var subject1 = new ExampleDataTemplateAttribute
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 1,
@@ -49,7 +49,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject1.Validate);
 
-        var subject2 = new DataGenerationTemplateAttribute
+        var subject2 = new ExampleDataTemplateAttribute
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 50,
@@ -57,7 +57,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject2.Validate);
 
-        var subject3 = new DataGenerationTemplateAttribute
+        var subject3 = new ExampleDataTemplateAttribute
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
@@ -70,7 +70,7 @@ public class DataGeneratorTemplateAttributePassTests
     public void TestIsValidNumberTypeSequentialPass()
     {
         // numbers can be assigned to attributes of type number AND string
-        var subject1 = new DataGenerationTemplateAttribute
+        var subject1 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
@@ -78,7 +78,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject1.Validate);
 
-        var subject2 = new DataGenerationTemplateAttribute
+        var subject2 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
@@ -86,7 +86,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject2.Validate);
 
-        var subject3 = new DataGenerationTemplateAttribute
+        var subject3 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
@@ -94,7 +94,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject3.Validate);
 
-        var subject4 = new DataGenerationTemplateAttribute
+        var subject4 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
@@ -102,7 +102,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject4.Validate);
 
-        var subject5 = new DataGenerationTemplateAttribute
+        var subject5 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
@@ -111,7 +111,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject5.Validate);
 
-        var subject6 = new DataGenerationTemplateAttribute
+        var subject6 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
@@ -125,7 +125,7 @@ public class DataGeneratorTemplateAttributePassTests
     public void TestIsValidNumberTypeRandomPass()
     {
         // numbers can be assigned to attributes of type number AND string
-        var subject1 = new DataGenerationTemplateAttribute
+        var subject1 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
@@ -134,7 +134,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject1.Validate);
 
-        var subject2 = new DataGenerationTemplateAttribute
+        var subject2 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
@@ -143,7 +143,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject2.Validate);
 
-        var subject3 = new DataGenerationTemplateAttribute
+        var subject3 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Number },
             PopulatedValuesPercentage = 100,
@@ -158,7 +158,7 @@ public class DataGeneratorTemplateAttributePassTests
     public void TestIsValidNumberTypeOnStringPass()
     {
         // numbers can be assigned to attributes of type number AND string
-        var subject1 = new DataGenerationTemplateAttribute
+        var subject1 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
@@ -167,7 +167,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject1.Validate);
 
-        var subject2 = new DataGenerationTemplateAttribute
+        var subject2 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
@@ -176,7 +176,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject2.Validate);
 
-        var subject3 = new DataGenerationTemplateAttribute
+        var subject3 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
@@ -186,7 +186,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject3.Validate);
 
-        var subject4 = new DataGenerationTemplateAttribute
+        var subject4 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
@@ -195,7 +195,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject4.Validate);
 
-        var subject5 = new DataGenerationTemplateAttribute
+        var subject5 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
@@ -204,7 +204,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject5.Validate);
 
-        var subject6 = new DataGenerationTemplateAttribute
+        var subject6 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
@@ -218,7 +218,7 @@ public class DataGeneratorTemplateAttributePassTests
     [Test]
     public void TestIsValidBoolPass()
     {
-        var subject1 = new DataGenerationTemplateAttribute
+        var subject1 = new ExampleDataTemplateAttribute
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Boolean },
             PopulatedValuesPercentage = 100,
@@ -226,7 +226,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject1.Validate);
 
-        var subject2 = new DataGenerationTemplateAttribute
+        var subject2 = new ExampleDataTemplateAttribute
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Boolean },
             PopulatedValuesPercentage = 100,
@@ -234,7 +234,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject2.Validate);
 
-        var subject3 = new DataGenerationTemplateAttribute
+        var subject3 = new ExampleDataTemplateAttribute
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Boolean },
             PopulatedValuesPercentage = 100,
@@ -242,7 +242,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject3.Validate);
 
-        var subject4 = new DataGenerationTemplateAttribute
+        var subject4 = new ExampleDataTemplateAttribute
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Boolean },
             PopulatedValuesPercentage = 100,
@@ -250,7 +250,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject4.Validate);
 
-        var subject5 = new DataGenerationTemplateAttribute
+        var subject5 = new ExampleDataTemplateAttribute
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Boolean },
             PopulatedValuesPercentage = 100,
@@ -258,7 +258,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject5.Validate);
 
-        var subject6 = new DataGenerationTemplateAttribute
+        var subject6 = new ExampleDataTemplateAttribute
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Boolean },
             PopulatedValuesPercentage = 100,
@@ -271,14 +271,14 @@ public class DataGeneratorTemplateAttributePassTests
     [Test]
     public void TestIsValidDateTimePass()
     {
-        var subject1 = new DataGenerationTemplateAttribute
+        var subject1 = new ExampleDataTemplateAttribute
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.DateTime },
             PopulatedValuesPercentage = 100
         };
         Assert.DoesNotThrow(subject1.Validate);
 
-        var subject2 = new DataGenerationTemplateAttribute
+        var subject2 = new ExampleDataTemplateAttribute
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.DateTime },
             PopulatedValuesPercentage = 100,
@@ -286,7 +286,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject2.Validate);
 
-        var subject3 = new DataGenerationTemplateAttribute
+        var subject3 = new ExampleDataTemplateAttribute
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.DateTime },
             PopulatedValuesPercentage = 100,
@@ -294,7 +294,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject3.Validate);
 
-        var subject4 = new DataGenerationTemplateAttribute
+        var subject4 = new ExampleDataTemplateAttribute
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.DateTime },
             PopulatedValuesPercentage = 100,
@@ -307,7 +307,7 @@ public class DataGeneratorTemplateAttributePassTests
     [Test]
     public void TestIsValidStringPass()
     {
-        var subject1 = new DataGenerationTemplateAttribute
+        var subject1 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
@@ -315,7 +315,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject1.Validate);
 
-        var subject2 = new DataGenerationTemplateAttribute
+        var subject2 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
@@ -327,10 +327,10 @@ public class DataGeneratorTemplateAttributePassTests
     [Test]
     public void TestIsValidWeightedStringValuesPass()
     {
-        var subject1 = new DataGenerationTemplateAttribute
+        var subject1 = new ExampleDataTemplateAttribute
         {
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
-            WeightedStringValues = new List<DataGenerationTemplateAttributeWeightedValue>
+            WeightedStringValues = new List<ExampleDataTemplateAttributeWeightedValue>
             {
                 new() { Value = "Active", Weight = 0.85f },
                 new() { Value = "Suspended", Weight = 0.1f },
@@ -348,7 +348,7 @@ public class DataGeneratorTemplateAttributePassTests
         // you can assign one or more ExampleDataSets with no pattern
         // you can assign one or more ExampleDAtaSets with a pattern
 
-        var subject1 = new DataGenerationTemplateAttribute
+        var subject1 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
@@ -356,7 +356,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject1.Validate);
 
-        var subject2 = new DataGenerationTemplateAttribute
+        var subject2 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
@@ -364,7 +364,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject2.Validate);
 
-        var subject3 = new DataGenerationTemplateAttribute
+        var subject3 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Text },
             PopulatedValuesPercentage = 100,
@@ -377,7 +377,7 @@ public class DataGeneratorTemplateAttributePassTests
     [Test]
     public void TestIsValidGuidPass()
     {
-        var subject1 = new DataGenerationTemplateAttribute
+        var subject1 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Guid },
             PopulatedValuesPercentage = 100
@@ -388,7 +388,7 @@ public class DataGeneratorTemplateAttributePassTests
     [Test]
     public void TestIsValidReferencePass()
     {
-        var subject1 = new DataGenerationTemplateAttribute
+        var subject1 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.StaticMembers },
             ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { new() },
@@ -400,7 +400,7 @@ public class DataGeneratorTemplateAttributePassTests
     [Test]
     public void TestIsValidMvaReferencePass()
     {
-        var subject1 = new DataGenerationTemplateAttribute
+        var subject1 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued },
             ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { new() },
@@ -409,7 +409,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject1.Validate);
 
-        var subject2 = new DataGenerationTemplateAttribute
+        var subject2 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued },
             ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { new() },
@@ -418,7 +418,7 @@ public class DataGeneratorTemplateAttributePassTests
         };
         Assert.DoesNotThrow(subject2.Validate);
 
-        var subject3 = new DataGenerationTemplateAttribute
+        var subject3 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued },
             ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { new() },
@@ -432,14 +432,14 @@ public class DataGeneratorTemplateAttributePassTests
     [Test]
     public void TestIsValidManagerPass()
     {
-        var subject1 = new DataGenerationTemplateAttribute
+        var subject1 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
             ManagerDepthPercentage = 50
         };
         Assert.DoesNotThrow(subject1.Validate);
 
-        var subject2 = new DataGenerationTemplateAttribute
+        var subject2 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
             ManagerDepthPercentage = 95

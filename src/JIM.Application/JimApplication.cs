@@ -29,7 +29,7 @@ public class JimApplication : IDisposable
     public CertificateServer Certificates { get; }
     public ChangeHistoryServer ChangeHistory { get; }
     public ConnectedSystemServer ConnectedSystems { get; }
-    public DataGenerationServer DataGeneration { get; }
+    public ExampleDataServer ExampleData { get; }
     public DriftDetectionService DriftDetection { get; }
     public ExportEvaluationServer ExportEvaluation { get; }
     public ExportExecutionServer ExportExecution { get; }
@@ -49,7 +49,7 @@ public class JimApplication : IDisposable
         Certificates = new CertificateServer(this);
         ChangeHistory = new ChangeHistoryServer(this);
         ConnectedSystems = new ConnectedSystemServer(this);
-        DataGeneration = new DataGenerationServer(this);
+        ExampleData = new ExampleDataServer(this);
         DriftDetection = new DriftDetectionService(this);
         ExportEvaluation = new ExportEvaluationServer(this);
         ExportExecution = new ExportExecutionServer(this);

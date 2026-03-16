@@ -33,8 +33,8 @@
                 <MudText>
                     @switch (_activity.TargetType)
                     {
-                        case ActivityTargetType.DataGenerationTemplate:
-                            <MudLink Href="@($"/admin/example-data/templates/{_activity.DataGenerationTemplateId}")">@_activity.TargetName</MudLink>
+                        case ActivityTargetType.ExampleDataTemplate:
+                            <MudLink Href="@($"/admin/example-data/templates/{_activity.ExampleDataTemplateId}")">@_activity.TargetName</MudLink>
                             break;
                         case ActivityTargetType.ConnectedSystem:
                             <MudLink Href="@($"/admin/connected-systems/{_activity.ConnectedSystemId}/")">@_activity.TargetName</MudLink>

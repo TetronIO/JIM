@@ -955,7 +955,7 @@ src/JIM.PowerShell/
 |   +-- Certificates/     # *-JIMCertificate cmdlets
 |   +-- Connection/       # Connect-JIM, Disconnect-JIM, Test-JIMConnection
 |   +-- ConnectedSystems/ # *-JIMConnectedSystem cmdlets
-|   +-- DataGeneration/   # *-JIMDataGeneration* cmdlets
+|   +-- ExampleData/   # *-JIMExampleData* cmdlets
 |   +-- Metaverse/        # *-JIMMetaverse* cmdlets
 |   +-- RunProfiles/      # *-JIMRunProfile cmdlets
 |   +-- SyncRules/        # *-JIMSyncRule cmdlets

@@ -27,8 +27,8 @@ public class OperationalExceptionHierarchyTests
     [TestCase(typeof(MultipleMatchesException))]
     [TestCase(typeof(DuplicateAttributesException))]
     [TestCase(typeof(DuplicatePendingExportException))]
-    [TestCase(typeof(DataGenerationTemplateException))]
-    [TestCase(typeof(DataGenerationTemplateAttributeException))]
+    [TestCase(typeof(ExampleDataTemplateException))]
+    [TestCase(typeof(ExampleDataTemplateAttributeException))]
     [TestCase(typeof(LdapCommunicationException))]
     public void CustomException_IsOperationalException(Type exceptionType)
     {
