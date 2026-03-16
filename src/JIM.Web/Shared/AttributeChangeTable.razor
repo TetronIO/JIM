@@ -109,10 +109,10 @@
             {
                 @* Pending export reference - stub CSO exists but not yet exported *@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                    <MudText>@context.DisplayValue</MudText>
-                    <MudTooltip Text="Awaiting export — this object has not yet been created in the target system.">
-                        <MudChip T="string" Variant="Variant.Outlined" Color="Color.Info">pending export</MudChip>
+                    <MudTooltip Text="Awaiting export — this object has been matched but not yet created in the target system.">
+                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Color="Color.Info" Size="Size.Small" />
                     </MudTooltip>
+                    <MudText Class="mud-text-secondary">@context.DisplayValue</MudText>
                 </MudStack>
             }
             else if (context.ReferenceValue != null)
