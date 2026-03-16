@@ -134,6 +134,7 @@ function Invoke-SyncSequence {
     $results.Steps += @{ Name = "LDAP Delta Import"; ActivityId = $confirmImportResult.activityId }
     if ($ValidateActivityStatus) {
         Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "LDAP Delta Import"
+        Assert-NoUnresolvedReferences -ConnectedSystemId $Config.LDAPSystemId -Name "LDAP" -Context "after Delta Import (confirming)"
     }
 
     # Step 5: LDAP Delta Sync
@@ -266,6 +267,7 @@ try {
     Write-Host "  Running Full Import to establish connector baseline..." -ForegroundColor DarkGray
     $baselineImportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
     Assert-ActivitySuccess -ActivityId $baselineImportResult.activityId -Name "LDAP Full Import (baseline)"
+    Assert-NoUnresolvedReferences -ConnectedSystemId $config.LDAPSystemId -Name "LDAP" -Context "after Full Import (baseline)"
 
     # Run Full Sync to process baseline imports and establish MVOs for existing AD objects
     # NOTE: First sync after Full Import should always be Full Sync (initialisation best practice)
