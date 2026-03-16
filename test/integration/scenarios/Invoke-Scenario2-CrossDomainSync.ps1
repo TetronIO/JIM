@@ -180,6 +180,7 @@ try {
             Write-Host "  Running Source AD Full Import..." -ForegroundColor Gray
             $cleanupImportResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceImportProfile.id -Wait -PassThru
             Assert-ActivitySuccess -ActivityId $cleanupImportResult.activityId -Name "Source Full Import (cleanup)"
+            Assert-NoUnresolvedReferences -ConnectedSystemId $sourceSystem.id -Name "Source AD" -Context "after Full Import (cleanup)"
             Start-Sleep -Seconds 5
             Write-Host "  Running Source AD Full Sync..." -ForegroundColor Gray
             $cleanupSyncResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceSyncProfile.id -Wait -PassThru
@@ -190,6 +191,7 @@ try {
             Write-Host "  Running Target AD Full Import..." -ForegroundColor Gray
             $cleanupImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetImportProfile.id -Wait -PassThru
             Assert-ActivitySuccess -ActivityId $cleanupImportResult.activityId -Name "Target Full Import (cleanup)"
+            Assert-NoUnresolvedReferences -ConnectedSystemId $targetSystem.id -Name "Target AD" -Context "after Full Import (cleanup)"
             Start-Sleep -Seconds 5
             Write-Host "  Running Target AD Full Sync..." -ForegroundColor Gray
             $cleanupSyncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetSyncProfile.id -Wait -PassThru
@@ -211,6 +213,7 @@ try {
         # Step 1: Import from Source
         $importResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceImportProfile.id -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Source Full Import$contextSuffix"
+        Assert-NoUnresolvedReferences -ConnectedSystemId $sourceSystem.id -Name "Source AD" -Context "after Full Import$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
         # Step 2: Sync to Metaverse
@@ -247,6 +250,7 @@ try {
         # Step 1: Import from Target
         $importResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetImportProfile.id -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Target Full Import$contextSuffix"
+        Assert-NoUnresolvedReferences -ConnectedSystemId $targetSystem.id -Name "Target AD" -Context "after Full Import$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
         # Step 2: Sync to Metaverse

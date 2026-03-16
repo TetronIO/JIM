@@ -207,10 +207,10 @@ try {
         Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Source Full Import$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
-        # Note: we do NOT check for unresolved references here. The initial full import may
-        # legitimately have unresolved references when LDAP paging causes groups to import before
-        # their member users. These resolve during the confirming import after export.
-        # The unresolved reference check is performed after the confirming import instead.
+        # Fail-fast: check for unresolved references after source import.
+        # All references MUST resolve in a single import run — JIM resolves references after
+        # all pages are imported, so ordering within pages is not an issue.
+        Assert-NoUnresolvedReferences -ConnectedSystemId $sourceSystem.id -Name "Source AD" -Context "after Full Import$contextSuffix"
 
         # Step 2: Full Import from Target (BEFORE any sync)
         # Import Target CSOs early so they can join to MVOs before export rules create provisioning CSOs
