@@ -1,7 +1,7 @@
 ﻿@page "/admin/example-data"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Application
-@using JIM.Models.DataGeneration.DTOs
+@using JIM.Models.ExampleData.DTOs
 @inject JimApplication Jim
 
 <PageTitle>Example Data Templates</PageTitle>
@@ -23,9 +23,9 @@
 
 <MudTable Items="@_templates" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5" SortLabel="Sort By" Outlined="true" Elevation="0">
     <HeaderContent>
-        <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateHeader, object>(x => x.Name ?? string.Empty)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateHeader, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateHeader, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataTemplateHeader, object>(x => x.Name ?? string.Empty)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataTemplateHeader, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataTemplateHeader, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Name"><MudLink Href="@("admin/example-data/templates/"+context.Id)">@context.Name</MudLink></MudTd>
@@ -39,7 +39,7 @@
 </MudTable>
 
 @code {
-    private List<DataGenerationTemplateHeader>? _templates;
+    private List<ExampleDataTemplateHeader>? _templates;
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new List<BreadcrumbItem>
     {
@@ -49,6 +49,6 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _templates = await Jim.DataGeneration.GetTemplateHeadersAsync();
+        _templates = await Jim.ExampleData.GetTemplateHeadersAsync();
     }
 }

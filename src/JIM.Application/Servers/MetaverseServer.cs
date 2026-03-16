@@ -304,7 +304,7 @@ public class MetaverseServer
     /// <summary>
     /// Creates a MetaverseObjectChange record and adds it to the MVO's Changes collection.
     /// Called internally by CreateMetaverseObjectAsync and UpdateMetaverseObjectAsync.
-    /// Also available to DataGenerationServer for batch operations where change records
+    /// Also available to ExampleDataServer for batch operations where change records
     /// are attached to MVOs before bulk persistence.
     /// Sync operations use a separate batched approach in SyncTaskProcessorBase.
     /// </summary>
@@ -438,7 +438,7 @@ public class MetaverseServer
     /// <param name="initiatedByType">The type of principal initiating the creation.</param>
     /// <param name="initiatedById">The ID of the principal initiating the creation.</param>
     /// <param name="initiatedByName">The display name of the principal initiating the creation.</param>
-    /// <param name="changeInitiatorType">The mechanism that initiated the creation (e.g. System, DataGeneration).</param>
+    /// <param name="changeInitiatorType">The mechanism that initiated the creation (e.g. System, ExampleData).</param>
     public async Task CreateMetaverseObjectAsync(
         MetaverseObject metaverseObject,
         ActivityInitiatorType initiatedByType = ActivityInitiatorType.NotSet,

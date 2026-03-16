@@ -52,7 +52,7 @@ public enum MetaverseObjectChangeInitiatorType
     WorkflowInstance = 2,
     GroupMembershipRuleEvaluation = 3,
     SynchronisationRule = 4,
-    DataGeneration = 5,
+    ExampleData = 5,
     System = 6
 }
 

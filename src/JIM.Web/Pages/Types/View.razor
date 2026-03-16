@@ -151,7 +151,7 @@
     private static string MapChangeToMechanismType(MetaverseObjectChange change)
     {
         // Use the change initiator type when it's explicitly set to a non-sync/non-default value
-        if (change.ChangeInitiatorType is MetaverseObjectChangeInitiatorType.DataGeneration
+        if (change.ChangeInitiatorType is MetaverseObjectChangeInitiatorType.ExampleData
             or MetaverseObjectChangeInitiatorType.User
             or MetaverseObjectChangeInitiatorType.WorkflowInstance
             or MetaverseObjectChangeInitiatorType.GroupMembershipRuleEvaluation

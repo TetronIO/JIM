@@ -225,7 +225,7 @@ public abstract class WorkflowTestBase
             BuiltIn = false,
             DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
             Attributes = new List<MetaverseAttribute>(),
-            DataGenerationTemplateAttributes = new List<JIM.Models.DataGeneration.DataGenerationTemplateAttribute>(),
+            ExampleDataTemplateAttributes = new List<JIM.Models.ExampleData.ExampleDataTemplateAttribute>(),
             PredefinedSearches = new List<JIM.Models.Search.PredefinedSearch>(),
             DeletionTriggerConnectedSystemIds = new List<int>()
         };

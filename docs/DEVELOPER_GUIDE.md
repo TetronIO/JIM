@@ -199,6 +199,10 @@ For full details and connector-specific guidance, see [`docs/plans/doing/GUID_UU
 - Test migrations on PostgreSQL 18
 - Use repository pattern, never access DbContext directly from application layer
 
+> **CRITICAL: NEVER flatten, squash, delete, or reset EF Core migrations.**
+>
+> JIM is deployed in production environments. EF Core tracks applied migrations by name in the `__EFMigrationsHistory` table. If existing migrations are removed and replaced with a new combined migration, EF will not recognise it as already applied, will attempt to re-create all tables, and **will fail on every deployed instance**. Migrations are append-only — once committed to `main`, they are permanent. The only permitted operations are adding new migrations and, in rare cases, reverting the most recent migration on a feature branch before merge.
+
 **Performance**:
 - Use `.AsNoTracking()` for read-only queries
 - Batch operations where possible
@@ -955,7 +959,7 @@ src/JIM.PowerShell/
 |   +-- Certificates/     # *-JIMCertificate cmdlets
 |   +-- Connection/       # Connect-JIM, Disconnect-JIM, Test-JIMConnection
 |   +-- ConnectedSystems/ # *-JIMConnectedSystem cmdlets
-|   +-- DataGeneration/   # *-JIMDataGeneration* cmdlets
+|   +-- ExampleData/   # *-JIMExampleData* cmdlets
 |   +-- Metaverse/        # *-JIMMetaverse* cmdlets
 |   +-- RunProfiles/      # *-JIMRunProfile cmdlets
 |   +-- SyncRules/        # *-JIMSyncRule cmdlets

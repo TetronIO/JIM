@@ -1,7 +1,7 @@
 ﻿@page "/admin/example-data/datasets"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Application
-@using JIM.Models.DataGeneration.DTOs
+@using JIM.Models.ExampleData.DTOs
 @inject JimApplication Jim
 
 <PageTitle>Example Data Sets</PageTitle>
@@ -62,7 +62,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _datasets = await Jim.DataGeneration.GetExampleDataSetHeadersAsync();
+        _datasets = await Jim.ExampleData.GetExampleDataSetHeadersAsync();
     }
 
     private bool FilterFunc1(ExampleDataSetHeader element) => FilterFunc(element, _searchString);

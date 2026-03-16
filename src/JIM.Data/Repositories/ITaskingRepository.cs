@@ -14,7 +14,7 @@ public interface ITaskingRepository
 
     public Task<WorkerTask?> GetNextWorkerTaskAsync();
 
-    public Task<DataGenerationTemplateWorkerTask?> GetFirstDataGenerationWorkerTaskAsync(int dataGenerationTemplateId);
+    public Task<ExampleDataTemplateWorkerTask?> GetFirstExampleDataWorkerTaskAsync(int dataGenerationTemplateId);
 
     /// <summary>
     /// Get all worker tasks that need cancelling.
@@ -28,7 +28,7 @@ public interface ITaskingRepository
 
     public Task<List<WorkerTask>> GetNextWorkerTasksToProcessAsync();
 
-    public Task<WorkerTaskStatus?> GetFirstDataGenerationTemplateWorkerTaskStatus(int templateId);
+    public Task<WorkerTaskStatus?> GetFirstExampleDataTemplateWorkerTaskStatus(int templateId);
 
     public Task UpdateWorkerTaskAsync(WorkerTask serviceTask);
 

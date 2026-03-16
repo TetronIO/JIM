@@ -339,7 +339,7 @@ no longer compensates for repository-level EF bugs.
   single-object CSO loads (2 — `GetConnectedSystemObjectAsync`, `GetConnectedSystemObjectByAttributeAsync`),
   import/export queries (2)
 - `MetaverseRepository`: 6 uses (header queries, matching queries)
-- `DataGenerationRepository`: 2 uses (template queries)
+- `ExampleDataRepository`: 2 uses (template queries)
 - `ActivitiesRepository`: 2 uses (activity queries)
 
 ### 2026-02-25: ContributedBySystemId Bug Fix

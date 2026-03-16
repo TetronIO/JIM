@@ -128,8 +128,8 @@
 
         # Data Generation
         'Get-JIMExampleDataSet',
-        'Get-JIMDataGenerationTemplate',
-        'Invoke-JIMDataGenerationTemplate',
+        'Get-JIMExampleDataTemplate',
+        'Invoke-JIMExampleDataTemplate',
 
         # Expressions
         'Test-JIMExpression',

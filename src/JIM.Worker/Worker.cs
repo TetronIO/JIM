@@ -201,10 +201,10 @@ public class Worker : BackgroundService
 
                             switch (newWorkerTask)
                             {
-                                case DataGenerationTemplateWorkerTask dataGenTemplateServiceTask:
+                                case ExampleDataTemplateWorkerTask dataGenTemplateServiceTask:
                                 {
-                                    Log.Information("ExecuteAsync: DataGenerationTemplateServiceTask received for template id: " + dataGenTemplateServiceTask.TemplateId);
-                                    var dataGenerationTemplate = await taskJim.DataGeneration.GetTemplateAsync(dataGenTemplateServiceTask.TemplateId);
+                                    Log.Information("ExecuteAsync: ExampleDataTemplateServiceTask received for template id: " + dataGenTemplateServiceTask.TemplateId);
+                                    var dataGenerationTemplate = await taskJim.ExampleData.GetTemplateAsync(dataGenTemplateServiceTask.TemplateId);
                                     if (dataGenerationTemplate == null)
                                     {
                                         Log.Warning($"ExecuteAsync: data generation template {dataGenTemplateServiceTask.TemplateId} not found.");
@@ -230,7 +230,7 @@ public class Worker : BackgroundService
                                             Log.Information("ExecuteAsync: Data generation progress update interval: {Interval}, batch size: {BatchSize}",
                                                 progressUpdateInterval, batchSize);
 
-                                            var objectsCreated = await taskJim.DataGeneration.ExecuteTemplateAsync(
+                                            var objectsCreated = await taskJim.ExampleData.ExecuteTemplateAsync(
                                                 dataGenTemplateServiceTask.TemplateId,
                                                 cancellationTokenSource.Token,
                                                 ProgressCallback,

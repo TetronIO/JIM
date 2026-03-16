@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- 🔄 "Data Generation" renamed to "Example Data" across the entire stack for consistent naming — models, API routes (`/example-data/`), PowerShell cmdlets (`Get-JIMExampleDataTemplate`, `Invoke-JIMExampleDataTemplate`), database tables, and UI all now share the "Example Data" family prefix
+- ⚡ Database migrations flattened into a single `InitialCreate` migration for faster first-start performance and simpler codebase
+
 ### Fixed
 
 #### Pending Export Reference Display (#404)
@@ -313,7 +318,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - API Keys: `Get-JIMApiKey`, `New-JIMApiKey`, `Set-JIMApiKey`, `Remove-JIMApiKey`
 - Certificates: `Get-JIMCertificate`, `Add-JIMCertificate`, `Set-JIMCertificate`, `Remove-JIMCertificate`, `Export-JIMCertificate`, `Test-JIMCertificate`
 - Security: `Get-JIMRole`
-- Data Generation: `Get-JIMDataGenerationTemplate`, `Get-JIMExampleDataSet`, `Invoke-JIMDataGenerationTemplate`
+- Example Data: `Get-JIMExampleDataTemplate`, `Get-JIMExampleDataSet`, `Invoke-JIMExampleDataTemplate`
 - Expressions: `Test-JIMExpression`
 - History: `Get-JIMDeletedObject`, `Get-JIMHistoryCount`, `Invoke-JIMHistoryCleanup`
 - Name-based parameter alternatives for all cmdlets (e.g., `-ConnectedSystemName` instead of `-ConnectedSystemId`)

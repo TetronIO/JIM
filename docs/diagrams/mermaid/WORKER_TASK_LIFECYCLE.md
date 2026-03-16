@@ -69,7 +69,7 @@ flowchart TD
     EX --> CompleteActivity
 
     %% --- Data generation task ---
-    TaskType -->|DataGenerationTemplate<br/>WorkerTask| DataGen[Execute template<br/>with progress callback]
+    TaskType -->|ExampleDataTemplate<br/>WorkerTask| DataGen[Execute template<br/>with progress callback]
     DataGen --> DataGenResult{Success?}
     DataGenResult -->|Yes| DataGenComplete[CompleteActivityAsync]
     DataGenResult -->|No| DataGenFail[FailActivityWithErrorAsync]

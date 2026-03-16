@@ -1,7 +1,7 @@
 ﻿using JIM.Data;
 using JIM.Models.Activities;
 using JIM.Models.Core;
-using JIM.Models.DataGeneration;
+using JIM.Models.ExampleData;
 using JIM.Models.Logic;
 using JIM.Models.Scheduling;
 using JIM.Models.Search;
@@ -35,12 +35,12 @@ public class JimDbContext : DbContext
     public virtual DbSet<ConnectorDefinitionFile> ConnectorDefinitionFiles { get; set; } = null!;
     public virtual DbSet<ConnectorDefinitionSetting> ConnectorDefinitionSettings { get; set; } = null!;
     public virtual DbSet<ConnectorPartition> ConnectorPartitions { get; set; } = null!;
-    public virtual DbSet<DataGenerationObjectType> DataGenerationObjectTypes { get; set; } = null!;
-    public virtual DbSet<DataGenerationTemplate> DataGenerationTemplates { get; set; } = null!;
-    public virtual DbSet<DataGenerationTemplateAttribute> DataGenerationTemplateAttributes { get; set; } = null!;
-    public virtual DbSet<DataGenerationTemplateAttributeDependency> DataGenerationTemplateAttributeDependencies { get; set; } = null!;
-    public virtual DbSet<DataGenerationTemplateAttributeWeightedValue> DataGenerationTemplateAttributeWeightedValues { get; set; } = null!;
-    public virtual DbSet<DataGenerationTemplateWorkerTask> DataGenerationTemplateWorkerTasks { get; set; } = null!;
+    public virtual DbSet<ExampleDataObjectType> ExampleDataObjectTypes { get; set; } = null!;
+    public virtual DbSet<ExampleDataTemplate> ExampleDataTemplates { get; set; } = null!;
+    public virtual DbSet<ExampleDataTemplateAttribute> ExampleDataTemplateAttributes { get; set; } = null!;
+    public virtual DbSet<ExampleDataTemplateAttributeDependency> ExampleDataTemplateAttributeDependencies { get; set; } = null!;
+    public virtual DbSet<ExampleDataTemplateAttributeWeightedValue> ExampleDataTemplateAttributeWeightedValues { get; set; } = null!;
+    public virtual DbSet<ExampleDataTemplateWorkerTask> ExampleDataTemplateWorkerTasks { get; set; } = null!;
     public virtual DbSet<DeleteConnectedSystemWorkerTask> DeleteConnectedSystemWorkerTasks { get; set; } = null!;
     public virtual DbSet<ExampleDataSet> ExampleDataSets { get; set; } = null!;
     public virtual DbSet<ExampleDataSetInstance> ExampleDataSetInstances { get; set; } = null!;

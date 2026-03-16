@@ -32,7 +32,7 @@ flowchart TD
 
     CreateTask --> TaskType{Worker task<br/>type?}
     TaskType -->|SynchronisationWorkerTask| SyncActivity[TargetType = ConnectedSystemRunProfile<br/>TargetName = runProfile.Name<br/>TargetContext = connectedSystem.Name]
-    TaskType -->|DataGenerationTemplateWorkerTask| DataGenActivity[TargetType = DataGenerationTemplate]
+    TaskType -->|ExampleDataTemplateWorkerTask| DataGenActivity[TargetType = ExampleDataTemplate]
     TaskType -->|ClearConnectedSystemObjectsWorkerTask| ClearActivity[TargetType = ConnectedSystem<br/>TargetOperationType = Clear]
     TaskType -->|DeleteConnectedSystemWorkerTask| DeleteActivity[TargetType = ConnectedSystem<br/>TargetOperationType = Delete]
 

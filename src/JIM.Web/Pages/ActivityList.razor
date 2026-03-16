@@ -76,7 +76,7 @@
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.SyncRule">Sync Rule</MudSelectItem>
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.MetaverseObject">Metaverse Object</MudSelectItem>
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.MetaverseAttribute">Metaverse Attribute</MudSelectItem>
-            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.DataGenerationTemplate">Data Generation Template</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ExampleDataTemplate">Data Generation Template</MudSelectItem>
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.TrustedCertificate">Trusted Certificate</MudSelectItem>
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ObjectMatchingRule">Object Matching Rule</MudSelectItem>
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ServiceSetting">Service Setting</MudSelectItem>
@@ -332,7 +332,7 @@
                     </MudTooltip>
                 }
             }
-            else if (context.TargetType == ActivityTargetType.DataGenerationTemplate
+            else if (context.TargetType == ActivityTargetType.ExampleDataTemplate
                      && context.TargetOperationType == ActivityTargetOperationType.Execute
                      && context.Status != ActivityStatus.InProgress)
             {
