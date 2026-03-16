@@ -195,8 +195,13 @@ public static class ExportChangeHistoryBuilder
             case AttributeDataType.Reference when peChange.StringValue != null:
                 // Resolved reference — deferred exports have their UnresolvedReferenceValue cleared
                 // and the resolved identifier (e.g. DN) stored in StringValue during reference resolution.
+                // Mark as pending export stub so the UI renders a clock icon (awaiting confirmation)
+                // rather than the broken-link "unresolved" icon.
                 attributeChange.ValueChanges.Add(
-                    new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.StringValue));
+                    new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.StringValue)
+                    {
+                        IsPendingExportStub = true
+                    });
                 break;
             case AttributeDataType.Text when peChange.StringValue == null:
             case AttributeDataType.Number when peChange.IntValue == null:

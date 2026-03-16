@@ -405,10 +405,10 @@ public class ExportChangeHistoryBuilderTests
         // Act
         ExportChangeHistoryBuilder.MapAttributeValueChanges(change, peChanges);
 
-        // Assert — resolved DN stored as string value
+        // Assert — resolved DN stored as string value with pending stub flag
         var valueChange = change.AttributeChanges.First().ValueChanges.First();
         Assert.That(valueChange.StringValue, Is.EqualTo("CN=User1,OU=Users,DC=test,DC=local"));
-        Assert.That(valueChange.IsPendingExportStub, Is.False);
+        Assert.That(valueChange.IsPendingExportStub, Is.True);
     }
 
     [Test]

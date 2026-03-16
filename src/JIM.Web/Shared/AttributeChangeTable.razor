@@ -107,9 +107,9 @@
             }
             else if (context.IsPendingExportStub)
             {
-                @* Pending export reference - stub CSO exists but not yet exported *@
+                @* Pending reference - matched but awaiting export or confirming import *@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                    <MudTooltip Text="Awaiting export — this object has been matched but not yet created in the target system.">
+                    <MudTooltip Text="Pending — this reference has been resolved but the object has not yet been fully confirmed in the target system.">
                         <MudIcon Icon="@Icons.Material.Filled.Schedule" Color="Color.Info" Size="Size.Small" />
                     </MudTooltip>
                     <MudText Class="mud-text-secondary">@context.DisplayValue</MudText>
