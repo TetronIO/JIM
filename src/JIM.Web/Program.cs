@@ -6,6 +6,7 @@ using JIM.Application.Services;
 using JIM.Data;
 using JIM.Web.Models;
 using JIM.Web.Services;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.PostgresData;
 using JIM.Web.Middleware.Api;
@@ -713,45 +714,90 @@ static async Task<MetaverseObject> CreateInitialAdminUserAsync(
 {
     Log.Information("CreateInitialAdminUserAsync: Creating initial admin user just-in-time ({UniqueId}).", uniqueIdClaimValue);
 
-    // Set Origin to Internal to protect admin from automatic deletion rules
-    var user = new MetaverseObject
+    var activity = new Activity
     {
-        Type = userType,
-        Origin = MetaverseObjectOrigin.Internal
+        TargetType = ActivityTargetType.MetaverseObject,
+        TargetOperationType = ActivityTargetOperationType.Create,
+        Message = "Creating initial administrator user on first sign-in"
     };
+    await jim.Activities.CreateSystemActivityAsync(activity);
 
-    // unique identifier attribute (required)
-    user.AttributeValues.Add(new MetaverseObjectAttributeValue
+    try
     {
-        MetaverseObject = user,
-        Attribute = uniqueIdentifierAttribute,
-        StringValue = uniqueIdClaimValue
-    });
+        // Set Origin to Internal to protect admin from automatic deletion rules
+        var user = new MetaverseObject
+        {
+            Type = userType,
+            Origin = MetaverseObjectOrigin.Internal
+        };
 
-    // Type attribute (required)
-    var typeAttribute = await jim.Metaverse.GetMetaverseAttributeAsync(Constants.BuiltInAttributes.Type) ??
-                        throw new Exception($"Couldn't get essential attribute: {Constants.BuiltInAttributes.Type}");
-    user.AttributeValues.Add(new MetaverseObjectAttributeValue
+        // unique identifier attribute (required)
+        user.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            MetaverseObject = user,
+            Attribute = uniqueIdentifierAttribute,
+            StringValue = uniqueIdClaimValue
+        });
+
+        // Type attribute (required)
+        var typeAttribute = await jim.Metaverse.GetMetaverseAttributeAsync(Constants.BuiltInAttributes.Type) ??
+                            throw new Exception($"Couldn't get essential attribute: {Constants.BuiltInAttributes.Type}");
+        user.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            MetaverseObject = user,
+            Attribute = typeAttribute,
+            StringValue = "PersonEntity"
+        });
+
+        // populate optional attributes from OIDC claims so everything is set in one go
+        await AddAttributeFromClaimAsync(jim, user, claimsPrincipal, "name", Constants.BuiltInAttributes.DisplayName);
+        await AddAttributeFromClaimAsync(jim, user, claimsPrincipal, "given_name", Constants.BuiltInAttributes.FirstName);
+        await AddAttributeFromClaimAsync(jim, user, claimsPrincipal, "family_name", Constants.BuiltInAttributes.LastName);
+        await AddAttributeFromClaimAsync(jim, user, claimsPrincipal, "preferred_username", Constants.BuiltInAttributes.UserPrincipalName);
+
+        await jim.Metaverse.CreateMetaverseObjectAsync(
+            user,
+            changeInitiatorType: MetaverseObjectChangeInitiatorType.System);
+
+        // update the parent activity with the user's details now that the MVO exists
+        activity.TargetName = user.DisplayName;
+        activity.MetaverseObjectId = user.Id;
+
+        // assign the Administrator role as a child activity
+        var roleActivity = new Activity
+        {
+            ParentActivityId = activity.Id,
+            TargetType = ActivityTargetType.MetaverseObject,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            TargetName = user.DisplayName,
+            MetaverseObjectId = user.Id,
+            Message = $"Assigning {Constants.BuiltInRoles.Administrator} role to initial administrator"
+        };
+        await jim.Activities.CreateSystemActivityAsync(roleActivity);
+
+        try
+        {
+            await jim.Security.AddObjectToRoleAsync(user, Constants.BuiltInRoles.Administrator);
+            roleActivity.Message = $"Assigned {Constants.BuiltInRoles.Administrator} role to initial administrator";
+            await jim.Activities.CompleteActivityAsync(roleActivity);
+        }
+        catch (Exception ex)
+        {
+            await jim.Activities.FailActivityWithErrorAsync(roleActivity, ex);
+            throw;
+        }
+
+        activity.Message = $"Created initial administrator '{user.DisplayName}'";
+        await jim.Activities.CompleteActivityAsync(activity);
+
+        Log.Information("CreateInitialAdminUserAsync: Initial admin user created and assigned {Role} role.", Constants.BuiltInRoles.Administrator);
+        return user;
+    }
+    catch (Exception ex)
     {
-        MetaverseObject = user,
-        Attribute = typeAttribute,
-        StringValue = "PersonEntity"
-    });
-
-    // populate optional attributes from OIDC claims so everything is set in one go
-    await AddAttributeFromClaimAsync(jim, user, claimsPrincipal, "name", Constants.BuiltInAttributes.DisplayName);
-    await AddAttributeFromClaimAsync(jim, user, claimsPrincipal, "given_name", Constants.BuiltInAttributes.FirstName);
-    await AddAttributeFromClaimAsync(jim, user, claimsPrincipal, "family_name", Constants.BuiltInAttributes.LastName);
-    await AddAttributeFromClaimAsync(jim, user, claimsPrincipal, "preferred_username", Constants.BuiltInAttributes.UserPrincipalName);
-
-    await jim.Metaverse.CreateMetaverseObjectAsync(
-        user,
-        changeInitiatorType: MetaverseObjectChangeInitiatorType.System);
-
-    await jim.Security.AddObjectToRoleAsync(user, Constants.BuiltInRoles.Administrator);
-
-    Log.Information("CreateInitialAdminUserAsync: Initial admin user created and assigned {Role} role.", Constants.BuiltInRoles.Administrator);
-    return user;
+        await jim.Activities.FailActivityWithErrorAsync(activity, ex);
+        throw;
+    }
 }
 
 /// <summary>
