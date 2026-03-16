@@ -80,7 +80,8 @@ public class Worker : BackgroundService
         // Threshold of 100ms means operations taking longer will be logged at Warning level
         using var diagnosticListener = Diagnostics.EnableLogging(slowOperationThresholdMs: 100);
 
-        Log.Information("Starting JIM.Worker...");
+        Log.Information("Starting JIM.Worker — connection pool: Min={MinPoolSize}, Max={MaxPoolSize}, RetryOnFailure=enabled",
+            5, 30);
 
         // Create credential protection service for encrypting/decrypting secrets
         // This uses the shared key storage to ensure consistency with JIM.Web

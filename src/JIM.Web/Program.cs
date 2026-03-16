@@ -68,7 +68,7 @@ try
     var dbPassword = Environment.GetEnvironmentVariable(Constants.Config.DatabasePassword);
     var dbLogSensitiveInfo = Environment.GetEnvironmentVariable(Constants.Config.DatabaseLogSensitiveInformation);
 
-    var connectionString = $"Host={dbHostName};Database={dbName};Username={dbUsername};Password={dbPassword};Minimum Pool Size=5;Maximum Pool Size=50;Connection Idle Lifetime=300;Connection Pruning Interval=30";
+    var connectionString = $"Host={dbHostName};Database={dbName};Username={dbUsername};Password={dbPassword};Minimum Pool Size=5;Maximum Pool Size=30;Connection Idle Lifetime=300;Connection Pruning Interval=30";
     _ = bool.TryParse(dbLogSensitiveInfo, out var logSensitiveInfo);
     if (logSensitiveInfo)
         connectionString += ";Include Error Detail=True";
@@ -76,7 +76,11 @@ try
     // Use DbContextFactory for Blazor Server to avoid concurrent DbContext access issues
     // Blazor Server pre-rendering and interactive rendering can happen concurrently
     builder.Services.AddDbContextFactory<JimDbContext>(options =>
-        options.UseNpgsql(connectionString)
+        options.UseNpgsql(connectionString, npgsqlOptions =>
+                npgsqlOptions.EnableRetryOnFailure(
+                    maxRetryCount: 3,
+                    maxRetryDelay: TimeSpan.FromSeconds(5),
+                    errorCodesToAdd: null))
             .ConfigureWarnings(warnings => warnings.Ignore(
                 Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning,
                 Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.MultipleCollectionIncludeWarning)));
@@ -423,7 +427,8 @@ try
         // Force EF Core to build and cache its compiled model by executing a trivial query
         _ = await warmupContext.Database.CanConnectAsync();
     }
-    app.Logger.LogInformation("Warmup complete");
+    app.Logger.LogInformation("Warmup complete — connection pool: Min={MinPoolSize}, Max={MaxPoolSize}",
+        5, 30);
 
     app.Logger.LogInformation("The JIM Web has started");
     app.Run();

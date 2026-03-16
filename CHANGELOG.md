@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🖥️ Pending export references show a "pending export" indicator to distinguish them from fully resolved and genuinely unresolved references
 - 🔒 Unresolved reference fail-fast assertions added to integration test Scenarios 1, 2, and 8
 
+#### Database Resilience (#408)
+
+- 🐛 Transient database errors now return HTTP 503 (Service Unavailable) with a `Retry-After` header instead of HTTP 400 (Bad Request)
+- ⚡ EF Core transient retry policy enabled on all database connections (3 retries, 5s max delay)
+- ⚡ Connection pool sizing reduced from 50 to 30 per service to leave headroom within PostgreSQL's `max_connections`
+- 📦 Development database (`db.yml`) now explicitly sets `max_connections=200` to match the full Docker stack
+
 ## [0.6.1] - 2026-03-15
 
 ### Added

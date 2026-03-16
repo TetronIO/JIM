@@ -48,18 +48,20 @@ JIM uses Npgsql connection pooling with the following default settings:
 | Parameter | Value | Description |
 |-----------|-------|-------------|
 | Minimum Pool Size | 5 | Keep connections warm for common operations |
-| Maximum Pool Size | 50 | Per-service limit (4 services × 50 = 200 max total) |
+| Maximum Pool Size | 30 | Per-service limit (3 services × 30 = 90 max, leaving headroom) |
 | Connection Idle Lifetime | 300s | Recycle idle connections after 5 minutes |
 | Connection Pruning Interval | 30s | Check for idle connections every 30 seconds |
+
+> **Note:** JIM has 3 services (Web, Worker, Scheduler). The Maximum Pool Size must leave headroom within PostgreSQL's `max_connections` for superuser connections, monitoring tools, and ad-hoc sessions. The default 30 per service uses 90 of the 200 available connections, leaving 110 for headroom.
 
 ### Recommended Pool Sizes by Deployment Size
 
 | Environment | Services | Max Pool/Service | Total Max | PostgreSQL max_connections |
 |-------------|----------|------------------|-----------|----------------------------|
-| Development | 4 | 25 | 100 | 100 |
-| Small (< 10k objects) | 4 | 50 | 200 | 200 |
-| Medium (10k-100k objects) | 4 | 75 | 300 | 300 |
-| Large (100k+ objects) | 4-8 | 100 | 400-800 | 500-1000 |
+| Development | 3 | 20 | 60 | 100-200 |
+| Small (< 10k objects) | 3 | 30 | 90 | 200 |
+| Medium (10k-100k objects) | 3 | 50 | 150 | 200-300 |
+| Large (100k+ objects) | 3-6 | 50 | 150-300 | 300-500 |
 
 ### Monitoring Connection Pool
 
