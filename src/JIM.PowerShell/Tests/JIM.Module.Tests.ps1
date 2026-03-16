@@ -128,6 +128,7 @@ Describe 'Module: JIM' {
 
         It 'Should not export private functions' {
             $exportedFunctions | Should -Not -Contain 'Invoke-JIMApi'
+            $exportedFunctions | Should -Not -Contain 'Test-JIMAuthorisation'
         }
     }
 }
