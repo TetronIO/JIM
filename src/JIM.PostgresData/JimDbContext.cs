@@ -122,11 +122,13 @@ public class JimDbContext : DbContext
         // Only configure if not already configured (i.e., when using parameterless constructor)
         if (!optionsBuilder.IsConfigured && _connectionString != null)
         {
-            optionsBuilder.UseNpgsql(_connectionString, npgsqlOptions =>
-                    npgsqlOptions.EnableRetryOnFailure(
-                        maxRetryCount: 3,
-                        maxRetryDelay: TimeSpan.FromSeconds(5),
-                        errorCodesToAdd: null))
+            // Note: EnableRetryOnFailure is NOT configured here because the codebase has
+            // manual transactions (BeginTransactionAsync) that are incompatible with
+            // NpgsqlRetryingExecutionStrategy. Each transaction site must be wrapped in
+            // CreateExecutionStrategy().ExecuteAsync() before retry can be enabled.
+            // See issue #408 for the tracking item.
+            // Transient failures are handled at the API level by GlobalExceptionHandler (HTTP 503).
+            optionsBuilder.UseNpgsql(_connectionString)
                 .ConfigureWarnings(warnings => warnings.Ignore(
                     Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning,
                     Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.MultipleCollectionIncludeWarning));
