@@ -193,6 +193,25 @@ Clone the repository and open it in VS Code with the [Dev Containers](https://ma
 
 For the full development guide, see the [Developer Guide](docs/DEVELOPER_GUIDE.md).
 
+### For Automation (PowerShell Module)
+
+JIM includes a cross-platform PowerShell module for scripting, automation, and Identity as Code (IDaC). Requires PowerShell 7.0+.
+
+**Install from PowerShell Gallery:**
+
+```powershell
+Install-Module -Name JIM
+```
+
+**Connect and verify:**
+
+```powershell
+Connect-JIM -Url "https://jim.example.com"    # Opens browser for SSO sign-in
+Test-JIMConnection
+```
+
+For air-gapped or disconnected installation, see the [Deployment Guide — PowerShell Module](docs/DEPLOYMENT_GUIDE.md#powershell-module).
+
 ## State of Development
 JIM has reached MVP completion (100%). The core identity lifecycle is fully functional:
 
