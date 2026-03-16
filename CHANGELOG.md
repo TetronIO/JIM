@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🐛 Pending export reference attributes (e.g. group members) now display meaningful identifiers (DN, External ID) instead of raw GUIDs with a misleading "unresolved reference" warning
 - 🐛 References to objects processed later on the same sync page are now resolved via a post-page resolution pass
+- 🐛 Resolved reference attributes (e.g. group members) now appear in export causality tree attribute changes — previously they were silently dropped
 - 🖥️ Pending export references show a "pending export" indicator to distinguish them from fully resolved and genuinely unresolved references
 - 🔒 Unresolved reference fail-fast assertions added to integration test Scenarios 1, 2, and 8
 

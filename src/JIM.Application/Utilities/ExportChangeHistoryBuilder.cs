@@ -192,6 +192,12 @@ public static class ExportChangeHistoryBuilder
                         new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.UnresolvedReferenceValue));
                 }
                 break;
+            case AttributeDataType.Reference when peChange.StringValue != null:
+                // Resolved reference — deferred exports have their UnresolvedReferenceValue cleared
+                // and the resolved identifier (e.g. DN) stored in StringValue during reference resolution.
+                attributeChange.ValueChanges.Add(
+                    new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.StringValue));
+                break;
             case AttributeDataType.Text when peChange.StringValue == null:
             case AttributeDataType.Number when peChange.IntValue == null:
             case AttributeDataType.LongNumber when peChange.LongValue == null:

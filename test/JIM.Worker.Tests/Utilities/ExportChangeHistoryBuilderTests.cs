@@ -393,6 +393,25 @@ public class ExportChangeHistoryBuilderTests
     }
 
     [Test]
+    public void MapAttributeValueChanges_ResolvedReferenceAttribute_MapsStringValueAsReference()
+    {
+        // Arrange — deferred export with resolved reference (UnresolvedReferenceValue cleared, StringValue set)
+        var change = new ConnectedSystemObjectChange();
+        var peChanges = new List<PendingExportAttributeValueChange>
+        {
+            new() { Attribute = _referenceAttribute, ChangeType = PendingExportAttributeChangeType.Add, StringValue = "CN=User1,OU=Users,DC=test,DC=local" }
+        };
+
+        // Act
+        ExportChangeHistoryBuilder.MapAttributeValueChanges(change, peChanges);
+
+        // Assert — resolved DN stored as string value
+        var valueChange = change.AttributeChanges.First().ValueChanges.First();
+        Assert.That(valueChange.StringValue, Is.EqualTo("CN=User1,OU=Users,DC=test,DC=local"));
+        Assert.That(valueChange.IsPendingExportStub, Is.False);
+    }
+
+    [Test]
     public void MapAttributeValueChanges_MultipleChangesForSameAttribute_GroupsUnderOneAttributeChange()
     {
         // Arrange — two value changes for the same multi-valued attribute
