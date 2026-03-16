@@ -139,6 +139,9 @@ function Connect-JIMWithApiKey {
 
         Show-JIMBanner -ServerVersion $serverVersion -Url $BaseUrl
 
+        # Verify the user is authorised to use JIM
+        $userInfo = Test-JIMAuthorisation
+
         # Return connection info (without exposing full API key)
         $keyPreview = if ($ApiKey.Length -gt 12) {
             $ApiKey.Substring(0, 8) + "..." + $ApiKey.Substring($ApiKey.Length - 4)
@@ -153,6 +156,7 @@ function Connect-JIMWithApiKey {
             ApiKey        = $keyPreview
             Connected     = $true
             ServerVersion = $serverVersion
+            Authorised    = $userInfo.authorised ?? $null
             Status        = $health.status ?? 'Connected'
         }
     }
@@ -282,12 +286,16 @@ function Connect-JIMInteractive {
 
         Show-JIMBanner -ServerVersion $serverVersion -Url $BaseUrl
 
+        # Verify the user is authorised to use JIM
+        $userInfo = Test-JIMAuthorisation
+
         [PSCustomObject]@{
             Url           = $script:JIMConnection.Url
             AuthMethod    = 'OAuth'
             Connected     = $true
             ServerVersion = $serverVersion
             ExpiresAt     = $tokens.ExpiresAt
+            Authorised    = $userInfo.authorised ?? $null
             Status        = $health.status ?? 'Connected'
         }
     }
