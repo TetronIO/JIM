@@ -423,6 +423,8 @@ var schedule = await Jim.Scheduler.GetScheduleAsync(id);
 4. Test: `dotnet ef database update --project src/JIM.PostgresData`
 5. Commit migration files
 
+**CRITICAL: NEVER flatten, squash, delete, or reset EF Core migrations.** Migrations are append-only. Deployed instances track applied migrations by name in `__EFMigrationsHistory` — removing old migrations and replacing them with a combined migration will break every existing deployment.
+
 **Updating Architecture Diagrams:**
 
 When making architectural changes (new containers, components, connectors, or significant restructuring):
