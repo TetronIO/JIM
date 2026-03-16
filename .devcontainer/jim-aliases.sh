@@ -183,8 +183,8 @@ jim-cleanup() {
   df -h / | tail -1
 }
 
-# Reset
-alias jim-reset='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down --rmi local --volumes && docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down --rmi local --volumes --remove-orphans 2>/dev/null || true && docker rm -f samba-ad-primary samba-ad-source samba-ad-target sqlserver-hris-a oracle-hris-b postgres-target openldap-test mysql-test 2>/dev/null || true && docker volume ls --format "{{.Name}}" | grep jim-integration | xargs -r docker volume rm 2>/dev/null || true && docker volume rm -f jim-db-volume jim-logs-volume 2>/dev/null || true && echo "JIM reset complete. All containers, images, and volumes removed. Run jim-build to rebuild."'
+# Reset (preserves Samba AD snapshot images — they take a long time to build)
+alias jim-reset='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down --volumes && docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down --volumes --remove-orphans 2>/dev/null || true && docker rm -f samba-ad-primary samba-ad-source samba-ad-target sqlserver-hris-a oracle-hris-b postgres-target openldap-test mysql-test 2>/dev/null || true && docker image prune -af --filter "label!=jim.samba.snapshot-hash" --filter "label!=jim.samba.build-hash" 2>/dev/null || true && docker volume ls --format "{{.Name}}" | grep jim-integration | xargs -r docker volume rm 2>/dev/null || true && docker volume rm -f jim-db-volume jim-logs-volume 2>/dev/null || true && echo "JIM reset complete. Containers, images, and volumes removed (snapshots preserved). Run jim-build to rebuild."'
 
 # Structurizr diagram export
 jim-diagrams() {
