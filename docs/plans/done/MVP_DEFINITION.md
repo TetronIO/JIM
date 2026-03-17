@@ -77,7 +77,7 @@ Full plan: `docs/plans/EXPORT_PERFORMANCE_OPTIMISATION.md`
 
 ### UI/UX Improvements
 
-- **Theme system** — 5 navy-series themes (navy-o2 through navy-o5) with refined light and dark mode support
+- **Theme system** — Navy theme with refined light and dark mode support, plus additional theme options (purple, black, blended-nav, future-minimal)
 - **Operations Queue** — Grouped queue table with collapsible schedule headers, step progress, worker status chips, animated worker processing bar
 - **Text normalisation** — Consistent text sizing across Activity Detail, API Key Detail, Change History modal, and Activity Item Details pages
 - **Thousand separators** — Culture-aware number formatting across all statistics displays
