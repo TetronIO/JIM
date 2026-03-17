@@ -109,7 +109,7 @@ html[lang] {
     --jim-nav-top-level-color: #b0b8c4;
     --jim-nav-child-color: #8a9eb4;
     --jim-nav-hover-color: #ffffff;
-    --jim-nav-active-color: #7b68b5;
+    --jim-nav-active-color: #9585c8;
 
     /* === JIM Custom: Drawer border (paper border — right-hand edge) === */
     --jim-drawer-border-color: #243a52;
@@ -268,4 +268,34 @@ html[lang] .mud-tab.mud-tab-active .mud-icon-root {
 html[lang] .mud-tab.mud-tab-active .mud-tab-indicator,
 html[lang] .mud-tab-slider {
     background-color: var(--mud-palette-primary-lighten) !important;
+}
+
+/* Outlined primary chips — brighten text and border */
+html[lang] .mud-chip-outlined.mud-chip-color-primary {
+    color: var(--mud-palette-primary-lighten) !important;
+    border-color: var(--mud-palette-primary-lighten) !important;
+}
+
+/* Text primary chips — brighten text with subtle primary background */
+html[lang] .mud-chip-text.mud-chip-color-primary {
+    color: var(--mud-palette-primary-lighten) !important;
+    background-color: rgba(var(--mud-palette-primary-rgb), 0.32) !important;
+}
+
+/* Outlined secondary chips — brighten text and border */
+html[lang] .mud-chip-outlined.mud-chip-color-secondary {
+    color: var(--mud-palette-secondary-lighten) !important;
+    border-color: var(--mud-palette-secondary-lighten) !important;
+}
+
+/* Text secondary chips — brighten text with subtle secondary background */
+html[lang] .mud-chip-text.mud-chip-color-secondary {
+    color: var(--mud-palette-secondary-lighten) !important;
+    background-color: rgba(var(--mud-palette-secondary-rgb), 0.32) !important;
+}
+
+/* Text tertiary chips — brighten text with subtle tertiary background */
+html[lang] .mud-chip-text.mud-chip-color-tertiary {
+    color: var(--mud-palette-tertiary-lighten) !important;
+    background-color: rgba(var(--mud-palette-tertiary-rgb), 0.32) !important;
 }
