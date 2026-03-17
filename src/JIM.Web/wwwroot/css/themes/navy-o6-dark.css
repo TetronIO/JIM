@@ -67,7 +67,7 @@ html[lang] {
 
     /* === Text === */
     --mud-palette-text-primary: #e0e4ea;
-    --mud-palette-text-secondary: #8a96a8;
+    --mud-palette-text-secondary: #8a9eb4;
     --mud-palette-text-disabled: #4a5568;
 
     /* === Action === */
@@ -107,7 +107,7 @@ html[lang] {
 
     /* === JIM Custom: Navigation === */
     --jim-nav-top-level-color: #b0b8c4;
-    --jim-nav-child-color: #6e7e94;
+    --jim-nav-child-color: #8a9eb4;
     --jim-nav-hover-color: #ffffff;
     --jim-nav-active-color: #7b68b5;
 
