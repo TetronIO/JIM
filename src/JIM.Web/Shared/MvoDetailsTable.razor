@@ -1,5 +1,6 @@
 @using JIM.Models.Core
 @using Utilities
+@inject IDialogService DialogService
 
 @if (MetaverseObject != null)
 {
@@ -38,7 +39,7 @@
                                 {
                                     @RenderValue(group.Values[0])
                                 }
-                                else if (group.Values.Count <= MvaInlineThreshold)
+                                else if (group.TotalCount <= MvaInlineThreshold)
                                 {
                                     <div class="jim-attr-expanded">
                                         @foreach (var val in group.Values)
@@ -58,9 +59,10 @@
                                                 @RenderValue(val)
                                             </div>
                                         }
-                                        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">
-                                            +@(group.Values.Count - MvaInlineThreshold) more
-                                        </MudText>
+                                        <MudButton Variant="Variant.Outlined" Class="jim-attr-expand-btn"
+                                            OnClick="@(() => OpenMvaDialogAsync(group.AttributeName, group.TotalCount, group.IsReference))">
+                                            +@(group.TotalCount - MvaInlineThreshold) more
+                                        </MudButton>
                                     </div>
                                 }
                             </td>
@@ -162,7 +164,9 @@
     private record MvoAttributeTableGroup(
         string AttributeName,
         List<MetaverseObjectAttributeValue> Values,
-        bool IsMultiValued);
+        bool IsMultiValued,
+        int TotalCount,
+        bool IsReference);
 
     private List<MvoAttributeTableGroup> GetGroupedAttributes()
     {
@@ -172,10 +176,37 @@
         return MetaverseObject.AttributeValues
             .GroupBy(v => v.Attribute.Name)
             .OrderBy(g => g.Key)
-            .Select(g => new MvoAttributeTableGroup(
-                g.Key,
-                g.ToList(),
-                g.First().Attribute.AttributePlurality == AttributePlurality.MultiValued))
+            .Select(g =>
+            {
+                var values = g.ToList();
+                var isReference = values.Any(v => v.ReferenceValue != null);
+                return new MvoAttributeTableGroup(
+                    g.Key,
+                    values,
+                    g.First().Attribute.AttributePlurality == AttributePlurality.MultiValued,
+                    values.Count,
+                    isReference);
+            })
             .ToList();
+    }
+
+    private async Task OpenMvaDialogAsync(string attributeName, int totalCount, bool isReference)
+    {
+        var parameters = new DialogParameters<MvoMvaDialog>
+        {
+            { x => x.AttributeName, attributeName },
+            { x => x.MetaverseObjectId, MetaverseObject.Id },
+            { x => x.TotalCount, totalCount },
+            { x => x.IsReferenceAttribute, isReference }
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        await DialogService.ShowAsync<MvoMvaDialog>(attributeName, parameters, options);
     }
 }

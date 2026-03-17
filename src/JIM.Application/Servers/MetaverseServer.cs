@@ -630,6 +630,21 @@ public class MetaverseServer
     }
 
     /// <summary>
+    /// Returns a paginated set of attribute values for a specific attribute on a Metaverse Object.
+    /// Supports server-side search and pagination for large multi-valued attributes.
+    /// </summary>
+    public async Task<PagedResultSet<MetaverseObjectAttributeValue>> GetAttributeValuesPagedAsync(
+        Guid metaverseObjectId,
+        string attributeName,
+        int page,
+        int pageSize,
+        string? searchText = null)
+    {
+        return await Application.Repository.Metaverse.GetAttributeValuesPagedAsync(
+            metaverseObjectId, attributeName, page, pageSize, searchText);
+    }
+
+    /// <summary>
     /// Marks MVOs as disconnected that will become orphaned when the specified Connected System is deleted.
     /// This sets LastConnectorDisconnectedDate so housekeeping will delete them after the grace period.
     /// </summary>

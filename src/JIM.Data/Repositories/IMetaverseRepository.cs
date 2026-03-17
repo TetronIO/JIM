@@ -196,6 +196,16 @@ public interface IMetaverseRepository
     /// <param name="changeId">The ID of the MVO change record.</param>
     /// <returns>List of all changes for that MVO ordered by ChangeTime descending.</returns>
     Task<List<MetaverseObjectChange>> GetDeletedMvoChangeHistoryAsync(Guid changeId);
+    /// <summary>
+    /// Returns a paginated set of attribute values for a specific attribute on a Metaverse Object.
+    /// Supports server-side search and pagination for large multi-valued attributes.
+    /// </summary>
+    public Task<PagedResultSet<MetaverseObjectAttributeValue>> GetAttributeValuesPagedAsync(
+        Guid metaverseObjectId,
+        string attributeName,
+        int page,
+        int pageSize,
+        string? searchText = null);
     #endregion
 
     #region attributes

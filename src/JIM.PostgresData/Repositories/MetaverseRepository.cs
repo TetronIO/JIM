@@ -1177,6 +1177,51 @@ public class MetaverseRepository : IMetaverseRepository
         return new List<MetaverseObjectChange> { targetChange };
     }
 
+    public async Task<PagedResultSet<MetaverseObjectAttributeValue>> GetAttributeValuesPagedAsync(
+        Guid metaverseObjectId,
+        string attributeName,
+        int page,
+        int pageSize,
+        string? searchText = null)
+    {
+        var query = Repository.Database.Set<MetaverseObjectAttributeValue>()
+            .Where(av => av.MetaverseObject.Id == metaverseObjectId
+                         && av.Attribute.Name == attributeName);
+
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            var search = searchText.ToLowerInvariant();
+            query = query.Where(av =>
+                (av.StringValue != null && av.StringValue.ToLower().Contains(search))
+                || (av.ReferenceValue != null && av.ReferenceValue.AttributeValues
+                    .Any(rav => rav.StringValue != null && rav.StringValue.ToLower().Contains(search)))
+            );
+        }
+
+        var totalCount = await query.CountAsync();
+
+        var values = await query
+            .AsSplitQuery()
+            .OrderBy(av => av.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Include(av => av.Attribute)
+            .Include(av => av.ReferenceValue)
+            .ThenInclude(rv => rv!.Type)
+            .Include(av => av.ReferenceValue)
+            .ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
+            .ThenInclude(rvav => rvav.Attribute)
+            .ToListAsync();
+
+        return new PagedResultSet<MetaverseObjectAttributeValue>
+        {
+            Results = values,
+            TotalResults = totalCount,
+            CurrentPage = page,
+            PageSize = pageSize
+        };
+    }
+
     private static List<MetaverseObjectAttributeValue> GetFilteredAttributeValuesList(PredefinedSearch predefinedSearch, MetaverseObject metaverseObject)
     {
         return predefinedSearch.Attributes
