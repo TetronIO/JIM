@@ -112,6 +112,83 @@ public class MetaverseRepository : IMetaverseRepository
         }).ToListAsync();
     }
 
+    public async Task<PagedResultSet<MetaverseAttributeHeader>> GetMetaverseAttributeHeadersAsync(
+        int page,
+        int pageSize,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = false)
+    {
+        if (pageSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
+
+        if (page < 1)
+            page = 1;
+
+        // Limit page size to avoid increasing latency unnecessarily
+        if (pageSize > 100)
+            pageSize = 100;
+
+        var query = Repository.Database.MetaverseAttributes
+            .Include(a => a.MetaverseObjectTypes)
+            .AsQueryable();
+
+        // Apply search filter
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            var searchPattern = $"%{searchQuery}%";
+            query = query.Where(a => EF.Functions.ILike(a.Name, searchPattern));
+        }
+
+        // Apply sorting
+        query = sortBy?.ToLower() switch
+        {
+            "name" => sortDescending
+                ? query.OrderByDescending(a => a.Name)
+                : query.OrderBy(a => a.Name),
+            "type" => sortDescending
+                ? query.OrderByDescending(a => a.Type)
+                : query.OrderBy(a => a.Type),
+            "plurality" => sortDescending
+                ? query.OrderByDescending(a => a.AttributePlurality)
+                : query.OrderBy(a => a.AttributePlurality),
+            "builtin" => sortDescending
+                ? query.OrderByDescending(a => a.BuiltIn)
+                : query.OrderBy(a => a.BuiltIn),
+            "created" => sortDescending
+                ? query.OrderByDescending(a => a.Created)
+                : query.OrderBy(a => a.Created),
+            _ => sortDescending
+                ? query.OrderByDescending(a => a.Name)
+                : query.OrderBy(a => a.Name)
+        };
+
+        var totalResults = await query.CountAsync();
+
+        var results = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(a => new MetaverseAttributeHeader
+            {
+                Id = a.Id,
+                Created = a.Created,
+                Name = a.Name,
+                BuiltIn = a.BuiltIn,
+                Type = a.Type,
+                AttributePlurality = a.AttributePlurality,
+                MetaverseObjectTypes = a.MetaverseObjectTypes.Select(t => new KeyValuePair<int, string>(t.Id, t.Name))
+            })
+            .ToListAsync();
+
+        return new PagedResultSet<MetaverseAttributeHeader>
+        {
+            Results = results,
+            TotalResults = totalResults,
+            PageSize = pageSize,
+            CurrentPage = page
+        };
+    }
+
     public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id)
     {
         return await Repository.Database.MetaverseAttributes.SingleOrDefaultAsync(x => x.Id == id);

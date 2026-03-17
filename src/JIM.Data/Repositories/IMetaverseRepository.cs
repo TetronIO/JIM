@@ -203,6 +203,16 @@ public interface IMetaverseRepository
 
     public Task<IList<MetaverseAttributeHeader>?> GetMetaverseAttributeHeadersAsync();
 
+    /// <summary>
+    /// Retrieves a page of Metaverse Attribute Headers with sorting and search support.
+    /// </summary>
+    public Task<PagedResultSet<MetaverseAttributeHeader>> GetMetaverseAttributeHeadersAsync(
+        int page,
+        int pageSize,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = false);
+
     public Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id);
 
     /// <summary>
