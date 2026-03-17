@@ -289,23 +289,28 @@
     };
 }
 
-@* Renders a view mode toggle button for switching between table/chipset/list *@
+@* Renders a view mode toggle button for switching between table/chipset/list.
+   Only shown when multiple view modes are available (small MVAs with ≤10 values). *@
 @{
     RenderFragment RenderViewModeToggle(MvoAttributeGroup group, string currentMode) => __builder =>
     {
-        <MudMenu Icon="@Icons.Material.Filled.ViewModule" Size="Size.Small" Dense="true"
-                 AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
-                 AriaLabel="Change view mode">
-            <MudMenuItem OnClick="@(() => SetViewModeAsync(group.AttributeName, "table"))"
-                         Icon="@Icons.Material.Filled.ViewList"
-                         Disabled="@(currentMode == "table")">Table</MudMenuItem>
-            <MudMenuItem OnClick="@(() => SetViewModeAsync(group.AttributeName, "chipset"))"
-                         Icon="@Icons.Material.Filled.Style"
-                         Disabled="@(currentMode == "chipset")">Chips</MudMenuItem>
-            <MudMenuItem OnClick="@(() => SetViewModeAsync(group.AttributeName, "list"))"
-                         Icon="@Icons.Material.Filled.FormatListBulleted"
-                         Disabled="@(currentMode == "list")">List</MudMenuItem>
-        </MudMenu>
+        @* Large MVAs are locked to table view — no toggle needed *@
+        if (group.TotalCount <= 10)
+        {
+            <MudMenu Icon="@Icons.Material.Filled.ViewModule" Size="Size.Small" Dense="true"
+                     AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
+                     AriaLabel="Change view mode">
+                <MudMenuItem OnClick="@(() => SetViewModeAsync(group.AttributeName, "table"))"
+                             Icon="@Icons.Material.Filled.ViewList"
+                             Disabled="@(currentMode == "table")">Table</MudMenuItem>
+                <MudMenuItem OnClick="@(() => SetViewModeAsync(group.AttributeName, "chipset"))"
+                             Icon="@Icons.Material.Filled.Style"
+                             Disabled="@(currentMode == "chipset")">Chips</MudMenuItem>
+                <MudMenuItem OnClick="@(() => SetViewModeAsync(group.AttributeName, "list"))"
+                             Icon="@Icons.Material.Filled.FormatListBulleted"
+                             Disabled="@(currentMode == "list")">List</MudMenuItem>
+            </MudMenu>
+        }
     };
 }
 
@@ -548,11 +553,16 @@
 
     /// <summary>
     /// Determines the effective view mode for a multi-valued attribute.
-    /// Priority: 1) user preference override, 2) schema rendering hint, 3) auto-decide by count.
+    /// Large MVAs (>10 values) always use table view for server-side pagination.
+    /// Small MVAs: 1) user preference override, 2) schema rendering hint, 3) auto-decide chipset.
     /// </summary>
     private string GetEffectiveViewMode(MvoAttributeGroup group)
     {
-        // User override takes precedence
+        // Large MVAs must use table view — chipset/list can't handle capped data
+        if (group.TotalCount > 10)
+            return "table";
+
+        // User override takes precedence for small MVAs
         if (_viewModeOverrides.TryGetValue(group.AttributeName, out var userMode))
             return userMode;
 
@@ -562,7 +572,7 @@
             AttributeRenderingHint.Table => "table",
             AttributeRenderingHint.ChipSet => "chipset",
             AttributeRenderingHint.List => "list",
-            _ => group.TotalCount > 10 ? "table" : "chipset"
+            _ => "chipset"
         };
     }
 
