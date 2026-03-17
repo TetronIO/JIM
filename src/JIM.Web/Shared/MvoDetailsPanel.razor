@@ -1,6 +1,8 @@
+@using JIM.Application
 @using JIM.Models.Core
 @using JIM.Web.Services
 @using Utilities
+@inject JimApplication Jim
 @inject IUserPreferenceService UserPreferences
 
 @if (MetaverseObject != null)
@@ -124,11 +126,12 @@
     };
 }
 
-@* Renders a multi-valued attribute as a searchable, paginated table *@
+@* Renders a multi-valued attribute as a searchable, server-side paginated table *@
 @{
     RenderFragment RenderMvaTable(MvoAttributeGroup group) => __builder =>
     {
         var searchText = _searchTexts.GetValueOrDefault(group.AttributeName, "");
+        var tableRef = GetOrCreateTableRef(group.AttributeName);
         @* TODO: When editable, add Add/Remove buttons and search-to-add dialog *@
         <MudText Typo="Typo.subtitle2" Class="mb-2">
             <div class="d-flex align-center justify-space-between">
@@ -136,13 +139,14 @@
                 @RenderViewModeToggle(group, "table")
             </div>
         </MudText>
-        <MudTable T="MetaverseObjectAttributeValue" Items="@group.Values" Dense="true" Hover="true"
+        <MudTable @ref="tableRef.Table" T="MetaverseObjectAttributeValue"
+                  ServerData="@((state, token) => ServerReloadAsync(group.AttributeName, state, token))"
+                  Dense="true" Hover="true"
                   Elevation="0" Outlined="true"
-                  RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChangedAsync"
-                  Filter="new Func<MetaverseObjectAttributeValue, bool>(v => FilterMvaTableValue(v, group.AttributeName))">
+                  RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChangedAsync">
             <ToolBarContent>
                 <MudTextField T="string" Value="@searchText"
-                              ValueChanged="@(v => OnSearchTextChanged(group.AttributeName, v))"
+                              ValueChanged="@(v => OnMvaSearchTextChanged(group.AttributeName, v))"
                               Placeholder="@($"Search {group.AttributeName.ToLower()}...")"
                               Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
                               Immediate="true" DebounceInterval="300"
@@ -543,24 +547,48 @@
         await UserPreferences.SetRowsPerPageAsync(newSize);
     }
 
-    // ========================== Table Search ==========================
+    // ========================== Server-Side Table ==========================
 
-    private void OnSearchTextChanged(string attributeName, string value)
+    /// <summary>
+    /// Per-attribute MudTable references for triggering server reload on search.
+    /// </summary>
+    private readonly Dictionary<string, MvaTableRef> _tableRefs = new();
+
+    private class MvaTableRef
     {
-        _searchTexts[attributeName] = value;
+        public MudTable<MetaverseObjectAttributeValue>? Table { get; set; }
     }
 
-    private bool FilterMvaTableValue(MetaverseObjectAttributeValue value, string attributeName)
+    private MvaTableRef GetOrCreateTableRef(string attributeName)
     {
+        if (!_tableRefs.ContainsKey(attributeName))
+            _tableRefs[attributeName] = new MvaTableRef();
+        return _tableRefs[attributeName];
+    }
+
+    private async Task<TableData<MetaverseObjectAttributeValue>> ServerReloadAsync(
+        string attributeName, TableState state, CancellationToken token)
+    {
+        var page = state.Page + 1; // MudBlazor is 0-indexed
+        var pageSize = state.PageSize;
         var searchText = _searchTexts.GetValueOrDefault(attributeName, "");
-        if (string.IsNullOrWhiteSpace(searchText))
-            return true;
+        var search = string.IsNullOrWhiteSpace(searchText) ? null : searchText;
 
-        var displayValue = value.ReferenceValue != null
-            ? value.ReferenceValue.DisplayName ?? value.ReferenceValue.Id.ToString()
-            : GetDisplayValue(value);
+        var result = await Jim.Metaverse.GetAttributeValuesPagedAsync(
+            MetaverseObject.Id, attributeName, page, pageSize, search);
 
-        return displayValue.Contains(searchText, StringComparison.OrdinalIgnoreCase);
+        return new TableData<MetaverseObjectAttributeValue>
+        {
+            Items = result.Results,
+            TotalItems = result.TotalResults
+        };
+    }
+
+    private void OnMvaSearchTextChanged(string attributeName, string value)
+    {
+        _searchTexts[attributeName] = value;
+        if (_tableRefs.TryGetValue(attributeName, out var tableRef))
+            tableRef.Table?.ReloadServerData();
     }
 
     // ========================== Helpers ==========================
