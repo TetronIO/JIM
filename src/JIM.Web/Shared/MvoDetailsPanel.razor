@@ -126,12 +126,14 @@
     };
 }
 
-@* Renders a multi-valued attribute as a searchable, server-side paginated table *@
+@* Renders a multi-valued attribute as a searchable, paginated table.
+   Small MVAs (all values loaded) use client-side Items/Filter.
+   Large MVAs (capped) use server-side ServerData pagination. *@
 @{
     RenderFragment RenderMvaTable(MvoAttributeGroup group) => __builder =>
     {
+        var isCapped = group.TotalCount > group.Values.Count;
         var searchText = _searchTexts.GetValueOrDefault(group.AttributeName, "");
-        var tableRef = GetOrCreateTableRef(group.AttributeName);
         @* TODO: When editable, add Add/Remove buttons and search-to-add dialog *@
         <MudText Typo="Typo.subtitle2" Class="mb-2">
             <div class="d-flex align-center justify-space-between">
@@ -139,45 +141,90 @@
                 @RenderViewModeToggle(group, "table")
             </div>
         </MudText>
-        <MudTable @ref="tableRef.Table" T="MetaverseObjectAttributeValue"
-                  ServerData="@((state, token) => ServerReloadAsync(group.AttributeName, state, token))"
-                  Dense="true" Hover="true"
-                  Elevation="0" Outlined="true"
-                  RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChangedAsync">
-            <ToolBarContent>
-                <MudTextField T="string" Value="@searchText"
-                              ValueChanged="@(v => OnMvaSearchTextChanged(group.AttributeName, v))"
-                              Placeholder="@($"Search {group.AttributeName.ToLower()}...")"
-                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                              Immediate="true" DebounceInterval="300"
-                              Variant="Variant.Outlined" Margin="Margin.Dense" />
-            </ToolBarContent>
-            <HeaderContent>
-                <MudTh>Display Name</MudTh>
-                <MudTh>Type</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                @if (context.ReferenceValue != null)
-                {
-                    <MudTd DataLabel="Display Name">
-                        <MudLink Href="@Utilities.GetMetaverseObjectHref(context.ReferenceValue)">
-                            @(context.ReferenceValue.DisplayName ?? context.ReferenceValue.Id.ToString())
-                        </MudLink>
-                    </MudTd>
-                    <MudTd DataLabel="Type">
-                        @context.ReferenceValue.Type?.Name
-                    </MudTd>
-                }
-                else
-                {
-                    <MudTd DataLabel="Display Name">@GetDisplayValue(context)</MudTd>
-                    <MudTd DataLabel="Type"></MudTd>
-                }
-            </RowTemplate>
-            <PagerContent>
-                <MudTablePager />
-            </PagerContent>
-        </MudTable>
+        @if (isCapped)
+        {
+            var tableRef = GetOrCreateTableRef(group.AttributeName);
+            <MudTable @ref="tableRef.Table" T="MetaverseObjectAttributeValue"
+                      ServerData="@((state, token) => ServerReloadAsync(group.AttributeName, state, token))"
+                      Dense="true" Hover="true"
+                      Elevation="0" Outlined="true"
+                      RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChangedAsync">
+                <ToolBarContent>
+                    <MudTextField T="string" Value="@searchText"
+                                  ValueChanged="@(v => OnMvaSearchTextChanged(group.AttributeName, v))"
+                                  Placeholder="@($"Search {group.AttributeName.ToLower()}...")"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Immediate="true" DebounceInterval="300"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </ToolBarContent>
+                <HeaderContent>
+                    <MudTh>Display Name</MudTh>
+                    <MudTh>Type</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    @if (context.ReferenceValue != null)
+                    {
+                        <MudTd DataLabel="Display Name">
+                            <MudLink Href="@Utilities.GetMetaverseObjectHref(context.ReferenceValue)">
+                                @(context.ReferenceValue.DisplayName ?? context.ReferenceValue.Id.ToString())
+                            </MudLink>
+                        </MudTd>
+                        <MudTd DataLabel="Type">
+                            @context.ReferenceValue.Type?.Name
+                        </MudTd>
+                    }
+                    else
+                    {
+                        <MudTd DataLabel="Display Name">@GetDisplayValue(context)</MudTd>
+                        <MudTd DataLabel="Type"></MudTd>
+                    }
+                </RowTemplate>
+                <PagerContent>
+                    <MudTablePager />
+                </PagerContent>
+            </MudTable>
+        }
+        else
+        {
+            <MudTable T="MetaverseObjectAttributeValue" Items="@group.Values" Dense="true" Hover="true"
+                      Elevation="0" Outlined="true"
+                      RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChangedAsync"
+                      Filter="new Func<MetaverseObjectAttributeValue, bool>(v => FilterMvaTableValue(v, group.AttributeName))">
+                <ToolBarContent>
+                    <MudTextField T="string" Value="@searchText"
+                                  ValueChanged="@(v => OnClientSearchTextChanged(group.AttributeName, v))"
+                                  Placeholder="@($"Search {group.AttributeName.ToLower()}...")"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Immediate="true" DebounceInterval="300"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </ToolBarContent>
+                <HeaderContent>
+                    <MudTh>Display Name</MudTh>
+                    <MudTh>Type</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    @if (context.ReferenceValue != null)
+                    {
+                        <MudTd DataLabel="Display Name">
+                            <MudLink Href="@Utilities.GetMetaverseObjectHref(context.ReferenceValue)">
+                                @(context.ReferenceValue.DisplayName ?? context.ReferenceValue.Id.ToString())
+                            </MudLink>
+                        </MudTd>
+                        <MudTd DataLabel="Type">
+                            @context.ReferenceValue.Type?.Name
+                        </MudTd>
+                    }
+                    else
+                    {
+                        <MudTd DataLabel="Display Name">@GetDisplayValue(context)</MudTd>
+                        <MudTd DataLabel="Type"></MudTd>
+                    }
+                </RowTemplate>
+                <PagerContent>
+                    <MudTablePager />
+                </PagerContent>
+            </MudTable>
+        }
     };
 }
 
@@ -589,6 +636,26 @@
         _searchTexts[attributeName] = value;
         if (_tableRefs.TryGetValue(attributeName, out var tableRef))
             tableRef.Table?.ReloadServerData();
+    }
+
+    // ========================== Client-Side Table (small MVAs) ==========================
+
+    private void OnClientSearchTextChanged(string attributeName, string value)
+    {
+        _searchTexts[attributeName] = value;
+    }
+
+    private bool FilterMvaTableValue(MetaverseObjectAttributeValue value, string attributeName)
+    {
+        var searchText = _searchTexts.GetValueOrDefault(attributeName, "");
+        if (string.IsNullOrWhiteSpace(searchText))
+            return true;
+
+        var displayValue = value.ReferenceValue != null
+            ? value.ReferenceValue.DisplayName ?? value.ReferenceValue.Id.ToString()
+            : GetDisplayValue(value);
+
+        return displayValue.Contains(searchText, StringComparison.OrdinalIgnoreCase);
     }
 
     // ========================== Helpers ==========================
