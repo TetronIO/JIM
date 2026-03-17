@@ -30,11 +30,11 @@ html[lang] {
     --mud-palette-secondary-lighten: #84a0c0;
     --mud-palette-secondary-text: #0a1018;
 
-    /* === Tertiary Palette (muted teal — cool complement to blue) === */
-    --mud-palette-tertiary: #4a9a8a;
-    --mud-palette-tertiary-rgb: 74,154,138;
-    --mud-palette-tertiary-darken: #3a8070;
-    --mud-palette-tertiary-lighten: #60b0a0;
+    /* === Tertiary Palette (teal — cool complement to blue) === */
+    --mud-palette-tertiary: #61aea6;
+    --mud-palette-tertiary-rgb: 97,174,166;
+    --mud-palette-tertiary-darken: #4e9a92;
+    --mud-palette-tertiary-lighten: #7ec2bb;
     --mud-palette-tertiary-text: #0a1018;
 
     /* === Semantic Colours (bright for dark backgrounds) === */
@@ -229,6 +229,14 @@ html[lang] .mud-alert-outlined-normal {
 
 html[lang] .mud-alert-outlined-info {
     background-color: rgba(var(--mud-palette-info-rgb), 0.06) !important;
+    color: var(--mud-palette-info) !important;
+}
+
+/* Info alert text colour — match border/icon for default and outlined variants */
+html[lang] .mud-alert-filled-info .mud-alert-message,
+html[lang] .mud-alert-outlined-info .mud-alert-message,
+html[lang] .mud-alert-text-info .mud-alert-message {
+    color: var(--mud-palette-info) !important;
 }
 
 html[lang] .mud-alert-outlined-success {
