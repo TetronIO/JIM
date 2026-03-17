@@ -1,0 +1,171 @@
+@using JIM.Application
+@using JIM.Models.Core
+@using Utilities
+@inject JimApplication Jim
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body1" Class="mb-3 mud-text-secondary">
+            @TotalCount.ToString("N0") values
+        </MudText>
+        @if (_isReferenceAttribute)
+        {
+            <MudTable @ref="_table" T="MetaverseObjectAttributeValue"
+                      ServerData="ServerReloadAsync"
+                      Dense="true" Hover="true" Elevation="0" Outlined="true"
+                      FixedHeader="true" Height="400px"
+                      Loading="@_loading" LoadingProgressColor="Color.Primary">
+                <ToolBarContent>
+                    <MudTextField T="string" Value="@_searchText"
+                                  ValueChanged="@OnSearch"
+                                  Placeholder="@($"Search {AttributeName.ToLower()}...")"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Immediate="true" DebounceInterval="300"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </ToolBarContent>
+                <HeaderContent>
+                    <MudTh>Display Name</MudTh>
+                    <MudTh>Object Type</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Display Name">
+                        @if (context.ReferenceValue != null)
+                        {
+                            <MudLink Href="@Utilities.GetMetaverseObjectHref(context.ReferenceValue)">
+                                @(context.ReferenceValue.DisplayName ?? context.ReferenceValue.Id.ToString())
+                            </MudLink>
+                        }
+                        else
+                        {
+                            @GetDisplayValue(context)
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Object Type">
+                        @if (context.ReferenceValue != null)
+                        {
+                            <MudChip T="string" Color="Color.Default">
+                                @context.ReferenceValue.Type?.Name
+                            </MudChip>
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <PagerContent>
+                    <MudTablePager />
+                </PagerContent>
+            </MudTable>
+        }
+        else
+        {
+            <MudTable @ref="_table" T="MetaverseObjectAttributeValue"
+                      ServerData="ServerReloadAsync"
+                      Dense="true" Hover="true" Elevation="0" Outlined="true"
+                      FixedHeader="true" Height="400px"
+                      Loading="@_loading" LoadingProgressColor="Color.Primary">
+                <ToolBarContent>
+                    <MudTextField T="string" Value="@_searchText"
+                                  ValueChanged="@OnSearch"
+                                  Placeholder="@($"Search {AttributeName.ToLower()}...")"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Immediate="true" DebounceInterval="300"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </ToolBarContent>
+                <HeaderContent>
+                    <MudTh>Value</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Value">
+                        @GetDisplayValue(context)
+                    </MudTd>
+                </RowTemplate>
+                <PagerContent>
+                    <MudTablePager />
+                </PagerContent>
+            </MudTable>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public string AttributeName { get; set; } = string.Empty;
+
+    [Parameter]
+    public Guid MetaverseObjectId { get; set; }
+
+    [Parameter]
+    public int TotalCount { get; set; }
+
+    [Parameter]
+    public bool IsReferenceAttribute { get; set; }
+
+    private MudTable<MetaverseObjectAttributeValue>? _table;
+    private string _searchText = string.Empty;
+    private bool _isReferenceAttribute;
+    private bool _loading;
+
+    protected override void OnInitialized()
+    {
+        _isReferenceAttribute = IsReferenceAttribute;
+    }
+
+    private async Task<TableData<MetaverseObjectAttributeValue>> ServerReloadAsync(
+        TableState state, CancellationToken token)
+    {
+        _loading = true;
+
+        try
+        {
+            var page = state.Page + 1; // MudBlazor is 0-indexed
+            var pageSize = state.PageSize;
+            var searchText = string.IsNullOrWhiteSpace(_searchText) ? null : _searchText;
+
+            var result = await Jim.Metaverse.GetAttributeValuesPagedAsync(
+                MetaverseObjectId, AttributeName, page, pageSize, searchText);
+
+            return new TableData<MetaverseObjectAttributeValue>
+            {
+                Items = result.Results,
+                TotalItems = result.TotalResults
+            };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OnSearch(string text)
+    {
+        _searchText = text;
+        _table?.ReloadServerData();
+    }
+
+    private static string GetDisplayValue(MetaverseObjectAttributeValue value)
+    {
+        if (!string.IsNullOrEmpty(value.StringValue))
+            return value.StringValue;
+        if (value.DateTimeValue.HasValue)
+            return value.DateTimeValue.Value.ToFriendlyDate();
+        if (value.IntValue.HasValue)
+            return value.IntValue.Value.ToString();
+        if (value.LongValue.HasValue)
+            return value.LongValue.Value.ToString();
+        if (value.GuidValue.HasValue)
+            return value.GuidValue.Value.ToString();
+        if (value.BoolValue.HasValue)
+            return value.BoolValue.Value ? "True" : "False";
+        if (value.ByteValue != null)
+            return $"{value.ByteValue.Length} bytes";
+        return string.Empty;
+    }
+
+    private void Close() => MudDialog.Close();
+}

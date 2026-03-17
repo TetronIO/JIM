@@ -1,6 +1,8 @@
+@using JIM.Application
 @using JIM.Models.Core
 @using JIM.Web.Services
 @using Utilities
+@inject JimApplication Jim
 @inject IUserPreferenceService UserPreferences
 
 @if (MetaverseObject != null)
@@ -124,56 +126,105 @@
     };
 }
 
-@* Renders a multi-valued attribute as a searchable, paginated table *@
+@* Renders a multi-valued attribute as a searchable, paginated table.
+   Small MVAs (all values loaded) use client-side Items/Filter.
+   Large MVAs (capped) use server-side ServerData pagination. *@
 @{
     RenderFragment RenderMvaTable(MvoAttributeGroup group) => __builder =>
     {
+        var isCapped = group.TotalCount > group.Values.Count;
         var searchText = _searchTexts.GetValueOrDefault(group.AttributeName, "");
         @* TODO: When editable, add Add/Remove buttons and search-to-add dialog *@
         <MudText Typo="Typo.subtitle2" Class="mb-2">
             <div class="d-flex align-center justify-space-between">
-                <span>@group.AttributeName (@group.Values.Count)</span>
+                <span>@group.AttributeName (@group.TotalCount)</span>
                 @RenderViewModeToggle(group, "table")
             </div>
         </MudText>
-        <MudTable T="MetaverseObjectAttributeValue" Items="@group.Values" Dense="true" Hover="true"
-                  Elevation="0" Outlined="true"
-                  RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChangedAsync"
-                  Filter="new Func<MetaverseObjectAttributeValue, bool>(v => FilterMvaTableValue(v, group.AttributeName))">
-            <ToolBarContent>
-                <MudTextField T="string" Value="@searchText"
-                              ValueChanged="@(v => OnSearchTextChanged(group.AttributeName, v))"
-                              Placeholder="@($"Search {group.AttributeName.ToLower()}...")"
-                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                              Immediate="true" DebounceInterval="300"
-                              Variant="Variant.Outlined" Margin="Margin.Dense" />
-            </ToolBarContent>
-            <HeaderContent>
-                <MudTh>Display Name</MudTh>
-                <MudTh>Type</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                @if (context.ReferenceValue != null)
-                {
-                    <MudTd DataLabel="Display Name">
-                        <MudLink Href="@Utilities.GetMetaverseObjectHref(context.ReferenceValue)">
-                            @(context.ReferenceValue.DisplayName ?? context.ReferenceValue.Id.ToString())
-                        </MudLink>
-                    </MudTd>
-                    <MudTd DataLabel="Type">
-                        @context.ReferenceValue.Type?.Name
-                    </MudTd>
-                }
-                else
-                {
-                    <MudTd DataLabel="Display Name">@GetDisplayValue(context)</MudTd>
-                    <MudTd DataLabel="Type"></MudTd>
-                }
-            </RowTemplate>
-            <PagerContent>
-                <MudTablePager />
-            </PagerContent>
-        </MudTable>
+        @if (isCapped)
+        {
+            var tableRef = GetOrCreateTableRef(group.AttributeName);
+            <MudTable @ref="tableRef.Table" T="MetaverseObjectAttributeValue"
+                      ServerData="@((state, token) => ServerReloadAsync(group.AttributeName, state, token))"
+                      Dense="true" Hover="true"
+                      Elevation="0" Outlined="true"
+                      RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChangedAsync">
+                <ToolBarContent>
+                    <MudTextField T="string" Value="@searchText"
+                                  ValueChanged="@(v => OnMvaSearchTextChanged(group.AttributeName, v))"
+                                  Placeholder="@($"Search {group.AttributeName.ToLower()}...")"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Immediate="true" DebounceInterval="300"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </ToolBarContent>
+                <HeaderContent>
+                    <MudTh>Display Name</MudTh>
+                    <MudTh>Type</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    @if (context.ReferenceValue != null)
+                    {
+                        <MudTd DataLabel="Display Name">
+                            <MudLink Href="@Utilities.GetMetaverseObjectHref(context.ReferenceValue)">
+                                @(context.ReferenceValue.DisplayName ?? context.ReferenceValue.Id.ToString())
+                            </MudLink>
+                        </MudTd>
+                        <MudTd DataLabel="Type">
+                            @context.ReferenceValue.Type?.Name
+                        </MudTd>
+                    }
+                    else
+                    {
+                        <MudTd DataLabel="Display Name">@GetDisplayValue(context)</MudTd>
+                        <MudTd DataLabel="Type"></MudTd>
+                    }
+                </RowTemplate>
+                <PagerContent>
+                    <MudTablePager />
+                </PagerContent>
+            </MudTable>
+        }
+        else
+        {
+            <MudTable T="MetaverseObjectAttributeValue" Items="@group.Values" Dense="true" Hover="true"
+                      Elevation="0" Outlined="true"
+                      RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChangedAsync"
+                      Filter="new Func<MetaverseObjectAttributeValue, bool>(v => FilterMvaTableValue(v, group.AttributeName))">
+                <ToolBarContent>
+                    <MudTextField T="string" Value="@searchText"
+                                  ValueChanged="@(v => OnClientSearchTextChanged(group.AttributeName, v))"
+                                  Placeholder="@($"Search {group.AttributeName.ToLower()}...")"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Immediate="true" DebounceInterval="300"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </ToolBarContent>
+                <HeaderContent>
+                    <MudTh>Display Name</MudTh>
+                    <MudTh>Type</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    @if (context.ReferenceValue != null)
+                    {
+                        <MudTd DataLabel="Display Name">
+                            <MudLink Href="@Utilities.GetMetaverseObjectHref(context.ReferenceValue)">
+                                @(context.ReferenceValue.DisplayName ?? context.ReferenceValue.Id.ToString())
+                            </MudLink>
+                        </MudTd>
+                        <MudTd DataLabel="Type">
+                            @context.ReferenceValue.Type?.Name
+                        </MudTd>
+                    }
+                    else
+                    {
+                        <MudTd DataLabel="Display Name">@GetDisplayValue(context)</MudTd>
+                        <MudTd DataLabel="Type"></MudTd>
+                    }
+                </RowTemplate>
+                <PagerContent>
+                    <MudTablePager />
+                </PagerContent>
+            </MudTable>
+        }
     };
 }
 
@@ -212,7 +263,7 @@
         @* TODO: When editable, add remove button per item and Add button at bottom *@
         <MudText Typo="Typo.subtitle2" Class="mb-1">
             <div class="d-flex align-center justify-space-between">
-                <span>@group.AttributeName (@group.Values.Count)</span>
+                <span>@group.AttributeName (@group.TotalCount)</span>
                 @RenderViewModeToggle(group, "list")
             </div>
         </MudText>
@@ -238,23 +289,28 @@
     };
 }
 
-@* Renders a view mode toggle button for switching between table/chipset/list *@
+@* Renders a view mode toggle button for switching between table/chipset/list.
+   Only shown when multiple view modes are available (small MVAs with ≤10 values). *@
 @{
     RenderFragment RenderViewModeToggle(MvoAttributeGroup group, string currentMode) => __builder =>
     {
-        <MudMenu Icon="@Icons.Material.Filled.ViewModule" Size="Size.Small" Dense="true"
-                 AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
-                 AriaLabel="Change view mode">
-            <MudMenuItem OnClick="@(() => SetViewModeAsync(group.AttributeName, "table"))"
-                         Icon="@Icons.Material.Filled.ViewList"
-                         Disabled="@(currentMode == "table")">Table</MudMenuItem>
-            <MudMenuItem OnClick="@(() => SetViewModeAsync(group.AttributeName, "chipset"))"
-                         Icon="@Icons.Material.Filled.Style"
-                         Disabled="@(currentMode == "chipset")">Chips</MudMenuItem>
-            <MudMenuItem OnClick="@(() => SetViewModeAsync(group.AttributeName, "list"))"
-                         Icon="@Icons.Material.Filled.FormatListBulleted"
-                         Disabled="@(currentMode == "list")">List</MudMenuItem>
-        </MudMenu>
+        @* Large MVAs are locked to table view — no toggle needed *@
+        if (group.TotalCount <= 10)
+        {
+            <MudMenu Icon="@Icons.Material.Filled.ViewModule" Size="Size.Small" Dense="true"
+                     AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
+                     AriaLabel="Change view mode">
+                <MudMenuItem OnClick="@(() => SetViewModeAsync(group.AttributeName, "table"))"
+                             Icon="@Icons.Material.Filled.ViewList"
+                             Disabled="@(currentMode == "table")">Table</MudMenuItem>
+                <MudMenuItem OnClick="@(() => SetViewModeAsync(group.AttributeName, "chipset"))"
+                             Icon="@Icons.Material.Filled.Style"
+                             Disabled="@(currentMode == "chipset")">Chips</MudMenuItem>
+                <MudMenuItem OnClick="@(() => SetViewModeAsync(group.AttributeName, "list"))"
+                             Icon="@Icons.Material.Filled.FormatListBulleted"
+                             Disabled="@(currentMode == "list")">List</MudMenuItem>
+            </MudMenu>
+        }
     };
 }
 
@@ -271,6 +327,13 @@
     /// </summary>
     [Parameter]
     public int ObjectTypeId { get; set; }
+
+    /// <summary>
+    /// Per-attribute total value counts from the capped load.
+    /// Used to show accurate totals when MVA values are capped.
+    /// </summary>
+    [Parameter]
+    public Dictionary<string, int> AttributeValueTotalCounts { get; set; } = new();
 
     /// <summary>
     /// Whether attributes are editable. Currently always false.
@@ -456,11 +519,17 @@
         var attributeGroups = MetaverseObject.AttributeValues
             .GroupBy(v => v.Attribute.Name)
             .OrderBy(g => g.Key)
-            .Select(g => new MvoAttributeGroup(
-                g.Key,
-                g.ToList(),
-                g.First().Attribute.AttributePlurality == AttributePlurality.MultiValued,
-                g.First().Attribute.RenderingHint))
+            .Select(g =>
+            {
+                var values = g.ToList();
+                var totalCount = AttributeValueTotalCounts.GetValueOrDefault(g.Key, values.Count);
+                return new MvoAttributeGroup(
+                    g.Key,
+                    values,
+                    g.First().Attribute.AttributePlurality == AttributePlurality.MultiValued,
+                    g.First().Attribute.RenderingHint,
+                    totalCount);
+            })
             .ToList();
 
         // Assign to categories
@@ -484,11 +553,16 @@
 
     /// <summary>
     /// Determines the effective view mode for a multi-valued attribute.
-    /// Priority: 1) user preference override, 2) schema rendering hint, 3) auto-decide by count.
+    /// Large MVAs (>10 values) always use table view for server-side pagination.
+    /// Small MVAs: 1) user preference override, 2) schema rendering hint, 3) auto-decide chipset.
     /// </summary>
     private string GetEffectiveViewMode(MvoAttributeGroup group)
     {
-        // User override takes precedence
+        // Large MVAs must use table view — chipset/list can't handle capped data
+        if (group.TotalCount > 10)
+            return "table";
+
+        // User override takes precedence for small MVAs
         if (_viewModeOverrides.TryGetValue(group.AttributeName, out var userMode))
             return userMode;
 
@@ -498,7 +572,7 @@
             AttributeRenderingHint.Table => "table",
             AttributeRenderingHint.ChipSet => "chipset",
             AttributeRenderingHint.List => "list",
-            _ => group.Values.Count > 10 ? "table" : "chipset"
+            _ => "chipset"
         };
     }
 
@@ -530,9 +604,53 @@
         await UserPreferences.SetRowsPerPageAsync(newSize);
     }
 
-    // ========================== Table Search ==========================
+    // ========================== Server-Side Table ==========================
 
-    private void OnSearchTextChanged(string attributeName, string value)
+    /// <summary>
+    /// Per-attribute MudTable references for triggering server reload on search.
+    /// </summary>
+    private readonly Dictionary<string, MvaTableRef> _tableRefs = new();
+
+    private class MvaTableRef
+    {
+        public MudTable<MetaverseObjectAttributeValue>? Table { get; set; }
+    }
+
+    private MvaTableRef GetOrCreateTableRef(string attributeName)
+    {
+        if (!_tableRefs.ContainsKey(attributeName))
+            _tableRefs[attributeName] = new MvaTableRef();
+        return _tableRefs[attributeName];
+    }
+
+    private async Task<TableData<MetaverseObjectAttributeValue>> ServerReloadAsync(
+        string attributeName, TableState state, CancellationToken token)
+    {
+        var page = state.Page + 1; // MudBlazor is 0-indexed
+        var pageSize = state.PageSize;
+        var searchText = _searchTexts.GetValueOrDefault(attributeName, "");
+        var search = string.IsNullOrWhiteSpace(searchText) ? null : searchText;
+
+        var result = await Jim.Metaverse.GetAttributeValuesPagedAsync(
+            MetaverseObject.Id, attributeName, page, pageSize, search);
+
+        return new TableData<MetaverseObjectAttributeValue>
+        {
+            Items = result.Results,
+            TotalItems = result.TotalResults
+        };
+    }
+
+    private void OnMvaSearchTextChanged(string attributeName, string value)
+    {
+        _searchTexts[attributeName] = value;
+        if (_tableRefs.TryGetValue(attributeName, out var tableRef))
+            tableRef.Table?.ReloadServerData();
+    }
+
+    // ========================== Client-Side Table (small MVAs) ==========================
+
+    private void OnClientSearchTextChanged(string attributeName, string value)
     {
         _searchTexts[attributeName] = value;
     }
@@ -580,7 +698,8 @@
         string AttributeName,
         List<MetaverseObjectAttributeValue> Values,
         bool IsMultiValued,
-        AttributeRenderingHint RenderingHint);
+        AttributeRenderingHint RenderingHint,
+        int TotalCount);
 
     private record CategoryGroup(
         string CategoryName,

@@ -268,6 +268,15 @@ public class MetaverseServer
         return await Application.Repository.Metaverse.GetMetaverseObjectWithChangeHistoryAsync(id);
     }
 
+    /// <summary>
+    /// Loads a Metaverse Object with attribute loading controlled by the specified strategy.
+    /// <see cref="MvoAttributeLoadStrategy.CappedMva"/> caps MVA values and includes per-attribute total counts.
+    /// </summary>
+    public async Task<MvoDetailResult?> GetMetaverseObjectDetailAsync(Guid id, MvoAttributeLoadStrategy loadStrategy)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectDetailAsync(id, loadStrategy);
+    }
+
     public async Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id)
     {
         return await Application.Repository.Metaverse.GetMetaverseObjectHeaderAsync(id);
@@ -627,6 +636,21 @@ public class MetaverseServer
             throw new ArgumentOutOfRangeException($"{nameof(objectMatchingRule)}.Sources is null or empty. Cannot continue.");
 
         return await Application.Repository.Metaverse.FindMetaverseObjectUsingMatchingRuleAsync(connectedSystemObject, metaverseObjectType, objectMatchingRule);
+    }
+
+    /// <summary>
+    /// Returns a paginated set of attribute values for a specific attribute on a Metaverse Object.
+    /// Supports server-side search and pagination for large multi-valued attributes.
+    /// </summary>
+    public async Task<PagedResultSet<MetaverseObjectAttributeValue>> GetAttributeValuesPagedAsync(
+        Guid metaverseObjectId,
+        string attributeName,
+        int page,
+        int pageSize,
+        string? searchText = null)
+    {
+        return await Application.Repository.Metaverse.GetAttributeValuesPagedAsync(
+            metaverseObjectId, attributeName, page, pageSize, searchText);
     }
 
     /// <summary>

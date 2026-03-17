@@ -72,6 +72,18 @@ public interface IUserPreferenceService
     Task SetMvaViewModeAsync(string attributeName, string viewMode);
 
     /// <summary>
+    /// Gets the user's preferred MVO detail view mode (form or table).
+    /// </summary>
+    /// <returns>"form" or "table"; null if no preference (default to form).</returns>
+    Task<string?> GetMvoDetailViewModeAsync();
+
+    /// <summary>
+    /// Sets the user's preferred MVO detail view mode.
+    /// </summary>
+    /// <param name="viewMode">"form" or "table".</param>
+    Task SetMvoDetailViewModeAsync(string viewMode);
+
+    /// <summary>
     /// Gets the expanded state for an attribute category panel on the MVO detail page.
     /// </summary>
     /// <param name="objectTypeId">The metaverse object type ID (stable across renames).</param>
@@ -97,6 +109,7 @@ public class UserPreferenceService : IUserPreferenceService
     private const string RowsPerPageKey = "rowsPerPage";
     private const string DarkModeKey = "darkMode";
     private const string DrawerPinnedKey = "drawerPinned";
+    private const string MvoDetailViewModeKey = "mvoDetailViewMode";
     private const int DefaultRowsPerPage = 10;
 
     /// <summary>
@@ -324,6 +337,52 @@ public class UserPreferenceService : IUserPreferenceService
         {
             var key = $"mvaViewMode_{attributeName}";
             await _jsRuntime.InvokeVoidAsync("jimPreferences.set", key, viewMode);
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, ignore
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), ignore
+        }
+    }
+
+    /// <summary>
+    /// Valid MVO detail view mode values.
+    /// </summary>
+    private static readonly string[] ValidMvoDetailViewModes = ["form", "table"];
+
+    /// <inheritdoc />
+    public async Task<string?> GetMvoDetailViewModeAsync()
+    {
+        try
+        {
+            var value = await _jsRuntime.InvokeAsync<string?>("jimPreferences.get", MvoDetailViewModeKey);
+            if (value != null && ValidMvoDetailViewModes.Contains(value))
+                return value;
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, return default
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), return default
+        }
+
+        return null;
+    }
+
+    /// <inheritdoc />
+    public async Task SetMvoDetailViewModeAsync(string viewMode)
+    {
+        if (!ValidMvoDetailViewModes.Contains(viewMode))
+            return;
+
+        try
+        {
+            await _jsRuntime.InvokeVoidAsync("jimPreferences.set", MvoDetailViewModeKey, viewMode);
         }
         catch (JSDisconnectedException)
         {

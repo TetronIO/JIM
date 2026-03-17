@@ -1,0 +1,220 @@
+@using JIM.Models.Core
+@using Utilities
+@inject IDialogService DialogService
+
+@if (MetaverseObject != null)
+{
+    <MudPaper Class="pa-0 mt-3" Outlined="true">
+        <MudSimpleTable Hover="true" Elevation="0" Class="jim-attribute-table">
+            <thead>
+                <tr>
+                    <th class="jim-attr-header-name">Attribute</th>
+                    <th class="jim-attr-header-value">Value</th>
+                    <th class="jim-attr-header-type">Type</th>
+                    <th class="jim-attr-header-plurality">Plurality</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{
+                    var groupedAttributes = GetGroupedAttributes();
+                }
+                @if (!groupedAttributes.Any())
+                {
+                    <tr>
+                        <td colspan="4" class="text-center pa-4">
+                            <MudText Typo="Typo.body1" Class="mud-text-secondary">No attributes to display</MudText>
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var group in groupedAttributes)
+                    {
+                        <tr class="@(group.Values.Count > 1 ? "jim-attr-row-mva" : "")">
+                            <td class="jim-attr-name">
+                                <MudText Typo="Typo.body1" Class="mud-text-secondary">@group.AttributeName</MudText>
+                            </td>
+                            <td class="jim-attr-value">
+                                @if (group.Values.Count == 1)
+                                {
+                                    @RenderValue(group.Values[0])
+                                }
+                                else if (group.TotalCount <= MvaInlineThreshold)
+                                {
+                                    <div class="jim-attr-expanded">
+                                        @foreach (var val in group.Values)
+                                        {
+                                            <div class="jim-attr-expanded-item">
+                                                @RenderValue(val)
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="jim-attr-expanded">
+                                        @foreach (var val in group.Values.Take(MvaInlineThreshold))
+                                        {
+                                            <div class="jim-attr-expanded-item">
+                                                @RenderValue(val)
+                                            </div>
+                                        }
+                                        <MudButton Variant="Variant.Outlined" Class="jim-attr-expand-btn"
+                                            OnClick="@(() => OpenMvaDialogAsync(group.AttributeName, group.TotalCount, group.IsReference))">
+                                            +@(group.TotalCount - MvaInlineThreshold) more
+                                        </MudButton>
+                                    </div>
+                                }
+                            </td>
+                            <td class="jim-attr-type">
+                                <MudText Typo="Typo.body1" Class="mud-text-secondary">@group.Values[0].Attribute.Type</MudText>
+                            </td>
+                            <td class="jim-attr-plurality">
+                                @if (group.IsMultiValued)
+                                {
+                                    <MudText Typo="Typo.body1" Class="mud-text-secondary">Multi</MudText>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body1" Class="mud-text-secondary">Single</MudText>
+                                }
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </MudSimpleTable>
+    </MudPaper>
+}
+
+@* ========================== Render Fragments ========================== *@
+
+@{
+    RenderFragment RenderValue(MetaverseObjectAttributeValue attributeValue) => __builder =>
+    {
+        if (attributeValue.Attribute.Type == AttributeDataType.Text)
+        {
+            if (attributeValue.Attribute.Name == Constants.BuiltInAttributes.Email && !string.IsNullOrEmpty(attributeValue.StringValue))
+            {
+                <MudLink Href="@($"mailto:{attributeValue.StringValue}")">@attributeValue.StringValue</MudLink>
+            }
+            else
+            {
+                @attributeValue.StringValue
+            }
+        }
+        else if (attributeValue.Attribute.Type == AttributeDataType.Number)
+        {
+            @attributeValue.IntValue
+        }
+        else if (attributeValue.Attribute.Type == AttributeDataType.LongNumber)
+        {
+            @attributeValue.LongValue
+        }
+        else if (attributeValue.Attribute.Type == AttributeDataType.DateTime && attributeValue.DateTimeValue.HasValue)
+        {
+            <MudTooltip Text="@attributeValue.DateTimeValue.Value.ToString("O")">
+                <ChildContent>
+                    @attributeValue.DateTimeValue.Value.ToFriendlyDate()
+                </ChildContent>
+            </MudTooltip>
+        }
+        else if (attributeValue.Attribute.Type == AttributeDataType.Guid)
+        {
+            @attributeValue.GuidValue?.ToString()
+        }
+        else if (attributeValue.Attribute.Type == AttributeDataType.Boolean && attributeValue.BoolValue.HasValue)
+        {
+            if (attributeValue.BoolValue.Value)
+            {
+                <MudIcon Icon="@Icons.Material.Filled.Check" Color="Color.Success" Size="Size.Small" />
+                <span class="ms-1">True</span>
+            }
+            else
+            {
+                <MudIcon Icon="@Icons.Material.Filled.Close" Color="Color.Default" Size="Size.Small" />
+                <span class="ms-1">False</span>
+            }
+        }
+        else if (attributeValue.Attribute.Type == AttributeDataType.Binary && attributeValue.ByteValue != null)
+        {
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@attributeValue.ByteValue.Length bytes</MudChip>
+        }
+        else if (attributeValue.Attribute.Type == AttributeDataType.Reference && attributeValue.ReferenceValue != null)
+        {
+            <MudLink Href="@Utilities.GetMetaverseObjectHref(attributeValue.ReferenceValue)">
+                @(attributeValue.ReferenceValue.DisplayName ?? attributeValue.ReferenceValue.Id.ToString())
+            </MudLink>
+        }
+    };
+}
+
+@code {
+    /// <summary>
+    /// The metaverse object whose attributes to display in table format.
+    /// </summary>
+    [Parameter]
+    public MetaverseObject MetaverseObject { get; set; } = null!;
+
+    /// <summary>
+    /// Per-attribute total value counts from the capped load.
+    /// Used to show accurate totals when MVA values are capped.
+    /// </summary>
+    [Parameter]
+    public Dictionary<string, int> AttributeValueTotalCounts { get; set; } = new();
+
+    /// <summary>
+    /// Maximum number of multi-valued attribute values to show inline before truncating.
+    /// </summary>
+    private const int MvaInlineThreshold = 10;
+
+    private record MvoAttributeTableGroup(
+        string AttributeName,
+        List<MetaverseObjectAttributeValue> Values,
+        bool IsMultiValued,
+        int TotalCount,
+        bool IsReference);
+
+    private List<MvoAttributeTableGroup> GetGroupedAttributes()
+    {
+        if (MetaverseObject?.AttributeValues == null)
+            return new List<MvoAttributeTableGroup>();
+
+        return MetaverseObject.AttributeValues
+            .GroupBy(v => v.Attribute.Name)
+            .OrderBy(g => g.Key)
+            .Select(g =>
+            {
+                var values = g.ToList();
+                var totalCount = AttributeValueTotalCounts.GetValueOrDefault(g.Key, values.Count);
+                var isReference = values.Any(v => v.ReferenceValue != null);
+                return new MvoAttributeTableGroup(
+                    g.Key,
+                    values,
+                    g.First().Attribute.AttributePlurality == AttributePlurality.MultiValued,
+                    totalCount,
+                    isReference);
+            })
+            .ToList();
+    }
+
+    private async Task OpenMvaDialogAsync(string attributeName, int totalCount, bool isReference)
+    {
+        var parameters = new DialogParameters<MvoMvaDialog>
+        {
+            { x => x.AttributeName, attributeName },
+            { x => x.MetaverseObjectId, MetaverseObject.Id },
+            { x => x.TotalCount, totalCount },
+            { x => x.IsReferenceAttribute, isReference }
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        await DialogService.ShowAsync<MvoMvaDialog>(attributeName, parameters, options);
+    }
+}

@@ -279,6 +279,108 @@ public class MetaverseRepository : IMetaverseRepository
             SingleOrDefaultAsync(mo => mo.Id == id);
     }
 
+    private const int CappedMvaLimit = 10;
+
+    public async Task<MvoDetailResult?> GetMetaverseObjectDetailAsync(Guid id, MvoAttributeLoadStrategy loadStrategy)
+    {
+        if (loadStrategy == MvoAttributeLoadStrategy.All)
+        {
+            var mvo = await GetMetaverseObjectWithChangeHistoryAsync(id);
+            return mvo == null ? null : new MvoDetailResult { MetaverseObject = mvo };
+        }
+
+        // CappedMva strategy: load the MVO with capped MVA values
+        // Step 1: Load the MVO shell with change history (no attribute values yet)
+        var entity = await Repository.Database.MetaverseObjects
+            .AsSplitQuery()
+            .Include(mo => mo.Type)
+            .Include(mo => mo.Changes)
+            .ThenInclude(c => c.AttributeChanges)
+            .ThenInclude(ac => ac.Attribute)
+            .Include(mo => mo.Changes)
+            .ThenInclude(c => c.AttributeChanges)
+            .ThenInclude(ac => ac.ValueChanges)
+            .ThenInclude(vc => vc.ReferenceValue)
+            .ThenInclude(rv => rv!.Type)
+            .Include(mo => mo.Changes)
+            .ThenInclude(c => c.AttributeChanges)
+            .ThenInclude(ac => ac.ValueChanges)
+            .ThenInclude(vc => vc.ReferenceValue)
+            .ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
+            .ThenInclude(rvav => rvav.Attribute)
+            .Include(mo => mo.Changes)
+            .ThenInclude(c => c.SyncRule)
+            .Include(mo => mo.Changes)
+            .ThenInclude(c => c.ActivityRunProfileExecutionItem)
+            .ThenInclude(rpei => rpei!.Activity)
+            .SingleOrDefaultAsync(mo => mo.Id == id);
+
+        if (entity == null)
+            return null;
+
+        // Step 2: Get per-attribute value counts for this MVO
+        var attributeValueCounts = await Repository.Database.Set<MetaverseObjectAttributeValue>()
+            .Where(av => av.MetaverseObject.Id == id)
+            .GroupBy(av => av.Attribute.Name)
+            .Select(g => new { AttributeName = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        var totalCounts = attributeValueCounts.ToDictionary(x => x.AttributeName, x => x.Count);
+
+        // Step 3: Load SVA values (all of them) and MVA values (capped)
+        var mvaAttributeIds = await Repository.Database.Set<MetaverseObjectAttributeValue>()
+            .Where(av => av.MetaverseObject.Id == id)
+            .Select(av => new { av.AttributeId, av.Attribute.AttributePlurality })
+            .Distinct()
+            .ToListAsync();
+
+        var multiValuedAttributeIds = mvaAttributeIds
+            .Where(a => a.AttributePlurality == AttributePlurality.MultiValued)
+            .Select(a => a.AttributeId)
+            .ToHashSet();
+
+        // Load all SVA values
+        var svaValues = await Repository.Database.Set<MetaverseObjectAttributeValue>()
+            .AsSplitQuery()
+            .Where(av => av.MetaverseObject.Id == id && !multiValuedAttributeIds.Contains(av.AttributeId))
+            .Include(av => av.Attribute)
+            .Include(av => av.ReferenceValue)
+            .ThenInclude(rv => rv!.Type)
+            .Include(av => av.ReferenceValue)
+            .ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
+            .ThenInclude(rvav => rvav.Attribute)
+            .ToListAsync();
+
+        // Load capped MVA values per attribute
+        var cappedMvaValues = new List<MetaverseObjectAttributeValue>();
+        foreach (var attrId in multiValuedAttributeIds)
+        {
+            var values = await Repository.Database.Set<MetaverseObjectAttributeValue>()
+                .AsSplitQuery()
+                .Where(av => av.MetaverseObject.Id == id && av.AttributeId == attrId)
+                .OrderBy(av => av.Id)
+                .Take(CappedMvaLimit)
+                .Include(av => av.Attribute)
+                .Include(av => av.ReferenceValue)
+                .ThenInclude(rv => rv!.Type)
+                .Include(av => av.ReferenceValue)
+                .ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
+                .ThenInclude(rvav => rvav.Attribute)
+                .ToListAsync();
+
+            cappedMvaValues.AddRange(values);
+        }
+
+        // Combine and attach to entity
+        entity.AttributeValues = svaValues.Concat(cappedMvaValues).ToList();
+
+        return new MvoDetailResult
+        {
+            MetaverseObject = entity,
+            AttributeValueTotalCounts = totalCounts
+        };
+    }
+
     public async Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id)
     {
         return await Repository.Database.MetaverseObjects
@@ -1175,6 +1277,51 @@ public class MetaverseRepository : IMetaverseRepository
         // Fallback: If no earlier changes exist (edge case), return only the Delete change
         // This can happen if an MVO was projected and immediately deleted in the same sync
         return new List<MetaverseObjectChange> { targetChange };
+    }
+
+    public async Task<PagedResultSet<MetaverseObjectAttributeValue>> GetAttributeValuesPagedAsync(
+        Guid metaverseObjectId,
+        string attributeName,
+        int page,
+        int pageSize,
+        string? searchText = null)
+    {
+        var query = Repository.Database.Set<MetaverseObjectAttributeValue>()
+            .Where(av => av.MetaverseObject.Id == metaverseObjectId
+                         && av.Attribute.Name == attributeName);
+
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            var search = searchText.ToLowerInvariant();
+            query = query.Where(av =>
+                (av.StringValue != null && av.StringValue.ToLower().Contains(search))
+                || (av.ReferenceValue != null && av.ReferenceValue.AttributeValues
+                    .Any(rav => rav.StringValue != null && rav.StringValue.ToLower().Contains(search)))
+            );
+        }
+
+        var totalCount = await query.CountAsync();
+
+        var values = await query
+            .AsSplitQuery()
+            .OrderBy(av => av.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Include(av => av.Attribute)
+            .Include(av => av.ReferenceValue)
+            .ThenInclude(rv => rv!.Type)
+            .Include(av => av.ReferenceValue)
+            .ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
+            .ThenInclude(rvav => rvav.Attribute)
+            .ToListAsync();
+
+        return new PagedResultSet<MetaverseObjectAttributeValue>
+        {
+            Results = values,
+            TotalResults = totalCount,
+            CurrentPage = page,
+            PageSize = pageSize
+        };
     }
 
     private static List<MetaverseObjectAttributeValue> GetFilteredAttributeValuesList(PredefinedSearch predefinedSearch, MetaverseObject metaverseObject)
