@@ -76,6 +76,17 @@ public class MetaverseServer
         return await Application.Repository.Metaverse.GetMetaverseAttributeHeadersAsync();
     }
 
+    public async Task<PagedResultSet<MetaverseAttributeHeader>> GetMetaverseAttributeHeadersAsync(
+        int page,
+        int pageSize,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = false)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseAttributeHeadersAsync(
+            page, pageSize, searchQuery, sortBy, sortDescending);
+    }
+
     public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id)
     {
         return await Application.Repository.Metaverse.GetMetaverseAttributeAsync(id);

@@ -3236,16 +3236,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             entry.State = EntityState.Detached;
     }
 
-    public async Task<HashSet<Guid>> GetCsoIdsWithPendingExportsAsync(IEnumerable<Guid> connectedSystemObjectIds)
+    public async Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId)
     {
-        var csoIdList = connectedSystemObjectIds.ToList();
-        if (csoIdList.Count == 0)
-            return new HashSet<Guid>();
-
         var csoIdsWithExports = await Repository.Database.PendingExports
             .AsNoTracking()
-            .Where(pe => pe.ConnectedSystemObject != null && csoIdList.Contains(pe.ConnectedSystemObject.Id))
-            .Select(pe => pe.ConnectedSystemObject!.Id)
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId && pe.ConnectedSystemObjectId != null)
+            .Select(pe => pe.ConnectedSystemObjectId!.Value)
             .Distinct()
             .ToListAsync();
 

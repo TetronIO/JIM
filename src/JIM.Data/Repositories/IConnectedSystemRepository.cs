@@ -268,13 +268,13 @@ public interface IConnectedSystemRepository
     public Task DeleteUntrackedPendingExportAttributeValueChangesAsync(IEnumerable<PendingExportAttributeValueChange> untrackedAttributeValueChanges);
 
     /// <summary>
-    /// Lightweight query that returns only the CSO IDs from the given set that have pending exports.
+    /// Lightweight query that returns the CSO IDs that have pending exports for a given connected system.
     /// Used to filter the CSO list before performing full pending export reconciliation,
     /// avoiding unnecessary iteration over CSOs that have no pending exports.
     /// </summary>
-    /// <param name="connectedSystemObjectIds">The CSO IDs to check for pending exports.</param>
-    /// <returns>A HashSet of CSO IDs that have at least one pending export.</returns>
-    public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsAsync(IEnumerable<Guid> connectedSystemObjectIds);
+    /// <param name="connectedSystemId">The connected system ID to find pending exports for.</param>
+    /// <returns>A HashSet of CSO IDs that have at least one pending export for the specified connected system.</returns>
+    public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId);
 
     /// <summary>
     /// Gets all Connected System Objects that are joined to a specific Metaverse Object.

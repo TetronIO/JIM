@@ -135,6 +135,7 @@ Sync operations are the core of JIM. Customers depend on JIM to synchronise thei
 - `jim-db` - Start PostgreSQL (for local debugging)
 - `jim-db-stop` - Stop PostgreSQL
 - `jim-migrate` - Apply migrations
+- `jim-postgres-tune` - Re-tune PostgreSQL for current CPU/RAM
 
 **Docker Stack Management:**
 - `jim-stack` - Start Docker stack
@@ -170,6 +171,17 @@ When running the Docker stack and you make code changes to JIM.Web, JIM.Worker, 
 - `jim-build` - Rebuild and restart all services
 
 Blazor pages, API controllers, and other compiled code require container rebuilds. Simply refreshing the browser will not show changes.
+
+**PostgreSQL Auto-Tuning:**
+PostgreSQL is automatically tuned during devcontainer setup (`.devcontainer/postgres-tune.sh`). The script:
+- Auto-detects CPU cores and available RAM
+- Calculates optimal pgtune settings for OLTP workloads
+- Generates two gitignored overlay files: `docker-compose.local.yml` and `db.local.yml`
+- The `jim-*` aliases automatically include these overlays when present (later files win)
+
+If you later increase devcontainer resources (e.g., scale from 4c/8GB to 8c/32GB), re-tune and restart:
+- `jim-postgres-tune` then `jim-db-stop && jim-db` (local dev)
+- `jim-postgres-tune` then `jim-restart` (Docker stack)
 
 **IMPORTANT - Dependency Update Policy:**
 All dependency updates from Dependabot require human review before merging - there is no auto-merge. This applies to all ecosystems: NuGet packages, Docker base images, and GitHub Actions. A maintainer must review each PR, verify the changes are appropriate, and merge manually.

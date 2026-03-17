@@ -298,13 +298,13 @@ else if (_syncRule != null)
                                             ValueChanged="@(value => HandleToggleMatchingRuleCaseSensitive(objectMatchingRule, value))"
                                             Label="Case Sensitive" Color="Color.Primary" Class="ms-4" />
                                         <MudSpacer />
-                                        <MudIconButton Icon="@Icons.Material.Outlined.ArrowUpward" Variant="Variant.Outlined" Color="Color.Default"
+                                        <MudIconButton Icon="@Icons.Material.Outlined.ArrowUpward" Variant="Variant.Filled" Color="Color.Default" Size="Size.Small"
                                             Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "up"))"
                                             Disabled="@DisableObjectMatchingMappingRuleOrderButton(objectMatchingRule, "up")" />
-                                        <MudIconButton Icon="@Icons.Material.Outlined.ArrowDownward" Variant="Variant.Outlined" Color="Color.Default"
+                                        <MudIconButton Icon="@Icons.Material.Outlined.ArrowDownward" Variant="Variant.Filled" Color="Color.Default" Size="Size.Small"
                                             Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "down"))"
                                             Disabled="@DisableObjectMatchingMappingRuleOrderButton(objectMatchingRule, "down")" />
-                                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Outlined" Color="Color.Error"
+                                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error" Size="Size.Small"
                                             aria-label="delete" OnClick="@(() => HandleObjectMatchingRuleDeleteClickAsync(objectMatchingRule))">
                                         </MudIconButton>
                                     </MudItem>
