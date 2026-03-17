@@ -16,12 +16,12 @@
  */
 
 html[lang] {
-    /* === Primary Palette (bright sky-blue accent) === */
-    --mud-palette-primary: #67b9ff;
-    --mud-palette-primary-rgb: 103,185,255;
-    --mud-palette-primary-darken: #4a9ee6;
-    --mud-palette-primary-lighten: #9ad0ff;
-    --mud-palette-primary-text: #0a1018;
+    /* === Primary Palette (muted purple accent) === */
+    --mud-palette-primary: #614b9e;
+    --mud-palette-primary-rgb: 97,75,158;
+    --mud-palette-primary-darken: #4e3c80;
+    --mud-palette-primary-lighten: #9585c8;
+    --mud-palette-primary-text: #ffffff;
 
     /* === Secondary Palette (cool slate-blue) === */
     --mud-palette-secondary: #6b8aad;
@@ -72,7 +72,7 @@ html[lang] {
 
     /* === Action === */
     --mud-palette-action-default: #b0b8c4;
-    --mud-palette-action-default-hover: rgba(103, 185, 255, 0.16);
+    --mud-palette-action-default-hover: rgba(97, 75, 158, 0.16);
     --mud-palette-action-disabled: rgba(255, 255, 255, 0.34);
     --mud-palette-action-disabled-background: rgba(255, 255, 255, 0.08);
 
@@ -85,7 +85,7 @@ html[lang] {
     /* === Table === */
     --mud-palette-table-lines: #243a52;
     --mud-palette-table-striped: rgba(255, 255, 255, 0.02);
-    --mud-palette-table-hover: rgba(103, 185, 255, 0.06);
+    --mud-palette-table-hover: rgba(97, 75, 158, 0.06);
 
     /* === JIM Custom: Attribute table name column === */
     --jim-attr-name-bg: #0e1d30;
@@ -108,8 +108,8 @@ html[lang] {
     /* === JIM Custom: Navigation === */
     --jim-nav-top-level-color: #b0b8c4;
     --jim-nav-child-color: #6e7e94;
-    --jim-nav-hover-color: #67b9ff;
-    --jim-nav-active-color: #67b9ff;
+    --jim-nav-hover-color: #ffffff;
+    --jim-nav-active-color: #7b68b5;
 
     /* === JIM Custom: Drawer border (paper border — right-hand edge) === */
     --jim-drawer-border-color: #243a52;
@@ -236,4 +236,18 @@ html[lang] .mud-paper .mud-table .mud-table-pagination-toolbar,
 html[lang] .mud-paper .mud-table .mud-table-foot .mud-table-cell,
 html[lang] .mud-paper .mud-table .mud-table-empty-row {
     background-color: #051526 !important;
+}
+
+/* Active tab text — use primary-lighten for better contrast against dark surfaces */
+html[lang] .mud-tab.mud-tab-active {
+    color: var(--mud-palette-primary-lighten) !important;
+}
+
+html[lang] .mud-tab.mud-tab-active .mud-icon-root {
+    color: var(--mud-palette-primary-lighten) !important;
+}
+
+html[lang] .mud-tab.mud-tab-active .mud-tab-indicator,
+html[lang] .mud-tab-slider {
+    background-color: var(--mud-palette-primary-lighten) !important;
 }
