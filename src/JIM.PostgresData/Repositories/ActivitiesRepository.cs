@@ -1300,6 +1300,33 @@ public class ActivityRepository : IActivityRepository
         if (npgsqlConn.State != System.Data.ConnectionState.Open)
             await npgsqlConn.OpenAsync();
 
+        // Collect distinct non-null, non-empty ReferenceValue IDs from this batch and verify
+        // which ones actually exist in the database. References to CSOs in future import batches
+        // (pre-generated IDs not yet persisted) would violate the FK constraint on ReferenceValueId.
+        // Only write the FK for CSOs confirmed to exist; write null for the rest.
+        // The DN/identifier is preserved in StringValue (set by AddChangeAttributeValueObject) so
+        // the UI can still display meaningful text for references that couldn't be linked via FK.
+        var candidateRefIds = valueChanges
+            .Select(vc => vc.Value.ReferenceValue?.Id)
+            .Where(id => id.HasValue && id.Value != Guid.Empty)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+
+        HashSet<Guid> persistedCsoIds;
+        if (candidateRefIds.Count > 0)
+        {
+            var existingIds = await Repository.Database.ConnectedSystemObjects
+                .Where(cso => candidateRefIds.Contains(cso.Id))
+                .Select(cso => cso.Id)
+                .ToListAsync();
+            persistedCsoIds = new HashSet<Guid>(existingIds);
+        }
+        else
+        {
+            persistedCsoIds = [];
+        }
+
         await using var writer = await npgsqlConn.BeginBinaryImportAsync(
             """
             COPY "ConnectedSystemObjectChangeAttributeValues" (
@@ -1344,10 +1371,12 @@ public class ActivityRepository : IActivityRepository
                 await writer.WriteAsync(v.BoolValue.Value, NpgsqlTypes.NpgsqlDbType.Boolean);
             else
                 await writer.WriteNullAsync();
-            // ReferenceValue?.Id can be Guid.Empty if the referenced CSO hasn't been persisted yet.
-            // Treat Guid.Empty as null to avoid FK violations against ConnectedSystemObjects.
+            // Only write the ReferenceValueId FK if the referenced CSO exists in the database.
+            // Pre-generated IDs mean cross-batch references have real GUIDs but the referenced CSO
+            // may not be persisted yet (it's in a future batch). Writing the FK would cause an FK
+            // violation. The DN/identifier is preserved in StringValue for UI display.
             var refId = v.ReferenceValue?.Id;
-            if (refId.HasValue && refId.Value != Guid.Empty)
+            if (refId.HasValue && refId.Value != Guid.Empty && persistedCsoIds.Contains(refId.Value))
                 await writer.WriteAsync(refId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
             else
                 await writer.WriteNullAsync();

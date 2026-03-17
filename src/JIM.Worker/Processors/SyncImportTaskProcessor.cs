@@ -1180,7 +1180,7 @@ public class SyncImportTaskProcessor
                     var statusTransitioned = false;
                     if (connectedSystemObject.Status == ConnectedSystemObjectStatus.PendingProvisioning)
                     {
-                        Log.Information("ProcessImportObjectsAsync: Transitioning CSO {CsoId} from PendingProvisioning to Normal status. Object now confirmed in connected system.",
+                        Log.Debug("ProcessImportObjectsAsync: Transitioning CSO {CsoId} from PendingProvisioning to Normal status. Object now confirmed in connected system.",
                             connectedSystemObject.Id);
                         connectedSystemObject.Status = ConnectedSystemObjectStatus.Normal;
                         statusTransitioned = true;

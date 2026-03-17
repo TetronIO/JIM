@@ -1648,7 +1648,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                   AND av."ReferenceValueId" IS NULL
                 """,
                 connectedSystemId)
-            .FirstAsync();
+            .SingleAsync();
         return result;
     }
 
@@ -3363,7 +3363,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // For export matching, the source should reference an MVO attribute
         if (source.MetaverseAttribute == null)
         {
-            Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Source does not have a MetaverseAttribute, skipping rule {RuleId}", objectMatchingRule.Id);
+            Log.Debug("FindConnectedSystemObjectUsingMatchingRuleAsync: Source does not have a MetaverseAttribute, skipping rule {RuleId}", objectMatchingRule.Id);
             return null;
         }
 

@@ -244,7 +244,7 @@ public class ConnectedSystemServerChangeTrackingTests
         var valueChange = memberAttributeChange.ValueChanges.Single();
         Assert.That(valueChange.ReferenceValue, Is.EqualTo(userCso),
             "Member change history should record the CSO reference when the CSO is already persisted");
-        Assert.That(valueChange.StringValue, Is.Null,
-            "StringValue should be null when a proper CSO reference is recorded");
+        Assert.That(valueChange.StringValue, Is.EqualTo(memberDn),
+            "StringValue should preserve the DN as a fallback for when the FK cannot be written during bulk persistence");
     }
 }

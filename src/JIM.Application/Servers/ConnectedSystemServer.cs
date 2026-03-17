@@ -3263,15 +3263,18 @@ public class ConnectedSystemServer
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, true, connectedSystemObjectAttributeValue.ByteValue.Length));
                 break;
             case AttributeDataType.Reference when connectedSystemObjectAttributeValue.ReferenceValue != null && connectedSystemObjectAttributeValue.ReferenceValue.Id != Guid.Empty:
-                // Reference resolved to a persisted CSO — store the FK relationship for a clickable link in the UI.
-                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.ReferenceValue));
+                // Reference resolved to a CSO with a known ID. Store the FK relationship for a clickable
+                // link in the UI. Also preserve the DN/identifier in StringValue so that if the FK is
+                // nulled out during bulk persistence (referenced CSO in a later batch hasn't been persisted
+                // yet), the UI can still display meaningful text instead of "(identifier not recorded)".
+                var changeValue = new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.ReferenceValue);
+                if (!string.IsNullOrEmpty(connectedSystemObjectAttributeValue.UnresolvedReferenceValue))
+                    changeValue.StringValue = connectedSystemObjectAttributeValue.UnresolvedReferenceValue;
+                attributeChange.ValueChanges.Add(changeValue);
                 break;
             case AttributeDataType.Reference when connectedSystemObjectAttributeValue.UnresolvedReferenceValue != null:
-                // Store the raw DN/identifier for display in the UI. This covers two scenarios:
-                // 1. Reference could not be resolved (referenced object out of container scope).
-                // 2. Reference was resolved in-memory to a CSO that has not yet been persisted (Guid.Empty
-                //    Id due to batch ordering — group processed before its member users). In this case
-                //    UnresolvedReferenceValue still holds the original DN since resolution does not clear it.
+                // Store the raw DN/identifier for display in the UI. The reference could not be resolved
+                // to a CSO (referenced object may be out of container scope).
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.UnresolvedReferenceValue));
                 break;
             case AttributeDataType.NotSet:
