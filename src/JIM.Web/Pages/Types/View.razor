@@ -7,10 +7,12 @@
 @using JIM.Models.Staging
 @using JIM.Web.Shared
 @using JIM.Web.Services
+@using Microsoft.JSInterop
 @using Utilities;
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 @inject IUserPreferenceService UserPreferences
+@inject IJSRuntime JsRuntime
 
 <PageTitle>@MetaverseObjectType?.Name: @_displayName</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-primary-text">@MetaverseObjectType?.Name:</span> @_displayName</MudText>
@@ -52,6 +54,69 @@
                 <ChangeHistoryTimeline Changes="@GetChangeHistory()" />
             </div>
         </MudTabPanel>
+
+        <MudTabPanel Text="Properties" Icon="@Icons.Material.Filled.Assignment">
+            <MudPaper Class="mt-3 pa-4" Outlined="true">
+                <MudGrid>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudField Label="Id" Variant="Variant.Outlined">
+                            <MudTooltip Text="Click to copy">
+                                <ChildContent>
+                                    <span style="cursor: pointer" @onclick="@(() => CopyToClipboardAsync(MetaverseObject.Id.ToString()))">
+                                        @MetaverseObject.Id
+                                    </span>
+                                </ChildContent>
+                            </MudTooltip>
+                        </MudField>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudField Label="Created" Variant="Variant.Outlined">
+                            <MudTooltip Text="@MetaverseObject.Created.ToString("O")">
+                                <ChildContent>
+                                    @MetaverseObject.Created.ToFriendlyDate()
+                                </ChildContent>
+                            </MudTooltip>
+                        </MudField>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudField Label="Created By" Variant="Variant.Outlined">
+                            @(_createdByName ?? "—")
+                        </MudField>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudField Label="Last Updated" Variant="Variant.Outlined">
+                            @if (MetaverseObject.LastUpdated.HasValue)
+                            {
+                                <MudTooltip Text="@MetaverseObject.LastUpdated.Value.ToString("O")">
+                                    <ChildContent>
+                                        @MetaverseObject.LastUpdated.Value.ToFriendlyDate()
+                                    </ChildContent>
+                                </MudTooltip>
+                            }
+                            else
+                            {
+                                <span>—</span>
+                            }
+                        </MudField>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudField Label="Last Updated By" Variant="Variant.Outlined">
+                            @(_lastUpdatedByName ?? "—")
+                        </MudField>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudField Label="Status" Variant="Variant.Outlined">
+                            @MetaverseObject.Status
+                        </MudField>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudField Label="Origin" Variant="Variant.Outlined">
+                            @MetaverseObject.Origin
+                        </MudField>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+        </MudTabPanel>
         </ChildContent>
     </MudTabs>
 }
@@ -68,6 +133,8 @@
     private string _detailViewMode = "form";
     private Dictionary<string, int> _attributeValueTotalCounts = new();
     private List<BreadcrumbItem> _breadcrumbs = null!;
+    private string? _createdByName;
+    private string? _lastUpdatedByName;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -103,6 +170,14 @@
         _attributeValueTotalCounts = detailResult.AttributeValueTotalCounts;
 
         _displayName = MetaverseObject.DisplayName;
+
+        // Derive "Created By" from the earliest change and "Last Updated By" from the most recent
+        if (MetaverseObject.Changes.Count > 0)
+        {
+            var orderedChanges = MetaverseObject.Changes.OrderBy(c => c.ChangeTime).ToList();
+            _createdByName = orderedChanges.First().InitiatedByName;
+            _lastUpdatedByName = orderedChanges.Last().InitiatedByName;
+        }
 
         if (MetaverseObject.DisplayName != null)
             _breadcrumbs = new List<BreadcrumbItem>
@@ -180,6 +255,11 @@
     /// Maps a MetaverseObjectChange to a mechanism type string for the change history timeline.
     /// Uses the ChangeInitiatorType when available, falling back to run type for sync-initiated changes.
     /// </summary>
+    private async Task CopyToClipboardAsync(string text)
+    {
+        await JsRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
+    }
+
     private static string MapChangeToMechanismType(MetaverseObjectChange change)
     {
         // Use the change initiator type when it's explicitly set to a non-sync/non-default value
