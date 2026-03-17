@@ -693,7 +693,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
             await transaction.CommitAsync();
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
+        catch (Exception ex) when (IsInMemoryProviderException(ex))
         {
             // Fallback for unit tests with mocked/in-memory provider where transactions are not supported.
             results = await pagedCsoQuery.ToListAsync();
@@ -838,7 +838,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
             await transaction.CommitAsync();
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
+        catch (Exception ex) when (IsInMemoryProviderException(ex))
         {
             // Fallback for unit tests with mocked/in-memory provider where transactions are not supported.
             results = await pagedCsoQuery.ToListAsync();
@@ -898,7 +898,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
             await transaction.CommitAsync();
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
+        catch (Exception ex) when (IsInMemoryProviderException(ex))
         {
             // Fallback for unit tests with mocked/in-memory provider where transactions are not supported.
             results = await csoQuery.ToListAsync();
@@ -986,7 +986,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     csoId)
                 .ToListAsync();
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
+        catch (Exception ex) when (IsInMemoryProviderException(ex))
         {
             // Non-relational providers (e.g., in-memory for tests) do not support raw SQL.
             // Return empty dictionary so callers fall back to navigation chain only.
@@ -1588,17 +1588,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // return DNs with different capitalisation.
         try
         {
-            // Fast early exit: skip the expensive multi-table JOIN UPDATE when there are no
-            // unresolved references. This is the common case for CSV imports, training imports,
-            // and confirming imports — only LDAP imports with out-of-order batched groups need fixup.
-            var unresolvedCount = await GetUnresolvedReferenceCountAsync(connectedSystemId);
-            if (unresolvedCount == 0)
-                return 0;
-
             var previousTimeout = Repository.Database.Database.GetCommandTimeout();
             Repository.Database.Database.SetCommandTimeout(300);
             try
             {
+                // Fast early exit: skip the expensive multi-table JOIN UPDATE when there are no
+                // unresolved references. This is the common case for CSV imports, training imports,
+                // and confirming imports — only LDAP imports with out-of-order batched groups need fixup.
+                var unresolvedCount = await GetUnresolvedReferenceCountAsync(connectedSystemId);
+                if (unresolvedCount == 0)
+                    return 0;
+
                 return await Repository.Database.Database.ExecuteSqlRawAsync(
                     """
                     UPDATE "ConnectedSystemObjectAttributeValues" av
@@ -1622,7 +1622,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 Repository.Database.Database.SetCommandTimeout(previousTimeout);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
+        catch (Exception ex) when (IsInMemoryProviderException(ex))
         {
             // Fallback for unit tests using a mocked or in-memory DbContext that does not support raw SQL.
             // The in-memory provider auto-resolves FKs from navigation properties so cross-batch
@@ -2704,7 +2704,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
             await transaction.CommitAsync();
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
+        catch (Exception ex) when (IsInMemoryProviderException(ex))
         {
             // Fallback for unit tests with mocked DbContext where raw SQL is not available.
             // Only catch InvalidOperationException (in-memory provider can't begin transactions)
@@ -4429,6 +4429,32 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     private static Npgsql.NpgsqlParameter NullableParam(object? value, NpgsqlTypes.NpgsqlDbType dbType)
     {
         return new Npgsql.NpgsqlParameter { Value = value ?? DBNull.Value, NpgsqlDbType = dbType };
+    }
+
+    /// <summary>
+    /// Determines whether an exception is from the EF Core in-memory provider (used in unit tests)
+    /// rather than a transient database failure. Only these should be silently swallowed when
+    /// falling back from raw SQL operations that the in-memory provider does not support.
+    /// </summary>
+    /// <remarks>
+    /// The previous pattern — <c>catch (Exception ex) when (IsInMemoryProviderException(ex))</c> —
+    /// was too broad: Npgsql wraps transient failures (timeouts, connection drops) in
+    /// <see cref="InvalidOperationException"/> with message "An exception has been raised that is likely due to a transient failure",
+    /// causing real database errors to be silently swallowed.
+    /// </remarks>
+    private static bool IsInMemoryProviderException(Exception ex)
+    {
+        // In-memory provider throws InvalidOperationException or NullReferenceException
+        // when raw SQL is attempted. Transient DB failures also throw InvalidOperationException
+        // but always have an inner exception from Npgsql (NpgsqlException, TimeoutException, etc.).
+        if (ex is not (InvalidOperationException or NullReferenceException))
+            return false;
+
+        // If the exception has an inner Npgsql/timeout exception, it's a real DB error, not in-memory.
+        if (ex.InnerException is Npgsql.NpgsqlException or TimeoutException or System.IO.IOException)
+            return false;
+
+        return true;
     }
 
     #endregion
