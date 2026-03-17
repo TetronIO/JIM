@@ -49,10 +49,11 @@ When the container is created, `setup.sh` automatically:
 1. ✅ Installs/updates `dotnet-ef` tools
 2. ✅ Restores NuGet packages
 3. ✅ Creates `.env` file with defaults (or from GitHub secrets)
-4. ✅ Starts PostgreSQL database
-5. ✅ Applies Entity Framework migrations
-6. ✅ Builds the JIM solution
-7. ✅ Creates helpful shell aliases
+4. ✅ Auto-tunes PostgreSQL for your devcontainer's CPU/RAM
+5. ✅ Starts PostgreSQL database
+6. ✅ Applies Entity Framework migrations
+7. ✅ Builds the JIM solution
+8. ✅ Creates helpful shell aliases
 
 ### Port Forwarding
 
@@ -151,6 +152,7 @@ jim-db-stop        # Stop PostgreSQL
 jim-db-logs        # View database logs
 jim-migrate        # Apply migrations
 jim-migration      # Create new migration
+jim-postgres-tune  # Re-tune PostgreSQL for current CPU/RAM
 ```
 
 ### Docker Stack Management
@@ -225,7 +227,7 @@ JIM supports two different development workflows. Choose the one that fits your 
 - Database: Internal (container network)
 - JIM Web + API: `http://localhost:5200` (API at `/api/`, Swagger at `/api/swagger`)
 
-**Note:** In GitHub Codespaces, the docker stack uses optimized PostgreSQL memory settings automatically via `docker-compose.override.yml`.
+**Note:** PostgreSQL is automatically tuned for your devcontainer's CPU and RAM during setup. If you later increase resources, run `jim-postgres-tune` to re-tune and restart the database.
 
 ## 🐛 Debugging
 
@@ -319,9 +321,10 @@ jim-stack
 jim-stack-logs
 ```
 
-If you see memory allocation errors in Codespaces, the PostgreSQL settings are automatically optimized via `docker-compose.override.yml`. If issues persist:
+If you see memory allocation errors, PostgreSQL may be over-provisioned for the available RAM. Re-tune and restart:
 ```bash
-# Clean restart
+# Re-tune and clean restart
+jim-postgres-tune
 docker compose -f db.yml down -v
 jim-db
 ```

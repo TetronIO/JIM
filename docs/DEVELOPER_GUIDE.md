@@ -704,9 +704,9 @@ Notes:
 - If `user.name` or `user.email` are missing in the container, it means they are not set on your host - configure them there, then rebuild the container
 
 **Technical Details**:
-- PostgreSQL memory settings automatically optimised for Codespaces constraints
+- PostgreSQL is auto-tuned for the devcontainer's CPU/RAM during setup (see `jim-postgres-tune`)
 - Port forwarding configured for Web + API (5200)
-- Custom docker-compose override: `docker-compose.override.yml`
+- Compose file layering: `docker-compose.yml` → `docker-compose.override.yml` → `docker-compose.local.yml` (gitignored, auto-tuned)
 - Use VS Code database extensions (e.g., PostgreSQL) to connect to the database on port 5432
 
 ## Environment Configuration
@@ -758,30 +758,43 @@ JIM uses standard OIDC claims (`sub`, `name`, `given_name`, `family_name`, `pref
 - Use VS Code database extensions (e.g., PostgreSQL) to connect to the database on port 5432
 
 ### Docker Compose
-- Base: `docker-compose.yml`
-- Overrides: `docker-compose.override.{windows|macos|linux}.yml`, `docker-compose.override.yml`
-- Use platform-specific overrides for optimal performance
+- Base: `docker-compose.yml` — production/deployment defaults
+- Dev overrides: `docker-compose.override.yml` — tracked dev settings (ports, env, LANG, conservative DB)
+- Local tuning: `docker-compose.local.yml` — gitignored, auto-generated machine-specific DB tuning
+- The `jim-*` aliases automatically include the local overlay when present
 
-### PostgreSQL Tuning (Important)
+### PostgreSQL Tuning
 
-The default PostgreSQL settings in `docker-compose.yml` are tuned for a **64GB Windows / 32GB WSL / 16 core** system. **You must tune these for your environment** or PostgreSQL may crash under load (OOM) or fail to start entirely.
+#### Development (Automatic)
 
-Use [PGTune](https://pgtune.leopard.in.ua/) to generate settings for your host, then override `command` and `shm_size` in a compose override file. The Codespaces override (`docker-compose.override.yml`) is a working example for 8GB hosts.
+In devcontainers (Codespaces and local), PostgreSQL is **automatically tuned** during setup. The script `.devcontainer/postgres-tune.sh` detects available CPU/RAM and generates gitignored overlay files (`docker-compose.local.yml` and `db.local.yml`) with optimal [PGTune](https://pgtune.leopard.in.ua/) OLTP settings.
+
+To re-tune after changing devcontainer resources:
+```bash
+jim-postgres-tune
+jim-db-stop && jim-db
+```
+
+See `.devcontainer/POSTGRES_TUNING.md` for full details on tuning formulas and parameters.
+
+#### Production (Manual)
+
+The default PostgreSQL settings in `docker-compose.yml` are tuned for a **64GB Windows / 32GB WSL / 16 core** system. For other production environments, use [PGTune](https://pgtune.leopard.in.ua/) to generate settings, then override `command` and `shm_size` in a compose override file.
 
 **Key settings to adjust:**
-- `shared_buffers` - typically ~25% of available host RAM
-- `effective_cache_size` - typically ~75% of available host RAM
-- `shm_size` (Docker) - must be >= `shared_buffers` with ~25% headroom
+- `shared_buffers` — typically ~25% of available host RAM
+- `effective_cache_size` — typically ~75% of available host RAM
+- `shm_size` (Docker) — must be >= `shared_buffers` with ~25% headroom
 
 **Sizing reference:**
 
 | Host RAM | `shared_buffers` | `shm_size` |
 |----------|------------------|------------|
-| 8GB      | 256MB            | 512mb      |
-| 16GB     | 2GB              | 3gb        |
-| 32GB     | 4GB              | 5gb        |
-| 64GB     | 8GB              | 10gb       |
-| 128GB    | 16GB             | 20gb       |
+| 8GB      | 2GB              | 3gb        |
+| 16GB     | 4GB              | 5gb        |
+| 32GB     | 8GB              | 10gb       |
+| 64GB     | 16GB             | 20gb       |
+| 128GB    | 32GB             | 40gb       |
 
 > **Warning**: If `shm_size` is smaller than `shared_buffers`, PostgreSQL will crash under load. Docker defaults `shm_size` to only 64MB, which is insufficient for any non-trivial `shared_buffers` value.
 
