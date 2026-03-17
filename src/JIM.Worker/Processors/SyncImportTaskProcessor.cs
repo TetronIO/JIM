@@ -533,7 +533,7 @@ public class SyncImportTaskProcessor
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Reconciling pending exports");
         using (Diagnostics.Sync.StartSpan("ReconcilePendingExports"))
         {
-            await ReconcilePendingExportsAsync(connectedSystemObjectsToBeUpdated, importRpeisByCsoId);
+            await ReconcilePendingExportsAsync(connectedSystemObjectsToBeUpdated, importRpeisByCsoId, _connectedSystem.Id);
         }
 
         // Validate all RPEIs before persisting - catch any that have no CSO and no error (indicates a bug)
@@ -2323,15 +2323,19 @@ public class SyncImportTaskProcessor
     /// <param name="importRpeisByCsoId">Lookup of already-persisted import RPEIs keyed by ConnectedSystemObjectId.</param>
     private async Task ReconcilePendingExportsAsync(
         IReadOnlyCollection<ConnectedSystemObject> updatedCsos,
-        Dictionary<Guid, ActivityRunProfileExecutionItem> importRpeisByCsoId)
+        Dictionary<Guid, ActivityRunProfileExecutionItem> importRpeisByCsoId,
+        int connectedSystemId)
     {
         if (updatedCsos.Count == 0)
             return;
 
         // Filter to only CSOs that actually have pending exports - avoids iterating thousands of CSOs
-        // that have no pending exports (e.g. on a first import before any exports have occurred)
+        // that have no pending exports (e.g. on a first import before any exports have occurred).
+        // Queries by connected system ID (single integer) rather than passing all CSO IDs to the database,
+        // which would not scale for large imports (10k+ CSOs).
+        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Reconciling pending exports - loading data");
         var csoIdsWithExports = await _jim.Repository.ConnectedSystems
-            .GetCsoIdsWithPendingExportsAsync(updatedCsos.Select(c => c.Id));
+            .GetCsoIdsWithPendingExportsByConnectedSystemAsync(connectedSystemId);
 
         if (csoIdsWithExports.Count == 0)
         {
@@ -2349,6 +2353,7 @@ public class SyncImportTaskProcessor
         // Update progress counter to reflect the filtered count (only CSOs with pending exports)
         _activity.ObjectsToProcess = csoList.Count;
         _activity.ObjectsProcessed = 0;
+        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Reconciling pending exports");
         await _jim.Activities.UpdateActivityAsync(_activity);
 
         Log.Debug("ReconcilePendingExportsAsync: {FilteredCount} of {TotalCount} CSOs have pending exports",
