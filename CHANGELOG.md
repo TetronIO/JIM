@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🎨 New default theme — "Navy O6" features a deeper navy background with a purple accent palette, improved button contrast for outlined and text variants, and refined surface colours for better visual depth
+- 🗑️ Removed legacy navy-o1 through navy-o4 themes — consolidated to navy-o5 and the new navy-o6 default
 - 🔄 "Data Generation" renamed to "Example Data" across the entire stack for consistent naming — models, API routes (`/example-data/`), PowerShell cmdlets (`Get-JIMExampleDataTemplate`, `Invoke-JIMExampleDataTemplate`), database tables, and UI all now share the "Example Data" family prefix
 - ⚡ Database migrations flattened into a single `InitialCreate` migration for faster first-start performance and simpler codebase
 
