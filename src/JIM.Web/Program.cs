@@ -106,7 +106,7 @@ try
     builder.Services.AddExpressionEvaluation();
 
     // Register UI theme settings from environment variable
-    var themeName = Environment.GetEnvironmentVariable(Constants.Config.Theme) ?? "navy-o5";
+    var themeName = Environment.GetEnvironmentVariable(Constants.Config.Theme) ?? "navy-o6";
     builder.Services.AddSingleton(new ThemeSettings
     {
         LightThemePath = $"css/themes/{themeName}-light.css",
