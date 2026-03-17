@@ -139,8 +139,9 @@ function Connect-JIMWithApiKey {
 
         Show-JIMBanner -ServerVersion $serverVersion -Url $BaseUrl
 
-        # Verify the user is authorised to use JIM
-        $userInfo = Test-JIMAuthorisation
+        # Note: Skip authorisation check for API keys - they are authorised by definition
+        # (they have explicit roles assigned at creation time). The userinfo endpoint checks
+        # for a MetaverseObject which only applies to interactive (SSO) users.
 
         # Return connection info (without exposing full API key)
         $keyPreview = if ($ApiKey.Length -gt 12) {
@@ -156,7 +157,7 @@ function Connect-JIMWithApiKey {
             ApiKey        = $keyPreview
             Connected     = $true
             ServerVersion = $serverVersion
-            Authorised    = $userInfo.authorised ?? $null
+            Authorised    = $true
             Status        = $health.status ?? 'Connected'
         }
     }

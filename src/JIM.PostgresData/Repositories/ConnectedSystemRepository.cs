@@ -693,7 +693,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
             await transaction.CommitAsync();
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
+        catch (Exception ex) when (IsInMemoryProviderException(ex))
         {
             // Fallback for unit tests with mocked/in-memory provider where transactions are not supported.
             results = await pagedCsoQuery.ToListAsync();
@@ -838,7 +838,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
             await transaction.CommitAsync();
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
+        catch (Exception ex) when (IsInMemoryProviderException(ex))
         {
             // Fallback for unit tests with mocked/in-memory provider where transactions are not supported.
             results = await pagedCsoQuery.ToListAsync();
@@ -898,7 +898,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
             await transaction.CommitAsync();
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
+        catch (Exception ex) when (IsInMemoryProviderException(ex))
         {
             // Fallback for unit tests with mocked/in-memory provider where transactions are not supported.
             results = await csoQuery.ToListAsync();
@@ -986,7 +986,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     csoId)
                 .ToListAsync();
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
+        catch (Exception ex) when (IsInMemoryProviderException(ex))
         {
             // Non-relational providers (e.g., in-memory for tests) do not support raw SQL.
             // Return empty dictionary so callers fall back to navigation chain only.
@@ -1579,23 +1579,26 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // - UnresolvedReferenceValue is set (contains the raw DN/secondary external ID string)
         // - ReferenceValueId is null (reference not yet resolved to a CSO ID)
         //
-        // This happens when groups are imported before the users they reference — the group CSO
-        // batch is saved while user CSOs still have Guid.Empty as their ID (not yet persisted).
-        // After all batches complete, this query resolves the remaining FKs by matching the
-        // UnresolvedReferenceValue against the secondary external ID attribute values of existing CSOs.
+        // Defence-in-depth for cross-run reference resolution (e.g., groups imported in a later
+        // run referencing users from a prior run). Within a single import run, upfront CSO ID
+        // pre-generation in SyncImportTaskProcessor should resolve all FKs before persistence.
+        //
+        // Uses case-insensitive LOWER() comparison because LDAP Distinguished Names are
+        // case-insensitive per RFC 4514, and different connector runs or LDAP servers may
+        // return DNs with different capitalisation.
         try
         {
-            // Fast early exit: skip the expensive multi-table JOIN UPDATE when there are no
-            // unresolved references. This is the common case for CSV imports, training imports,
-            // and confirming imports — only LDAP imports with out-of-order batched groups need fixup.
-            var unresolvedCount = await GetUnresolvedReferenceCountAsync(connectedSystemId);
-            if (unresolvedCount == 0)
-                return 0;
-
             var previousTimeout = Repository.Database.Database.GetCommandTimeout();
             Repository.Database.Database.SetCommandTimeout(300);
             try
             {
+                // Fast early exit: skip the expensive multi-table JOIN UPDATE when there are no
+                // unresolved references. This is the common case for CSV imports, training imports,
+                // and confirming imports — only LDAP imports with out-of-order batched groups need fixup.
+                var unresolvedCount = await GetUnresolvedReferenceCountAsync(connectedSystemId);
+                if (unresolvedCount == 0)
+                    return 0;
+
                 return await Repository.Database.Database.ExecuteSqlRawAsync(
                     """
                     UPDATE "ConnectedSystemObjectAttributeValues" av
@@ -1609,7 +1612,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                       AND av."ConnectedSystemObjectId" = owner_cso."Id"
                       AND av."UnresolvedReferenceValue" IS NOT NULL
                       AND av."ReferenceValueId" IS NULL
-                      AND av."UnresolvedReferenceValue" = target_av."StringValue"
+                      AND target_av."StringValue" IS NOT NULL
+                      AND LOWER(av."UnresolvedReferenceValue") = LOWER(target_av."StringValue")
                     """,
                     connectedSystemId);
             }
@@ -1618,11 +1622,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 Repository.Database.Database.SetCommandTimeout(previousTimeout);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
+        catch (Exception ex) when (IsInMemoryProviderException(ex))
         {
             // Fallback for unit tests using a mocked or in-memory DbContext that does not support raw SQL.
             // The in-memory provider auto-resolves FKs from navigation properties so cross-batch
             // reference issues do not manifest in tests. Return 0 — no fixup needed.
+            Log.Warning(ex, "FixupCrossBatchReferenceIdsAsync: Raw SQL not available (likely in-memory test provider). Skipping cross-batch FK fixup.");
             return 0;
         }
     }
@@ -1682,11 +1687,19 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             // ReferenceValue (navigation) but not ReferenceValueId (FK). EF change tracking would
             // normally sync these, but raw SQL bulk insert bypasses change tracking entirely,
             // so we must explicitly copy the ID from the navigation property to the FK column.
+            //
+            // IMPORTANT: Only set the FK when the referenced CSO is in THIS batch. Cross-batch
+            // references (where the referenced CSO is in a later batch) cannot have their FK set
+            // here because the referenced CSO row doesn't exist in the database yet — the FK
+            // constraint would reject the INSERT. Cross-batch FKs are resolved after all batches
+            // complete via FixupCrossBatchReferenceIdsAsync.
+            var batchCsoIds = new HashSet<Guid>(connectedSystemObjects.Select(c => c.Id));
             foreach (var cso in connectedSystemObjects)
             {
                 foreach (var av in cso.AttributeValues)
                 {
-                    if (av.ReferenceValue != null && av.ReferenceValue.Id != Guid.Empty && !av.ReferenceValueId.HasValue)
+                    if (av.ReferenceValue != null && av.ReferenceValue.Id != Guid.Empty && !av.ReferenceValueId.HasValue
+                        && batchCsoIds.Contains(av.ReferenceValue.Id))
                         av.ReferenceValueId = av.ReferenceValue.Id;
                 }
             }
@@ -2691,7 +2704,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
             await transaction.CommitAsync();
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
+        catch (Exception ex) when (IsInMemoryProviderException(ex))
         {
             // Fallback for unit tests with mocked DbContext where raw SQL is not available.
             // Only catch InvalidOperationException (in-memory provider can't begin transactions)
@@ -4416,6 +4429,32 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     private static Npgsql.NpgsqlParameter NullableParam(object? value, NpgsqlTypes.NpgsqlDbType dbType)
     {
         return new Npgsql.NpgsqlParameter { Value = value ?? DBNull.Value, NpgsqlDbType = dbType };
+    }
+
+    /// <summary>
+    /// Determines whether an exception is from the EF Core in-memory provider (used in unit tests)
+    /// rather than a transient database failure. Only these should be silently swallowed when
+    /// falling back from raw SQL operations that the in-memory provider does not support.
+    /// </summary>
+    /// <remarks>
+    /// The previous pattern — <c>catch (Exception ex) when (IsInMemoryProviderException(ex))</c> —
+    /// was too broad: Npgsql wraps transient failures (timeouts, connection drops) in
+    /// <see cref="InvalidOperationException"/> with message "An exception has been raised that is likely due to a transient failure",
+    /// causing real database errors to be silently swallowed.
+    /// </remarks>
+    private static bool IsInMemoryProviderException(Exception ex)
+    {
+        // In-memory provider throws InvalidOperationException or NullReferenceException
+        // when raw SQL is attempted. Transient DB failures also throw InvalidOperationException
+        // but always have an inner exception from Npgsql (NpgsqlException, TimeoutException, etc.).
+        if (ex is not (InvalidOperationException or NullReferenceException))
+            return false;
+
+        // If the exception has an inner Npgsql/timeout exception, it's a real DB error, not in-memory.
+        if (ex.InnerException is Npgsql.NpgsqlException or TimeoutException or System.IO.IOException)
+            return false;
+
+        return true;
     }
 
     #endregion
