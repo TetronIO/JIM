@@ -7,8 +7,8 @@
  *
  * Depth model:
  *   Page background:    #051526  (deep navy)
- *   Container surface:  #122538  (slightly lighter navy)
- *   Nested containers:  #1a3045  (subtle step)
+ *   Container surface:  #0d1e30  (slightly lighter navy)
+ *   Nested containers:  #15293c  (subtle step)
  *
  * We use html[lang] instead of :root so that these declarations have
  * higher specificity (0,1,1) than MudBlazor's injected :root (0,1,0)
@@ -53,15 +53,15 @@ html[lang] {
 
     /* === Background & Surface === */
     --mud-palette-background: #051526;
-    --mud-palette-surface: #122538;
+    --mud-palette-surface: #0d1e30;
     --mud-palette-background-grey: rgba(255, 255, 255, 0.03);
 
     /* === Inner Surface (nested containers) === */
-    --jim-inner-surface: #1a3045;
+    --jim-inner-surface: #15293c;
     --jim-inner-border-color: #243a52;
 
     /* === Drawer (paper surface with right-hand border) === */
-    --mud-palette-drawer-background: #122538;
+    --mud-palette-drawer-background: #0d1e30;
     --mud-palette-drawer-text: #b0b8c4;
     --mud-palette-drawer-icon: #687890;
 
@@ -118,8 +118,8 @@ html[lang] {
     --jim-paper-border-color: #243a52;
 
     /* === JIM Custom: Dialog surfaces (stepped elevation) === */
-    --jim-dialog-surface: #122538;
-    --jim-dialog-inner-surface: #1a3045;
+    --jim-dialog-surface: #0d1e30;
+    --jim-dialog-inner-surface: #15293c;
 
     /* === JIM Custom: Content Links === */
     --jim-link-color: #67b9ff;
@@ -227,7 +227,7 @@ html[lang] .mud-alert-outlined-error {
 
 /* Table group header rows — deeper navy for schedule/category emphasis */
 html[lang] .mud-table-cell-custom-group {
-    background-color: #1a3045 !important;
+    background-color: #15293c !important;
 }
 
 /* Nested table footer, pager, and no-records rows use page background
