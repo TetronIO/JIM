@@ -29,6 +29,13 @@ public interface IMetaverseRepository
 
     public Task<MetaverseObject?> GetMetaverseObjectWithChangeHistoryAsync(Guid id);
 
+    /// <summary>
+    /// Loads a Metaverse Object with attribute loading controlled by the specified strategy.
+    /// <see cref="MvoAttributeLoadStrategy.CappedMva"/> caps MVA values and includes per-attribute total counts.
+    /// Change history is always included.
+    /// </summary>
+    public Task<MvoDetailResult?> GetMetaverseObjectDetailAsync(Guid id, MvoAttributeLoadStrategy loadStrategy);
+
     public Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id);
 
     public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject);

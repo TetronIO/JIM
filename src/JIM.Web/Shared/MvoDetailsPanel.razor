@@ -132,7 +132,7 @@
         @* TODO: When editable, add Add/Remove buttons and search-to-add dialog *@
         <MudText Typo="Typo.subtitle2" Class="mb-2">
             <div class="d-flex align-center justify-space-between">
-                <span>@group.AttributeName (@group.Values.Count)</span>
+                <span>@group.AttributeName (@group.TotalCount)</span>
                 @RenderViewModeToggle(group, "table")
             </div>
         </MudText>
@@ -212,7 +212,7 @@
         @* TODO: When editable, add remove button per item and Add button at bottom *@
         <MudText Typo="Typo.subtitle2" Class="mb-1">
             <div class="d-flex align-center justify-space-between">
-                <span>@group.AttributeName (@group.Values.Count)</span>
+                <span>@group.AttributeName (@group.TotalCount)</span>
                 @RenderViewModeToggle(group, "list")
             </div>
         </MudText>
@@ -271,6 +271,13 @@
     /// </summary>
     [Parameter]
     public int ObjectTypeId { get; set; }
+
+    /// <summary>
+    /// Per-attribute total value counts from the capped load.
+    /// Used to show accurate totals when MVA values are capped.
+    /// </summary>
+    [Parameter]
+    public Dictionary<string, int> AttributeValueTotalCounts { get; set; } = new();
 
     /// <summary>
     /// Whether attributes are editable. Currently always false.
@@ -456,11 +463,17 @@
         var attributeGroups = MetaverseObject.AttributeValues
             .GroupBy(v => v.Attribute.Name)
             .OrderBy(g => g.Key)
-            .Select(g => new MvoAttributeGroup(
-                g.Key,
-                g.ToList(),
-                g.First().Attribute.AttributePlurality == AttributePlurality.MultiValued,
-                g.First().Attribute.RenderingHint))
+            .Select(g =>
+            {
+                var values = g.ToList();
+                var totalCount = AttributeValueTotalCounts.GetValueOrDefault(g.Key, values.Count);
+                return new MvoAttributeGroup(
+                    g.Key,
+                    values,
+                    g.First().Attribute.AttributePlurality == AttributePlurality.MultiValued,
+                    g.First().Attribute.RenderingHint,
+                    totalCount);
+            })
             .ToList();
 
         // Assign to categories
@@ -498,7 +511,7 @@
             AttributeRenderingHint.Table => "table",
             AttributeRenderingHint.ChipSet => "chipset",
             AttributeRenderingHint.List => "list",
-            _ => group.Values.Count > 10 ? "table" : "chipset"
+            _ => group.TotalCount > 10 ? "table" : "chipset"
         };
     }
 
@@ -580,7 +593,8 @@
         string AttributeName,
         List<MetaverseObjectAttributeValue> Values,
         bool IsMultiValued,
-        AttributeRenderingHint RenderingHint);
+        AttributeRenderingHint RenderingHint,
+        int TotalCount);
 
     private record CategoryGroup(
         string CategoryName,

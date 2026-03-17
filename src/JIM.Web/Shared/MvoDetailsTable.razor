@@ -157,6 +157,13 @@
     public MetaverseObject MetaverseObject { get; set; } = null!;
 
     /// <summary>
+    /// Per-attribute total value counts from the capped load.
+    /// Used to show accurate totals when MVA values are capped.
+    /// </summary>
+    [Parameter]
+    public Dictionary<string, int> AttributeValueTotalCounts { get; set; } = new();
+
+    /// <summary>
     /// Maximum number of multi-valued attribute values to show inline before truncating.
     /// </summary>
     private const int MvaInlineThreshold = 10;
@@ -179,12 +186,13 @@
             .Select(g =>
             {
                 var values = g.ToList();
+                var totalCount = AttributeValueTotalCounts.GetValueOrDefault(g.Key, values.Count);
                 var isReference = values.Any(v => v.ReferenceValue != null);
                 return new MvoAttributeTableGroup(
                     g.Key,
                     values,
                     g.First().Attribute.AttributePlurality == AttributePlurality.MultiValued,
-                    values.Count,
+                    totalCount,
                     isReference);
             })
             .ToList();

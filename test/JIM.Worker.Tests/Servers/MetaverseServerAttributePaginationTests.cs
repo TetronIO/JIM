@@ -2,6 +2,7 @@ using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
 using JIM.Models.Utility;
 using Moq;
 using NUnit.Framework;
@@ -103,5 +104,60 @@ public class MetaverseServerAttributePaginationTests
         Assert.That(result, Is.Not.Null);
         Assert.That(result.TotalResults, Is.EqualTo(0));
         Assert.That(result.Results, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetMetaverseObjectDetailAsync_WithCappedMva_DelegatesToRepositoryAsync()
+    {
+        // Arrange
+        var mvoId = Guid.NewGuid();
+        var expectedResult = new MvoDetailResult
+        {
+            MetaverseObject = new MetaverseObject
+            {
+                Id = mvoId,
+                Type = new MetaverseObjectType { Id = 1, Name = "User" },
+                AttributeValues = new List<MetaverseObjectAttributeValue>()
+            },
+            AttributeValueTotalCounts = new Dictionary<string, int>
+            {
+                { "StaticMembers", 1000 },
+                { "DisplayName", 1 }
+            }
+        };
+
+        _mockMetaverseRepo
+            .Setup(r => r.GetMetaverseObjectDetailAsync(mvoId, MvoAttributeLoadStrategy.CappedMva))
+            .ReturnsAsync(expectedResult);
+
+        // Act
+        var result = await _jim.Metaverse.GetMetaverseObjectDetailAsync(mvoId, MvoAttributeLoadStrategy.CappedMva);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.MetaverseObject.Id, Is.EqualTo(mvoId));
+        Assert.That(result.AttributeValueTotalCounts, Has.Count.EqualTo(2));
+        Assert.That(result.AttributeValueTotalCounts["StaticMembers"], Is.EqualTo(1000));
+
+        _mockMetaverseRepo.Verify(
+            r => r.GetMetaverseObjectDetailAsync(mvoId, MvoAttributeLoadStrategy.CappedMva),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task GetMetaverseObjectDetailAsync_WhenNotFound_ReturnsNullAsync()
+    {
+        // Arrange
+        var mvoId = Guid.NewGuid();
+
+        _mockMetaverseRepo
+            .Setup(r => r.GetMetaverseObjectDetailAsync(mvoId, MvoAttributeLoadStrategy.CappedMva))
+            .ReturnsAsync((MvoDetailResult?)null);
+
+        // Act
+        var result = await _jim.Metaverse.GetMetaverseObjectDetailAsync(mvoId, MvoAttributeLoadStrategy.CappedMva);
+
+        // Assert
+        Assert.That(result, Is.Null);
     }
 }

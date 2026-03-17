@@ -2,6 +2,7 @@
 @attribute [Authorize(Roles = "User")]
 @using JIM.Application
 @using JIM.Models.Core
+@using JIM.Models.Core.DTOs
 @using JIM.Models.Enums
 @using JIM.Models.Staging
 @using JIM.Web.Shared
@@ -38,11 +39,11 @@
         <MudTabPanel Text="Details" Icon="@Icons.Material.Filled.Info">
             @if (_detailViewMode == "table")
             {
-                <MvoDetailsTable MetaverseObject="MetaverseObject" />
+                <MvoDetailsTable MetaverseObject="MetaverseObject" AttributeValueTotalCounts="_attributeValueTotalCounts" />
             }
             else
             {
-                <MvoDetailsPanel MetaverseObject="MetaverseObject" ObjectTypeId="MetaverseObjectType!.Id" />
+                <MvoDetailsPanel MetaverseObject="MetaverseObject" ObjectTypeId="MetaverseObjectType!.Id" AttributeValueTotalCounts="_attributeValueTotalCounts" />
             }
         </MudTabPanel>
 
@@ -65,6 +66,7 @@
     private string? _displayName;
     private int _activeTabIndex = 0;
     private string _detailViewMode = "form";
+    private Dictionary<string, int> _attributeValueTotalCounts = new();
     private List<BreadcrumbItem> _breadcrumbs = null!;
 
     protected override async Task OnParametersSetAsync()
@@ -89,13 +91,16 @@
             return;
         }
 
-        // get the metaverse object with change history...
-        MetaverseObject = await Jim.Metaverse.GetMetaverseObjectWithChangeHistoryAsync(IdParam);
-        if (MetaverseObject == null)
+        // Load MVO with capped MVA values for efficient rendering
+        var detailResult = await Jim.Metaverse.GetMetaverseObjectDetailAsync(IdParam, MvoAttributeLoadStrategy.CappedMva);
+        if (detailResult == null)
         {
             NavManager.NavigateTo("/");
             return;
         }
+
+        MetaverseObject = detailResult.MetaverseObject;
+        _attributeValueTotalCounts = detailResult.AttributeValueTotalCounts;
 
         _displayName = MetaverseObject.DisplayName;
 

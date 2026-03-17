@@ -242,6 +242,24 @@ public enum PartitionValidationMode
 }
 
 /// <summary>
+/// Controls how much attribute data is loaded when fetching a Metaverse Object.
+/// Used to optimise queries for different consumers (worker vs. web/API).
+/// </summary>
+public enum MvoAttributeLoadStrategy
+{
+    /// <summary>
+    /// Loads all attribute values with references.
+    /// Used by the worker for sync processing.
+    /// </summary>
+    All = 0,
+    /// <summary>
+    /// Loads all SVA values normally. For MVA attributes, loads first N values (capped)
+    /// and returns total count per attribute. Used by the web detail page and API.
+    /// </summary>
+    CappedMva = 1
+}
+
+/// <summary>
 /// Provides a hint to the UI on how to render a metaverse attribute's values.
 /// This is a schema-level hint stored on <see cref="MetaverseAttribute"/>, not on individual values.
 /// The hint drives the display shape (table, chips, list); the CRUD mode (read-only vs editable)

@@ -268,6 +268,15 @@ public class MetaverseServer
         return await Application.Repository.Metaverse.GetMetaverseObjectWithChangeHistoryAsync(id);
     }
 
+    /// <summary>
+    /// Loads a Metaverse Object with attribute loading controlled by the specified strategy.
+    /// <see cref="MvoAttributeLoadStrategy.CappedMva"/> caps MVA values and includes per-attribute total counts.
+    /// </summary>
+    public async Task<MvoDetailResult?> GetMetaverseObjectDetailAsync(Guid id, MvoAttributeLoadStrategy loadStrategy)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectDetailAsync(id, loadStrategy);
+    }
+
     public async Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id)
     {
         return await Application.Repository.Metaverse.GetMetaverseObjectHeaderAsync(id);
