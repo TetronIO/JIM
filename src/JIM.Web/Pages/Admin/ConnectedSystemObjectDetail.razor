@@ -1,6 +1,5 @@
 ﻿@page "/admin/connected-systems/{CsId:int}/staging/{CsoId}"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Application
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Transactional
@@ -9,7 +8,7 @@
 @using JIM.Models.Enums
 @using JIM.Models.Utility
 @using JIM.Utilities
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject IDialogService DialogService
 
@@ -284,7 +283,8 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        ConnectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(CsId);
+        using var jim = JimFactory.Create();
+        ConnectedSystemHeader = await jim.ConnectedSystems.GetConnectedSystemHeaderAsync(CsId);
         if (ConnectedSystemHeader == null)
         {
             // ConnectedSystem not found, redirect to the Connected Systems index page
@@ -299,7 +299,7 @@
             return;
         }
 
-        var detailResult = await Jim.ConnectedSystems.GetConnectedSystemObjectDetailAsync(
+        var detailResult = await jim.ConnectedSystems.GetConnectedSystemObjectDetailAsync(
             CsId, connectedSystemObjectId, CsoAttributeLoadStrategy.CappedMva);
         if (detailResult == null)
         {
@@ -324,10 +324,10 @@
         SecondaryExternalIdAttributeValue = ConnectedSystemObject.SecondaryExternalIdAttributeValue;
 
         // Fetch pending export for this CSO
-        PendingExport = await Jim.ConnectedSystems.GetPendingExportForObjectAsync(connectedSystemObjectId);
+        PendingExport = await jim.ConnectedSystems.GetPendingExportForObjectAsync(connectedSystemObjectId);
 
         // Fetch change history for this CSO
-        CsoChanges = await Jim.ConnectedSystems.GetConnectedSystemObjectChangesAsync(connectedSystemObjectId);
+        CsoChanges = await jim.ConnectedSystems.GetConnectedSystemObjectChangesAsync(connectedSystemObjectId);
     }
 
     private static readonly Func<AttributeGroup, object> _sortByAttribute = g => g.AttributeName;

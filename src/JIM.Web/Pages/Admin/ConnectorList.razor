@@ -1,8 +1,7 @@
 ﻿@page "/admin/connected-systems/connectors"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Application
 @using JIM.Models.Staging.DTOs
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 
 <PageTitle>Connectors</PageTitle>
 <MudText Typo="Typo.h4">Connectors</MudText>
@@ -55,7 +54,8 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _headers = await Jim.ConnectedSystems.GetConnectorDefinitionHeadersAsync();
+        using var jim = JimFactory.Create();
+        _headers = await jim.ConnectedSystems.GetConnectorDefinitionHeadersAsync();
     }
 
     private bool FilterFunc1(ConnectorDefinitionHeader element) => FilterFunc(element, _searchString);

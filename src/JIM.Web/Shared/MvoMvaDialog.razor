@@ -1,7 +1,6 @@
-@using JIM.Application
 @using JIM.Models.Core
 @using Utilities
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 
 <MudDialog>
     <DialogContent>
@@ -127,7 +126,8 @@
             var pageSize = state.PageSize;
             var searchText = string.IsNullOrWhiteSpace(_searchText) ? null : _searchText;
 
-            var result = await Jim.Metaverse.GetAttributeValuesPagedAsync(
+            using var jim = JimFactory.Create();
+            var result = await jim.Metaverse.GetAttributeValuesPagedAsync(
                 MetaverseObjectId, AttributeName, page, pageSize, searchText);
 
             return new TableData<MetaverseObjectAttributeValue>

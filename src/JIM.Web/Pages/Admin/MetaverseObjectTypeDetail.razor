@@ -1,11 +1,10 @@
 ﻿@page "/admin/schema/object-types/{Id:int}"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Application
 @using JIM.Models.Core
 @using JIM.Models.Logic
 @using JIM.Models.Staging
 @using JIM.Utilities
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 @inject IUserPreferenceService PreferenceService
@@ -244,8 +243,9 @@
 
     protected override async Task OnInitializedAsync()
     {
+        using var jim = JimFactory.Create();
         _rowsPerPage = await PreferenceService.GetRowsPerPageAsync();
-        _metaverseObjectType = await Jim.Metaverse.GetMetaverseObjectTypeAsync(Id, true);
+        _metaverseObjectType = await jim.Metaverse.GetMetaverseObjectTypeAsync(Id, true);
         if (_metaverseObjectType == null)
         {
             NavManager.NavigateTo("../");
@@ -268,7 +268,8 @@
 
     private async Task LoadContributingSystemsAsync()
     {
-        var allSyncRules = await Jim.Repository.ConnectedSystems.GetSyncRulesAsync();
+        using var jim = JimFactory.Create();
+        var allSyncRules = await jim.Repository.ConnectedSystems.GetSyncRulesAsync();
         var inboundRulesForType = allSyncRules
             .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.MetaverseObjectTypeId == Id)
             .ToList();
@@ -278,7 +279,7 @@
 
         foreach (var csId in connectedSystemIds)
         {
-            var cs = await Jim.ConnectedSystems.GetConnectedSystemAsync(csId);
+            var cs = await jim.ConnectedSystems.GetConnectedSystemAsync(csId);
             if (cs != null)
                 _contributingSystems.Add(cs);
         }
@@ -368,7 +369,8 @@
                 ? _selectedAuthoritativeSources.ToList()
                 : new List<int>();
 
-            await Jim.Metaverse.UpdateMetaverseObjectTypeAsync(_metaverseObjectType);
+            using var jim = JimFactory.Create();
+            await jim.Metaverse.UpdateMetaverseObjectTypeAsync(_metaverseObjectType);
 
             // Update original values to reflect saved state
             _originalDeletionRule = _deletionRule;

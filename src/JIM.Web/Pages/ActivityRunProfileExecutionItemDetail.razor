@@ -1,6 +1,5 @@
 @page "/activity/item/{Id:guid}"
 @attribute [Authorize(Roles = "User")]
-@using JIM.Application
 @using JIM.Models.Activities;
 @using JIM.Models.Core
 @using JIM.Models.Enums;
@@ -8,7 +7,7 @@
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Transactional
 @using JIM.Utilities;
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 
 <PageTitle>Item Details: @(_externalIdAttributeValue?.ToStringNoName() ??
@@ -1016,14 +1015,15 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
 
     protected override async Task OnParametersSetAsync()
     {
-        _activityRunProfileExecutionItem = await Jim.Activities.GetActivityRunProfileExecutionItemAsync(Id);
+        using var jim = JimFactory.Create();
+        _activityRunProfileExecutionItem = await jim.Activities.GetActivityRunProfileExecutionItemAsync(Id);
         if (_activityRunProfileExecutionItem == null)
         {
             NavManager.NavigateTo("/activity");
             return;
         }
 
-        _activity = await Jim.Activities.GetActivityAsync(_activityRunProfileExecutionItem.ActivityId);
+        _activity = await jim.Activities.GetActivityAsync(_activityRunProfileExecutionItem.ActivityId);
 
         _breadcrumbs = new List<BreadcrumbItem>
 {
@@ -1037,7 +1037,7 @@ new("Item Details", href: null, disabled: true)
         var connectedSystemId = _activityRunProfileExecutionItem.GetConnectedSystemId()
                                 ?? _activity?.ConnectedSystemId;
         if (connectedSystemId != null)
-            _connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(connectedSystemId.Value);
+            _connectedSystemHeader = await jim.ConnectedSystems.GetConnectedSystemHeaderAsync(connectedSystemId.Value);
 
         // For projected items, get the MVO from the MetaverseObjectChange or fall back to CSO.MetaverseObject
         if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Projected)
@@ -1053,16 +1053,16 @@ new("Item Details", href: null, disabled: true)
             or ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed
             && _activityRunProfileExecutionItem.ConnectedSystemObjectId.HasValue)
         {
-            _pendingExport = await Jim.ConnectedSystems.GetPendingExportForObjectAsync(
+            _pendingExport = await jim.ConnectedSystems.GetPendingExportForObjectAsync(
                 _activityRunProfileExecutionItem.ConnectedSystemObjectId.Value);
         }
         else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.PendingExport)
         {
             if (_activityRunProfileExecutionItem.ConnectedSystemObjectId.HasValue)
-                _pendingExport = await Jim.ConnectedSystems.GetPendingExportForObjectAsync(
+                _pendingExport = await jim.ConnectedSystems.GetPendingExportForObjectAsync(
                     _activityRunProfileExecutionItem.ConnectedSystemObjectId.Value);
             else if (_activityRunProfileExecutionItem.PendingExportId.HasValue)
-                _pendingExport = await Jim.ConnectedSystems.GetPendingExportAsync(
+                _pendingExport = await jim.ConnectedSystems.GetPendingExportAsync(
                     _activityRunProfileExecutionItem.PendingExportId.Value);
         }
 
@@ -1099,7 +1099,7 @@ new("Item Details", href: null, disabled: true)
                         or ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope);
                 if (disconnectedOutcome?.TargetEntityId.HasValue == true)
                 {
-                    var mvo = await Jim.Metaverse.GetMetaverseObjectAsync(disconnectedOutcome.TargetEntityId.Value);
+                    var mvo = await jim.Metaverse.GetMetaverseObjectAsync(disconnectedOutcome.TargetEntityId.Value);
                     if (mvo?.Type != null)
                         mvoTypeId = mvo.Type.Id;
                 }
@@ -1108,7 +1108,7 @@ new("Item Details", href: null, disabled: true)
             // Fourth try: if we don't have MVO type yet but have CSO type, look up via sync rules
             if (!mvoTypeId.HasValue && csoTypeId.HasValue)
             {
-                var syncRules = await Jim.ConnectedSystems.GetSyncRulesAsync();
+                var syncRules = await jim.ConnectedSystems.GetSyncRulesAsync();
                 var syncRule = syncRules.FirstOrDefault(sr => sr.ConnectedSystemObjectTypeId == csoTypeId.Value);
                 if (syncRule != null)
                 {
@@ -1118,7 +1118,7 @@ new("Item Details", href: null, disabled: true)
 
             if (mvoTypeId.HasValue)
             {
-                _metaverseObjectType = await Jim.Metaverse.GetMetaverseObjectTypeAsync(mvoTypeId.Value, false);
+                _metaverseObjectType = await jim.Metaverse.GetMetaverseObjectTypeAsync(mvoTypeId.Value, false);
 
                 // For deletion/disconnection items, load authoritative source names for deletion rule display
                 if (_activityRunProfileExecutionItem.ObjectChangeType is ObjectChangeType.Deleted or ObjectChangeType.Disconnected
@@ -1128,7 +1128,7 @@ new("Item Details", href: null, disabled: true)
                     _deletionTriggerSystems = new List<ConnectedSystemHeader>();
                     foreach (var csId in _metaverseObjectType.DeletionTriggerConnectedSystemIds)
                     {
-                        var cs = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(csId);
+                        var cs = await jim.ConnectedSystems.GetConnectedSystemHeaderAsync(csId);
                         if (cs != null)
                             _deletionTriggerSystems.Add(cs);
                     }

@@ -1,7 +1,6 @@
-@using JIM.Application
 @using JIM.Models.Core
 @using JIM.Models.Staging
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 
@@ -196,13 +195,14 @@
 
     private async Task HandleValidSettingsSubmitAsync()
     {
+        using var jim = JimFactory.Create();
         _settingsBeingSaved = true;
         SettingsFormCustomErrors.Clear();
 
         StateHasChanged();
         await Task.Delay(1);
 
-        var results = Jim.ConnectedSystems.ValidateConnectedSystemSettings(ConnectedSystem);
+        var results = jim.ConnectedSystems.ValidateConnectedSystemSettings(ConnectedSystem);
         for (var i = 0; i < results.Count; i++)
         {
             var result = results[i];
@@ -226,8 +226,8 @@
             return;
         }
 
-        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
-        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user);
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+        await jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user);
         Snackbar.Add("Your setting changes have been saved.", Severity.Success);
         _settingsBeingSaved = false;
 

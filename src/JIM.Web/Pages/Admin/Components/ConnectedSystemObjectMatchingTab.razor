@@ -1,9 +1,8 @@
-@using JIM.Application
 @using JIM.Models.Core
 @using JIM.Models.Logic
 @using JIM.Models.Staging
 @using Serilog
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 
@@ -163,7 +162,8 @@ else
         if (_newMatchingRuleSourceAttribute == null || _newMatchingRuleTargetAttribute == null)
             return;
 
-        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
 
         // Calculate the next order value
         var nextOrder = objectType.ObjectMatchingRules.Count > 0
@@ -191,7 +191,7 @@ else
 
         try
         {
-            await Jim.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, user);
+            await jim.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, user);
 
             // Add to the local list for immediate UI update
             objectType.ObjectMatchingRules.Add(rule);
@@ -222,11 +222,12 @@ else
         if (confirmationResult != true)
             return;
 
-        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
 
         try
         {
-            await Jim.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule, user);
+            await jim.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule, user);
 
             // Remove from the local list for immediate UI update
             objectType.ObjectMatchingRules.Remove(rule);
@@ -243,12 +244,13 @@ else
 
     private async Task HandleToggleMatchingRuleCaseSensitiveAsync(ObjectMatchingRule rule, bool caseSensitive)
     {
-        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
 
         try
         {
             rule.CaseSensitive = caseSensitive;
-            await Jim.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, user);
+            await jim.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, user);
 
             Snackbar.Add($"Matching rule is now {(caseSensitive ? "case-sensitive" : "case-insensitive")}.", Severity.Success);
             StateHasChanged();
@@ -288,13 +290,14 @@ else
         rule.Order = targetRule.Order;
         targetRule.Order = tempOrder;
 
-        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
 
         try
         {
             // Update both rules
-            await Jim.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, user);
-            await Jim.ConnectedSystems.UpdateObjectMatchingRuleAsync(targetRule, user);
+            await jim.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, user);
+            await jim.ConnectedSystems.UpdateObjectMatchingRuleAsync(targetRule, user);
 
             StateHasChanged();
         }
@@ -319,10 +322,11 @@ else
 
         try
         {
-            var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
             var newMode = _switchingToAdvancedMode ? ObjectMatchingRuleMode.SyncRule : ObjectMatchingRuleMode.ConnectedSystem;
 
-            var result = await Jim.ConnectedSystems.SwitchObjectMatchingModeAsync(ConnectedSystem, newMode, user);
+            var result = await jim.ConnectedSystems.SwitchObjectMatchingModeAsync(ConnectedSystem, newMode, user);
 
             if (!result.Success)
             {

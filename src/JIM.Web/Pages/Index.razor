@@ -1,10 +1,9 @@
 @page "/"
 @attribute [Authorize(Roles = "User")]
-@using JIM.Application
 @using JIM.Models.Core
 @using JIM.Models.Scheduling
 @using JIM.Models.Logic
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 
 <PageTitle>JIM Home</PageTitle>
@@ -319,19 +318,20 @@
 
     protected override async Task OnInitializedAsync()
     {
+        using var jim = JimFactory.Create();
         // Load object type counts
-        var userType = await Jim.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User, includeChildObjects: false);
-        var groupType = await Jim.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Group, includeChildObjects: false);
-        _userCount = userType != null ? await Jim.Metaverse.GetMetaverseObjectOfTypeCountAsync(userType) : 0;
-        _groupCount = groupType != null ? await Jim.Metaverse.GetMetaverseObjectOfTypeCountAsync(groupType) : 0;
+        var userType = await jim.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User, includeChildObjects: false);
+        var groupType = await jim.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Group, includeChildObjects: false);
+        _userCount = userType != null ? await jim.Metaverse.GetMetaverseObjectOfTypeCountAsync(userType) : 0;
+        _groupCount = groupType != null ? await jim.Metaverse.GetMetaverseObjectOfTypeCountAsync(groupType) : 0;
 
         // Load connected system and sync rule counts
-        _connectedSystemCount = Jim.ConnectedSystems.GetConnectedSystemCount();
-        var syncRuleHeaders = await Jim.ConnectedSystems.GetSyncRuleHeadersAsync();
+        _connectedSystemCount = jim.ConnectedSystems.GetConnectedSystemCount();
+        var syncRuleHeaders = await jim.ConnectedSystems.GetSyncRuleHeadersAsync();
         _syncRuleCount = syncRuleHeaders.Count;
 
         // Load schedules
-        _schedules = await Jim.Scheduler.GetAllSchedulesAsync();
+        _schedules = await jim.Scheduler.GetAllSchedulesAsync();
         _hasSchedules = _schedules.Count > 0;
         _hasEverRun = _schedules.Any(s => s.LastRunTime.HasValue);
 

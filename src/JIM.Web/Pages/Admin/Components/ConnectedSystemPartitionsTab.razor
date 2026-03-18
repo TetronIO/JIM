@@ -1,9 +1,8 @@
-@using JIM.Application
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using Serilog
 @using System.Text
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
 @inject IJSRuntime JSRuntime
 
@@ -354,7 +353,8 @@
     private async Task HandleImportHierarchyAsync()
     {
         // attribute the import to the user
-        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
 
         _hierarchyBeingRetrieved = true;
         _hierarchyRefreshResult = null; // Clear previous result
@@ -363,7 +363,7 @@
 
         try
         {
-            _hierarchyRefreshResult = await Jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(ConnectedSystem, user);
+            _hierarchyRefreshResult = await jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(ConnectedSystem, user);
 
             if (_hierarchyRefreshResult.Success)
             {
@@ -463,8 +463,9 @@
     private async Task HandleHierarchySelectionSubmitAsync()
     {
         // attribute the action to the user
-        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
-        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user);
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+        await jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user);
         Snackbar.Add("Your hierarchy changes have been saved.", Severity.Success);
         await OnConnectedSystemChanged.InvokeAsync();
     }

@@ -1,10 +1,9 @@
 @page "/admin/connected-systems/{ConnectedSystemId:int}/pending-exports/{Id:guid}"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Application
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Transactional
 @using JIM.Utilities
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 
@@ -272,14 +271,15 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
-        _connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(ConnectedSystemId);
+        using var jim = JimFactory.Create();
+        _connectedSystemHeader = await jim.ConnectedSystems.GetConnectedSystemHeaderAsync(ConnectedSystemId);
         if (_connectedSystemHeader == null)
         {
             NavManager.NavigateTo("/admin/connected-systems/");
             return;
         }
 
-        _pendingExport = await Jim.ConnectedSystems.GetPendingExportAsync(Id);
+        _pendingExport = await jim.ConnectedSystems.GetPendingExportAsync(Id);
         if (_pendingExport == null)
         {
             _notFound = true;

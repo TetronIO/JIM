@@ -1,11 +1,10 @@
 @page "/admin/pending-deletions"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Application
 @using JIM.Models.Core
 @using JIM.Models.Utility
 @using JIM.Utilities
 @using JIM.Web.Services
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject IUserPreferenceService PreferenceService
 
@@ -216,7 +215,8 @@
         };
 
         // Load object types for filter
-        _objectTypes = await Jim.Metaverse.GetMetaverseObjectTypesAsync(false);
+        using var jim = JimFactory.Create();
+        _objectTypes = await jim.Metaverse.GetMetaverseObjectTypesAsync(false);
 
         // Load summary counts
         await LoadSummaryAsync();
@@ -248,11 +248,12 @@
 
     private async Task LoadSummaryAsync()
     {
+        using var jim = JimFactory.Create();
         // Get all pending to calculate summary
-        var result = await Jim.Repository.Metaverse.GetMetaverseObjectsPendingDeletionAsync(1, 100, _selectedObjectTypeId);
+        var result = await jim.Repository.Metaverse.GetMetaverseObjectsPendingDeletionAsync(1, 100, _selectedObjectTypeId);
         var now = DateTime.UtcNow;
 
-        _totalCount = await Jim.Repository.Metaverse.GetMetaverseObjectsPendingDeletionCountAsync(_selectedObjectTypeId);
+        _totalCount = await jim.Repository.Metaverse.GetMetaverseObjectsPendingDeletionCountAsync(_selectedObjectTypeId);
 
         // Calculate status counts
         _deprovisioningCount = result.Results.Count(m => m.ConnectedSystemObjects.Any());
@@ -275,7 +276,8 @@
             // Convert MudBlazor's 0-indexed page to our 1-indexed page
             var page = state.Page + 1;
 
-            var result = await Jim.Repository.Metaverse.GetMetaverseObjectsPendingDeletionAsync(
+            using var jim = JimFactory.Create();
+            var result = await jim.Repository.Metaverse.GetMetaverseObjectsPendingDeletionAsync(
                 page,
                 state.PageSize,
                 _selectedObjectTypeId);

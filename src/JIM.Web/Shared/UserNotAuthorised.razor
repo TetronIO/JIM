@@ -1,10 +1,9 @@
 ﻿@using System.Security.Claims
-@using JIM.Application
 @using JIM.Models.Core
 @using Microsoft.AspNetCore.Components.Authorization
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager NavigationManager
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 
 <div class="not-authorised-container">
     <div class="not-authorised-illustration">
@@ -337,7 +336,8 @@
             .ToList();
         _userRoles = roles.Count > 0 ? string.Join(", ", roles) : "(none)";
 
-        var serviceSettings = await Jim.ServiceSettings.GetServiceSettingsAsync();
+        using var jim = JimFactory.Create();
+        var serviceSettings = await jim.ServiceSettings.GetServiceSettingsAsync();
         if (serviceSettings == null)
             return;
 

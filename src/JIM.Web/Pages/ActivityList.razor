@@ -2,7 +2,6 @@
 @page "/activity/mine"
 @attribute [Authorize(Roles = "User")]
 @implements IDisposable
-@using JIM.Application
 @using JIM.Models.Activities
 @using JIM.Models.Enums
 @using JIM.Models.Staging
@@ -10,7 +9,7 @@
 @using JIM.Utilities;
 @using JIM.Web.Services
 @using Microsoft.AspNetCore.Components.Authorization
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IUserPreferenceService PreferenceService
@@ -595,7 +594,8 @@
             var types = _filterTypes.Any() ? _filterTypes : null;
             var statuses = _filterStatuses.Any() ? _filterStatuses : null;
 
-            var result = await Jim.Activities.GetActivitiesAsync(
+            using var jim = JimFactory.Create();
+            var result = await jim.Activities.GetActivitiesAsync(
                 page,
                 state.PageSize,
                 string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
@@ -608,7 +608,7 @@
                 statuses,
                 _filterHasChildren ? true : null);
 
-            _childActivityCounts = await Jim.Activities.GetChildActivityCountsAsync(result.Results.Select(a => a.Id));
+            _childActivityCounts = await jim.Activities.GetChildActivityCountsAsync(result.Results.Select(a => a.Id));
 
             return new TableData<Activity>
             {

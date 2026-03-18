@@ -1,10 +1,9 @@
 @page "/admin/settings"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Application
 @using JIM.Application.Services
 @using JIM.Models.Core
 @using JIM.Web
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject ICredentialProtectionService CredentialProtection
@@ -171,7 +170,8 @@
     private async Task LoadSettingsAsync()
     {
         _loading = true;
-        _settings = await Jim.ServiceSettings.GetAllSettingsAsync();
+        using var jim = JimFactory.Create();
+        _settings = await jim.ServiceSettings.GetAllSettingsAsync();
         _decryptedCache.Clear();
         _revealedSecrets.Clear();
         UpdateFilteredSettings();
@@ -301,8 +301,9 @@
         {
             try
             {
-                var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
-                await Jim.ServiceSettings.UpdateSettingValueAsync(setting.Key, newValue, user);
+                using var jim = JimFactory.Create();
+                var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+                await jim.ServiceSettings.UpdateSettingValueAsync(setting.Key, newValue, user);
                 await LoadSettingsAsync();
                 Snackbar.Add($"Setting '{setting.DisplayName}' updated.", Severity.Success);
             }
@@ -324,8 +325,9 @@
         {
             try
             {
-                var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
-                await Jim.ServiceSettings.RevertSettingToDefaultAsync(setting.Key, user);
+                using var jim = JimFactory.Create();
+                var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+                await jim.ServiceSettings.RevertSettingToDefaultAsync(setting.Key, user);
                 await LoadSettingsAsync();
                 Snackbar.Add($"Setting '{setting.DisplayName}' reverted to default.", Severity.Success);
             }

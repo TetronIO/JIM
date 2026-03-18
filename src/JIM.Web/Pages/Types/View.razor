@@ -1,6 +1,5 @@
 @page "/t/{TypeNameUrlParam}/v/{IdParam:guid}"
 @attribute [Authorize(Roles = "User")]
-@using JIM.Application
 @using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
@@ -10,7 +9,7 @@
 @using JIM.Web.Services
 @using Microsoft.JSInterop
 @using Utilities;
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject IUserPreferenceService UserPreferences
 @inject IJSRuntime JsRuntime
@@ -164,8 +163,9 @@
             // JS interop not yet available; keep default
         }
 
+        using var jim = JimFactory.Create();
         var pluralName = Helpers.ConvertFromUrlParam(TypeNameUrlParam);
-        MetaverseObjectType = await Jim.Metaverse.GetMetaverseObjectTypeByPluralNameAsync(pluralName, false);
+        MetaverseObjectType = await jim.Metaverse.GetMetaverseObjectTypeByPluralNameAsync(pluralName, false);
         if (MetaverseObjectType == null)
         {
             NavManager.NavigateTo("/");
@@ -173,7 +173,7 @@
         }
 
         // Load MVO with capped MVA values for efficient rendering
-        var detailResult = await Jim.Metaverse.GetMetaverseObjectDetailAsync(IdParam, MvoAttributeLoadStrategy.CappedMva);
+        var detailResult = await jim.Metaverse.GetMetaverseObjectDetailAsync(IdParam, MvoAttributeLoadStrategy.CappedMva);
         if (detailResult == null)
         {
             NavManager.NavigateTo("/");

@@ -1,10 +1,9 @@
 @page "/admin/certificates"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Application
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
 @using JIM.Web
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -332,8 +331,9 @@ new("Certificates", href: null, disabled: true)
 
     private async Task LoadCertificatesAsync()
     {
+        using var jim = JimFactory.Create();
         _loading = true;
-        _certificates = await Jim.Certificates.GetAllAsync();
+        _certificates = await jim.Certificates.GetAllAsync();
         _loading = false;
     }
 
@@ -418,6 +418,8 @@ new("Certificates", href: null, disabled: true)
 
         try
         {
+            using var jim = JimFactory.Create();
+
             // Read file content
             using var stream = _uploadFile.OpenReadStream(maxAllowedSize: 1024 * 1024); // 1MB max
             using var ms = new MemoryStream();
@@ -425,10 +427,10 @@ new("Certificates", href: null, disabled: true)
             var certificateData = ms.ToArray();
 
             // Get current user
-            var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
 
             // Add certificate
-            await Jim.Certificates.AddFromDataAsync(_uploadName, certificateData, user, _uploadNotes);
+            await jim.Certificates.AddFromDataAsync(_uploadName, certificateData, user, _uploadNotes);
 
             Snackbar.Add("Certificate uploaded successfully.", Severity.Success);
             _uploadDialogVisible = false;
@@ -454,8 +456,9 @@ new("Certificates", href: null, disabled: true)
 
         try
         {
-            var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
-            await Jim.Certificates.AddFromFilePathAsync(_filePathName, _filePath, user, _filePathNotes);
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            await jim.Certificates.AddFromFilePathAsync(_filePathName, _filePath, user, _filePathNotes);
 
             Snackbar.Add("Certificate added successfully.", Severity.Success);
             _filePathDialogVisible = false;
@@ -481,8 +484,9 @@ new("Certificates", href: null, disabled: true)
 
         try
         {
-            var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
-            await Jim.Certificates.UpdateAsync(
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            await jim.Certificates.UpdateAsync(
             _editingCertificate.Id,
             user,
             _editName,
@@ -516,8 +520,9 @@ new("Certificates", href: null, disabled: true)
 
         try
         {
-            var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
-            await Jim.Certificates.DeleteAsync(certificate.Id, user);
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            await jim.Certificates.DeleteAsync(certificate.Id, user);
 
             Snackbar.Add("Certificate deleted successfully.", Severity.Success);
             await LoadCertificatesAsync();

@@ -1,8 +1,7 @@
-@using JIM.Application
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using Serilog
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
 @inject NavigationManager NavManager
 
@@ -187,7 +186,8 @@
         StateHasChanged();
         await Task.Delay(1);
 
-        _deletionPreview = await Jim.ConnectedSystems.GetDeletionPreviewAsync(ConnectedSystem.Id);
+        using var jim = JimFactory.Create();
+        _deletionPreview = await jim.ConnectedSystems.GetDeletionPreviewAsync(ConnectedSystem.Id);
         _deletionPreviewLoading = false;
 
         StateHasChanged();
@@ -212,8 +212,9 @@
 
         try
         {
-            var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
-            var result = await Jim.ConnectedSystems.DeleteAsync(ConnectedSystem.Id, user, _deleteChangeHistory);
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var result = await jim.ConnectedSystems.DeleteAsync(ConnectedSystem.Id, user, _deleteChangeHistory);
 
             _deleteConfirmationDialogVisible = false;
             _deletionInProgress = false;

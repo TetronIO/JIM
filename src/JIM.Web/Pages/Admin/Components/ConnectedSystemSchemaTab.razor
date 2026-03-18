@@ -1,4 +1,3 @@
-@using JIM.Application
 @using JIM.Models.Core
 @using JIM.Models.Exceptions
 @using JIM.Models.Staging
@@ -6,7 +5,7 @@
 @using JIM.Utilities
 @using Serilog
 @using JIM.Web.Services
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IUserPreferenceService PreferenceService
@@ -608,7 +607,8 @@
     private async Task HandleImportSchemaAsync()
     {
         // attribute the import to the user
-        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
 
         _schemaBeingRetrieved = true;
         _schemaRefreshResult = null; // Clear any previous result
@@ -617,7 +617,7 @@
 
         try
         {
-            _schemaRefreshResult = await Jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(ConnectedSystem, user);
+            _schemaRefreshResult = await jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(ConnectedSystem, user);
 
             // if there's just a single object type in the schema, auto-select it
             if (ConnectedSystem.ObjectTypes is { Count: 1 })
@@ -696,8 +696,9 @@
     private async Task HandleObjectTypesAndAttributeSelectionSubmitAsync()
     {
         // attribute the update to the user
-        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
-        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user);
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+        await jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user);
         Snackbar.Add("Your attribute changes have been saved.", Severity.Success);
 
         await OnConnectedSystemChanged.InvokeAsync();
@@ -892,7 +893,8 @@
     private async Task HandleShowEditAttributeDialogAsync(ConnectedSystemObjectTypeAttribute connectedSystemObjectTypeAttribute)
     {
         // can the connected system attribute be edited? are there any references to it?
-        _objectTypeAttributeBeingEditedIsEditable = !await Jim.ConnectedSystems.IsObjectTypeAttributeBeingReferencedAsync(connectedSystemObjectTypeAttribute);
+        using var jim = JimFactory.Create();
+        _objectTypeAttributeBeingEditedIsEditable = !await jim.ConnectedSystems.IsObjectTypeAttributeBeingReferencedAsync(connectedSystemObjectTypeAttribute);
         _objectTypeAttributeBeingEdited = connectedSystemObjectTypeAttribute;
         _objectTypeAttributeBeingEditedText = connectedSystemObjectTypeAttribute.Type.ToString();
         _editSchemaAttributeDialogVisible = true;

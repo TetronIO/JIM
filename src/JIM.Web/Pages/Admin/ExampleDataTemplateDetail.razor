@@ -1,11 +1,10 @@
 ﻿@page "/admin/example-data/templates/{Id:int}"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Application
 @using JIM.Models.ExampleData
 @using JIM.Models.Core
 @using JIM.Models.Tasking
 @using System.Diagnostics
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 
 <PageTitle>Data Generation Template: @_template?.Name</PageTitle>
@@ -195,7 +194,8 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _template = await Jim.ExampleData.GetTemplateAsync(Id);
+        using var jim = JimFactory.Create();
+        _template = await jim.ExampleData.GetTemplateAsync(Id);
         if (_template == null)
         {
             // template not found, redirect to index page
@@ -218,7 +218,8 @@
             Debug.WriteLine("Timer loop executing...");
             if (_template != null)
             {
-                _status = await Jim.Tasking.GetFirstExampleDataTemplateWorkerTaskStatus(_template.Id);
+                using var timerJim = JimFactory.Create();
+                _status = await timerJim.Tasking.GetFirstExampleDataTemplateWorkerTaskStatus(_template.Id);
                 if (_status != null)
                     Debug.WriteLine("TimerLoop: status is " + _status);
                 else
@@ -246,9 +247,10 @@
         _isExecuting = true;
 
         // attribute the execution to the user
-        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
         _task = ExampleDataTemplateWorkerTask.ForUser(_template.Id, user.Id, user.DisplayName ?? "Unknown User");
-        var result = await Jim.Tasking.CreateWorkerTaskAsync(_task);
+        var result = await jim.Tasking.CreateWorkerTaskAsync(_task);
 
         if (!result.Success)
         {

@@ -1,8 +1,7 @@
-@using JIM.Application
 @using JIM.Models.Core
 @using JIM.Web.Services
 @using Utilities
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject IUserPreferenceService UserPreferences
 
 @if (MetaverseObject != null)
@@ -631,7 +630,8 @@
         var searchText = _searchTexts.GetValueOrDefault(attributeName, "");
         var search = string.IsNullOrWhiteSpace(searchText) ? null : searchText;
 
-        var result = await Jim.Metaverse.GetAttributeValuesPagedAsync(
+        using var jim = JimFactory.Create();
+        var result = await jim.Metaverse.GetAttributeValuesPagedAsync(
             MetaverseObject.Id, attributeName, page, pageSize, search);
 
         return new TableData<MetaverseObjectAttributeValue>

@@ -2,7 +2,6 @@
 @attribute [Authorize(Roles = "Administrator")]
 @implements IFullWidthPage
 @implements IDisposable
-@using JIM.Application
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Tasking
@@ -10,7 +9,7 @@
 @using JIM.Utilities
 @using JIM.Web.Services
 @using JIM.Web.Shared
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 @inject IUserPreferenceService PreferenceService
@@ -334,7 +333,8 @@ else
     {
         Layout?.SetFullWidth();
 
-        _connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(Id);
+        using var jim = JimFactory.Create();
+        _connectedSystemHeader = await jim.ConnectedSystems.GetConnectedSystemHeaderAsync(Id);
         if (_connectedSystemHeader == null)
         {
             NavManager.NavigateTo("../");
@@ -349,7 +349,7 @@ else
             new("Staging", href: null, disabled: true)
         };
 
-        _objectTypes = (await Jim.ConnectedSystems.GetObjectTypesAsync(Id))
+        _objectTypes = (await jim.ConnectedSystems.GetObjectTypesAsync(Id))
             .Where(t => t.Selected)
             .ToList();
     }
@@ -385,6 +385,7 @@ else
 
         try
         {
+            using var jim = JimFactory.Create();
             // Convert MudBlazor's 0-indexed page to our 1-indexed page
             var page = state.Page + 1;
             var sortDescending = state.SortDirection == SortDirection.Descending;
@@ -394,7 +395,7 @@ else
             IEnumerable<int>? objectTypeFilter = _selectedObjectTypeIds.Count > 0 ? _selectedObjectTypeIds : null;
             IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = _selectedJoinTypes.Count > 0 ? _selectedJoinTypes : null;
 
-            var result = await Jim.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
+            var result = await jim.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
                 Id,
                 page,
                 state.PageSize,
@@ -472,10 +473,11 @@ else
     {
         _clearDialogVisible = false;
 
+        using var jim = JimFactory.Create();
         // attribute the execution to the user
-        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
         var task = ClearConnectedSystemObjectsWorkerTask.ForUser(Id, user.Id, user.DisplayName ?? "Unknown User", _clearDeleteChangeHistory);
-        var result = await Jim.Tasking.CreateWorkerTaskAsync(task);
+        var result = await jim.Tasking.CreateWorkerTaskAsync(task);
 
         if (!result.Success)
         {
