@@ -425,6 +425,11 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     font-size: 0.9em !important;
 }
 
+/* Allow long unbroken strings (DNs, GUIDs, URLs) to wrap mid-word */
+.jim-text-break {
+    word-break: break-all;
+}
+
 /* Inline code styling - similar to markdown code blocks */
 .jim-code-inline {
     font-family: "Lucida Console", "Courier New", monospace;

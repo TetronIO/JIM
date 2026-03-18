@@ -195,7 +195,7 @@
             </MudTd>
             @if (_hasSecondaryExternalId)
             {
-                <MudTd DataLabel="Secondary External Id">
+                <MudTd DataLabel="Secondary External Id" Class="jim-text-break">
                     @if (context.SecondaryExternalIdAttributeValue != null)
                     {
                         @context.SecondaryExternalIdAttributeValue?.ToStringNoName()
