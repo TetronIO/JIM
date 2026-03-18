@@ -643,6 +643,17 @@ html[lang] .jim-paper-danger-zone {
     color: #f44336 !important;
 }
 
+/* Normal-severity alerts — MudBlazor sets background-color to var(--mud-palette-dark-hover)
+   which is invisible on dark backgrounds. Override with a visible neutral wash.
+   The filled variant gets a stronger wash to differentiate from text. */
+html[lang] .mud-alert-text-normal {
+    background-color: rgba(var(--mud-palette-text-primary-rgb, 255, 255, 255), 0.08) !important;
+}
+
+html[lang] .mud-alert-filled-normal {
+    background-color: rgba(var(--mud-palette-text-primary-rgb, 255, 255, 255), 0.12) !important;
+}
+
 /* Dark mode adjustments for error alert */
 .mud-theme-dark .jim-alert-error {
     background-color: rgba(244, 67, 54, 0.08) !important;
@@ -743,6 +754,11 @@ html[lang] .mud-dialog .mud-paper-outlined {
 
 .mud-button-group-override-styles {
     box-shadow: none !important;
+}
+
+/* Centre-align alert icon and close button vertically */
+html[lang] .mud-alert-position {
+    align-items: center;
 }
 
 /* Schema refresh results alert - position close icon in top right */

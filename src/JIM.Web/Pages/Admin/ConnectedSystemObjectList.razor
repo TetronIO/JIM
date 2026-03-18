@@ -18,9 +18,12 @@
 <PageTitle>Connected System Objects: @_connectedSystemHeader?.Name</PageTitle>
 <MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connected System Objects:</span> <span class="mud-primary-text">@_connectedSystemHeader?.Name</span></MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
-<MudAlert Severity="Severity.Normal" Variant="Variant.Filled" Class="mt-3 mb-3">
-    This is the staging area for this Connected System. Inbound changes from the system are held here before being committed to the Metaverse. Outbound changes are staged here ahead of synchronisation to the connected system.
-</MudAlert>
+@if (_showIntro)
+{
+    <MudAlert Severity="Severity.Normal" Class="mt-3 mb-3" ShowCloseIcon="true" CloseIconClicked="() => _showIntro = false">
+        This is the staging area for this Connected System. Inbound changes from the system are held here before being committed to the Metaverse. Outbound changes are staged here ahead of synchronisation to the connected system.
+    </MudAlert>
+}
 
 @if (_connectedSystemHeader != null && _preferencesLoaded)
 {
@@ -310,6 +313,7 @@ else
     private ConnectedSystemHeader? _connectedSystemHeader;
     private string _searchString = "";
     private List<BreadcrumbItem> _breadcrumbs = null!;
+    private bool _showIntro = true;
     private bool _loading;
     private bool _clearDialogVisible;
     private bool _clearDeleteChangeHistory = true; // Default to true (recommended for re-import)
