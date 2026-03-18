@@ -263,7 +263,7 @@ html[lang] .mud-chip-text.mud-chip-color-info {
 
 html[lang] .mud-chip-text.mud-chip-color-success {
     background-color: rgba(var(--mud-palette-success-rgb), 0.16) !important;
-    color: #1f5e2e !important;
+    color: #1a7a2e !important;
 }
 
 html[lang] .mud-chip-text.mud-chip-color-warning {
@@ -298,8 +298,8 @@ html[lang] .mud-chip-outlined.mud-chip-color-info {
 }
 
 html[lang] .mud-chip-outlined.mud-chip-color-success {
-    color: #1f5e2e !important;
-    border-color: #1f5e2e !important;
+    color: #1a7a2e !important;
+    border-color: #1a7a2e !important;
 }
 
 html[lang] .mud-chip-outlined.mud-chip-color-warning {
