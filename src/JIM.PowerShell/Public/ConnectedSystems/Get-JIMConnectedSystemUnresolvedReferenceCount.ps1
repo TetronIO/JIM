@@ -58,7 +58,7 @@ function Get-JIMConnectedSystemUnresolvedReferenceCount {
         Write-Verbose "Getting unresolved reference count for Connected System: $ConnectedSystemId"
 
         try {
-            $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/objects/unresolved-references/count"
+            $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/staging/unresolved-references/count"
             [int]$result
         }
         catch {

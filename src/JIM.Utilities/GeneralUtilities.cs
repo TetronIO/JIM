@@ -95,7 +95,7 @@ public static class Utilities
 
     public static string GetConnectedSystemObjectsHref(int connectedSystemId)
     {
-        return $"/admin/connected-systems/{connectedSystemId}/objects";
+        return $"/admin/connected-systems/{connectedSystemId}/staging";
     }
 
     public static string GetConnectedSystemObjectHref(ConnectedSystemObject connectedSystemObject)
@@ -110,7 +110,7 @@ public static class Utilities
 
     public static string GetConnectedSystemObjectHref(int connectedSystemId, Guid connectedSystemObjectId)
     {
-        return $"/admin/connected-systems/{connectedSystemId}/objects/{connectedSystemObjectId}";
+        return $"/admin/connected-systems/{connectedSystemId}/staging/{connectedSystemObjectId}";
     }
 
     /// <summary>

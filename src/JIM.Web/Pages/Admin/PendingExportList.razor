@@ -117,7 +117,7 @@
             <MudTd DataLabel="Target Object">
                 @if (context.ConnectedSystemObjectId.HasValue)
                 {
-                    <MudLink Href="@($"/admin/connected-systems/{Id}/objects/{context.ConnectedSystemObjectId}")">
+                    <MudLink Href="@($"/admin/connected-systems/{Id}/staging/{context.ConnectedSystemObjectId}")">
                         @(context.TargetObjectIdentifier ?? context.ConnectedSystemObjectId.ToString())
                     </MudLink>
                 }

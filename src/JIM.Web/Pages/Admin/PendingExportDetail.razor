@@ -103,7 +103,7 @@
                                     {
                                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                             <MudChip T="string" Color="Color.Default">@_pendingExport.ConnectedSystemObject.Type.Name</MudChip>
-                                            <MudLink Href="@($"/admin/connected-systems/{ConnectedSystemId}/objects/{_pendingExport.ConnectedSystemObject.Id}")">
+                                            <MudLink Href="@($"/admin/connected-systems/{ConnectedSystemId}/staging/{_pendingExport.ConnectedSystemObject.Id}")">
                                                 @GetCsoDisplayName()
                                             </MudLink>
                                         </MudStack>

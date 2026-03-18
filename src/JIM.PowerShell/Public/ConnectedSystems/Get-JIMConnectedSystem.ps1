@@ -97,7 +97,7 @@ function Get-JIMConnectedSystem {
 
             'Object' {
                 Write-Verbose "Getting object $ObjectId from Connected System ID: $Id"
-                $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$Id/objects/$ObjectId"
+                $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$Id/staging/$ObjectId"
                 $result
             }
 

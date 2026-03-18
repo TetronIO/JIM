@@ -154,6 +154,12 @@ html[lang] a.mud-link.mud-primary-text:visited:hover {
     overflow: hidden;
 }
 
+/* Border-only panel with transparent background — use on MudPaper Outlined="true" Elevation="0"
+   when the surface fill would clash with the page background (e.g., intro text above filters). */
+html[lang] .jim-panel-transparent.mud-paper {
+    background-color: transparent !important;
+}
+
 /* Give container elements a subtle border for better definition against the background.
    Use html[lang] parent for higher specificity (0,2,1) to beat MudBlazor's (0,1,0) rules. */
 html[lang] .mud-paper,
