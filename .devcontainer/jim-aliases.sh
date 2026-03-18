@@ -108,10 +108,22 @@ jim-test-all() {
 alias jim-test-ps='pwsh -NoProfile -Command "Import-Module Pester; \$config = New-PesterConfiguration; \$config.Run.Path = \"./src/JIM.PowerShell/Tests\"; \$config.Output.Verbosity = \"Detailed\"; Invoke-Pester -Configuration \$config"'
 alias jim-clean='dotnet clean JIM.sln && dotnet build JIM.sln'
 
+# Kill a specific locally-running JIM .NET project before restarting it
+_jim_kill_project() {
+  local project="$1"
+  local pids
+  pids=$(pgrep -f "dotnet.*JIM\.${project}" 2>/dev/null || true)
+  if [ -n "$pids" ]; then
+    echo "Stopping existing JIM.${project} (PIDs: $(echo $pids | tr '\n' ' '))..."
+    echo "$pids" | xargs kill 2>/dev/null || true
+    sleep 1
+  fi
+}
+
 # Local run aliases - source .env and override DB hostname for local access
-alias jim-web='(set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Web)'
-alias jim-worker='(set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Worker)'
-alias jim-scheduler='(set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Scheduler)'
+jim-web()       { _jim_kill_project Web       && (set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Web); }
+jim-worker()    { _jim_kill_project Worker    && (set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Worker); }
+jim-scheduler() { _jim_kill_project Scheduler && (set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Scheduler); }
 
 # Database management
 alias jim-migrate='dotnet ef database update --project src/JIM.PostgresData'
