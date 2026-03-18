@@ -95,7 +95,16 @@ public abstract class SyncTaskProcessorBase
     protected readonly List<ConnectedSystemObject> _quietCsosToDelete = [];
 
     // Batch collection for deferred MVO deletions (for immediate 0-grace-period deletions)
-    protected readonly List<MetaverseObject> _pendingMvoDeletions = [];
+    // Stores: (MVO, FinalAttributeValues) - attribute values are snapshotted before attribute recall
+    // because recall removes them from the MVO before FlushPendingMvoDeletionsAsync runs.
+    protected readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> FinalAttributeValues)> _pendingMvoDeletions = [];
+
+    // Pre-recall attribute value snapshots for MVOs that may be deleted.
+    // Captured in ProcessObsoleteConnectedSystemObjectAsync before attribute recall runs,
+    // then consumed by MarkMvoForDeletionAsync when the MVO is queued for deletion.
+    // This is needed because recall removes attributes from the MVO before the deletion
+    // rule evaluation determines whether the MVO should actually be deleted.
+    private readonly Dictionary<Guid, List<MetaverseObjectAttributeValue>> _preRecallAttributeSnapshots = new();
 
     // Batch collection for MVO change object creation (deferred to page boundary for performance)
     // Stores: (MVO, Additions, Removals, ChangeType, RPEI) - captured BEFORE applying pending changes
@@ -736,6 +745,14 @@ public abstract class SyncTaskProcessorBase
         var totalCsoCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
         var remainingCsoCount = Math.Max(0, totalCsoCount - 1);
 
+        // Snapshot the MVO's current attribute values before recall removes them.
+        // This snapshot is used by MarkMvoForDeletionAsync to capture the final state
+        // on the deletion change record for audit purposes.
+        if (!_preRecallAttributeSnapshots.ContainsKey(mvoId))
+        {
+            _preRecallAttributeSnapshots[mvoId] = mvo.AttributeValues.ToList();
+        }
+
         // Check if we should remove contributed attributes based on the object type setting.
         // When a grace period is configured, skip attribute recall to preserve identity-critical
         // attribute values (e.g., display name, department) that feed expression-based exports
@@ -979,12 +996,18 @@ public abstract class SyncTaskProcessorBase
         {
             // No grace period - delete synchronously during this sync page flush
             // Check if already queued (multiple CSOs from same MVO may disconnect in same page)
-            if (!_pendingMvoDeletions.Any(m => m.Id == mvo.Id))
+            if (!_pendingMvoDeletions.Any(m => m.Mvo.Id == mvo.Id))
             {
                 Log.Information(
                     "MarkMvoForDeletionAsync: MVO {MvoId} queued for immediate deletion ({Reason}). No grace period configured.",
                     mvo.Id, reason);
-                _pendingMvoDeletions.Add(mvo);
+                // Use the pre-recall attribute snapshot if available (captured before attribute
+                // recall removed them), otherwise fall back to the MVO's current values.
+                var finalAttributeValues = _preRecallAttributeSnapshots.TryGetValue(mvo.Id, out var snapshot)
+                    ? snapshot
+                    : mvo.AttributeValues.ToList();
+                _preRecallAttributeSnapshots.Remove(mvo.Id);
+                _pendingMvoDeletions.Add((mvo, finalAttributeValues));
             }
             return MvoDeletionFate.DeletedImmediately;
         }
@@ -2097,7 +2120,7 @@ public abstract class SyncTaskProcessorBase
         // These MVOs will get Delete exports in FlushPendingMvoDeletionsAsync,
         // so creating Update exports here would be spurious.
         var pendingDeletionMvoIds = _pendingMvoDeletions.Count > 0
-            ? _pendingMvoDeletions.Select(m => m.Id).ToHashSet()
+            ? _pendingMvoDeletions.Select(m => m.Mvo.Id).ToHashSet()
             : null;
 
         var skippedCount = 0;
@@ -2246,7 +2269,7 @@ public abstract class SyncTaskProcessorBase
         using var span = Diagnostics.Sync.StartSpan("FlushPendingMvoDeletions");
         span.SetTag("deleteCount", _pendingMvoDeletions.Count);
 
-        foreach (var mvo in _pendingMvoDeletions)
+        foreach (var (mvo, finalAttributeValues) in _pendingMvoDeletions)
         {
             try
             {
@@ -2288,12 +2311,14 @@ public abstract class SyncTaskProcessorBase
                         deleteExports.Count, mvo.Id);
                 }
 
-                // Delete the MVO, passing initiator info from the activity
+                // Delete the MVO, passing initiator info and the snapshotted final attribute values
+                // (captured before attribute recall removed them from the MVO)
                 await _jim.Metaverse.DeleteMetaverseObjectAsync(
                     mvo,
                     _activity.InitiatedByType,
                     _activity.InitiatedById,
-                    _activity.InitiatedByName);
+                    _activity.InitiatedByName,
+                    finalAttributeValues);
                 Log.Information(
                     "FlushPendingMvoDeletionsAsync: Deleted MVO {MvoId} ({DisplayName})",
                     mvo.Id, mvo.DisplayName ?? "No display name");
@@ -2311,6 +2336,7 @@ public abstract class SyncTaskProcessorBase
         }
 
         _pendingMvoDeletions.Clear();
+        _preRecallAttributeSnapshots.Clear();
         span.SetSuccess();
     }
 

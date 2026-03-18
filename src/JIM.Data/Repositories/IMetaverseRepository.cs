@@ -120,6 +120,13 @@ public interface IMetaverseRepository
     public Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject);
 
     /// <summary>
+    /// Explicitly loads the AttributeValues (and their Attribute navigation) for an MVO
+    /// that was queried without them. Used to capture final attribute state before deletion.
+    /// </summary>
+    /// <param name="metaverseObject">The MVO to load attribute values for.</param>
+    public Task LoadMetaverseObjectAttributeValuesAsync(MetaverseObject metaverseObject);
+
+    /// <summary>
     /// Gets Metaverse Objects that are eligible for automatic deletion based on deletion rules.
     /// Returns MVOs where:
     /// - Origin = Projected (not Internal - protects admin accounts)

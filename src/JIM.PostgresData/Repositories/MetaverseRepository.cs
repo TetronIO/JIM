@@ -1005,6 +1005,20 @@ public class MetaverseRepository : IMetaverseRepository
             await Repository.Database.Database.ExecuteSqlRawAsync(
                 @"UPDATE ""MetaverseObjectChanges"" SET ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = {0}",
                 metaverseObject.Id);
+
+            // Null out reference attribute values on other MVOs that point to this MVO.
+            // Without this, deleting an MVO that is referenced (e.g., as a Manager) by other
+            // MVOs would violate the FK constraint on MetaverseObjectAttributeValues.ReferenceValueId.
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""MetaverseObjectAttributeValues"" SET ""ReferenceValueId"" = NULL WHERE ""ReferenceValueId"" = {0}",
+                metaverseObject.Id);
+
+            // Null out reference values in change tracking attribute records that point to this MVO.
+            // Change history records may reference this MVO (e.g., "Manager was set to Alice")
+            // and must be preserved with a null reference rather than blocking deletion.
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""MetaverseObjectChangeAttributeValues"" SET ""ReferenceValueId"" = NULL WHERE ""ReferenceValueId"" = {0}",
+                metaverseObject.Id);
         }
         catch (Exception)
         {
@@ -1014,6 +1028,20 @@ public class MetaverseRepository : IMetaverseRepository
 
         Repository.Database.MetaverseObjects.Remove(metaverseObject);
         await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Explicitly loads the AttributeValues (and their Attribute navigation) for an MVO
+    /// that was queried without them. Used to capture final attribute state before deletion.
+    /// </summary>
+    /// <param name="metaverseObject">The MVO to load attribute values for.</param>
+    public async Task LoadMetaverseObjectAttributeValuesAsync(MetaverseObject metaverseObject)
+    {
+        await Repository.Database.Entry(metaverseObject)
+            .Collection(mvo => mvo.AttributeValues)
+            .Query()
+            .Include(av => av.Attribute)
+            .LoadAsync();
     }
 
     /// <summary>

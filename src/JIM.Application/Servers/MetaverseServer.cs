@@ -505,34 +505,60 @@ public class MetaverseServer
 
     /// <summary>
     /// Deletes a Metaverse Object and optionally records the deletion for audit trail.
+    /// Captures the final attribute values on the deletion change record for audit purposes.
     /// </summary>
     /// <param name="metaverseObject">The MVO to delete.</param>
     /// <param name="initiatedByType">The type of principal initiating the deletion.</param>
     /// <param name="initiatedById">The ID of the principal initiating the deletion.</param>
     /// <param name="initiatedByName">The display name of the principal initiating the deletion.</param>
+    /// <param name="finalAttributeValues">Pre-captured attribute values to record as the final state.
+    /// Required when the sync processor has already recalled attributes from the MVO before deletion.
+    /// When null, the method uses the MVO's current attribute values (loading from DB if needed).</param>
     public async Task DeleteMetaverseObjectAsync(
         MetaverseObject metaverseObject,
         ActivityInitiatorType initiatedByType = ActivityInitiatorType.NotSet,
         Guid? initiatedById = null,
-        string? initiatedByName = null)
+        string? initiatedByName = null,
+        List<MetaverseObjectAttributeValue>? finalAttributeValues = null)
     {
         // Check if MVO change tracking is enabled
         var changeTrackingEnabled = await Application.ServiceSettings.GetMvoChangeTrackingEnabledAsync();
 
         if (changeTrackingEnabled)
         {
-            // Create a deletion change record before deleting.
-            // IMPORTANT: Do NOT add this to metaverseObject.Changes collection!
-            // Adding via navigation property causes EF Core to try to INSERT a record
-            // referencing an MVO that's being DELETED in the same transaction, which fails.
-            // Instead, we create the record with a direct reference to the MVO, then allow
-            // the FK to be nulled during deletion (cascade behavior).
+            // Determine the attribute values to capture as final state.
+            // The sync processor path passes pre-captured values (snapshotted before attribute recall).
+            // The housekeeping path doesn't pass them, so we use the MVO's current values
+            // (loading from DB if needed since GetMetaverseObjectsEligibleForDeletionAsync
+            // doesn't include AttributeValues).
+            var attributesToCapture = finalAttributeValues;
+            if (attributesToCapture == null)
+            {
+                if (metaverseObject.AttributeValues.Count == 0)
+                {
+                    await Application.Repository.Metaverse.LoadMetaverseObjectAttributeValuesAsync(metaverseObject);
+                }
+                attributesToCapture = metaverseObject.AttributeValues.ToList();
+            }
+
+            // Resolve display name: prefer the MVO's current DisplayName (computed from AttributeValues),
+            // but if attributes were already recalled (sync processor path), derive it from the snapshot.
+            var displayName = metaverseObject.DisplayName;
+            if (displayName == null && attributesToCapture.Count > 0)
+            {
+                var displayNameAttrValue = attributesToCapture.SingleOrDefault(
+                    av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName);
+                displayName = displayNameAttrValue?.StringValue;
+            }
+
+            // Create a deletion change record.
+            // IMPORTANT: Do NOT set the MetaverseObject navigation property! Setting it causes EF Core
+            // to track and attempt to process the MVO entity during SaveChangesAsync, which triggers
+            // FK constraint violations when other MVOs in the batch are pending deletion.
+            // The MetaverseObjectId FK is always nulled for deletion records anyway —
+            // GetDeletedMvoChangeHistoryAsync uses DeletedObjectDisplayName/DeletedObjectTypeId instead.
             var change = new MetaverseObjectChange
             {
-                // CRITICAL: Set MetaverseObject reference to enable querying full change history.
-                // The FK will be automatically nulled when the MVO is deleted (cascade behavior),
-                // but we capture the ID here so GetDeletedMvoChangeHistoryAsync can find all related changes.
-                MetaverseObject = metaverseObject,
                 ChangeType = ObjectChangeType.Deleted,
                 ChangeTime = DateTime.UtcNow,
                 InitiatedByType = initiatedByType,
@@ -543,11 +569,29 @@ public class MetaverseServer
                     : MetaverseObjectChangeInitiatorType.NotSet,
                 // Preserve object identity for the deleted objects browser
                 DeletedObjectTypeId = metaverseObject.Type?.Id,
-                DeletedObjectDisplayName = metaverseObject.DisplayName
+                DeletedObjectDisplayName = displayName
             };
 
-            // Save the change record directly (not via MVO navigation property)
+            // Capture final attribute values as removals so the deletion change
+            // record preserves the final state of the object for audit purposes.
+            foreach (var attributeValue in attributesToCapture)
+            {
+                AddMvoChangeAttributeValueObject(change, attributeValue, ValueChangeType.Remove);
+            }
+
+            // Delete the MVO first, then save the change record afterwards.
+            // IMPORTANT: The change record intentionally does NOT set MetaverseObject navigation property
+            // and is saved AFTER deletion to avoid two problems:
+            // 1. Setting MetaverseObject would cause EF Core to track the entity and trigger FK issues
+            // 2. Calling SaveChangesAsync before deletion would flush ALL tracked changes in the
+            //    change tracker (including pending MVO deletions from the sync batch), causing FK
+            //    constraint violations on MetaverseObjectAttributeValues reference FKs.
+            // The deletion change record always has null MetaverseObjectId since the MVO no longer
+            // exists — GetDeletedMvoChangeHistoryAsync finds related changes via DeletedObjectDisplayName
+            // and DeletedObjectTypeId instead.
+            await Application.Repository.Metaverse.DeleteMetaverseObjectAsync(metaverseObject);
             await Application.Repository.Metaverse.CreateMetaverseObjectChangeAsync(change);
+            return;
         }
 
         await Application.Repository.Metaverse.DeleteMetaverseObjectAsync(metaverseObject);
