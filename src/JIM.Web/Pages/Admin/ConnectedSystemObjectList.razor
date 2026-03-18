@@ -190,7 +190,7 @@
                 }
                 else
                 {
-                    @context.ExternalIdAttributeValue
+                    @context.ExternalIdAttributeValue?.ToStringNoName()
                 }
             </MudTd>
             @if (_hasSecondaryExternalId)
@@ -198,7 +198,7 @@
                 <MudTd DataLabel="Secondary External Id">
                     @if (context.SecondaryExternalIdAttributeValue != null)
                     {
-                        @context.SecondaryExternalIdAttributeValue
+                        @context.SecondaryExternalIdAttributeValue?.ToStringNoName()
                     }
                     else if (!string.IsNullOrEmpty(context.PendingSecondaryExternalId))
                     {
