@@ -1004,6 +1004,7 @@ html[lang] .mud-alert-position {
 
 .jim-attr-header-extid {
     width: 140px;
+    white-space: nowrap;
 }
 
 .jim-attr-header-value {
@@ -1073,7 +1074,8 @@ html[lang] .mud-alert-position {
 }
 
 /* MVA rows: top-align cells so attribute name stays at top when values stack vertically */
-.jim-attribute-table tbody tr.jim-attr-row-mva td {
+.jim-attribute-table tbody tr.jim-attr-row-mva td,
+.jim-attr-cell-mva {
     vertical-align: top;
 }
 

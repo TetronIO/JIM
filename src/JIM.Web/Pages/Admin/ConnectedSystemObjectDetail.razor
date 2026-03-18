@@ -146,101 +146,97 @@
     <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" PanelClass="pa-0 mt-4">
         <MudTabPanel Text="Attributes">
             <MudPaper Class="pa-0" Outlined="true">
-                <MudSimpleTable Hover="true" Elevation="0" Class="jim-attribute-table">
-                    <thead>
-                        <tr>
-                            <th class="jim-attr-header-name">Attribute</th>
-                            <th class="jim-attr-header-value">Value</th>
-                            <th class="jim-attr-header-type">Type</th>
-                            <th class="jim-attr-header-plurality">Plurality</th>
-                            <th class="jim-attr-header-extid">External ID?</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @{
-                            var groupedAttributes = GetGroupedAttributes();
-                        }
-                        @if (!groupedAttributes.Any())
-                        {
-                            <tr>
-                                <td colspan="5" class="text-center pa-4">
-                                    <MudText Typo="Typo.body1" Class="mud-text-secondary">No attributes to display</MudText>
-                                </td>
-                            </tr>
-                        }
-                        else
-                        {
-                            @foreach (var group in groupedAttributes)
+                <MudTable Items="@GetGroupedAttributes()" Hover="true" Elevation="0" Class="jim-attribute-table"
+                    Breakpoint="Breakpoint.None">
+                    <HeaderContent>
+                        <MudTh Class="jim-attr-header-name">
+                            <MudTableSortLabel SortBy="@_sortByAttribute"
+                                InitialDirection="SortDirection.Ascending" T="AttributeGroup">
+                                <MudText Typo="Typo.button">Attribute</MudText>
+                            </MudTableSortLabel>
+                        </MudTh>
+                        <MudTh Class="jim-attr-header-value">
+                            <MudTableSortLabel SortBy="@_sortByValue" T="AttributeGroup">
+                                <MudText Typo="Typo.button">Value</MudText>
+                            </MudTableSortLabel>
+                        </MudTh>
+                        <MudTh Class="jim-attr-header-type">
+                            <MudTableSortLabel SortBy="@_sortByType" T="AttributeGroup">
+                                <MudText Typo="Typo.button">Type</MudText>
+                            </MudTableSortLabel>
+                        </MudTh>
+                        <MudTh Class="jim-attr-header-plurality">
+                            <MudTableSortLabel SortBy="@_sortByPlurality" T="AttributeGroup">
+                                <MudText Typo="Typo.button">Plurality</MudText>
+                            </MudTableSortLabel>
+                        </MudTh>
+                        <MudTh Class="jim-attr-header-extid">
+                            <MudTableSortLabel SortBy="@_sortByExternalId" T="AttributeGroup">
+                                <MudText Typo="Typo.button">External ID?</MudText>
+                            </MudTableSortLabel>
+                        </MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Attribute" Class="@($"jim-attr-name {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
+                            <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.AttributeName</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Value" Class="@($"jim-attr-value {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
+                            @if (context.Values.Count == 1)
                             {
-                                <tr class="@(group.Values.Count > 1 ? "jim-attr-row-mva" : "")">
-                                    <td class="jim-attr-name">
-                                        <MudText Typo="Typo.body1" Class="mud-text-secondary">@group.AttributeName</MudText>
-                                    </td>
-                                    <td class="jim-attr-value">
-                                        @if (group.Values.Count == 1)
-                                        {
-                                            <CsoAttributeValue Value="@group.Values[0]" />
-                                        }
-                                        else if (group.TotalCount <= MvaInlineThreshold)
-                                        {
-                                            <div class="jim-attr-expanded">
-                                                @foreach (var val in group.Values)
-                                                {
-                                                    <div class="jim-attr-expanded-item">
-                                                        <CsoAttributeValue Value="@val" />
-                                                    </div>
-                                                }
-                                            </div>
-                                        }
-                                        else
-                                        {
-                                            <div class="jim-attr-expanded">
-                                                @foreach (var val in group.Values.Take(MvaInlineThreshold))
-                                                {
-                                                    <div class="jim-attr-expanded-item">
-                                                        <CsoAttributeValue Value="@val" />
-                                                    </div>
-                                                }
-                                                <MudButton Variant="Variant.Outlined" Class="jim-attr-expand-btn"
-                                                    OnClick="@(() => OpenMvaDialogAsync(group.AttributeName, group.TotalCount, group.IsReference))">
-                                                    +@(group.TotalCount - MvaInlineThreshold) more
-                                                </MudButton>
-                                            </div>
-                                        }
-                                    </td>
-                                    <td class="jim-attr-type">
-                                        <MudText Typo="Typo.body1" Class="mud-text-secondary">@group.Values[0].Attribute.Type
-                                        </MudText>
-                                    </td>
-                                    <td class="jim-attr-plurality">
-                                        @if (group.IsMultiValued)
-                                        {
-                                            <MudText Typo="Typo.body1" Class="mud-text-secondary">Multi</MudText>
-                                        }
-                                        else
-                                        {
-                                            <MudText Typo="Typo.body1" Class="mud-text-secondary">Single</MudText>
-                                        }
-                                    </td>
-                                    <td>
-                                        @if (IsExternalId(group.Values[0]))
-                                        {
-                                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
-                                        }
-                                        else if (IsSecondaryExternalId(group.Values[0]))
-                                        {
-                                            <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
-                                        }
-                                        else
-                                        {
-                                            <span>-</span>
-                                        }
-                                    </td>
-                                </tr>
+                                <CsoAttributeValue Value="@context.Values[0]" />
                             }
-                        }
-                    </tbody>
-                </MudSimpleTable>
+                            else if (context.TotalCount <= MvaInlineThreshold)
+                            {
+                                <div class="jim-attr-expanded">
+                                    @foreach (var val in context.Values)
+                                    {
+                                        <div class="jim-attr-expanded-item">
+                                            <CsoAttributeValue Value="@val" />
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="jim-attr-expanded">
+                                    @foreach (var val in context.Values.Take(MvaInlineThreshold))
+                                    {
+                                        <div class="jim-attr-expanded-item">
+                                            <CsoAttributeValue Value="@val" />
+                                        </div>
+                                    }
+                                    <MudButton Variant="Variant.Outlined" Class="jim-attr-expand-btn"
+                                        OnClick="@(() => OpenMvaDialogAsync(context.AttributeName, context.TotalCount, context.IsReference))">
+                                        +@(context.TotalCount - MvaInlineThreshold) more
+                                    </MudButton>
+                                </div>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Type" Class="@($"jim-attr-type {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
+                            <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.Values[0].Attribute.Type</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Plurality" Class="@($"jim-attr-plurality {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
+                            <MudText Typo="Typo.body1" Class="mud-text-secondary">@(context.IsMultiValued ? "Multi" : "Single")</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="External ID?" Class="@(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")" Style="white-space: nowrap">
+                            @if (IsExternalId(context.Values[0]))
+                            {
+                                <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
+                            }
+                            else if (IsSecondaryExternalId(context.Values[0]))
+                            {
+                                <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
+                            }
+                            else
+                            {
+                                <span>-</span>
+                            }
+                        </MudTd>
+                    </RowTemplate>
+                    <NoRecordsContent>
+                        <MudText Typo="Typo.body1" Class="mud-text-secondary">No attributes to display</MudText>
+                    </NoRecordsContent>
+                </MudTable>
             </MudPaper>
         </MudTabPanel>
         <MudTabPanel Text="Change History">
@@ -334,6 +330,12 @@
         CsoChanges = await Jim.ConnectedSystems.GetConnectedSystemObjectChangesAsync(connectedSystemObjectId);
     }
 
+    private static readonly Func<AttributeGroup, object> _sortByAttribute = g => g.AttributeName;
+    private static readonly Func<AttributeGroup, object> _sortByValue = g => g.Values[0].ToStringNoName() ?? "";
+    private static readonly Func<AttributeGroup, object> _sortByType = g => g.Values[0].Attribute.Type.ToString();
+    private static readonly Func<AttributeGroup, object> _sortByPlurality = g => g.IsMultiValued;
+    private Func<AttributeGroup, object> _sortByExternalId => g => GetExternalIdSortOrder(g);
+
     private const int MvaInlineThreshold = 10;
 
     private record AttributeGroup(
@@ -350,7 +352,6 @@
 
         return ConnectedSystemObject.AttributeValues
         .GroupBy(v => v.Attribute.Name)
-        .OrderBy(g => g.Key)
         .Select(g =>
         {
             var values = g.ToList();
@@ -364,6 +365,13 @@
                 isReference);
         })
         .ToList();
+    }
+
+    private int GetExternalIdSortOrder(AttributeGroup group)
+    {
+        if (IsExternalId(group.Values[0])) return 0;
+        if (IsSecondaryExternalId(group.Values[0])) return 1;
+        return 2;
     }
 
     private bool IsExternalId(ConnectedSystemObjectAttributeValue value)
