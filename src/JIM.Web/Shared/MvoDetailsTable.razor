@@ -142,6 +142,7 @@
         }
         else if (attributeValue.Attribute.Type == AttributeDataType.Reference && attributeValue.ReferenceValue != null)
         {
+            <MudChip T="string" Color="Color.Default">@attributeValue.ReferenceValue.Type?.Name</MudChip>
             <MudLink Href="@Utilities.GetMetaverseObjectHref(attributeValue.ReferenceValue)">
                 @(attributeValue.ReferenceValue.DisplayName ?? attributeValue.ReferenceValue.Id.ToString())
             </MudLink>
