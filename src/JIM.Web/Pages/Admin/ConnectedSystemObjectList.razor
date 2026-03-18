@@ -18,10 +18,12 @@
 <PageTitle>Connected System Objects: @_connectedSystemHeader?.Name</PageTitle>
 <MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connected System Objects:</span> <span class="mud-primary-text">@_connectedSystemHeader?.Name</span></MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
-    A view of the objects that are staged within JIM for this connected system. This is where changes either, to the connected system are staged ahead of synchronisation,
-    or where changes from the system are staged before being committed to the Metaverse within JIM.
-</MudText>
+<MudPaper Elevation="0" Outlined="true" Class="pa-4 mt-3 mb-3">
+    <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
+        A view of the objects that are staged within JIM for this connected system. This is where changes either, to the connected system are staged ahead of synchronisation,
+        or where changes from the system are staged before being committed to the Metaverse within JIM.
+    </MudText>
+</MudPaper>
 
 @if (_connectedSystemHeader != null && _preferencesLoaded)
 {
