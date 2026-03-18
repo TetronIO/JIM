@@ -16,7 +16,7 @@
 @inject IUserPreferenceService PreferenceService
 
 <PageTitle>Connected System Objects: @_connectedSystemHeader?.Name</PageTitle>
-<MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span class="mud-primary-text">Connected System Objects:</span> @_connectedSystemHeader?.Name</MudText>
+<MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connected System Objects:</span> <span class="mud-primary-text">@_connectedSystemHeader?.Name</span></MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
     A view of the objects that are staged within JIM for this connected system. This is where changes either, to the connected system are staged ahead of synchronisation,

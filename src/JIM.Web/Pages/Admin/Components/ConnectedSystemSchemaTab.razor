@@ -234,7 +234,7 @@
 
     @if (_selectedObjectType != null)
     {
-        <MudText Typo="Typo.h5" Class="mt-5"><span class="mud-primary-text">Object Type:</span> @_selectedObjectType.Name</MudText>
+        <MudText Typo="Typo.h5" Class="mt-5"><span>Object Type:</span> <span class="mud-primary-text">@_selectedObjectType.Name</span></MudText>
         @if (ConnectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId)
         {
             <MudPaper Outlined="true" Class="pa-4 mt-5">

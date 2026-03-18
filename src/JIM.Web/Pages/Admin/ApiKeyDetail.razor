@@ -13,7 +13,7 @@
 @inject IUserPreferenceService PreferenceService
 
 <PageTitle>API Key: @_apiKey?.Name</PageTitle>
-<MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.Api" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span class="mud-primary-text">API Key:</span> @_apiKey?.Name</MudText>
+<MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.Api" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>API Key:</span> <span class="mud-primary-text">@_apiKey?.Name</span></MudText>
 <div class="d-flex justify-space-between align-center">
     <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
     @if (_apiKey != null)
