@@ -15,11 +15,11 @@
  */
 
 html[lang] {
-    /* === Primary Palette (deep blue — WCAG-safe version of sky-blue) === */
-    --mud-palette-primary: #0076d3;
-    --mud-palette-primary-rgb: 0,118,211;
-    --mud-palette-primary-darken: #005da8;
-    --mud-palette-primary-lighten: #1a8be6;
+    /* === Primary Palette (purple — WCAG AA on white) === */
+    --mud-palette-primary: #5a45a0;
+    --mud-palette-primary-rgb: 90,69,160;
+    --mud-palette-primary-darken: #4e3b84;
+    --mud-palette-primary-lighten: #614b9e;
     --mud-palette-primary-text: #ffffffff;
 
     /* === Secondary Palette (navy — from the dark theme's background) === */
@@ -107,8 +107,9 @@ html[lang] {
     /* === JIM Custom: Navigation === */
     --jim-nav-top-level-color: #4a5568;
     --jim-nav-child-color: #4a5568;
-    --jim-nav-hover-color: #005da8;
-    --jim-nav-active-color: #0076d3;
+    --jim-nav-hover-color: #5a45a0;
+    --jim-nav-hover-bg: #eaecf0;
+    --jim-nav-active-color: #5a45a0;
 
     /* === JIM Custom: Drawer border (paper border — right-hand edge) === */
     --jim-drawer-border-color: rgba(30, 58, 95, 0.26);
@@ -184,6 +185,16 @@ html[lang] .mud-button-outlined.mud-button-outlined-default:not(:disabled):hover
     background-color: rgba(0, 0, 0, 0.06);
 }
 
+/* Secondary button hover — use secondary colour tint instead of default blue */
+html[lang] .mud-button-outlined.mud-button-outlined-secondary:not(:disabled):hover,
+html[lang] .mud-button-text.mud-button-text-secondary:not(:disabled):hover {
+    background-color: rgba(var(--mud-palette-secondary-rgb), 0.10) !important;
+}
+
+html[lang] .mud-button-filled.mud-button-filled-secondary:not(:disabled):hover {
+    background-color: var(--mud-palette-secondary-darken) !important;
+}
+
 /* Boost alert background contrast — MudBlazor defaults are too faint on light backgrounds.
    Text variant: stronger background wash (~18% vs default ~8%).
    Outlined variant: add a subtle fill instead of transparent. */
@@ -225,6 +236,80 @@ html[lang] .mud-alert-outlined-warning {
 
 html[lang] .mud-alert-outlined-error {
     background-color: rgba(var(--mud-palette-error-rgb), 0.06) !important;
+}
+
+/* Text-variant chips — stronger background for high contrast (matches dark theme intensity).
+   MudBlazor defaults are ~5% opacity; we use 16% for a punchy, uniform look.
+   Text colour uses the darken variant (or base colour) for maximum legibility on white. */
+html[lang] .mud-chip-text.mud-chip-color-primary {
+    background-color: rgba(var(--mud-palette-primary-rgb), 0.16) !important;
+    color: var(--mud-palette-primary-darken) !important;
+}
+
+html[lang] .mud-chip-text.mud-chip-color-secondary {
+    background-color: rgba(var(--mud-palette-secondary-rgb), 0.16) !important;
+    color: var(--mud-palette-secondary-darken) !important;
+}
+
+html[lang] .mud-chip-text.mud-chip-color-tertiary {
+    background-color: rgba(var(--mud-palette-tertiary-rgb), 0.16) !important;
+    color: var(--mud-palette-tertiary-darken) !important;
+}
+
+html[lang] .mud-chip-text.mud-chip-color-info {
+    background-color: rgba(var(--mud-palette-info-rgb), 0.16) !important;
+    color: #005da8 !important;
+}
+
+html[lang] .mud-chip-text.mud-chip-color-success {
+    background-color: rgba(var(--mud-palette-success-rgb), 0.16) !important;
+    color: #1f5e2e !important;
+}
+
+html[lang] .mud-chip-text.mud-chip-color-warning {
+    background-color: rgba(var(--mud-palette-warning-rgb), 0.16) !important;
+    color: #8a4400 !important;
+}
+
+html[lang] .mud-chip-text.mud-chip-color-error {
+    background-color: rgba(var(--mud-palette-error-rgb), 0.16) !important;
+    color: #9e1e1e !important;
+}
+
+/* Outlined chips — use darken colour for text and border to match text-chip contrast */
+html[lang] .mud-chip-outlined.mud-chip-color-primary {
+    color: var(--mud-palette-primary-darken) !important;
+    border-color: var(--mud-palette-primary-darken) !important;
+}
+
+html[lang] .mud-chip-outlined.mud-chip-color-secondary {
+    color: var(--mud-palette-secondary-darken) !important;
+    border-color: var(--mud-palette-secondary-darken) !important;
+}
+
+html[lang] .mud-chip-outlined.mud-chip-color-tertiary {
+    color: var(--mud-palette-tertiary-darken) !important;
+    border-color: var(--mud-palette-tertiary-darken) !important;
+}
+
+html[lang] .mud-chip-outlined.mud-chip-color-info {
+    color: #005da8 !important;
+    border-color: #005da8 !important;
+}
+
+html[lang] .mud-chip-outlined.mud-chip-color-success {
+    color: #1f5e2e !important;
+    border-color: #1f5e2e !important;
+}
+
+html[lang] .mud-chip-outlined.mud-chip-color-warning {
+    color: #8a4400 !important;
+    border-color: #8a4400 !important;
+}
+
+html[lang] .mud-chip-outlined.mud-chip-color-error {
+    color: #9e1e1e !important;
+    border-color: #9e1e1e !important;
 }
 
 /* Nested table footer, pager, and no-records rows use page background

@@ -528,6 +528,10 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     color: var(--jim-nav-hover-color, var(--jim-nav-active-color)) !important;
 }
 
+.jim-nav-menu .mud-nav-link:hover {
+    background-color: var(--jim-nav-hover-bg, transparent) !important;
+}
+
 /* Child nav items - dimmed colour and lighter weight for visual hierarchy */
 .jim-nav-child .mud-nav-link-text {
     font-weight: 400 !important;
