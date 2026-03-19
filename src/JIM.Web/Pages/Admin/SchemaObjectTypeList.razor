@@ -26,7 +26,10 @@
                 <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
             </HeaderContent>
             <RowTemplate>
-                <MudTd DataLabel="Name"><MudLink Href="@("/admin/schema/object-types/"+context.Id)">@context.Name</MudLink></MudTd>
+                <MudTd DataLabel="Name">
+                    <MudIcon Icon="@Helpers.ResolveObjectTypeIcon(context.Icon)" Class="mr-1" Style="vertical-align: middle;" />
+                    <MudLink Href="@("/admin/schema/object-types/"+context.Id)">@context.Name</MudLink>
+                </MudTd>
                 <MudTd DataLabel="Attributes">@context.AttributesCount</MudTd>
                 <MudTd DataLabel="Deletion Rule">
                     @{
