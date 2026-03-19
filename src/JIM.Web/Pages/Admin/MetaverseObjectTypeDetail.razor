@@ -33,6 +33,14 @@
             <MudItem xs="12" sm="6" md="4">
                 <MudField Label="Built-in?" Variant="Variant.Outlined">@(_metaverseObjectType.BuiltIn ? "Yes" : "No")</MudField>
             </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudField Label="Icon" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Helpers.ResolveObjectTypeIcon(_metaverseObjectType.Icon)">
+                    @(_metaverseObjectType.Icon ?? "None")
+                </MudField>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
+                    Browse available icons at the <MudLink Href="https://mudblazor.com/features/icons" Target="_blank">MudBlazor Icon Gallery</MudLink>. Use the <strong>Filled</strong> icon name (e.g., "Person", "Groups", "Devices").
+                </MudText>
+            </MudItem>
         </MudGrid>
     </MudPaper>
 
