@@ -1,5 +1,6 @@
 using JIM.Application;
 using JIM.Application.Diagnostics;
+using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -20,11 +21,12 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
 {
     public SyncFullSyncTaskProcessor(
         JimApplication jimApplication,
+        ISyncRepository syncRepository,
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile connectedSystemRunProfile,
         Activity activity,
         CancellationTokenSource cancellationTokenSource)
-        : base(jimApplication, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource)
+        : base(jimApplication, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource)
     {
     }
 
@@ -44,22 +46,22 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // - update the Metaverse Objects accordingly.
         // - work out if this requires other Connected System to be updated by way of creating new Pending Export Objects.
 
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Preparing");
+        await _syncRepo.UpdateActivityMessageAsync(_activity, "Preparing");
 
         // how many objects are we processing? that = CSO count + Pending Export Object count.
         // update the activity with this info so a progress bar can be shown.
-        var totalCsosToProcess = await _jim.ConnectedSystems.GetConnectedSystemObjectCountAsync(_connectedSystem.Id);
-        var totalPendingExportObjectsToProcess = await _jim.ConnectedSystems.GetPendingExportsCountAsync(_connectedSystem.Id);
+        var totalCsosToProcess = await _syncRepo.GetConnectedSystemObjectCountAsync(_connectedSystem.Id);
+        var totalPendingExportObjectsToProcess = await _syncRepo.GetPendingExportsCountAsync(_connectedSystem.Id);
         var totalObjectsToProcess = totalCsosToProcess + totalPendingExportObjectsToProcess;
         _activity.ObjectsToProcess = totalObjectsToProcess;
         _activity.ObjectsProcessed = 0;
-        await _jim.Activities.UpdateActivityAsync(_activity);
+        await _syncRepo.UpdateActivityAsync(_activity);
 
         // get all the active sync rules for this system
         List<SyncRule> activeSyncRules;
         using (Diagnostics.Sync.StartSpan("LoadSyncRules"))
         {
-            activeSyncRules = await _jim.ConnectedSystems.GetSyncRulesAsync(_connectedSystem.Id, false);
+            activeSyncRules = await _syncRepo.GetSyncRulesAsync(_connectedSystem.Id, false);
         }
 
         // Load ALL sync rules from ALL systems for drift detection import mapping cache.
@@ -68,7 +70,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         List<SyncRule> allSyncRules;
         using (Diagnostics.Sync.StartSpan("LoadAllSyncRulesForDriftDetection"))
         {
-            allSyncRules = await _jim.ConnectedSystems.GetSyncRulesAsync();
+            allSyncRules = await _syncRepo.GetAllSyncRulesAsync();
         }
 
         // Build drift detection cache (import mapping cache + export rules with EnforceState=true)
@@ -78,14 +80,14 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // get the schema for all object types upfront in this Connected System, so we can retrieve lightweight CSOs without this data.
         using (Diagnostics.Sync.StartSpan("LoadObjectTypes"))
         {
-            _objectTypes = await _jim.ConnectedSystems.GetObjectTypesAsync(_connectedSystem.Id);
+            _objectTypes = await _syncRepo.GetObjectTypesAsync(_connectedSystem.Id);
         }
 
         // load all pending exports once upfront and index by CSO ID for O(1) lookup
         // this avoids O(n²) behaviour from loading all pending exports for every CSO
         using (Diagnostics.Sync.StartSpan("LoadPendingExports"))
         {
-            var allPendingExports = await _jim.ConnectedSystems.GetPendingExportsAsync(_connectedSystem.Id);
+            var allPendingExports = await _syncRepo.GetPendingExportsAsync(_connectedSystem.Id);
             _pendingExportsByCsoId = allPendingExports
                 .Where(pe => pe.ConnectedSystemObject?.Id != null)
                 .GroupBy(pe => pe.ConnectedSystemObject!.Id)
@@ -101,14 +103,14 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         }
 
         // Load settings once at start of sync
-        _syncOutcomeTrackingLevel = await _jim.ServiceSettings.GetSyncOutcomeTrackingLevelAsync();
-        _csoChangeTrackingEnabled = await _jim.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
+        _syncOutcomeTrackingLevel = await _syncRepo.GetSyncOutcomeTrackingLevelAsync();
+        _csoChangeTrackingEnabled = await _syncRepo.GetCsoChangeTrackingEnabledAsync();
 
         // Process CSOs in batches. This enables us to respond to cancellation requests in a reasonable timeframe.
         // Page size is configurable via service settings for performance tuning.
-        var pageSize = await _jim.ServiceSettings.GetSyncPageSizeAsync();
+        var pageSize = await _syncRepo.GetSyncPageSizeAsync();
         var totalCsoPages = Convert.ToInt16(Math.Ceiling((double)totalCsosToProcess / pageSize));
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing Connected System Objects");
+        await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing Connected System Objects");
 
         using var processCsosSpan = Diagnostics.Sync.StartSpan("ProcessConnectedSystemObjects");
         processCsosSpan.SetTag("totalObjects", totalCsosToProcess);
@@ -116,7 +118,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         processCsosSpan.SetTag("totalPages", totalCsoPages);
 
         // Set the message once for the entire phase (no page details for users)
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing Connected System Objects");
+        await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing Connected System Objects");
 
         for (var i = 1; i <= totalCsoPages; i++)
         {
@@ -124,7 +126,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             PagedResultSet<ConnectedSystemObject> csoPagedResult;
             using (Diagnostics.Sync.StartSpan("LoadCsoPage"))
             {
-                csoPagedResult = await _jim.ConnectedSystems.GetConnectedSystemObjectsAsync(_connectedSystem.Id, i, pageSize);
+                csoPagedResult = await _syncRepo.GetConnectedSystemObjectsAsync(_connectedSystem.Id, i, pageSize);
             }
 
             // Note: Target CSO attribute values for no-net-change detection are pre-loaded in ExportEvaluationCache
@@ -184,7 +186,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             // With AutoDetectChanges disabled, SaveChangesAsync only persists entities we explicitly
             // mark (AddRange for creates, Entry().State = Modified for updates) without scanning
             // navigation property collections.
-            _jim.Repository.SetAutoDetectChangesEnabled(false);
+            _syncRepo.SetAutoDetectChangesEnabled(false);
             try
             {
                 // Batch persist all MVOs collected during this page.
@@ -246,17 +248,17 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // and fails with DbUpdateConcurrencyException.
                 // UpdateDetachedSafe will re-attach the Activity in Modified state.
                 if (hadMvoDeletions && _hasRawSqlSupport)
-                    _jim.Repository.ClearChangeTracker();
+                    _syncRepo.ClearChangeTracker();
 
                 // Update progress with page completion - this persists ObjectsProcessed to database (including MVO changes)
                 using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
                 {
-                    await _jim.Activities.UpdateActivityAsync(_activity);
+                    await _syncRepo.UpdateActivityAsync(_activity);
                 }
             }
             finally
             {
-                _jim.Repository.SetAutoDetectChangesEnabled(true);
+                _syncRepo.SetAutoDetectChangesEnabled(true);
             }
         }
 
@@ -270,7 +272,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         await FlushRpeisAsync();
 
         // Ensure the activity and any pending db updates are applied after all pages are processed
-        await _jim.Activities.UpdateActivityAsync(_activity);
+        await _syncRepo.UpdateActivityAsync(_activity);
 
         // Update the delta sync watermark to establish baseline for future delta syncs
         await UpdateDeltaSyncWatermarkAsync();

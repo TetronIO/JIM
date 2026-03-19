@@ -1,5 +1,6 @@
 using JIM.Application;
 using JIM.Application.Diagnostics;
+using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
@@ -19,11 +20,12 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
 {
     public SyncDeltaSyncTaskProcessor(
         JimApplication jimApplication,
+        ISyncRepository syncRepository,
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile connectedSystemRunProfile,
         Activity activity,
         CancellationTokenSource cancellationTokenSource)
-        : base(jimApplication, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource)
+        : base(jimApplication, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource)
     {
     }
 
@@ -35,7 +37,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
 
         Log.Verbose("PerformDeltaSyncAsync: Starting");
 
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Preparing delta sync");
+        await _syncRepo.UpdateActivityMessageAsync(_activity, "Preparing delta sync");
 
         // Determine the watermark - when was the last successful sync?
         var lastSyncTimestamp = _connectedSystem.LastDeltaSyncCompletedAt ?? DateTime.MinValue;
@@ -45,7 +47,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         int totalCsosToProcess;
         using (Diagnostics.Sync.StartSpan("CountModifiedCsos"))
         {
-            totalCsosToProcess = await _jim.ConnectedSystems.GetConnectedSystemObjectModifiedSinceCountAsync(
+            totalCsosToProcess = await _syncRepo.GetConnectedSystemObjectModifiedSinceCountAsync(
                 _connectedSystem.Id,
                 lastSyncTimestamp);
         }
@@ -58,7 +60,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         if (totalCsosToProcess == 0)
         {
             Log.Information("PerformDeltaSyncAsync: No CSOs modified since last sync. Completing immediately.");
-            await _jim.Activities.UpdateActivityMessageAsync(_activity, "No changes to process");
+            await _syncRepo.UpdateActivityMessageAsync(_activity, "No changes to process");
 
             // Update the watermark even when there are no changes
             await UpdateDeltaSyncWatermarkAsync();
@@ -66,17 +68,17 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         }
 
         // Count pending exports (still need to process these)
-        var totalPendingExportObjectsToProcess = await _jim.ConnectedSystems.GetPendingExportsCountAsync(_connectedSystem.Id);
+        var totalPendingExportObjectsToProcess = await _syncRepo.GetPendingExportsCountAsync(_connectedSystem.Id);
         var totalObjectsToProcess = totalCsosToProcess + totalPendingExportObjectsToProcess;
         _activity.ObjectsToProcess = totalObjectsToProcess;
         _activity.ObjectsProcessed = 0;
-        await _jim.Activities.UpdateActivityAsync(_activity);
+        await _syncRepo.UpdateActivityAsync(_activity);
 
         // Get all the active sync rules for this system
         List<SyncRule> activeSyncRules;
         using (Diagnostics.Sync.StartSpan("LoadSyncRules"))
         {
-            activeSyncRules = await _jim.ConnectedSystems.GetSyncRulesAsync(_connectedSystem.Id, false);
+            activeSyncRules = await _syncRepo.GetSyncRulesAsync(_connectedSystem.Id, false);
         }
 
         // Load ALL sync rules from ALL systems for drift detection import mapping cache.
@@ -85,7 +87,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         List<SyncRule> allSyncRules;
         using (Diagnostics.Sync.StartSpan("LoadAllSyncRulesForDriftDetection"))
         {
-            allSyncRules = await _jim.ConnectedSystems.GetSyncRulesAsync();
+            allSyncRules = await _syncRepo.GetAllSyncRulesAsync();
         }
 
         // Build drift detection cache (import mapping cache + export rules with EnforceState=true)
@@ -95,13 +97,13 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         // Get the schema for all object types upfront
         using (Diagnostics.Sync.StartSpan("LoadObjectTypes"))
         {
-            _objectTypes = await _jim.ConnectedSystems.GetObjectTypesAsync(_connectedSystem.Id);
+            _objectTypes = await _syncRepo.GetObjectTypesAsync(_connectedSystem.Id);
         }
 
         // Load all pending exports once upfront and index by CSO ID for O(1) lookup
         using (Diagnostics.Sync.StartSpan("LoadPendingExports"))
         {
-            var allPendingExports = await _jim.ConnectedSystems.GetPendingExportsAsync(_connectedSystem.Id);
+            var allPendingExports = await _syncRepo.GetPendingExportsAsync(_connectedSystem.Id);
             _pendingExportsByCsoId = allPendingExports
                 .Where(pe => pe.ConnectedSystemObject?.Id != null)
                 .GroupBy(pe => pe.ConnectedSystemObject!.Id)
@@ -116,14 +118,14 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         }
 
         // Load settings once at start of sync
-        _syncOutcomeTrackingLevel = await _jim.ServiceSettings.GetSyncOutcomeTrackingLevelAsync();
-        _csoChangeTrackingEnabled = await _jim.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
+        _syncOutcomeTrackingLevel = await _syncRepo.GetSyncOutcomeTrackingLevelAsync();
+        _csoChangeTrackingEnabled = await _syncRepo.GetCsoChangeTrackingEnabledAsync();
 
         // Process only the modified CSOs in batches. This enables us to respond to cancellation requests in a reasonable timeframe.
         // Page size is configurable via service settings for performance tuning.
-        var pageSize = await _jim.ServiceSettings.GetSyncPageSizeAsync();
+        var pageSize = await _syncRepo.GetSyncPageSizeAsync();
         var totalCsoPages = Convert.ToInt16(Math.Ceiling((double)totalCsosToProcess / pageSize));
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing modified Connected System Objects");
+        await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing modified Connected System Objects");
 
         using var processCsosSpan = Diagnostics.Sync.StartSpan("ProcessModifiedConnectedSystemObjects");
         processCsosSpan.SetTag("totalObjects", totalCsosToProcess);
@@ -131,7 +133,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         processCsosSpan.SetTag("totalPages", totalCsoPages);
 
         // Set the message once for the entire phase (no page details for users)
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing modified Connected System Objects");
+        await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing modified Connected System Objects");
 
         for (var page = 1; page <= totalCsoPages; page++)
         {
@@ -141,7 +143,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             {
                 // Use the delta-specific query that filters by LastUpdated > watermark
                 // Note: Page is 1-indexed to match the repository's paging convention
-                csoPagedResult = await _jim.ConnectedSystems.GetConnectedSystemObjectsModifiedSinceAsync(
+                csoPagedResult = await _syncRepo.GetConnectedSystemObjectsModifiedSinceAsync(
                     _connectedSystem.Id,
                     lastSyncTimestamp,
                     page,
@@ -193,7 +195,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             // Disable AutoDetectChangesEnabled for the page flush sequence.
             // See SyncFullSyncTaskProcessor for detailed explanation of why this is necessary
             // to prevent DetectChanges() from discovering RPEIs and causing duplicate key violations.
-            _jim.Repository.SetAutoDetectChangesEnabled(false);
+            _syncRepo.SetAutoDetectChangesEnabled(false);
             try
             {
                 // Batch persist all MVOs collected during this page.
@@ -227,17 +229,17 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 // Clear the change tracker after MVO deletions to prevent stale entity conflicts.
                 // See SyncFullSyncTaskProcessor for detailed explanation.
                 if (hadMvoDeletions && _hasRawSqlSupport)
-                    _jim.Repository.ClearChangeTracker();
+                    _syncRepo.ClearChangeTracker();
 
                 // Update progress with page completion - this persists ObjectsProcessed to database (including MVO changes)
                 using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
                 {
-                    await _jim.Activities.UpdateActivityAsync(_activity);
+                    await _syncRepo.UpdateActivityAsync(_activity);
                 }
             }
             finally
             {
-                _jim.Repository.SetAutoDetectChangesEnabled(true);
+                _syncRepo.SetAutoDetectChangesEnabled(true);
             }
         }
 
@@ -248,7 +250,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         await FlushRpeisAsync();
 
         // Ensure the activity and any pending db updates are applied after all pages are processed
-        await _jim.Activities.UpdateActivityAsync(_activity);
+        await _syncRepo.UpdateActivityAsync(_activity);
 
         // Update the watermark to mark this sync as complete
         await UpdateDeltaSyncWatermarkAsync();

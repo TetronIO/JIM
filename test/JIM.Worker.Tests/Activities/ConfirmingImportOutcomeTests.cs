@@ -179,6 +179,7 @@ public class ConfirmingImportOutcomeTests
         var activity = _activitiesData.First();
         var importProcessor = new SyncImportTaskProcessor(
             _jim,
+            new SyncRepositoryAdapter(_jim),
             mockConnector,
             targetSystem!,
             importRunProfile,

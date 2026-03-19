@@ -2,6 +2,7 @@ using System.Diagnostics;
 using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Services;
+using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -17,6 +18,7 @@ namespace JIM.Worker.Processors;
 public class SyncImportTaskProcessor
 {
     private readonly JimApplication _jim;
+    private readonly ISyncRepository _syncRepo;
     private readonly IConnector _connector;
     private readonly ConnectedSystem _connectedSystem;
     private readonly ConnectedSystemRunProfile _connectedSystemRunProfile;
@@ -53,6 +55,7 @@ public class SyncImportTaskProcessor
 
     public SyncImportTaskProcessor(
         JimApplication jimApplication,
+        ISyncRepository syncRepository,
         IConnector connector,
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile connectedSystemRunProfile,
@@ -60,6 +63,7 @@ public class SyncImportTaskProcessor
         CancellationTokenSource cancellationTokenSource)
     {
         _jim = jimApplication;
+        _syncRepo = syncRepository;
         _connector = connector;
         _connectedSystem = connectedSystem;
         _cancellationTokenSource = cancellationTokenSource;
@@ -93,13 +97,13 @@ public class SyncImportTaskProcessor
         // Check if the connected system has any existing CSOs. If it's empty (first-ever import),
         // we can skip all FindMatchingCso lookups since every object is guaranteed to be new.
         // This eliminates N unnecessary DB round-trips for initial imports.
-        var csoCountAtStart = await _jim.ConnectedSystems.GetConnectedSystemObjectCountAsync(_connectedSystem.Id);
+        var csoCountAtStart = await _syncRepo.GetConnectedSystemObjectCountAsync(_connectedSystem.Id);
         _csIsEmpty = csoCountAtStart == 0;
         if (_csIsEmpty)
             Log.Information("PerformFullImportAsync: Connected system {ConnectedSystemId} has no existing CSOs. Skipping CSO lookups for this import.", _connectedSystem.Id);
 
         // Load sync outcome tracking level once at start of import
-        _syncOutcomeTrackingLevel = await _jim.ServiceSettings.GetSyncOutcomeTrackingLevelAsync();
+        _syncOutcomeTrackingLevel = await _syncRepo.GetSyncOutcomeTrackingLevelAsync();
 
         // we keep track of all processed CSOs here, so we can bulk-persist later, when all waves of CSO changes are prepared
         var connectedSystemObjectsToBeCreated = new List<ConnectedSystemObject>();
@@ -115,7 +119,7 @@ public class SyncImportTaskProcessor
         // Key format: "{objectTypeId}:{externalIdValue}" (same as per-page tracking)
         var crossPageSeenExternalIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Performing import");
+        await _syncRepo.UpdateActivityMessageAsync(_activity, "Performing import");
         switch (_connector)
         {
             case IConnectorImportUsingCalls callBasedImportConnector:
@@ -172,7 +176,7 @@ public class SyncImportTaskProcessor
                     var progressMessage = pageNumber > 1 || result.PaginationTokens.Count > 0
                         ? $"Imported {totalObjectsImported} objects (page {pageNumber})"
                         : $"Imported {totalObjectsImported} objects";
-                    await _jim.Activities.UpdateActivityMessageAsync(_activity, progressMessage);
+                    await _syncRepo.UpdateActivityMessageAsync(_activity, progressMessage);
 
                     // add the external ids from this page worth of results to our external-id collection for later deletion calculation
                     AddExternalIdsToCollection(result, externalIdsImported);
@@ -243,7 +247,7 @@ public class SyncImportTaskProcessor
 
                 // Mark file processing complete
                 _activity.ObjectsProcessed = totalObjectsImported;
-                await _jim.Activities.UpdateActivityAsync(_activity);
+                await _syncRepo.UpdateActivityAsync(_activity);
                 break;
             }
             default:
@@ -259,10 +263,10 @@ public class SyncImportTaskProcessor
         if (totalObjectsImported > 0 && _connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport)
         {
             // Get count of existing CSOs to determine how many we need to check for deletions
-            var existingCsoCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountAsync(_connectedSystem.Id);
+            var existingCsoCount = await _syncRepo.GetConnectedSystemObjectCountAsync(_connectedSystem.Id);
             _activity.ObjectsToProcess = existingCsoCount;
             _activity.ObjectsProcessed = 0;
-            await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing deletions");
+            await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing deletions");
             using (Diagnostics.Sync.StartSpan("ProcessDeletions"))
             {
                 await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeUpdated);
@@ -280,7 +284,7 @@ public class SyncImportTaskProcessor
                                     connectedSystemObjectsToBeUpdated.Count(cso => cso.PendingAttributeValueAdditions.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)));
         _activity.ObjectsToProcess = objectsWithReferences;
         _activity.ObjectsProcessed = 0;
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Resolving references");
+        await _syncRepo.UpdateActivityMessageAsync(_activity, "Resolving references");
         using (Diagnostics.Sync.StartSpan("ResolveReferences"))
         {
             await ResolveReferencesAsync(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
@@ -300,7 +304,7 @@ public class SyncImportTaskProcessor
             createdCount, connectedSystemObjectsToBeUpdated.Count, _activityRunProfileExecutionItems.Count,
             GC.GetTotalMemory(true) / 1024 / 1024,
             System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Saving changes");
+        await _syncRepo.UpdateActivityMessageAsync(_activity, "Saving changes");
         using (var persistSpan = Diagnostics.Database.StartSpan("PersistConnectedSystemObjects"))
         {
             persistSpan.SetTag("createCount", createdCount);
@@ -356,7 +360,7 @@ public class SyncImportTaskProcessor
                     .ToList();
 
                 var batchSw = System.Diagnostics.Stopwatch.StartNew();
-                await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(csoBatch, batchRpeis);
+                await _syncRepo.CreateConnectedSystemObjectsAsync(csoBatch, batchRpeis);
                 Log.Debug("PerformFullImportAsync: CreateConnectedSystemObjectsAsync took {ElapsedMs}ms for {Count} CSOs",
                     batchSw.ElapsedMilliseconds, batchSize);
 
@@ -372,13 +376,13 @@ public class SyncImportTaskProcessor
                 {
                     var extIdValue = newCso.ExternalIdAttributeValue;
                     if (extIdValue?.StringValue != null)
-                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.StringValue, newCso.Id);
+                        _syncRepo.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.StringValue, newCso.Id);
                     else if (extIdValue?.IntValue != null)
-                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), newCso.Id);
+                        _syncRepo.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), newCso.Id);
                     else if (extIdValue?.LongValue != null)
-                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), newCso.Id);
+                        _syncRepo.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), newCso.Id);
                     else if (extIdValue?.GuidValue != null)
-                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), newCso.Id);
+                        _syncRepo.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), newCso.Id);
                 }
 
                 // Remove batch RPEIs from the main list and flush them
@@ -399,14 +403,14 @@ public class SyncImportTaskProcessor
                     totalCreatedSoFar, totalToCreate,
                     GC.GetTotalMemory(false) / 1024 / 1024,
                     System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
-                await _jim.Activities.UpdateActivityProgressOutOfBandAsync(_activity);
+                await _syncRepo.UpdateActivityProgressOutOfBandAsync(_activity);
             }
 
             // Defence-in-depth: fix up any remaining unresolved ReferenceValueId FKs via SQL.
             // With upfront ID pre-generation, cross-batch references within the same import run
             // should already be resolved. This fixup still handles edge cases such as cross-run
             // references (e.g., groups imported in a later run referencing users from a prior run).
-            var crossBatchFixed = await _jim.ConnectedSystems.FixupCrossBatchReferenceIdsAsync(_connectedSystem.Id);
+            var crossBatchFixed = await _syncRepo.FixupCrossBatchReferenceIdsAsync(_connectedSystem.Id);
             if (crossBatchFixed > 0)
                 Log.Information("PerformFullImportAsync: Fixed up {Count} cross-batch reference FKs after all create batches completed.", crossBatchFixed);
 
@@ -420,7 +424,7 @@ public class SyncImportTaskProcessor
             var totalToUpdate = connectedSystemObjectsToBeUpdated.Count;
 
             _activity.ObjectsProcessed = createdCount;
-            await _jim.Activities.UpdateActivityAsync(_activity);
+            await _syncRepo.UpdateActivityAsync(_activity);
 
             for (var batchStart = 0; batchStart < totalToUpdate; batchStart += ImportBatchSize)
             {
@@ -457,7 +461,7 @@ public class SyncImportTaskProcessor
                     .Where(r => r.ConnectedSystemObjectId.HasValue && batchCsoIds.Contains(r.ConnectedSystemObjectId.Value))
                     .ToList();
 
-                await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(csoBatch, batchRpeis);
+                await _syncRepo.UpdateConnectedSystemObjectsAsync(csoBatch, batchRpeis);
 
                 // Populate the reconciliation RPEI lookup before flushing.
                 // Only update-phase RPEIs are needed — created CSOs can't have pending exports.
@@ -493,24 +497,24 @@ public class SyncImportTaskProcessor
                     if (oldIds.primaryIdValue != null && newPrimaryId != null
                         && !oldIds.primaryIdValue.Equals(newPrimaryId, StringComparison.OrdinalIgnoreCase))
                     {
-                        _jim.ConnectedSystems.EvictCsoFromCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, oldIds.primaryIdValue);
+                        _syncRepo.EvictCsoFromCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, oldIds.primaryIdValue);
                     }
 
                     // Evict old secondary cache entry if this CSO has a secondary external ID
                     if (updatedCso.SecondaryExternalIdAttributeId.HasValue && oldIds.secondaryIdValue != null)
                     {
-                        _jim.ConnectedSystems.EvictCsoFromCache(_connectedSystem.Id, updatedCso.SecondaryExternalIdAttributeId.Value, oldIds.secondaryIdValue);
+                        _syncRepo.EvictCsoFromCache(_connectedSystem.Id, updatedCso.SecondaryExternalIdAttributeId.Value, oldIds.secondaryIdValue);
                     }
 
                     // Add/refresh primary external ID cache entry
                     if (extIdValue.StringValue != null)
-                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.StringValue, updatedCso.Id);
+                        _syncRepo.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.StringValue, updatedCso.Id);
                     else if (extIdValue.IntValue != null)
-                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), updatedCso.Id);
+                        _syncRepo.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), updatedCso.Id);
                     else if (extIdValue.LongValue != null)
-                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), updatedCso.Id);
+                        _syncRepo.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), updatedCso.Id);
                     else if (extIdValue.GuidValue != null)
-                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), updatedCso.Id);
+                        _syncRepo.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), updatedCso.Id);
                 }
 
                 _activity.ObjectsProcessed = createdCount + batchStart + batchSize;
@@ -518,7 +522,7 @@ public class SyncImportTaskProcessor
                     batchStart + batchSize, totalToUpdate,
                     GC.GetTotalMemory(false) / 1024 / 1024,
                     System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
-                await _jim.Activities.UpdateActivityProgressOutOfBandAsync(_activity);
+                await _syncRepo.UpdateActivityProgressOutOfBandAsync(_activity);
             }
         }
 
@@ -530,7 +534,7 @@ public class SyncImportTaskProcessor
         // This confirms exported attribute changes or marks them for retry
         _activity.ObjectsToProcess = connectedSystemObjectsToBeUpdated.Count;
         _activity.ObjectsProcessed = 0;
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Reconciling pending exports");
+        await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling pending exports");
         using (Diagnostics.Sync.StartSpan("ReconcilePendingExports"))
         {
             await ReconcilePendingExportsAsync(connectedSystemObjectsToBeUpdated, importRpeisByCsoId, _connectedSystem.Id);
@@ -561,7 +565,7 @@ public class SyncImportTaskProcessor
         var remainingRpeiCount = _activityRunProfileExecutionItems.Count;
         _activity.ObjectsToProcess = remainingRpeiCount;
         _activity.ObjectsProcessed = 0;
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Creating activity run profile execution items");
+        await _syncRepo.UpdateActivityMessageAsync(_activity, "Creating activity run profile execution items");
         await FlushImportRpeisAsync();
         _activity.ObjectsProcessed = remainingRpeiCount;
 
@@ -571,7 +575,7 @@ public class SyncImportTaskProcessor
         if (_activity.RunProfileExecutionItems.Count > 0)
             Worker.CalculateActivitySummaryStats(_activity);
 
-        await _jim.Activities.UpdateActivityAsync(_activity);
+        await _syncRepo.UpdateActivityAsync(_activity);
 
         importSpan.SetTag("totalObjectsImported", totalObjectsImported);
         importSpan.SetTag("objectsCreated", createdCount);
@@ -600,7 +604,7 @@ public class SyncImportTaskProcessor
                 case AttributeDataType.Number:
                 {
                     // get the int connected system object external ids for this object type
-                    var connectedSystemObjectExternalIdsOfTypeInt = await _jim.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeIntAsync(_connectedSystem.Id, selectedObjectType.Id);
+                    var connectedSystemObjectExternalIdsOfTypeInt = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeIntAsync(_connectedSystem.Id, selectedObjectType.Id);
 
                     // get the int import object external ids for this object type
                     var connectedSystemIntExternalIdValues = externalIdsImported
@@ -618,7 +622,7 @@ public class SyncImportTaskProcessor
                 case AttributeDataType.Text:
                 {
                     // get the string connected system object external ids for this object type
-                    var connectedSystemObjectExternalIdsOfTypeString = await _jim.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeStringAsync(_connectedSystem.Id, selectedObjectType.Id);
+                    var connectedSystemObjectExternalIdsOfTypeString = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeStringAsync(_connectedSystem.Id, selectedObjectType.Id);
 
                     // get the string import object external ids for this object type
                     var connectedSystemStringExternalIdValues = externalIdsImported
@@ -636,7 +640,7 @@ public class SyncImportTaskProcessor
                 case AttributeDataType.Guid:
                 {
                     // get the guid connected system object external ids for this object type
-                    var connectedSystemObjectExternalIdsOfTypeGuid = await _jim.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeGuidAsync(_connectedSystem.Id, selectedObjectType.Id);
+                    var connectedSystemObjectExternalIdsOfTypeGuid = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeGuidAsync(_connectedSystem.Id, selectedObjectType.Id);
 
                     // get the guid import object external ids for this object type
                     var connectedSystemGuidExternalIdValues = externalIdsImported
@@ -654,7 +658,7 @@ public class SyncImportTaskProcessor
                 case AttributeDataType.LongNumber:
                 {
                     // get the long connected system object external ids for this object type
-                    var connectedSystemObjectExternalIdsOfTypeLong = await _jim.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeLongAsync(_connectedSystem.Id, selectedObjectType.Id);
+                    var connectedSystemObjectExternalIdsOfTypeLong = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeLongAsync(_connectedSystem.Id, selectedObjectType.Id);
 
                     // get the long import object external ids for this object type
                     var connectedSystemLongExternalIdValues = externalIdsImported
@@ -712,7 +716,7 @@ public class SyncImportTaskProcessor
                 SyncOutcomeBuilder.BuildOutcomeSummary(rpei);
         }
 
-        var usedRawSql = await _jim.Activities.BulkInsertRpeisAsync(rpeis);
+        var usedRawSql = await _syncRepo.BulkInsertRpeisAsync(rpeis);
 
         // Sync change object FKs: RPEI Ids were generated above (lines 623-624) after
         // CreateConnectedSystemObjectsAsync set ActivityRunProfileExecutionItemId = Guid.Empty.
@@ -726,7 +730,7 @@ public class SyncImportTaskProcessor
         // Persist CSO change records separately — raw SQL bulk insert only covers
         // RPEI scalar columns, not the ConnectedSystemObjectChange navigation graph.
         // This must happen for both production and test paths.
-        await _jim.Activities.PersistRpeiCsoChangesAsync(rpeis);
+        await _syncRepo.PersistRpeiCsoChangesAsync(rpeis);
 
         // Release the change object graphs to allow GC. At 100K CSOs with ~20 attributes each,
         // the ConnectedSystemObjectChange + ChangeAttribute + ChangeAttributeValue objects
@@ -749,7 +753,7 @@ public class SyncImportTaskProcessor
 
             // Detach from change tracker so no subsequent SaveChangesAsync re-inserts or
             // overwrites them with stale in-memory state.
-            _jim.Activities.DetachRpeisFromChangeTracker(rpeis);
+            _syncRepo.DetachRpeisFromChangeTracker(rpeis);
         }
         else
         {
@@ -782,9 +786,9 @@ public class SyncImportTaskProcessor
         // find the cso
         var cso = connectedSystemObjectExternalId switch
         {
-            int intId => await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, intId),
-            string stringId => await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, stringId),
-            Guid guidId => await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, guidId),
+            int intId => await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, intId),
+            string stringId => await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, stringId),
+            Guid guidId => await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, guidId),
             _ => null
         };
 
@@ -828,7 +832,7 @@ public class SyncImportTaskProcessor
         // target system, any Exported-status Delete PEs (awaiting confirmation) or other stale PEs
         // are no longer relevant. Without this cleanup, stale PEs accumulate and can cause duplicate
         // PE errors when subsequent operations create new PEs for other CSOs.
-        var deletedPeCount = await _jim.Repository.ConnectedSystems
+        var deletedPeCount = await _syncRepo
             .DeletePendingExportsByConnectedSystemObjectIdsAsync(new[] { cso.Id });
         if (deletedPeCount > 0)
         {
@@ -883,7 +887,7 @@ public class SyncImportTaskProcessor
         var totalObjectsInBatch = connectedSystemImportResult.ImportObjects.Count;
         _activity.ObjectsToProcess = totalObjectsInBatch;
         _activity.ObjectsProcessed = 0;
-        await _jim.Activities.UpdateActivityMessageAsync(_activity,
+        await _syncRepo.UpdateActivityMessageAsync(_activity,
             $"Processing imported objects (0 / {totalObjectsInBatch:N0})");
         const int progressUpdateInterval = 100;
 
@@ -1190,7 +1194,7 @@ public class SyncImportTaskProcessor
                     // This provides a reliable fallback when EF's AsSplitQuery() fails to materialise
                     // ReferenceValue navigations (dotnet/efcore#33826), preventing spurious
                     // removal and re-addition of resolved reference attribute values.
-                    var refExternalIds = await _jim.ConnectedSystems.GetReferenceExternalIdsAsync(connectedSystemObject.Id);
+                    var refExternalIds = await _syncRepo.GetReferenceExternalIdsAsync(connectedSystemObject.Id);
 
                     // Calculate attribute changes before processing
                     UpdateConnectedSystemObjectFromImportObject(importObject, connectedSystemObject, csObjectType, activityRunProfileExecutionItem, refExternalIds);
@@ -1262,7 +1266,7 @@ public class SyncImportTaskProcessor
                 _activity.ObjectsProcessed = importIndex + 1;
                 if ((importIndex + 1) % progressUpdateInterval == 0)
                 {
-                    await _jim.Activities.UpdateActivityMessageAsync(_activity,
+                    await _syncRepo.UpdateActivityMessageAsync(_activity,
                         $"Processing imported objects ({importIndex + 1:N0} / {totalObjectsInBatch:N0})");
                 }
             }
@@ -1271,7 +1275,7 @@ public class SyncImportTaskProcessor
         // Final progress update to ensure the UI reflects completion for this batch
         if (totalObjectsInBatch > 0 && totalObjectsInBatch % progressUpdateInterval != 0)
         {
-            await _jim.Activities.UpdateActivityMessageAsync(_activity,
+            await _syncRepo.UpdateActivityMessageAsync(_activity,
                 $"Processing imported objects ({totalObjectsInBatch:N0} / {totalObjectsInBatch:N0})");
         }
 
@@ -1346,19 +1350,19 @@ public class SyncImportTaskProcessor
             AttributeDataType.Text when importObjectAttribute.StringValues.Count == 0 =>
                 throw new ExternalIdAttributeValueMissingException($"External Id string attribute ({externalIdAttribute.Name}) on the imported object has no value."),
             AttributeDataType.Text =>
-                await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.StringValues[0]),
+                await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.StringValues[0]),
             AttributeDataType.Number when importObjectAttribute.IntValues.Count == 0 =>
                 throw new ExternalIdAttributeValueMissingException($"External Id number attribute({externalIdAttribute.Name}) on the imported object has no value."),
             AttributeDataType.Number =>
-                await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.IntValues[0]),
+                await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.IntValues[0]),
             AttributeDataType.LongNumber when importObjectAttribute.LongValues.Count == 0 =>
                 throw new ExternalIdAttributeValueMissingException($"External Id long number attribute({externalIdAttribute.Name}) on the imported object has no value."),
             AttributeDataType.LongNumber =>
-                await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.LongValues[0]),
+                await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.LongValues[0]),
             AttributeDataType.Guid when importObjectAttribute.GuidValues.Count == 0 =>
                 throw new ExternalIdAttributeValueMissingException($"External Id guid attribute ({externalIdAttribute.Name}) on the imported object has no value."),
             AttributeDataType.Guid =>
-                await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.GuidValues[0]),
+                await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.GuidValues[0]),
             _ => throw new InvalidDataException($"TryAndFindMatchingConnectedSystemObjectAsync: Unsupported connected system object type External Id attribute type: {externalIdAttribute.Type}")
         };
 
@@ -1380,9 +1384,8 @@ public class SyncImportTaskProcessor
         cso = secondaryExternalIdAttribute.Type switch
         {
             AttributeDataType.Text when secondaryIdImportAttr.StringValues.Count > 0 =>
-                await _jim.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAsync(
-                    _connectedSystem.Id, connectedSystemObjectType.Id, secondaryIdImportAttr.StringValues[0],
-                    secondaryExternalIdAttribute.Id),
+                await _syncRepo.GetConnectedSystemObjectBySecondaryExternalIdAsync(
+                    _connectedSystem.Id, connectedSystemObjectType.Id, secondaryIdImportAttr.StringValues[0]),
             _ => null
         };
 
@@ -1942,7 +1945,7 @@ public class SyncImportTaskProcessor
         // create a connected system object change for this
 
         // Use sync page size for consistent progress persistence across all sync operations
-        var pageSize = await _jim.ServiceSettings.GetSyncPageSizeAsync();
+        var pageSize = await _syncRepo.GetSyncPageSizeAsync();
         var processedCount = 0;
 
         // Build RPEI lookup dictionary for O(1) error reporting instead of O(N) linear scans
@@ -2004,7 +2007,7 @@ public class SyncImportTaskProcessor
             });
 
             _activity.ObjectsProcessed = processedCount;
-            await _jim.Activities.UpdateActivityProgressOutOfBandAsync(_activity);
+            await _syncRepo.UpdateActivityProgressOutOfBandAsync(_activity);
         }
 
         // Phase 2: Batch DB query for remaining unresolved references (eliminates N+1 individual queries)
@@ -2036,7 +2039,7 @@ public class SyncImportTaskProcessor
                 for (var i = 0; i < primaryValuesList.Count; i += pageSize)
                 {
                     var batch = primaryValuesList.Skip(i).Take(pageSize);
-                    var batchResults = await _jim.ConnectedSystems.GetConnectedSystemObjectsByAttributeValuesAsync(
+                    var batchResults = await _syncRepo.GetConnectedSystemObjectsByAttributeValuesAsync(
                         _connectedSystem.Id, primaryAttributeId.Value, batch);
                     foreach (var kvp in batchResults)
                         dbPrimaryResults.TryAdd(kvp.Key, kvp.Value);
@@ -2049,7 +2052,7 @@ public class SyncImportTaskProcessor
                 for (var i = 0; i < secondaryValuesList.Count; i += pageSize)
                 {
                     var batch = secondaryValuesList.Skip(i).Take(pageSize);
-                    var batchResults = await _jim.ConnectedSystems.GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(
+                    var batchResults = await _syncRepo.GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(
                         _connectedSystem.Id, batch);
                     foreach (var kvp in batchResults)
                         dbSecondaryResults.TryAdd(kvp.Key, kvp.Value);
@@ -2096,7 +2099,7 @@ public class SyncImportTaskProcessor
         }
 
         // persist final progress so the UI reflects completion before moving to the next phase
-        await _jim.Activities.UpdateActivityAsync(_activity);
+        await _syncRepo.UpdateActivityAsync(_activity);
     }
 
     /// <summary>
@@ -2333,8 +2336,8 @@ public class SyncImportTaskProcessor
         // that have no pending exports (e.g. on a first import before any exports have occurred).
         // Queries by connected system ID (single integer) rather than passing all CSO IDs to the database,
         // which would not scale for large imports (10k+ CSOs).
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Reconciling pending exports - loading data");
-        var csoIdsWithExports = await _jim.Repository.ConnectedSystems
+        await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling pending exports - loading data");
+        var csoIdsWithExports = await _syncRepo
             .GetCsoIdsWithPendingExportsByConnectedSystemAsync(connectedSystemId);
 
         if (csoIdsWithExports.Count == 0)
@@ -2344,7 +2347,7 @@ public class SyncImportTaskProcessor
 
             // Mark progress as complete so the UI doesn't stay stuck at "0 / N"
             _activity.ObjectsProcessed = _activity.ObjectsToProcess;
-            await _jim.Activities.UpdateActivityAsync(_activity);
+            await _syncRepo.UpdateActivityAsync(_activity);
             return;
         }
 
@@ -2353,8 +2356,8 @@ public class SyncImportTaskProcessor
         // Update progress counter to reflect the filtered count (only CSOs with pending exports)
         _activity.ObjectsToProcess = csoList.Count;
         _activity.ObjectsProcessed = 0;
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Reconciling pending exports");
-        await _jim.Activities.UpdateActivityAsync(_activity);
+        await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling pending exports");
+        await _syncRepo.UpdateActivityAsync(_activity);
 
         Log.Debug("ReconcilePendingExportsAsync: {FilteredCount} of {TotalCount} CSOs have pending exports",
             csoList.Count, updatedCsos.Count);
@@ -2366,7 +2369,7 @@ public class SyncImportTaskProcessor
         var exportsDeleted = 0;
 
         // Use sync page size for consistent batching across all sync operations
-        var pageSize = await _jim.ServiceSettings.GetSyncPageSizeAsync();
+        var pageSize = await _syncRepo.GetSyncPageSizeAsync();
         var totalPages = (int)Math.Ceiling((double)csoList.Count / pageSize);
 
         Log.Debug("ReconcilePendingExportsAsync: Processing {CsoCount} CSOs in {PageCount} pages of {PageSize}",
@@ -2394,7 +2397,7 @@ public class SyncImportTaskProcessor
             Dictionary<Guid, JIM.Models.Transactional.PendingExport> pendingExportsByCsoId;
             using (Diagnostics.Sync.StartSpan("LoadPendingExports").SetTag("csoCount", pageCsos.Count))
             {
-                pendingExportsByCsoId = await _jim.Repository.ConnectedSystems
+                pendingExportsByCsoId = await _syncRepo
                     .GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(pageCsos.Select(c => c.Id));
             }
 
@@ -2609,26 +2612,26 @@ public class SyncImportTaskProcessor
             {
                 if (pendingExportsToDelete.Count > 0)
                 {
-                    await _jim.Repository.ConnectedSystems.DeleteUntrackedPendingExportsAsync(pendingExportsToDelete);
+                    await _syncRepo.DeleteUntrackedPendingExportsAsync(pendingExportsToDelete);
                     Log.Verbose("ReconcilePendingExportsAsync: Page {Page}: Batch deleted {Count} confirmed pending exports", page + 1, pendingExportsToDelete.Count);
                 }
 
                 // Delete confirmed attribute changes before updating (AsNoTracking requires explicit child deletion)
                 if (confirmedAttrChangesToDelete.Count > 0)
                 {
-                    await _jim.Repository.ConnectedSystems.DeleteUntrackedPendingExportAttributeValueChangesAsync(confirmedAttrChangesToDelete);
+                    await _syncRepo.DeleteUntrackedPendingExportAttributeValueChangesAsync(confirmedAttrChangesToDelete);
                     Log.Verbose("ReconcilePendingExportsAsync: Page {Page}: Batch deleted {Count} confirmed attribute value changes", page + 1, confirmedAttrChangesToDelete.Count);
                 }
 
                 if (pendingExportsToUpdate.Count > 0)
                 {
-                    await _jim.Repository.ConnectedSystems.UpdateUntrackedPendingExportsAsync(pendingExportsToUpdate);
+                    await _syncRepo.UpdateUntrackedPendingExportsAsync(pendingExportsToUpdate);
                     Log.Verbose("ReconcilePendingExportsAsync: Page {Page}: Batch updated {Count} pending exports", page + 1, pendingExportsToUpdate.Count);
                 }
             }
 
             // Update activity progress after each page
-            await _jim.Activities.UpdateActivityAsync(_activity);
+            await _syncRepo.UpdateActivityAsync(_activity);
         }
 
         // Persist reconciliation outcomes merged onto existing import RPEIs.
@@ -2663,7 +2666,7 @@ public class SyncImportTaskProcessor
                 }
             }
 
-            await _jim.Activities.BulkUpdateRpeiOutcomesAsync(modifiedRpeiList, newOutcomes);
+            await _syncRepo.BulkUpdateRpeiOutcomesAsync(modifiedRpeiList, newOutcomes);
 
             Log.Debug("ReconcilePendingExportsAsync: Updated {RpeiCount} existing RPEIs with {OutcomeCount} new reconciliation outcomes",
                 modifiedRpeiList.Count, newOutcomes.Count);
@@ -2684,7 +2687,7 @@ public class SyncImportTaskProcessor
     /// </summary>
     private async Task UpdateConnectedSystemWithInitiatorAsync()
     {
-        await _jim.ConnectedSystems.UpdateConnectedSystemWithTriadAsync(
+        await _syncRepo.UpdateConnectedSystemWithTriadAsync(
             _connectedSystem,
             _initiatedByType,
             _initiatedById,
