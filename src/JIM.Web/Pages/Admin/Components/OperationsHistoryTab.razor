@@ -70,6 +70,14 @@
                 <MudCheckBox T="bool" Value="_filterHasChildren" ValueChanged="OnHasChildrenFilterChanged"
                              Label="Has child activities" Dense="true" Class="mb-1 mud-typography-nowrap" />
             </MudItem>
+            <MudItem Class="d-flex align-end mb-2">
+                <MudTooltip Text="@(_pollingPaused ? "Resume auto-refresh" : "Pause auto-refresh")" Placement="Placement.Top">
+                    <MudIconButton Icon="@(_pollingPaused ? Icons.Material.Filled.PlayArrow : Icons.Material.Filled.Pause)"
+                                   Size="Size.Small"
+                                   OnClick="@(() => _pollingPaused = !_pollingPaused)"
+                                   Color="@(_pollingPaused ? Color.Warning : Color.Default)" />
+                </MudTooltip>
+            </MudItem>
     </MudStack>
 
     <MudTable @ref="_table" T="Activity" ServerData="ServerReload" @bind-CurrentPage="_currentPage"
@@ -547,6 +555,7 @@
     private bool _panelOpen;
     private Activity? _selectedActivity;
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
+    private bool _pollingPaused;
 
     // Snapshot of last-displayed data for change detection during polling
     private string? _lastDataFingerprint;
@@ -575,8 +584,8 @@
                 {
                     await Task.Delay(TimeSpan.FromSeconds(5), token);
 
-                    // Only auto-refresh when on page 1 and panel is closed to avoid jarring UX
-                    if (_table == null || _currentPage != 0 || _panelOpen)
+                    // Only auto-refresh when on page 1, panel is closed, and not paused
+                    if (_table == null || _currentPage != 0 || _panelOpen || _pollingPaused)
                         continue;
 
                     // Fetch current data and compare with what's displayed
