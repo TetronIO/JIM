@@ -10,7 +10,7 @@
 @inject IUserPreferenceService PreferenceService
 
 <PageTitle>Metaverse Object Type: @_metaverseObjectType?.Name</PageTitle>
-<MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.Schema" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Metaverse Object Type:</span> <span class="mud-primary-text">@_metaverseObjectType?.Name</span></MudText>
+<MudText Typo="Typo.h4"><MudIcon Icon="@Helpers.ResolveObjectTypeIcon(_metaverseObjectType?.Icon)" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Metaverse Object Type:</span> <span class="mud-primary-text">@_metaverseObjectType?.Name</span></MudText>
 <div class="d-flex justify-space-between align-center">
     <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
     @if (_metaverseObjectType != null)
@@ -32,6 +32,14 @@
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudField Label="Built-in?" Variant="Variant.Outlined">@(_metaverseObjectType.BuiltIn ? "Yes" : "No")</MudField>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudField Label="Icon" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Helpers.ResolveObjectTypeIcon(_metaverseObjectType.Icon)">
+                    @(_metaverseObjectType.Icon ?? "None")
+                </MudField>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
+                    Browse available icons at the <MudLink Href="https://mudblazor.com/features/icons" Target="_blank">MudBlazor Icon Gallery</MudLink>. Use the <strong>Filled</strong> icon name (e.g., "Person", "Groups", "Devices").
+                </MudText>
             </MudItem>
         </MudGrid>
     </MudPaper>

@@ -51,6 +51,7 @@ public class MetaverseRepository : IMetaverseRepository
             Created = t.Created,
             AttributesCount = t.Attributes.Count,
             BuiltIn = t.BuiltIn,
+            Icon = t.Icon,
             HasPredefinedSearches = t.PredefinedSearches.Count > 0,
             DeletionRule = t.DeletionRule,
             DeletionGracePeriod = t.DeletionGracePeriod

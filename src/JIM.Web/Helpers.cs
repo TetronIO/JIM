@@ -452,6 +452,31 @@ public static class Helpers
             _ => Icons.Material.Filled.HelpOutline
         };
     }
+
+    /// <summary>
+    /// Resolves a MudBlazor icon field name (e.g., "Person", "Groups") stored on a MetaverseObjectType
+    /// to the actual MudBlazor icon SVG path string. Returns a fallback icon if the name is null or unrecognised.
+    /// </summary>
+    public static string ResolveObjectTypeIcon(string? iconName)
+    {
+        if (string.IsNullOrEmpty(iconName))
+            return Icons.Material.Filled.Category;
+
+        return IconLookup.TryGetValue(iconName, out var icon) ? icon : Icons.Material.Filled.Category;
+    }
+
+    private static readonly Dictionary<string, string> IconLookup = BuildIconLookup();
+
+    private static Dictionary<string, string> BuildIconLookup()
+    {
+        var lookup = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var field in typeof(Icons.Material.Filled).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
+        {
+            if (field.FieldType == typeof(string) && field.GetValue(null) is string value)
+                lookup[field.Name] = value;
+        }
+        return lookup;
+    }
     #endregion
 
     #region Expression Syntax Highlighting

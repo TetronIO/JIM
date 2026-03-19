@@ -12,6 +12,7 @@ public class MetaverseObjectTypeDetailDto
     public string PluralName { get; set; } = null!;
     public DateTime Created { get; set; }
     public bool BuiltIn { get; set; }
+    public string? Icon { get; set; }
     public MetaverseObjectDeletionRule DeletionRule { get; set; }
     public TimeSpan? DeletionGracePeriod { get; set; }
     public List<int> DeletionTriggerConnectedSystemIds { get; set; } = new();
@@ -29,6 +30,7 @@ public class MetaverseObjectTypeDetailDto
             PluralName = entity.PluralName,
             Created = entity.Created,
             BuiltIn = entity.BuiltIn,
+            Icon = entity.Icon,
             DeletionRule = entity.DeletionRule,
             DeletionGracePeriod = entity.DeletionGracePeriod,
             DeletionTriggerConnectedSystemIds = entity.DeletionTriggerConnectedSystemIds ?? new(),
