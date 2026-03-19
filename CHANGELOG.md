@@ -22,6 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+#### Deleted Object Change History
+
+- 🐛 Deleted MVO change history now shows the full timeline of prior changes (Created, AttributeFlow, Disconnected) — previously only the Deleted record was visible due to a broken FK correlation after deletion
+- 🐛 Final attribute values are now captured on MVO deletion change records, showing exactly what the object looked like before it was removed
+- 🐛 Final attribute values are now captured on CSO deletion change records — previously only the external ID and display name were preserved
+- 🐛 MVO deletion no longer fails with FK constraint violations when the deleted object is referenced by other MVOs (e.g., as a Manager) or by change history records
+
 #### Pending Export Reference Display (#404)
 
 - 🐛 Pending export reference attributes (e.g. group members) now display meaningful identifiers (DN, External ID) instead of raw GUIDs with a misleading "unresolved reference" warning
