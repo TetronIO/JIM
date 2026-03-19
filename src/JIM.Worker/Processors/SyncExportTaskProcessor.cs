@@ -5,6 +5,7 @@ using JIM.Connectors;
 using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
 using JIM.Data;
+using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Enums;
 using JIM.Models.Interfaces;
@@ -23,6 +24,7 @@ namespace JIM.Worker.Processors;
 public class SyncExportTaskProcessor
 {
     private readonly JimApplication _jim;
+    private readonly ISyncRepository _syncRepo;
     private readonly IConnector _connector;
     private readonly ConnectedSystem _connectedSystem;
     private readonly ConnectedSystemRunProfile _runProfile;
@@ -48,6 +50,7 @@ public class SyncExportTaskProcessor
 
     public SyncExportTaskProcessor(
         JimApplication jimApplication,
+        ISyncRepository syncRepository,
         IConnector connector,
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile runProfile,
@@ -56,6 +59,7 @@ public class SyncExportTaskProcessor
         SyncRunMode runMode = SyncRunMode.PreviewAndSync)
     {
         _jim = jimApplication;
+        _syncRepo = syncRepository;
         _connector = connector;
         _connectedSystem = connectedSystem;
         _runProfile = runProfile;
@@ -80,26 +84,26 @@ public class SyncExportTaskProcessor
         Log.Information("PerformExportAsync: Starting export for {SystemName} (RunMode: {RunMode})",
             _connectedSystem.Name, _runMode);
 
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Preparing export");
+        await _syncRepo.UpdateActivityMessageAsync(_activity, "Preparing export");
 
         // Load settings once at start of export
-        _syncOutcomeTrackingLevel = await _jim.ServiceSettings.GetSyncOutcomeTrackingLevelAsync();
-        _csoChangeTrackingEnabled = await _jim.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
+        _syncOutcomeTrackingLevel = await _syncRepo.GetSyncOutcomeTrackingLevelAsync();
+        _csoChangeTrackingEnabled = await _syncRepo.GetCsoChangeTrackingEnabledAsync();
 
         // Get count of pending exports for progress tracking
         int pendingExportCount;
         using (Diagnostics.Sync.StartSpan("GetPendingExportsCount"))
         {
-            pendingExportCount = await _jim.ConnectedSystems.GetPendingExportsCountAsync(_connectedSystem.Id);
+            pendingExportCount = await _syncRepo.GetPendingExportsCountAsync(_connectedSystem.Id);
         }
         _activity.ObjectsToProcess = pendingExportCount;
         _activity.ObjectsProcessed = 0;
-        await _jim.Activities.UpdateActivityAsync(_activity);
+        await _syncRepo.UpdateActivityAsync(_activity);
 
         if (pendingExportCount == 0)
         {
             Log.Information("PerformExportAsync: No pending exports for {SystemName}", _connectedSystem.Name);
-            await _jim.Activities.UpdateActivityMessageAsync(_activity, "No exports to process");
+            await _syncRepo.UpdateActivityMessageAsync(_activity, "No exports to process");
             return;
         }
 
@@ -108,7 +112,7 @@ public class SyncExportTaskProcessor
         {
             var errorMessage = $"Connector {_connector.Name} does not support export operations";
             Log.Error("PerformExportAsync: {Error}", errorMessage);
-            await _jim.Activities.FailActivityWithErrorAsync(_activity, errorMessage);
+            await _syncRepo.FailActivityWithErrorAsync(_activity, errorMessage);
             return;
         }
 
@@ -116,7 +120,7 @@ public class SyncExportTaskProcessor
         if (_cancellationTokenSource.IsCancellationRequested)
         {
             Log.Information("PerformExportAsync: Cancellation requested before export started");
-            await _jim.Activities.UpdateActivityMessageAsync(_activity, "Cancelled before export");
+            await _syncRepo.UpdateActivityMessageAsync(_activity, "Cancelled before export");
             return;
         }
 
@@ -142,8 +146,8 @@ public class SyncExportTaskProcessor
                     {
                         // Update activity with progress
                         _activity.ObjectsProcessed = progressInfo.ProcessedExports;
-                        await _jim.Activities.UpdateActivityMessageAsync(_activity, progressInfo.Message);
-                        await _jim.Activities.UpdateActivityAsync(_activity);
+                        await _syncRepo.UpdateActivityMessageAsync(_activity, progressInfo.Message);
+                        await _syncRepo.UpdateActivityAsync(_activity);
                     },
                     connectorFactory: CreateConnectorForParallelBatch,
                     repositoryFactory: () => new PostgresDataRepository(new JimDbContext()));
@@ -168,7 +172,7 @@ public class SyncExportTaskProcessor
 
                 using (Diagnostics.Sync.StartSpan("AutoSelectContainers").SetTag("containerCount", result.CreatedContainerExternalIds.Count))
                 {
-                    await _jim.ConnectedSystems.RefreshAndAutoSelectContainersWithTriadAsync(
+                    await _syncRepo.RefreshAndAutoSelectContainersWithTriadAsync(
                         _connectedSystem,
                         _connector,
                         result.CreatedContainerExternalIds,
@@ -184,12 +188,12 @@ public class SyncExportTaskProcessor
         catch (OperationCanceledException)
         {
             Log.Information("PerformExportAsync: Export cancelled for {SystemName}", _connectedSystem.Name);
-            await _jim.Activities.UpdateActivityMessageAsync(_activity, "Export cancelled");
+            await _syncRepo.UpdateActivityMessageAsync(_activity, "Export cancelled");
         }
         catch (Exception ex)
         {
             Log.Error(ex, "PerformExportAsync: Error during export for {SystemName}", _connectedSystem.Name);
-            await _jim.Activities.FailActivityWithErrorAsync(_activity, ex);
+            await _syncRepo.FailActivityWithErrorAsync(_activity, ex);
             throw;
         }
     }
@@ -331,12 +335,12 @@ public class SyncExportTaskProcessor
                     SyncOutcomeBuilder.BuildOutcomeSummary(rpei);
             }
 
-            hasRawSqlSupport = await _jim.Activities.BulkInsertRpeisAsync(exportRpeis);
+            hasRawSqlSupport = await _syncRepo.BulkInsertRpeisAsync(exportRpeis);
 
             // Persist CSO change records separately — raw SQL bulk insert only covers
             // RPEI scalar columns, not the ConnectedSystemObjectChange navigation graph.
             if (_csoChangeTrackingEnabled)
-                await _jim.Activities.PersistRpeiCsoChangesAsync(exportRpeis);
+                await _syncRepo.PersistRpeiCsoChangesAsync(exportRpeis);
         }
 
         if (hasRawSqlSupport)
@@ -348,8 +352,8 @@ public class SyncExportTaskProcessor
         // Test environments (EF fallback): keep RPEIs on the Activity for test assertions.
         // Stats are computed at activity completion by CalculateActivitySummaryStats.
 
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, completionMessage);
-        await _jim.Activities.UpdateActivityAsync(_activity);
+        await _syncRepo.UpdateActivityMessageAsync(_activity, completionMessage);
+        await _syncRepo.UpdateActivityAsync(_activity);
 
         // Log summary
         if (result.FailedCount > 0)

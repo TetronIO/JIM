@@ -2258,8 +2258,25 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         await Repository.Database.SaveChangesAsync();
     }
 
-    public async Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile)
+    public async Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile runProfile)
     {
+        // Re-fetch the tracked entity to handle callers that use a different DbContext
+        // (e.g. Blazor pages that create a fresh JimApplication per action).
+        var tracked = await Repository.Database.ConnectedSystemRunProfiles
+            .FirstOrDefaultAsync(q => q.Id == runProfile.Id);
+
+        if (tracked == null)
+            return;
+
+        tracked.Name = runProfile.Name;
+        tracked.PageSize = runProfile.PageSize;
+        tracked.FilePath = runProfile.FilePath;
+        tracked.Partition = runProfile.Partition;
+        tracked.LastUpdated = runProfile.LastUpdated;
+        tracked.LastUpdatedByType = runProfile.LastUpdatedByType;
+        tracked.LastUpdatedById = runProfile.LastUpdatedById;
+        tracked.LastUpdatedByName = runProfile.LastUpdatedByName;
+
         await Repository.Database.SaveChangesAsync();
     }
 

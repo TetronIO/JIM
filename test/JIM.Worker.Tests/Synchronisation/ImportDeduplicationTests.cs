@@ -199,7 +199,7 @@ public class ImportDeduplicationTests
 
         // Act
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
-            Jim, mockFileConnector, connectedSystem, runProfile,
+            Jim, new SyncRepositoryAdapter(Jim), mockFileConnector, connectedSystem, runProfile,
             TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await syncImportTaskProcessor.PerformFullImportAsync();
 
@@ -242,7 +242,7 @@ public class ImportDeduplicationTests
 
         // Act
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
-            Jim, mockFileConnector, connectedSystem, runProfile,
+            Jim, new SyncRepositoryAdapter(Jim), mockFileConnector, connectedSystem, runProfile,
             TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await syncImportTaskProcessor.PerformFullImportAsync();
 
@@ -284,7 +284,7 @@ public class ImportDeduplicationTests
 
         // Act
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
-            Jim, mockFileConnector, connectedSystem, runProfile,
+            Jim, new SyncRepositoryAdapter(Jim), mockFileConnector, connectedSystem, runProfile,
             TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await syncImportTaskProcessor.PerformFullImportAsync();
 
@@ -327,7 +327,7 @@ public class ImportDeduplicationTests
 
         // Act
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
-            Jim, mockFileConnector, connectedSystem, runProfile,
+            Jim, new SyncRepositoryAdapter(Jim), mockFileConnector, connectedSystem, runProfile,
             TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await syncImportTaskProcessor.PerformFullImportAsync();
 
@@ -369,7 +369,7 @@ public class ImportDeduplicationTests
 
         // Act
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
-            Jim, mockFileConnector, connectedSystem, runProfile,
+            Jim, new SyncRepositoryAdapter(Jim), mockFileConnector, connectedSystem, runProfile,
             TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await syncImportTaskProcessor.PerformFullImportAsync();
 
@@ -416,7 +416,7 @@ public class ImportDeduplicationTests
 
         // Act
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
-            Jim, mockFileConnector, connectedSystem, runProfile,
+            Jim, new SyncRepositoryAdapter(Jim), mockFileConnector, connectedSystem, runProfile,
             TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await syncImportTaskProcessor.PerformFullImportAsync();
 

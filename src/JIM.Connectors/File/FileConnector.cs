@@ -30,6 +30,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public bool SupportsUserSelectedAttributeTypes => true;
     public bool SupportsAutoConfirmExport => true;
     public bool SupportsParallelExport => false;
+    public bool SupportsPaging => false;
     #endregion
 
     #region IConnectorSettings members

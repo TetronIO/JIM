@@ -1,6 +1,6 @@
 # JIM.Worker Redesign - High-Level Design Options
 
-- **Status:** Planned (partially progressed — see [Progress Since Original Analysis](#progress-since-original-analysis))
+- **Status:** Doing (Phase 1a complete, Phase 1b in progress — see [Progress Since Original Analysis](#progress-since-original-analysis))
 - **Created**: 2026-02-23
 - **Updated**: 2026-03-19
 - **Author**: Architecture Review
@@ -226,12 +226,12 @@ Keep the current architecture but surgically extract the sync processing logic i
    - Fully unit testable with plain objects - no mocking needed
    - The ~3,970 lines of SyncTaskProcessorBase + SyncRuleMappingProcessor become the engine
 
-2. **Extract `ISyncRepository`** (JIM.Data / JIM.PostgresData) - Explicit data boundary for **all** worker data access — **PARTIALLY DONE (#338)**
-   - Interface defined in JIM.Data alongside existing repository interfaces (e.g., `IConnectedSystemRepository`)
-   - `SyncRepository` in JIM.PostgresData for production - direct SQL/Npgsql for **all** worker operations, no EF Core — **partially done**: CSO creates/updates, pending export CRUD, RPEI persistence, RPEI outcome summary updates, change history (3 tables), and cross-batch reference fixup are already raw SQL; MVO creates/updates and remaining reads still use EF and must be migrated
+2. **Extract `ISyncRepository`** (JIM.Data / JIM.PostgresData) - Explicit data boundary for **all** worker data access — **PARTIALLY DONE (#338, interface defined #394)**
+   - Interface defined in JIM.Data alongside existing repository interfaces (e.g., `IConnectedSystemRepository`) — **done** (`ISyncRepository.cs`)
+   - `SyncRepository` in JIM.PostgresData for production - direct SQL/Npgsql for **all** worker operations, no EF Core — **partially done**: CSO creates/updates, pending export CRUD, RPEI persistence, RPEI outcome summary updates, change history (3 tables), and cross-batch reference fixup are already raw SQL; MVO creates/updates and remaining reads still use EF and must be migrated. Production adapter implementation **not started**
    - `SyncRepository` in a new JIM.InMemoryData project for tests - purpose-built, not EF's leaky in-memory provider, references only JIM.Data + JIM.Models with no database dependencies — **not done** (tests use EF fallback via try/catch). This is the **single highest-value change for test reliability**: it eliminates the three-way code path divergence (raw SQL / in-memory EF provider / mocked DbContext) that currently requires two-tier try/catch fallback logic across ~17 catch blocks in 4 repository files (see Pain Point 5)
-   - **Goal: eliminate EF Core from the worker entirely.** Once `ISyncRepository` is formalised, progressively migrate all remaining worker data access (MVO operations, reads, lookups) from EF to direct SQL within the PostgresData `SyncRepository`. The existing EF repositories (`IConnectedSystemRepository`, `IMetaverseRepository`, etc.) remain unchanged for JIM.Web and JIM.Scheduler
-   - Batch-oriented API: `GetCsoBatch()`, `PersistSyncResults()`, `BulkUpsertCsos()` — **not formalised as an interface** (raw SQL is embedded in existing repository methods with EF fallback)
+   - **Goal: eliminate EF Core from the worker entirely.** Once `ISyncRepository` implementations exist, progressively migrate all remaining worker data access (MVO operations, reads, lookups) from EF to direct SQL within the PostgresData `SyncRepository`. The existing EF repositories (`IConnectedSystemRepository`, `IMetaverseRepository`, etc.) remain unchanged for JIM.Web and JIM.Scheduler
+   - Batch-oriented API formalised as `ISyncRepository` interface — **done**: CSO reads/writes, MVO reads/writes, pending export CRUD, RPEI operations, sync rules/config, settings, change tracker management, CSO cache, cross-batch fixup, change history
    - CSO lookup cache via `IMemoryCache` eliminates N+1 import queries — **done**
    - Lightweight ID-only MVO matching with `Take(2)` — **done**
    - **Integration tests required:** Since the in-memory `SyncRepository` is purpose-built (not EF in-memory), the production `SyncRepository`'s direct SQL must be verified by integration tests against real PostgreSQL. This is actually a **better** situation than today — currently the raw SQL production paths are never tested at all (unit tests hit the EF fallback). See [Testing Strategy](#testing-strategy)

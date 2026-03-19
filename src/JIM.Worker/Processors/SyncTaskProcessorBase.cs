@@ -14,6 +14,7 @@ using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using JIM.Utilities;
+using JIM.Data.Repositories;
 using JIM.Worker.Models;
 using Serilog;
 
@@ -43,6 +44,7 @@ public enum MvoDeletionFate
 public abstract class SyncTaskProcessorBase
 {
     protected readonly JimApplication _jim;
+    protected readonly ISyncRepository _syncRepo;
     protected readonly ConnectedSystem _connectedSystem;
     protected readonly ConnectedSystemRunProfile _connectedSystemRunProfile;
     protected readonly Activity _activity;
@@ -160,12 +162,14 @@ public abstract class SyncTaskProcessorBase
 
     protected SyncTaskProcessorBase(
         JimApplication jimApplication,
+        ISyncRepository syncRepository,
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile connectedSystemRunProfile,
         Activity activity,
         CancellationTokenSource cancellationTokenSource)
     {
         _jim = jimApplication;
+        _syncRepo = syncRepository;
         _connectedSystem = connectedSystem;
         _connectedSystemRunProfile = connectedSystemRunProfile;
         _activity = activity;
@@ -251,7 +255,7 @@ public abstract class SyncTaskProcessorBase
 
         // Bulk insert this page's RPEIs via raw SQL (or EF fallback for tests).
         // Returns true if raw SQL was used, false if EF fallback was used.
-        var usedRawSql = await _jim.Activities.BulkInsertRpeisAsync(pageRpeis);
+        var usedRawSql = await _syncRepo.BulkInsertRpeisAsync(pageRpeis);
 
         if (usedRawSql)
         {
@@ -263,7 +267,7 @@ public abstract class SyncTaskProcessorBase
             // Clear from Activity's collection and detach from change tracker so no
             // subsequent SaveChangesAsync re-inserts them.
             _activity.RunProfileExecutionItems.Clear();
-            _jim.Activities.DetachRpeisFromChangeTracker(pageRpeis);
+            _syncRepo.DetachRpeisFromChangeTracker(pageRpeis);
             _hasRawSqlSupport = true;
         }
         // Tests (EF fallback): RPEIs stay in Activity.RunProfileExecutionItems for test
@@ -287,7 +291,7 @@ public abstract class SyncTaskProcessorBase
         _connectedSystem.LastDeltaSyncCompletedAt = DateTime.UtcNow;
 
         // Use repository directly to avoid validation that expects RunProfiles to be loaded
-        await _jim.Repository.ConnectedSystems.UpdateConnectedSystemAsync(_connectedSystem);
+        await _syncRepo.UpdateConnectedSystemAsync(_connectedSystem);
 
         Log.Information("UpdateDeltaSyncWatermarkAsync: Updated delta sync watermark to {Timestamp}",
             _connectedSystem.LastDeltaSyncCompletedAt);
@@ -742,7 +746,7 @@ public abstract class SyncTaskProcessorBase
 
         // Query remaining CSO count BEFORE breaking the join so the count includes all current connectors.
         // Then subtract 1 to exclude this CSO which is about to be disconnected.
-        var totalCsoCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
+        var totalCsoCount = await _syncRepo.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
         var remainingCsoCount = Math.Max(0, totalCsoCount - 1);
 
         // Snapshot the MVO's current attribute values before recall removes them.
@@ -1024,7 +1028,7 @@ public abstract class SyncTaskProcessorBase
                 mvo.Id, reason, gracePeriod.Value, _activity.InitiatedByName ?? "Unknown");
 
             // Persist the LastConnectorDisconnectedDate and initiator info
-            await _jim.Metaverse.UpdateMetaverseObjectAsync(mvo);
+            await _syncRepo.UpdateMetaverseObjectAsync(mvo);
             return MvoDeletionFate.DeletionScheduled;
         }
     }
@@ -1483,7 +1487,7 @@ public abstract class SyncTaskProcessorBase
         // Batch create new MVOs
         if (_pendingMvoCreates.Count > 0)
         {
-            await _jim.Metaverse.CreateMetaverseObjectsAsync(_pendingMvoCreates);
+            await _syncRepo.CreateMetaverseObjectsAsync(_pendingMvoCreates);
             Log.Verbose("PersistPendingMetaverseObjectsAsync: Created {Count} MVOs in batch", _pendingMvoCreates.Count);
             _pendingMvoCreates.Clear();
         }
@@ -1491,7 +1495,7 @@ public abstract class SyncTaskProcessorBase
         // Batch update existing MVOs
         if (_pendingMvoUpdates.Count > 0)
         {
-            await _jim.Metaverse.UpdateMetaverseObjectsAsync(_pendingMvoUpdates);
+            await _syncRepo.UpdateMetaverseObjectsAsync(_pendingMvoUpdates);
             Log.Verbose("PersistPendingMetaverseObjectsAsync: Updated {Count} MVOs in batch", _pendingMvoUpdates.Count);
             _pendingMvoUpdates.Clear();
         }
@@ -1511,7 +1515,7 @@ public abstract class SyncTaskProcessorBase
                     cso.MetaverseObjectId = cso.MetaverseObject.Id;
             }
 
-            await _jim.ConnectedSystems.UpdateConnectedSystemObjectJoinStatesAsync(_pendingCsoJoinUpdates);
+            await _syncRepo.UpdateConnectedSystemObjectJoinStatesAsync(_pendingCsoJoinUpdates);
             Log.Verbose("PersistPendingMetaverseObjectsAsync: Updated {Count} CSO join states in batch", _pendingCsoJoinUpdates.Count);
             _pendingCsoJoinUpdates.Clear();
         }
@@ -1755,7 +1759,7 @@ public abstract class SyncTaskProcessorBase
         Log.Information("ResolveCrossPageReferences: Resolving cross-page references for {Count} CSOs",
             totalCrossPagesToResolve);
 
-        await _jim.Activities.UpdateActivityMessageAsync(_activity,
+        await _syncRepo.UpdateActivityMessageAsync(_activity,
             $"Resolving cross-page references (0 / {totalCrossPagesToResolve})");
 
         // Build a lookup of CSO ID → existing RPEI for CSOs that need cross-page resolution.
@@ -1785,7 +1789,7 @@ public abstract class SyncTaskProcessorBase
         // cross-page resolution query.
         var rpeiCountBeforeClear = _activity.RunProfileExecutionItems.Count;
         _activity.RunProfileExecutionItems.Clear();
-        _jim.Repository.ClearChangeTracker();
+        _syncRepo.ClearChangeTracker();
         Log.Debug("ResolveCrossPageReferences: Cleared change tracker and {RpeiCount} persisted RPEIs from activity",
             rpeiCountBeforeClear);
 
@@ -1799,7 +1803,7 @@ public abstract class SyncTaskProcessorBase
             .ToDictionary(sr => sr.Id);
 
         // Process in batches to avoid loading too many CSOs at once
-        var pageSize = await _jim.ServiceSettings.GetSyncPageSizeAsync();
+        var pageSize = await _syncRepo.GetSyncPageSizeAsync();
         var totalItems = _unresolvedCrossPageReferences.Count;
         var totalBatches = (int)Math.Ceiling((double)totalItems / pageSize);
 
@@ -1813,7 +1817,7 @@ public abstract class SyncTaskProcessorBase
                 .Take(pageSize)
                 .ToList();
 
-            await _jim.Activities.UpdateActivityMessageAsync(_activity,
+            await _syncRepo.UpdateActivityMessageAsync(_activity,
                 $"Resolving cross-page references ({resolvedCount} / {totalCrossPagesToResolve}) - loading batch {batchIndex + 1} of {totalBatches}");
 
             // Reload CSOs from DB — now all MVOs exist, so ReferenceValue.MetaverseObject will be populated
@@ -1821,7 +1825,7 @@ public abstract class SyncTaskProcessorBase
             List<ConnectedSystemObject> reloadedCsos;
             using (Diagnostics.Sync.StartSpan("ReloadCsosForCrossPageReferences").SetTag("count", csoIds.Count))
             {
-                reloadedCsos = await _jim.ConnectedSystems.GetConnectedSystemObjectsForReferenceResolutionAsync(csoIds);
+                reloadedCsos = await _syncRepo.GetConnectedSystemObjectsForReferenceResolutionAsync(csoIds);
             }
 
             // Index reloaded CSOs by ID for O(1) lookup
@@ -1995,7 +1999,7 @@ public abstract class SyncTaskProcessorBase
                     // tracker. After ClearChangeTracker(), loading PEs with Include chains would create
                     // MetaverseAttribute instances that conflict with instances already tracked by the
                     // cross-page CSO query, causing identity resolution failures.
-                    var deletedCount = await _jim.ConnectedSystems.DeletePendingExportsByConnectedSystemObjectIdsAsync(targetCsoIds);
+                    var deletedCount = await _syncRepo.DeletePendingExportsByConnectedSystemObjectIdsAsync(targetCsoIds);
                     if (deletedCount > 0)
                     {
                         Log.Information("ResolveCrossPageReferences: Batch-deleted {Count} existing pending exports " +
@@ -2020,10 +2024,10 @@ public abstract class SyncTaskProcessorBase
             // IMPORTANT: Must be set BEFORE any SaveChangesAsync call — including the activity message
             // update — because by this point the tracker already contains conflicting instances from
             // the batch processing above.
-            _jim.Repository.SetAutoDetectChangesEnabled(false);
+            _syncRepo.SetAutoDetectChangesEnabled(false);
             try
             {
-                await _jim.Activities.UpdateActivityMessageAsync(_activity,
+                await _syncRepo.UpdateActivityMessageAsync(_activity,
                     $"Resolving cross-page references ({resolvedCount} / {totalCrossPagesToResolve}) - saving changes");
 
                 // Flush RPEIs FIRST to prevent DetectChanges() from discovering them during
@@ -2048,7 +2052,7 @@ public abstract class SyncTaskProcessorBase
                             outcome.Id = Guid.NewGuid();
                     }
 
-                    await _jim.Activities.BulkUpdateRpeiOutcomesAsync(updatedExistingRpeis, newOutcomes);
+                    await _syncRepo.BulkUpdateRpeiOutcomesAsync(updatedExistingRpeis, newOutcomes);
 
                     // Accumulate stats ONLY for newly added outcome nodes (not the full RPEIs, which
                     // were already counted during initial page flush). New outcomes can occur when the
@@ -2075,11 +2079,11 @@ public abstract class SyncTaskProcessorBase
                 await FlushRpeisAsync();
 
                 // Update activity progress
-                await _jim.Activities.UpdateActivityAsync(_activity);
+                await _syncRepo.UpdateActivityAsync(_activity);
             }
             finally
             {
-                _jim.Repository.SetAutoDetectChangesEnabled(true);
+                _syncRepo.SetAutoDetectChangesEnabled(true);
             }
         }
 
@@ -2095,7 +2099,7 @@ public abstract class SyncTaskProcessorBase
         // subsequent SaveChangesAsync triggers DetectChanges. Clearing removes all tracked entities
         // so the caller's next SaveChangesAsync starts with a clean tracker.
         // The Activity entity will be re-attached by UpdateActivityAsync's detached entity handling.
-        _jim.Repository.ClearChangeTracker();
+        _syncRepo.ClearChangeTracker();
 
         span.SetSuccess();
     }
@@ -2176,7 +2180,7 @@ public abstract class SyncTaskProcessorBase
         // Batch create provisioning CSOs first (pending exports reference CSOs by ID)
         if (_provisioningCsosToCreate.Count > 0)
         {
-            await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(_provisioningCsosToCreate);
+            await _syncRepo.CreateConnectedSystemObjectsAsync(_provisioningCsosToCreate);
 
             // Add provisioned CSOs to the lookup cache so confirming imports can find them.
             // Provisioned CSOs don't have a primary external ID yet (it's system-assigned during export),
@@ -2187,7 +2191,7 @@ public abstract class SyncTaskProcessorBase
                 {
                     var secondaryIdValue = cso.AttributeValues?.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
                     if (secondaryIdValue?.StringValue != null)
-                        _jim.ConnectedSystems.AddCsoToCache(cso.ConnectedSystemId, cso.SecondaryExternalIdAttributeId.Value, secondaryIdValue.StringValue, cso.Id);
+                        _syncRepo.AddCsoToCache(cso.ConnectedSystemId, cso.SecondaryExternalIdAttributeId.Value, secondaryIdValue.StringValue, cso.Id);
                 }
             }
 
@@ -2198,7 +2202,7 @@ public abstract class SyncTaskProcessorBase
         // Batch create new pending exports (evaluated during export evaluation phase)
         if (_pendingExportsToCreate.Count > 0)
         {
-            await _jim.ConnectedSystems.CreatePendingExportsAsync(_pendingExportsToCreate);
+            await _syncRepo.CreatePendingExportsAsync(_pendingExportsToCreate);
             Log.Verbose("FlushPendingExportOperationsAsync: Created {Count} pending exports in batch", _pendingExportsToCreate.Count);
             _pendingExportsToCreate.Clear();
         }
@@ -2206,7 +2210,7 @@ public abstract class SyncTaskProcessorBase
         // Batch delete confirmed pending exports
         if (_pendingExportsToDelete.Count > 0)
         {
-            await _jim.ConnectedSystems.DeletePendingExportsAsync(_pendingExportsToDelete);
+            await _syncRepo.DeletePendingExportsAsync(_pendingExportsToDelete);
             Log.Verbose("FlushPendingExportOperationsAsync: Deleted {Count} confirmed pending exports in batch", _pendingExportsToDelete.Count);
             _pendingExportsToDelete.Clear();
         }
@@ -2214,7 +2218,7 @@ public abstract class SyncTaskProcessorBase
         // Batch update pending exports that need error tracking
         if (_pendingExportsToUpdate.Count > 0)
         {
-            await _jim.ConnectedSystems.UpdatePendingExportsAsync(_pendingExportsToUpdate);
+            await _syncRepo.UpdatePendingExportsAsync(_pendingExportsToUpdate);
             Log.Verbose("FlushPendingExportOperationsAsync: Updated {Count} pending exports in batch", _pendingExportsToUpdate.Count);
             _pendingExportsToUpdate.Clear();
         }
@@ -2232,7 +2236,7 @@ public abstract class SyncTaskProcessorBase
         // First, handle quiet deletions (pre-disconnected CSOs from synchronous MVO deletion)
         if (_quietCsosToDelete.Count > 0)
         {
-            await _jim.ConnectedSystems.DeleteConnectedSystemObjectsAsync(_quietCsosToDelete);
+            await _syncRepo.DeleteConnectedSystemObjectsAsync(_quietCsosToDelete);
             Log.Debug("FlushObsoleteCsoOperationsAsync: Quietly deleted {Count} pre-disconnected CSOs", _quietCsosToDelete.Count);
             _quietCsosToDelete.Clear();
         }
@@ -2248,7 +2252,7 @@ public abstract class SyncTaskProcessorBase
         var csosToDelete = _obsoleteCsosToDelete.Select(x => x.Cso).ToList();
         var executionItems = _obsoleteCsosToDelete.Select(x => x.ExecutionItem).ToList();
 
-        await _jim.ConnectedSystems.DeleteConnectedSystemObjectsAsync(csosToDelete, executionItems);
+        await _syncRepo.DeleteConnectedSystemObjectsAsync(csosToDelete, executionItems);
         Log.Verbose("FlushObsoleteCsoOperationsAsync: Deleted {Count} obsolete CSOs in batch", _obsoleteCsosToDelete.Count);
 
         _obsoleteCsosToDelete.Clear();
@@ -2313,7 +2317,7 @@ public abstract class SyncTaskProcessorBase
 
                 // Delete the MVO, passing initiator info and the snapshotted final attribute values
                 // (captured before attribute recall removed them from the MVO)
-                await _jim.Metaverse.DeleteMetaverseObjectAsync(
+                await _syncRepo.DeleteMetaverseObjectAsync(
                     mvo,
                     _activity.InitiatedByType,
                     _activity.InitiatedById,
@@ -2331,7 +2335,7 @@ public abstract class SyncTaskProcessorBase
                     "FlushPendingMvoDeletionsAsync: Failed to delete MVO {MvoId}, marking for housekeeping retry",
                     mvo.Id);
                 mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
-                await _jim.Metaverse.UpdateMetaverseObjectAsync(mvo);
+                await _syncRepo.UpdateMetaverseObjectAsync(mvo);
             }
         }
 
@@ -2351,7 +2355,7 @@ public abstract class SyncTaskProcessorBase
             return;
 
         // Check feature flag
-        var changeTrackingEnabled = await _jim.ServiceSettings.GetMvoChangeTrackingEnabledAsync();
+        var changeTrackingEnabled = await _syncRepo.GetMvoChangeTrackingEnabledAsync();
         if (!changeTrackingEnabled)
         {
             _pendingMvoChanges.Clear();
@@ -2531,7 +2535,7 @@ public abstract class SyncTaskProcessorBase
     {
         try
         {
-            return await _jim.ObjectMatching.FindMatchingMetaverseObjectAsync(connectedSystemObject, matchingRules);
+            return await _syncRepo.FindMatchingMetaverseObjectAsync(connectedSystemObject, matchingRules);
         }
         catch (JIM.Models.Exceptions.MultipleMatchesException ex)
         {
@@ -2549,7 +2553,7 @@ public abstract class SyncTaskProcessorBase
     private async Task<bool> EstablishJoinAsync(ConnectedSystemObject connectedSystemObject, MetaverseObject mvo)
     {
         // MVO must not already be joined to a connected system object in this connected system. Joins are 1:1.
-        var existingCsoJoinCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountByMvoAsync(
+        var existingCsoJoinCount = await _syncRepo.GetConnectedSystemObjectCountByMvoAsync(
             _connectedSystem.Id, mvo.Id);
 
         // Account for CSOs that have been disconnected in-memory but not yet flushed to the database.
@@ -2936,7 +2940,7 @@ public abstract class SyncTaskProcessorBase
             // Need to load CSO attributes for scoping evaluation if not already loaded
             if (csoWithAttributes.AttributeValues.Count == 0)
             {
-                var fullCso = await _jim.ConnectedSystems.GetConnectedSystemObjectAsync(_connectedSystem.Id, connectedSystemObject.Id);
+                var fullCso = await _syncRepo.GetConnectedSystemObjectAsync(_connectedSystem.Id, connectedSystemObject.Id);
                 if (fullCso != null)
                 {
                     csoWithAttributes = fullCso;
@@ -2997,7 +3001,7 @@ public abstract class SyncTaskProcessorBase
 
                 // Query remaining CSO count BEFORE breaking the join so the count includes all current connectors.
                 // Then subtract 1 to exclude this CSO which is about to be disconnected.
-                var totalCsoCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
+                var totalCsoCount = await _syncRepo.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
                 var remainingCsoCount = Math.Max(0, totalCsoCount - 1);
 
                 // Check if we should remove contributed attributes based on the object type setting.
@@ -3039,7 +3043,7 @@ public abstract class SyncTaskProcessorBase
 
                 // Apply pending attribute changes and update MVO
                 ApplyPendingMetaverseObjectAttributeChanges(mvo);
-                await _jim.Metaverse.UpdateMetaverseObjectAsync(mvo);
+                await _syncRepo.UpdateMetaverseObjectAsync(mvo);
 
                 // Evaluate MVO deletion rule based on type configuration
                 var mvoDeletionFate = await ProcessMvoDeletionRuleAsync(mvo, _connectedSystem.Id, remainingCsoCount);

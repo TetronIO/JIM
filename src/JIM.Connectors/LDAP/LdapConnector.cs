@@ -36,6 +36,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public bool SupportsUserSelectedAttributeTypes => false;
     public bool SupportsAutoConfirmExport => false;
     public bool SupportsParallelExport => true;
+    public bool SupportsPaging => true;
     #endregion
 
     #region IConnectorSettings members

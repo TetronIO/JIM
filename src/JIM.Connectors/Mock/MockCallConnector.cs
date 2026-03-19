@@ -28,6 +28,7 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
     public bool SupportsUserSelectedAttributeTypes => true;
     public bool SupportsAutoConfirmExport => false;
     public bool SupportsParallelExport => true;
+    public bool SupportsPaging => true;
 
     private bool _supportsSecondaryExternalId = true;
     private readonly Queue<ConnectedSystemImportResult> _importResultQueue = new();
