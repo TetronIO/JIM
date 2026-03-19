@@ -2400,6 +2400,13 @@ public class ConnectedSystemServer
             .SingleOrDefault(q => q.Attribute?.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase) == true);
         var displayName = displayNameAttr?.StringValue;
 
+        // Snapshot all attribute values BEFORE deletion for change tracking.
+        // Attribute values are cascade-deleted with the CSO, so we must capture them now.
+        // Filter out attributes with NotSet type (e.g., incomplete test data) to avoid errors.
+        var finalAttributeValues = connectedSystemObject.AttributeValues
+            .Where(av => av.Attribute != null && av.Attribute.Type != AttributeDataType.NotSet)
+            .ToList();
+
         await Application.Repository.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject);
 
         // Check if CSO change tracking is enabled
@@ -2434,10 +2441,17 @@ public class ConnectedSystemServer
             InitiatedByName = activityRunProfileExecutionItem.Activity?.InitiatedByName
         };
 
+        // Capture all final attribute values as removals for audit purposes.
+        // Attribute value entities reference ConnectedSystemObjectTypeAttribute schema entities
+        // that may already be tracked by EF Core's change tracker, so we capture in a separate
+        // step and associate with the change record only if no tracking conflicts occur.
+        CaptureDeletedCsoAttributeValues(change, finalAttributeValues);
+
         // Log the external ID for audit purposes
         if (!string.IsNullOrEmpty(externalIdDisplayValue))
         {
-            Log.Debug("DeleteConnectedSystemObjectAsync: Deleted CSO with external ID: {ExternalId}", externalIdDisplayValue);
+            Log.Debug("DeleteConnectedSystemObjectAsync: Deleted CSO with external ID: {ExternalId}, captured {AttrCount} final attribute values",
+                externalIdDisplayValue, change.AttributeChanges.Count);
         }
 
         // The change object will be persisted with the activity run profile execution item further up the stack.
@@ -2461,7 +2475,7 @@ public class ConnectedSystemServer
         if (connectedSystemObjects.Count != activityRunProfileExecutionItems.Count)
             throw new ArgumentException("CSO count must match execution item count");
 
-        // Capture external ID and display name values before deletion
+        // Capture external ID, display name, and all attribute values before deletion.
         // We cannot reference attribute values after deletion because they get cascade deleted with the CSO.
         // Use ToStringNoName() to get just the value without "attributeName: " prefix.
         // Get displayName attribute directly (don't use DisplayNameOrId which falls back to External ID).
@@ -2470,7 +2484,10 @@ public class ConnectedSystemServer
                 ExternalId: cso.ExternalIdAttributeValue?.ToStringNoName(),
                 DisplayName: cso.AttributeValues
                     .SingleOrDefault(q => q.Attribute?.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase) == true)
-                    ?.StringValue))
+                    ?.StringValue,
+                FinalAttributeValues: cso.AttributeValues
+                    .Where(av => av.Attribute != null && av.Attribute.Type != AttributeDataType.NotSet)
+                    .ToList()))
             .ToList();
 
         // Batch delete from database
@@ -2484,7 +2501,7 @@ public class ConnectedSystemServer
         {
             var cso = connectedSystemObjects[i];
             var executionItem = activityRunProfileExecutionItems[i];
-            var (externalId, displayName) = deletedObjectInfo[i];
+            var (externalId, displayName, finalAttributeValues) = deletedObjectInfo[i];
 
             if (changeTrackingEnabled)
             {
@@ -2503,6 +2520,9 @@ public class ConnectedSystemServer
                     InitiatedById = executionItem.Activity?.InitiatedById,
                     InitiatedByName = executionItem.Activity?.InitiatedByName
                 };
+
+                // Capture all final attribute values as removals for audit purposes.
+                CaptureDeletedCsoAttributeValues(change, finalAttributeValues);
 
                 executionItem.ConnectedSystemObjectChange = change;
             }
@@ -3280,6 +3300,33 @@ public class ConnectedSystemServer
             case AttributeDataType.NotSet:
             default:
                 throw new InvalidDataException($"AddChangeAttributeValueObject:  Invalid removal attribute '{connectedSystemObjectAttributeValue.Attribute.Name}' of type '{connectedSystemObjectAttributeValue.Attribute.Type}' or null attribute value.");
+        }
+    }
+
+    /// <summary>
+    /// Captures all final attribute values from a deleted CSO as Remove records on the change.
+    /// Handles EF Core entity tracking conflicts gracefully — the attribute schema entities
+    /// (ConnectedSystemObjectTypeAttribute) may already be tracked by the change tracker,
+    /// causing InvalidOperationException when the change record is associated with the context.
+    /// In that case, we clear the attribute changes and preserve only the basic identity info.
+    /// </summary>
+    private static void CaptureDeletedCsoAttributeValues(
+        ConnectedSystemObjectChange change,
+        List<ConnectedSystemObjectAttributeValue> finalAttributeValues)
+    {
+        try
+        {
+            foreach (var attributeValue in finalAttributeValues)
+            {
+                AddChangeAttributeValueObject(change, attributeValue, ValueChangeType.Remove);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException)
+        {
+            // EF Core tracking conflict or invalid attribute type (e.g., NotSet).
+            // Clear any partially-built attribute changes and fall back to basic identity info.
+            Log.Warning(ex, "CaptureDeletedCsoAttributeValues: Could not capture final attribute values. Basic identity info preserved.");
+            change.AttributeChanges.Clear();
         }
     }
 

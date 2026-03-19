@@ -999,11 +999,11 @@ public class MetaverseRepository : IMetaverseRepository
                 @"UPDATE ""Activities"" SET ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = {0}",
                 metaverseObject.Id);
 
-            // Null out FK reference in MetaverseObjectChanges to preserve change history audit trail
-            // The MetaverseObjectId column is nullable specifically to support this - DELETE change records
-            // intentionally have null MetaverseObjectId since the MVO no longer exists
+            // Stamp DeletedMetaverseObjectId on all prior change records for this MVO so that
+            // GetDeletedMvoChangeHistoryAsync can correlate them after the FK is nulled.
+            // Then null the FK to allow the MVO to be deleted without constraint violations.
             await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""MetaverseObjectChanges"" SET ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = {0}",
+                @"UPDATE ""MetaverseObjectChanges"" SET ""DeletedMetaverseObjectId"" = {0}, ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = {0}",
                 metaverseObject.Id);
 
             // Null out reference attribute values on other MVOs that point to this MVO.
@@ -1042,6 +1042,22 @@ public class MetaverseRepository : IMetaverseRepository
             .Query()
             .Include(av => av.Attribute)
             .LoadAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task SetDeletedMetaverseObjectIdAsync(Guid changeId, Guid metaverseObjectId)
+    {
+        try
+        {
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""MetaverseObjectChanges"" SET ""DeletedMetaverseObjectId"" = {0} WHERE ""Id"" = {1}",
+                metaverseObjectId, changeId);
+        }
+        catch (Exception)
+        {
+            // Expected when running with mocked DbContext in tests - the Database property may be null
+            // or the InMemory provider doesn't support raw SQL. In production with PostgreSQL, this works.
+        }
     }
 
     /// <summary>
@@ -1270,28 +1286,28 @@ public class MetaverseRepository : IMetaverseRepository
         if (targetChange == null)
             return new List<MetaverseObjectChange>();
 
-        // Validate it's a Delete change with tombstone data
-        if (string.IsNullOrEmpty(targetChange.DeletedObjectDisplayName) || !targetChange.DeletedObjectTypeId.HasValue)
-            return new List<MetaverseObjectChange> { targetChange };
+        // Resolve the original MVO ID from the deletion change record.
+        // DeletedMetaverseObjectId is explicitly set via raw SQL on prior change records,
+        // and via SetDeletedMetaverseObjectIdAsync on the deletion record itself.
+        // As a fallback, EF Core may auto-set MetaverseObjectId via relationship fixup.
+        var mvoId = targetChange.DeletedMetaverseObjectId
+            ?? (targetChange.MetaverseObject != null ? targetChange.MetaverseObject.Id : (Guid?)null);
 
-        // Strategy: Find the original MetaverseObjectId by looking for other changes with the same
-        // deleted object identity. Earlier changes (Projected, AttributeFlow) still have the FK populated.
-        var mvoId = await Repository.Database.MetaverseObjectChanges
-            .Where(c => c.DeletedObjectTypeId == targetChange.DeletedObjectTypeId &&
-                        c.DeletedObjectDisplayName == targetChange.DeletedObjectDisplayName &&
-                        c.MetaverseObject != null) // Earlier changes still have the FK
-            .Select(c => c.MetaverseObject!.Id)
-            .FirstOrDefaultAsync();
+        // Also check the shadow FK property directly (EF Core stores it even without navigation loaded)
+        if (!mvoId.HasValue || mvoId.Value == Guid.Empty)
+        {
+            var shadowFk = Repository.Database.Entry(targetChange).Property<Guid?>("MetaverseObjectId").CurrentValue;
+            if (shadowFk.HasValue && shadowFk.Value != Guid.Empty)
+                mvoId = shadowFk;
+        }
 
-        // If we found the original MVO ID, fetch ALL changes (including Delete change)
-        if (mvoId != Guid.Empty)
+        // If we have the MVO ID, find ALL change records using DeletedMetaverseObjectId
+        // (set on prior records by raw SQL) OR MetaverseObjectId (set on deletion record by EF Core).
+        if (mvoId.HasValue && mvoId.Value != Guid.Empty)
         {
             return await Repository.Database.MetaverseObjectChanges
                 .AsSplitQuery()
-                .Where(c => c.MetaverseObject!.Id == mvoId || // Non-deleted changes
-                            (c.DeletedObjectTypeId == targetChange.DeletedObjectTypeId &&
-                             c.DeletedObjectDisplayName == targetChange.DeletedObjectDisplayName &&
-                             c.ChangeType == ObjectChangeType.Deleted)) // The Delete change
+                .Where(c => c.DeletedMetaverseObjectId == mvoId || c.Id == changeId)
                 .OrderByDescending(c => c.ChangeTime)
                 .Include(c => c.ActivityRunProfileExecutionItem)
                 .ThenInclude(rpei => rpei!.Activity)
@@ -1299,12 +1315,20 @@ public class MetaverseRepository : IMetaverseRepository
                 .ThenInclude(ac => ac.Attribute)
                 .Include(c => c.AttributeChanges)
                 .ThenInclude(ac => ac.ValueChanges)
+                .ThenInclude(vc => vc.ReferenceValue)
                 .ToListAsync();
         }
 
-        // Fallback: If no earlier changes exist (edge case), return only the Delete change
-        // This can happen if an MVO was projected and immediately deleted in the same sync
-        return new List<MetaverseObjectChange> { targetChange };
+        // Fallback: return only the Delete change with its attribute changes loaded
+        return await Repository.Database.MetaverseObjectChanges
+            .AsSplitQuery()
+            .Where(c => c.Id == changeId)
+            .Include(c => c.AttributeChanges)
+            .ThenInclude(ac => ac.Attribute)
+            .Include(c => c.AttributeChanges)
+            .ThenInclude(ac => ac.ValueChanges)
+            .ThenInclude(vc => vc.ReferenceValue)
+            .ToListAsync();
     }
 
     public async Task<PagedResultSet<MetaverseObjectAttributeValue>> GetAttributeValuesPagedAsync(

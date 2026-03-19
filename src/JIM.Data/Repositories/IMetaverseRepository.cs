@@ -127,6 +127,13 @@ public interface IMetaverseRepository
     public Task LoadMetaverseObjectAttributeValuesAsync(MetaverseObject metaverseObject);
 
     /// <summary>
+    /// Sets the DeletedMetaverseObjectId on a change record via raw SQL.
+    /// Used as a safety measure after saving deletion change records, since EF Core
+    /// entity tracking state after MVO deletion may not persist the value correctly.
+    /// </summary>
+    public Task SetDeletedMetaverseObjectIdAsync(Guid changeId, Guid metaverseObjectId);
+
+    /// <summary>
     /// Gets Metaverse Objects that are eligible for automatic deletion based on deletion rules.
     /// Returns MVOs where:
     /// - Origin = Projected (not Internal - protects admin accounts)

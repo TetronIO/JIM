@@ -541,6 +541,9 @@ public class MetaverseServer
                 attributesToCapture = metaverseObject.AttributeValues.ToList();
             }
 
+            // Capture the MVO ID before deletion — EF Core may clear the Id property after SaveChangesAsync.
+            var mvoId = metaverseObject.Id;
+
             // Resolve display name: prefer the MVO's current DisplayName (computed from AttributeValues),
             // but if attributes were already recalled (sync processor path), derive it from the snapshot.
             var displayName = metaverseObject.DisplayName;
@@ -568,6 +571,7 @@ public class MetaverseServer
                     ? MetaverseObjectChangeInitiatorType.User
                     : MetaverseObjectChangeInitiatorType.NotSet,
                 // Preserve object identity for the deleted objects browser
+                DeletedMetaverseObjectId = mvoId,
                 DeletedObjectTypeId = metaverseObject.Type?.Id,
                 DeletedObjectDisplayName = displayName
             };
@@ -591,6 +595,11 @@ public class MetaverseServer
             // and DeletedObjectTypeId instead.
             await Application.Repository.Metaverse.DeleteMetaverseObjectAsync(metaverseObject);
             await Application.Repository.Metaverse.CreateMetaverseObjectChangeAsync(change);
+
+            // Ensure DeletedMetaverseObjectId is set on the deletion change record.
+            // EF Core may not persist it correctly due to entity tracking state after deletion,
+            // so we set it via raw SQL as a safety measure.
+            await Application.Repository.Metaverse.SetDeletedMetaverseObjectIdAsync(change.Id, mvoId);
             return;
         }
 

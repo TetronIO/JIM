@@ -82,6 +82,13 @@ public class MetaverseObjectChange
     // -----------------------------------------------------------------------------------------------------------------
 
     /// <summary>
+    /// The original MetaverseObject ID, preserved on ALL change records (including prior changes)
+    /// when an MVO is deleted. This enables GetDeletedMvoChangeHistoryAsync to correlate the
+    /// deletion record with earlier changes after the MetaverseObject FK has been nulled.
+    /// </summary>
+    public Guid? DeletedMetaverseObjectId { get; set; }
+
+    /// <summary>
     /// If the object was deleted, the object type ID is preserved here.
     /// </summary>
     public int? DeletedObjectTypeId { get; set; }
