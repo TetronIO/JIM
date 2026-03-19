@@ -2,7 +2,7 @@
  * JIM Colour Theme: Navy O6 Light
  *
  * Light counterpart to navy-o6-dark. Shaded page background with white
- * content panels and a white sidebar with a right-hand paper border.
+ * content panels and a sidebar matching the page background with a right-hand paper border.
  *
  * Depth model:
  *   Page background:    #f3f3f3  (neutral light grey)
@@ -59,8 +59,8 @@ html[lang] {
     --jim-inner-surface: #f7f7f7;
     --jim-inner-border-color: rgba(30, 58, 95, 0.28);
 
-    /* === Drawer (white surface with right-hand border) === */
-    --mud-palette-drawer-background: #ffffff;
+    /* === Drawer (same as page background with right-hand border) === */
+    --mud-palette-drawer-background: #f3f3f3;
     --mud-palette-drawer-text: #1e3a5f;
     --mud-palette-drawer-icon: rgba(30, 58, 95, 0.60);
 

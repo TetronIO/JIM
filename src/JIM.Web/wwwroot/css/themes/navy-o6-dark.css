@@ -60,8 +60,8 @@ html[lang] {
     --jim-inner-surface: #15293c;
     --jim-inner-border-color: #243a52;
 
-    /* === Drawer (paper surface with right-hand border) === */
-    --mud-palette-drawer-background: #0d1e30;
+    /* === Drawer (same as page background with right-hand border) === */
+    --mud-palette-drawer-background: #051526;
     --mud-palette-drawer-text: #b0b8c4;
     --mud-palette-drawer-icon: #687890;
 
