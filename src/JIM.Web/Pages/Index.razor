@@ -84,7 +84,7 @@
     <MudItem xs="6" md="3">
         <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/t/users"))">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
-                <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Primary" />
+                <MudIcon Icon="@Helpers.ResolveObjectTypeIcon(_userIcon)" Color="Color.Primary" />
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Users</MudText>
             </MudStack>
             @if (_dataLoaded)
@@ -100,7 +100,7 @@
     <MudItem xs="6" md="3">
         <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/t/groups"))">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
-                <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Primary" />
+                <MudIcon Icon="@Helpers.ResolveObjectTypeIcon(_groupIcon)" Color="Color.Primary" />
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Groups</MudText>
             </MudStack>
             @if (_dataLoaded)
@@ -248,7 +248,7 @@
     <MudItem xs="6" sm="4" md="3">
         <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/t/users"))">
             <MudStack AlignItems="AlignItems.Center" Spacing="2">
-                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Large" Color="Color.Primary" />
+                <MudIcon Icon="@Helpers.ResolveObjectTypeIcon(_userIcon)" Size="Size.Large" Color="Color.Primary" />
                 <MudText Typo="Typo.body1">Users</MudText>
             </MudStack>
         </MudPaper>
@@ -256,7 +256,7 @@
     <MudItem xs="6" sm="4" md="3">
         <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/t/groups"))">
             <MudStack AlignItems="AlignItems.Center" Spacing="2">
-                <MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Large" Color="Color.Primary" />
+                <MudIcon Icon="@Helpers.ResolveObjectTypeIcon(_groupIcon)" Size="Size.Large" Color="Color.Primary" />
                 <MudText Typo="Typo.body1">Groups</MudText>
             </MudStack>
         </MudPaper>
@@ -309,6 +309,8 @@
     private bool _dataLoaded;
     private int _userCount;
     private int _groupCount;
+    private string? _userIcon;
+    private string? _groupIcon;
     private int _connectedSystemCount;
     private int _syncRuleCount;
     private List<Schedule> _schedules = new();
@@ -324,6 +326,8 @@
         var groupType = await jim.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Group, includeChildObjects: false);
         _userCount = userType != null ? await jim.Metaverse.GetMetaverseObjectOfTypeCountAsync(userType) : 0;
         _groupCount = groupType != null ? await jim.Metaverse.GetMetaverseObjectOfTypeCountAsync(groupType) : 0;
+        _userIcon = userType?.Icon;
+        _groupIcon = groupType?.Icon;
 
         // Load connected system and sync rule counts
         _connectedSystemCount = jim.ConnectedSystems.GetConnectedSystemCount();

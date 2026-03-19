@@ -586,4 +586,111 @@ public class MetaverseControllerObjectTypeTests
     }
 
     #endregion
+
+    #region Icon mapping tests
+
+    [Test]
+    public async Task GetObjectTypeAsync_WithIcon_ReturnsIconInDto()
+    {
+        var objectType = new MetaverseObjectType
+        {
+            Id = 1,
+            Name = "User",
+            PluralName = "Users",
+            BuiltIn = true,
+            Icon = "Person",
+            Attributes = new List<MetaverseAttribute>()
+        };
+
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, false))
+            .ReturnsAsync(objectType);
+
+        var result = await _controller.GetObjectTypeAsync(1) as OkObjectResult;
+
+        Assert.That(result, Is.Not.Null);
+        var dto = result!.Value as MetaverseObjectTypeDetailDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.Icon, Is.EqualTo("Person"));
+    }
+
+    [Test]
+    public async Task GetObjectTypeAsync_WithNullIcon_ReturnsNullIconInDto()
+    {
+        var objectType = new MetaverseObjectType
+        {
+            Id = 1,
+            Name = "Device",
+            PluralName = "Devices",
+            BuiltIn = false,
+            Icon = null,
+            Attributes = new List<MetaverseAttribute>()
+        };
+
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, false))
+            .ReturnsAsync(objectType);
+
+        var result = await _controller.GetObjectTypeAsync(1) as OkObjectResult;
+
+        Assert.That(result, Is.Not.Null);
+        var dto = result!.Value as MetaverseObjectTypeDetailDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.Icon, Is.Null);
+    }
+
+    [Test]
+    public void MetaverseObjectTypeHeader_FromEntity_MapsIconCorrectly()
+    {
+        var entity = new MetaverseObjectType
+        {
+            Id = 1,
+            Name = "User",
+            PluralName = "Users",
+            BuiltIn = true,
+            Icon = "Person",
+            PredefinedSearches = new List<PredefinedSearch>()
+        };
+
+        var header = MetaverseObjectTypeHeader.FromEntity(entity);
+
+        Assert.That(header.Icon, Is.EqualTo("Person"));
+    }
+
+    [Test]
+    public void MetaverseObjectTypeHeader_FromEntity_MapsNullIconCorrectly()
+    {
+        var entity = new MetaverseObjectType
+        {
+            Id = 1,
+            Name = "Device",
+            PluralName = "Devices",
+            BuiltIn = false,
+            Icon = null,
+            PredefinedSearches = new List<PredefinedSearch>()
+        };
+
+        var header = MetaverseObjectTypeHeader.FromEntity(entity);
+
+        Assert.That(header.Icon, Is.Null);
+    }
+
+    [Test]
+    public void MetaverseObjectTypeDetailDto_FromEntity_MapsIconCorrectly()
+    {
+        var entity = new MetaverseObjectType
+        {
+            Id = 2,
+            Name = "Group",
+            PluralName = "Groups",
+            BuiltIn = true,
+            Icon = "Groups",
+            Attributes = new List<MetaverseAttribute>(),
+            DeletionTriggerConnectedSystemIds = new List<int>()
+        };
+
+        var dto = MetaverseObjectTypeDetailDto.FromEntity(entity);
+
+        Assert.That(dto.Icon, Is.EqualTo("Groups"));
+    }
+
+    #endregion
 }

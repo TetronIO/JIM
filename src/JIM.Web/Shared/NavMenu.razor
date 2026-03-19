@@ -1,17 +1,19 @@
+@using JIM.Models.Core
 @inject NavigationManager NavigationManager
 @inject IUserPreferenceService PreferenceService
+@inject IJimApplicationFactory JimFactory
 @implements IDisposable
 
 <MudNavMenu Color="Color.Primary" Class="pt-3 pb-3 jim-nav-menu">
     <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home" Class="jim-nav-top-level">Home</MudNavLink>
 
-    <MudNavGroup Title="Users" Expanded="_usersExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "users"))" Icon="@Icons.Material.Filled.Person" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
+    <MudNavGroup Title="Users" Expanded="_usersExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "users"))" Icon="@_userIcon" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
         <MudNavLink Href="/t/users" Match="NavLinkMatch.All" Class="jim-nowrap jim-nav-child">All Users</MudNavLink>
         <MudNavLink Href="/t/users/s/people" Match="NavLinkMatch.Prefix" Class="jim-nav-child">People</MudNavLink>
         <MudNavLink Href="/t/users/s/service-principals" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Service Principals</MudNavLink>
     </MudNavGroup>
 
-    <MudNavGroup Title="Groups" Expanded="_groupsExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "groups"))" Icon="@Icons.Material.Filled.Groups" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
+    <MudNavGroup Title="Groups" Expanded="_groupsExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "groups"))" Icon="@_groupIcon" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
         <MudNavLink Href="/t/groups" Match="NavLinkMatch.All" Class="jim-nowrap jim-nav-child">All Groups</MudNavLink>
         <MudNavLink Href="/t/groups/s/security-groups" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Security Groups</MudNavLink>
         <MudNavLink Href="/t/groups/s/distribution-groups" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Distribution Groups</MudNavLink>
@@ -60,6 +62,10 @@
     private bool _preferencesLoaded;
     private CancellationTokenSource? _restoreCts;
 
+    // Object type icons (loaded once from database)
+    private string _userIcon = Icons.Material.Filled.Person;
+    private string _groupIcon = Icons.Material.Filled.Groups;
+
     // Track expanded state for each nav group
     private bool _usersExpanded;
     private bool _groupsExpanded;
@@ -67,10 +73,17 @@
     private bool _dashboardExpanded;
     private bool _adminExpanded;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         _currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri).ToLowerInvariant();
         NavigationManager.LocationChanged += OnLocationChanged;
+
+        // Load object type icons from database (runs once per Blazor circuit)
+        using var jim = JimFactory.Create();
+        var userType = await jim.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User, includeChildObjects: false);
+        var groupType = await jim.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Group, includeChildObjects: false);
+        _userIcon = Helpers.ResolveObjectTypeIcon(userType?.Icon);
+        _groupIcon = Helpers.ResolveObjectTypeIcon(groupType?.Icon);
 
         // Initialize expanded states based on current URL if drawer starts open
         // Saved preferences will be loaded in OnAfterRenderAsync when JS interop is available

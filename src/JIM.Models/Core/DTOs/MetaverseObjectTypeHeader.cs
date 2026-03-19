@@ -20,6 +20,7 @@ public class MetaverseObjectTypeHeader
     public DateTime Created { get; set; }
     public int AttributesCount { get; set; }
     public bool BuiltIn { get; set; }
+    public string? Icon { get; set; }
     public bool HasPredefinedSearches { get; set; }
     public MetaverseObjectDeletionRule DeletionRule { get; set; }
     public TimeSpan? DeletionGracePeriod { get; set; }
@@ -37,6 +38,7 @@ public class MetaverseObjectTypeHeader
             Created = entity.Created,
             AttributesCount = entity.Attributes?.Count ?? 0,
             BuiltIn = entity.BuiltIn,
+            Icon = entity.Icon,
             HasPredefinedSearches = entity.PredefinedSearches?.Count > 0,
             DeletionRule = entity.DeletionRule,
             DeletionGracePeriod = entity.DeletionGracePeriod
