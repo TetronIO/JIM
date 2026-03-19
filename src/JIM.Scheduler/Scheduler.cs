@@ -48,12 +48,20 @@ public class Scheduler : BackgroundService
         // This uses the shared key storage to ensure consistency with JIM.Web and JIM.Worker
         var credentialProtection = new CredentialProtectionService(DataProtectionHelper.CreateProvider());
 
+        // Healthcheck heartbeat file path — Docker healthcheck monitors this file's age
+        // to determine if the scheduler's main loop is still executing.
+        const string healthcheckFile = "/tmp/healthcheck";
+
         // Wait for the application to be fully ready (JIM.Worker handles initial migration and seeding).
         // We must check IsApplicationReadyAsync() rather than just database connectivity, because the
         // worker needs to complete migrations and seeding before tables like Schedules exist.
         Log.Information("Waiting for application to be ready...");
         while (!stoppingToken.IsCancellationRequested)
         {
+            // Touch the healthcheck file during readiness wait so Docker doesn't mark us unhealthy
+            try { await File.WriteAllTextAsync(healthcheckFile, DateTime.UtcNow.ToString("O"), stoppingToken); }
+            catch { /* Non-critical */ }
+
             try
             {
                 using var checkJim = new JimApplication(new PostgresDataRepository(new JimDbContext()));
@@ -75,6 +83,10 @@ public class Scheduler : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            // Touch the healthcheck file each polling cycle so Docker knows the main loop is alive
+            try { await File.WriteAllTextAsync(healthcheckFile, DateTime.UtcNow.ToString("O"), stoppingToken); }
+            catch { /* Non-critical */ }
+
             try
             {
                 // Create a fresh JimApplication instance for each polling cycle

@@ -109,8 +109,16 @@ public class Worker : BackgroundService
         if (recoveredCount > 0)
             Log.Warning("ExecuteAsync: Recovered {Count} stale worker task(s) from previous crash", recoveredCount);
 
+        // Healthcheck heartbeat file path — Docker healthcheck monitors this file's age
+        // to determine if the worker's main loop is still executing.
+        const string healthcheckFile = "/tmp/healthcheck";
+
         while (!stoppingToken.IsCancellationRequested)
         {
+            // Touch the healthcheck file each iteration so Docker knows the main loop is alive
+            try { await File.WriteAllTextAsync(healthcheckFile, DateTime.UtcNow.ToString("O"), stoppingToken); }
+            catch { /* Non-critical — don't let healthcheck IO fail the main loop */ }
+
             // if processing no tasks:
             //      get the next batch of parallel tasks and execute them all at once or the next sequential task and execute that
             // if processing tasks:
