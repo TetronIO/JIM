@@ -134,6 +134,13 @@ public interface IMetaverseRepository
     public Task SetDeletedMetaverseObjectIdAsync(Guid changeId, Guid metaverseObjectId);
 
     /// <summary>
+    /// Inserts a MetaverseObjectChange and its attribute changes via raw SQL,
+    /// bypassing the EF Core change tracker. Used for deletion change records to avoid
+    /// SaveChangesAsync flushing other tracked entities with stale FK references.
+    /// </summary>
+    public Task CreateMetaverseObjectChangeDirectAsync(MetaverseObjectChange change);
+
+    /// <summary>
     /// Gets Metaverse Objects that are eligible for automatic deletion based on deletion rules.
     /// Returns MVOs where:
     /// - Origin = Projected (not Internal - protects admin accounts)

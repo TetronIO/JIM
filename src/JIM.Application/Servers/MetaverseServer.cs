@@ -594,12 +594,12 @@ public class MetaverseServer
             // exists — GetDeletedMvoChangeHistoryAsync finds related changes via DeletedObjectDisplayName
             // and DeletedObjectTypeId instead.
             await Application.Repository.Metaverse.DeleteMetaverseObjectAsync(metaverseObject);
-            await Application.Repository.Metaverse.CreateMetaverseObjectChangeAsync(change);
 
-            // Ensure DeletedMetaverseObjectId is set on the deletion change record.
-            // EF Core may not persist it correctly due to entity tracking state after deletion,
-            // so we set it via raw SQL as a safety measure.
-            await Application.Repository.Metaverse.SetDeletedMetaverseObjectIdAsync(change.Id, mvoId);
+            // Insert the change record via raw SQL, bypassing EF Core's change tracker.
+            // Using CreateMetaverseObjectChangeAsync (which calls SaveChangesAsync) would flush
+            // ALL tracked entities, including CSOs with stale FK references to the just-deleted MVO,
+            // causing FK constraint violations.
+            await Application.Repository.Metaverse.CreateMetaverseObjectChangeDirectAsync(change);
             return;
         }
 

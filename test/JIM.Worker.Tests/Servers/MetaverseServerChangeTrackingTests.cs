@@ -380,7 +380,7 @@ public class MetaverseServerChangeTrackingTests
 
         MetaverseObjectChange? capturedChange = null;
         _mockMetaverseRepo
-            .Setup(r => r.CreateMetaverseObjectChangeAsync(It.IsAny<MetaverseObjectChange>()))
+            .Setup(r => r.CreateMetaverseObjectChangeDirectAsync(It.IsAny<MetaverseObjectChange>()))
             .Callback<MetaverseObjectChange>(c => capturedChange = c)
             .Returns(Task.CompletedTask);
 
@@ -439,7 +439,7 @@ public class MetaverseServerChangeTrackingTests
 
         MetaverseObjectChange? capturedChange = null;
         _mockMetaverseRepo
-            .Setup(r => r.CreateMetaverseObjectChangeAsync(It.IsAny<MetaverseObjectChange>()))
+            .Setup(r => r.CreateMetaverseObjectChangeDirectAsync(It.IsAny<MetaverseObjectChange>()))
             .Callback<MetaverseObjectChange>(c => capturedChange = c)
             .Returns(Task.CompletedTask);
 
@@ -487,7 +487,7 @@ public class MetaverseServerChangeTrackingTests
 
         // Assert - no change record created, but MVO still deleted
         _mockMetaverseRepo.Verify(
-            r => r.CreateMetaverseObjectChangeAsync(It.IsAny<MetaverseObjectChange>()),
+            r => r.CreateMetaverseObjectChangeDirectAsync(It.IsAny<MetaverseObjectChange>()),
             Times.Never);
         _mockMetaverseRepo.Verify(
             r => r.DeleteMetaverseObjectAsync(mvo),
@@ -507,7 +507,7 @@ public class MetaverseServerChangeTrackingTests
 
         MetaverseObjectChange? capturedChange = null;
         _mockMetaverseRepo
-            .Setup(r => r.CreateMetaverseObjectChangeAsync(It.IsAny<MetaverseObjectChange>()))
+            .Setup(r => r.CreateMetaverseObjectChangeDirectAsync(It.IsAny<MetaverseObjectChange>()))
             .Callback<MetaverseObjectChange>(c => capturedChange = c)
             .Returns(Task.CompletedTask);
 
@@ -542,7 +542,7 @@ public class MetaverseServerChangeTrackingTests
 
         MetaverseObjectChange? capturedChange = null;
         _mockMetaverseRepo
-            .Setup(r => r.CreateMetaverseObjectChangeAsync(It.IsAny<MetaverseObjectChange>()))
+            .Setup(r => r.CreateMetaverseObjectChangeDirectAsync(It.IsAny<MetaverseObjectChange>()))
             .Callback<MetaverseObjectChange>(c => capturedChange = c)
             .Returns(Task.CompletedTask);
 
