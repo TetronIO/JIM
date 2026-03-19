@@ -7,25 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-03-19
+
 ### Added
 
 - ✨ `GET /api/v1/userinfo` endpoint — returns the authenticated user's JIM identity, roles, and authorisation status without requiring Administrator privileges
 - ✨ `Connect-JIM` now verifies authorisation after authentication and warns if the user has no JIM identity, with clear guidance to sign in via the web portal first
 - 🖥️ Improved 403 error messages in the PowerShell module — now explains the likely cause (no JIM identity) and how to resolve it
+- 🖥️ Properties tab on the Metaverse Object detail page — shows creation date, last modified, and clickable initiator links
+- 🖥️ Form and table view toggle on the Metaverse Object detail page
+- 🖥️ Server-side paginated dialog for large multi-valued attributes on the MVO detail page
+- 🖥️ Object type chip prefix on reference values in MVO table view
+- 🖥️ Server-side paging on the schema attributes table
+- 🖥️ Sortable columns on the staging object attribute table
+- ✨ Activity tracking for initial admin user creation
+- 🔒 `Connect-JIM` now skips the authorisation check when using API key authentication
 
 ### Changed
 
-- 🎨 New default theme — "Navy O6" features a deeper navy background with a purple accent palette, improved button contrast for outlined and text variants, and refined surface colours for better visual depth
-- 🎨 Switched web font from Roboto to Inter — self-hosted for air-gapped deployment, delivering improved readability and a modern feel
-- 🎨 Light mode chip contrast boosted across all colour variants to match the high-contrast dark mode treatment — no more washed-out pastels
-- 🐛 Secondary button hover colour now correctly uses the secondary palette tint instead of an incorrect blue
-- 🗑️ Removed legacy navy-o1 through navy-o4 themes — consolidated to navy-o5 and the new navy-o6 default
+- 🎨 New default theme with a refined colour palette — deeper backgrounds, improved button and chip contrast across dark and light modes, and better visual hierarchy for a more polished, readable experience
+- 🎨 Switched web font to Inter — self-hosted for air-gapped deployment, delivering improved readability and a modern feel
+- 🗑️ Removed legacy themes consolidated into the new default
+- 🔄 "Connected System Objects" pages renamed to "Staging" with cleaner URL structure and improved introductory UX
 - 🔄 "Data Generation" renamed to "Example Data" across the entire stack for consistent naming — models, API routes (`/example-data/`), PowerShell cmdlets (`Get-JIMExampleDataTemplate`, `Invoke-JIMExampleDataTemplate`), database tables, and UI all now share the "Example Data" family prefix
 - ⚡ Database migrations flattened into a single `InitialCreate` migration for faster first-start performance and simpler codebase
+- 🖥️ Redesigned object matching tab layout and combined status chips on the RPEI detail page
 
 ### Fixed
 
 - 🐛 Resolved intermittent DbContext concurrency errors across all Blazor Server pages — overlapping async lifecycle methods (e.g. data load and table pagination) no longer share a single database context
+- 🐛 FK violation in import change history bulk persistence no longer causes import failures
+- 🐛 `HasPredefinedSearches` now returns the correct value for object types with predefined searches
+- 🐛 Spurious pending exports no longer surface during full sync operations
 
 #### Deleted Object Change History
 
@@ -40,14 +53,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 References to objects processed later on the same sync page are now resolved via a post-page resolution pass
 - 🐛 Resolved reference attributes (e.g. group members) now appear in export causality tree attribute changes — previously they were silently dropped
 - 🖥️ Pending export references show a "pending export" indicator to distinguish them from fully resolved and genuinely unresolved references
-- 🔒 Unresolved reference fail-fast assertions added to integration test Scenarios 1, 2, and 8
 
-#### Database Resilience (#408)
+#### Database Resilience (#408, #409)
 
 - 🐛 Transient database errors now return HTTP 503 (Service Unavailable) with a `Retry-After` header instead of HTTP 400 (Bad Request)
+- 🐛 Cross-batch reference fixup hardened against database timeouts and FK gaps at scale
 - ⚡ Transient database failures handled gracefully at API level with retry guidance
 - ⚡ Connection pool sizing reduced from 50 to 30 per service to leave headroom within PostgreSQL's `max_connections`
 - 📦 Development database (`db.yml`) now explicitly sets `max_connections=200` to match the full Docker stack
+
+### Performance
+
+- ⚡ MVO detail page now caps multi-valued attribute values with server-side pagination, dramatically reducing load time for objects with large MVAs
+- ⚡ Pending export reconciliation query optimised with sub-phase progress messages
 
 ## [0.6.1] - 2026-03-15
 
@@ -379,7 +397,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Air-gapped deployment bundle support
 - PowerShell Gallery publishing
 
-[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/TetronIO/JIM/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/TetronIO/JIM/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/TetronIO/JIM/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/TetronIO/JIM/compare/v0.4.0...v0.5.0
