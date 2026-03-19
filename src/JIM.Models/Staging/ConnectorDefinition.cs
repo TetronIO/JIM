@@ -121,5 +121,12 @@ public class ConnectorDefinition : IAuditable, IConnectorCapabilities
     /// Connectors that hold exclusive file locks or write to shared resources should return false.
     /// </summary>
     public bool SupportsParallelExport { get; set; }
+
+    /// <summary>
+    /// Does the Connector support paged imports/exports? When true, the Page Size setting
+    /// is shown on run profiles so the user can control how many items the connector retrieves
+    /// per request.
+    /// </summary>
+    public bool SupportsPaging { get; set; }
     #endregion
 }

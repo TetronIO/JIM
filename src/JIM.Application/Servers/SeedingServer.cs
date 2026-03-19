@@ -971,7 +971,8 @@ internal class SeedingServer
             existingDefinition.SupportsUserSelectedExternalId != connectorCapabilities.SupportsUserSelectedExternalId ||
             existingDefinition.SupportsUserSelectedAttributeTypes != connectorCapabilities.SupportsUserSelectedAttributeTypes ||
             existingDefinition.SupportsAutoConfirmExport != connectorCapabilities.SupportsAutoConfirmExport ||
-            existingDefinition.SupportsParallelExport != connectorCapabilities.SupportsParallelExport)
+            existingDefinition.SupportsParallelExport != connectorCapabilities.SupportsParallelExport ||
+            existingDefinition.SupportsPaging != connectorCapabilities.SupportsPaging)
         {
             existingDefinition.SupportsFullImport = connectorCapabilities.SupportsFullImport;
             existingDefinition.SupportsDeltaImport = connectorCapabilities.SupportsDeltaImport;
@@ -983,6 +984,7 @@ internal class SeedingServer
             existingDefinition.SupportsUserSelectedAttributeTypes = connectorCapabilities.SupportsUserSelectedAttributeTypes;
             existingDefinition.SupportsAutoConfirmExport = connectorCapabilities.SupportsAutoConfirmExport;
             existingDefinition.SupportsParallelExport = connectorCapabilities.SupportsParallelExport;
+            existingDefinition.SupportsPaging = connectorCapabilities.SupportsPaging;
             hasChanges = true;
             Log.Information($"SyncConnectorDefinitionAsync: Updated capability flags for '{connector.Name}'");
         }
@@ -1157,7 +1159,9 @@ internal class SeedingServer
             SupportsSecondaryExternalId = connectorCapabilities.SupportsSecondaryExternalId,
             SupportsUserSelectedExternalId = connectorCapabilities.SupportsUserSelectedExternalId,
             SupportsUserSelectedAttributeTypes = connectorCapabilities.SupportsUserSelectedAttributeTypes,
-            SupportsAutoConfirmExport = connectorCapabilities.SupportsAutoConfirmExport
+            SupportsAutoConfirmExport = connectorCapabilities.SupportsAutoConfirmExport,
+            SupportsParallelExport = connectorCapabilities.SupportsParallelExport,
+            SupportsPaging = connectorCapabilities.SupportsPaging
         };
 
         Application.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition(connectorSettings, connectorDefinition);

@@ -33,11 +33,14 @@
                     </MudTableSortLabel>
                 </MudTh>
             }
-            <MudTh>
-                <MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.PageSize)">
-                    <MudText Typo="Typo.button">Page Size</MudText>
-                </MudTableSortLabel>
-            </MudTh>
+            @if (ConnectedSystem.ConnectorDefinition.SupportsPaging)
+            {
+                <MudTh>
+                    <MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.PageSize)">
+                        <MudText Typo="Typo.button">Page Size</MudText>
+                    </MudTableSortLabel>
+                </MudTh>
+            }
             <MudTh>
                 <MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.FilePath!)">
                     <MudText Typo="Typo.button">File Path</MudText>
@@ -54,7 +57,10 @@
             {
                 <MudTd DataLabel="Partition">@(context.Partition != null ? context.Partition.Name : "-")</MudTd>
             }
-            <MudTd DataLabel="Page Size">@context.PageSize</MudTd>
+            @if (ConnectedSystem.ConnectorDefinition.SupportsPaging)
+            {
+                <MudTd DataLabel="Page Size">@context.PageSize</MudTd>
+            }
             <MudTd DataLabel="File Path">
                 @if (!string.IsNullOrEmpty(context.FilePath))
                 {
@@ -66,6 +72,10 @@
                 }
             </MudTd>
             <MudTd DataLabel="Actions" Style="text-align: center">
+                <MudTooltip Text="Edit" Arrow="true" Placement="Placement.Top">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Variant="Variant.Filled"
+                                   Size="Size.Small" OnClick="_ => HandleShowEditRunProfileDialogAsync(context)" Class="me-2" />
+                </MudTooltip>
                 <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
                     <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Variant="Variant.Filled"
                                    Size="Size.Small" OnClick="_ => HandleRunProfileDeleteAsync(context)" />
@@ -144,9 +154,7 @@
                     </MudSelect>
                 }
 
-                @if (_newRunProfile.RunType == ConnectedSystemRunType.FullImport ||
-                                                                                 _newRunProfile.RunType == ConnectedSystemRunType.DeltaImport ||
-                                                                                 _newRunProfile.RunType == ConnectedSystemRunType.Export)
+                @if (ConnectedSystem.ConnectorDefinition.SupportsPaging)
                 {
                     <MudNumericField @bind-Value="_newRunProfile.PageSize" Label="Page Size" Variant="Variant.Outlined"
                                      Class="mt-3" Min="0" Step="100" Required="true"
@@ -164,6 +172,62 @@
         </DialogActions>
     </MudDialog>
 
+    @* Edit Run Profile Dialog *@
+    <MudDialog @bind-Visible="_editRunProfileDialogVisible" Options="_newRunProfileDialogOptions">
+        <TitleContent>
+            <MudText Typo="Typo.h6">
+                <MudIcon Icon="@Icons.Material.Filled.Edit" Class="me-3" /> Edit Run Profile
+            </MudText>
+        </TitleContent>
+        <DialogContent>
+            <MudForm @bind-IsValid="@_isEditRunProfileFormValid">
+                <MudTextField T="string" @bind-Value="_editRunProfile.Name" Label="Name" Variant="Variant.Outlined"
+                              Class="mt-3" Required="true" RequiredError="A name for the run profile is required" />
+
+                <MudTextField T="string" Value="@_editRunProfile.RunType.ToString().SplitOnCapitalLetters()" Label="Run Type"
+                              Variant="Variant.Outlined" Class="mt-5" Disabled="true"
+                              HelperText="The run type cannot be changed. Delete and recreate the profile to use a different type." />
+
+                @if (_editRunProfile.RunType == ConnectedSystemRunType.FullImport ||
+                                                                                 _editRunProfile.RunType == ConnectedSystemRunType.DeltaImport ||
+                                                                                 _editRunProfile.RunType == ConnectedSystemRunType.Export)
+                {
+                    <MudTextField T="string" @bind-Value="_editRunProfile.FilePath" Label="File Path" Variant="Variant.Outlined"
+                                  Class="mt-3"
+                                  HelperText="File-based connectors need the in-container path specifying, i.e. /var/connector-files/test-data/Users.csv" />
+                }
+
+                @if (ConnectedSystem.ConnectorDefinition.SupportsPartitions && ConnectedSystem.Partitions != null)
+                {
+                    <MudSelect T="ConnectedSystemPartition" @bind-Value="_editRunProfile.Partition" Label="Partition"
+                               Variant="Variant.Outlined" Class="mt-5" AnchorOrigin="Origin.BottomLeft"
+                               Required="@ConnectedSystem.ConnectorDefinition.SupportsPartitions"
+                               RequiredError="A run profile partition is required">
+                        @foreach (var partition in ConnectedSystem.Partitions.Where(p => p.Selected))
+                        {
+                            <MudSelectItem Value="@partition" />
+                        }
+                    </MudSelect>
+                }
+
+                @if (ConnectedSystem.ConnectorDefinition.SupportsPaging)
+                {
+                    <MudNumericField @bind-Value="_editRunProfile.PageSize" Label="Page Size" Variant="Variant.Outlined"
+                                     Class="mt-3" Min="0" Step="100" Required="true"
+                                     RequiredError="How many items to process in one go when importing/exporting" />
+                }
+            </MudForm>
+        </DialogContent>
+        <DialogActions>
+            <MudButton OnClick="@(() => _editRunProfileDialogVisible = false)" DropShadow="false">Cancel</MudButton>
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
+                       OnClick="HandleEditRunProfileFormSubmitAsync"
+                       Disabled="@(!_isEditRunProfileFormValid)">
+                Save Changes
+            </MudButton>
+        </DialogActions>
+    </MudDialog>
+
 @code {
     [Parameter, EditorRequired]
     public ConnectedSystem ConnectedSystem { get; set; } = null!;
@@ -175,6 +239,11 @@
     private ConnectedSystemRunProfile _newRunProfile = new() { RunType = ConnectedSystemRunType.NotSet };
     private readonly DialogOptions _newRunProfileDialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Small };
     private bool _newRunProfileDialogVisible;
+
+    private bool _isEditRunProfileFormValid;
+    private ConnectedSystemRunProfile _editRunProfile = new();
+    private ConnectedSystemRunProfile? _editRunProfileOriginal;
+    private bool _editRunProfileDialogVisible;
 
     private string? ValidateRunType(ConnectedSystemRunType runType)
     {
@@ -227,6 +296,52 @@
         catch
         {
             Snackbar.Add("Failed to create run profile. Please try again.", Severity.Error);
+        }
+    }
+
+    private Task HandleShowEditRunProfileDialogAsync(ConnectedSystemRunProfile runProfile)
+    {
+        _editRunProfileOriginal = runProfile;
+        _editRunProfile = new ConnectedSystemRunProfile
+        {
+            Id = runProfile.Id,
+            ConnectedSystemId = runProfile.ConnectedSystemId,
+            Name = runProfile.Name,
+            RunType = runProfile.RunType,
+            PageSize = runProfile.PageSize,
+            FilePath = runProfile.FilePath,
+            Partition = runProfile.Partition
+        };
+        _editRunProfileDialogVisible = true;
+        return Task.CompletedTask;
+    }
+
+    private async Task HandleEditRunProfileFormSubmitAsync()
+    {
+        if (_editRunProfileOriginal == null)
+            return;
+
+        var selectedPartition = _editRunProfile.Partition;
+
+        _editRunProfileOriginal.Name = _editRunProfile.Name;
+        _editRunProfileOriginal.PageSize = _editRunProfile.PageSize;
+        _editRunProfileOriginal.FilePath = _editRunProfile.FilePath;
+        _editRunProfileOriginal.Partition = selectedPartition;
+
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            await jim.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(_editRunProfileOriginal, user);
+
+            _editRunProfileOriginal.Partition = selectedPartition;
+
+            Snackbar.Add("Run profile updated.", Severity.Success);
+            _editRunProfileDialogVisible = false;
+        }
+        catch
+        {
+            Snackbar.Add("Failed to update run profile. Please try again.", Severity.Error);
         }
     }
 
