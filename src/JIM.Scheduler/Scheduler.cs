@@ -1,10 +1,8 @@
 using JIM.Application;
-using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Scheduling;
 using JIM.Models.Tasking;
-using JIM.PostgresData;
 using Serilog;
 using Serilog.Formatting.Compact;
 
@@ -38,15 +36,18 @@ namespace JIM.Scheduler;
 
 public class Scheduler : BackgroundService
 {
+    private readonly IJimApplicationFactory _jimFactory;
+
+    public Scheduler(IJimApplicationFactory jimFactory)
+    {
+        _jimFactory = jimFactory;
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         InitialiseLogging();
 
         Log.Information("Starting JIM.Scheduler...");
-
-        // Create credential protection service for encrypting/decrypting secrets
-        // This uses the shared key storage to ensure consistency with JIM.Web and JIM.Worker
-        var credentialProtection = new CredentialProtectionService(DataProtectionHelper.CreateProvider());
 
         // Healthcheck heartbeat file path — Docker healthcheck monitors this file's age
         // to determine if the scheduler's main loop is still executing.
@@ -64,7 +65,7 @@ public class Scheduler : BackgroundService
 
             try
             {
-                using var checkJim = new JimApplication(new PostgresDataRepository(new JimDbContext()));
+                using var checkJim = _jimFactory.Create();
                 if (await checkJim.IsApplicationReadyAsync())
                 {
                     Log.Information("Application is ready.");
@@ -91,8 +92,7 @@ public class Scheduler : BackgroundService
             {
                 // Create a fresh JimApplication instance for each polling cycle
                 // to avoid EF context caching issues
-                using var jim = new JimApplication(new PostgresDataRepository(new JimDbContext()));
-                jim.CredentialProtection = credentialProtection;
+                using var jim = _jimFactory.Create();
 
                 // Step 1: Update next run times for cron-based schedules
                 await jim.Scheduler.UpdateNextRunTimesAsync();

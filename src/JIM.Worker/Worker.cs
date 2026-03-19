@@ -1,9 +1,6 @@
 using JIM.Application;
 using JIM.Application.Diagnostics;
-using JIM.Application.Services;
 using JIM.Connectors;
-using JIM.Connectors.File;
-using JIM.Connectors.LDAP;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
@@ -11,9 +8,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
-using JIM.PostgresData;
 using JIM.Worker.Processors;
-using Microsoft.Extensions.Caching.Memory;
 using Serilog;
 using Serilog.Formatting.Compact;
 using Serilog.Formatting.Json;
@@ -51,17 +46,20 @@ namespace JIM.Worker;
 
 public class Worker : BackgroundService
 {
+    private readonly IJimApplicationFactory _jimFactory;
+    private readonly IConnectorFactory _connectorFactory;
+
     /// <summary>
     /// The worker tasks currently being executed.
     /// </summary>
     private List<TaskTask> CurrentTasks { get; } = new();
     private readonly object _currentTasksLock = new();
 
-    /// <summary>
-    /// Service-lifetime memory cache shared across all JimApplication instances.
-    /// Used for CSO external ID lookup indexing to eliminate N+1 import queries.
-    /// </summary>
-    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
+    public Worker(IJimApplicationFactory jimFactory, IConnectorFactory connectorFactory)
+    {
+        _jimFactory = jimFactory;
+        _connectorFactory = connectorFactory;
+    }
 
     /// <summary>
     /// Maximum number of connected systems to warm concurrently during startup.
@@ -82,15 +80,10 @@ public class Worker : BackgroundService
 
         Log.Information("Starting JIM.Worker — connection pool: Min={MinPoolSize}, Max={MaxPoolSize}",  5, 30);
 
-        // Create credential protection service for encrypting/decrypting secrets
-        // This uses the shared key storage to ensure consistency with JIM.Web
-        var credentialProtection = new CredentialProtectionService(DataProtectionHelper.CreateProvider());
-
         // as JIM.Worker is the first JimApplication client to start, it's responsible for ensuring the database is initialised.
         // other JimApplication clients will need to check if the app is ready before completing their initialisation.
         // JimApplication instances are ephemeral and should be disposed as soon as a request/batch of work is complete (for database tracking reasons).
-        using var mainLoopJim = new JimApplication(new PostgresDataRepository(new JimDbContext()), _cache);
-        mainLoopJim.CredentialProtection = credentialProtection;
+        using var mainLoopJim = _jimFactory.Create();
         await mainLoopJim.InitialiseDatabaseAsync();
 
         // Warm the CSO lookup cache for all connected systems before accepting tasks.
@@ -197,8 +190,7 @@ public class Worker : BackgroundService
                             // create an instance of JIM, specific to the processing of this task.
                             // we can't use the main-loop instance, due to Entity Framework having connection sharing issues.
                             // IMPORTANT: taskJim must be disposed to release database connections and prevent deadlocks.
-                            using var taskJim = new JimApplication(new PostgresDataRepository(new JimDbContext()), _cache);
-                            taskJim.CredentialProtection = credentialProtection;
+                            using var taskJim = _jimFactory.Create();
 
                             // we want to re-retrieve the worker task using this instance of JIM, so there's no chance of any cross-JIM-instance issues
                             var newWorkerTask = await taskJim.Tasking.GetWorkerTaskAsync(mainLoopNewWorkerTask.Id) ??
@@ -280,15 +272,8 @@ public class Worker : BackgroundService
                                         var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(syncWorkerTask.ConnectedSystemId);
                                         if (connectedSystem != null)
                                         {
-                                            // work out what connector we need to use
-                                            // todo: run through built-in connectors first, then do a lookup for user-supplied connectors
-                                            IConnector connector;
-                                            if (connectedSystem.ConnectorDefinition.Name == ConnectorConstants.LdapConnectorName)
-                                                connector = new LdapConnector();
-                                            else if (connectedSystem.ConnectorDefinition.Name == ConnectorConstants.FileConnectorName)
-                                                connector = new FileConnector();
-                                            else
-                                                throw new NotSupportedException($"{connectedSystem.ConnectorDefinition.Name} connector not yet supported for worker processing.");
+                                            // Resolve the connector for this connected system's connector definition
+                                            var connector = _connectorFactory.Create(connectedSystem.ConnectorDefinition.Name);
 
                                             // work out what type of run profile we're being asked to run
                                             var runProfile = connectedSystem.RunProfiles?.SingleOrDefault(rp => rp.Id == syncWorkerTask.ConnectedSystemRunProfileId);
@@ -508,7 +493,7 @@ public class Worker : BackgroundService
             try
             {
                 // Each warming task needs its own JimApplication/DbContext to avoid connection sharing issues
-                using var warmJim = new JimApplication(new PostgresDataRepository(new JimDbContext()), _cache);
+                using var warmJim = _jimFactory.Create();
                 await warmJim.ConnectedSystems.WarmCsoCacheAsync(cs.Id, cs.Name);
             }
             catch (Exception ex)
@@ -936,8 +921,7 @@ public class Worker : BackgroundService
                 // Last resort: Create a new DbContext and try to update the activity
                 try
                 {
-                    using var emergencyContext = new JimDbContext();
-                    var emergencyJim = new JimApplication(new PostgresDataRepository(emergencyContext), _cache);
+                    using var emergencyJim = _jimFactory.Create();
                     var freshActivity = await emergencyJim.Activities.GetActivityAsync(activity.Id);
                     if (freshActivity != null && freshActivity.Status == ActivityStatus.InProgress)
                     {

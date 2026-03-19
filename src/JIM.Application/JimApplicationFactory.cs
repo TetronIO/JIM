@@ -1,13 +1,11 @@
-using JIM.Application;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace JIM.Web.Services;
+namespace JIM.Application;
 
 /// <summary>
-/// Creates short-lived <see cref="JimApplication"/> instances for Blazor Server components.
+/// Creates short-lived <see cref="JimApplication"/> instances via the DI container.
 /// Each call to <see cref="Create"/> resolves a new transient JimApplication with its own
-/// DbContext, preventing concurrent access errors when multiple Blazor lifecycle methods
-/// overlap (e.g. OnInitializedAsync and OnAfterRenderAsync).
+/// DbContext, preventing concurrent access errors when multiple tasks run in parallel.
 /// </summary>
 public class JimApplicationFactory : IJimApplicationFactory
 {
