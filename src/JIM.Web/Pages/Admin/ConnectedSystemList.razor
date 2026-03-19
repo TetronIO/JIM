@@ -1,10 +1,9 @@
 ﻿@page "/admin/connected-systems"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Application
 @using JIM.Models.Staging.DTOs
 @using JIM.Utilities;
 @using System;
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 
 <PageTitle>Connected Systems</PageTitle>
 <MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Connected Systems</MudText>
@@ -101,7 +100,8 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+        using var jim = JimFactory.Create();
+        _connectedSystemHeaders = await jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
     }
 
     private static int GetPercentage(int total, int part)

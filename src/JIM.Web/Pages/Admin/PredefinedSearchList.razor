@@ -1,8 +1,7 @@
 @page "/admin/predefined-searches"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Application
 @using JIM.Models.Search.DTOs
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 
 <PageTitle>Predefined Searches</PageTitle>
@@ -103,7 +102,8 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _predefinedSearchHeaders = await Jim.Search.GetPredefinedSearchHeadersAsync();
+        using var jim = JimFactory.Create();
+        _predefinedSearchHeaders = await jim.Search.GetPredefinedSearchHeadersAsync();
         _loading = false;
     }
 

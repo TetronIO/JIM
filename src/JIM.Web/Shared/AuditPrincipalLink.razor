@@ -1,7 +1,6 @@
-@using JIM.Application
 @using JIM.Models.Activities
 @using JIM.Utilities
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 
 @if (PrincipalType == ActivityInitiatorType.User && PrincipalId.HasValue)
 {
@@ -41,7 +40,8 @@ else
 
         if (PrincipalType == ActivityInitiatorType.User && PrincipalId.HasValue)
         {
-            var mvo = await Jim.Metaverse.GetMetaverseObjectAsync(PrincipalId.Value);
+            using var jim = JimFactory.Create();
+            var mvo = await jim.Metaverse.GetMetaverseObjectAsync(PrincipalId.Value);
             if (mvo?.Type != null)
             {
                 _mvoHref = Utilities.GetMetaverseObjectHref(mvo.Id, mvo.Type.PluralName);

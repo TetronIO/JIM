@@ -120,6 +120,27 @@ public interface IMetaverseRepository
     public Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject);
 
     /// <summary>
+    /// Explicitly loads the AttributeValues (and their Attribute navigation) for an MVO
+    /// that was queried without them. Used to capture final attribute state before deletion.
+    /// </summary>
+    /// <param name="metaverseObject">The MVO to load attribute values for.</param>
+    public Task LoadMetaverseObjectAttributeValuesAsync(MetaverseObject metaverseObject);
+
+    /// <summary>
+    /// Sets the DeletedMetaverseObjectId on a change record via raw SQL.
+    /// Used as a safety measure after saving deletion change records, since EF Core
+    /// entity tracking state after MVO deletion may not persist the value correctly.
+    /// </summary>
+    public Task SetDeletedMetaverseObjectIdAsync(Guid changeId, Guid metaverseObjectId);
+
+    /// <summary>
+    /// Inserts a MetaverseObjectChange and its attribute changes via raw SQL,
+    /// bypassing the EF Core change tracker. Used for deletion change records to avoid
+    /// SaveChangesAsync flushing other tracked entities with stale FK references.
+    /// </summary>
+    public Task CreateMetaverseObjectChangeDirectAsync(MetaverseObjectChange change);
+
+    /// <summary>
     /// Gets Metaverse Objects that are eligible for automatic deletion based on deletion rules.
     /// Returns MVOs where:
     /// - Origin = Projected (not Internal - protects admin accounts)

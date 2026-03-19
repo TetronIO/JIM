@@ -1,12 +1,11 @@
 @page "/admin/schema"
 @page "/admin/schema/attributes"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Application
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
 @using JIM.Utilities
 @using JIM.Web.Services
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavigationManager
 @inject IUserPreferenceService PreferenceService
 
@@ -163,7 +162,8 @@
             _activeTabIndex = 1;
         }
 
-        _metaverseObjectTypeHeaders = await Jim.Metaverse.GetMetaverseObjectTypeHeadersAsync();
+        using var jim = JimFactory.Create();
+        _metaverseObjectTypeHeaders = await jim.Metaverse.GetMetaverseObjectTypeHeadersAsync();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -200,7 +200,8 @@
             var page = state.Page + 1;
             var sortDescending = state.SortDirection == SortDirection.Descending;
 
-            var result = await Jim.Metaverse.GetMetaverseAttributeHeadersAsync(
+            using var jim = JimFactory.Create();
+            var result = await jim.Metaverse.GetMetaverseAttributeHeadersAsync(
                 page,
                 state.PageSize,
                 string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,

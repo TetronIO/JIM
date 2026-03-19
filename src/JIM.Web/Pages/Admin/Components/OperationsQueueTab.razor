@@ -1,11 +1,10 @@
-@using JIM.Application
 @using JIM.Models.Core
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Tasking
 @using JIM.Models.Tasking.DTOs
 @using JIM.Utilities
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject NavigationManager NavigationManager
@@ -256,7 +255,8 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        _connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+        using var jim = JimFactory.Create();
+        _connectedSystemHeaders = await jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
 
         // In development, ?demo query string activates demo mode with mock data
         if (Environment.IsDevelopment())
@@ -265,7 +265,7 @@ else
             var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
             if (query.ContainsKey("demo"))
             {
-                var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+                var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
                 _workerTaskHeaders = GenerateDemoData(user.Id, user.DisplayName ?? "Unknown User");
                 _hasProcessingTasks = _workerTaskHeaders.Any(t => t.Status == WorkerTaskStatus.Processing);
                 return;
@@ -273,7 +273,7 @@ else
         }
 
         // Get initial data for worker task table rendering
-        _workerTaskHeaders = await Jim.Tasking.GetWorkerTaskHeadersAsync();
+        _workerTaskHeaders = await jim.Tasking.GetWorkerTaskHeadersAsync();
         _hasProcessingTasks = _workerTaskHeaders.Any(t => t.Status == WorkerTaskStatus.Processing);
 
         // Setup polling for worker task header updates
@@ -285,7 +285,8 @@ else
                 try
                 {
                     var stateHasChanged = false;
-                    var newWorkerTaskHeaders = await Jim.Tasking.GetWorkerTaskHeadersAsync();
+                    using var pollJim = JimFactory.Create();
+                    var newWorkerTaskHeaders = await pollJim.Tasking.GetWorkerTaskHeadersAsync();
 
                     // Look for additions or updates
                     foreach (var newWorkerTaskHeader in newWorkerTaskHeaders)
@@ -343,7 +344,8 @@ else
     private async Task HandleConnectedSystemHeaderChangedAsync(ConnectedSystemHeader connectedSystemHeader)
     {
         _selectedConnectedSystemHeader = connectedSystemHeader;
-        _connectedSystemRunProfiles = await Jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemHeader.Id);
+        using var jim = JimFactory.Create();
+        _connectedSystemRunProfiles = await jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemHeader.Id);
     }
 
     private async Task HandleExecuteRunProfileSubmitAsync()
@@ -351,9 +353,10 @@ else
         if (_selectedConnectedSystemHeader == null || _selectedConnectedSystemRunProfile == null)
             return;
 
-        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
         var task = SynchronisationWorkerTask.ForUser(_selectedConnectedSystemHeader.Id, _selectedConnectedSystemRunProfile.Id, user.Id, user.DisplayName ?? "Unknown User");
-        var result = await Jim.Tasking.CreateWorkerTaskAsync(task);
+        var result = await jim.Tasking.CreateWorkerTaskAsync(task);
 
         if (!result.Success)
         {
@@ -383,7 +386,8 @@ else
         if (result != true)
             return;
 
-        await Jim.Tasking.RequestWorkerTaskCancellationAsync(workerTaskHeader.Id);
+        using var jim = JimFactory.Create();
+        await jim.Tasking.RequestWorkerTaskCancellationAsync(workerTaskHeader.Id);
         Snackbar.Add("Worker task cancellation requested.", Severity.Success);
     }
 
@@ -403,7 +407,8 @@ else
         if (result != true)
             return;
 
-        var cancelled = await Jim.Scheduler.CancelScheduleExecutionAsync(scheduleExecutionId);
+        using var jim = JimFactory.Create();
+        var cancelled = await jim.Scheduler.CancelScheduleExecutionAsync(scheduleExecutionId);
         if (cancelled)
         {
             Snackbar.Add("Schedule execution cancelled.", Severity.Success);

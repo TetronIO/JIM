@@ -1,11 +1,10 @@
-@using JIM.Application
 @using JIM.Models.Activities
 @using JIM.Models.Enums
 @using JIM.Models.Staging
 @using JIM.Models.Utility
 @using JIM.Utilities
 @using JIM.Web.Services
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject IUserPreferenceService PreferenceService
 @implements IDisposable
@@ -563,7 +562,8 @@
     protected override async Task OnInitializedAsync()
     {
         // Load filter options (distinct connected systems and run profiles)
-        _filterOptions = await Jim.Activities.GetWorkerTaskActivityFilterOptionsAsync();
+        using var jim = JimFactory.Create();
+        _filterOptions = await jim.Activities.GetWorkerTaskActivityFilterOptionsAsync();
 
         // Setup polling for auto-refresh, only reloading when data has actually changed
         var token = _pollingCancellationTokenSource.Token;
@@ -585,7 +585,8 @@
                     var statuses = _filterStatuses.Any() ? _filterStatuses : null;
                     var initiatedBy = string.IsNullOrWhiteSpace(_filterInitiatedBy) ? null : _filterInitiatedBy;
 
-                    var result = await Jim.Activities.GetWorkerTaskActivitiesAsync(
+                    using var pollJim = JimFactory.Create();
+                    var result = await pollJim.Activities.GetWorkerTaskActivitiesAsync(
                         1, _rowsPerPage, connectedSystems, runProfiles, statuses, initiatedBy, "created", true,
                         _filterHasChildren ? true : null);
 
@@ -638,6 +639,7 @@
 
     private async Task<TableData<Activity>> ServerReload(TableState state, CancellationToken token)
     {
+        using var jim = JimFactory.Create();
         var page = state.Page + 1;
         var sortDescending = state.SortDirection == SortDirection.Descending;
 
@@ -647,7 +649,7 @@
         var statuses = _filterStatuses.Any() ? _filterStatuses : null;
         var initiatedBy = string.IsNullOrWhiteSpace(_filterInitiatedBy) ? null : _filterInitiatedBy;
 
-        var result = await Jim.Activities.GetWorkerTaskActivitiesAsync(
+        var result = await jim.Activities.GetWorkerTaskActivitiesAsync(
             page,
             state.PageSize,
             connectedSystems,

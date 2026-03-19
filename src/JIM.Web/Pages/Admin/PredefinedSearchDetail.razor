@@ -1,8 +1,7 @@
 ﻿@page "/admin/predefined-searches/{Uri}"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Application
 @using JIM.Models.Search
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 
 <PageTitle>Predefined Search: @_predefinedSearch?.Name</PageTitle>
@@ -89,7 +88,8 @@
             return;
         }
 
-        _predefinedSearch = await Jim.Search.GetPredefinedSearchAsync(Uri);
+        using var jim = JimFactory.Create();
+        _predefinedSearch = await jim.Search.GetPredefinedSearchAsync(Uri);
         if (_predefinedSearch == null)
         {
             // predefined search not found, redirect to index page

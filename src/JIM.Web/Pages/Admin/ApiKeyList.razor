@@ -1,11 +1,10 @@
 @page "/admin/apikeys"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Application
 @using JIM.Models.Security
 @using JIM.Web
 @using JIM.Web.Middleware.Api
 @using Humanizer
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -315,9 +314,10 @@
 
     private async Task LoadDataAsync()
     {
+        using var jim = JimFactory.Create();
         _loading = true;
-        _apiKeys = await Jim.Repository.ApiKeys.GetAllAsync();
-        _availableRoles = await Jim.Security.GetRolesAsync();
+        _apiKeys = await jim.Repository.ApiKeys.GetAllAsync();
+        _availableRoles = await jim.Security.GetRolesAsync();
         _loading = false;
     }
 
@@ -392,8 +392,9 @@
                 Roles = roles
             };
 
+            using var jim = JimFactory.Create();
             apiKey.Created = DateTime.UtcNow;
-            await Jim.Repository.ApiKeys.CreateAsync(apiKey);
+            await jim.Repository.ApiKeys.CreateAsync(apiKey);
 
             Snackbar.Add("API key created successfully.", Severity.Success);
             _createDialogVisible = false;
@@ -461,7 +462,8 @@
                 Roles = _editSelectedRoleIds.Select(id => new Role { Id = id }).ToList()
             };
 
-            await Jim.Repository.ApiKeys.UpdateAsync(updatedKey);
+            using var jim = JimFactory.Create();
+            await jim.Repository.ApiKeys.UpdateAsync(updatedKey);
 
             Snackbar.Add("API key updated successfully.", Severity.Success);
             _editDialogVisible = false;
@@ -490,7 +492,8 @@
 
         try
         {
-            await Jim.Repository.ApiKeys.DeleteAsync(apiKey.Id);
+            using var jim = JimFactory.Create();
+            await jim.Repository.ApiKeys.DeleteAsync(apiKey.Id);
 
             Snackbar.Add("API key deleted successfully.", Severity.Success);
             await LoadDataAsync();

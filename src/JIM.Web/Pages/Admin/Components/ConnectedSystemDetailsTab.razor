@@ -1,6 +1,5 @@
-@using JIM.Application
 @using JIM.Models.Staging
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
 
 <MudPaper Class="pa-4" Outlined="true">
@@ -43,8 +42,9 @@
 
     private async Task HandleValidDetailsSubmitAsync()
     {
-        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
-        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user);
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+        await jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user);
         Snackbar.Add("Your details changes have been saved.", Severity.Success);
     }
 }

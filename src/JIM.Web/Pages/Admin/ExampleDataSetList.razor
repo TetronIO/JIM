@@ -1,8 +1,7 @@
 ﻿@page "/admin/example-data/datasets"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Application
 @using JIM.Models.ExampleData.DTOs
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 
 <PageTitle>Example Data Sets</PageTitle>
 <MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.Science" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Example Data:</span> <span class="mud-primary-text">Data Sets</span></MudText>
@@ -62,7 +61,8 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _datasets = await Jim.ExampleData.GetExampleDataSetHeadersAsync();
+        using var jim = JimFactory.Create();
+        _datasets = await jim.ExampleData.GetExampleDataSetHeadersAsync();
     }
 
     private bool FilterFunc1(ExampleDataSetHeader element) => FilterFunc(element, _searchString);

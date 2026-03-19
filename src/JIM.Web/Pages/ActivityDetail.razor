@@ -1,6 +1,5 @@
 @page "/activity/{Id:guid}"
 @attribute [Authorize(Roles = "User")]
-@using JIM.Application
 @using JIM.Models.Activities;
 @using JIM.Models.Activities.DTOs;
 @using JIM.Models.Core.DTOs;
@@ -10,7 +9,7 @@
 @using JIM.Models.Utility;
 @using JIM.Utilities;
 @using JIM.Web.Services
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject IUserPreferenceService PreferenceService
 
@@ -680,7 +679,8 @@
         _selectedErrorTypes = new List<ActivityRunProfileExecutionItemErrorType>();
         _selectedOutcomeTypes = new List<ActivityRunProfileExecutionItemSyncOutcomeType>();
 
-        _activity = await Jim.Activities.GetActivityAsync(Id);
+        using var jim = JimFactory.Create();
+        _activity = await jim.Activities.GetActivityAsync(Id);
         if (_activity == null)
         {
             NavManager.NavigateTo("../");
@@ -690,15 +690,15 @@
         // Note: These queries run sequentially because EF Core's DbContext is not thread-safe.
         // The main performance win comes from the optimised GROUP BY query in GetActivityRunProfileExecutionStatsAsync.
         if (_activity.ConnectedSystemId.HasValue)
-            _connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(_activity.ConnectedSystemId.Value);
+            _connectedSystemHeader = await jim.ConnectedSystems.GetConnectedSystemHeaderAsync(_activity.ConnectedSystemId.Value);
 
         if (_activity.TargetType is ActivityTargetType.MetaverseObject or ActivityTargetType.ConnectedSystemRunProfile && _activity.MetaverseObjectId != null)
-            _metaverseObjectHeader = await Jim.Metaverse.GetMetaverseObjectHeaderAsync(_activity.MetaverseObjectId.Value);
+            _metaverseObjectHeader = await jim.Metaverse.GetMetaverseObjectHeaderAsync(_activity.MetaverseObjectId.Value);
 
         if (_activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && _activity.TargetOperationType == ActivityTargetOperationType.Execute)
-            _activityRunProfileExecutionStats = await Jim.Activities.GetActivityRunProfileExecutionStatsAsync(_activity.Id);
+            _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(_activity.Id);
 
-        _childActivities = await Jim.Activities.GetChildActivitiesAsync(_activity.Id);
+        _childActivities = await jim.Activities.GetChildActivitiesAsync(_activity.Id);
 
         _loadedId = Id;
         _initialisationComplete = true;
@@ -748,7 +748,8 @@
             // Get selected outcome types for filtering (null means show all)
             IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>? outcomeTypeFilter = _selectedOutcomeTypes.Count > 0 ? _selectedOutcomeTypes : null;
 
-            var result = await Jim.Activities.GetActivityRunProfileExecutionItemHeadersAsync(
+            using var jim = JimFactory.Create();
+            var result = await jim.Activities.GetActivityRunProfileExecutionItemHeadersAsync(
                 Id,
                 page,
                 state.PageSize,

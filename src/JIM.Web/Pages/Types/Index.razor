@@ -1,14 +1,13 @@
 @page "/t/{TypeNameUrlParam}"
 @page "/t/{TypeNameUrlParam}/s/{PredefinedSearchUri}"
 @attribute [Authorize(Roles = "User")]
-@using JIM.Application
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
 @using JIM.Models.Search
 @using JIM.Models.Utility
 @using JIM.Utilities
 @using JIM.Web.Services
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject IUserPreferenceService PreferenceService
 
@@ -97,8 +96,9 @@ else if (_isInitialised)
         // Read page from URL query string (MudTable uses 0-indexed pages)
         _currentPage = GetPageFromUrl() - 1;
 
+        using var jim = JimFactory.Create();
         var pluralName = Helpers.ConvertFromUrlParam(TypeNameUrlParam);
-        MetaverseObjectType = await Jim.Metaverse.GetMetaverseObjectTypeByPluralNameAsync(pluralName, false);
+        MetaverseObjectType = await jim.Metaverse.GetMetaverseObjectTypeByPluralNameAsync(pluralName, false);
         if (MetaverseObjectType == null)
         {
             NavManager.NavigateTo("/");
@@ -111,12 +111,12 @@ else if (_isInitialised)
         // are we being asked to load a specific PredefinedSearch, via the URL?
         if (!string.IsNullOrEmpty(PredefinedSearchUri))
         {
-            PredefinedSearch = await Jim.Search.GetPredefinedSearchAsync(PredefinedSearchUri);
+            PredefinedSearch = await jim.Search.GetPredefinedSearchAsync(PredefinedSearchUri);
         }
         else
         {
             // is there a default predefined search for this object type?
-            PredefinedSearch = await Jim.Search.GetPredefinedSearchAsync(MetaverseObjectType);
+            PredefinedSearch = await jim.Search.GetPredefinedSearchAsync(MetaverseObjectType);
         }
 
         if (PredefinedSearch != null)
@@ -190,7 +190,8 @@ else if (_isInitialised)
             // Update URL with current page (without triggering navigation/reload)
             UpdateUrlWithPage(page);
 
-            var result = await Jim.Metaverse.GetMetaverseObjectsOfTypeAsync(
+            using var jim = JimFactory.Create();
+            var result = await jim.Metaverse.GetMetaverseObjectsOfTypeAsync(
                 PredefinedSearch,
                 page,
                 state.PageSize,

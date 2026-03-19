@@ -1,8 +1,7 @@
 ﻿@page "/admin/example-data"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Application
 @using JIM.Models.ExampleData.DTOs
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 
 <PageTitle>Example Data Templates</PageTitle>
 <MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.Science" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Example Data:</span> <span class="mud-primary-text">Templates</span></MudText>
@@ -49,6 +48,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _templates = await Jim.ExampleData.GetTemplateHeadersAsync();
+        using var jim = JimFactory.Create();
+        _templates = await jim.ExampleData.GetTemplateHeadersAsync();
     }
 }

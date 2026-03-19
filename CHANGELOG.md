@@ -16,11 +16,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - 🎨 New default theme — "Navy O6" features a deeper navy background with a purple accent palette, improved button contrast for outlined and text variants, and refined surface colours for better visual depth
+- 🎨 Switched web font from Roboto to Inter — self-hosted for air-gapped deployment, delivering improved readability and a modern feel
+- 🎨 Light mode chip contrast boosted across all colour variants to match the high-contrast dark mode treatment — no more washed-out pastels
+- 🐛 Secondary button hover colour now correctly uses the secondary palette tint instead of an incorrect blue
 - 🗑️ Removed legacy navy-o1 through navy-o4 themes — consolidated to navy-o5 and the new navy-o6 default
 - 🔄 "Data Generation" renamed to "Example Data" across the entire stack for consistent naming — models, API routes (`/example-data/`), PowerShell cmdlets (`Get-JIMExampleDataTemplate`, `Invoke-JIMExampleDataTemplate`), database tables, and UI all now share the "Example Data" family prefix
 - ⚡ Database migrations flattened into a single `InitialCreate` migration for faster first-start performance and simpler codebase
 
 ### Fixed
+
+- 🐛 Resolved intermittent DbContext concurrency errors across all Blazor Server pages — overlapping async lifecycle methods (e.g. data load and table pagination) no longer share a single database context
+
+#### Deleted Object Change History
+
+- 🐛 Deleted MVO change history now shows the full timeline of prior changes (Created, AttributeFlow, Disconnected) — previously only the Deleted record was visible due to a broken FK correlation after deletion
+- 🐛 Final attribute values are now captured on MVO deletion change records, showing exactly what the object looked like before it was removed
+- 🐛 Final attribute values are now captured on CSO deletion change records — previously only the external ID and display name were preserved
+- 🐛 MVO deletion no longer fails with FK constraint violations when the deleted object is referenced by other MVOs (e.g., as a Manager) or by change history records
 
 #### Pending Export Reference Display (#404)
 

@@ -1,10 +1,9 @@
 ﻿@page "/admin/connected-systems/new"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Application
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Staging;
 @using JIM.Web.Models;
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 
 <PageTitle>Create a Connected System</PageTitle>
@@ -53,12 +52,14 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _connectorDefinitionHeaders = await Jim.ConnectedSystems.GetConnectorDefinitionHeadersAsync();
+        using var jim = JimFactory.Create();
+        _connectorDefinitionHeaders = await jim.ConnectedSystems.GetConnectorDefinitionHeadersAsync();
     }
 
     private async Task HandleValidSubmit()
     {
-        var connectorDefinition = await Jim.ConnectedSystems.GetConnectorDefinitionAsync(int.Parse(_model.ConnectorId));
+        using var jim = JimFactory.Create();
+        var connectorDefinition = await jim.ConnectedSystems.GetConnectorDefinitionAsync(int.Parse(_model.ConnectorId));
         if (connectorDefinition == null)
             return;
 
@@ -70,8 +71,8 @@
         };
 
         // attribute the operation to the user
-        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
-        await Jim.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem, user);
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+        await jim.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem, user);
         NavManager.NavigateTo($"/admin/connected-systems/{connectedSystem.Id}");
     }
 }

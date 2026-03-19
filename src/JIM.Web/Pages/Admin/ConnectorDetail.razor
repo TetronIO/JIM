@@ -1,13 +1,12 @@
 ﻿@page "/admin/connected-systems/connectors/{Id:int}"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Application
 @using JIM.Models.Interfaces;
 @using JIM.Models.Staging;
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 
 <PageTitle>Connector: @_connector?.Name</PageTitle>
-<MudText Typo="Typo.h4"><span>Connector:</span> <span class="mud-primary-text">@_connector?.Name</span></MudText>
+<MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.Power" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connector:</span> <span class="mud-primary-text">@_connector?.Name</span></MudText>
 <div class="d-flex justify-space-between align-center">
     <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
     @if (_connector != null)
@@ -85,7 +84,8 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _connector = await Jim.ConnectedSystems.GetConnectorDefinitionAsync(Id);
+        using var jim = JimFactory.Create();
+        _connector = await jim.ConnectedSystems.GetConnectorDefinitionAsync(Id);
         if (_connector == null)
         {
             // connector definition not found, redirect to index page

@@ -1,7 +1,6 @@
 ﻿@page "/admin/sync-rules/new"
 @page "/admin/sync-rules/{Id:int}"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Application
 @using JIM.Models.Core
 @using JIM.Models.Logic
 @using JIM.Models.Search
@@ -9,7 +8,7 @@
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Utility
 @using JIM.Utilities
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -956,6 +955,7 @@ else if (_syncRule != null)
 
     protected override async Task OnInitializedAsync()
     {
+        using var jim = JimFactory.Create();
         _breadcrumbs =
         [
         new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
@@ -965,7 +965,7 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/sync-rules/")
         if (Id != null)
         {
             // edit an existing sync rule
-            _syncRule = await Jim.ConnectedSystems.GetSyncRuleAsync(Id.Value);
+            _syncRule = await jim.ConnectedSystems.GetSyncRuleAsync(Id.Value);
             if (_syncRule == null)
             {
                 // sync rule not found, redirect to index page
@@ -985,8 +985,8 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/sync-rules/")
             // create a new sync rule
             _syncRule = new SyncRule();
             _breadcrumbs.Add(new BreadcrumbItem("New", href: null, disabled: true));
-            _connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
-            _metaverseObjectTypes = await Jim.Metaverse.GetMetaverseObjectTypesAsync(true);
+            _connectedSystemHeaders = await jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+            _metaverseObjectTypes = await jim.Metaverse.GetMetaverseObjectTypesAsync(true);
         }
 
         var storedView = await JS.InvokeAsync<string?>("localStorage.getItem", "attributeFlowView");
@@ -1009,7 +1009,8 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/sync-rules/")
 
         // convert to int and assign to SR
         var connectedSystemIdInt = int.Parse(connectedSystemId);
-        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(connectedSystemIdInt);
+        using var jim = JimFactory.Create();
+        var connectedSystem = await jim.ConnectedSystems.GetConnectedSystemAsync(connectedSystemIdInt);
         if (connectedSystem == null)
             return;
 
@@ -1233,8 +1234,9 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/sync-rules/")
         var isSyncRuleNew = _syncRule.Id == 0;
 
         // attribute the operation to the user
-        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
-        var wasSuccessful = await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(_syncRule, user);
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+        var wasSuccessful = await jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(_syncRule, user);
         switch (wasSuccessful)
         {
             // send the user to the existing-sync-rule view.
@@ -1500,8 +1502,9 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/sync-rules/")
         if (confirmationResult.HasValue && confirmationResult.Value)
         {
             // attribute the operation to the signed-in user
-            var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
-            await Jim.ConnectedSystems.DeleteSyncRuleAsync(_syncRule, user);
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            await jim.ConnectedSystems.DeleteSyncRuleAsync(_syncRule, user);
             NavManager.NavigateTo("/admin/sync-rules");
         }
     }

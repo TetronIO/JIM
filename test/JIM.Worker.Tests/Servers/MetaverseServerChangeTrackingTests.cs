@@ -358,4 +358,209 @@ public class MetaverseServerChangeTrackingTests
     }
 
     #endregion
+
+    #region DeleteMetaverseObjectAsync change tracking
+
+    [Test]
+    public async Task DeleteMetaverseObjectAsync_WithPreCapturedAttributes_CapturesFinalValuesAsync()
+    {
+        // Arrange - simulates the sync processor path where attribute values are
+        // snapshotted before attribute recall removes them from the MVO.
+        // MVO's AttributeValues is empty (attributes were already recalled) so DisplayName is null.
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType };
+
+        // Pre-captured attribute values (snapshotted before recall)
+        var finalAttributeValues = new List<MetaverseObjectAttributeValue>
+        {
+            new() { Attribute = _displayNameAttr, StringValue = "Alice Adams" },
+            new() { Attribute = _departmentAttr, StringValue = "Engineering" }
+        };
+
+        var userId = Guid.NewGuid();
+
+        MetaverseObjectChange? capturedChange = null;
+        _mockMetaverseRepo
+            .Setup(r => r.CreateMetaverseObjectChangeDirectAsync(It.IsAny<MetaverseObjectChange>()))
+            .Callback<MetaverseObjectChange>(c => capturedChange = c)
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await _jim.Metaverse.DeleteMetaverseObjectAsync(
+            mvo,
+            ActivityInitiatorType.User,
+            userId,
+            "Test User",
+            finalAttributeValues);
+
+        // Assert - change record was created with final attribute values as removals
+        Assert.That(capturedChange, Is.Not.Null);
+        Assert.That(capturedChange!.ChangeType, Is.EqualTo(ObjectChangeType.Deleted));
+        Assert.That(capturedChange.DeletedObjectDisplayName, Is.Null);
+        Assert.That(capturedChange.DeletedObjectTypeId, Is.EqualTo(_userType.Id));
+        Assert.That(capturedChange.InitiatedByType, Is.EqualTo(ActivityInitiatorType.User));
+        Assert.That(capturedChange.InitiatedById, Is.EqualTo(userId));
+        Assert.That(capturedChange.InitiatedByName, Is.EqualTo("Test User"));
+
+        // Two attributes should be captured
+        Assert.That(capturedChange.AttributeChanges, Has.Count.EqualTo(2));
+
+        // All values should be recorded as removals (final state before deletion)
+        foreach (var attrChange in capturedChange.AttributeChanges)
+        {
+            Assert.That(attrChange.ValueChanges, Has.Count.EqualTo(1));
+            Assert.That(attrChange.ValueChanges[0].ValueChangeType, Is.EqualTo(ValueChangeType.Remove));
+        }
+
+        var displayNameChange = capturedChange.AttributeChanges.Single(ac => ac.Attribute.Id == _displayNameAttr.Id);
+        Assert.That(displayNameChange.ValueChanges[0].StringValue, Is.EqualTo("Alice Adams"));
+
+        var departmentChange = capturedChange.AttributeChanges.Single(ac => ac.Attribute.Id == _departmentAttr.Id);
+        Assert.That(departmentChange.ValueChanges[0].StringValue, Is.EqualTo("Engineering"));
+
+        // LoadMetaverseObjectAttributeValuesAsync should NOT be called when pre-captured values are provided
+        _mockMetaverseRepo.Verify(
+            r => r.LoadMetaverseObjectAttributeValuesAsync(It.IsAny<MetaverseObject>()),
+            Times.Never);
+
+        // MVO itself was still deleted
+        _mockMetaverseRepo.Verify(r => r.DeleteMetaverseObjectAsync(mvo), Times.Once);
+    }
+
+    [Test]
+    public async Task DeleteMetaverseObjectAsync_WithoutPreCapturedAttributes_UsesCurrentValuesAsync()
+    {
+        // Arrange - simulates the housekeeping path where MVO still has its attributes
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType };
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Attribute = _displayNameAttr,
+            StringValue = "Bob Brown"
+        });
+
+        MetaverseObjectChange? capturedChange = null;
+        _mockMetaverseRepo
+            .Setup(r => r.CreateMetaverseObjectChangeDirectAsync(It.IsAny<MetaverseObjectChange>()))
+            .Callback<MetaverseObjectChange>(c => capturedChange = c)
+            .Returns(Task.CompletedTask);
+
+        // Act - no finalAttributeValues passed
+        await _jim.Metaverse.DeleteMetaverseObjectAsync(mvo);
+
+        // Assert - attribute values captured from MVO
+        Assert.That(capturedChange, Is.Not.Null);
+        Assert.That(capturedChange!.AttributeChanges, Has.Count.EqualTo(1));
+
+        var displayNameChange = capturedChange.AttributeChanges.Single(ac => ac.Attribute.Id == _displayNameAttr.Id);
+        Assert.That(displayNameChange.ValueChanges[0].StringValue, Is.EqualTo("Bob Brown"));
+        Assert.That(displayNameChange.ValueChanges[0].ValueChangeType, Is.EqualTo(ValueChangeType.Remove));
+
+        // LoadMetaverseObjectAttributeValuesAsync should NOT be called since values were already present
+        _mockMetaverseRepo.Verify(
+            r => r.LoadMetaverseObjectAttributeValuesAsync(It.IsAny<MetaverseObject>()),
+            Times.Never);
+    }
+
+    [Test]
+    public async Task DeleteMetaverseObjectAsync_WhenChangeTrackingDisabled_DoesNotCaptureAttributesAsync()
+    {
+        // Arrange
+        var disabledSetting = new ServiceSetting
+        {
+            Key = "ChangeTracking.MvoChangesEnabled",
+            DefaultValue = "True",
+            Value = "False",
+            ValueType = ServiceSettingValueType.Boolean
+        };
+        _mockServiceSettingsRepo
+            .Setup(r => r.GetSettingAsync(It.IsAny<string>()))
+            .ReturnsAsync(disabledSetting);
+
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType };
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Attribute = _displayNameAttr,
+            StringValue = "Charlie Clark"
+        });
+
+        // Act
+        await _jim.Metaverse.DeleteMetaverseObjectAsync(mvo);
+
+        // Assert - no change record created, but MVO still deleted
+        _mockMetaverseRepo.Verify(
+            r => r.CreateMetaverseObjectChangeDirectAsync(It.IsAny<MetaverseObjectChange>()),
+            Times.Never);
+        _mockMetaverseRepo.Verify(
+            r => r.DeleteMetaverseObjectAsync(mvo),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task DeleteMetaverseObjectAsync_WithEmptyAttributes_CreatesChangeRecordWithoutAttributeChangesAsync()
+    {
+        // Arrange - MVO with no attribute values and none to load from DB
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType };
+
+        // LoadMetaverseObjectAttributeValuesAsync is called but doesn't add any values
+        _mockMetaverseRepo
+            .Setup(r => r.LoadMetaverseObjectAttributeValuesAsync(mvo))
+            .Returns(Task.CompletedTask);
+
+        MetaverseObjectChange? capturedChange = null;
+        _mockMetaverseRepo
+            .Setup(r => r.CreateMetaverseObjectChangeDirectAsync(It.IsAny<MetaverseObjectChange>()))
+            .Callback<MetaverseObjectChange>(c => capturedChange = c)
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await _jim.Metaverse.DeleteMetaverseObjectAsync(mvo);
+
+        // Assert - change record created but with no attribute changes
+        Assert.That(capturedChange, Is.Not.Null);
+        Assert.That(capturedChange!.ChangeType, Is.EqualTo(ObjectChangeType.Deleted));
+        Assert.That(capturedChange.AttributeChanges, Has.Count.EqualTo(0));
+    }
+
+    [Test]
+    public async Task DeleteMetaverseObjectAsync_LoadsAttributeValues_WhenNotAlreadyLoadedAsync()
+    {
+        // Arrange - MVO with empty AttributeValues (simulates housekeeping path where
+        // GetMetaverseObjectsEligibleForDeletionAsync doesn't include AttributeValues)
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType };
+
+        // When LoadMetaverseObjectAttributeValuesAsync is called, populate the attribute values
+        _mockMetaverseRepo
+            .Setup(r => r.LoadMetaverseObjectAttributeValuesAsync(mvo))
+            .Callback<MetaverseObject>(m =>
+            {
+                m.AttributeValues.Add(new MetaverseObjectAttributeValue
+                {
+                    Attribute = _displayNameAttr,
+                    StringValue = "Lazy Loaded"
+                });
+            })
+            .Returns(Task.CompletedTask);
+
+        MetaverseObjectChange? capturedChange = null;
+        _mockMetaverseRepo
+            .Setup(r => r.CreateMetaverseObjectChangeDirectAsync(It.IsAny<MetaverseObjectChange>()))
+            .Callback<MetaverseObjectChange>(c => capturedChange = c)
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await _jim.Metaverse.DeleteMetaverseObjectAsync(mvo);
+
+        // Assert - LoadMetaverseObjectAttributeValuesAsync was called
+        _mockMetaverseRepo.Verify(
+            r => r.LoadMetaverseObjectAttributeValuesAsync(mvo),
+            Times.Once);
+
+        // Assert - attribute values were captured after loading
+        Assert.That(capturedChange, Is.Not.Null);
+        Assert.That(capturedChange!.AttributeChanges, Has.Count.EqualTo(1));
+        var displayNameChange = capturedChange.AttributeChanges.Single(ac => ac.Attribute.Id == _displayNameAttr.Id);
+        Assert.That(displayNameChange.ValueChanges[0].StringValue, Is.EqualTo("Lazy Loaded"));
+        Assert.That(displayNameChange.ValueChanges[0].ValueChangeType, Is.EqualTo(ValueChangeType.Remove));
+    }
+
+    #endregion
 }

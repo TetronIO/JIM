@@ -1,8 +1,7 @@
 @page "/admin/operations"
-@using JIM.Application;
 @using JIM.Web.Pages.Admin.Components
 @attribute [Authorize(Roles = "Administrator")]
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 
 <PageTitle>Operations</PageTitle>
 <MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.PendingActions" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Operations</MudText>

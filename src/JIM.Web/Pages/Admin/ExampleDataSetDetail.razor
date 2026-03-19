@@ -1,8 +1,7 @@
 ﻿@page "/admin/example-data/datasets/{Id:int}"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Application
 @using JIM.Models.ExampleData
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 
 <PageTitle>Example Data Set: @_exampleDataSet?.Name</PageTitle>
@@ -47,7 +46,8 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _exampleDataSet = await Jim.ExampleData.GetExampleDataSetAsync(Id);
+        using var jim = JimFactory.Create();
+        _exampleDataSet = await jim.ExampleData.GetExampleDataSetAsync(Id);
         if (_exampleDataSet == null)
         {
             // template not found, redirect to index page

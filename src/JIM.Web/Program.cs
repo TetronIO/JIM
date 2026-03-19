@@ -102,6 +102,7 @@ try
         jim.CredentialProtection = sp.GetService<ICredentialProtectionService>();
         return jim;
     });
+    builder.Services.AddSingleton<IJimApplicationFactory, JimApplicationFactory>();
     builder.Services.AddSingleton<LogReaderService>();
     builder.Services.AddExpressionEvaluation();
 

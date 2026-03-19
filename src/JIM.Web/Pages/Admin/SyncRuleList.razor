@@ -1,9 +1,8 @@
 ﻿@page "/admin/sync-rules"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Application
 @using JIM.Models.Logic;
 @using JIM.Models.Logic.DTOs
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 
 <PageTitle>Synchronisation Rules</PageTitle>
 <MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Synchronisation Rules</MudText>
@@ -183,8 +182,9 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _canCreateSyncRules = Jim.ConnectedSystems.GetConnectedSystemCount() > 0;
-        _syncRuleHeaders = await Jim.ConnectedSystems.GetSyncRuleHeadersAsync();
+        using var jim = JimFactory.Create();
+        _canCreateSyncRules = jim.ConnectedSystems.GetConnectedSystemCount() > 0;
+        _syncRuleHeaders = await jim.ConnectedSystems.GetSyncRuleHeadersAsync();
     }
 
     private bool FilterFunc1(SyncRuleHeader element) => FilterFunc(element, _searchString);

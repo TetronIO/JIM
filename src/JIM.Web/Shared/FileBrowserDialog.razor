@@ -1,6 +1,5 @@
-@using JIM.Application
 @using JIM.Application.Servers
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 
 <MudDialog>
     <TitleContent>
@@ -115,7 +114,8 @@
 
     private void LoadDirectory(string? path)
     {
-        var result = Jim.FileSystem.ListDirectory(path);
+        using var jim = JimFactory.Create();
+        var result = jim.FileSystem.ListDirectory(path);
         if (result.Success)
         {
             _currentPath = result.Path;

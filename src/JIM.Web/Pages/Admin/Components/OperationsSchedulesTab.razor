@@ -1,10 +1,9 @@
-@using JIM.Application
 @using JIM.Models.Activities
 @using JIM.Models.Scheduling
 @using JIM.Models.Utility
 @using JIM.Utilities
 @using JIM.Web.Services
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IUserPreferenceService PreferenceService
@@ -207,10 +206,11 @@
 
         try
         {
+            using var jim = JimFactory.Create();
             var page = state.Page + 1;
             var sortDescending = state.SortDirection == SortDirection.Descending;
 
-            var result = await Jim.Scheduler.GetSchedulesAsync(
+            var result = await jim.Scheduler.GetSchedulesAsync(
                 page,
                 state.PageSize,
                 string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
@@ -278,16 +278,17 @@
 
     private async Task HandleToggleEnabledAsync(Schedule schedule)
     {
+        using var jim = JimFactory.Create();
         schedule.IsEnabled = !schedule.IsEnabled;
 
         // Update audit info
-        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
         schedule.LastUpdated = DateTime.UtcNow;
         schedule.LastUpdatedByType = ActivityInitiatorType.User;
         schedule.LastUpdatedById = user.Id;
         schedule.LastUpdatedByName = user.DisplayName;
 
-        await Jim.Scheduler.UpdateScheduleAsync(schedule);
+        await jim.Scheduler.UpdateScheduleAsync(schedule);
 
         var action = schedule.IsEnabled ? "enabled" : "disabled";
         Snackbar.Add($"Schedule '{schedule.Name}' has been {action}.", Severity.Success);
@@ -312,17 +313,18 @@
         if (confirmed != true)
             return;
 
-        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
 
         // Load schedule with steps for execution
-        var scheduleWithSteps = await Jim.Scheduler.GetScheduleWithStepsAsync(schedule.Id);
+        var scheduleWithSteps = await jim.Scheduler.GetScheduleWithStepsAsync(schedule.Id);
         if (scheduleWithSteps == null)
         {
             Snackbar.Add("Schedule not found.", Severity.Error);
             return;
         }
 
-        var execution = await Jim.Scheduler.StartScheduleExecutionAsync(
+        var execution = await jim.Scheduler.StartScheduleExecutionAsync(
             scheduleWithSteps,
             ActivityInitiatorType.User,
             user.Id,
@@ -351,7 +353,8 @@
         if (confirmed != true)
             return;
 
-        await Jim.Scheduler.DeleteScheduleAsync(schedule);
+        using var jim = JimFactory.Create();
+        await jim.Scheduler.DeleteScheduleAsync(schedule);
         Snackbar.Add($"Schedule '{schedule.Name}' has been deleted.", Severity.Success);
         _table?.ReloadServerData();
     }

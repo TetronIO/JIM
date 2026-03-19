@@ -1,13 +1,12 @@
 @page "/admin/deleted-objects"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Application
 @using JIM.Models.Core
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Enums
 @using Humanizer
 @using JIM.Web.Services
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject IUserPreferenceService PreferenceService
 
@@ -339,11 +338,12 @@
 
     protected override async Task OnInitializedAsync()
     {
+        using var jim = JimFactory.Create();
         // Load reference data
-        var csHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+        var csHeaders = await jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
         _connectedSystems = csHeaders?.ToList();
 
-        var otHeaders = await Jim.Metaverse.GetMetaverseObjectTypeHeadersAsync();
+        var otHeaders = await jim.Metaverse.GetMetaverseObjectTypeHeadersAsync();
         _objectTypes = otHeaders?.Select(h => new MetaverseObjectType { Id = h.Id, Name = h.Name }).ToList();
 
         // Load initial data for both tabs (showing latest deleted objects by default)
@@ -383,7 +383,8 @@
 
         try
         {
-            var (items, _) = await Jim.Repository.ConnectedSystems.GetDeletedCsoChangesAsync(
+            using var jim = JimFactory.Create();
+            var (items, _) = await jim.Repository.ConnectedSystems.GetDeletedCsoChangesAsync(
                 connectedSystemId: _csoFilterConnectedSystemId,
                 fromDate: _csoFromDate?.ToUniversalTime(),
                 toDate: _csoToDate?.ToUniversalTime().AddDays(1), // Include the entire day
@@ -407,7 +408,8 @@
 
         try
         {
-            var (items, _) = await Jim.Repository.Metaverse.GetDeletedMvoChangesAsync(
+            using var jim = JimFactory.Create();
+            var (items, _) = await jim.Repository.Metaverse.GetDeletedMvoChangesAsync(
                 objectTypeId: _mvoFilterObjectTypeId,
                 fromDate: _mvoFromDate?.ToUniversalTime(),
                 toDate: _mvoToDate?.ToUniversalTime().AddDays(1),
@@ -433,7 +435,8 @@
 
         try
         {
-            _selectedCsoHistory = await Jim.Repository.ConnectedSystems.GetDeletedCsoChangeHistoryAsync(change.Id);
+            using var jim = JimFactory.Create();
+            _selectedCsoHistory = await jim.Repository.ConnectedSystems.GetDeletedCsoChangeHistoryAsync(change.Id);
         }
         finally
         {
@@ -452,7 +455,8 @@
 
         try
         {
-            _selectedMvoHistory = await Jim.Repository.Metaverse.GetDeletedMvoChangeHistoryAsync(change.Id);
+            using var jim = JimFactory.Create();
+            _selectedMvoHistory = await jim.Repository.Metaverse.GetDeletedMvoChangeHistoryAsync(change.Id);
         }
         finally
         {

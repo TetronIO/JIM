@@ -1,12 +1,11 @@
 ﻿@page "/admin/connected-systems/{Id:int}"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Application
 @using JIM.Models.Core
 @using JIM.Models.Logic
 @using JIM.Models.Staging
 @using JIM.Web.Pages.Admin.Components
 @using JIM.Web.Shared
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 
@@ -88,7 +87,8 @@
 
     private async Task LoadConnectedSystemAsync()
     {
-        _connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(Id);
+        using var jim = JimFactory.Create();
+        _connectedSystem = await jim.ConnectedSystems.GetConnectedSystemAsync(Id);
         if (_connectedSystem == null)
         {
             NavManager.NavigateTo("../");
@@ -120,8 +120,8 @@
             _partitionAndHierarchyText = "partition";
         }
 
-        _pendingExportCount = await Jim.ConnectedSystems.GetPendingExportsCountAsync(Id);
-        _metaverseAttributes ??= await Jim.Metaverse.GetMetaverseAttributesAsync();
+        _pendingExportCount = await jim.ConnectedSystems.GetPendingExportsCountAsync(Id);
+        _metaverseAttributes ??= await jim.Metaverse.GetMetaverseAttributesAsync();
     }
 
     private async Task ReloadConnectedSystemAsync()

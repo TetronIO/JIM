@@ -1,13 +1,12 @@
 @page "/admin/apikeys/{Id:guid}"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Application
 @using JIM.Models.Activities
 @using JIM.Models.Security
 @using JIM.Models.Utility
 @using JIM.Utilities
 @using JIM.Web.Services
 @using Humanizer
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 @inject IUserPreferenceService PreferenceService
@@ -222,8 +221,9 @@ else if (!_loading)
 
     protected override async Task OnParametersSetAsync()
     {
+        using var jim = JimFactory.Create();
         _loading = true;
-        _apiKey = await Jim.Repository.ApiKeys.GetByIdAsync(Id);
+        _apiKey = await jim.Repository.ApiKeys.GetByIdAsync(Id);
         _loading = false;
 
         _breadcrumbs = new List<BreadcrumbItem>
@@ -279,7 +279,8 @@ else if (!_loading)
             var page = state.Page + 1;
             var sortDescending = state.SortDirection == SortDirection.Descending;
 
-            var result = await Jim.Activities.GetActivitiesAsync(
+            using var jim = JimFactory.Create();
+            var result = await jim.Activities.GetActivitiesAsync(
                 page,
                 state.PageSize,
                 string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,

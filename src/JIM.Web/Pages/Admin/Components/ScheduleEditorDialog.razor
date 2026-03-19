@@ -1,11 +1,10 @@
-@using JIM.Application
 @using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Scheduling
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Utilities
-@inject JimApplication Jim
+@inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
 
 <MudDialog>
@@ -469,14 +468,15 @@
         _daysOfWeek = GetDaysOfWeekForCulture();
 
         // Load connected systems for step configuration
-        _connectedSystems = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+        using var jim = JimFactory.Create();
+        _connectedSystems = await jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
 
         if (ScheduleId.HasValue)
         {
             // Use AsNoTracking to prevent EF Core from tracking changes to _schedule and its steps.
             // This avoids issues where adding/removing steps in the UI causes EF Core to cascade
             // UPDATE/DELETE operations when we later save the schedule.
-            _schedule = await Jim.Scheduler.GetScheduleWithStepsAsNoTrackingAsync(ScheduleId.Value);
+            _schedule = await jim.Scheduler.GetScheduleWithStepsAsNoTrackingAsync(ScheduleId.Value);
             if (_schedule != null)
             {
                 // Load schedule configuration from model fields
@@ -827,14 +827,15 @@
 
         try
         {
-            var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
 
             if (ScheduleId.HasValue)
             {
                 // Update existing schedule
                 // IMPORTANT: Fetch a fresh schedule from DB to avoid EF Core cascade deleting steps
                 // when we modify the in-memory schedule's Steps collection
-                var dbSchedule = await Jim.Scheduler.GetScheduleAsync(_schedule.Id);
+                var dbSchedule = await jim.Scheduler.GetScheduleAsync(_schedule.Id);
                 if (dbSchedule == null)
                 {
                     Snackbar.Add("Schedule not found.", Severity.Error);
@@ -860,10 +861,10 @@
                 dbSchedule.LastUpdatedById = user.Id;
                 dbSchedule.LastUpdatedByName = user.DisplayName;
 
-                await Jim.Scheduler.UpdateScheduleAsync(dbSchedule);
+                await jim.Scheduler.UpdateScheduleAsync(dbSchedule);
 
                 // Now handle steps separately
-                var existingSteps = await Jim.Scheduler.GetScheduleStepsAsync(_schedule.Id);
+                var existingSteps = await jim.Scheduler.GetScheduleStepsAsync(_schedule.Id);
                 var existingStepIds = existingSteps.Select(s => s.Id).ToHashSet();
 
                 // Determine which steps to delete (in DB but not in our list)
@@ -876,7 +877,7 @@
                     var stepToDelete = existingSteps.FirstOrDefault(s => s.Id == stepId);
                     if (stepToDelete != null)
                     {
-                        await Jim.Scheduler.DeleteScheduleStepAsync(stepToDelete);
+                        await jim.Scheduler.DeleteScheduleStepAsync(stepToDelete);
                     }
                 }
 
@@ -887,7 +888,7 @@
                     if (existingStepIds.Contains(inMemoryStep.Id))
                     {
                         // Update existing step - fetch fresh from DB to avoid tracking issues
-                        var dbStep = await Jim.Scheduler.GetScheduleStepAsync(inMemoryStep.Id);
+                        var dbStep = await jim.Scheduler.GetScheduleStepAsync(inMemoryStep.Id);
                         if (dbStep != null)
                         {
                             // Copy changed values to the tracked entity
@@ -910,7 +911,7 @@
                             dbStep.LastUpdatedByType = ActivityInitiatorType.User;
                             dbStep.LastUpdatedById = user.Id;
                             dbStep.LastUpdatedByName = user.DisplayName;
-                            await Jim.Scheduler.UpdateScheduleStepAsync(dbStep);
+                            await jim.Scheduler.UpdateScheduleStepAsync(dbStep);
                         }
                     }
                     else
@@ -921,7 +922,7 @@
                         inMemoryStep.CreatedByType = ActivityInitiatorType.User;
                         inMemoryStep.CreatedById = user.Id;
                         inMemoryStep.CreatedByName = user.DisplayName;
-                        await Jim.Scheduler.CreateScheduleStepAsync(inMemoryStep);
+                        await jim.Scheduler.CreateScheduleStepAsync(inMemoryStep);
                     }
                 }
 
@@ -947,7 +948,7 @@
                 }
 
                 // This will save the schedule and all its steps in one transaction
-                await Jim.Scheduler.CreateScheduleAsync(_schedule);
+                await jim.Scheduler.CreateScheduleAsync(_schedule);
 
                 Snackbar.Add("Schedule created successfully.", Severity.Success);
             }
@@ -1073,7 +1074,8 @@
         if (step.StepType == ScheduleStepType.RunProfile && step.ConnectedSystemId.HasValue)
         {
             _selectedConnectedSystemId = step.ConnectedSystemId.Value;
-            _runProfiles = await Jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(_selectedConnectedSystemId);
+            using var jim = JimFactory.Create();
+            _runProfiles = await jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(_selectedConnectedSystemId);
             _selectedRunProfileId = step.RunProfileId ?? 0;
         }
     }
@@ -1204,7 +1206,8 @@
             return cached;
         }
 
-        var profiles = await Jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemId);
+        using var jim = JimFactory.Create();
+        var profiles = await jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemId);
         _runProfilesCache[connectedSystemId] = profiles;
         return profiles;
     }
