@@ -64,8 +64,7 @@ public interface ISyncRepository
     /// Loads a page of CSOs modified since the specified date, with full attribute values.
     /// Used by delta sync to process only recently changed objects.
     /// </summary>
-    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
-        int connectedSystemId, DateTime modifiedSince, int page, int pageSize);
+    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize);
 
     /// <summary>
     /// Gets a single CSO by ID with full attribute values.
@@ -110,15 +109,13 @@ public interface ISyncRepository
     /// Returns a dictionary keyed by the string representation of the attribute value.
     /// Used during import to batch-match incoming objects.
     /// </summary>
-    Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(
-        int connectedSystemId, int attributeId, IEnumerable<string> attributeValues);
+    Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(int connectedSystemId, int attributeId, IEnumerable<string> attributeValues);
 
     /// <summary>
     /// Gets multiple CSOs by secondary external ID values (batch lookup, any object type).
     /// Returns a dictionary keyed by the secondary external ID value.
     /// </summary>
-    Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(
-        int connectedSystemId, IEnumerable<string> secondaryExternalIdValues);
+    Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(int connectedSystemId, IEnumerable<string> secondaryExternalIdValues);
 
     /// <summary>
     /// Gets all external ID attribute values of type int for a connected system and object type.
@@ -176,16 +173,27 @@ public interface ISyncRepository
     Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
 
     /// <summary>
-    /// Bulk creates CSOs with a progress callback invoked after each batch is persisted.
-    /// The callback receives the count of objects persisted in the current batch.
+    /// Bulk creates CSOs with associated RPEIs. Persists the CSOs via raw SQL,
+    /// then links change tracking records to the corresponding RPEIs.
     /// </summary>
-    Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, Func<int, Task>? onBatchPersisted);
+    Task CreateConnectedSystemObjectsAsync(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<ActivityRunProfileExecutionItem> rpeis,
+        Func<int, Task>? onBatchPersisted = null);
 
     /// <summary>
     /// Bulk updates CSOs with their attribute values.
     /// Uses raw SQL bulk operations in production for performance.
     /// </summary>
     Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
+
+    /// <summary>
+    /// Bulk updates CSOs with associated RPEIs. Persists the CSO updates,
+    /// then links change tracking records to the corresponding RPEIs.
+    /// </summary>
+    Task UpdateConnectedSystemObjectsAsync(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<ActivityRunProfileExecutionItem> rpeis);
 
     /// <summary>
     /// Updates only the join state fields (MetaverseObjectId, JoinType, Status) on CSOs
@@ -196,13 +204,21 @@ public interface ISyncRepository
     /// <summary>
     /// Updates CSOs that have new attribute values added (e.g., secondary external ID during export).
     /// </summary>
-    Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(
-        List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates);
+    Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates);
 
     /// <summary>
-    /// Deletes CSOs and their attribute values.
+    /// Deletes CSOs and their attribute values without change tracking.
+    /// Used for quiet deletions (e.g., pre-disconnected CSOs).
     /// </summary>
     Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
+
+    /// <summary>
+    /// Deletes CSOs with associated RPEIs. Captures final attribute snapshots on the RPEIs
+    /// before deletion for audit trail, then deletes the CSOs.
+    /// </summary>
+    Task DeleteConnectedSystemObjectsAsync(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<ActivityRunProfileExecutionItem> rpeis);
 
     /// <summary>
     /// Resolves cross-batch reference attribute values that could not be resolved during initial import
@@ -220,7 +236,7 @@ public interface ISyncRepository
     /// Returns null if no match is found; throws or returns specific results for multiple matches
     /// depending on the matching rule configuration.
     /// </summary>
-    Task<MetaverseObject?> FindMatchingMetaverseObjectAsync(ConnectedSystemObject cso, List<SyncRule> matchingRules);
+    Task<MetaverseObject?> FindMatchingMetaverseObjectAsync(ConnectedSystemObject cso, List<ObjectMatchingRule> matchingRules);
 
     #endregion
 
@@ -316,7 +332,7 @@ public interface ISyncRepository
     /// Gets CSO IDs that have pending exports for a connected system.
     /// Used during import reconciliation to identify which CSOs have outstanding exports.
     /// </summary>
-    Task<List<Guid>> GetCsoIdsWithPendingExportsAsync(int connectedSystemId);
+    Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId);
 
     /// <summary>
     /// Deletes pending exports that are not tracked by the EF change tracker.
@@ -380,9 +396,7 @@ public interface ISyncRepository
     /// and inserts any new SyncOutcomes added after initial persistence.
     /// Used by confirming imports to merge reconciliation outcomes onto existing RPEIs.
     /// </summary>
-    Task BulkUpdateRpeiOutcomesAsync(
-        List<ActivityRunProfileExecutionItem> rpeis,
-        List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes);
+    Task BulkUpdateRpeiOutcomesAsync(List<ActivityRunProfileExecutionItem> rpeis, List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes);
 
     /// <summary>
     /// Detaches RPEIs from the EF change tracker so they are not persisted by subsequent
@@ -504,17 +518,21 @@ public interface ISyncRepository
     Task RefreshAndAutoSelectContainersWithTriadAsync(
         ConnectedSystem connectedSystem,
         IConnector connector,
-        List<string> createdContainerExternalIds,
+        IReadOnlyList<string> createdContainerExternalIds,
         ActivityInitiatorType initiatorType,
         Guid? initiatorId,
         string? initiatorName,
-        Activity activity);
+        Activity? parentActivity = null);
 
     /// <summary>
     /// Updates a connected system with the latest triad data from the connector.
     /// Called during import to refresh schema and partition information.
     /// </summary>
-    Task UpdateConnectedSystemWithTriadAsync(ConnectedSystem connectedSystem, Activity activity);
+    Task UpdateConnectedSystemWithTriadAsync(
+        ConnectedSystem connectedSystem,
+        ActivityInitiatorType initiatorType,
+        Guid? initiatorId,
+        string? initiatorName);
 
     #endregion
 
