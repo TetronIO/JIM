@@ -1075,7 +1075,7 @@ html[lang] .mud-alert-position {
 
 /* MVA rows: top-align cells so attribute name stays at top when values stack vertically */
 .jim-attribute-table tbody tr.jim-attr-row-mva td,
-.jim-attr-cell-mva {
+.jim-attribute-table .mud-table-body .mud-table-cell.jim-attr-cell-mva {
     vertical-align: top;
 }
 
