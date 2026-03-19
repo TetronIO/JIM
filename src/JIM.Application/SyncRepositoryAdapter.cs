@@ -20,7 +20,7 @@ namespace JIM.Application;
 /// by routing through the application-layer servers rather than bypassing them.
 /// </para>
 /// <para>
-/// In a future phase, this adapter will be replaced by a direct <c>PostgresSyncRepository</c>
+/// In a future phase, this adapter will be replaced by a direct <c>SyncRepository</c>
 /// in JIM.PostgresData that uses raw SQL/Npgsql for all operations.
 /// </para>
 /// </summary>
