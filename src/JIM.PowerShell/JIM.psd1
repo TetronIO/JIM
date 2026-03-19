@@ -3,7 +3,7 @@
     RootModule = 'JIM.psm1'
 
     # Version number of this module.
-    ModuleVersion = '0.7.0'
+    ModuleVersion = '0.7.1'
 
     # Supported PSEditions
     CompatiblePSEditions = @('Core', 'Desktop')
@@ -166,31 +166,10 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
-## 0.7.0
-
-### New Features
-- New default theme with refined colour palette, improved contrast, and Inter web font for better readability
-- Properties tab on the Metaverse Object detail page with creation date, last modified, and initiator links
-- Form and table view toggle on the MVO detail page with server-side paginated MVA dialog
-- GET /api/v1/userinfo endpoint for authenticated user identity lookup
-- Connect-JIM authorisation verification with clear guidance for missing JIM identities
-- Activity tracking for initial admin user creation
-
-### Changed
-- "Connected System Objects" pages renamed to "Staging" with cleaner URL structure
-- "Data Generation" renamed to "Example Data" across models, API, PowerShell, and UI
-- Database migrations flattened into a single InitialCreate for faster first-start
+## 0.7.1
 
 ### Fixed
-- DbContext concurrency errors across all Blazor Server pages
-- Deleted object change history correlation and final attribute capture
-- Pending export reference display with meaningful identifiers
-- Cross-batch reference fixup hardened against DB timeouts at scale
-- MVO deletion FK constraint violations
-
-### Performance
-- MVO detail page caps multi-valued attributes with server-side pagination
-- Pending export reconciliation query optimised
+- Sidebar background colour in the Navy O6 theme now matches the page background
 
 For full changelog, see: https://github.com/TetronIO/JIM/blob/main/CHANGELOG.md
 '@

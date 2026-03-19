@@ -16,6 +16,7 @@ JIM uses a tag-based release workflow. When we push a tag like `v0.2.0`, the Git
 
 | Version | Date | Notes |
 |---------|------|-------|
+| `0.7.1` | 2026-03-19 | Navy O6 theme sidebar background fix for visual consistency. |
 | `0.7.0` | 2026-03-19 | New default theme with refined colour palette and Inter font, MVO Properties tab and form/table view toggle, userinfo API endpoint, Staging page rename, Example Data rename, migration flattening, DbContext concurrency fix, deleted object change history fixes, pending export reference display, database resilience hardening, MVO MVA pagination performance. |
 | `0.6.1` | 2026-03-15 | Child activity tracking, Clear-JIMConnectedSystem cmdlet, global error boundary, CWE-117 log injection sanitisation, Trivy CI scanning, cross-batch reference resolution fixes, PostgreSQL COPY binary import performance. |
 | `0.6.0` | 2026-03-12 | Disconnection causality tracking, activity list filters, CSO large MVA pagination, 13 sync engine bug fixes, large-scale import memory optimisation for 100K+ objects. |
