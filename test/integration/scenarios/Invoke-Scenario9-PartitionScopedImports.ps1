@@ -168,9 +168,9 @@ try {
         throw "Required run profiles not found. Ensure Setup-Scenario9.ps1 completed successfully."
     }
 
-    # Track objects processed for comparison
-    $scopedObjectsProcessed = 0
-    $unscopedObjectsProcessed = 0
+    # Track CSOs touched (adds + updates) for comparison
+    $scopedCsosTouched = 0
+    $unscopedCsosTouched = 0
 
     # Test 1: Scoped Import
     if ($Step -eq "ScopedImport" -or $Step -eq "All") {
@@ -184,17 +184,18 @@ try {
 
         # Get activity stats to verify objects were imported
         $stats = Get-JIMActivityStats -Id $importResult.activityId
-        $scopedObjectsProcessed = $stats.totalObjectsProcessed
-        Write-Host "  Objects processed: $scopedObjectsProcessed" -ForegroundColor Gray
+        $scopedCsosTouched = $stats.totalCsoAdds + $stats.totalCsoUpdates
         Write-Host "  CSO adds: $($stats.totalCsoAdds)" -ForegroundColor Gray
+        Write-Host "  CSO updates: $($stats.totalCsoUpdates)" -ForegroundColor Gray
+        Write-Host "  CSOs touched (adds + updates): $scopedCsosTouched" -ForegroundColor Gray
 
-        if ($stats.totalCsoAdds -ge $testUsers.Count) {
-            Write-Host "  OK Scoped import created at least $($testUsers.Count) CSOs" -ForegroundColor Green
-            $testResults.Steps += @{ Name = "ScopedImport"; Success = $true; ObjectsProcessed = $scopedObjectsProcessed }
+        if ($scopedCsosTouched -ge $testUsers.Count) {
+            Write-Host "  OK Scoped import touched at least $($testUsers.Count) CSOs" -ForegroundColor Green
+            $testResults.Steps += @{ Name = "ScopedImport"; Success = $true; CsosTouched = $scopedCsosTouched }
         }
         else {
-            Write-Host "  FAIL Expected at least $($testUsers.Count) CSO adds, got $($stats.totalCsoAdds)" -ForegroundColor Red
-            $testResults.Steps += @{ Name = "ScopedImport"; Success = $false; Error = "Expected at least $($testUsers.Count) CSO adds, got $($stats.totalCsoAdds)" }
+            Write-Host "  FAIL Expected at least $($testUsers.Count) CSOs touched, got $scopedCsosTouched" -ForegroundColor Red
+            $testResults.Steps += @{ Name = "ScopedImport"; Success = $false; Error = "Expected at least $($testUsers.Count) CSOs touched, got $scopedCsosTouched" }
         }
 
         # Run sync to project to Metaverse
@@ -224,18 +225,20 @@ try {
         Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Full Import (Unscoped)"
         Start-Sleep -Seconds $WaitSeconds
 
-        # Get activity stats
+        # Get activity stats — CSOs already exist from scoped import, so expect updates not adds
         $stats = Get-JIMActivityStats -Id $importResult.activityId
-        $unscopedObjectsProcessed = $stats.totalObjectsProcessed
-        Write-Host "  Objects processed: $unscopedObjectsProcessed" -ForegroundColor Gray
+        $unscopedCsosTouched = $stats.totalCsoAdds + $stats.totalCsoUpdates
+        Write-Host "  CSO adds: $($stats.totalCsoAdds)" -ForegroundColor Gray
+        Write-Host "  CSO updates: $($stats.totalCsoUpdates)" -ForegroundColor Gray
+        Write-Host "  CSOs touched (adds + updates): $unscopedCsosTouched" -ForegroundColor Gray
 
-        if ($unscopedObjectsProcessed -ge $testUsers.Count) {
-            Write-Host "  OK Unscoped import processed at least $($testUsers.Count) objects" -ForegroundColor Green
-            $testResults.Steps += @{ Name = "UnscopedImport"; Success = $true; ObjectsProcessed = $unscopedObjectsProcessed }
+        if ($unscopedCsosTouched -ge $testUsers.Count) {
+            Write-Host "  OK Unscoped import touched at least $($testUsers.Count) CSOs" -ForegroundColor Green
+            $testResults.Steps += @{ Name = "UnscopedImport"; Success = $true; CsosTouched = $unscopedCsosTouched }
         }
         else {
-            Write-Host "  FAIL Expected at least $($testUsers.Count) objects processed, got $unscopedObjectsProcessed" -ForegroundColor Red
-            $testResults.Steps += @{ Name = "UnscopedImport"; Success = $false; Error = "Expected at least $($testUsers.Count) objects, got $unscopedObjectsProcessed" }
+            Write-Host "  FAIL Expected at least $($testUsers.Count) CSOs touched, got $unscopedCsosTouched" -ForegroundColor Red
+            $testResults.Steps += @{ Name = "UnscopedImport"; Success = $false; Error = "Expected at least $($testUsers.Count) CSOs touched, got $unscopedCsosTouched" }
         }
     }
 
@@ -243,17 +246,17 @@ try {
     if ($Step -eq "Comparison" -or $Step -eq "All") {
         Write-TestSection "Test 3: Comparison (scoped vs unscoped)"
 
-        # Both imports target the same single selected partition, so object counts should match
-        Write-Host "  Scoped import objects processed:   $scopedObjectsProcessed" -ForegroundColor Gray
-        Write-Host "  Unscoped import objects processed: $unscopedObjectsProcessed" -ForegroundColor Gray
+        # Both imports target the same single selected partition, so CSO counts should match
+        Write-Host "  Scoped import CSOs touched:   $scopedCsosTouched" -ForegroundColor Gray
+        Write-Host "  Unscoped import CSOs touched: $unscopedCsosTouched" -ForegroundColor Gray
 
-        if ($scopedObjectsProcessed -eq $unscopedObjectsProcessed) {
-            Write-Host "  OK Object counts match - partition scoping produced identical results" -ForegroundColor Green
-            $testResults.Steps += @{ Name = "Comparison"; Success = $true; Note = "Both imports processed $scopedObjectsProcessed objects" }
+        if ($scopedCsosTouched -eq $unscopedCsosTouched) {
+            Write-Host "  OK CSO counts match - partition scoping produced identical results" -ForegroundColor Green
+            $testResults.Steps += @{ Name = "Comparison"; Success = $true; Note = "Both imports touched $scopedCsosTouched CSOs" }
         }
         else {
-            Write-Host "  FAIL Object counts differ - scoped: $scopedObjectsProcessed, unscoped: $unscopedObjectsProcessed" -ForegroundColor Red
-            $testResults.Steps += @{ Name = "Comparison"; Success = $false; Error = "Object count mismatch: scoped=$scopedObjectsProcessed, unscoped=$unscopedObjectsProcessed" }
+            Write-Host "  FAIL CSO counts differ - scoped: $scopedCsosTouched, unscoped: $unscopedCsosTouched" -ForegroundColor Red
+            $testResults.Steps += @{ Name = "Comparison"; Success = $false; Error = "CSO count mismatch: scoped=$scopedCsosTouched, unscoped=$unscopedCsosTouched" }
         }
     }
 
