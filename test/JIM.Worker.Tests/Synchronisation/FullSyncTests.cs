@@ -13,6 +13,7 @@ using JIM.Worker.Tests.Models;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
 using Moq;
+using SyncRepository = JIM.InMemoryData.SyncRepository;
 
 namespace JIM.Worker.Tests.Synchronisation;
 
@@ -46,6 +47,7 @@ public class FullSyncTests
     private List<ServiceSetting> ServiceSettingItemsData { get; set; }
     private Mock<DbSet<ServiceSetting>> MockDbSetServiceSettingItems { get; set; }
     private JimApplication Jim { get; set; }
+    private SyncRepository SyncRepo { get; set; }
     #endregion
 
     [TearDown]
@@ -170,8 +172,15 @@ public class FullSyncTests
         MockJimDbContext.Setup(m => m.SyncRules).Returns(MockDbSetSyncRules.Object);
         MockJimDbContext.Setup(m => m.ServiceSettingItems).Returns(MockDbSetServiceSettingItems.Object);
 
-        // instantiate Jim using the mocked db context
-        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+        // instantiate the SyncRepository and Jim using the mocked db context.
+        // Pass SyncRulesData so that test-level modifications (e.g. adding matching rules) are
+        // visible to the processor, which now reads sync rules from SyncRepo rather than the mock DbSet.
+        SyncRepo = TestUtilities.CreateSyncRepository(
+            csos: ConnectedSystemObjectsData,
+            mvos: MetaverseObjectsData,
+            activity: ActivitiesData.First(),
+            syncRules: SyncRulesData);
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
     }
     
     /// <summary>
@@ -222,8 +231,9 @@ public class FullSyncTests
             }
         };
 
-        // add the pending export to our mock data
+        // add the pending export to our mock data and SyncRepo (processor reads from SyncRepo)
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
 
         // update the CSO to have the exact values that are in the pending export
         // (simulating that the export was successfully applied)
@@ -256,11 +266,11 @@ public class FullSyncTests
         // run full sync
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify the pending export was deleted because the CSO state matches
-        Assert.That(PendingExportsData.Count, Is.EqualTo(0),
+        Assert.That(SyncRepo.PendingExports.Count, Is.EqualTo(0),
             "Expected pending export to be deleted when CSO state matches the pending changes.");
     }
 
@@ -324,8 +334,9 @@ public class FullSyncTests
             }
         };
 
-        // add the pending export to our mock data
+        // add the pending export to our mock data and SyncRepo (processor reads from SyncRepo)
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
 
         // update the CSO with only 2 of the 3 pending changes (simulating partial export success)
         // DisplayName and EmployeeNumber succeeded, Role failed
@@ -366,11 +377,11 @@ public class FullSyncTests
         // run full sync
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify the pending export was NOT deleted
-        Assert.That(PendingExportsData.Count, Is.EqualTo(1),
+        Assert.That(SyncRepo.PendingExports.Count, Is.EqualTo(1),
             "Expected pending export to be kept when CSO state only partially matches.");
         Assert.That(deleteCallCount, Is.EqualTo(0),
             "Expected Delete to not be called when pending export doesn't fully match.");
@@ -428,8 +439,9 @@ public class FullSyncTests
             }
         };
 
-        // add the pending export to our mock data
+        // add the pending export to our mock data and SyncRepo (processor reads from SyncRepo)
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
 
         // Role is still NOT matching - the export continues to fail
         var csoRoleValue = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == (int)MockSourceSystemAttributeNames.ROLE);
@@ -451,7 +463,7 @@ public class FullSyncTests
         // run full sync
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify ErrorCount was incremented to 3
@@ -459,7 +471,7 @@ public class FullSyncTests
             "Expected ErrorCount to be incremented to 3 after another failure.");
 
         // verify the pending export still exists with the failed attribute
-        Assert.That(PendingExportsData.Count, Is.EqualTo(1),
+        Assert.That(SyncRepo.PendingExports.Count, Is.EqualTo(1),
             "Expected pending export to be kept.");
         Assert.That(pendingExport.AttributeValueChanges.Count, Is.EqualTo(1),
             "Expected failed attribute change to still be present.");
@@ -498,7 +510,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
         
         // test that a CSO is successfully match to an MVO using the sync rule.
@@ -546,7 +558,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
         
         // test that a CSO is successfully match to an MVO using the sync rule.
@@ -594,7 +606,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
         
         // test that a CSO is successfully match to an MVO using the sync rule.
@@ -626,7 +638,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // test that a CSO successfully projected to create a new MVO
@@ -662,11 +674,6 @@ public class FullSyncTests
     [Test]
     public async Task CsoProjection_JoinStateExplicitlyPersistedAsync()
     {
-        // Arrange - capture CSOs passed to UpdateRange on the ConnectedSystemObjects DbSet
-        var updatedCsos = new List<ConnectedSystemObject>();
-        MockDbSetConnectedSystemObjects.Setup(m => m.UpdateRange(It.IsAny<IEnumerable<ConnectedSystemObject>>()))
-            .Callback<IEnumerable<ConnectedSystemObject>>(csos => updatedCsos.AddRange(csos));
-
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
         importSyncRule.ProjectToMetaverse = true;
 
@@ -674,14 +681,15 @@ public class FullSyncTests
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        var syncProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncProcessor.PerformFullSyncAsync();
 
-        // Assert - UpdateRange should have been called with the projected CSOs
-        Assert.That(updatedCsos, Is.Not.Empty, "Expected UpdateRange to be called with projected CSOs for join state persistence.");
-        Assert.That(updatedCsos.All(c => c.JoinType == ConnectedSystemObjectJoinType.Projected),
-            "All projected CSOs should have JoinType=Projected when persisted.");
-        Assert.That(updatedCsos.All(c => c.DateJoined != null),
+        // Assert - SyncRepo CSOs should have join state updated after projection
+        var projectedCsos = SyncRepo.ConnectedSystemObjects.Values
+            .Where(c => c.JoinType == ConnectedSystemObjectJoinType.Projected)
+            .ToList();
+        Assert.That(projectedCsos, Is.Not.Empty, "Expected CSOs to have JoinType=Projected persisted via SyncRepo.");
+        Assert.That(projectedCsos.All(c => c.DateJoined != null),
             "All projected CSOs should have DateJoined set when persisted.");
     }
 
@@ -691,11 +699,6 @@ public class FullSyncTests
     [Test]
     public async Task CsoJoin_JoinStateExplicitlyPersistedAsync()
     {
-        // Arrange - capture CSOs passed to UpdateRange on the ConnectedSystemObjects DbSet
-        var updatedCsos = new List<ConnectedSystemObject>();
-        MockDbSetConnectedSystemObjects.Setup(m => m.UpdateRange(It.IsAny<IEnumerable<ConnectedSystemObject>>()))
-            .Callback<IEnumerable<ConnectedSystemObject>>(csos => updatedCsos.AddRange(csos));
-
         // Set up a join rule (same pattern as CsoJoinToMvoViaTextAttributeTestAsync)
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
         var objectMatchingRule = new ObjectMatchingRule
@@ -720,12 +723,14 @@ public class FullSyncTests
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        var syncProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncProcessor.PerformFullSyncAsync();
 
-        // Assert - UpdateRange should have been called with the joined CSOs
-        var joinedCsos = updatedCsos.Where(c => c.JoinType == ConnectedSystemObjectJoinType.Joined).ToList();
-        Assert.That(joinedCsos, Is.Not.Empty, "Expected UpdateRange to be called with joined CSOs for join state persistence.");
+        // Assert - SyncRepo CSOs should have join state updated after joining
+        var joinedCsos = SyncRepo.ConnectedSystemObjects.Values
+            .Where(c => c.JoinType == ConnectedSystemObjectJoinType.Joined)
+            .ToList();
+        Assert.That(joinedCsos, Is.Not.Empty, "Expected CSOs to have JoinType=Joined persisted via SyncRepo.");
         Assert.That(joinedCsos.All(c => c.DateJoined != null), "All joined CSOs should have DateJoined set when persisted.");
         Assert.That(joinedCsos.All(c => c.MetaverseObjectId != null), "All joined CSOs should have MetaverseObjectId set when persisted.");
     }
@@ -831,7 +836,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // get the first projected MVO
@@ -943,7 +948,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // get the joined MVO
@@ -978,7 +983,7 @@ public class FullSyncTests
         ConnectedSystemObjectsData[0].MetaverseObjectId = null;
         ConnectedSystemObjectsData[0].JoinType = ConnectedSystemObjectJoinType.NotJoined;
 
-        var initialCsoCount = ConnectedSystemObjectsData.Count;
+        var initialCsoCount = SyncRepo.ConnectedSystemObjects.Count;
 
         // start the test
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
@@ -986,21 +991,12 @@ public class FullSyncTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
 
-        // setup mock to handle batch CSO deletion (full sync now uses batched deletes for consistency with delta sync)
-        MockDbSetConnectedSystemObjects.Setup(set => set.RemoveRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback(
-            (IEnumerable<ConnectedSystemObject> entities) => {
-                foreach (var entity in entities.ToList())
-                {
-                    ConnectedSystemObjectsData.Remove(entity);
-                }
-            });
-
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify that the obsolete, non-joined CSO was deleted
-        Assert.That(ConnectedSystemObjectsData.Count, Is.EqualTo(initialCsoCount - 1), "Expected one CSO to be deleted.");
-        Assert.That(ConnectedSystemObjectsData.Any(cso => cso.Status == ConnectedSystemObjectStatus.Obsolete), Is.False,
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(initialCsoCount - 1), "Expected one CSO to be deleted.");
+        Assert.That(SyncRepo.ConnectedSystemObjects.Values.Any(cso => cso.Status == ConnectedSystemObjectStatus.Obsolete), Is.False,
             "Expected no obsolete CSOs to remain after processing.");
     }
 
@@ -1030,7 +1026,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify CSO-MVO join was broken
@@ -1082,7 +1078,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify CSO successfully joined to MVO
@@ -1139,7 +1135,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify that only one CSO successfully joined
@@ -1218,7 +1214,7 @@ public class FullSyncTests
         // run full sync
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify that the contributed attributes were actually removed from the MVO
@@ -1359,6 +1355,7 @@ public class FullSyncTests
         });
         ConnectedSystemObjectsData.Add(targetCso);
         mvo.ConnectedSystemObjects.Add(targetCso);
+        SyncRepo.SeedConnectedSystemObject(targetCso);
 
         // Rebuild the mock DbSets so the new CSO and updated sync rules are visible to queries
         MockDbSetConnectedSystemObjects = ConnectedSystemObjectsData.BuildMockDbSet();
@@ -1380,7 +1377,7 @@ public class FullSyncTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q =>
             q.ConnectedSystemId == sourceSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),sourceSystem, runProfile, activity, new CancellationTokenSource());
+        var syncProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,sourceSystem, runProfile, activity, new CancellationTokenSource());
         await syncProcessor.PerformFullSyncAsync();
 
         // Assert: MVO attributes should have been recalled
@@ -1468,7 +1465,7 @@ public class FullSyncTests
         // run full sync
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify that no pending attribute value removals were created (attributes are retained)
@@ -1524,7 +1521,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify the CSO joined to existing MVO rather than projecting a new one
@@ -1555,7 +1552,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify CSO did not project (no MVO created/joined)
@@ -1580,7 +1577,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify CSO did not project (no MVO created/joined)
@@ -1606,7 +1603,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify CSO did not project (sync rule is disabled)
@@ -1648,7 +1645,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify the CSO projected and used the first sync rule's MVO type (User, not Group)
@@ -1726,7 +1723,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify the CSO joined to the existing MVO
@@ -1811,7 +1808,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify the CSO joined to the existing MVO
@@ -1900,7 +1897,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify the CSO joined to the existing MVO
@@ -1983,7 +1980,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify EmployeeNumber was updated to the new value (old value removed, new value applied)
@@ -2064,7 +2061,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify HrId was updated to the new value (old value removed, new value applied)
@@ -2142,7 +2139,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify EmployeeNumber was removed from MVO (because it was removed from CSO)
@@ -2182,29 +2179,17 @@ public class FullSyncTests
         // mark CSO as obsolete to trigger disconnection
         cso.Status = ConnectedSystemObjectStatus.Obsolete;
 
-        var initialMvoCount = MetaverseObjectsData.Count;
-
-        // setup mock to handle CSO deletion
-        MockDbSetConnectedSystemObjects.Setup(set => set.Remove(It.IsAny<ConnectedSystemObject>())).Callback(
-            (ConnectedSystemObject entity) => {
-                ConnectedSystemObjectsData.Remove(entity);
-            });
-
-        // setup mock for MVO deletion (should NOT be called)
-        MockDbSetMetaverseObjects.Setup(set => set.Remove(It.IsAny<MetaverseObject>())).Callback(
-            (MetaverseObject entity) => {
-                MetaverseObjectsData.Remove(entity);
-            });
+        var initialMvoCount = SyncRepo.MetaverseObjects.Count;
 
         // run sync
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify MVO was NOT deleted
-        Assert.That(MetaverseObjectsData.Count, Is.EqualTo(initialMvoCount), "Expected MVO to remain when DeletionRule is Manual.");
+        Assert.That(SyncRepo.MetaverseObjects.Count, Is.EqualTo(initialMvoCount), "Expected MVO to remain when DeletionRule is Manual.");
         Assert.That(mvo.LastConnectorDisconnectedDate, Is.Null, "Expected no scheduled deletion date when DeletionRule is Manual.");
     }
 
@@ -2239,27 +2224,19 @@ public class FullSyncTests
         // mark CSO as obsolete to trigger disconnection
         cso.Status = ConnectedSystemObjectStatus.Obsolete;
 
-        var initialMvoCount = MetaverseObjectsData.Count;
+        var initialMvoCount = SyncRepo.MetaverseObjects.Count;
         var mvoId = mvo.Id;
-
-        // setup mock to handle CSO deletion
-        MockDbSetConnectedSystemObjects.Setup(set => set.Remove(It.IsAny<ConnectedSystemObject>())).Callback(
-            (ConnectedSystemObject entity) => ConnectedSystemObjectsData.Remove(entity));
-
-        // setup mock for MVO deletion (SHOULD be called - synchronous deletion for 0-grace-period)
-        MockDbSetMetaverseObjects.Setup(set => set.Remove(It.IsAny<MetaverseObject>())).Callback(
-            (MetaverseObject entity) => MetaverseObjectsData.Remove(entity));
 
         // run sync
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify MVO WAS deleted during sync (synchronous deletion for 0-grace-period)
-        Assert.That(MetaverseObjectsData.Count, Is.EqualTo(initialMvoCount - 1), "Expected MVO to be deleted synchronously during sync.");
-        Assert.That(MetaverseObjectsData.Any(m => m.Id == mvoId), Is.False, "Expected specific MVO to be deleted.");
+        Assert.That(SyncRepo.MetaverseObjects.Count, Is.EqualTo(initialMvoCount - 1), "Expected MVO to be deleted synchronously during sync.");
+        Assert.That(SyncRepo.MetaverseObjects.ContainsKey(mvoId), Is.False, "Expected specific MVO to be deleted.");
     }
 
     /// <summary>
@@ -2292,30 +2269,18 @@ public class FullSyncTests
         // mark CSO as obsolete to trigger disconnection
         cso.Status = ConnectedSystemObjectStatus.Obsolete;
 
-        var initialMvoCount = MetaverseObjectsData.Count;
+        var initialMvoCount = SyncRepo.MetaverseObjects.Count;
         var beforeSync = DateTime.UtcNow;
-
-        // setup mock to handle CSO deletion
-        MockDbSetConnectedSystemObjects.Setup(set => set.Remove(It.IsAny<ConnectedSystemObject>())).Callback(
-            (ConnectedSystemObject entity) => {
-                ConnectedSystemObjectsData.Remove(entity);
-            });
-
-        // setup mock for MVO deletion (should NOT be called due to grace period)
-        MockDbSetMetaverseObjects.Setup(set => set.Remove(It.IsAny<MetaverseObject>())).Callback(
-            (MetaverseObject entity) => {
-                MetaverseObjectsData.Remove(entity);
-            });
 
         // run sync
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify MVO was NOT deleted (grace period)
-        Assert.That(MetaverseObjectsData.Count, Is.EqualTo(initialMvoCount), "Expected MVO to NOT be deleted during grace period.");
+        Assert.That(SyncRepo.MetaverseObjects.Count, Is.EqualTo(initialMvoCount), "Expected MVO to NOT be deleted during grace period.");
 
         // verify LastConnectorDisconnectedDate was set to approximately now (not 30 days in future)
         // The grace period is calculated by adding DeletionGracePeriod (TimeSpan) to LastConnectorDisconnectedDate
@@ -2365,29 +2330,17 @@ public class FullSyncTests
         cso1.Status = ConnectedSystemObjectStatus.Obsolete;
         cso2.Status = ConnectedSystemObjectStatus.Normal;
 
-        var initialMvoCount = MetaverseObjectsData.Count;
-
-        // setup mock to handle CSO deletion
-        MockDbSetConnectedSystemObjects.Setup(set => set.Remove(It.IsAny<ConnectedSystemObject>())).Callback(
-            (ConnectedSystemObject entity) => {
-                ConnectedSystemObjectsData.Remove(entity);
-            });
-
-        // setup mock for MVO deletion (should NOT be called)
-        MockDbSetMetaverseObjects.Setup(set => set.Remove(It.IsAny<MetaverseObject>())).Callback(
-            (MetaverseObject entity) => {
-                MetaverseObjectsData.Remove(entity);
-            });
+        var initialMvoCount = SyncRepo.MetaverseObjects.Count;
 
         // run sync
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify MVO was NOT deleted (still has cso2 connected)
-        Assert.That(MetaverseObjectsData.Count, Is.EqualTo(initialMvoCount), "Expected MVO to remain when other connectors exist.");
+        Assert.That(SyncRepo.MetaverseObjects.Count, Is.EqualTo(initialMvoCount), "Expected MVO to remain when other connectors exist.");
         Assert.That(mvo.LastConnectorDisconnectedDate, Is.Null, "Expected no scheduled deletion date when connectors remain.");
         Assert.That(mvo.ConnectedSystemObjects.Count, Is.EqualTo(1), "Expected MVO to have one remaining CSO.");
     }
@@ -2467,7 +2420,7 @@ public class FullSyncTests
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify CSO joined to MVO
@@ -2563,7 +2516,7 @@ public class FullSyncTests
         var runProfile = ConnectedSystemRunProfilesData.Single(
             q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(
-            new SyncServer(Jim), new SyncRepositoryAdapter(Jim), connectedSystem, runProfile, activity, new CancellationTokenSource());
+            new SyncServer(Jim), SyncRepo, connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // Assert - No new CSOs should have been created
@@ -2636,7 +2589,7 @@ public class FullSyncTests
         var runProfile = ConnectedSystemRunProfilesData.Single(
             q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(
-            new SyncServer(Jim), new SyncRepositoryAdapter(Jim), connectedSystem, runProfile, activity, new CancellationTokenSource());
+            new SyncServer(Jim), SyncRepo, connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // Assert - CSO should still exist
@@ -2713,7 +2666,7 @@ public class FullSyncTests
         var runProfile = ConnectedSystemRunProfilesData.Single(
             q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(
-            new SyncServer(Jim), new SyncRepositoryAdapter(Jim), connectedSystem, runProfile, activity, new CancellationTokenSource());
+            new SyncServer(Jim), SyncRepo, connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // Assert - Verify that NO PendingExport execution items were created
@@ -2830,26 +2783,20 @@ public class FullSyncTests
         // Clear existing MVO data (we want clean projections)
         MetaverseObjectsData.Clear();
         MockDbSetMetaverseObjects = MetaverseObjectsData.BuildMockDbSet();
-        MockDbSetMetaverseObjects.Setup(m => m.Add(It.IsAny<MetaverseObject>()))
-            .Callback<MetaverseObject>(mvo =>
-            {
-                if (mvo.Id == Guid.Empty) mvo.Id = Guid.NewGuid();
-                MetaverseObjectsData.Add(mvo);
-            });
-        MockDbSetMetaverseObjects.Setup(m => m.AddRange(It.IsAny<IEnumerable<MetaverseObject>>()))
-            .Callback<IEnumerable<MetaverseObject>>(mvos =>
-            {
-                foreach (var mvo in mvos)
-                {
-                    if (mvo.Id == Guid.Empty) mvo.Id = Guid.NewGuid();
-                    MetaverseObjectsData.Add(mvo);
-                }
-            });
         MockJimDbContext.Setup(m => m.MetaverseObjects).Returns(MockDbSetMetaverseObjects.Object);
 
         // Recreate Jim with updated mocks
         Jim?.Dispose();
         Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+
+        // Recreate SyncRepo with the new CSOs (original SyncRepo still has the old default CSOs)
+        SyncRepo = TestUtilities.CreateSyncRepository(
+            csos: ConnectedSystemObjectsData,
+            mvos: MetaverseObjectsData,
+            activity: ActivitiesData.First(),
+            syncRules: SyncRulesData);
+        // Apply the page size override so CSOs are split across pages as the test requires
+        SyncRepo.SetSyncPageSize(1);
 
         // Set up sync rule: enable projection + add Manager reference attribute flow mapping
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
@@ -2897,7 +2844,7 @@ public class FullSyncTests
         var runProfile = ConnectedSystemRunProfilesData.Single(q =>
             q.ConnectedSystemId == connectedSystem!.Id &&
             q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        var syncProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncProcessor.PerformFullSyncAsync();
 
         // Assert: Both CSOs should be projected to MVOs
@@ -3025,26 +2972,20 @@ public class FullSyncTests
         // Clear existing MVO data (we want clean projections)
         MetaverseObjectsData.Clear();
         MockDbSetMetaverseObjects = MetaverseObjectsData.BuildMockDbSet();
-        MockDbSetMetaverseObjects.Setup(m => m.Add(It.IsAny<MetaverseObject>()))
-            .Callback<MetaverseObject>(mvo =>
-            {
-                if (mvo.Id == Guid.Empty) mvo.Id = Guid.NewGuid();
-                MetaverseObjectsData.Add(mvo);
-            });
-        MockDbSetMetaverseObjects.Setup(m => m.AddRange(It.IsAny<IEnumerable<MetaverseObject>>()))
-            .Callback<IEnumerable<MetaverseObject>>(mvos =>
-            {
-                foreach (var mvo in mvos)
-                {
-                    if (mvo.Id == Guid.Empty) mvo.Id = Guid.NewGuid();
-                    MetaverseObjectsData.Add(mvo);
-                }
-            });
         MockJimDbContext.Setup(m => m.MetaverseObjects).Returns(MockDbSetMetaverseObjects.Object);
 
         // Recreate Jim with updated mocks
         Jim?.Dispose();
         Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+
+        // Recreate SyncRepo with the new CSOs (original SyncRepo still has the old default CSOs)
+        SyncRepo = TestUtilities.CreateSyncRepository(
+            csos: ConnectedSystemObjectsData,
+            mvos: MetaverseObjectsData,
+            activity: ActivitiesData.First(),
+            syncRules: SyncRulesData);
+        // Apply the page size override so CSOs are split across pages as the test requires
+        SyncRepo.SetSyncPageSize(1);
 
         // Set up sync rule: enable projection + add Manager reference attribute flow mapping
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
@@ -3092,7 +3033,7 @@ public class FullSyncTests
         var runProfile = ConnectedSystemRunProfilesData.Single(q =>
             q.ConnectedSystemId == connectedSystem!.Id &&
             q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        var syncProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncProcessor.PerformFullSyncAsync();
 
         // Assert: Reference should be resolved (basic sanity)
@@ -3215,7 +3156,7 @@ public class FullSyncTests
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // Assert: CSO #1 should be disconnected and deleted
@@ -3308,30 +3249,17 @@ public class FullSyncTests
         });
         importSyncRule.ObjectMatchingRules.Add(objectMatchingRule);
 
-        // Setup mocks for batch CSO deletion
-        MockDbSetConnectedSystemObjects.Setup(set => set.RemoveRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback(
-            (IEnumerable<ConnectedSystemObject> entities) => {
-                foreach (var entity in entities.ToList())
-                    ConnectedSystemObjectsData.Remove(entity);
-            });
-
-        // Setup mock for MVO deletion (should NOT be called thanks to safeguard)
-        MockDbSetMetaverseObjects.Setup(set => set.Remove(It.IsAny<MetaverseObject>())).Callback(
-            (MetaverseObject entity) => {
-                MetaverseObjectsData.Remove(entity);
-            });
-
-        var initialMvoCount = MetaverseObjectsData.Count;
+        var initialMvoCount = SyncRepo.MetaverseObjects.Count;
 
         // Act: Run full sync
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // Assert: MVO should NOT have been deleted (reconnected during Pass 2)
-        Assert.That(MetaverseObjectsData.Count, Is.EqualTo(initialMvoCount),
+        Assert.That(SyncRepo.MetaverseObjects.Count, Is.EqualTo(initialMvoCount),
             "Expected MVO to survive — it was reconnected by a new CSO during the same page.");
 
         // Assert: CSO #2 should be joined to the MVO
@@ -3470,6 +3398,7 @@ public class FullSyncTests
         });
         ConnectedSystemObjectsData.Add(targetCso);
         mvo.ConnectedSystemObjects.Add(targetCso);
+        SyncRepo.SeedConnectedSystemObject(targetCso);
 
         // Rebuild the mock DbSets so the new CSO and updated sync rules are visible to queries
         MockDbSetConnectedSystemObjects = ConnectedSystemObjectsData.BuildMockDbSet();
@@ -3482,51 +3411,26 @@ public class FullSyncTests
         MockJimDbContext.Setup(m => m.SyncRules).Returns(MockDbSetSyncRules.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemObjectAttributeValues).Returns(MockDbSetConnectedSystemObjectAttributeValues.Object);
 
-        // Capture all pending exports created during sync
-        var createdPendingExports = new List<PendingExport>();
-        MockDbSetPendingExports.Setup(m => m.AddAsync(It.IsAny<PendingExport>(), It.IsAny<CancellationToken>()))
-            .Callback<PendingExport, CancellationToken>((pe, _) =>
-            {
-                PendingExportsData.Add(pe);
-                createdPendingExports.Add(pe);
-            })
-            .ReturnsAsync((PendingExport pe, CancellationToken _) => null!);
-        MockDbSetPendingExports.Setup(m => m.AddRangeAsync(It.IsAny<IEnumerable<PendingExport>>(), It.IsAny<CancellationToken>()))
-            .Callback<IEnumerable<PendingExport>, CancellationToken>((exports, _) =>
-            {
-                var list = exports.ToList();
-                PendingExportsData.AddRange(list);
-                createdPendingExports.AddRange(list);
-            })
-            .Returns(Task.CompletedTask);
-
-        // Setup mock to handle CSO deletion
-        MockDbSetConnectedSystemObjects.Setup(set => set.Remove(It.IsAny<ConnectedSystemObject>())).Callback(
-            (ConnectedSystemObject entity) => ConnectedSystemObjectsData.Remove(entity));
-
-        // Setup mock for MVO deletion
-        MockDbSetMetaverseObjects.Setup(set => set.Remove(It.IsAny<MetaverseObject>())).Callback(
-            (MetaverseObject entity) => MetaverseObjectsData.Remove(entity));
-
         // Mark source CSO as obsolete
         sourceCso.Status = ConnectedSystemObjectStatus.Obsolete;
 
-        var initialMvoCount = MetaverseObjectsData.Count;
+        var initialMvoCount = SyncRepo.MetaverseObjects.Count;
         var mvoId = mvo.Id;
 
         // Act: run full sync on the SOURCE system
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q =>
             q.ConnectedSystemId == sourceSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),sourceSystem, runProfile, activity, new CancellationTokenSource());
+        var syncProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,sourceSystem, runProfile, activity, new CancellationTokenSource());
         await syncProcessor.PerformFullSyncAsync();
 
         // Assert: MVO should have been deleted (0-grace-period, authoritative source disconnected)
-        Assert.That(MetaverseObjectsData.Any(m => m.Id == mvoId), Is.False,
+        Assert.That(SyncRepo.MetaverseObjects.ContainsKey(mvoId), Is.False,
             "Expected MVO to be deleted synchronously (0-grace-period, WhenAuthoritativeSourceDisconnected).");
 
         // Assert: No Update pending exports should have been created.
         // Only Delete exports (from EvaluateMvoDeletionAsync) are expected.
+        var createdPendingExports = SyncRepo.PendingExports.Values.ToList();
         var updateExports = createdPendingExports.Where(pe => pe.ChangeType == PendingExportChangeType.Update).ToList();
         Assert.That(updateExports, Is.Empty,
             "Expected no Update pending exports — MVO was queued for immediate deletion, " +

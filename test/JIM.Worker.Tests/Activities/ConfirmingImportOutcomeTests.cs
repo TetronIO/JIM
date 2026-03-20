@@ -10,6 +10,7 @@ using JIM.Worker.Processors;
 using JIM.Worker.Tests.Models;
 using MockQueryable.Moq;
 using Moq;
+using SyncRepository = JIM.InMemoryData.SyncRepository;
 
 namespace JIM.Worker.Tests.Activities;
 
@@ -37,6 +38,7 @@ public class ConfirmingImportOutcomeTests
     private List<ConnectedSystemObject> _connectedSystemObjectsData = null!;
     private Mock<JimDbContext> _mockDbContext = null!;
     private JimApplication _jim = null!;
+    private SyncRepository _syncRepo = null!;
 
     #endregion
 
@@ -84,7 +86,11 @@ public class ConfirmingImportOutcomeTests
         });
         _mockDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockCsoDbSet.Object);
 
-        _jim = new JimApplication(new PostgresDataRepository(_mockDbContext.Object));
+        _syncRepo = TestUtilities.CreateSyncRepository(
+            csos: _connectedSystemObjectsData,
+            pendingExports: _pendingExportsData,
+            activity: _activitiesData.First());
+        _jim = new JimApplication(new PostgresDataRepository(_mockDbContext.Object), syncRepository: _syncRepo);
     }
 
     /// <summary>
@@ -179,7 +185,7 @@ public class ConfirmingImportOutcomeTests
         var activity = _activitiesData.First();
         var importProcessor = new SyncImportTaskProcessor(
             _jim,
-            new SyncRepositoryAdapter(_jim),
+            _syncRepo,
             mockConnector,
             targetSystem!,
             importRunProfile,

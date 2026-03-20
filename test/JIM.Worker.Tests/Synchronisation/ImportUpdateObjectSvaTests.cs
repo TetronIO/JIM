@@ -11,6 +11,7 @@ using JIM.Worker.Tests.Models;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
 using Moq;
+using SyncRepository = JIM.InMemoryData.SyncRepository;
 
 namespace JIM.Worker.Tests.Synchronisation;
 
@@ -33,8 +34,9 @@ public class ImportUpdateObjectSvaTests
     private Mock<DbSet<ServiceSetting>> MockDbSetServiceSettings { get; set; }
     private List<PendingExport> PendingExportsData { get; set; }
     private Mock<DbSet<PendingExport>> MockDbSetPendingExports { get; set; }
-    private Mock<JimDbContext> MockJimDbContext { get; set; }
-    private JimApplication Jim { get; set; }
+    private Mock<JimDbContext> MockJimDbContext { get; set; } = null!;
+    private JimApplication Jim { get; set; } = null!;
+    private SyncRepository SyncRepo { get; set; } = null!;
     #endregion
 
     [TearDown]
@@ -88,9 +90,6 @@ public class ImportUpdateObjectSvaTests
         MockJimDbContext.Setup(m => m.ServiceSettingItems).Returns(MockDbSetServiceSettings.Object);
         MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
 
-        // instantiate Jim using the mocked db context
-        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
-        
         var mockDbSetConnectedSystemObject = ConnectedSystemObjectsData.BuildMockDbSet();
         mockDbSetConnectedSystemObject.Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback((IEnumerable<ConnectedSystemObject> entities) => {
             var connectedSystemObjects = entities as ConnectedSystemObject[] ?? entities.ToArray();
@@ -252,12 +251,12 @@ public class ImportUpdateObjectSvaTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results persisted to the mocked db context
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
-        
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
+
         // get the Connected System Object for the user we changed some attribute values for in the mocked connector
         var cso1ToValidate = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1ToValidate, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
@@ -421,12 +420,12 @@ public class ImportUpdateObjectSvaTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results persisted to the mocked db context
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
-        
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
+
         // get the Connected System Object for the user we changed some attribute values for in the mocked connector
         var cso1ToValidate = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1ToValidate, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
@@ -589,12 +588,12 @@ public class ImportUpdateObjectSvaTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results persisted to the mocked db context
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
-        
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
+
         // get the Connected System Object for the user we changed some attribute values for in the mocked connector
         var cso1ToValidate = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1ToValidate, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
@@ -759,12 +758,12 @@ public class ImportUpdateObjectSvaTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results persisted to the mocked db context
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
-        
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
+
         // get the Connected System Object for the user we changed some attribute values for in the mocked connector
         var cso1ToValidate = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1ToValidate, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
@@ -933,12 +932,12 @@ public class ImportUpdateObjectSvaTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results persisted to the mocked db context
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
-        
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
+
         // get the Connected System Object for the user we changed some attribute values for in the mocked connector
         var cso2ToValidate = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_2_ID);
         Assert.That(cso2ToValidate, Is.Not.EqualTo(null), "Expected to be able to retrieve the second CSO to validate.");
@@ -1108,12 +1107,12 @@ public class ImportUpdateObjectSvaTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results persisted to the mocked db context
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
-        
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
+
         // get the Connected System Object for the user we changed some attribute values for in the mocked connector
         var cso2ToValidate = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_2_ID);
         Assert.That(cso2ToValidate, Is.Not.EqualTo(null), "Expected to be able to retrieve the second CSO to validate.");
@@ -1356,14 +1355,14 @@ public class ImportUpdateObjectSvaTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results persisted to the mocked db context
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(3), $"Expected three Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(3), $"Expected three Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
         
-        // get the new manager
-        var cso3 = await Jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(1, (int)MockSourceSystemAttributeNames.EMPLOYEE_ID, "3");
+        // get the new manager — CSO3 was created during import, so it's in SyncRepo but not in the mock DbContext
+        var cso3 = await SyncRepo.GetConnectedSystemObjectByAttributeAsync(1, (int)MockSourceSystemAttributeNames.EMPLOYEE_ID, "3");
         Assert.That(cso3, Is.Not.EqualTo(null), "Expected to be able to retrieve the new manager (cso3).");
         var cso3ManagerAttribute = cso3.GetAttributeValue(MockSourceSystemAttributeNames.MANAGER.ToString());
         Assert.That(cso3ManagerAttribute, Is.Not.Null);
@@ -1461,12 +1460,12 @@ public class ImportUpdateObjectSvaTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results persisted to the mocked db context
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
-        
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
+
         // get the Connected System Object for the user we changed some attribute values for in the mocked connector
         var cso1ToValidate = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1ToValidate, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
@@ -1554,12 +1553,12 @@ public class ImportUpdateObjectSvaTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results persisted to the mocked db context
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
-        
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
+
         // get the Connected System Object for the user we changed some attribute values for in the mocked connector
         var cso1 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
@@ -1647,12 +1646,12 @@ public class ImportUpdateObjectSvaTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results persisted to the mocked db context
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
-        
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
+
         // get the Connected System Object for the user we changed some attribute values for in the mocked connector
         var cso1 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
@@ -1740,12 +1739,12 @@ public class ImportUpdateObjectSvaTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results persisted to the mocked db context
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
-        
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
+
         // get the Connected System Object for the user we changed some attribute values for in the mocked connector
         var cso1 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
@@ -1833,12 +1832,12 @@ public class ImportUpdateObjectSvaTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results persisted to the mocked db context
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
-        
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
+
         // get the Connected System Object for the user we changed some attribute values for in the mocked connector
         var cso1 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
@@ -1934,12 +1933,12 @@ public class ImportUpdateObjectSvaTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results persisted to the mocked db context
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
-        
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
+
         // get the Connected System Object for the user we changed some attribute values for in the mocked connector
         var cso2 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_2_ID);
         Assert.That(cso2, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
@@ -2027,12 +2026,12 @@ public class ImportUpdateObjectSvaTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results persisted to the mocked db context
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
-        
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
+
         // get the Connected System Object for the user we changed some attribute values for in the mocked connector
         var cso1 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
@@ -2132,12 +2131,12 @@ public class ImportUpdateObjectSvaTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results persisted to the mocked db context
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
-        
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
+
         // get the Connected System Object for the user we changed some attribute values for in the mocked connector
         var cso1ToValidate = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1ToValidate, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
@@ -2239,12 +2238,12 @@ public class ImportUpdateObjectSvaTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results persisted to the mocked db context
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
-        
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
+
         // get the Connected System Object for the user we changed some attribute values for in the mocked connector
         var cso1 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
@@ -2347,12 +2346,12 @@ public class ImportUpdateObjectSvaTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results persisted to the mocked db context
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
-        
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
+
         // get the Connected System Object for the user we changed some attribute values for in the mocked connector
         var cso1 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
@@ -2454,12 +2453,12 @@ public class ImportUpdateObjectSvaTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results persisted to the mocked db context
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
-        
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
+
         // get the Connected System Object for the user we changed some attribute values for in the mocked connector
         var cso1 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1, Is.Not.EqualTo(null), "Expected to be able to retrieve the first CSO to validate.");
@@ -2561,12 +2560,12 @@ public class ImportUpdateObjectSvaTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results persisted to the mocked db context
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
-        
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
+
         // get the Connected System Object for the user we changed some attribute values for in the mocked connector
         var cso1 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_1_ID);
         Assert.That(cso1, Is.Not.EqualTo(null), "Expected to be able to retrieve the second CSO to validate.");
@@ -2744,16 +2743,16 @@ public class ImportUpdateObjectSvaTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results persisted to the mocked db context
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
-        
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
+
         // get the Connected System Object for the user we changed some attribute values for in the mocked connector
         var cso2 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_2_ID);
         Assert.That(cso2, Is.Not.EqualTo(null), "Expected to be able to retrieve the second CSO to validate.");
-        
+
         // not core to this test, but we've had failings for this before, so increasing coverage.
         var cso2ManagerAttribute = cso2.GetAttributeValue(MockSourceSystemAttributeNames.MANAGER.ToString());
         Assert.That(cso2ManagerAttribute, Is.Not.Null, "Expected to be able to get the MANAGER attribute on CSO2.");
@@ -2941,11 +2940,11 @@ public class ImportUpdateObjectSvaTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
 
-        // confirm the results persisted to the mocked db context
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {ConnectedSystemObjectsData.Count}.");
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
 
         // get the Connected System Object for the user we added the profile picture to
         var cso2 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_2_ID);
@@ -3143,6 +3142,10 @@ public class ImportUpdateObjectSvaTests
             }
         };
         ConnectedSystemObjectsData.Add(cso2);
+
+        // create the sync repository with the CSOs seeded, then instantiate Jim
+        SyncRepo = TestUtilities.CreateSyncRepository(csos: ConnectedSystemObjectsData, activity: ActivitiesData.First());
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
     }
     #endregion
 }

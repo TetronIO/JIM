@@ -11,6 +11,7 @@ using JIM.Worker.Tests.Models;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
 using Moq;
+using SyncRepository = JIM.InMemoryData.SyncRepository;
 
 namespace JIM.Worker.Tests.Synchronisation;
 
@@ -39,6 +40,7 @@ public class ImportReferenceMatchingTests
     private Mock<DbSet<PendingExport>> MockDbSetPendingExports { get; set; } = null!;
     private Mock<JimDbContext> MockJimDbContext { get; set; } = null!;
     private JimApplication Jim { get; set; } = null!;
+    private SyncRepository SyncRepo { get; set; } = null!;
     #endregion
 
     [TearDown]
@@ -84,7 +86,8 @@ public class ImportReferenceMatchingTests
         MockJimDbContext.Setup(m => m.ServiceSettingItems).Returns(MockDbSetServiceSettings.Object);
         MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
 
-        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+        SyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First());
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
 
         var mockDbSetConnectedSystemObject = ConnectedSystemObjectsData.BuildMockDbSet();
         mockDbSetConnectedSystemObject.Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback((IEnumerable<ConnectedSystemObject> entities) =>
@@ -133,7 +136,7 @@ public class ImportReferenceMatchingTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var importProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var importProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await importProcessor.PerformFullImportAsync();
 
         // Verify all 3 member references are preserved
@@ -191,7 +194,7 @@ public class ImportReferenceMatchingTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var importProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var importProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await importProcessor.PerformFullImportAsync();
 
         // Since UnresolvedReferenceValue matches the import string (case-sensitive), all 3
@@ -345,6 +348,10 @@ public class ImportReferenceMatchingTests
             new() { Id = Guid.NewGuid(), StringValue = TestConstants.CS_OBJECT_4_DISPLAY_NAME, Attribute = groupObjectType.Attributes.Single(q => q.Name == MockSourceSystemAttributeNames.DISPLAY_NAME.ToString()), ConnectedSystemObject = cso4 }
         };
         ConnectedSystemObjectsData.Add(cso4);
+
+        // Seed all CSOs into the SyncRepository so the import processor can look them up
+        foreach (var cso in ConnectedSystemObjectsData)
+            SyncRepo.SeedConnectedSystemObject(cso);
     }
 
     #endregion

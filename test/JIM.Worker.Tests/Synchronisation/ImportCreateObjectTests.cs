@@ -11,6 +11,7 @@ using JIM.Worker.Tests.Models;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
 using Moq;
+using SyncRepository = JIM.InMemoryData.SyncRepository;
 
 namespace JIM.Worker.Tests.Synchronisation;
 
@@ -34,6 +35,7 @@ public class ImportCreateObjectTests
     private Mock<DbSet<PendingExport>> MockDbSetPendingExports { get; set; }
     private Mock<JimDbContext> MockJimDbContext { get; set; }
     private JimApplication Jim { get; set; }
+    private SyncRepository SyncRepo { get; set; }
     #endregion
 
     [TearDown]
@@ -87,8 +89,9 @@ public class ImportCreateObjectTests
         MockJimDbContext.Setup(m => m.ServiceSettingItems).Returns(MockDbSetServiceSettings.Object);
         MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
 
-        // instantiate Jim using the mocked db context
-        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+        // create the sync repository and instantiate Jim using the mocked db context
+        SyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First());
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
     }
     
     [Test]
@@ -232,14 +235,15 @@ public class ImportCreateObjectTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results persisted to the mocked db context
-        Assert.That(connectedSystemObjectData, Has.Count.EqualTo(2), "Expected two Connected System Objects to have been persisted.");
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), "Expected two Connected System Objects to have been persisted.");
 
         // validate the first user (who is a manager)
-        var firstPersistedConnectedSystemObject = connectedSystemObjectData[0];
+        var syncRepoValues = SyncRepo.ConnectedSystemObjects.Values.ToList();
+        var firstPersistedConnectedSystemObject = syncRepoValues[0];
         var firstSourceConnectedSystemImportObject = mockFileConnector.TestImportObjects[0];
         TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.HR_ID, ConnectedSystemObjectTypesData);
         TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.EMPLOYEE_ID, ConnectedSystemObjectTypesData);
@@ -251,7 +255,7 @@ public class ImportCreateObjectTests
         TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.LEAVER, ConnectedSystemObjectTypesData);
         
         // validate the second user (who is a direct-report)
-        var secondPersistedConnectedSystemObject = connectedSystemObjectData[1];
+        var secondPersistedConnectedSystemObject = syncRepoValues[1];
         var secondSourceConnectedSystemImportObject = mockFileConnector.TestImportObjects[1];
         TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.HR_ID, ConnectedSystemObjectTypesData);
         TestUtilities.ValidateImportAttributesForEquality(secondPersistedConnectedSystemObject, secondSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.EMPLOYEE_ID, ConnectedSystemObjectTypesData);
@@ -356,14 +360,14 @@ public class ImportCreateObjectTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results persisted to the mocked db context
-        Assert.That(connectedSystemObjectData, Has.Count.EqualTo(1), "Expected one Connected System Object to have been persisted.");
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(1), "Expected one Connected System Object to have been persisted.");
 
         // validate the user
-        var firstPersistedConnectedSystemObject = connectedSystemObjectData[0];
+        var firstPersistedConnectedSystemObject = SyncRepo.ConnectedSystemObjects.Values.First();
         var firstSourceConnectedSystemImportObject = mockFileConnector.TestImportObjects[0];
         
         TestUtilities.ValidateImportAttributesForEquality(firstPersistedConnectedSystemObject, firstSourceConnectedSystemImportObject, MockSourceSystemAttributeNames.HR_ID, ConnectedSystemObjectTypesData);
@@ -410,12 +414,12 @@ public class ImportCreateObjectTests
             var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
             var activity = ActivitiesData.First();
             var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
-            var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+            var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
             await synchronisationImportTaskProcessor.PerformFullImportAsync();
         });
 
         // no CSOs should have been created
-        Assert.That(connectedSystemObjectData, Has.Count.EqualTo(0), "Expected no Connected System Objects to be created when connector throws an exception.");
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(0), "Expected no Connected System Objects to be created when connector throws an exception.");
     }
 
     /// <summary>
@@ -478,11 +482,11 @@ public class ImportCreateObjectTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
 
         // no CSOs should have been created due to the error
-        Assert.That(connectedSystemObjectData, Has.Count.EqualTo(0), "Expected no Connected System Objects to be created due to duplicate attribute error.");
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(0), "Expected no Connected System Objects to be created due to duplicate attribute error.");
 
         // verify the error was recorded in the activity
         Assert.That(activity.RunProfileExecutionItems, Is.Not.Empty, "Expected run profile execution items to be created.");
@@ -547,11 +551,11 @@ public class ImportCreateObjectTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
 
         // no CSOs should have been created due to the error
-        Assert.That(connectedSystemObjectData, Has.Count.EqualTo(0), "Expected no Connected System Objects to be created due to unexpected attribute error.");
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(0), "Expected no Connected System Objects to be created due to unexpected attribute error.");
 
         // verify the error was recorded in the activity
         Assert.That(activity.RunProfileExecutionItems, Is.Not.Empty, "Expected run profile execution items to be created.");
@@ -646,11 +650,11 @@ public class ImportCreateObjectTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
 
         // NO CSOs should have been created - both objects should be rejected
-        Assert.That(connectedSystemObjectData, Has.Count.EqualTo(0), "Expected no Connected System Objects to be created due to duplicate external ID error.");
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(0), "Expected no Connected System Objects to be created due to duplicate external ID error.");
 
         // verify BOTH objects have DuplicateObject errors in the activity
         Assert.That(activity.RunProfileExecutionItems, Is.Not.Empty, "Expected run profile execution items to be created.");
@@ -727,11 +731,11 @@ public class ImportCreateObjectTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
 
         // NO CSOs should have been created
-        Assert.That(connectedSystemObjectData, Has.Count.EqualTo(0), "Expected no Connected System Objects to be created due to triplicate external ID error.");
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(0), "Expected no Connected System Objects to be created due to triplicate external ID error.");
 
         // verify ALL THREE objects have DuplicateObject errors
         var duplicateErrors = activity.RunProfileExecutionItems
@@ -856,14 +860,14 @@ public class ImportCreateObjectTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
 
         // Only ONE CSO should have been created (the unique one)
-        Assert.That(connectedSystemObjectData, Has.Count.EqualTo(1), "Expected exactly one Connected System Object to be created (the unique one).");
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(1), "Expected exactly one Connected System Object to be created (the unique one).");
 
         // Verify it's the unique object
-        var createdCso = connectedSystemObjectData[0];
+        var createdCso = SyncRepo.ConnectedSystemObjects.Values.First();
         var hrIdValue = createdCso.AttributeValues.FirstOrDefault(av =>
             av.Attribute.Name == MockSourceSystemAttributeNames.HR_ID.ToString())?.GuidValue;
         Assert.That(hrIdValue, Is.EqualTo(uniqueHrId), "Expected the created CSO to be the unique object, not a duplicate.");

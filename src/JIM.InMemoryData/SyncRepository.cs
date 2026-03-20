@@ -367,10 +367,13 @@ public class SyncRepository : ISyncRepository
 
     public Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId)
     {
-        if (!_csosByMvo.TryGetValue(metaverseObjectId, out var ids))
-            return Task.FromResult(0);
-
-        var count = ids.Count(id => _csos.TryGetValue(id, out var cso) && cso.ConnectedSystemId == connectedSystemId);
+        // Scan _csos directly rather than using the _csosByMvo index so that within-page joins
+        // (where MetaverseObjectId has been set in-memory but the index hasn't been flushed yet)
+        // are counted correctly. This matches the behaviour of the production EF Core query.
+        var count = _csos.Values.Count(c =>
+            c.ConnectedSystemId == connectedSystemId &&
+            c.MetaverseObjectId == metaverseObjectId &&
+            c.JoinType != ConnectedSystemObjectJoinType.NotJoined);
         return Task.FromResult(count);
     }
 
@@ -806,11 +809,34 @@ public class SyncRepository : ISyncRepository
             if (rpei.Id == Guid.Empty)
                 rpei.Id = Guid.NewGuid();
             _rpeis[rpei.Id] = rpei;
+
+            // Generate IDs for SyncOutcomes (matches PostgresDataRepository.FlattenSyncOutcomes behaviour)
+            AssignSyncOutcomeIds(rpei.SyncOutcomes, rpei.Id, null);
         }
         // Return false to indicate "not raw SQL" — tells the processor to keep RPEIs in
         // the activity's RunProfileExecutionItems collection for test assertions, rather
         // than clearing them (which is the production raw SQL path).
         return Task.FromResult(false);
+    }
+
+    private static void AssignSyncOutcomeIds(
+        List<ActivityRunProfileExecutionItemSyncOutcome> outcomes, Guid rpeiId, Guid? parentId)
+    {
+        // Process only root outcomes from the flat list to avoid visiting children twice
+        var roots = parentId == null
+            ? outcomes.Where(o => o.ParentSyncOutcome == null && o.ParentSyncOutcomeId == null).ToList()
+            : outcomes;
+
+        foreach (var outcome in roots)
+        {
+            if (outcome.Id == Guid.Empty)
+                outcome.Id = Guid.NewGuid();
+            outcome.ActivityRunProfileExecutionItemId = rpeiId;
+            outcome.ParentSyncOutcomeId = parentId;
+
+            if (outcome.Children.Count > 0)
+                AssignSyncOutcomeIds(outcome.Children, rpeiId, outcome.Id);
+        }
     }
 
     public Task BulkUpdateRpeiOutcomesAsync(
@@ -1270,6 +1296,8 @@ public class SyncRepository : ISyncRepository
         // CSO-level nav props
         if (cso.Type == null && cso.TypeId > 0 && _objectTypes.TryGetValue(cso.TypeId, out var objectType))
             cso.Type = objectType;
+        else if (cso.TypeId == 0 && cso.Type != null)
+            cso.TypeId = cso.Type.Id; // reverse: nav prop set but FK missing (common in tests)
         if (cso.ConnectedSystem == null && cso.ConnectedSystemId > 0 && _connectedSystems.TryGetValue(cso.ConnectedSystemId, out var cs))
             cso.ConnectedSystem = cs;
         if (cso.MetaverseObject == null && cso.MetaverseObjectId.HasValue && _mvos.TryGetValue(cso.MetaverseObjectId.Value, out var mvo))
