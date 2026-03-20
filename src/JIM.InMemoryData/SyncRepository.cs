@@ -734,7 +734,10 @@ public class SyncRepository : ISyncRepository
                 rpei.Id = Guid.NewGuid();
             _rpeis[rpei.Id] = rpei;
         }
-        return Task.FromResult(true);
+        // Return false to indicate "not raw SQL" — tells the processor to keep RPEIs in
+        // the activity's RunProfileExecutionItems collection for test assertions, rather
+        // than clearing them (which is the production raw SQL path).
+        return Task.FromResult(false);
     }
 
     public Task BulkUpdateRpeiOutcomesAsync(
