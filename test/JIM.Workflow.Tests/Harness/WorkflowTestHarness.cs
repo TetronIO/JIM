@@ -1,4 +1,5 @@
 using JIM.Application;
+using JIM.Application.Servers;
 using JIM.Connectors.Mock;
 using JIM.Data;
 using JIM.Models.Activities;
@@ -268,7 +269,7 @@ public class WorkflowTestHarness : IDisposable
 
         var cts = new CancellationTokenSource();
         var processor = new SyncFullSyncTaskProcessor(
-            _jim,
+            new SyncServer(_jim),
             new SyncRepositoryAdapter(_jim),
             system,
             runProfile,
@@ -348,7 +349,7 @@ public class WorkflowTestHarness : IDisposable
 
         var cts = new CancellationTokenSource();
         var processor = new SyncDeltaSyncTaskProcessor(
-            _jim,
+            new SyncServer(_jim),
             new SyncRepositoryAdapter(_jim),
             system,
             runProfile,

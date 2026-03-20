@@ -1,4 +1,5 @@
 using JIM.Application;
+using JIM.Application.Interfaces;
 using JIM.Application.Services;
 using JIM.Connectors;
 using JIM.Data;

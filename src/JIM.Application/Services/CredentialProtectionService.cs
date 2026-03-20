@@ -1,3 +1,4 @@
+using JIM.Application.Interfaces;
 using Microsoft.AspNetCore.DataProtection;
 using Serilog;
 

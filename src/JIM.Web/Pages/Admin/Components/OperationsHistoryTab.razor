@@ -70,6 +70,14 @@
                 <MudCheckBox T="bool" Value="_filterHasChildren" ValueChanged="OnHasChildrenFilterChanged"
                              Label="Has child activities" Dense="true" Class="mb-1 mud-typography-nowrap" />
             </MudItem>
+            <MudItem Class="d-flex align-end mb-2">
+                <MudTooltip Text="@(_pollingPaused ? "Resume auto-refresh" : "Pause auto-refresh")" Placement="Placement.Top">
+                    <MudIconButton Icon="@(_pollingPaused ? Icons.Material.Filled.PlayArrow : Icons.Material.Filled.Pause)"
+                                   Size="Size.Small"
+                                   OnClick="@(() => _pollingPaused = !_pollingPaused)"
+                                   Color="@(_pollingPaused ? Color.Warning : Color.Default)" />
+                </MudTooltip>
+            </MudItem>
     </MudStack>
 
     <MudTable @ref="_table" T="Activity" ServerData="ServerReload" @bind-CurrentPage="_currentPage"
@@ -286,7 +294,22 @@
                 }
                 else
                 {
-                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Style="width: 80px;" />
+                    @if (context.ObjectsToProcess > 0)
+                    {
+                        var percentage = (double)context.ObjectsProcessed / context.ObjectsToProcess * 100;
+                        <MudStack Spacing="0" Style="width: 120px;">
+                            <MudProgressLinear Value="@percentage" Color="Color.Primary" Rounded="true" Size="Size.Small" />
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="white-space: nowrap;">@context.ObjectsProcessed.ToString("N0") / @context.ObjectsToProcess.ToString("N0")</MudText>
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Rounded="true" Style="width: 80px;" Size="Size.Small" />
+                        @if (!string.IsNullOrEmpty(context.Message))
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.Message</MudText>
+                        }
+                    }
                 }
             </MudTd>
             <MudTd DataLabel="Initiated By">
@@ -358,7 +381,7 @@
             </div>
 
             @* Status *@
-            <div class="d-flex gap-4 align-center flex-wrap">
+            <div class="d-flex gap-4 align-center flex-wrap mt-n4">
                 <MudChip T="string" Size="Size.Medium" Variant="Variant.Filled"
                          Color="Helpers.GetActivityMudBlazorColorForStatus(_selectedActivity.Status)">
                     @_selectedActivity.Status.ToString().SplitOnCapitalLetters()
@@ -368,17 +391,152 @@
             @* Target Information *@
             <MudPaper Elevation="0" Class="pa-3" Outlined="true">
                 <MudText Typo="Typo.subtitle2" Class="mb-2" Color="Color.Primary">Target</MudText>
-                @if (!string.IsNullOrEmpty(_selectedActivity.TargetContext))
+                @switch (_selectedActivity.TargetType)
                 {
-                    <MudText Typo="Typo.body1"><strong>@_selectedActivity.TargetContext</strong> → @_selectedActivity.TargetName</MudText>
+                    case ActivityTargetType.ConnectedSystemRunProfile:
+                        <div>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Connected System</MudText><br/>
+                            @if (_selectedActivity.ConnectedSystemId.HasValue && !string.IsNullOrEmpty(_selectedActivity.TargetContext))
+                            {
+                                <MudLink Typo="Typo.body1" Href="@($"/admin/connected-systems/{_selectedActivity.ConnectedSystemId}/")">@_selectedActivity.TargetContext</MudLink>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body1">@(_selectedActivity.TargetContext ?? "-")</MudText>
+                            }
+                        </div>
+                        break;
+
+                    case ActivityTargetType.ConnectedSystem:
+                        <div>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Connected System</MudText><br/>
+                            @if (_selectedActivity.ConnectedSystemId.HasValue)
+                            {
+                                <MudLink Typo="Typo.body1" Href="@($"/admin/connected-systems/{_selectedActivity.ConnectedSystemId}/")">@_selectedActivity.TargetName</MudLink>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body1">@(_selectedActivity.TargetName ?? "-")</MudText>
+                            }
+                        </div>
+                        break;
+
+                    case ActivityTargetType.SyncRule:
+                        <div>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Sync Rule</MudText><br/>
+                            @if (_selectedActivity.SyncRuleId.HasValue)
+                            {
+                                <MudLink Typo="Typo.body1" Href="@($"/admin/sync-rules/{_selectedActivity.SyncRuleId}")">@_selectedActivity.TargetName</MudLink>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body1">@(_selectedActivity.TargetName ?? "-")</MudText>
+                            }
+                        </div>
+                        break;
+
+                    case ActivityTargetType.MetaverseObject:
+                        <div>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Metaverse Object</MudText><br/>
+                            @if (_selectedActivity.MetaverseObjectId.HasValue)
+                            {
+                                <MudLink Typo="Typo.body1" Href="@($"/admin/metaverse/{_selectedActivity.MetaverseObjectId}")">@(_selectedActivity.TargetName ?? _selectedActivity.MetaverseObjectId.ToString())</MudLink>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body1">@(_selectedActivity.TargetName ?? "-")</MudText>
+                            }
+                        </div>
+                        break;
+
+                    case ActivityTargetType.ExampleDataTemplate:
+                        <div>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Example Data Template</MudText><br/>
+                            @if (_selectedActivity.ExampleDataTemplateId.HasValue)
+                            {
+                                <MudLink Typo="Typo.body1" Href="@($"/admin/example-data/templates/{_selectedActivity.ExampleDataTemplateId}")">@_selectedActivity.TargetName</MudLink>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body1">@(_selectedActivity.TargetName ?? "-")</MudText>
+                            }
+                        </div>
+                        break;
+
+                    case ActivityTargetType.TrustedCertificate:
+                        <div>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Trusted Certificate</MudText><br/>
+                            <MudLink Typo="Typo.body1" Href="/admin/certificates">@(_selectedActivity.TargetName ?? "-")</MudLink>
+                        </div>
+                        break;
+
+                    case ActivityTargetType.MetaverseAttribute:
+                        <div>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Metaverse Attribute</MudText><br/>
+                            <MudLink Typo="Typo.body1" Href="/admin/schema/metaverse">@(_selectedActivity.TargetName ?? "-")</MudLink>
+                        </div>
+                        break;
+
+                    case ActivityTargetType.ObjectMatchingRule:
+                        @if (!string.IsNullOrEmpty(_selectedActivity.TargetContext))
+                        {
+                            <div class="mb-4">
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Sync Rule</MudText><br/>
+                                <MudText Typo="Typo.body1">@_selectedActivity.TargetContext</MudText>
+                            </div>
+                        }
+                        <div>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Object Matching Rule</MudText><br/>
+                            <MudText Typo="Typo.body1">@(_selectedActivity.TargetName ?? "-")</MudText>
+                        </div>
+                        break;
+
+                    case ActivityTargetType.HistoryRetentionCleanup:
+                        <div>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">System Task</MudText><br/>
+                            <MudText Typo="Typo.body1">
+                                <MudIcon Icon="@Icons.Material.Filled.CleaningServices" Class="mr-1" Style="vertical-align: middle;" />
+                                @(_selectedActivity.TargetName ?? "History Retention Cleanup")
+                            </MudText>
+                        </div>
+                        break;
+
+                    case ActivityTargetType.ServiceSetting:
+                        <div>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Service Setting</MudText><br/>
+                            <MudText Typo="Typo.body1">@(_selectedActivity.TargetName ?? "-")</MudText>
+                        </div>
+                        break;
+
+                    default:
+                        <div>
+                            @if (!string.IsNullOrEmpty(_selectedActivity.TargetContext))
+                            {
+                                <MudText Typo="Typo.body1"><strong>@_selectedActivity.TargetContext</strong> → @_selectedActivity.TargetName</MudText>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body1">@(_selectedActivity.TargetName ?? "-")</MudText>
+                            }
+                        </div>
+                        break;
                 }
-                else
+            </MudPaper>
+
+            @* Operation *@
+            <MudPaper Elevation="0" Class="pa-3" Outlined="true">
+                <MudText Typo="Typo.subtitle2" Class="mb-2" Color="Color.Primary">Operation</MudText>
+                <div>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Type</MudText><br/>
+                    <MudText Typo="Typo.body1">@_selectedActivity.TargetOperationType.ToString().SplitOnCapitalLetters() @_selectedActivity.TargetType.ToString().SplitOnCapitalLetters()</MudText>
+                </div>
+                @if (_selectedActivity.TargetType == ActivityTargetType.ConnectedSystemRunProfile)
                 {
-                    <MudText Typo="Typo.body1">@_selectedActivity.TargetName</MudText>
+                    <div class="mt-4">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Run Profile</MudText><br/>
+                        <MudText Typo="Typo.body1">@(_selectedActivity.TargetName ?? "-")</MudText>
+                    </div>
                 }
-                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
-                    @_selectedActivity.TargetType.ToString().SplitOnCapitalLetters()
-                </MudText>
             </MudPaper>
 
             @* Statistics *@
@@ -547,6 +705,7 @@
     private bool _panelOpen;
     private Activity? _selectedActivity;
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
+    private bool _pollingPaused;
 
     // Snapshot of last-displayed data for change detection during polling
     private string? _lastDataFingerprint;
@@ -575,8 +734,8 @@
                 {
                     await Task.Delay(TimeSpan.FromSeconds(5), token);
 
-                    // Only auto-refresh when on page 1 and panel is closed to avoid jarring UX
-                    if (_table == null || _currentPage != 0 || _panelOpen)
+                    // Only auto-refresh when on page 1, panel is closed, and not paused
+                    if (_table == null || _currentPage != 0 || _panelOpen || _pollingPaused)
                         continue;
 
                     // Fetch current data and compare with what's displayed

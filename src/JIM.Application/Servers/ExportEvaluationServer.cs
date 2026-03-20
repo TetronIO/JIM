@@ -1,4 +1,5 @@
 using JIM.Application.Expressions;
+using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
@@ -6,6 +7,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using Serilog;
+
 namespace JIM.Application.Servers;
 
 /// <summary>
@@ -15,73 +17,16 @@ namespace JIM.Application.Servers;
 public class ExportEvaluationServer
 {
     private JimApplication Application { get; }
+    private ISyncRepository SyncRepo { get; }
     private IExpressionEvaluator ExpressionEvaluator { get; }
     private ScopingEvaluationServer ScopingEvaluation { get; }
 
-    internal ExportEvaluationServer(JimApplication application)
+    internal ExportEvaluationServer(JimApplication application, ISyncRepository syncRepo)
     {
         Application = application;
+        SyncRepo = syncRepo;
         ExpressionEvaluator = new DynamicExpressoEvaluator();
         ScopingEvaluation = new ScopingEvaluationServer();
-    }
-
-    /// <summary>
-    /// Result of export evaluation including pending exports and no-net-change statistics.
-    /// </summary>
-    public class ExportEvaluationResult
-    {
-        /// <summary>
-        /// List of PendingExports that were created.
-        /// </summary>
-        public List<PendingExport> PendingExports { get; set; } = [];
-
-        /// <summary>
-        /// List of CSOs created for provisioning (when deferSave is true).
-        /// These need to be batch-persisted by the caller before the pending exports.
-        /// </summary>
-        public List<ConnectedSystemObject> ProvisioningCsosToCreate { get; set; } = [];
-
-        /// <summary>
-        /// Count of attributes skipped because the CSO already has the current value.
-        /// This represents true no-net-changes where the MVO had updates but the CSO matches.
-        /// </summary>
-        public int CsoAlreadyCurrentCount { get; set; }
-    }
-
-    /// <summary>
-    /// Cache class for pre-loaded export evaluation data.
-    /// Pass this to the optimised evaluation methods to avoid O(N×M) database queries.
-    /// </summary>
-    public class ExportEvaluationCache
-    {
-        /// <summary>
-        /// Pre-loaded export rules, keyed by MVO type ID.
-        /// </summary>
-        public Dictionary<int, List<SyncRule>> ExportRulesByMvoTypeId { get; }
-
-        /// <summary>
-        /// Pre-loaded CSO lookup, keyed by (MvoId, ConnectedSystemId).
-        /// </summary>
-        public Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject> CsoLookup { get; }
-
-        /// <summary>
-        /// Pre-loaded target CSO attribute values for no-net-change detection during export evaluation.
-        /// Uses ILookup to support multi-valued attributes where a single (CsoId, AttributeId) can have multiple values.
-        /// </summary>
-        public ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue> CsoAttributeValues { get; }
-
-        /// <summary>
-        /// Creates a new export evaluation cache with pre-loaded data.
-        /// </summary>
-        public ExportEvaluationCache(
-            Dictionary<int, List<SyncRule>> exportRulesByMvoTypeId,
-            Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject> csoLookup,
-            ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue> csoAttributeValues)
-        {
-            ExportRulesByMvoTypeId = exportRulesByMvoTypeId;
-            CsoLookup = csoLookup;
-            CsoAttributeValues = csoAttributeValues;
-        }
     }
 
     /// <summary>
@@ -98,7 +43,7 @@ public class ExportEvaluationServer
     {
         // Use pre-loaded sync rules if available, otherwise load from database
         var allSyncRules = preloadedSyncRules
-            ?? await Application.Repository.ConnectedSystems.GetSyncRulesAsync();
+            ?? await SyncRepo.GetAllSyncRulesAsync();
 
         var exportRules = allSyncRules
             .Where(sr => sr.Enabled && sr.Direction == SyncRuleDirection.Export)
@@ -116,15 +61,13 @@ public class ExportEvaluationServer
             .ToList();
 
         // Load all CSOs for target systems in a single query
-        var csoLookup = await Application.Repository.ConnectedSystems
-            .GetConnectedSystemObjectsByTargetSystemsAsync(targetSystemIds);
+        var csoLookup = await SyncRepo.GetConnectedSystemObjectsByTargetSystemsAsync(targetSystemIds);
 
         // Load target CSO attribute values for no-net-change detection during export evaluation.
         // This is critical for preventing duplicate ADD operations on multi-valued attributes
         // (e.g., group members that already exist in the target system).
         var targetCsoIds = csoLookup.Values.Select(cso => cso.Id).ToList();
-        var csoAttributeValues = await Application.Repository.ConnectedSystems
-            .GetCsoAttributeValuesByCsoIdsAsync(targetCsoIds);
+        var csoAttributeValues = await SyncRepo.GetCsoAttributeValuesByCsoIdsAsync(targetCsoIds);
 
         // Use ToLookup to support multi-valued attributes (e.g., group membership)
         // where a single (CsoId, AttributeId) key can have multiple values
@@ -228,8 +171,7 @@ public class ExportEvaluationServer
             }
 
             // MVO is OUT of scope - check if there's an existing CSO to deprovision
-            var existingCso = await Application.Repository.ConnectedSystems
-                .GetConnectedSystemObjectByMetaverseObjectIdAsync(mvo.Id, exportRule.ConnectedSystemId);
+            var existingCso = await SyncRepo.GetConnectedSystemObjectByMetaverseObjectIdAsync(mvo.Id, exportRule.ConnectedSystemId);
 
             if (existingCso == null)
             {
@@ -499,7 +441,7 @@ public class ExportEvaluationServer
                 mvo.ConnectedSystemObjects.Remove(cso);
 
                 // Update the CSO in the database
-                await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(cso);
+                await SyncRepo.UpdateConnectedSystemObjectAsync(cso);
 
                 // Check if this was the last connector for the MVO
                 if (mvo.ConnectedSystemObjects.Count == 0 && mvo.Origin == MetaverseObjectOrigin.Projected)
@@ -533,7 +475,7 @@ public class ExportEvaluationServer
                     CreatedAt = DateTime.UtcNow
                 };
 
-                await Application.Repository.ConnectedSystems.CreatePendingExportAsync(pendingExport);
+                await SyncRepo.CreatePendingExportAsync(pendingExport);
 
                 Log.Information("HandleOutboundDeprovisioningAsync: Created delete PendingExport {ExportId} for CSO {CsoId} in system {SystemId}",
                     pendingExport.Id, cso.Id, cso.ConnectedSystemId);
@@ -559,7 +501,7 @@ public class ExportEvaluationServer
         var pendingExports = new List<PendingExport>();
 
         // Get all CSOs joined to this MVO (includes attribute values for secondary external ID)
-        var joinedCsos = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdAsync(mvo.Id);
+        var joinedCsos = await SyncRepo.GetConnectedSystemObjectsByMetaverseObjectIdAsync(mvo.Id);
 
         foreach (var cso in joinedCsos)
         {
@@ -573,7 +515,7 @@ public class ExportEvaluationServer
                 cso.MetaverseObjectId = null;
                 cso.JoinType = ConnectedSystemObjectJoinType.NotJoined;
                 cso.DateJoined = null;
-                await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(cso);
+                await SyncRepo.UpdateConnectedSystemObjectAsync(cso);
                 Log.Debug("EvaluateMvoDeletionAsync: Disconnected non-Provisioned CSO {CsoId} from MVO {MvoId}",
                     cso.Id, mvo.Id);
                 continue;
@@ -583,8 +525,7 @@ public class ExportEvaluationServer
             // This prevents duplicate PEs when EvaluateMvoDeletionAsync is called multiple times
             // for the same MVO (e.g., via housekeeping retry after a failed deletion attempt),
             // or when a Create PE exists from provisioning that was never exported.
-            var existingPe = await Application.Repository.ConnectedSystems
-                .GetPendingExportByConnectedSystemObjectIdAsync(cso.Id);
+            var existingPe = await SyncRepo.GetPendingExportByConnectedSystemObjectIdAsync(cso.Id);
 
             if (existingPe != null)
             {
@@ -599,7 +540,7 @@ public class ExportEvaluationServer
                     cso.MetaverseObjectId = null;
                     cso.JoinType = ConnectedSystemObjectJoinType.NotJoined;
                     cso.DateJoined = null;
-                    await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(cso);
+                    await SyncRepo.UpdateConnectedSystemObjectAsync(cso);
                     continue;
                 }
 
@@ -607,7 +548,7 @@ public class ExportEvaluationServer
                 // Delete it and replace with the Delete PE, since the MVO is being deleted.
                 Log.Information("EvaluateMvoDeletionAsync: Replacing existing {ChangeType} PendingExport {ExistingPeId} for CSO {CsoId} with Delete PE",
                     existingPe.ChangeType, existingPe.Id, cso.Id);
-                await Application.Repository.ConnectedSystems.DeletePendingExportAsync(existingPe);
+                await SyncRepo.DeletePendingExportAsync(existingPe);
             }
 
             // Only set the FK property (ConnectedSystemObjectId), NOT the navigation property (ConnectedSystemObject).
@@ -647,7 +588,7 @@ public class ExportEvaluationServer
                     cso.Id);
             }
 
-            await Application.Repository.ConnectedSystems.CreatePendingExportAsync(pendingExport);
+            await SyncRepo.CreatePendingExportAsync(pendingExport);
             pendingExports.Add(pendingExport);
 
             // Disconnect the CSO from the MVO to prevent spurious sync processing after the MVO is deleted.
@@ -656,7 +597,7 @@ public class ExportEvaluationServer
             cso.MetaverseObjectId = null;
             cso.JoinType = ConnectedSystemObjectJoinType.NotJoined;
             cso.DateJoined = null;
-            await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(cso);
+            await SyncRepo.UpdateConnectedSystemObjectAsync(cso);
 
             Log.Information("EvaluateMvoDeletionAsync: Created delete PendingExport {ExportId} for CSO {CsoId} in system {SystemId}, CSO disconnected from MVO",
                 pendingExport.Id, cso.Id, cso.ConnectedSystemId);
@@ -670,7 +611,7 @@ public class ExportEvaluationServer
     /// </summary>
     private async Task<List<SyncRule>> GetExportRulesForObjectTypeAsync(int metaverseObjectTypeId)
     {
-        var allSyncRules = await Application.Repository.ConnectedSystems.GetSyncRulesAsync();
+        var allSyncRules = await SyncRepo.GetAllSyncRulesAsync();
 
         return allSyncRules
             .Where(sr => sr.Enabled &&
@@ -704,8 +645,7 @@ public class ExportEvaluationServer
         HashSet<MetaverseObjectAttributeValue>? removedAttributes = null)
     {
         // Find existing CSO for this MVO in the target system
-        var existingCso = await Application.Repository.ConnectedSystems
-            .GetConnectedSystemObjectByMetaverseObjectIdAsync(mvo.Id, exportRule.ConnectedSystemId);
+        var existingCso = await SyncRepo.GetConnectedSystemObjectByMetaverseObjectIdAsync(mvo.Id, exportRule.ConnectedSystemId);
 
         PendingExportChangeType changeType;
         ConnectedSystemObject? csoForExport = existingCso;
@@ -789,7 +729,7 @@ public class ExportEvaluationServer
             CreatedAt = DateTime.UtcNow
         };
 
-        await Application.Repository.ConnectedSystems.CreatePendingExportAsync(pendingExport);
+        await SyncRepo.CreatePendingExportAsync(pendingExport);
 
         Log.Information("CreateOrUpdatePendingExportAsync: Created {ChangeType} PendingExport {ExportId} for MVO {MvoId} to system {SystemName} with {AttrCount} attribute changes",
             changeType, pendingExport.Id, mvo.Id, exportRule.ConnectedSystem?.Name ?? exportRule.ConnectedSystemId.ToString(), attributeChanges.Count);
@@ -911,7 +851,7 @@ public class ExportEvaluationServer
 
         // Save immediately - batching causes memory pressure with large datasets (5000+ objects)
         // which leads to worse performance than individual saves due to GC overhead
-        await Application.Repository.ConnectedSystems.CreatePendingExportAsync(pendingExport);
+        await SyncRepo.CreatePendingExportAsync(pendingExport);
 
         Log.Debug("CreateOrUpdatePendingExportAsync: Created {ChangeType} PendingExport {ExportId} for MVO {MvoId} to system {SystemName} with {AttrCount} attribute changes, CsoId={CsoId}",
             changeType, pendingExport.Id, mvo.Id, exportRule.ConnectedSystem?.Name ?? exportRule.ConnectedSystemId.ToString(), attributeChanges.Count, pendingExport.ConnectedSystemObjectId);
@@ -992,7 +932,7 @@ public class ExportEvaluationServer
                     matchedCso.JoinType = ConnectedSystemObjectJoinType.Joined;
                     matchedCso.DateJoined = DateTime.UtcNow;
 
-                    await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(matchedCso);
+                    await SyncRepo.UpdateConnectedSystemObjectAsync(matchedCso);
 
                     // Update cache so subsequent lookups find the joined CSO
                     cache.CsoLookup[lookupKey] = matchedCso;
@@ -1159,8 +1099,7 @@ public class ExportEvaluationServer
         // If found, delete the old PE and return a new merged PE for batch creation.
         if (csoId.HasValue && (changeType == PendingExportChangeType.Update || changeType == PendingExportChangeType.Create))
         {
-            var dbPendingExport = await Application.Repository.ConnectedSystems
-                .GetPendingExportByConnectedSystemObjectIdAsync(csoId.Value);
+            var dbPendingExport = await SyncRepo.GetPendingExportByConnectedSystemObjectIdAsync(csoId.Value);
 
             if (dbPendingExport != null)
             {
@@ -1200,7 +1139,7 @@ public class ExportEvaluationServer
                     attributeChanges.Count, driftOnlyChanges.Count, mergedChanges.Count, mvo.Id);
 
                 // Delete the old PE from the database
-                await Application.Repository.ConnectedSystems.DeletePendingExportAsync(dbPendingExport);
+                await SyncRepo.DeletePendingExportAsync(dbPendingExport);
 
                 // Replace attributeChanges with merged set so the new PE created below includes everything
                 attributeChanges = mergedChanges;
@@ -1235,7 +1174,7 @@ public class ExportEvaluationServer
         {
             using (JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("SavePendingExport"))
             {
-                await Application.Repository.ConnectedSystems.CreatePendingExportAsync(pendingExport);
+                await SyncRepo.CreatePendingExportAsync(pendingExport);
             }
         }
 
@@ -1293,7 +1232,7 @@ public class ExportEvaluationServer
         // Save immediately unless caller requested deferred saving for batch operations
         if (!deferSave)
         {
-            await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectAsync(cso);
+            await SyncRepo.CreateConnectedSystemObjectAsync(cso);
         }
 
         Log.Debug("CreatePendingProvisioningCsoAsync: Created PendingProvisioning CSO {CsoId} for MVO {MvoId} in system {SystemId} (deferSave={DeferSave})",
@@ -1356,13 +1295,13 @@ public class ExportEvaluationServer
         // Persist immediately unless caller requested deferred saving for batch operations
         if (!deferSave)
         {
-            await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(cso);
+            await SyncRepo.UpdateConnectedSystemObjectAsync(cso);
 
             // Add to lookup cache so confirming imports can find this PendingProvisioning CSO
             // by secondary external ID without a DB round-trip.
             // When deferSave=true, the caller (FlushPendingExportOperationsAsync) handles cache population.
             if (secondaryIdChange.StringValue != null)
-                Application.ConnectedSystems.AddCsoToCache(cso.ConnectedSystemId, cso.SecondaryExternalIdAttributeId.Value, secondaryIdChange.StringValue, cso.Id);
+                SyncRepo.AddCsoToCache(cso.ConnectedSystemId, cso.SecondaryExternalIdAttributeId.Value, secondaryIdChange.StringValue, cso.Id);
         }
 
         Log.Debug("AddSecondaryExternalIdToCsoAsync: Added secondary external ID value '{SecondaryIdValue}' to CSO {CsoId} for confirming import matching (deferSave={DeferSave})",
@@ -2049,7 +1988,7 @@ public class ExportEvaluationServer
 
         try
         {
-            return await Application.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            return await SyncRepo.FindMatchingConnectedSystemObjectAsync(
                 mvo,
                 exportRule.ConnectedSystem,
                 exportRule.ConnectedSystemObjectType,

@@ -1,4 +1,5 @@
 using JIM.Application;
+using JIM.Application.Servers;
 using JIM.Connectors.Mock;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -255,7 +256,7 @@ public class FullSyncTests
         // run full sync
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify the pending export was deleted because the CSO state matches
@@ -365,7 +366,7 @@ public class FullSyncTests
         // run full sync
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify the pending export was NOT deleted
@@ -450,7 +451,7 @@ public class FullSyncTests
         // run full sync
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify ErrorCount was incremented to 3
@@ -497,7 +498,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
         
         // test that a CSO is successfully match to an MVO using the sync rule.
@@ -545,7 +546,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
         
         // test that a CSO is successfully match to an MVO using the sync rule.
@@ -593,7 +594,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
         
         // test that a CSO is successfully match to an MVO using the sync rule.
@@ -625,7 +626,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // test that a CSO successfully projected to create a new MVO
@@ -673,7 +674,7 @@ public class FullSyncTests
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        var syncProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncProcessor.PerformFullSyncAsync();
 
         // Assert - UpdateRange should have been called with the projected CSOs
@@ -719,7 +720,7 @@ public class FullSyncTests
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        var syncProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncProcessor.PerformFullSyncAsync();
 
         // Assert - UpdateRange should have been called with the joined CSOs
@@ -830,7 +831,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // get the first projected MVO
@@ -942,7 +943,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // get the joined MVO
@@ -994,7 +995,7 @@ public class FullSyncTests
                 }
             });
 
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify that the obsolete, non-joined CSO was deleted
@@ -1029,7 +1030,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify CSO-MVO join was broken
@@ -1081,7 +1082,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify CSO successfully joined to MVO
@@ -1138,7 +1139,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify that only one CSO successfully joined
@@ -1217,7 +1218,7 @@ public class FullSyncTests
         // run full sync
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify that the contributed attributes were actually removed from the MVO
@@ -1379,7 +1380,7 @@ public class FullSyncTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q =>
             q.ConnectedSystemId == sourceSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),sourceSystem, runProfile, activity, new CancellationTokenSource());
+        var syncProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),sourceSystem, runProfile, activity, new CancellationTokenSource());
         await syncProcessor.PerformFullSyncAsync();
 
         // Assert: MVO attributes should have been recalled
@@ -1467,7 +1468,7 @@ public class FullSyncTests
         // run full sync
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify that no pending attribute value removals were created (attributes are retained)
@@ -1523,7 +1524,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify the CSO joined to existing MVO rather than projecting a new one
@@ -1554,7 +1555,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify CSO did not project (no MVO created/joined)
@@ -1579,7 +1580,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify CSO did not project (no MVO created/joined)
@@ -1605,7 +1606,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify CSO did not project (sync rule is disabled)
@@ -1647,7 +1648,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify the CSO projected and used the first sync rule's MVO type (User, not Group)
@@ -1725,7 +1726,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify the CSO joined to the existing MVO
@@ -1810,7 +1811,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify the CSO joined to the existing MVO
@@ -1899,7 +1900,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify the CSO joined to the existing MVO
@@ -1982,7 +1983,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify EmployeeNumber was updated to the new value (old value removed, new value applied)
@@ -2063,7 +2064,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify HrId was updated to the new value (old value removed, new value applied)
@@ -2141,7 +2142,7 @@ public class FullSyncTests
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify EmployeeNumber was removed from MVO (because it was removed from CSO)
@@ -2199,7 +2200,7 @@ public class FullSyncTests
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify MVO was NOT deleted
@@ -2253,7 +2254,7 @@ public class FullSyncTests
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify MVO WAS deleted during sync (synchronous deletion for 0-grace-period)
@@ -2310,7 +2311,7 @@ public class FullSyncTests
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify MVO was NOT deleted (grace period)
@@ -2382,7 +2383,7 @@ public class FullSyncTests
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify MVO was NOT deleted (still has cso2 connected)
@@ -2466,7 +2467,7 @@ public class FullSyncTests
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // verify CSO joined to MVO
@@ -2562,7 +2563,7 @@ public class FullSyncTests
         var runProfile = ConnectedSystemRunProfilesData.Single(
             q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(
-            Jim, new SyncRepositoryAdapter(Jim), connectedSystem, runProfile, activity, new CancellationTokenSource());
+            new SyncServer(Jim), new SyncRepositoryAdapter(Jim), connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // Assert - No new CSOs should have been created
@@ -2635,7 +2636,7 @@ public class FullSyncTests
         var runProfile = ConnectedSystemRunProfilesData.Single(
             q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(
-            Jim, new SyncRepositoryAdapter(Jim), connectedSystem, runProfile, activity, new CancellationTokenSource());
+            new SyncServer(Jim), new SyncRepositoryAdapter(Jim), connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // Assert - CSO should still exist
@@ -2712,7 +2713,7 @@ public class FullSyncTests
         var runProfile = ConnectedSystemRunProfilesData.Single(
             q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(
-            Jim, new SyncRepositoryAdapter(Jim), connectedSystem, runProfile, activity, new CancellationTokenSource());
+            new SyncServer(Jim), new SyncRepositoryAdapter(Jim), connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // Assert - Verify that NO PendingExport execution items were created
@@ -2896,7 +2897,7 @@ public class FullSyncTests
         var runProfile = ConnectedSystemRunProfilesData.Single(q =>
             q.ConnectedSystemId == connectedSystem!.Id &&
             q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        var syncProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncProcessor.PerformFullSyncAsync();
 
         // Assert: Both CSOs should be projected to MVOs
@@ -3091,7 +3092,7 @@ public class FullSyncTests
         var runProfile = ConnectedSystemRunProfilesData.Single(q =>
             q.ConnectedSystemId == connectedSystem!.Id &&
             q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        var syncProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncProcessor.PerformFullSyncAsync();
 
         // Assert: Reference should be resolved (basic sanity)
@@ -3214,7 +3215,7 @@ public class FullSyncTests
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // Assert: CSO #1 should be disconnected and deleted
@@ -3326,7 +3327,7 @@ public class FullSyncTests
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
         // Assert: MVO should NOT have been deleted (reconnected during Pass 2)
@@ -3517,7 +3518,7 @@ public class FullSyncTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q =>
             q.ConnectedSystemId == sourceSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncProcessor = new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),sourceSystem, runProfile, activity, new CancellationTokenSource());
+        var syncProcessor = new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),sourceSystem, runProfile, activity, new CancellationTokenSource());
         await syncProcessor.PerformFullSyncAsync();
 
         // Assert: MVO should have been deleted (0-grace-period, authoritative source disconnected)

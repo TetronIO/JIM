@@ -1,3 +1,4 @@
+using JIM.Application.Interfaces;
 using JIM.Application.Servers;
 using JIM.Application.Services;
 using JIM.Data;
@@ -51,8 +52,9 @@ public class JimApplication : IDisposable
         ConnectedSystems = new ConnectedSystemServer(this);
         ExampleData = new ExampleDataServer(this);
         DriftDetection = new DriftDetectionService(this);
-        ExportEvaluation = new ExportEvaluationServer(this);
-        ExportExecution = new ExportExecutionServer(this);
+        var syncRepo = new SyncRepositoryAdapter(this);
+        ExportEvaluation = new ExportEvaluationServer(this, syncRepo);
+        ExportExecution = new ExportExecutionServer(this, syncRepo);
         ScopingEvaluation = new ScopingEvaluationServer();
         FileSystem = new FileSystemServer(this);
         Metaverse = new MetaverseServer(this);

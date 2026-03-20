@@ -1,3 +1,4 @@
+using JIM.Application.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace JIM.Application;

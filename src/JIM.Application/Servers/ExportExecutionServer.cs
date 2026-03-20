@@ -28,10 +28,12 @@ public class ExportExecutionServer
     public const int DefaultBatchSize = 100;
 
     private JimApplication Application { get; }
+    private ISyncRepository SyncRepo { get; }
 
-    internal ExportExecutionServer(JimApplication application)
+    internal ExportExecutionServer(JimApplication application, ISyncRepository syncRepo)
     {
         Application = application;
+        SyncRepo = syncRepo;
     }
 
     /// <summary>
@@ -69,7 +71,7 @@ public class ExportExecutionServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback = null,
         Func<IConnector>? connectorFactory = null,
-        Func<IRepository>? repositoryFactory = null)
+        Func<ISyncRepository>? repositoryFactory = null)
     {
         options ??= new ExportExecutionOptions();
         cancellationToken.ThrowIfCancellationRequested();
@@ -87,7 +89,7 @@ public class ExportExecutionServer
         int totalExportCount;
         using (Diagnostics.Diagnostics.Sync.StartSpan("GetExecutableExportCount"))
         {
-            totalExportCount = await Application.Repository.ConnectedSystems.GetExecutableExportCountAsync(connectedSystem.Id);
+            totalExportCount = await SyncRepo.GetExecutableExportCountAsync(connectedSystem.Id);
         }
         result.TotalPendingExports = totalExportCount;
 
@@ -169,7 +171,7 @@ public class ExportExecutionServer
     private async Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId)
     {
         // Database-level filtering handles: status, NextRetryAt, ErrorCount < MaxRetries, ordering
-        var eligibleExports = await Application.Repository.ConnectedSystems.GetExecutableExportsAsync(connectedSystemId);
+        var eligibleExports = await SyncRepo.GetExecutableExportsAsync(connectedSystemId);
 
         // In-memory filtering for checks that require navigation property evaluation
         return eligibleExports
@@ -227,7 +229,7 @@ public class ExportExecutionServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector>? connectorFactory,
-        Func<IRepository>? repositoryFactory)
+        Func<ISyncRepository>? repositoryFactory)
     {
         // Check if connector supports export using calls
         if (connector is IConnectorExportUsingCalls callsConnector)
@@ -285,7 +287,7 @@ public class ExportExecutionServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector>? connectorFactory,
-        Func<IRepository>? repositoryFactory)
+        Func<ISyncRepository>? repositoryFactory)
     {
         try
         {
@@ -327,7 +329,7 @@ public class ExportExecutionServer
                             .SetTag("skip", scanSkip)
                             .SetTag("take", options.BatchSize))
                         {
-                            rawBatch = await Application.Repository.ConnectedSystems
+                            rawBatch = await SyncRepo
                                 .GetExecutableExportBatchAsync(connectedSystem.Id, scanSkip, options.BatchSize);
                         }
 
@@ -384,7 +386,7 @@ public class ExportExecutionServer
                         using (Diagnostics.Diagnostics.Database.StartSpan("MarkBatchAsExecuting")
                             .SetTag("batchSize", immediateExports.Count))
                         {
-                            await MarkBatchAsExecutingAsync(immediateExports, Application.Repository.ConnectedSystems);
+                            await MarkBatchAsExecutingAsync(immediateExports, SyncRepo);
                         }
 
                         // Execute batch via connector
@@ -400,7 +402,7 @@ public class ExportExecutionServer
                             .SetTag("batchSize", immediateExports.Count))
                         {
                             await ProcessBatchSuccessAsync(immediateExports, exportResults, result,
-                                Application.Repository.ConnectedSystems);
+                                SyncRepo);
                         }
 
                         processedCount += immediateExports.Count;
@@ -410,7 +412,7 @@ public class ExportExecutionServer
                         // so tracked entities serve no purpose after each batch completes. Without
                         // this, Entity() calls in detach loops trigger change detection scans across
                         // all accumulated entities — 40K+ entities after 100 batches.
-                        Application.Repository.ClearChangeTracker();
+                        SyncRepo.ClearChangeTracker();
                     }
                     // Note: no break when a batch has only ineligible/deferred exports — the outer
                     // loop continues scanning forward since later batches (ordered by CreatedAt) may
@@ -469,7 +471,7 @@ public class ExportExecutionServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector>? connectorFactory,
-        Func<IRepository>? repositoryFactory)
+        Func<ISyncRepository>? repositoryFactory)
     {
         var useParallelBatches = options.MaxParallelism > 1 && connectorFactory != null && repositoryFactory != null;
 
@@ -488,7 +490,7 @@ public class ExportExecutionServer
             .SetTag("mvoIdCount", mvoIds.Count))
         {
             csoLookup = mvoIds.Count > 0
-                ? await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(mvoIds, connectedSystem.Id)
+                ? await SyncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(mvoIds, connectedSystem.Id)
                 : new Dictionary<Guid, ConnectedSystemObject>();
         }
 
@@ -529,7 +531,7 @@ public class ExportExecutionServer
             // The CSO lookup query above re-loaded entities into the tracker, which causes
             // identity conflicts when the EF fallback paths (used in tests with in-memory DB)
             // try to attach/update the original PE instances.
-            Application.Repository.ClearChangeTracker();
+            SyncRepo.ClearChangeTracker();
 
             var deferredBatches = resolvedExports
                 .Select((export, index) => new { export, index })
@@ -608,7 +610,7 @@ public class ExportExecutionServer
             using (Diagnostics.Diagnostics.Database.StartSpan("MarkDeferredBatchAsExecuting")
                 .SetTag("batchSize", batch.Count))
             {
-                await MarkBatchAsExecutingAsync(batch, Application.Repository.ConnectedSystems);
+                await MarkBatchAsExecutingAsync(batch, SyncRepo);
             }
 
             List<ConnectedSystemExportResult> exportResults;
@@ -621,7 +623,7 @@ public class ExportExecutionServer
             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessDeferredBatchSuccess")
                 .SetTag("batchSize", batch.Count))
             {
-                await ProcessBatchSuccessAsync(batch, exportResults, result, Application.Repository.ConnectedSystems);
+                await ProcessBatchSuccessAsync(batch, exportResults, result, SyncRepo);
             }
 
             processedCount += batch.Count;
@@ -644,7 +646,7 @@ public class ExportExecutionServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector> connectorFactory,
-        Func<IRepository> repositoryFactory,
+        Func<ISyncRepository> repositoryFactory,
         string spanName)
     {
         Log.Information("ProcessBatchesInParallelAsync: Processing {BatchCount} batches with MaxParallelism={MaxParallelism}",
@@ -671,11 +673,11 @@ public class ExportExecutionServer
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                // Create per-batch repository with its own DbContext
-                using var batchRepo = repositoryFactory();
+                // Create per-batch repository with its own context
+                var batchRepo = repositoryFactory();
 
                 // Re-load this batch's pending exports from the batch's own context
-                var batch = await batchRepo.ConnectedSystems.GetPendingExportsByIdsAsync(batchIds);
+                var batch = await batchRepo.GetPendingExportsByIdsAsync(batchIds);
                 if (batch.Count == 0)
                 {
                     Log.Warning("ProcessBatchesInParallelAsync: Batch {BatchIndex} returned 0 exports for {IdCount} IDs",
@@ -706,14 +708,14 @@ public class ExportExecutionServer
                 try
                 {
                     // Mark batch as executing (raw SQL - context-independent)
-                    await batchRepo.ConnectedSystems.MarkPendingExportsAsExecutingAsync(batch);
+                    await batchRepo.MarkPendingExportsAsExecutingAsync(batch);
 
                     // Execute batch via connector
                     var exportResults = await batchConnector.ExportAsync(batch, cancellationToken);
 
                     // Process results using the batch's own repository
                     var batchResult = new ExportExecutionResult();
-                    await ProcessBatchSuccessAsync(batch, exportResults, batchResult, batchRepo.ConnectedSystems);
+                    await ProcessBatchSuccessAsync(batch, exportResults, batchResult, batchRepo);
 
                     // Capture created containers from this batch's connector
                     List<string>? batchContainerIds = null;
@@ -796,7 +798,7 @@ public class ExportExecutionServer
     /// Marks a batch of exports as executing using raw SQL for efficiency.
     /// Bypasses EF Core change tracking since this is a simple status update.
     /// </summary>
-    private static async Task MarkBatchAsExecutingAsync(List<PendingExport> batch, IConnectedSystemRepository repository)
+    private static async Task MarkBatchAsExecutingAsync(List<PendingExport> batch, ISyncRepository repository)
     {
         await repository.MarkPendingExportsAsExecutingAsync(batch);
     }
@@ -811,7 +813,7 @@ public class ExportExecutionServer
         List<PendingExport> batch,
         List<ConnectedSystemExportResult> exportResults,
         ExportExecutionResult result,
-        IConnectedSystemRepository repository)
+        ISyncRepository repository)
     {
         var exportsToUpdate = new List<PendingExport>();
         var csosToUpdate = new List<(ConnectedSystemObject cso, ConnectedSystemExportResult exportResult)>();
@@ -897,7 +899,7 @@ public class ExportExecutionServer
     /// </summary>
     private async Task BatchUpdateCsosAfterSuccessfulExportAsync(
         List<(ConnectedSystemObject cso, ConnectedSystemExportResult exportResult)> csosToUpdate,
-        IConnectedSystemRepository repository)
+        ISyncRepository repository)
     {
         // Collect all unique attribute IDs we need to look up (external ID + secondary external ID attributes)
         var attributeIds = new HashSet<int>();
@@ -1023,9 +1025,9 @@ public class ExportExecutionServer
 
         // Update cache after successful persistence: evict stale entries, then add current ones
         foreach (var (connectedSystemId, attributeId, oldValue) in cacheEvictions)
-            Application.ConnectedSystems.EvictCsoFromCache(connectedSystemId, attributeId, oldValue);
+            SyncRepo.EvictCsoFromCache(connectedSystemId, attributeId, oldValue);
         foreach (var (connectedSystemId, attributeId, newValue, csoId) in cacheAdditions)
-            Application.ConnectedSystems.AddCsoToCache(connectedSystemId, attributeId, newValue, csoId);
+            SyncRepo.AddCsoToCache(connectedSystemId, attributeId, newValue, csoId);
     }
 
     /// <summary>
@@ -1077,7 +1079,7 @@ public class ExportExecutionServer
         if (exportResult != null && !string.IsNullOrEmpty(exportResult.ExternalId) && cso.ExternalIdAttributeId > 0)
         {
             // Get the attribute definition to determine the correct data type
-            var externalIdAttribute = await Application.Repository.ConnectedSystems.GetAttributeAsync(cso.ExternalIdAttributeId);
+            var externalIdAttribute = await SyncRepo.GetAttributeAsync(cso.ExternalIdAttributeId);
 
             // Find or create the external ID attribute value
             var externalIdAttrValue = cso.AttributeValues
@@ -1142,7 +1144,7 @@ public class ExportExecutionServer
             // Explicitly add new attribute values to ensure they are tracked by EF Core
             // This handles the case where the CSO was loaded without attribute values (PendingProvisioning)
             // and we're adding new values that need to be persisted
-            await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectWithNewAttributeValuesAsync(cso, newAttributeValues);
+            await SyncRepo.UpdateConnectedSystemObjectWithNewAttributeValuesAsync(cso, newAttributeValues);
             Log.Information("UpdateCsoAfterSuccessfulExportAsync: Updated CSO {CsoId}", cso.Id);
         }
     }
@@ -1279,7 +1281,7 @@ public class ExportExecutionServer
                 using (Diagnostics.Diagnostics.Database.StartSpan("UpdatePendingExports")
                     .SetTag("count", exportsToUpdate.Count))
                 {
-                    await Application.Repository.ConnectedSystems.UpdatePendingExportsAsync(exportsToUpdate);
+                    await SyncRepo.UpdatePendingExportsAsync(exportsToUpdate);
                 }
             }
 
@@ -1289,14 +1291,14 @@ public class ExportExecutionServer
                 using (Diagnostics.Diagnostics.Database.StartSpan("DeletePendingExports")
                     .SetTag("count", exportsToDelete.Count))
                 {
-                    await Application.Repository.ConnectedSystems.DeletePendingExportsAsync(exportsToDelete);
+                    await SyncRepo.DeletePendingExportsAsync(exportsToDelete);
                 }
             }
 
             // Batch update CSOs that need external ID or status changes
             if (csosToUpdate.Count > 0)
             {
-                await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate, Application.Repository.ConnectedSystems);
+                await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate, SyncRepo);
             }
 
             Log.Information("ExecuteUsingFilesWithBatchingAsync: Exported {Count} changes to file for {SystemName}",
@@ -1325,7 +1327,7 @@ public class ExportExecutionServer
             using (Diagnostics.Diagnostics.Database.StartSpan("UpdateFailedExports")
                 .SetTag("count", pendingExports.Count))
             {
-                await Application.Repository.ConnectedSystems.UpdatePendingExportsAsync(pendingExports);
+                await SyncRepo.UpdatePendingExportsAsync(pendingExports);
             }
 
             result.FailedCount = pendingExports.Count;
@@ -1434,7 +1436,7 @@ public class ExportExecutionServer
         List<PendingExport> deferredExports;
         using (Diagnostics.Diagnostics.Database.StartSpan("GetPendingExportsForDeferredResolution"))
         {
-            deferredExports = await Application.Repository.ConnectedSystems.GetPendingExportsAsync(connectedSystem.Id);
+            deferredExports = await SyncRepo.GetPendingExportsAsync(connectedSystem.Id);
         }
         var unresolvedExports = deferredExports
             .Where(pe => pe.HasUnresolvedReferences && pe.Status == PendingExportStatus.Pending)
@@ -1453,7 +1455,7 @@ public class ExportExecutionServer
             .SetTag("mvoIdCount", mvoIds.Count))
         {
             csoLookup = mvoIds.Count > 0
-                ? await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(mvoIds, connectedSystem.Id)
+                ? await SyncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(mvoIds, connectedSystem.Id)
                 : new Dictionary<Guid, ConnectedSystemObject>();
         }
 
@@ -1490,7 +1492,7 @@ public class ExportExecutionServer
             using (Diagnostics.Diagnostics.Database.StartSpan("UpdateResolvedDeferredExports")
                 .SetTag("count", resolvedExports.Count))
             {
-                await Application.Repository.ConnectedSystems.UpdatePendingExportsAsync(resolvedExports);
+                await SyncRepo.UpdatePendingExportsAsync(resolvedExports);
             }
         }
     }
@@ -1542,7 +1544,7 @@ public class ExportExecutionServer
         // They will be confirmed (and deleted) or marked for retry during the next import
         UpdateAttributeChangeStatusesAfterExport(export);
 
-        await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(export);
+        await SyncRepo.UpdatePendingExportAsync(export);
 
         result.SuccessCount++;
         Log.Debug("ProcessExportSuccessAsync: Successfully exported {ExportId}, awaiting confirmation via import", export.Id);
@@ -1564,7 +1566,7 @@ public class ExportExecutionServer
             .Count(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue));
         var totalChanges = export.AttributeValueChanges.Count;
 
-        await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(export);
+        await SyncRepo.UpdatePendingExportAsync(export);
         Log.Information("MarkExportDeferredAsync: Export {ExportId} for CSO {CsoId} deferred - " +
             "{UnresolvedCount}/{TotalChanges} attribute changes have unresolved references. Next retry at {NextRetry}",
             export.Id, export.ConnectedSystemObjectId, unresolvedRefCount, totalChanges, export.NextRetryAt);
@@ -1597,7 +1599,7 @@ public class ExportExecutionServer
                 export.Id, export.ErrorCount, export.MaxRetries, export.NextRetryAt, errorMessage);
         }
 
-        await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(export);
+        await SyncRepo.UpdatePendingExportAsync(export);
     }
 
     /// <summary>
@@ -1616,7 +1618,7 @@ public class ExportExecutionServer
     /// </summary>
     public async Task<int> GetFailedExportsCountAsync(int connectedSystemId)
     {
-        var pendingExports = await Application.Repository.ConnectedSystems.GetPendingExportsAsync(connectedSystemId);
+        var pendingExports = await SyncRepo.GetPendingExportsAsync(connectedSystemId);
         return pendingExports.Count(pe => pe.Status == PendingExportStatus.Failed);
     }
 
@@ -1626,7 +1628,7 @@ public class ExportExecutionServer
     /// </summary>
     public async Task RetryFailedExportsAsync(int connectedSystemId)
     {
-        var pendingExports = await Application.Repository.ConnectedSystems.GetPendingExportsAsync(connectedSystemId);
+        var pendingExports = await SyncRepo.GetPendingExportsAsync(connectedSystemId);
         var failedExports = pendingExports.Where(pe => pe.Status == PendingExportStatus.Failed).ToList();
 
         foreach (var export in failedExports)
@@ -1636,7 +1638,7 @@ public class ExportExecutionServer
             export.NextRetryAt = null;
             export.LastErrorMessage = null;
             export.LastErrorStackTrace = null;
-            await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(export);
+            await SyncRepo.UpdatePendingExportAsync(export);
         }
 
         Log.Information("RetryFailedExportsAsync: Reset {Count} failed exports for system {SystemId}",

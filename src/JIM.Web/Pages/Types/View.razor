@@ -20,7 +20,7 @@
 
 @if (MetaverseObject != null)
 {
-    <MudTabs @bind-ActivePanelIndex="_activeTabIndex" Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" Class="mt-5" PanelClass="pa-0">
+    <NavigableMudTabs @bind-ActivePanelIndex="_activeTabIndex" Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" Class="mt-5" PanelClass="pa-0">
         <Header Context="headerContext">
             @if (_activeTabIndex == 0)
             {
@@ -129,7 +129,7 @@
             </MudPaper>
         </MudTabPanel>
         </ChildContent>
-    </MudTabs>
+    </NavigableMudTabs>
 }
 
 @code {

@@ -1,4 +1,5 @@
 using JIM.Application;
+using JIM.Application.Servers;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -50,7 +51,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var fullSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
         var fullSyncActivity = await CreateActivityAsync(sourceSystem.Id, fullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
         var cts1 = new CancellationTokenSource();
-        await new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),sourceSystem, fullSyncProfile, fullSyncActivity, cts1)
+        await new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),sourceSystem, fullSyncProfile, fullSyncActivity, cts1)
             .PerformFullSyncAsync();
 
         // Verify MVO was created and CSO is joined
@@ -66,7 +67,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         sourceSystem = await ReloadEntityAsync(sourceSystem);
         var deltaSyncActivity = await CreateActivityAsync(sourceSystem.Id, deltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
         var cts2 = new CancellationTokenSource();
-        await new SyncDeltaSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),sourceSystem, deltaSyncProfile, deltaSyncActivity, cts2)
+        await new SyncDeltaSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),sourceSystem, deltaSyncProfile, deltaSyncActivity, cts2)
             .PerformDeltaSyncAsync();
 
         // Assert: MVO should NOT be marked for deletion (Manual rule)
@@ -126,7 +127,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var fullSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
         var fullSyncActivity = await CreateActivityAsync(sourceSystem.Id, fullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
         var cts1 = new CancellationTokenSource();
-        await new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),sourceSystem, fullSyncProfile, fullSyncActivity, cts1)
+        await new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),sourceSystem, fullSyncProfile, fullSyncActivity, cts1)
             .PerformFullSyncAsync();
 
         // Verify MVO was created and CSO is joined
@@ -142,7 +143,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         sourceSystem = await ReloadEntityAsync(sourceSystem);
         var deltaSyncActivity = await CreateActivityAsync(sourceSystem.Id, deltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
         var cts2 = new CancellationTokenSource();
-        await new SyncDeltaSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),sourceSystem, deltaSyncProfile, deltaSyncActivity, cts2)
+        await new SyncDeltaSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),sourceSystem, deltaSyncProfile, deltaSyncActivity, cts2)
             .PerformDeltaSyncAsync();
 
         // Assert: MVO should be marked for deletion (not deleted yet due to grace period)
@@ -177,7 +178,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var fullSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
         var fullSyncActivity = await CreateActivityAsync(sourceSystem.Id, fullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
         var cts1 = new CancellationTokenSource();
-        await new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),sourceSystem, fullSyncProfile, fullSyncActivity, cts1)
+        await new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),sourceSystem, fullSyncProfile, fullSyncActivity, cts1)
             .PerformFullSyncAsync();
 
         // Verify MVO was created and CSO is joined
@@ -193,7 +194,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         sourceSystem = await ReloadEntityAsync(sourceSystem);
         var deltaSyncActivity = await CreateActivityAsync(sourceSystem.Id, deltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
         var cts2 = new CancellationTokenSource();
-        await new SyncDeltaSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),sourceSystem, deltaSyncProfile, deltaSyncActivity, cts2)
+        await new SyncDeltaSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),sourceSystem, deltaSyncProfile, deltaSyncActivity, cts2)
             .PerformDeltaSyncAsync();
 
         // Assert: MVO should be DELETED (not just marked) due to zero grace period
@@ -232,7 +233,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var fullSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
         var fullSyncActivity = await CreateActivityAsync(sourceSystem.Id, fullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
         var cts1 = new CancellationTokenSource();
-        await new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),sourceSystem, fullSyncProfile, fullSyncActivity, cts1)
+        await new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),sourceSystem, fullSyncProfile, fullSyncActivity, cts1)
             .PerformFullSyncAsync();
 
         // Verify MVO was created and CSO is joined
@@ -248,7 +249,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         sourceSystem = await ReloadEntityAsync(sourceSystem);
         var deltaSyncActivity = await CreateActivityAsync(sourceSystem.Id, deltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
         var cts2 = new CancellationTokenSource();
-        await new SyncDeltaSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),sourceSystem, deltaSyncProfile, deltaSyncActivity, cts2)
+        await new SyncDeltaSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),sourceSystem, deltaSyncProfile, deltaSyncActivity, cts2)
             .PerformDeltaSyncAsync();
 
         // Assert: MVO should be DELETED (not just marked) due to null grace period
@@ -279,7 +280,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var fullSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
         var fullSyncActivity = await CreateActivityAsync(sourceSystem.Id, fullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
         var cts1 = new CancellationTokenSource();
-        await new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),sourceSystem, fullSyncProfile, fullSyncActivity, cts1)
+        await new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),sourceSystem, fullSyncProfile, fullSyncActivity, cts1)
             .PerformFullSyncAsync();
 
         cso1 = await ReloadEntityAsync(cso1);
@@ -305,7 +306,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         sourceSystem = await ReloadEntityAsync(sourceSystem);
         var deltaSyncActivity = await CreateActivityAsync(sourceSystem.Id, deltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
         var cts2 = new CancellationTokenSource();
-        await new SyncDeltaSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),sourceSystem, deltaSyncProfile, deltaSyncActivity, cts2)
+        await new SyncDeltaSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),sourceSystem, deltaSyncProfile, deltaSyncActivity, cts2)
             .PerformDeltaSyncAsync();
 
         // Assert: MVO should NOT be marked for deletion (CSO2 still connected)
@@ -355,7 +356,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var sourceFullSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
         var sourceFullSyncActivity = await CreateActivityAsync(sourceSystem.Id, sourceFullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
         var cts1 = new CancellationTokenSource();
-        await new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),sourceSystem, sourceFullSyncProfile, sourceFullSyncActivity, cts1)
+        await new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),sourceSystem, sourceFullSyncProfile, sourceFullSyncActivity, cts1)
             .PerformFullSyncAsync();
 
         // Verify MVO created
@@ -382,7 +383,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         sourceSystem = await ReloadEntityAsync(sourceSystem);
         var sourceDeltaSyncActivity = await CreateActivityAsync(sourceSystem.Id, sourceDeltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
         var cts2 = new CancellationTokenSource();
-        await new SyncDeltaSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),sourceSystem, sourceDeltaSyncProfile, sourceDeltaSyncActivity, cts2)
+        await new SyncDeltaSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),sourceSystem, sourceDeltaSyncProfile, sourceDeltaSyncActivity, cts2)
             .PerformDeltaSyncAsync();
 
         // Assert: MVO SHOULD be marked for deletion (not deleted yet due to grace period)
@@ -428,7 +429,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var sourceFullSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
         var sourceFullSyncActivity = await CreateActivityAsync(sourceSystem.Id, sourceFullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
         var cts1 = new CancellationTokenSource();
-        await new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),sourceSystem, sourceFullSyncProfile, sourceFullSyncActivity, cts1)
+        await new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),sourceSystem, sourceFullSyncProfile, sourceFullSyncActivity, cts1)
             .PerformFullSyncAsync();
 
         // Verify MVO created
@@ -456,7 +457,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         sourceSystem = await ReloadEntityAsync(sourceSystem);
         var sourceDeltaSyncActivity = await CreateActivityAsync(sourceSystem.Id, sourceDeltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
         var cts2 = new CancellationTokenSource();
-        await new SyncDeltaSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),sourceSystem, sourceDeltaSyncProfile, sourceDeltaSyncActivity, cts2)
+        await new SyncDeltaSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),sourceSystem, sourceDeltaSyncProfile, sourceDeltaSyncActivity, cts2)
             .PerformDeltaSyncAsync();
 
         // Assert: MVO SHOULD be DELETED (not just marked) due to zero grace period
@@ -501,7 +502,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var fullSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
         var fullSyncActivity = await CreateActivityAsync(sourceSystem.Id, fullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
         var cts1 = new CancellationTokenSource();
-        await new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),sourceSystem, fullSyncProfile, fullSyncActivity, cts1)
+        await new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),sourceSystem, fullSyncProfile, fullSyncActivity, cts1)
             .PerformFullSyncAsync();
 
         sourceCso = await ReloadEntityAsync(sourceCso);
@@ -530,7 +531,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         targetSystem = await ReloadEntityAsync(targetSystem);
         var deltaSyncActivity = await CreateActivityAsync(targetSystem.Id, targetDeltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
         var cts2 = new CancellationTokenSource();
-        await new SyncDeltaSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),targetSystem, targetDeltaSyncProfile, deltaSyncActivity, cts2)
+        await new SyncDeltaSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),targetSystem, targetDeltaSyncProfile, deltaSyncActivity, cts2)
             .PerformDeltaSyncAsync();
 
         // Assert: MVO should NOT be marked for deletion (non-authoritative system disconnected)
@@ -607,7 +608,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var hrFullSyncProfile = await CreateRunProfileAsync(hrSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
         var hrFullSyncActivity = await CreateActivityAsync(hrSystem.Id, hrFullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
         var cts1 = new CancellationTokenSource();
-        await new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),hrSystem, hrFullSyncProfile, hrFullSyncActivity, cts1)
+        await new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),hrSystem, hrFullSyncProfile, hrFullSyncActivity, cts1)
             .PerformFullSyncAsync();
 
         hrCso = await ReloadEntityAsync(hrCso);
@@ -641,7 +642,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         trainingSystem = await ReloadEntityAsync(trainingSystem);
         var trainingDeltaSyncActivity = await CreateActivityAsync(trainingSystem.Id, trainingDeltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
         var cts2 = new CancellationTokenSource();
-        await new SyncDeltaSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),trainingSystem, trainingDeltaSyncProfile, trainingDeltaSyncActivity, cts2)
+        await new SyncDeltaSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),trainingSystem, trainingDeltaSyncProfile, trainingDeltaSyncActivity, cts2)
             .PerformDeltaSyncAsync();
 
         // Assert: MVO should NOT be marked for deletion (Training is not authoritative)
@@ -665,7 +666,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         hrSystem = await ReloadEntityAsync(hrSystem);
         var hrDeltaSyncActivity = await CreateActivityAsync(hrSystem.Id, hrDeltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
         var cts3 = new CancellationTokenSource();
-        await new SyncDeltaSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),hrSystem, hrDeltaSyncProfile, hrDeltaSyncActivity, cts3)
+        await new SyncDeltaSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),hrSystem, hrDeltaSyncProfile, hrDeltaSyncActivity, cts3)
             .PerformDeltaSyncAsync();
 
         // Assert: MVO SHOULD be DELETED (not just marked) because HR (authoritative source) disconnected
@@ -712,7 +713,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var fullSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
         var fullSyncActivity = await CreateActivityAsync(sourceSystem.Id, fullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
         var cts1 = new CancellationTokenSource();
-        await new SyncFullSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),sourceSystem, fullSyncProfile, fullSyncActivity, cts1)
+        await new SyncFullSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),sourceSystem, fullSyncProfile, fullSyncActivity, cts1)
             .PerformFullSyncAsync();
 
         cso = await ReloadEntityAsync(cso);
@@ -726,7 +727,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         sourceSystem = await ReloadEntityAsync(sourceSystem);
         var deltaSyncActivity = await CreateActivityAsync(sourceSystem.Id, deltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
         var cts2 = new CancellationTokenSource();
-        await new SyncDeltaSyncTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),sourceSystem, deltaSyncProfile, deltaSyncActivity, cts2)
+        await new SyncDeltaSyncTaskProcessor(new SyncServer(Jim), new SyncRepositoryAdapter(Jim),sourceSystem, deltaSyncProfile, deltaSyncActivity, cts2)
             .PerformDeltaSyncAsync();
 
         // Assert: MVO should be marked for deletion but not immediately eligible

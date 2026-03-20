@@ -92,8 +92,8 @@ internal class LdapConnectorImport
             result.PersistedConnectorData = JsonSerializer.Serialize(_currentRootDse);
         }
 
-        // enumerate all selected partitions
-        foreach (var selectedPartition in _connectedSystem.Partitions.Where(p => p.Selected))
+        // enumerate target partitions (scoped to run profile partition if set, otherwise all selected)
+        foreach (var selectedPartition in GetTargetPartitions())
         {
             // enumerate top-level selected containers in this partition
             // Use GetTopLevelSelectedContainers to avoid duplicates when both parent and child containers are selected
@@ -177,7 +177,7 @@ internal class LdapConnectorImport
                 _previousRootDse.HighestCommittedUsn);
 
             // For AD, query objects where uSNChanged > previous HighestCommittedUSN
-            foreach (var selectedPartition in _connectedSystem.Partitions.Where(p => p.Selected))
+            foreach (var selectedPartition in GetTargetPartitions())
             {
                 // Use GetTopLevelSelectedContainers to avoid duplicates when both parent and child containers are selected
                 foreach (var selectedContainer in ConnectedSystemUtilities.GetTopLevelSelectedContainers(selectedPartition))
@@ -225,6 +225,23 @@ internal class LdapConnectorImport
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Returns the partitions to import from. If the run profile specifies a partition, only that
+    /// partition is returned. Otherwise, all selected partitions on the connected system are returned.
+    /// </summary>
+    private IEnumerable<ConnectedSystemPartition> GetTargetPartitions()
+    {
+        if (_connectedSystemRunProfile.Partition != null)
+        {
+            _logger.Debug("GetTargetPartitions: Run profile targets specific partition: {PartitionName}",
+                LogSanitiser.Sanitise(_connectedSystemRunProfile.Partition.Name));
+            return [_connectedSystemRunProfile.Partition];
+        }
+
+        _logger.Debug("GetTargetPartitions: No partition specified on run profile, importing from all selected partitions");
+        return _connectedSystem.Partitions!.Where(p => p.Selected);
     }
 
     #region private methods

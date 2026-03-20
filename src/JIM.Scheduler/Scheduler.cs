@@ -1,4 +1,5 @@
 using JIM.Application;
+using JIM.Application.Interfaces;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Scheduling;

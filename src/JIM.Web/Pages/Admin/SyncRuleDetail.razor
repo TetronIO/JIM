@@ -33,7 +33,7 @@
 }
 else if (_syncRule != null)
 {
-    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" PanelClass="pt-5" Class="mt-2" Outlined="true">
+    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" PanelClass="pt-5" Class="mt-2" Outlined="true">
         <MudTabPanel Text="Details">
             <MudPaper Class="pa-4" Outlined="true">
                 <MudForm @bind-IsValid="@_isDetailsFormValid" @bind-Errors="@_detailsFormErrors">
@@ -913,7 +913,7 @@ else if (_syncRule != null)
                 </MudPaper>
             </MudTabPanel>
         }
-    </MudTabs>
+    </NavigableMudTabs>
 }
 
 @code {

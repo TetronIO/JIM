@@ -1,5 +1,6 @@
 using JIM.Application;
 using JIM.Application.Diagnostics;
+using JIM.Application.Interfaces;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -20,13 +21,13 @@ namespace JIM.Worker.Processors;
 public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
 {
     public SyncFullSyncTaskProcessor(
-        JimApplication jimApplication,
+        ISyncServer syncServer,
         ISyncRepository syncRepository,
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile connectedSystemRunProfile,
         Activity activity,
         CancellationTokenSource cancellationTokenSource)
-        : base(jimApplication, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource)
+        : base(syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource)
     {
     }
 
@@ -99,7 +100,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // This eliminates O(N×M) database queries during export evaluation
         using (Diagnostics.Sync.StartSpan("LoadExportEvaluationCache"))
         {
-            _exportEvaluationCache = await _jim.ExportEvaluation.BuildExportEvaluationCacheAsync(_connectedSystem.Id);
+            _exportEvaluationCache = await _syncServer.BuildExportEvaluationCacheAsync(_connectedSystem.Id);
         }
 
         // Load settings once at start of sync

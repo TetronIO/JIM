@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using JIM.Application;
+using JIM.Application.Interfaces;
 using JIM.Application.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Application.Services;

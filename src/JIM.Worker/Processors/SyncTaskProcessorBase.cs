@@ -1,6 +1,7 @@
 using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Expressions;
+using JIM.Application.Interfaces;
 using JIM.Application.Utilities;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
@@ -43,7 +44,7 @@ public enum MvoDeletionFate
 
 public abstract class SyncTaskProcessorBase
 {
-    protected readonly JimApplication _jim;
+    protected readonly ISyncServer _syncServer;
     protected readonly ISyncRepository _syncRepo;
     protected readonly ConnectedSystem _connectedSystem;
     protected readonly ConnectedSystemRunProfile _connectedSystemRunProfile;
@@ -51,7 +52,7 @@ public abstract class SyncTaskProcessorBase
     protected readonly CancellationTokenSource _cancellationTokenSource;
     protected List<ConnectedSystemObjectType>? _objectTypes;
     protected Dictionary<Guid, List<JIM.Models.Transactional.PendingExport>>? _pendingExportsByCsoId;
-    protected ExportEvaluationServer.ExportEvaluationCache? _exportEvaluationCache;
+    protected ExportEvaluationCache? _exportEvaluationCache;
 
     // Cache for drift detection: maps (ConnectedSystemId, MvoAttributeId) to import mappings
     // Used to check if a connected system is a legitimate contributor for an attribute
@@ -161,14 +162,14 @@ public abstract class SyncTaskProcessorBase
     protected readonly IExpressionEvaluator _expressionEvaluator = new DynamicExpressoEvaluator();
 
     protected SyncTaskProcessorBase(
-        JimApplication jimApplication,
+        ISyncServer syncServer,
         ISyncRepository syncRepository,
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile connectedSystemRunProfile,
         Activity activity,
         CancellationTokenSource cancellationTokenSource)
     {
-        _jim = jimApplication;
+        _syncServer = syncServer;
         _syncRepo = syncRepository;
         _connectedSystem = connectedSystem;
         _connectedSystemRunProfile = connectedSystemRunProfile;
@@ -1302,7 +1303,7 @@ public abstract class SyncTaskProcessorBase
         // Pending exports and provisioning CSOs are deferred (deferSave=true) and collected for batch saving
         using (Diagnostics.Sync.StartSpan("EvaluateExportRules"))
         {
-            var result = await _jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
+            var result = await _syncServer.EvaluateExportRulesWithNoNetChangeDetectionAsync(
                 mvo,
                 changedAttributes,
                 _connectedSystem,
@@ -1460,7 +1461,7 @@ public abstract class SyncTaskProcessorBase
         // Evaluate if MVO has fallen OUT of scope for any export rules (deprovisioning), using cached data
         using (Diagnostics.Sync.StartSpan("EvaluateOutOfScopeExports"))
         {
-            await _jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(
+            await _syncServer.EvaluateOutOfScopeExportsAsync(
                 mvo,
                 _connectedSystem,
                 _exportEvaluationCache!);
@@ -2307,7 +2308,7 @@ public abstract class SyncTaskProcessorBase
 
                 // Create delete pending exports for any remaining Provisioned CSOs
                 // This handles WhenAuthoritativeSourceDisconnected where target CSOs still exist
-                var deleteExports = await _jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
+                var deleteExports = await _syncServer.EvaluateMvoDeletionAsync(mvo);
                 if (deleteExports.Count > 0)
                 {
                     Log.Information(
@@ -2739,8 +2740,7 @@ public abstract class SyncTaskProcessorBase
 
             if (unresolvedMvoGuids.Count > 0)
             {
-                var dbResolved = await _jim.Repository.ConnectedSystems
-                    .GetConnectedSystemObjectsByMetaverseObjectIdsAsync(unresolvedMvoGuids, pendingExport.ConnectedSystemId);
+                var dbResolved = await _syncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(unresolvedMvoGuids, pendingExport.ConnectedSystemId);
                 foreach (var kvp in dbResolved)
                 {
                     resolvedReferences.TryAdd(kvp.Key, kvp.Value);
@@ -2827,8 +2827,7 @@ public abstract class SyncTaskProcessorBase
         var resolvedLookup = new Dictionary<(int CsId, Guid MvoGuid), ConnectedSystemObject>();
         foreach (var (csId, mvoGuids) in unresolvedByCs)
         {
-            var resolved = await _jim.Repository.ConnectedSystems
-                .GetConnectedSystemObjectsByMetaverseObjectIdsAsync(mvoGuids, csId);
+            var resolved = await _syncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(mvoGuids, csId);
             foreach (var (mvoGuid, cso) in resolved)
             {
                 resolvedLookup[(csId, mvoGuid)] = cso;
@@ -2950,7 +2949,7 @@ public abstract class SyncTaskProcessorBase
             }
 
             // Evaluate scoping criteria
-            if (_jim.ScopingEvaluation.IsCsoInScopeForImportRule(csoWithAttributes, syncRule))
+            if (_syncServer.IsCsoInScopeForImportRule(csoWithAttributes, syncRule))
             {
                 inScopeRules.Add(syncRule);
             }
@@ -3118,7 +3117,7 @@ public abstract class SyncTaskProcessorBase
         span.SetTag("csoId", cso.Id);
         span.SetTag("mvoId", targetMvo.Id);
 
-        var result = _jim.DriftDetection.EvaluateDrift(
+        var result = _syncServer.EvaluateDrift(
             cso,
             targetMvo,
             _driftDetectionExportRules,

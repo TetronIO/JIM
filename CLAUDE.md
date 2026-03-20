@@ -267,6 +267,10 @@ When creating ASCII diagrams in documentation or code comments, use only reliabl
 - Classes: Full descriptive names (avoid abbreviations)
 - Properties: PascalCase with nullable reference types enabled
 
+**Tabs:**
+- Use `<NavigableMudTabs>` instead of `<MudTabs>` for all top-level page tabs — it syncs the active tab with a `?t=slug` query string, enabling browser back/forward navigation
+- Use plain `<MudTabs>` only for tabs inside dialogs or nested sub-tabs where URL navigation is not needed
+
 **UI Element Sizing:**
 - ALWAYS use normal/default sizes for ALL UI elements when adding new components
 - Text: Use `Typo.body1` (default readable size)

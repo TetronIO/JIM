@@ -251,6 +251,7 @@ function Show-ScenarioMenu {
                 "*Scenario6*" { "Scheduler service end-to-end testing" }
                 "*Scenario7*" { "Clear Connected System Objects testing" }
                 "*Scenario8*" { "Cross-domain entitlement synchronisation" }
+                "*Scenario9*" { "Partition-scoped import run profiles" }
                 default { "Integration test scenario" }
             }
         }

@@ -889,7 +889,7 @@ public class ExportEvaluationNoChangeTests
         };
         var csoAttributeValues = csoAttrValues.ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId));
 
-        var cache = new ExportEvaluationServer.ExportEvaluationCache(
+        var cache = new ExportEvaluationCache(
             exportRulesByMvoTypeId, csoLookup, csoAttributeValues);
 
         // Act: evaluate export rules with removed attributes

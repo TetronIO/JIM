@@ -1,6 +1,6 @@
 using JIM.Models.Interfaces;
 
-namespace JIM.Application.Services;
+namespace JIM.Application.Interfaces;
 
 /// <summary>
 /// Service for encrypting and decrypting credential data at rest.
