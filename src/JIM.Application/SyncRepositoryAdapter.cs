@@ -333,4 +333,81 @@ public class SyncRepositoryAdapter : ISyncRepository
         => _jim.Repository.Metaverse.CreateMetaverseObjectChangeDirectAsync(change);
 
     #endregion
+
+    #region Connected System Object — Singular Convenience Methods
+
+    public Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
+        => _jim.Repository.ConnectedSystems.CreateConnectedSystemObjectAsync(connectedSystemObject);
+
+    public Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
+        => _jim.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(connectedSystemObject);
+
+    public Task UpdateConnectedSystemObjectWithNewAttributeValuesAsync(
+        ConnectedSystemObject connectedSystemObject,
+        List<ConnectedSystemObjectAttributeValue> newAttributeValues)
+        => _jim.Repository.ConnectedSystems.UpdateConnectedSystemObjectWithNewAttributeValuesAsync(
+            connectedSystemObject, newAttributeValues);
+
+    #endregion
+
+    #region Pending Export — Singular Convenience Methods
+
+    public Task CreatePendingExportAsync(PendingExport pendingExport)
+        => _jim.Repository.ConnectedSystems.CreatePendingExportAsync(pendingExport);
+
+    public Task DeletePendingExportAsync(PendingExport pendingExport)
+        => _jim.Repository.ConnectedSystems.DeletePendingExportAsync(pendingExport);
+
+    public Task UpdatePendingExportAsync(PendingExport pendingExport)
+        => _jim.Repository.ConnectedSystems.UpdatePendingExportAsync(pendingExport);
+
+    #endregion
+
+    #region Export Evaluation Support
+
+    public Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByTargetSystemsAsync(
+        IEnumerable<int> targetConnectedSystemIds)
+        => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectsByTargetSystemsAsync(targetConnectedSystemIds);
+
+    public Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesByCsoIdsAsync(IEnumerable<Guid> csoIds)
+        => _jim.Repository.ConnectedSystems.GetCsoAttributeValuesByCsoIdsAsync(csoIds);
+
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId)
+        => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectByMetaverseObjectIdAsync(metaverseObjectId, connectedSystemId);
+
+    public Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
+        IEnumerable<Guid> metaverseObjectIds, int connectedSystemId)
+        => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
+
+    public Task<ConnectedSystemObjectTypeAttribute?> GetAttributeAsync(int id)
+        => _jim.Repository.ConnectedSystems.GetAttributeAsync(id);
+
+    public Task<ConnectedSystemObject?> FindMatchingConnectedSystemObjectAsync(
+        MetaverseObject metaverseObject,
+        ConnectedSystem connectedSystem,
+        ConnectedSystemObjectType connectedSystemObjectType,
+        List<ObjectMatchingRule> matchingRules)
+        => _jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            metaverseObject, connectedSystem, connectedSystemObjectType, matchingRules);
+
+    #endregion
+
+    #region Export Execution Support
+
+    public Task<int> GetExecutableExportCountAsync(int connectedSystemId)
+        => _jim.Repository.ConnectedSystems.GetExecutableExportCountAsync(connectedSystemId);
+
+    public Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId)
+        => _jim.Repository.ConnectedSystems.GetExecutableExportsAsync(connectedSystemId);
+
+    public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take)
+        => _jim.Repository.ConnectedSystems.GetExecutableExportBatchAsync(connectedSystemId, skip, take);
+
+    public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
+        => _jim.Repository.ConnectedSystems.MarkPendingExportsAsExecutingAsync(pendingExports);
+
+    public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds)
+        => _jim.Repository.ConnectedSystems.GetPendingExportsByIdsAsync(pendingExportIds);
+
+    #endregion
 }

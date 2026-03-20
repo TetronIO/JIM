@@ -545,4 +545,126 @@ public interface ISyncRepository
     Task CreateMetaverseObjectChangeDirectAsync(MetaverseObjectChange change);
 
     #endregion
+
+    #region Connected System Object — Singular Convenience Methods
+
+    /// <summary>
+    /// Creates a single CSO. Convenience wrapper around <see cref="CreateConnectedSystemObjectsAsync(List{ConnectedSystemObject})"/>.
+    /// </summary>
+    Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject);
+
+    /// <summary>
+    /// Updates a single CSO. Convenience wrapper around <see cref="UpdateConnectedSystemObjectsAsync(List{ConnectedSystemObject})"/>.
+    /// </summary>
+    Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject);
+
+    /// <summary>
+    /// Updates a single CSO with new attribute values (e.g., secondary external ID during export).
+    /// Convenience wrapper around <see cref="UpdateConnectedSystemObjectsWithNewAttributeValuesAsync"/>.
+    /// </summary>
+    Task UpdateConnectedSystemObjectWithNewAttributeValuesAsync(
+        ConnectedSystemObject connectedSystemObject,
+        List<ConnectedSystemObjectAttributeValue> newAttributeValues);
+
+    #endregion
+
+    #region Pending Export — Singular Convenience Methods
+
+    /// <summary>
+    /// Creates a single pending export. Convenience wrapper around <see cref="CreatePendingExportsAsync"/>.
+    /// </summary>
+    Task CreatePendingExportAsync(PendingExport pendingExport);
+
+    /// <summary>
+    /// Deletes a single pending export. Convenience wrapper around <see cref="DeletePendingExportsAsync"/>.
+    /// </summary>
+    Task DeletePendingExportAsync(PendingExport pendingExport);
+
+    /// <summary>
+    /// Updates a single pending export. Convenience wrapper around <see cref="UpdatePendingExportsAsync"/>.
+    /// </summary>
+    Task UpdatePendingExportAsync(PendingExport pendingExport);
+
+    #endregion
+
+    #region Export Evaluation Support
+
+    /// <summary>
+    /// Gets CSOs joined to MVOs that are targeted by the specified connected systems.
+    /// Returns a dictionary keyed by (MvoId, ConnectedSystemId) for O(1) lookup during export evaluation.
+    /// </summary>
+    Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByTargetSystemsAsync(
+        IEnumerable<int> targetConnectedSystemIds);
+
+    /// <summary>
+    /// Batch loads CSO attribute values for the specified CSO IDs.
+    /// Used to pre-load target CSO attribute values for no-net-change detection during export evaluation.
+    /// </summary>
+    Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesByCsoIdsAsync(IEnumerable<Guid> csoIds);
+
+    /// <summary>
+    /// Gets a single CSO joined to a specific MVO within a connected system.
+    /// Used during export evaluation to find existing CSOs for provisioning decisions.
+    /// </summary>
+    Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId);
+
+    /// <summary>
+    /// Gets CSOs joined to multiple MVOs within a connected system.
+    /// Returns a dictionary keyed by MVO ID for O(1) lookup.
+    /// Used for reference resolution during export processing.
+    /// </summary>
+    Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
+        IEnumerable<Guid> metaverseObjectIds, int connectedSystemId);
+
+    /// <summary>
+    /// Gets a single connected system object type attribute by ID.
+    /// Used during export to determine attribute data types.
+    /// </summary>
+    Task<ConnectedSystemObjectTypeAttribute?> GetAttributeAsync(int id);
+
+    /// <summary>
+    /// Finds a matching CSO for export provisioning using object matching rules.
+    /// Evaluates rules in order until a match is found.
+    /// </summary>
+    Task<ConnectedSystemObject?> FindMatchingConnectedSystemObjectAsync(
+        MetaverseObject metaverseObject,
+        ConnectedSystem connectedSystem,
+        ConnectedSystemObjectType connectedSystemObjectType,
+        List<ObjectMatchingRule> matchingRules);
+
+    #endregion
+
+    #region Export Execution Support
+
+    /// <summary>
+    /// Gets the count of pending exports that are ready for execution.
+    /// Applies database-level filtering for status, retry timing, and max retries.
+    /// </summary>
+    Task<int> GetExecutableExportCountAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Gets all pending exports that are ready for execution.
+    /// Applies database-level filtering for status, retry timing, and max retries.
+    /// </summary>
+    Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Gets a batch of executable exports using paged loading.
+    /// Uses AsNoTracking in production for minimal EF overhead.
+    /// </summary>
+    Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take);
+
+    /// <summary>
+    /// Marks pending exports as Executing with the current UTC timestamp.
+    /// Uses raw SQL in production for efficiency.
+    /// </summary>
+    Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports);
+
+    /// <summary>
+    /// Reloads pending exports by their IDs with full object graph.
+    /// Used during parallel export processing to reload exports in a separate context.
+    /// </summary>
+    Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds);
+
+    #endregion
 }

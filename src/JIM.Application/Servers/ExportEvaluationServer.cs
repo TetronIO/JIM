@@ -6,6 +6,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using Serilog;
+
 namespace JIM.Application.Servers;
 
 /// <summary>
@@ -23,65 +24,6 @@ public class ExportEvaluationServer
         Application = application;
         ExpressionEvaluator = new DynamicExpressoEvaluator();
         ScopingEvaluation = new ScopingEvaluationServer();
-    }
-
-    /// <summary>
-    /// Result of export evaluation including pending exports and no-net-change statistics.
-    /// </summary>
-    public class ExportEvaluationResult
-    {
-        /// <summary>
-        /// List of PendingExports that were created.
-        /// </summary>
-        public List<PendingExport> PendingExports { get; set; } = [];
-
-        /// <summary>
-        /// List of CSOs created for provisioning (when deferSave is true).
-        /// These need to be batch-persisted by the caller before the pending exports.
-        /// </summary>
-        public List<ConnectedSystemObject> ProvisioningCsosToCreate { get; set; } = [];
-
-        /// <summary>
-        /// Count of attributes skipped because the CSO already has the current value.
-        /// This represents true no-net-changes where the MVO had updates but the CSO matches.
-        /// </summary>
-        public int CsoAlreadyCurrentCount { get; set; }
-    }
-
-    /// <summary>
-    /// Cache class for pre-loaded export evaluation data.
-    /// Pass this to the optimised evaluation methods to avoid O(N×M) database queries.
-    /// </summary>
-    public class ExportEvaluationCache
-    {
-        /// <summary>
-        /// Pre-loaded export rules, keyed by MVO type ID.
-        /// </summary>
-        public Dictionary<int, List<SyncRule>> ExportRulesByMvoTypeId { get; }
-
-        /// <summary>
-        /// Pre-loaded CSO lookup, keyed by (MvoId, ConnectedSystemId).
-        /// </summary>
-        public Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject> CsoLookup { get; }
-
-        /// <summary>
-        /// Pre-loaded target CSO attribute values for no-net-change detection during export evaluation.
-        /// Uses ILookup to support multi-valued attributes where a single (CsoId, AttributeId) can have multiple values.
-        /// </summary>
-        public ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue> CsoAttributeValues { get; }
-
-        /// <summary>
-        /// Creates a new export evaluation cache with pre-loaded data.
-        /// </summary>
-        public ExportEvaluationCache(
-            Dictionary<int, List<SyncRule>> exportRulesByMvoTypeId,
-            Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject> csoLookup,
-            ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue> csoAttributeValues)
-        {
-            ExportRulesByMvoTypeId = exportRulesByMvoTypeId;
-            CsoLookup = csoLookup;
-            CsoAttributeValues = csoAttributeValues;
-        }
     }
 
     /// <summary>

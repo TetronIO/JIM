@@ -855,6 +855,228 @@ public class SyncRepository : ISyncRepository
 
     #endregion
 
+    #region Connected System Object — Singular Convenience Methods
+
+    public Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
+        => CreateConnectedSystemObjectsAsync(new List<ConnectedSystemObject> { connectedSystemObject });
+
+    public Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
+        => UpdateConnectedSystemObjectsAsync(new List<ConnectedSystemObject> { connectedSystemObject });
+
+    public Task UpdateConnectedSystemObjectWithNewAttributeValuesAsync(
+        ConnectedSystemObject connectedSystemObject,
+        List<ConnectedSystemObjectAttributeValue> newAttributeValues)
+        => UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(
+            new List<(ConnectedSystemObject, List<ConnectedSystemObjectAttributeValue>)>
+            {
+                (connectedSystemObject, newAttributeValues)
+            });
+
+    #endregion
+
+    #region Pending Export — Singular Convenience Methods
+
+    public Task CreatePendingExportAsync(PendingExport pendingExport)
+        => CreatePendingExportsAsync(new[] { pendingExport });
+
+    public Task DeletePendingExportAsync(PendingExport pendingExport)
+        => DeletePendingExportsAsync(new[] { pendingExport });
+
+    public Task UpdatePendingExportAsync(PendingExport pendingExport)
+        => UpdatePendingExportsAsync(new[] { pendingExport });
+
+    #endregion
+
+    #region Export Evaluation Support
+
+    public Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByTargetSystemsAsync(
+        IEnumerable<int> targetConnectedSystemIds)
+    {
+        var targetIds = targetConnectedSystemIds.ToHashSet();
+        var result = new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>();
+
+        foreach (var cso in _csos.Values)
+        {
+            if (targetIds.Contains(cso.ConnectedSystemId) && cso.MetaverseObjectId.HasValue)
+            {
+                var key = (cso.MetaverseObjectId.Value, cso.ConnectedSystemId);
+                result.TryAdd(key, cso);
+            }
+        }
+
+        return Task.FromResult(result);
+    }
+
+    public Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesByCsoIdsAsync(IEnumerable<Guid> csoIds)
+    {
+        var ids = csoIds.ToHashSet();
+        var result = new List<ConnectedSystemObjectAttributeValue>();
+
+        foreach (var cso in _csos.Values)
+        {
+            if (ids.Contains(cso.Id) && cso.AttributeValues != null)
+                result.AddRange(cso.AttributeValues);
+        }
+
+        return Task.FromResult(result);
+    }
+
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(
+        Guid metaverseObjectId, int connectedSystemId)
+    {
+        ConnectedSystemObject? result = null;
+
+        if (_csosByMvo.TryGetValue(metaverseObjectId, out var csoIds))
+        {
+            foreach (var csoId in csoIds)
+            {
+                if (_csos.TryGetValue(csoId, out var cso) && cso.ConnectedSystemId == connectedSystemId)
+                {
+                    result = cso;
+                    break;
+                }
+            }
+        }
+
+        return Task.FromResult(result);
+    }
+
+    public Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
+        IEnumerable<Guid> metaverseObjectIds, int connectedSystemId)
+    {
+        var result = new Dictionary<Guid, ConnectedSystemObject>();
+
+        foreach (var mvoId in metaverseObjectIds)
+        {
+            if (_csosByMvo.TryGetValue(mvoId, out var csoIds))
+            {
+                foreach (var csoId in csoIds)
+                {
+                    if (_csos.TryGetValue(csoId, out var cso) && cso.ConnectedSystemId == connectedSystemId)
+                    {
+                        result.TryAdd(mvoId, cso);
+                        break;
+                    }
+                }
+            }
+        }
+
+        return Task.FromResult(result);
+    }
+
+    public Task<ConnectedSystemObjectTypeAttribute?> GetAttributeAsync(int id)
+    {
+        ConnectedSystemObjectTypeAttribute? result = null;
+
+        foreach (var objectType in _objectTypes.Values)
+        {
+            if (objectType.Attributes != null)
+            {
+                result = objectType.Attributes.FirstOrDefault(a => a.Id == id);
+                if (result != null) break;
+            }
+        }
+
+        return Task.FromResult(result);
+    }
+
+    public Task<ConnectedSystemObject?> FindMatchingConnectedSystemObjectAsync(
+        MetaverseObject metaverseObject,
+        ConnectedSystem connectedSystem,
+        ConnectedSystemObjectType connectedSystemObjectType,
+        List<ObjectMatchingRule> matchingRules)
+    {
+        // Simplified export matching: iterate rules, find CSO with matching attribute value
+        foreach (var rule in matchingRules.OrderBy(r => r.Order))
+        {
+            if (rule.Sources.Count == 0) continue;
+            var source = rule.Sources[0];
+
+            if (source.MetaverseAttribute == null && source.MetaverseAttributeId == null) continue;
+            if (source.ConnectedSystemAttribute == null && source.ConnectedSystemAttributeId == null) continue;
+
+            // Get the MVO attribute value to match against
+            var mvoAttrId = source.MetaverseAttribute?.Id ?? source.MetaverseAttributeId;
+            var mvoAttr = metaverseObject.AttributeValues?
+                .FirstOrDefault(av => av.AttributeId == mvoAttrId);
+            if (mvoAttr == null) continue;
+
+            var mvoVal = mvoAttr.StringValue ?? mvoAttr.GuidValue?.ToString() ?? mvoAttr.IntValue?.ToString();
+            if (mvoVal == null) continue;
+
+            // Find a CSO in the target system with a matching CS attribute value
+            var csAttrId = source.ConnectedSystemAttribute?.Id ?? source.ConnectedSystemAttributeId;
+            var comparison = rule.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+
+            foreach (var cso in _csos.Values)
+            {
+                if (cso.ConnectedSystemId != connectedSystem.Id) continue;
+                if (cso.TypeId != connectedSystemObjectType.Id) continue;
+
+                var csoAttr = cso.AttributeValues?
+                    .FirstOrDefault(av => av.AttributeId == csAttrId);
+                if (csoAttr == null) continue;
+
+                var csoVal = csoAttr.StringValue ?? csoAttr.GuidValue?.ToString() ?? csoAttr.IntValue?.ToString();
+                if (string.Equals(mvoVal, csoVal, comparison))
+                    return Task.FromResult<ConnectedSystemObject?>(cso);
+            }
+        }
+
+        return Task.FromResult<ConnectedSystemObject?>(null);
+    }
+
+    #endregion
+
+    #region Export Execution Support
+
+    public Task<int> GetExecutableExportCountAsync(int connectedSystemId)
+    {
+        var count = GetPendingExportsForSystem(connectedSystemId)
+            .Count(pe => pe.Status == PendingExportStatus.Pending || pe.Status == PendingExportStatus.ExportNotConfirmed);
+        return Task.FromResult(count);
+    }
+
+    public Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId)
+    {
+        var result = GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.Status == PendingExportStatus.Pending || pe.Status == PendingExportStatus.ExportNotConfirmed)
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take)
+    {
+        var result = GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.Status == PendingExportStatus.Pending || pe.Status == PendingExportStatus.ExportNotConfirmed)
+            .Skip(skip)
+            .Take(take)
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
+    {
+        foreach (var pe in pendingExports)
+        {
+            pe.Status = PendingExportStatus.Executing;
+            pe.LastAttemptedAt = DateTime.UtcNow;
+            _pendingExports[pe.Id] = pe;
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds)
+    {
+        var result = pendingExportIds
+            .Where(id => _pendingExports.ContainsKey(id))
+            .Select(id => _pendingExports[id])
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    #endregion
+
     #region Private Helpers
 
     private IEnumerable<ConnectedSystemObject> GetCsosForSystem(int connectedSystemId)

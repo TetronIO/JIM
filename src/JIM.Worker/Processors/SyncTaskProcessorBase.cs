@@ -51,7 +51,7 @@ public abstract class SyncTaskProcessorBase
     protected readonly CancellationTokenSource _cancellationTokenSource;
     protected List<ConnectedSystemObjectType>? _objectTypes;
     protected Dictionary<Guid, List<JIM.Models.Transactional.PendingExport>>? _pendingExportsByCsoId;
-    protected ExportEvaluationServer.ExportEvaluationCache? _exportEvaluationCache;
+    protected ExportEvaluationCache? _exportEvaluationCache;
 
     // Cache for drift detection: maps (ConnectedSystemId, MvoAttributeId) to import mappings
     // Used to check if a connected system is a legitimate contributor for an attribute
