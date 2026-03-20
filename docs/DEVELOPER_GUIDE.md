@@ -272,6 +272,10 @@ public class MetaverseController : ControllerBase
 - Use MudBlazor components for consistency
 - Follow Blazor lifecycle methods
 
+**Tabs**:
+- Use `<NavigableMudTabs>` instead of `<MudTabs>` for all top-level page tabs. This wrapper component syncs the active tab with a `?t=slug` query string parameter, enabling browser back/forward navigation between tabs. It is a drop-in replacement — accepts the same parameters as `MudTabs` (including `Header`, `@bind-ActivePanelIndex`, etc.)
+- Plain `<MudTabs>` is still appropriate for tabs inside dialogs or nested sub-tabs within a parent tab, where URL navigation is not needed
+
 **State Management**:
 - Use cascading parameters for shared state
 - Avoid static state
