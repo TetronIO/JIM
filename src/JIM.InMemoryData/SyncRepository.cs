@@ -1036,7 +1036,13 @@ public class SyncRepository : ISyncRepository
         foreach (var cso in _csos.Values)
         {
             if (ids.Contains(cso.Id) && cso.AttributeValues != null)
-                result.AddRange(cso.AttributeValues);
+            {
+                foreach (var av in cso.AttributeValues)
+                {
+                    av.ConnectedSystemObject ??= cso;
+                    result.Add(av);
+                }
+            }
         }
 
         return Task.FromResult(result);
@@ -1338,6 +1344,12 @@ public class SyncRepository : ISyncRepository
         }
         mvoSet.Add(csoId);
     }
+
+    /// <summary>
+    /// Updates the MVO index for a CSO after its MetaverseObjectId has been changed externally.
+    /// Call this after manually setting cso.MetaverseObjectId in tests.
+    /// </summary>
+    public void RefreshCsoMvoIndex(ConnectedSystemObject cso) => UpdateMvoIndex(cso);
 
     private void UpdateMvoIndex(ConnectedSystemObject cso)
     {
