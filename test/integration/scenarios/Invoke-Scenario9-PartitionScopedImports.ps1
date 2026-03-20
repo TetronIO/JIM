@@ -241,7 +241,7 @@ try {
 
         $syncStats = Get-JIMActivityStats -Id $syncResult.activityId
         Write-Host "  Projections: $($syncStats.totalProjections)" -ForegroundColor Gray
-        Write-Host "  Updates: $($syncStats.totalMvoUpdates)" -ForegroundColor Gray
+        Write-Host "  Updates: $($syncStats.totalUpdated)" -ForegroundColor Gray
 
         # No new projections expected — objects already projected from scoped import
         Write-Host "  OK Full Sync consistent after unscoped import" -ForegroundColor Green
