@@ -1540,9 +1540,9 @@ public class DriftDetectionWorkflowTests
         var cso = allCsos.First();
         cso.LastUpdated = DateTime.UtcNow;
 
-        // Act: Call the repository method that delta sync uses
+        // Act: Call the ISyncRepository method that delta sync uses
         var watermark = DateTime.UtcNow.AddHours(-1);
-        var pagedResult = await _harness.Repository.ConnectedSystems.GetConnectedSystemObjectsModifiedSinceAsync(
+        var pagedResult = await _harness.SyncRepo.GetConnectedSystemObjectsModifiedSinceAsync(
             system.Id,
             watermark,
             page: 1,

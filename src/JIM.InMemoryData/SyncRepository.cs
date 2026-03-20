@@ -666,6 +666,9 @@ public class SyncRepository : ISyncRepository
                     pe.ConnectedSystemObject = cso;
             }
 
+            // Fixup AttributeValueChange nav props (production code may set only Attribute or only AttributeId)
+            FixupPendingExportAttributeChanges(pe);
+
             _pendingExports[pe.Id] = pe;
             AddToPeIndex(pe);
         }
@@ -1219,7 +1222,16 @@ public class SyncRepository : ISyncRepository
     {
         if (!_csosByConnectedSystem.TryGetValue(connectedSystemId, out var ids))
             return Enumerable.Empty<ConnectedSystemObject>();
-        return ids.Where(id => _csos.ContainsKey(id)).Select(id => _csos[id]);
+        return ids.Where(id => _csos.ContainsKey(id)).Select(id =>
+        {
+            var cso = _csos[id];
+            // Lazy fixup: production code may add attribute values with Attribute nav prop
+            // but without AttributeId (relying on EF SaveChanges to resolve). Fix on read.
+            FixupCsoNavigationProperties(cso);
+            if (cso.MetaverseObject != null)
+                FixupMvoAttributeValues(cso.MetaverseObject);
+            return cso;
+        });
     }
 
     private IEnumerable<PendingExport> GetPendingExportsForSystem(int connectedSystemId)
@@ -1254,6 +1266,8 @@ public class SyncRepository : ISyncRepository
             cso.Type = objectType;
         if (cso.ConnectedSystem == null && cso.ConnectedSystemId > 0 && _connectedSystems.TryGetValue(cso.ConnectedSystemId, out var cs))
             cso.ConnectedSystem = cs;
+        if (cso.MetaverseObject == null && cso.MetaverseObjectId.HasValue && _mvos.TryGetValue(cso.MetaverseObjectId.Value, out var mvo))
+            cso.MetaverseObject = mvo;
 
         // Attribute value FK ↔ nav prop fixup
         foreach (var av in cso.AttributeValues)
@@ -1262,6 +1276,30 @@ public class SyncRepository : ISyncRepository
                 av.AttributeId = av.Attribute.Id;
             else if (av.Attribute == null && av.AttributeId > 0 && cso.Type != null)
                 av.Attribute = cso.Type.Attributes.FirstOrDefault(a => a.Id == av.AttributeId)!;
+        }
+    }
+
+    /// <summary>
+    /// Fixes up PendingExportAttributeValueChange FK/nav prop mismatches.
+    /// Drift detection creates changes with only AttributeId; export evaluation creates with both.
+    /// </summary>
+    private void FixupPendingExportAttributeChanges(PendingExport pe)
+    {
+        if (pe.AttributeValueChanges == null || pe.AttributeValueChanges.Count == 0) return;
+
+        // Build attribute lookup from the CSO type (if available)
+        ConnectedSystemObjectType? csoType = null;
+        if (pe.ConnectedSystemObject?.Type != null)
+            csoType = pe.ConnectedSystemObject.Type;
+        else if (pe.ConnectedSystemObject?.TypeId > 0 && _objectTypes.TryGetValue(pe.ConnectedSystemObject.TypeId, out var ot))
+            csoType = ot;
+
+        foreach (var avc in pe.AttributeValueChanges)
+        {
+            if (avc.AttributeId == 0 && avc.Attribute != null)
+                avc.AttributeId = avc.Attribute.Id;
+            else if (avc.Attribute == null && avc.AttributeId > 0 && csoType != null)
+                avc.Attribute = csoType.Attributes.FirstOrDefault(a => a.Id == avc.AttributeId);
         }
     }
 
