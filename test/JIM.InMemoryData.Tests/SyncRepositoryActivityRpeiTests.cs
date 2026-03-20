@@ -73,13 +73,15 @@ public class SyncRepositoryActivityRpeiTests
     }
 
     [Test]
-    public async Task BulkInsertRpeisAsync_AddsRpeisAndReturnsTrueAsync()
+    public async Task BulkInsertRpeisAsync_AddsRpeisAndReturnsFalseAsync()
     {
         var activityId = Guid.NewGuid();
         var rpei = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = activityId };
 
+        // Returns false to tell the processor to keep RPEIs in the activity's
+        // RunProfileExecutionItems collection (not the raw SQL path)
         var result = await _repo.BulkInsertRpeisAsync(new List<ActivityRunProfileExecutionItem> { rpei });
-        Assert.That(result, Is.True);
+        Assert.That(result, Is.False);
     }
 
     [Test]
