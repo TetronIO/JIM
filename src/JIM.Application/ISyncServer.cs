@@ -1,10 +1,11 @@
+using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 
-namespace JIM.Data.Repositories;
+namespace JIM.Application;
 
 /// <summary>
 /// Domain logic boundary for sync operations.
