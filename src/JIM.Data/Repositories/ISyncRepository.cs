@@ -590,6 +590,12 @@ public interface ISyncRepository
     #region Export Evaluation Support
 
     /// <summary>
+    /// Gets all CSOs joined to a specific MVO across all connected systems.
+    /// Used during MVO deletion to find all provisioned CSOs for delete exports.
+    /// </summary>
+    Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId);
+
+    /// <summary>
     /// Gets CSOs joined to MVOs that are targeted by the specified connected systems.
     /// Returns a dictionary keyed by (MvoId, ConnectedSystemId) for O(1) lookup during export evaluation.
     /// </summary>
@@ -621,6 +627,13 @@ public interface ISyncRepository
     /// Used during export to determine attribute data types.
     /// </summary>
     Task<ConnectedSystemObjectTypeAttribute?> GetAttributeAsync(int id);
+
+    /// <summary>
+    /// Gets multiple connected system object type attributes by their IDs.
+    /// Returns a dictionary keyed by attribute ID for O(1) lookup.
+    /// Used during batch export processing to pre-fetch attribute definitions.
+    /// </summary>
+    Task<Dictionary<int, ConnectedSystemObjectTypeAttribute>> GetAttributesByIdsAsync(IEnumerable<int> ids);
 
     /// <summary>
     /// Finds a matching CSO for export provisioning using object matching rules.

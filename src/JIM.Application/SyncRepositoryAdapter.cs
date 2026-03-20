@@ -365,6 +365,9 @@ public class SyncRepositoryAdapter : ISyncRepository
 
     #region Export Evaluation Support
 
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId)
+        => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdAsync(metaverseObjectId);
+
     public Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByTargetSystemsAsync(
         IEnumerable<int> targetConnectedSystemIds)
         => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectsByTargetSystemsAsync(targetConnectedSystemIds);
@@ -381,6 +384,9 @@ public class SyncRepositoryAdapter : ISyncRepository
 
     public Task<ConnectedSystemObjectTypeAttribute?> GetAttributeAsync(int id)
         => _jim.Repository.ConnectedSystems.GetAttributeAsync(id);
+
+    public Task<Dictionary<int, ConnectedSystemObjectTypeAttribute>> GetAttributesByIdsAsync(IEnumerable<int> ids)
+        => _jim.Repository.ConnectedSystems.GetAttributesByIdsAsync(ids);
 
     public Task<ConnectedSystemObject?> FindMatchingConnectedSystemObjectAsync(
         MetaverseObject metaverseObject,

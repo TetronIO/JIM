@@ -889,6 +889,20 @@ public class SyncRepository : ISyncRepository
 
     #region Export Evaluation Support
 
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId)
+    {
+        var result = new List<ConnectedSystemObject>();
+        if (_csosByMvo.TryGetValue(metaverseObjectId, out var csoIds))
+        {
+            foreach (var csoId in csoIds)
+            {
+                if (_csos.TryGetValue(csoId, out var cso))
+                    result.Add(cso);
+            }
+        }
+        return Task.FromResult(result);
+    }
+
     public Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByTargetSystemsAsync(
         IEnumerable<int> targetConnectedSystemIds)
     {
@@ -974,6 +988,24 @@ public class SyncRepository : ISyncRepository
             {
                 result = objectType.Attributes.FirstOrDefault(a => a.Id == id);
                 if (result != null) break;
+            }
+        }
+
+        return Task.FromResult(result);
+    }
+
+    public Task<Dictionary<int, ConnectedSystemObjectTypeAttribute>> GetAttributesByIdsAsync(IEnumerable<int> ids)
+    {
+        var idSet = ids.ToHashSet();
+        var result = new Dictionary<int, ConnectedSystemObjectTypeAttribute>();
+
+        foreach (var objectType in _objectTypes.Values)
+        {
+            if (objectType.Attributes == null) continue;
+            foreach (var attr in objectType.Attributes)
+            {
+                if (idSet.Contains(attr.Id))
+                    result.TryAdd(attr.Id, attr);
             }
         }
 
