@@ -191,6 +191,8 @@ public class Worker : BackgroundService
                             // we can't use the main-loop instance, due to Entity Framework having connection sharing issues.
                             // IMPORTANT: taskJim must be disposed to release database connections and prevent deadlocks.
                             using var taskJim = _jimFactory.Create();
+                            var syncRepo = new JIM.Application.SyncRepositoryAdapter(taskJim);
+                            var syncServer = new JIM.Application.SyncServer(taskJim);
 
                             // we want to re-retrieve the worker task using this instance of JIM, so there's no chance of any cross-JIM-instance issues
                             var newWorkerTask = await taskJim.Tasking.GetWorkerTaskAsync(mainLoopNewWorkerTask.Id) ??
@@ -286,7 +288,7 @@ public class Worker : BackgroundService
                                                         // hand processing of the sync task to a dedicated task processor to keep the worker abstract of specific tasks
                                                         case ConnectedSystemRunType.FullImport:
                                                         {
-                                                            var syncImportTaskProcessor = new SyncImportTaskProcessor(taskJim, new JIM.Application.SyncRepositoryAdapter(taskJim), connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource);
+                                                            var syncImportTaskProcessor = new SyncImportTaskProcessor(taskJim, syncRepo, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource);
                                                             await syncImportTaskProcessor.PerformFullImportAsync();
                                                             break;
                                                         }
@@ -295,25 +297,26 @@ public class Worker : BackgroundService
                                                             // Delta Import uses the import processor just like Full Import.
                                                             // The connector's ImportAsync method checks the run profile type
                                                             // to determine whether to do full or delta import.
-                                                            var syncDeltaImportTaskProcessor = new SyncImportTaskProcessor(taskJim, new JIM.Application.SyncRepositoryAdapter(taskJim), connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource);
+                                                            var syncDeltaImportTaskProcessor = new SyncImportTaskProcessor(taskJim, syncRepo, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource);
                                                             await syncDeltaImportTaskProcessor.PerformFullImportAsync();
                                                             break;
                                                         }
                                                         case ConnectedSystemRunType.FullSynchronisation:
                                                         {
-                                                            var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(taskJim, new JIM.Application.SyncRepositoryAdapter(taskJim), connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource);
+                                                            var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(syncServer, syncRepo, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource);
                                                             await syncFullSyncTaskProcessor.PerformFullSyncAsync();
                                                             break;
                                                         }
                                                         case ConnectedSystemRunType.Export:
                                                         {
-                                                            var syncExportTaskProcessor = new SyncExportTaskProcessor(taskJim, new JIM.Application.SyncRepositoryAdapter(taskJim), connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource);
+                                                            var syncExportTaskProcessor = new SyncExportTaskProcessor(syncServer, syncRepo, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource,
+                                                                                        syncRepoFactory: () => new JIM.Application.SyncRepositoryAdapter(_jimFactory.Create()));
                                                             await syncExportTaskProcessor.PerformExportAsync();
                                                             break;
                                                         }
                                                         case ConnectedSystemRunType.DeltaSynchronisation:
                                                         {
-                                                            var syncDeltaSyncTaskProcessor = new SyncDeltaSyncTaskProcessor(taskJim, new JIM.Application.SyncRepositoryAdapter(taskJim), connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource);
+                                                            var syncDeltaSyncTaskProcessor = new SyncDeltaSyncTaskProcessor(syncServer, syncRepo, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource);
                                                             await syncDeltaSyncTaskProcessor.PerformDeltaSyncAsync();
                                                             break;
                                                         }

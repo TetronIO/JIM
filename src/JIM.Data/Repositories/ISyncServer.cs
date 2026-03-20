@@ -102,5 +102,19 @@ public interface ISyncServer
         IConnector connector,
         SyncRunMode runMode = SyncRunMode.PreviewAndSync);
 
+    /// <summary>
+    /// Executes all pending exports with full options including progress reporting,
+    /// cancellation, and parallel batch support.
+    /// </summary>
+    Task<ExportExecutionResult> ExecuteExportsAsync(
+        ConnectedSystem connectedSystem,
+        IConnector connector,
+        SyncRunMode runMode,
+        ExportExecutionOptions? options,
+        CancellationToken cancellationToken,
+        Func<ExportProgressInfo, Task>? progressCallback = null,
+        Func<IConnector>? connectorFactory = null,
+        Func<ISyncRepository>? repositoryFactory = null);
+
     #endregion
 }

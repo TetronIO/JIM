@@ -23,8 +23,9 @@ namespace JIM.Worker.Processors;
 /// </summary>
 public class SyncExportTaskProcessor
 {
-    private readonly JimApplication _jim;
+    private readonly ISyncServer _syncServer;
     private readonly ISyncRepository _syncRepo;
+    private readonly Func<ISyncRepository>? _syncRepoFactory;
     private readonly IConnector _connector;
     private readonly ConnectedSystem _connectedSystem;
     private readonly ConnectedSystemRunProfile _runProfile;
@@ -49,17 +50,19 @@ public class SyncExportTaskProcessor
     private bool _csoChangeTrackingEnabled;
 
     public SyncExportTaskProcessor(
-        JimApplication jimApplication,
+        ISyncServer syncServer,
         ISyncRepository syncRepository,
         IConnector connector,
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile runProfile,
         WorkerTask workerTask,
         CancellationTokenSource cancellationTokenSource,
-        SyncRunMode runMode = SyncRunMode.PreviewAndSync)
+        SyncRunMode runMode = SyncRunMode.PreviewAndSync,
+        Func<ISyncRepository>? syncRepoFactory = null)
     {
-        _jim = jimApplication;
+        _syncServer = syncServer;
         _syncRepo = syncRepository;
+        _syncRepoFactory = syncRepoFactory;
         _connector = connector;
         _connectedSystem = connectedSystem;
         _runProfile = runProfile;
@@ -136,7 +139,7 @@ public class SyncExportTaskProcessor
             ExportExecutionResult result;
             using (Diagnostics.Connector.StartSpan("ExecuteExports").SetTag("pendingExportCount", pendingExportCount))
             {
-                result = await _jim.ExportExecution.ExecuteExportsAsync(
+                result = await _syncServer.ExecuteExportsAsync(
                     _connectedSystem,
                     _connector,
                     _runMode,
@@ -150,7 +153,7 @@ public class SyncExportTaskProcessor
                         await _syncRepo.UpdateActivityAsync(_activity);
                     },
                     connectorFactory: CreateConnectorForParallelBatch,
-                    repositoryFactory: () => new PostgresDataRepository(new JimDbContext()));
+                    repositoryFactory: _syncRepoFactory);
             }
 
             exportSpan.SetTag("successCount", result.SuccessCount);
@@ -392,6 +395,6 @@ public class SyncExportTaskProcessor
         Log.Information("GetExportPreviewAsync: Generating preview for {SystemName}", _connectedSystem.Name);
 
         // Always use preview mode for this method
-        return await _jim.ExportExecution.ExecuteExportsAsync(_connectedSystem, _connector, SyncRunMode.PreviewOnly);
+        return await _syncServer.ExecuteExportsAsync(_connectedSystem, _connector, SyncRunMode.PreviewOnly);
     }
 }

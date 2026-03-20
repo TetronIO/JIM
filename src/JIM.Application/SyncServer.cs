@@ -86,5 +86,18 @@ public class SyncServer : ISyncServer
         SyncRunMode runMode = SyncRunMode.PreviewAndSync)
         => _exportExec.ExecuteExportsAsync(connectedSystem, connector, runMode);
 
+    public Task<ExportExecutionResult> ExecuteExportsAsync(
+        ConnectedSystem connectedSystem,
+        IConnector connector,
+        SyncRunMode runMode,
+        ExportExecutionOptions? options,
+        CancellationToken cancellationToken,
+        Func<ExportProgressInfo, Task>? progressCallback = null,
+        Func<IConnector>? connectorFactory = null,
+        Func<ISyncRepository>? repositoryFactory = null)
+        => _exportExec.ExecuteExportsAsync(
+            connectedSystem, connector, runMode, options, cancellationToken,
+            progressCallback, connectorFactory, repositoryFactory);
+
     #endregion
 }

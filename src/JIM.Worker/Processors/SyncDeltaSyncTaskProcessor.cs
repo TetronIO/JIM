@@ -19,13 +19,13 @@ namespace JIM.Worker.Processors;
 public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
 {
     public SyncDeltaSyncTaskProcessor(
-        JimApplication jimApplication,
+        ISyncServer syncServer,
         ISyncRepository syncRepository,
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile connectedSystemRunProfile,
         Activity activity,
         CancellationTokenSource cancellationTokenSource)
-        : base(jimApplication, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource)
+        : base(syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource)
     {
     }
 
@@ -114,7 +114,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         // Pre-load export evaluation cache
         using (Diagnostics.Sync.StartSpan("LoadExportEvaluationCache"))
         {
-            _exportEvaluationCache = await _jim.ExportEvaluation.BuildExportEvaluationCacheAsync(_connectedSystem.Id);
+            _exportEvaluationCache = await _syncServer.BuildExportEvaluationCacheAsync(_connectedSystem.Id);
         }
 
         // Load settings once at start of sync
