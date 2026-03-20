@@ -1,6 +1,7 @@
 using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Expressions;
+using JIM.Application.Interfaces;
 using JIM.Application.Utilities;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;

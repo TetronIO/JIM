@@ -1,4 +1,4 @@
-namespace JIM.Application;
+namespace JIM.Application.Interfaces;
 
 /// <summary>
 /// Factory for creating short-lived <see cref="JimApplication"/> instances.

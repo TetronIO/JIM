@@ -1,3 +1,4 @@
+using JIM.Application.Interfaces;
 using JIM.Application.Services;
 using JIM.Data.Repositories;
 using JIM.Models.Core;

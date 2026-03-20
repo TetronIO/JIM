@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
 using JIM.Application;
+using JIM.Application.Interfaces;
 using JIM.Application.Expressions;
 using JIM.Application.Services;
 using JIM.Data;

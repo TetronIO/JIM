@@ -5,7 +5,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 
-namespace JIM.Application;
+namespace JIM.Application.Interfaces;
 
 /// <summary>
 /// Domain logic boundary for sync operations.

@@ -1,5 +1,6 @@
 using JIM.Application;
 using JIM.Application.Diagnostics;
+using JIM.Application.Interfaces;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
