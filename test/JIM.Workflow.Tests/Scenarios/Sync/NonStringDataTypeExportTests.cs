@@ -83,10 +83,7 @@ public class NonStringDataTypeExportTests
 
         // Assert: PendingExport has BoolValue set (not converted to string)
         // Query the actual PendingExport from database with AttributeValueChanges included
-        var pendingExport = await _harness.DbContext.PendingExports
-            .Include(pe => pe.AttributeValueChanges)
-            .ThenInclude(avc => avc.Attribute)
-            .FirstAsync();
+        var pendingExport = _harness.SyncRepo.PendingExports.Values.First();
 
         var isActiveChange = pendingExport.AttributeValueChanges
             .FirstOrDefault(avc => avc.Attribute?.Name == "enabled");
@@ -157,10 +154,7 @@ public class NonStringDataTypeExportTests
         Assert.That(afterSync.PendingExportCount, Is.EqualTo(1), "Should have 1 PendingExport");
 
         // Assert: PendingExport has GuidValue set (not converted to string)
-        var pendingExport = await _harness.DbContext.PendingExports
-            .Include(pe => pe.AttributeValueChanges)
-            .ThenInclude(avc => avc.Attribute)
-            .FirstAsync();
+        var pendingExport = _harness.SyncRepo.PendingExports.Values.First();
 
         var correlationIdChange = pendingExport.AttributeValueChanges
             .FirstOrDefault(avc => avc.Attribute?.Name == "externalCorrelationId");
@@ -222,10 +216,7 @@ public class NonStringDataTypeExportTests
         var afterSync = await _harness.TakeSnapshotAsync("After Full Sync");
 
         // Assert: PendingExport has DateTimeValue set
-        var pendingExport = await _harness.DbContext.PendingExports
-            .Include(pe => pe.AttributeValueChanges)
-            .ThenInclude(avc => avc.Attribute)
-            .FirstAsync();
+        var pendingExport = _harness.SyncRepo.PendingExports.Values.First();
 
         var startDateChange = pendingExport.AttributeValueChanges
             .FirstOrDefault(avc => avc.Attribute?.Name == "hireDate");
@@ -282,10 +273,7 @@ public class NonStringDataTypeExportTests
         var afterSync = await _harness.TakeSnapshotAsync("After Full Sync");
 
         // Assert: PendingExport has IntValue set
-        var pendingExport = await _harness.DbContext.PendingExports
-            .Include(pe => pe.AttributeValueChanges)
-            .ThenInclude(avc => avc.Attribute)
-            .FirstAsync();
+        var pendingExport = _harness.SyncRepo.PendingExports.Values.First();
 
         var badgeChange = pendingExport.AttributeValueChanges
             .FirstOrDefault(avc => avc.Attribute?.Name == "employeeNumber");

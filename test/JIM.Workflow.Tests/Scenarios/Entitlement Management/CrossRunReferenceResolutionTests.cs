@@ -2,7 +2,6 @@ using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Workflow.Tests.Harness;
-using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
 
 namespace JIM.Workflow.Tests.Scenarios.EntitlementManagement;
@@ -85,10 +84,9 @@ public class CrossRunReferenceResolutionTests
         await _harness.TakeSnapshotAsync("After User Import (Run 1)");
 
         // Verify users were imported as CSOs
-        var userCsos = await _harness.DbContext.ConnectedSystemObjects
-            .Include(c => c.Type)
+        var userCsos = _harness.SyncRepo.ConnectedSystemObjects.Values
             .Where(c => c.Type != null && c.Type.Name == "User")
-            .ToListAsync();
+            .ToList();
         Assert.That(userCsos.Count, Is.EqualTo(TestUsers.Count),
             "All users should be imported as CSOs after Run 1");
 
@@ -101,11 +99,8 @@ public class CrossRunReferenceResolutionTests
         await _harness.TakeSnapshotAsync("After Group Import (Run 2)");
 
         // Assert: The group CSO should have all member references resolved with ReferenceValueId set
-        var groupCso = await _harness.DbContext.ConnectedSystemObjects
-            .Include(c => c.AttributeValues)
-                .ThenInclude(av => av.Attribute)
-            .Include(c => c.Type)
-            .FirstOrDefaultAsync(c => c.Type != null && c.Type.Name == "Group");
+        var groupCso = _harness.SyncRepo.ConnectedSystemObjects.Values
+            .FirstOrDefault(c => c.Type != null && c.Type.Name == "Group");
 
         Assert.That(groupCso, Is.Not.Null, "Group CSO should exist after Run 2");
 
@@ -160,11 +155,8 @@ public class CrossRunReferenceResolutionTests
         await _harness.ExecuteFullImportAsync("Source");
 
         // Assert: Group exists but member references are unresolved
-        var groupCso = await _harness.DbContext.ConnectedSystemObjects
-            .Include(c => c.AttributeValues)
-                .ThenInclude(av => av.Attribute)
-            .Include(c => c.Type)
-            .FirstOrDefaultAsync(c => c.Type != null && c.Type.Name == "Group");
+        var groupCso = _harness.SyncRepo.ConnectedSystemObjects.Values
+            .FirstOrDefault(c => c.Type != null && c.Type.Name == "Group");
 
         Assert.That(groupCso, Is.Not.Null, "Group CSO should exist");
 

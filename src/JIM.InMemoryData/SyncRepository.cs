@@ -136,6 +136,16 @@ public class SyncRepository : ISyncRepository
         _activities[activity.Id] = activity;
     }
 
+    /// <summary>
+    /// Removes all pending exports from the store. Used by tests to reset state between sync cycles.
+    /// </summary>
+    public void ClearAllPendingExports()
+    {
+        _pendingExports.Clear();
+        _pendingExportsByCs.Clear();
+        _pendingExportsByCsoId.Clear();
+    }
+
     public void SetSyncPageSize(int pageSize) => _syncPageSize = pageSize;
 
     public void SetSyncOutcomeTrackingLevel(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel level)
@@ -374,6 +384,8 @@ public class SyncRepository : ISyncRepository
         {
             if (cso.Id == Guid.Empty)
                 cso.Id = Guid.NewGuid();
+
+            FixupCsoNavigationProperties(cso);
             _csos[cso.Id] = cso;
             AddToCsIndex(cso);
         }
@@ -394,6 +406,7 @@ public class SyncRepository : ISyncRepository
     {
         foreach (var cso in connectedSystemObjects)
         {
+            FixupCsoNavigationProperties(cso);
             _csos[cso.Id] = cso;
             UpdateMvoIndex(cso);
         }
@@ -403,7 +416,40 @@ public class SyncRepository : ISyncRepository
     public Task UpdateConnectedSystemObjectsAsync(
         List<ConnectedSystemObject> connectedSystemObjects,
         List<ActivityRunProfileExecutionItem> rpeis)
-        => UpdateConnectedSystemObjectsAsync(connectedSystemObjects);
+    {
+        // Apply PendingAttributeValueAdditions/Removals — in production this is done by
+        // ConnectedSystemServer.ProcessConnectedSystemObjectAttributeValueChanges before
+        // delegating to the repository. InMemoryData must do it here.
+        foreach (var cso in connectedSystemObjects)
+        {
+            foreach (var addition in cso.PendingAttributeValueAdditions)
+            {
+                if (addition.AttributeId == 0 && addition.Attribute != null)
+                    addition.AttributeId = addition.Attribute.Id;
+                cso.AttributeValues.Add(addition);
+            }
+
+            foreach (var removal in cso.PendingAttributeValueRemovals)
+            {
+                // Use reference equality when Id is Guid.Empty (newly created, not yet persisted).
+                // With EF Core, these objects have DB-generated IDs. In-memory, they remain empty.
+                if (removal.Id == Guid.Empty)
+                    cso.AttributeValues.Remove(removal);
+                else
+                    cso.AttributeValues.RemoveAll(av => av.Id == removal.Id);
+            }
+
+            cso.PendingAttributeValueAdditions = new List<ConnectedSystemObjectAttributeValue>();
+            cso.PendingAttributeValueRemovals = new List<ConnectedSystemObjectAttributeValue>();
+
+            // Also fixup the joined MVO's attribute values — ApplyPendingMetaverseObjectAttributeChanges
+            // adds values with Attribute nav prop set but AttributeId == 0
+            if (cso.MetaverseObject != null)
+                FixupMvoAttributeValues(cso.MetaverseObject);
+        }
+
+        return UpdateConnectedSystemObjectsAsync(connectedSystemObjects);
+    }
 
     public Task UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects)
     {
@@ -428,7 +474,17 @@ public class SyncRepository : ISyncRepository
         {
             if (_csos.TryGetValue(cso.Id, out var stored))
             {
-                stored.AttributeValues.AddRange(newAvs);
+                // Since InMemoryData stores references (not copies), stored and cso may be the same object.
+                // Only add values that aren't already in the collection to avoid duplicates.
+                foreach (var av in newAvs)
+                {
+                    // Fixup FK from nav prop (EF Core does this automatically on SaveChanges)
+                    if (av.AttributeId == 0 && av.Attribute != null)
+                        av.AttributeId = av.Attribute.Id;
+
+                    if (!stored.AttributeValues.Contains(av))
+                        stored.AttributeValues.Add(av);
+                }
             }
         }
         return Task.CompletedTask;
@@ -544,6 +600,7 @@ public class SyncRepository : ISyncRepository
         {
             if (mvo.Id == Guid.Empty)
                 mvo.Id = Guid.NewGuid();
+            FixupMvoAttributeValues(mvo);
             _mvos[mvo.Id] = mvo;
         }
         return Task.CompletedTask;
@@ -552,12 +609,16 @@ public class SyncRepository : ISyncRepository
     public Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
     {
         foreach (var mvo in metaverseObjects)
+        {
+            FixupMvoAttributeValues(mvo);
             _mvos[mvo.Id] = mvo;
+        }
         return Task.CompletedTask;
     }
 
     public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
     {
+        FixupMvoAttributeValues(metaverseObject);
         _mvos[metaverseObject.Id] = metaverseObject;
         return Task.CompletedTask;
     }
@@ -596,6 +657,15 @@ public class SyncRepository : ISyncRepository
         {
             if (pe.Id == Guid.Empty)
                 pe.Id = Guid.NewGuid();
+
+            if (pe.ConnectedSystem == null && pe.ConnectedSystemId > 0 && _connectedSystems.TryGetValue(pe.ConnectedSystemId, out var cs))
+                pe.ConnectedSystem = cs;
+            if (pe.ConnectedSystemObject == null && pe.ConnectedSystemObjectId.HasValue)
+            {
+                if (_csos.TryGetValue(pe.ConnectedSystemObjectId.Value, out var cso))
+                    pe.ConnectedSystemObject = cso;
+            }
+
             _pendingExports[pe.Id] = pe;
             AddToPeIndex(pe);
         }
@@ -1169,6 +1239,43 @@ public class SyncRepository : ISyncRepository
             CurrentPage = page,
             PageSize = pageSize
         };
+    }
+
+    /// <summary>
+    /// Simulates EF Core's automatic FK ↔ navigation property resolution.
+    /// Production code may set only FK (TypeId) or only nav prop (Type) — EF resolves
+    /// the other side on SaveChanges. InMemoryData must do this explicitly.
+    /// Also fixes up AttributeValue FK/nav prop mismatches (AttributeId ↔ Attribute).
+    /// </summary>
+    private void FixupCsoNavigationProperties(ConnectedSystemObject cso)
+    {
+        // CSO-level nav props
+        if (cso.Type == null && cso.TypeId > 0 && _objectTypes.TryGetValue(cso.TypeId, out var objectType))
+            cso.Type = objectType;
+        if (cso.ConnectedSystem == null && cso.ConnectedSystemId > 0 && _connectedSystems.TryGetValue(cso.ConnectedSystemId, out var cs))
+            cso.ConnectedSystem = cs;
+
+        // Attribute value FK ↔ nav prop fixup
+        foreach (var av in cso.AttributeValues)
+        {
+            if (av.AttributeId == 0 && av.Attribute != null)
+                av.AttributeId = av.Attribute.Id;
+            else if (av.Attribute == null && av.AttributeId > 0 && cso.Type != null)
+                av.Attribute = cso.Type.Attributes.FirstOrDefault(a => a.Id == av.AttributeId)!;
+        }
+    }
+
+    /// <summary>
+    /// Fixes up MVO attribute value FK/nav prop mismatches.
+    /// Production code sets Attribute nav prop but not AttributeId; EF resolves on SaveChanges.
+    /// </summary>
+    private static void FixupMvoAttributeValues(MetaverseObject mvo)
+    {
+        foreach (var av in mvo.AttributeValues)
+        {
+            if (av.AttributeId == 0 && av.Attribute != null)
+                av.AttributeId = av.Attribute.Id;
+        }
     }
 
     private void AddToCsIndex(ConnectedSystemObject cso)

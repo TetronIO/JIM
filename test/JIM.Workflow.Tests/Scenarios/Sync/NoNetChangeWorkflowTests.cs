@@ -69,19 +69,16 @@ public class NoNetChangeWorkflowTests
         var afterExport = await _harness.TakeSnapshotAsync("After Export");
 
         // Clear the pending exports (mark as completed)
-        var exportedPendingExports = await _harness.DbContext.PendingExports.ToListAsync();
-        foreach (var pe in exportedPendingExports)
+        foreach (var pe in _harness.SyncRepo.PendingExports.Values.ToList())
         {
             pe.Status = PendingExportStatus.Exported;
         }
-        await _harness.DbContext.SaveChangesAsync();
 
         // Simulate CSO attribute values being populated (as they would be after confirming import)
         await PopulateCsoAttributeValuesFromPendingExportsAsync();
 
         // Delete pending exports to reset state
-        _harness.DbContext.PendingExports.RemoveRange(await _harness.DbContext.PendingExports.ToListAsync());
-        await _harness.DbContext.SaveChangesAsync();
+        _harness.SyncRepo.ClearAllPendingExports();
 
         var beforeSecondSync = await _harness.TakeSnapshotAsync("Before Second Sync");
         Assert.That(beforeSecondSync.PendingExportCount, Is.EqualTo(0),
@@ -120,8 +117,7 @@ public class NoNetChangeWorkflowTests
         await PopulateCsoAttributeValuesFromPendingExportsAsync();
 
         // Clear pending exports
-        _harness.DbContext.PendingExports.RemoveRange(await _harness.DbContext.PendingExports.ToListAsync());
-        await _harness.DbContext.SaveChangesAsync();
+        _harness.SyncRepo.ClearAllPendingExports();
 
         // Step 2: Change department but keep displayName the same
         sourceConnector.QueueImportObjects(GenerateSourceUsersWithDepartment(3, "User", "Marketing"));
@@ -131,10 +127,7 @@ public class NoNetChangeWorkflowTests
         var afterSecondSync = await _harness.TakeSnapshotAsync("After Second Sync");
 
         // Assert: PendingExports created only for department changes
-        var pendingExports = await _harness.DbContext.PendingExports
-            .Include(pe => pe.AttributeValueChanges)
-            .ThenInclude(avc => avc.Attribute)
-            .ToListAsync();
+        var pendingExports = _harness.SyncRepo.PendingExports.Values.ToList();
 
         Assert.That(pendingExports.Count, Is.EqualTo(3),
             "Should have 3 PendingExports (one per user for department change)");
@@ -178,8 +171,7 @@ public class NoNetChangeWorkflowTests
         await PopulateCsoAttributeValuesFromPendingExportsAsync();
 
         // Clear pending exports
-        _harness.DbContext.PendingExports.RemoveRange(await _harness.DbContext.PendingExports.ToListAsync());
-        await _harness.DbContext.SaveChangesAsync();
+        _harness.SyncRepo.ClearAllPendingExports();
 
         // Step 2: Run sync with same data
         sourceConnector.QueueImportObjects(GenerateSourceUsers(3, "Initial"));
@@ -221,10 +213,8 @@ public class NoNetChangeWorkflowTests
         await _harness.ExecuteExportAsync("AD");
 
         // Now ensure CSO attribute values are null (no cn attribute)
-        var adCsos = await _harness.DbContext.ConnectedSystemObjects
-            .Where(cso => cso.ConnectedSystem.Name == "AD")
-            .Include(cso => cso.AttributeValues)
-            .ToListAsync();
+        var adCsos = _harness.SyncRepo.ConnectedSystemObjects.Values
+            .Where(cso => cso.ConnectedSystem?.Name == "AD").ToList();
 
         foreach (var cso in adCsos)
         {
@@ -234,11 +224,9 @@ public class NoNetChangeWorkflowTests
                 cso.AttributeValues.Remove(cnAttr);
             }
         }
-        await _harness.DbContext.SaveChangesAsync();
 
         // Clear pending exports
-        _harness.DbContext.PendingExports.RemoveRange(await _harness.DbContext.PendingExports.ToListAsync());
-        await _harness.DbContext.SaveChangesAsync();
+        _harness.SyncRepo.ClearAllPendingExports();
 
         // Step 2: Update with non-null displayName
         sourceConnector.QueueImportObjects(GenerateSourceUsers(3, "NewValue"));
@@ -273,8 +261,7 @@ public class NoNetChangeWorkflowTests
         await PopulateCsoAttributeValuesFromPendingExportsAsync();
 
         // Clear pending exports
-        _harness.DbContext.PendingExports.RemoveRange(await _harness.DbContext.PendingExports.ToListAsync());
-        await _harness.DbContext.SaveChangesAsync();
+        _harness.SyncRepo.ClearAllPendingExports();
 
         // Step 2: Sync with different value "NewName"
         sourceConnector.QueueImportObjects(GenerateSourceUsers(3, "NewName"));
@@ -335,8 +322,7 @@ public class NoNetChangeWorkflowTests
         await PopulateCsoAttributeValuesFromPendingExportsAsync();
 
         // Clear pending exports
-        _harness.DbContext.PendingExports.RemoveRange(await _harness.DbContext.PendingExports.ToListAsync());
-        await _harness.DbContext.SaveChangesAsync();
+        _harness.SyncRepo.ClearAllPendingExports();
 
         // Step 2: Sync with same string value
         sourceConnector.QueueImportObjects(GenerateSourceUsers(2, "StringTest"));
@@ -368,8 +354,7 @@ public class NoNetChangeWorkflowTests
         await PopulateCsoAttributeValuesFromPendingExportsAsync();
 
         // Clear pending exports
-        _harness.DbContext.PendingExports.RemoveRange(await _harness.DbContext.PendingExports.ToListAsync());
-        await _harness.DbContext.SaveChangesAsync();
+        _harness.SyncRepo.ClearAllPendingExports();
 
         // Step 2: Sync with same integer value
         sourceConnector.QueueImportObjects(GenerateSourceUsersWithEmployeeNumber(2, 12345));
@@ -401,8 +386,7 @@ public class NoNetChangeWorkflowTests
         await PopulateCsoAttributeValuesFromPendingExportsAsync();
 
         // Clear pending exports
-        _harness.DbContext.PendingExports.RemoveRange(await _harness.DbContext.PendingExports.ToListAsync());
-        await _harness.DbContext.SaveChangesAsync();
+        _harness.SyncRepo.ClearAllPendingExports();
 
         // Step 2: Sync with different integer value
         sourceConnector.QueueImportObjects(GenerateSourceUsersWithEmployeeNumber(2, 99999));
@@ -446,8 +430,7 @@ public class NoNetChangeWorkflowTests
         await PopulateCsoMultiValuedAttributesAsync("member", new[] { "Member1", "Member2" });
 
         // Clear pending exports
-        _harness.DbContext.PendingExports.RemoveRange(await _harness.DbContext.PendingExports.ToListAsync());
-        await _harness.DbContext.SaveChangesAsync();
+        _harness.SyncRepo.ClearAllPendingExports();
 
         // Step 2: Try to add same member (Member1 already exists)
         groupImport = GenerateGroupWithMembers("TestGroup", new[] { "Member1", "Member2", "Member1" }, groupId);
@@ -488,8 +471,7 @@ public class NoNetChangeWorkflowTests
         await PopulateCsoMultiValuedAttributesAsync("member", new[] { "Member1", "Member2" });
 
         // Clear pending exports
-        _harness.DbContext.PendingExports.RemoveRange(await _harness.DbContext.PendingExports.ToListAsync());
-        await _harness.DbContext.SaveChangesAsync();
+        _harness.SyncRepo.ClearAllPendingExports();
 
         // Step 2: Add new member (Member3)
         groupImport = GenerateGroupWithMembers("TestGroup", new[] { "Member1", "Member2", "Member3" }, groupId);
@@ -533,8 +515,7 @@ public class NoNetChangeWorkflowTests
         await PopulateCsoMultiValuedAttributesAsync("member", new[] { "Member1" });
 
         // Clear pending exports
-        _harness.DbContext.PendingExports.RemoveRange(await _harness.DbContext.PendingExports.ToListAsync());
-        await _harness.DbContext.SaveChangesAsync();
+        _harness.SyncRepo.ClearAllPendingExports();
 
         // Step 2: Try to remove Member2 (doesn't exist in CSO)
         var snapshot = await _harness.TakeSnapshotAsync("After Setup");
@@ -983,15 +964,9 @@ public class NoNetChangeWorkflowTests
     /// Populates CSO attribute values based on pending exports.
     /// This simulates what would happen after a confirming import.
     /// </summary>
-    private async Task PopulateCsoAttributeValuesFromPendingExportsAsync()
+    private Task PopulateCsoAttributeValuesFromPendingExportsAsync()
     {
-        var pendingExports = await _harness.DbContext.PendingExports
-            .Include(pe => pe.ConnectedSystemObject)
-            .ThenInclude(cso => cso!.Type)
-            .ThenInclude(csot => csot.Attributes)
-            .Include(pe => pe.AttributeValueChanges)
-            .ThenInclude(avc => avc.Attribute)
-            .ToListAsync();
+        var pendingExports = _harness.SyncRepo.PendingExports.Values.ToList();
 
         foreach (var pe in pendingExports)
         {
@@ -999,24 +974,26 @@ public class NoNetChangeWorkflowTests
 
             var cso = pe.ConnectedSystemObject;
 
+            // Resolve the live CSO instance from SyncRepo so mutations are on the tracked object
+            if (!_harness.SyncRepo.ConnectedSystemObjects.TryGetValue(cso.Id, out var liveCso))
+                liveCso = cso;
+
             foreach (var avc in pe.AttributeValueChanges)
             {
                 if (avc.Attribute == null) continue;
 
                 // Find or create CSO attribute value
-                var existingAttrValue = await _harness.DbContext.ConnectedSystemObjectAttributeValues
-                    .FirstOrDefaultAsync(av =>
-                        av.ConnectedSystemObject.Id == cso.Id &&
-                        av.AttributeId == avc.AttributeId);
+                var existingAttrValue = liveCso.AttributeValues
+                    .FirstOrDefault(av => av.AttributeId == avc.AttributeId);
 
                 if (existingAttrValue == null)
                 {
                     existingAttrValue = new ConnectedSystemObjectAttributeValue
                     {
-                        ConnectedSystemObject = cso,
+                        ConnectedSystemObject = liveCso,
                         AttributeId = avc.AttributeId
                     };
-                    _harness.DbContext.ConnectedSystemObjectAttributeValues.Add(existingAttrValue);
+                    liveCso.AttributeValues.Add(existingAttrValue);
                 }
 
                 // Copy values from pending export
@@ -1028,18 +1005,15 @@ public class NoNetChangeWorkflowTests
             }
         }
 
-        await _harness.DbContext.SaveChangesAsync();
+        return Task.CompletedTask;
     }
 
     /// <summary>
     /// Populates CSO multi-valued attribute with specific values.
     /// </summary>
-    private async Task PopulateCsoMultiValuedAttributesAsync(string attributeName, string[] values)
+    private Task PopulateCsoMultiValuedAttributesAsync(string attributeName, string[] values)
     {
-        var csos = await _harness.DbContext.ConnectedSystemObjects
-            .Include(cso => cso.Type)
-            .ThenInclude(csot => csot.Attributes)
-            .ToListAsync();
+        var csos = _harness.SyncRepo.ConnectedSystemObjects.Values.ToList();
 
         foreach (var cso in csos)
         {
@@ -1056,11 +1030,11 @@ public class NoNetChangeWorkflowTests
                     AttributeId = attribute.Id,
                     StringValue = value
                 };
-                _harness.DbContext.ConnectedSystemObjectAttributeValues.Add(attrValue);
+                cso.AttributeValues.Add(attrValue);
             }
         }
 
-        await _harness.DbContext.SaveChangesAsync();
+        return Task.CompletedTask;
     }
 
     #endregion

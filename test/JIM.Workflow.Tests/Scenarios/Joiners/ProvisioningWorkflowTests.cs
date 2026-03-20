@@ -297,11 +297,9 @@ public class ProvisioningWorkflowTests
         Assert.That(s2.GetPendingExportsWithNullCsoFk(), Is.Empty, "All PendingExports should have CSO FK");
 
         // Verify secondary external IDs are populated on PendingProvisioning CSOs (issue #234 fix)
-        var adCsos = await _harness.DbContext.ConnectedSystemObjects
+        var adCsos = _harness.SyncRepo.ConnectedSystemObjects.Values
             .Where(cso => cso.ConnectedSystem.Name == "AD")
-            .Include(cso => cso.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .ToListAsync();
+            .ToList();
 
         Console.WriteLine("AD CSO attribute values check:");
         var csosWithDn = 0;

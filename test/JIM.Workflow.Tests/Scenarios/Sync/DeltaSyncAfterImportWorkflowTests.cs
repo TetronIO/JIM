@@ -86,7 +86,7 @@ public class DeltaSyncAfterImportWorkflowTests
             "Should have MVOs for all users and the group");
 
         // Verify initial group membership in MVO
-        var groupMvo = await GetGroupMvoAsync();
+        var groupMvo = GetGroupMvo();
         Assert.That(groupMvo, Is.Not.Null, "Group MVO should exist");
 
         var initialMemberCount = groupMvo!.AttributeValues
@@ -98,7 +98,7 @@ public class DeltaSyncAfterImportWorkflowTests
             "No pending exports should remain after initial sync");
 
         // Record the watermark time (when delta sync was last completed)
-        var watermarkBefore = await GetSystemWatermarkAsync("Source");
+        var watermarkBefore = GetSystemWatermark("Source");
         Console.WriteLine($"Delta sync watermark before: {watermarkBefore}");
 
         // Step 2: Simulate delta import with group membership change (add user3)
@@ -114,7 +114,7 @@ public class DeltaSyncAfterImportWorkflowTests
         var afterDeltaImport = await _harness.TakeSnapshotAsync("After Delta Import");
 
         // Verify the CSO was modified during import
-        var groupCso = await GetGroupCsoAsync("Source");
+        var groupCso = GetGroupCso("Source");
         Assert.That(groupCso, Is.Not.Null, "Group CSO should exist");
         Console.WriteLine($"Group CSO LastUpdated: {groupCso!.LastUpdated}");
         Console.WriteLine($"Group CSO status: {groupCso.Status}");
@@ -174,7 +174,7 @@ public class DeltaSyncAfterImportWorkflowTests
             "Should have exactly 1 AttributeFlow RPEI for the group membership change");
 
         // Verify MVO was updated with new member
-        var updatedGroupMvo = await GetGroupMvoAsync();
+        var updatedGroupMvo = GetGroupMvo();
         Assert.That(updatedGroupMvo, Is.Not.Null, "Group MVO should still exist");
 
         var updatedMemberCount = updatedGroupMvo!.AttributeValues
@@ -211,7 +211,7 @@ public class DeltaSyncAfterImportWorkflowTests
         var afterInitialSync = await _harness.TakeSnapshotAsync("After Initial Sync");
 
         // Verify initial group membership
-        var groupMvo = await GetGroupMvoAsync();
+        var groupMvo = GetGroupMvo();
         Assert.That(groupMvo, Is.Not.Null, "Group MVO should exist");
 
         var initialMemberCount = groupMvo!.AttributeValues
@@ -231,7 +231,7 @@ public class DeltaSyncAfterImportWorkflowTests
         var afterDeltaImport = await _harness.TakeSnapshotAsync("After Delta Import");
 
         // Verify the group CSO has one less member
-        var groupCso = await GetGroupCsoAsync("Source");
+        var groupCso = GetGroupCso("Source");
         var csoMemberCount = groupCso!.AttributeValues
             .Count(av => av.Attribute?.Name == "member");
         Console.WriteLine($"Group CSO has {csoMemberCount} member attribute values after import");
@@ -285,7 +285,7 @@ public class DeltaSyncAfterImportWorkflowTests
             "Should have exactly 1 AttributeFlow RPEI for the group membership removal");
 
         // Verify MVO was updated (member removed)
-        var updatedGroupMvo = await GetGroupMvoAsync();
+        var updatedGroupMvo = GetGroupMvo();
         var updatedMemberCount = updatedGroupMvo!.AttributeValues
             .Count(av => av.Attribute?.Name == "member");
         Console.WriteLine($"Group MVO has {updatedMemberCount} member values after delta sync");
@@ -433,14 +433,11 @@ public class DeltaSyncAfterImportWorkflowTests
         await _harness.ExecuteConfirmingImportAsync("Target");
 
         // Clear any remaining pending exports
-        var pendingExports = await _harness.DbContext.PendingExports.ToListAsync();
-        _harness.DbContext.PendingExports.RemoveRange(pendingExports);
-        await _harness.DbContext.SaveChangesAsync();
+        _harness.SyncRepo.ClearAllPendingExports();
 
         // Update the delta sync watermark so delta sync knows what's "new"
         var sourceSystem = _harness.GetConnectedSystem("Source");
         sourceSystem.LastDeltaSyncCompletedAt = DateTime.UtcNow;
-        await _harness.DbContext.SaveChangesAsync();
     }
 
     private List<ConnectedSystemImportObject> GenerateSourceUsers()
@@ -580,36 +577,28 @@ public class DeltaSyncAfterImportWorkflowTests
         };
     }
 
-    private async Task<MetaverseObject?> GetGroupMvoAsync()
+    private MetaverseObject? GetGroupMvo()
     {
-        return await _harness.DbContext.MetaverseObjects
-            .Include(m => m.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .Include(m => m.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .FirstOrDefaultAsync(m => m.AttributeValues.Any(av =>
+        return _harness.SyncRepo.MetaverseObjects.Values
+            .FirstOrDefault(m => m.AttributeValues.Any(av =>
                 av.Attribute != null && av.Attribute.Name == "cn" && av.StringValue == TestGroup.Name));
     }
 
-    private async Task<ConnectedSystemObject?> GetGroupCsoAsync(string systemName)
+    private ConnectedSystemObject? GetGroupCso(string systemName)
     {
         var system = _harness.GetConnectedSystem(systemName);
-        return await _harness.DbContext.ConnectedSystemObjects
-            .Include(c => c.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .Include(c => c.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .FirstOrDefaultAsync(c =>
+        return _harness.SyncRepo.ConnectedSystemObjects.Values
+            .FirstOrDefault(c =>
                 c.ConnectedSystemId == system.Id &&
                 c.AttributeValues.Any(av =>
                     av.Attribute != null && av.Attribute.Name == "cn" && av.StringValue == TestGroup.Name));
     }
 
-    private async Task<DateTime?> GetSystemWatermarkAsync(string systemName)
+    private DateTime? GetSystemWatermark(string systemName)
     {
-        var system = await _harness.DbContext.ConnectedSystems
-            .FirstAsync(s => s.Name == systemName);
-        return system.LastDeltaSyncCompletedAt;
+        return _harness.SyncRepo.ConnectedSystems.Values
+            .First(s => s.Name == systemName)
+            .LastDeltaSyncCompletedAt;
     }
 
     #endregion
