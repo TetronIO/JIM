@@ -50,6 +50,37 @@ public class SyncRepository : ISyncRepository
 
     #endregion
 
+    #region Test Inspection — Read-Only Access to Internal State
+
+    /// <summary>All connected system objects, keyed by CSO ID.</summary>
+    public IReadOnlyDictionary<Guid, ConnectedSystemObject> ConnectedSystemObjects => _csos;
+
+    /// <summary>All metaverse objects, keyed by MVO ID.</summary>
+    public IReadOnlyDictionary<Guid, MetaverseObject> MetaverseObjects => _mvos;
+
+    /// <summary>All pending exports, keyed by pending export ID.</summary>
+    public IReadOnlyDictionary<Guid, PendingExport> PendingExports => _pendingExports;
+
+    /// <summary>All activities, keyed by activity ID.</summary>
+    public IReadOnlyDictionary<Guid, Activity> Activities => _activities;
+
+    /// <summary>All run profile execution items, keyed by RPEI ID.</summary>
+    public IReadOnlyDictionary<Guid, ActivityRunProfileExecutionItem> Rpeis => _rpeis;
+
+    /// <summary>All connected systems, keyed by connected system ID.</summary>
+    public IReadOnlyDictionary<int, ConnectedSystem> ConnectedSystems => _connectedSystems;
+
+    /// <summary>All sync rules, keyed by sync rule ID.</summary>
+    public IReadOnlyDictionary<int, SyncRule> SyncRules => _syncRules;
+
+    /// <summary>All connected system object types, keyed by object type ID.</summary>
+    public IReadOnlyDictionary<int, ConnectedSystemObjectType> ObjectTypes => _objectTypes;
+
+    /// <summary>All metaverse object change records, keyed by change ID.</summary>
+    public IReadOnlyDictionary<Guid, MetaverseObjectChange> MetaverseObjectChanges => _mvoChanges;
+
+    #endregion
+
     #region Seeding API
 
     public void SeedConnectedSystem(ConnectedSystem cs)
