@@ -21,7 +21,7 @@
 
 @if (_connectedSystem != null)
 {
-    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" PanelClass="pt-5" Class="mt-2" Outlined="true">
+    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" PanelClass="pt-5" Class="mt-2" Outlined="true">
 
         <MudTabPanel Text="Details">
             <ConnectedSystemDetailsTab ConnectedSystem="_connectedSystem" PendingExportCount="_pendingExportCount" />
@@ -61,7 +61,7 @@
             <ConnectedSystemDangerZoneTab ConnectedSystem="_connectedSystem" />
         </MudTabPanel>
 
-    </MudTabs>
+    </NavigableMudTabs>
 
 }
 

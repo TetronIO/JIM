@@ -14,7 +14,7 @@
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Manage metaverse object types and their attributes.</MudText>
 
-<MudTabs @bind-ActivePanelIndex="_activeTabIndex" Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" PanelClass="pt-5" Class="mt-5">
+<NavigableMudTabs @bind-ActivePanelIndex="_activeTabIndex" Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" PanelClass="pt-5" Class="mt-5">
     <MudTabPanel Text="Object Types" Icon="@Icons.Material.Filled.Category">
         <MudTable Items="@_metaverseObjectTypeHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Loading="false" SortLabel="Sort By" Outlined="true" Elevation="0">
             <HeaderContent>
@@ -139,7 +139,7 @@
             <MudProgressCircular Color="Color.Primary" Indeterminate="true" Class="mt-5" />
         }
     </MudTabPanel>
-</MudTabs>
+</NavigableMudTabs>
 
 @code {
     private int _activeTabIndex;
@@ -158,13 +158,6 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Set active tab based on the current URL
-        var uri = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
-        if (uri.StartsWith("admin/schema/attributes", StringComparison.OrdinalIgnoreCase))
-        {
-            _activeTabIndex = 1;
-        }
-
         using var jim = JimFactory.Create();
         _metaverseObjectTypeHeaders = await jim.Metaverse.GetMetaverseObjectTypeHeadersAsync();
     }

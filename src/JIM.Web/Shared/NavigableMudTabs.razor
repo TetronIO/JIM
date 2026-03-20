@@ -1,0 +1,197 @@
+@implements IDisposable
+@inject NavigationManager NavManager
+
+<MudTabs @ref="_mudTabs"
+         ActivePanelIndex="_activePanelIndex"
+         ActivePanelIndexChanged="OnTabChangedAsync"
+         Elevation="Elevation"
+         Rounded="Rounded"
+         ApplyEffectsToContainer="ApplyEffectsToContainer"
+         Outlined="Outlined"
+         PanelClass="@PanelClass"
+         Class="@Class"
+         KeepPanelsAlive="KeepPanelsAlive"
+         Centered="Centered"
+         Border="Border"
+         Color="Color"
+         SliderColor="SliderColor"
+         IconColor="IconColor"
+         Header="Header"
+         Ripple="Ripple">
+    @ChildContent
+</MudTabs>
+
+@code {
+    private MudTabs _mudTabs = null!;
+    private int _activePanelIndex;
+    private bool _isNavigating;
+
+    // Pass-through parameters matching MudTabs
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment<MudTabs>? Header { get; set; }
+    [Parameter] public int Elevation { get; set; }
+    [Parameter] public bool Rounded { get; set; }
+    [Parameter] public bool ApplyEffectsToContainer { get; set; }
+    [Parameter] public bool Outlined { get; set; }
+    [Parameter] public string? PanelClass { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public bool KeepPanelsAlive { get; set; }
+    [Parameter] public bool Centered { get; set; }
+    [Parameter] public bool Border { get; set; }
+    [Parameter] public Color Color { get; set; } = Color.Default;
+    [Parameter] public Color SliderColor { get; set; } = Color.Inherit;
+    [Parameter] public Color IconColor { get; set; } = Color.Inherit;
+    [Parameter] public bool Ripple { get; set; } = true;
+
+    /// <summary>
+    /// Optional two-way binding for the active tab index, allowing parent pages
+    /// to read or set the active tab programmatically.
+    /// </summary>
+    [Parameter] public int ActivePanelIndex { get; set; }
+    [Parameter] public EventCallback<int> ActivePanelIndexChanged { get; set; }
+
+    protected override void OnInitialized()
+    {
+        NavManager.LocationChanged += OnLocationChanged;
+
+        // Read ?t= from the current URL on first load
+        var slug = GetTabSlugFromUrl();
+        if (!string.IsNullOrEmpty(slug))
+        {
+            // Defer panel lookup to OnAfterRender since panels aren't registered yet
+        }
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var slug = GetTabSlugFromUrl();
+            if (!string.IsNullOrEmpty(slug))
+            {
+                var index = FindPanelIndexBySlug(slug);
+                if (index >= 0 && index != _activePanelIndex)
+                {
+                    _activePanelIndex = index;
+                    ActivePanelIndex = index;
+                    ActivePanelIndexChanged.InvokeAsync(index);
+                    StateHasChanged();
+                }
+            }
+        }
+    }
+
+    private async Task OnTabChangedAsync(int newIndex)
+    {
+        if (_isNavigating)
+            return;
+
+        _activePanelIndex = newIndex;
+        ActivePanelIndex = newIndex;
+        await ActivePanelIndexChanged.InvokeAsync(newIndex);
+
+        // Push URL with ?t=slug for browser history
+        var slug = GetSlugForPanelIndex(newIndex);
+        if (slug != null)
+        {
+            _isNavigating = true;
+            try
+            {
+                var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+                var baseUri = uri.GetLeftPart(UriPartial.Path);
+
+                // First tab (index 0) = no query string for clean URLs
+                var newUrl = newIndex == 0 ? baseUri : $"{baseUri}?t={slug}";
+                NavManager.NavigateTo(newUrl, new NavigationOptions { ReplaceHistoryEntry = false });
+            }
+            finally
+            {
+                _isNavigating = false;
+            }
+        }
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        if (_isNavigating)
+            return;
+
+        // Browser back/forward button pressed
+        var slug = GetTabSlugFromUrl();
+        var targetIndex = string.IsNullOrEmpty(slug) ? 0 : FindPanelIndexBySlug(slug);
+
+        if (targetIndex >= 0 && targetIndex != _activePanelIndex)
+        {
+            _isNavigating = true;
+            try
+            {
+                _activePanelIndex = targetIndex;
+                ActivePanelIndex = targetIndex;
+                ActivePanelIndexChanged.InvokeAsync(targetIndex);
+                InvokeAsync(StateHasChanged);
+            }
+            finally
+            {
+                _isNavigating = false;
+            }
+        }
+    }
+
+    private string? GetTabSlugFromUrl()
+    {
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        return query["t"];
+    }
+
+    private int FindPanelIndexBySlug(string slug)
+    {
+        if (_mudTabs?.Panels == null)
+            return -1;
+
+        var panels = _mudTabs.Panels.ToList();
+        for (var i = 0; i < panels.Count; i++)
+        {
+            if (Slugify(panels[i].Text) == slug && !panels[i].Disabled)
+                return i;
+        }
+
+        // If the tab is disabled or not found, stay on first tab
+        return 0;
+    }
+
+    private string? GetSlugForPanelIndex(int index)
+    {
+        if (_mudTabs?.Panels == null)
+            return null;
+
+        var panels = _mudTabs.Panels.ToList();
+        if (index < 0 || index >= panels.Count)
+            return null;
+
+        return Slugify(panels[index].Text);
+    }
+
+    /// <summary>
+    /// Converts tab text to a URL-friendly slug.
+    /// e.g. "Partitions &amp; Containers" becomes "partitions-containers"
+    /// </summary>
+    internal static string Slugify(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+
+        var slug = text.ToLowerInvariant()
+            .Replace("&", "")
+            .Replace("  ", " ")
+            .Trim()
+            .Replace(" ", "-");
+
+        return slug;
+    }
+
+    public void Dispose()
+    {
+        NavManager.LocationChanged -= OnLocationChanged;
+    }
+}
