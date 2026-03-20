@@ -492,11 +492,6 @@
                 <MudTh>
                     <MudText Typo="Typo.button" Class="mud-text-secondary">Outcomes</MudText>
                 </MudTh>
-                <MudTh>
-                    <MudTableSortLabel SortLabel="errortype" T="ActivityRunProfileExecutionItemHeader">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Error Type</MudText>
-                    </MudTableSortLabel>
-                </MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd>
@@ -525,21 +520,23 @@
                                     </MudChip>
                                 </MudTooltip>
                             }
+                            @if (context.ErrorType != null && context.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
+                            {
+                                <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="px-2">
+                                    @context.ErrorType.Value.ToString().SplitOnCapitalLetters()
+                                </MudChip>
+                            }
                         </MudStack>
+                    }
+                    else if (context.ErrorType != null && context.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
+                    {
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="px-2">
+                            @context.ErrorType.Value.ToString().SplitOnCapitalLetters()
+                        </MudChip>
                     }
                     else
                     {
                         <span class="mud-text-disabled">-</span>
-                    }
-                </MudTd>
-                <MudTd DataLabel="Error Type">
-                    @if (context.ErrorType != null && context.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
-                    {
-                        <MudChip T="string" Variant="Variant.Text" Color="Color.Error">@context.ErrorType.Value.ToString().SplitOnCapitalLetters()</MudChip>
-                    }
-                    else
-                    {
-                        <span>-</span>
                     }
                 </MudTd>
             </RowTemplate>
