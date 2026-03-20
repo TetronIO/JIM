@@ -12,6 +12,7 @@ using JIM.Worker.Tests.Models;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
 using Moq;
+using SyncRepository = JIM.InMemoryData.SyncRepository;
 
 namespace JIM.Worker.Tests.OutboundSync;
 
@@ -43,6 +44,7 @@ public class ExportEvaluationTests
     private List<SyncRule> SyncRulesData { get; set; } = null!;
     private Mock<DbSet<SyncRule>> MockDbSetSyncRules { get; set; } = null!;
     private JimApplication Jim { get; set; } = null!;
+    private SyncRepository SyncRepo { get; set; } = null!;
     #endregion
 
     [TearDown]
@@ -110,8 +112,12 @@ public class ExportEvaluationTests
         MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
         MockJimDbContext.Setup(m => m.SyncRules).Returns(MockDbSetSyncRules.Object);
 
-        // Instantiate Jim using the mocked db context
-        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+        // Instantiate Jim using the mocked db context.
+        // Pass SyncRulesData so the same instances that tests modify are seeded into SyncRepo.
+        SyncRepo = TestUtilities.CreateSyncRepository(
+            activity: ActivitiesData.First(),
+            syncRules: SyncRulesData);
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
     }
 
     /// <summary>
@@ -200,11 +206,7 @@ public class ExportEvaluationTests
         };
 
         ConnectedSystemObjectsData.Add(provisionedCso);
-
-        // Track pending exports created
-        MockDbSetPendingExports.Setup(set => set.AddAsync(It.IsAny<PendingExport>(), It.IsAny<CancellationToken>()))
-            .Callback((PendingExport entity, CancellationToken _) => { PendingExportsData.Add(entity); })
-            .ReturnsAsync((PendingExport entity, CancellationToken _) => null!);
+        SyncRepo.SeedConnectedSystemObject(provisionedCso);
 
         // Act
         var result = await Jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
@@ -240,6 +242,7 @@ public class ExportEvaluationTests
         };
 
         ConnectedSystemObjectsData.Add(joinedCso);
+        SyncRepo.SeedConnectedSystemObject(joinedCso);
 
         // Act
         var result = await Jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
@@ -288,11 +291,7 @@ public class ExportEvaluationTests
         });
 
         ConnectedSystemObjectsData.Add(provisionedCso);
-
-        // Track pending exports created
-        MockDbSetPendingExports.Setup(set => set.AddAsync(It.IsAny<PendingExport>(), It.IsAny<CancellationToken>()))
-            .Callback((PendingExport entity, CancellationToken _) => { PendingExportsData.Add(entity); })
-            .ReturnsAsync((PendingExport entity, CancellationToken _) => null!);
+        SyncRepo.SeedConnectedSystemObject(provisionedCso);
 
         // Act
         var result = await Jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
@@ -330,6 +329,7 @@ public class ExportEvaluationTests
         };
 
         ConnectedSystemObjectsData.Add(provisionedCso);
+        SyncRepo.SeedConnectedSystemObject(provisionedCso);
 
         // Pre-populate with an existing Delete PE for this CSO
         // Must set ConnectedSystemObject navigation property because mock DbSet doesn't auto-load it
@@ -345,16 +345,7 @@ public class ExportEvaluationTests
             CreatedAt = DateTime.UtcNow.AddMinutes(-5)
         };
         PendingExportsData.Add(existingDeletePe);
-
-        // Rebuild the mock DbSet so the query can find the existing PE
-        MockDbSetPendingExports = PendingExportsData.BuildMockDbSet();
-        MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
-
-        // Track any new PEs added
-        var newPesAdded = new List<PendingExport>();
-        MockDbSetPendingExports.Setup(set => set.AddAsync(It.IsAny<PendingExport>(), It.IsAny<CancellationToken>()))
-            .Callback((PendingExport entity, CancellationToken _) => { newPesAdded.Add(entity); })
-            .ReturnsAsync((PendingExport entity, CancellationToken _) => null!);
+        SyncRepo.SeedPendingExport(existingDeletePe);
 
         // Act
         var result = await Jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
@@ -363,7 +354,7 @@ public class ExportEvaluationTests
         Assert.That(result, Is.Not.Null);
         Assert.That(result.Count, Is.EqualTo(1), "Should return exactly one PE");
         Assert.That(result[0].Id, Is.EqualTo(existingDeletePe.Id), "Should return the existing Delete PE, not a new one");
-        Assert.That(newPesAdded.Count, Is.EqualTo(0), "Should NOT create a new PE when Delete PE already exists");
+        Assert.That(SyncRepo.PendingExports.Count, Is.EqualTo(1), "Should NOT create a new PE when Delete PE already exists");
     }
 
     /// <summary>
@@ -390,6 +381,7 @@ public class ExportEvaluationTests
         };
 
         ConnectedSystemObjectsData.Add(provisionedCso);
+        SyncRepo.SeedConnectedSystemObject(provisionedCso);
 
         // Pre-populate with an existing Create PE for this CSO (not yet exported)
         // Must set ConnectedSystemObject navigation property because mock DbSet doesn't auto-load it
@@ -405,16 +397,7 @@ public class ExportEvaluationTests
             CreatedAt = DateTime.UtcNow.AddMinutes(-5)
         };
         PendingExportsData.Add(existingCreatePe);
-
-        // Rebuild the mock DbSet
-        MockDbSetPendingExports = PendingExportsData.BuildMockDbSet();
-        MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
-
-        // Track PEs added and removed
-        var newPesAdded = new List<PendingExport>();
-        MockDbSetPendingExports.Setup(set => set.AddAsync(It.IsAny<PendingExport>(), It.IsAny<CancellationToken>()))
-            .Callback((PendingExport entity, CancellationToken _) => { newPesAdded.Add(entity); PendingExportsData.Add(entity); })
-            .ReturnsAsync((PendingExport entity, CancellationToken _) => null!);
+        SyncRepo.SeedPendingExport(existingCreatePe);
 
         // Act
         var result = await Jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
@@ -424,7 +407,8 @@ public class ExportEvaluationTests
         Assert.That(result.Count, Is.EqualTo(1), "Should return exactly one PE");
         Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Delete), "Should be a Delete PE");
         Assert.That(result[0].Id, Is.Not.EqualTo(existingCreatePe.Id), "Should be a new PE, not the old Create PE");
-        Assert.That(newPesAdded.Count, Is.EqualTo(1), "Should create exactly one new Delete PE");
+        Assert.That(SyncRepo.PendingExports.Values.Count(pe => pe.ChangeType == PendingExportChangeType.Delete), Is.EqualTo(1),
+            "Should create exactly one new Delete PE");
     }
 
     /// <summary>
@@ -574,27 +558,14 @@ public class ExportEvaluationTests
         // Ensure no CSO exists for this MVO in the target system
         ConnectedSystemObjectsData.RemoveAll(cso => cso.MetaverseObjectId == mvo.Id && cso.ConnectedSystemId == targetSystem.Id);
 
-        // Track CSOs created - using synchronous Add (not AddAsync) to match repository implementation
-        var createdCsos = new List<ConnectedSystemObject>();
-        MockDbSetConnectedSystemObjects.Setup(set => set.Add(It.IsAny<ConnectedSystemObject>()))
-            .Callback((ConnectedSystemObject entity) =>
-            {
-                if (entity.Id == Guid.Empty)
-                    entity.Id = Guid.NewGuid();
-                createdCsos.Add(entity);
-                ConnectedSystemObjectsData.Add(entity);
-            });
-
-        // Track pending exports created - using synchronous Add to match repository implementation
-        MockDbSetPendingExports.Setup(set => set.Add(It.IsAny<PendingExport>()))
-            .Callback((PendingExport entity) => { PendingExportsData.Add(entity); });
-
         var changedAttributes = mvo.AttributeValues.ToList();
 
         // Act
         var result = await Jim.ExportEvaluation.EvaluateExportRulesAsync(mvo, changedAttributes);
 
         // Assert - CSO should be created with PendingProvisioning status
+        // CSOs are now created via SyncRepo.CreateConnectedSystemObjectAsync, not the mock DbSet
+        var createdCsos = SyncRepo.ConnectedSystemObjects.Values.ToList();
         Assert.That(createdCsos, Has.Count.EqualTo(1), "Expected exactly one CSO to be created");
         var newCso = createdCsos[0];
         Assert.That(newCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning),
@@ -647,6 +618,7 @@ public class ExportEvaluationTests
             AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
         };
         ConnectedSystemObjectsData.Add(existingCso);
+        SyncRepo.SeedConnectedSystemObject(existingCso);
 
         // Configure export rule
         var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
@@ -682,26 +654,14 @@ public class ExportEvaluationTests
             exportRule.AttributeFlowRules.Add(mapping);
         }
 
-        // Track CSOs created (should be none) - using synchronous Add to match repository implementation
-        var createdCsos = new List<ConnectedSystemObject>();
-        MockDbSetConnectedSystemObjects.Setup(set => set.Add(It.IsAny<ConnectedSystemObject>()))
-            .Callback((ConnectedSystemObject entity) =>
-            {
-                createdCsos.Add(entity);
-                ConnectedSystemObjectsData.Add(entity);
-            });
-
-        // Track pending exports created - using synchronous Add to match repository implementation
-        MockDbSetPendingExports.Setup(set => set.Add(It.IsAny<PendingExport>()))
-            .Callback((PendingExport entity) => { PendingExportsData.Add(entity); });
-
         var changedAttributes = mvo.AttributeValues.ToList();
 
         // Act
         var result = await Jim.ExportEvaluation.EvaluateExportRulesAsync(mvo, changedAttributes);
 
-        // Assert - No new CSO should be created
-        Assert.That(createdCsos, Has.Count.EqualTo(0), "No new CSO should be created when one already exists");
+        // Assert - No new CSO should be created (only the pre-seeded existingCso should be in SyncRepo)
+        // CSOs are now created via SyncRepo.CreateConnectedSystemObjectAsync, not the mock DbSet
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(1), "No new CSO should be created when one already exists");
 
         // Assert - existing CSO should remain unchanged
         Assert.That(existingCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined),
@@ -750,22 +710,14 @@ public class ExportEvaluationTests
         // Ensure no CSO exists
         ConnectedSystemObjectsData.RemoveAll(cso => cso.MetaverseObjectId == mvo.Id && cso.ConnectedSystemId == targetSystem.Id);
 
-        // Track CSOs created - using synchronous Add to match repository implementation
-        var createdCsos = new List<ConnectedSystemObject>();
-        MockDbSetConnectedSystemObjects.Setup(set => set.Add(It.IsAny<ConnectedSystemObject>()))
-            .Callback((ConnectedSystemObject entity) => { createdCsos.Add(entity); });
-
-        // Track pending exports created - using synchronous Add to match repository implementation
-        MockDbSetPendingExports.Setup(set => set.Add(It.IsAny<PendingExport>()))
-            .Callback((PendingExport entity) => { PendingExportsData.Add(entity); });
-
         var changedAttributes = mvo.AttributeValues.ToList();
 
         // Act
         var result = await Jim.ExportEvaluation.EvaluateExportRulesAsync(mvo, changedAttributes);
 
         // Assert - No CSO should be created when provisioning is disabled
-        Assert.That(createdCsos, Has.Count.EqualTo(0),
+        // CSOs are now created via SyncRepo.CreateConnectedSystemObjectAsync, not the mock DbSet
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(0),
             "No CSO should be created when ProvisionToConnectedSystem is false");
 
         // Assert - No PendingExport should be created
@@ -805,6 +757,7 @@ public class ExportEvaluationTests
             AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
         };
         ConnectedSystemObjectsData.Add(pendingProvisioningCso);
+        SyncRepo.SeedConnectedSystemObject(pendingProvisioningCso);
 
         // Configure export rule
         var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
@@ -818,26 +771,14 @@ public class ExportEvaluationTests
         exportRule.ProvisionToConnectedSystem = true;
         exportRule.ObjectScopingCriteriaGroups.Clear();
 
-        // Track CSOs created (should be none - should use existing) - using synchronous Add to match repository implementation
-        var createdCsos = new List<ConnectedSystemObject>();
-        MockDbSetConnectedSystemObjects.Setup(set => set.Add(It.IsAny<ConnectedSystemObject>()))
-            .Callback((ConnectedSystemObject entity) =>
-            {
-                createdCsos.Add(entity);
-                ConnectedSystemObjectsData.Add(entity);
-            });
-
-        // Track pending exports created - using synchronous Add to match repository implementation
-        MockDbSetPendingExports.Setup(set => set.Add(It.IsAny<PendingExport>()))
-            .Callback((PendingExport entity) => { PendingExportsData.Add(entity); });
-
         var changedAttributes = mvo.AttributeValues.ToList();
 
         // Act
         var result = await Jim.ExportEvaluation.EvaluateExportRulesAsync(mvo, changedAttributes);
 
         // Assert - No new CSO should be created (should use existing PendingProvisioning CSO)
-        Assert.That(createdCsos, Has.Count.EqualTo(0),
+        // CSOs are now created via SyncRepo.CreateConnectedSystemObjectAsync, not the mock DbSet
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(1),
             "No new CSO should be created when one already exists in PendingProvisioning state");
 
         // The existing CSO should still be PendingProvisioning
@@ -920,18 +861,7 @@ public class ExportEvaluationTests
         });
         exportRule.AttributeFlowRules.Add(expressionMapping);
 
-        // Track pending exports created
-        MockDbSetPendingExports.Setup(set => set.Add(It.IsAny<PendingExport>()))
-            .Callback((PendingExport entity) => { PendingExportsData.Add(entity); });
-
-        // Track CSOs created
-        var createdCsos = new List<ConnectedSystemObject>();
-        MockDbSetConnectedSystemObjects.Setup(set => set.Add(It.IsAny<ConnectedSystemObject>()))
-            .Callback((ConnectedSystemObject entity) =>
-            {
-                createdCsos.Add(entity);
-                ConnectedSystemObjectsData.Add(entity);
-            });
+        // CSOs are now created via SyncRepo.CreateConnectedSystemObjectAsync, not the mock DbSet
 
         var changedAttributes = mvo.AttributeValues.ToList();
 
@@ -955,7 +885,8 @@ public class ExportEvaluationTests
         Assert.That(dnChange.StringValue, Is.EqualTo("CN=Test User,CN=Users,DC=testdomain,DC=local"),
             "DN should be correctly generated from the expression using Display Name");
 
-        // Verify a PendingProvisioning CSO was created
+        // Verify a PendingProvisioning CSO was created via SyncRepo
+        var createdCsos = SyncRepo.ConnectedSystemObjects.Values.ToList();
         Assert.That(createdCsos, Has.Count.EqualTo(1),
             "Should create one PendingProvisioning CSO for the new provision");
         Assert.That(createdCsos[0].Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning),
@@ -998,6 +929,7 @@ public class ExportEvaluationTests
             AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
         };
         ConnectedSystemObjectsData.Add(existingCso);
+        SyncRepo.SeedConnectedSystemObject(existingCso);
         mvo.ConnectedSystemObjects.Add(existingCso);
 
         var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
@@ -1076,6 +1008,7 @@ public class ExportEvaluationTests
             AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
         };
         ConnectedSystemObjectsData.Add(existingCso);
+        SyncRepo.SeedConnectedSystemObject(existingCso);
         mvo.ConnectedSystemObjects.Add(existingCso);
 
         var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
@@ -1106,10 +1039,6 @@ public class ExportEvaluationTests
                 }
             }
         });
-
-        // Track pending exports created
-        MockDbSetPendingExports.Setup(set => set.Add(It.IsAny<PendingExport>()))
-            .Callback((PendingExport entity) => { PendingExportsData.Add(entity); });
 
         // Act
         var result = await Jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(mvo);
@@ -1150,6 +1079,7 @@ public class ExportEvaluationTests
             AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
         };
         ConnectedSystemObjectsData.Add(existingCso);
+        SyncRepo.SeedConnectedSystemObject(existingCso);
         mvo.ConnectedSystemObjects.Add(existingCso);
 
         var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
@@ -1224,6 +1154,7 @@ public class ExportEvaluationTests
             AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
         };
         ConnectedSystemObjectsData.Add(existingCso);
+        SyncRepo.SeedConnectedSystemObject(existingCso);
         mvo.ConnectedSystemObjects.Clear();
         mvo.ConnectedSystemObjects.Add(existingCso);
 
@@ -1377,10 +1308,7 @@ public class ExportEvaluationTests
         // Ensure no CSO exists (so this will be a Create)
         ConnectedSystemObjectsData.RemoveAll(cso => cso.MetaverseObjectId == mvo.Id && cso.ConnectedSystemId == targetSystem.Id);
 
-        // Track pending exports and CSOs created
-        MockDbSetPendingExports.Setup(set => set.Add(It.IsAny<PendingExport>()))
-            .Callback((PendingExport entity) => { PendingExportsData.Add(entity); });
-
+        // Track CSOs created
         MockDbSetConnectedSystemObjects.Setup(set => set.Add(It.IsAny<ConnectedSystemObject>()))
             .Callback((ConnectedSystemObject entity) =>
             {
@@ -1490,6 +1418,7 @@ public class ExportEvaluationTests
             AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
         };
         ConnectedSystemObjectsData.Add(existingCso);
+        SyncRepo.SeedConnectedSystemObject(existingCso);
 
         // Configure export rule with multiple mappings
         var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
@@ -1537,10 +1466,6 @@ public class ExportEvaluationTests
             MetaverseAttributeId = employeeIdAttr.Id
         });
         exportRule.AttributeFlowRules.Add(employeeIdMapping);
-
-        // Track pending exports created
-        MockDbSetPendingExports.Setup(set => set.Add(It.IsAny<PendingExport>()))
-            .Callback((PendingExport entity) => { PendingExportsData.Add(entity); });
 
         // Only pass ONE changed attribute (displayName)
         // For Update, only this one should be included
@@ -1600,6 +1525,7 @@ public class ExportEvaluationTests
             AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
         };
         ConnectedSystemObjectsData.Add(existingCso);
+        SyncRepo.SeedConnectedSystemObject(existingCso);
 
         // Configure export rule with a mapping for displayName
         var displayNameAttr = mvo.Type.Attributes.Single(a => a.Name == "Display Name");
@@ -1641,10 +1567,6 @@ public class ExportEvaluationTests
             MetaverseAttributeId = displayNameAttr.Id
         });
         exportRule.AttributeFlowRules.Add(displayNameMapping);
-
-        // Track pending exports created
-        MockDbSetPendingExports.Setup(set => set.Add(It.IsAny<PendingExport>()))
-            .Callback((PendingExport entity) => { PendingExportsData.Add(entity); });
 
         // Pass an attribute that is NOT mapped (Employee ID changed, but it's not in the export rule mappings)
         var employeeIdAttr = mvo.Type.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);

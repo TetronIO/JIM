@@ -9,6 +9,7 @@ using JIM.Worker.Tests.Models;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
 using Moq;
+using SyncRepository = JIM.InMemoryData.SyncRepository;
 
 namespace JIM.Worker.Tests.OutboundSync;
 
@@ -43,6 +44,7 @@ public class ProvisioningFlowTests
     private List<SyncRule> SyncRulesData { get; set; } = null!;
     private Mock<DbSet<SyncRule>> MockDbSetSyncRules { get; set; } = null!;
     private JimApplication Jim { get; set; } = null!;
+    private SyncRepository SyncRepo { get; set; } = null!;
     #endregion
 
     [TearDown]
@@ -118,7 +120,8 @@ public class ProvisioningFlowTests
         MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
         MockJimDbContext.Setup(m => m.SyncRules).Returns(MockDbSetSyncRules.Object);
 
-        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+        SyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First());
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
     }
 
     #region CSO Provisioning Status Tests

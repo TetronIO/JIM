@@ -372,8 +372,7 @@ public class SyncRepository : ISyncRepository
         // are counted correctly. This matches the behaviour of the production EF Core query.
         var count = _csos.Values.Count(c =>
             c.ConnectedSystemId == connectedSystemId &&
-            c.MetaverseObjectId == metaverseObjectId &&
-            c.JoinType != ConnectedSystemObjectJoinType.NotJoined);
+            c.MetaverseObjectId == metaverseObjectId);
         return Task.FromResult(count);
     }
 
@@ -1203,27 +1202,51 @@ public class SyncRepository : ISyncRepository
 
     public Task<int> GetExecutableExportCountAsync(int connectedSystemId)
     {
-        var count = GetPendingExportsForSystem(connectedSystemId)
-            .Count(pe => pe.Status == PendingExportStatus.Pending || pe.Status == PendingExportStatus.ExportNotConfirmed);
+        var count = GetExecutableExportsForSystem(connectedSystemId).Count();
         return Task.FromResult(count);
     }
 
     public Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId)
     {
-        var result = GetPendingExportsForSystem(connectedSystemId)
-            .Where(pe => pe.Status == PendingExportStatus.Pending || pe.Status == PendingExportStatus.ExportNotConfirmed)
-            .ToList();
+        var result = GetExecutableExportsForSystem(connectedSystemId).ToList();
         return Task.FromResult(result);
     }
 
     public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take)
     {
-        var result = GetPendingExportsForSystem(connectedSystemId)
-            .Where(pe => pe.Status == PendingExportStatus.Pending || pe.Status == PendingExportStatus.ExportNotConfirmed)
+        var result = GetExecutableExportsForSystem(connectedSystemId)
             .Skip(skip)
             .Take(take)
             .ToList();
         return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// Applies the same eligibility filters as the Postgres ExecutableExportsQuery:
+    /// status must be Pending, Exported, or ExportNotConfirmed; exports not yet due for retry or
+    /// that have exceeded max retries are excluded; Update exports must have at least one Pending or
+    /// ExportedNotConfirmed attribute change; Delete exports that were already Exported are excluded
+    /// (awaiting import confirmation, not re-execution).
+    /// </summary>
+    private IEnumerable<PendingExport> GetExecutableExportsForSystem(int connectedSystemId)
+    {
+        var now = DateTime.UtcNow;
+        return GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.Status == PendingExportStatus.Pending
+                      || pe.Status == PendingExportStatus.Exported
+                      || pe.Status == PendingExportStatus.ExportNotConfirmed)
+            // Exclude exports not yet due for retry
+            .Where(pe => !pe.NextRetryAt.HasValue || pe.NextRetryAt <= now)
+            // Exclude exports that have exceeded max retries
+            .Where(pe => pe.ErrorCount < pe.MaxRetries)
+            // Update exports must have at least one exportable attribute change
+            .Where(pe => pe.ChangeType != PendingExportChangeType.Update
+                      || pe.AttributeValueChanges.Any(ac =>
+                            ac.Status == PendingExportAttributeChangeStatus.Pending
+                         || ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed))
+            // Delete exports already exported are awaiting import confirmation — do not re-execute
+            .Where(pe => !(pe.ChangeType == PendingExportChangeType.Delete
+                        && pe.Status == PendingExportStatus.Exported));
     }
 
     public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)

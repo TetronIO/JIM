@@ -8,6 +8,7 @@ using JIM.Worker.Tests.Models;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
 using Moq;
+using SyncRepository = JIM.InMemoryData.SyncRepository;
 
 namespace JIM.Worker.Tests.OutboundSync;
 
@@ -30,6 +31,7 @@ public class PendingExportReconciliationTests
     private List<PendingExportAttributeValueChange> PendingExportAttributeValueChangesData { get; set; } = null!;
     private Mock<DbSet<PendingExportAttributeValueChange>> MockDbSetPendingExportAttributeValueChanges { get; set; } = null!;
     private JimApplication Jim { get; set; } = null!;
+    private SyncRepository SyncRepo { get; set; } = null!;
     private ConnectedSystem TargetSystem { get; set; } = null!;
     private ConnectedSystemObjectType TargetUserType { get; set; } = null!;
     private ConnectedSystemObjectTypeAttribute DisplayNameAttr { get; set; } = null!;
@@ -76,7 +78,10 @@ public class PendingExportReconciliationTests
         MockJimDbContext.Setup(m => m.PendingExportAttributeValueChanges).Returns(MockDbSetPendingExportAttributeValueChanges.Object);
 
         // Instantiate Jim using the mocked db context
-        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+        SyncRepo = TestUtilities.CreateSyncRepository(
+            csos: ConnectedSystemObjectsData,
+            pendingExports: PendingExportsData);
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
 
         // Store references to commonly used objects
         TargetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
