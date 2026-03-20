@@ -245,47 +245,25 @@ catch {
     throw
 }
 
-# Step 7: Create Metaverse Object Type and Attributes
-Write-TestStep "Step 7" "Creating Metaverse schema"
+# Step 7: Get Metaverse Object Type and Attributes
+Write-TestStep "Step 7" "Getting Metaverse schema"
 
 try {
-    # Check if Person type already exists
-    $mvObjectTypes = @(Get-JIMMetaverseObjectType)
-    $personType = $mvObjectTypes | Where-Object { $_.name -eq "Person" }
+    # Use the seed "User" metaverse object type (same as other scenarios)
+    $mvUserType = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "User" } | Select-Object -First 1
 
-    if (-not $personType) {
-        $personType = New-JIMMetaverseObjectType -Name "Person" -PassThru
-        Write-Host "  OK Created 'Person' Metaverse Object Type" -ForegroundColor Green
-    }
-    else {
-        Write-Host "  Person type already exists (ID: $($personType.id))" -ForegroundColor Yellow
+    if (-not $mvUserType) {
+        throw "No 'User' metaverse object type found in seed data"
     }
 
-    # Create attributes if they don't exist
+    Write-Host "  OK Found 'User' Metaverse Object Type (ID: $($mvUserType.id))" -ForegroundColor Green
+
+    # Get existing metaverse attributes
     $mvAttributes = @(Get-JIMMetaverseAttribute)
-    $requiredAttrs = @(
-        @{ Name = "Account Name"; Type = "Text" },
-        @{ Name = "First Name"; Type = "Text" },
-        @{ Name = "Last Name"; Type = "Text" },
-        @{ Name = "Display Name"; Type = "Text" },
-        @{ Name = "Department"; Type = "Text" },
-        @{ Name = "Employee ID"; Type = "Text" }
-    )
-
-    foreach ($attrDef in $requiredAttrs) {
-        $existing = $mvAttributes | Where-Object { $_.name -eq $attrDef.Name }
-        if (-not $existing) {
-            New-JIMMetaverseAttribute -Name $attrDef.Name -Type $attrDef.Type -ObjectTypeId $personType.id | Out-Null
-            Write-Host "  OK Created attribute: $($attrDef.Name)" -ForegroundColor Green
-        }
-        else {
-            # Ensure attribute is linked to Person type
-            Write-Host "  Attribute '$($attrDef.Name)' already exists" -ForegroundColor Gray
-        }
-    }
+    Write-Host "  OK Found $($mvAttributes.Count) metaverse attributes" -ForegroundColor Green
 }
 catch {
-    Write-Host "  FAIL Failed to create Metaverse schema: $_" -ForegroundColor Red
+    Write-Host "  FAIL Failed to get Metaverse schema: $_" -ForegroundColor Red
     throw
 }
 
@@ -306,7 +284,7 @@ try {
             -Name "Partition Test - AD Import Users" `
             -ConnectedSystemId $ldapSystem.id `
             -ConnectedSystemObjectTypeId $userObjectType.id `
-            -MetaverseObjectTypeId $personType.id `
+            -MetaverseObjectTypeId $mvUserType.id `
             -Direction Import `
             -ProjectToMetaverse `
             -PassThru
