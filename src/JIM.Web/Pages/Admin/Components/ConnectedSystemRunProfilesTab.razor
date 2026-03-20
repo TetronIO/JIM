@@ -141,12 +141,11 @@
                                   HelperText="File-based connectors need the in-container path specifying, i.e. /var/connector-files/test-data/Users.csv" />
                 }
 
-                @if (ConnectedSystem.ConnectorDefinition.SupportsPartitions && ConnectedSystem.Partitions != null)
+                @if (IsImportRunType(_newRunProfile.RunType) && ConnectedSystem.ConnectorDefinition.SupportsPartitions && ConnectedSystem.Partitions != null)
                 {
                     <MudSelect T="ConnectedSystemPartition" @bind-Value="_newRunProfile.Partition" Label="Partition"
-                               Variant="Variant.Outlined" Class="mt-5" AnchorOrigin="Origin.BottomLeft"
-                               Required="@ConnectedSystem.ConnectorDefinition.SupportsPartitions"
-                               RequiredError="A run profile partition is required">
+                               Variant="Variant.Outlined" Class="mt-5" AnchorOrigin="Origin.BottomLeft" Clearable="true"
+                               HelperText="Optional. Leave empty to import from all selected partitions.">
                         @foreach (var partition in ConnectedSystem.Partitions.Where(p => p.Selected))
                         {
                             <MudSelectItem Value="@partition" />
@@ -154,11 +153,11 @@
                     </MudSelect>
                 }
 
-                @if (ConnectedSystem.ConnectorDefinition.SupportsPaging)
+                @if (IsImportRunType(_newRunProfile.RunType) && ConnectedSystem.ConnectorDefinition.SupportsPaging)
                 {
                     <MudNumericField @bind-Value="_newRunProfile.PageSize" Label="Page Size" Variant="Variant.Outlined"
                                      Class="mt-3" Min="0" Step="100" Required="true"
-                                     RequiredError="How many items to process in one go when importing/exporting" />
+                                     RequiredError="How many items to process in one go when importing" />
                 }
             </MudForm>
         </DialogContent>
@@ -197,12 +196,11 @@
                                   HelperText="File-based connectors need the in-container path specifying, i.e. /var/connector-files/test-data/Users.csv" />
                 }
 
-                @if (ConnectedSystem.ConnectorDefinition.SupportsPartitions && ConnectedSystem.Partitions != null)
+                @if (IsImportRunType(_editRunProfile.RunType) && ConnectedSystem.ConnectorDefinition.SupportsPartitions && ConnectedSystem.Partitions != null)
                 {
                     <MudSelect T="ConnectedSystemPartition" @bind-Value="_editRunProfile.Partition" Label="Partition"
-                               Variant="Variant.Outlined" Class="mt-5" AnchorOrigin="Origin.BottomLeft"
-                               Required="@ConnectedSystem.ConnectorDefinition.SupportsPartitions"
-                               RequiredError="A run profile partition is required">
+                               Variant="Variant.Outlined" Class="mt-5" AnchorOrigin="Origin.BottomLeft" Clearable="true"
+                               HelperText="Optional. Leave empty to import from all selected partitions.">
                         @foreach (var partition in ConnectedSystem.Partitions.Where(p => p.Selected))
                         {
                             <MudSelectItem Value="@partition" />
@@ -210,11 +208,11 @@
                     </MudSelect>
                 }
 
-                @if (ConnectedSystem.ConnectorDefinition.SupportsPaging)
+                @if (IsImportRunType(_editRunProfile.RunType) && ConnectedSystem.ConnectorDefinition.SupportsPaging)
                 {
                     <MudNumericField @bind-Value="_editRunProfile.PageSize" Label="Page Size" Variant="Variant.Outlined"
                                      Class="mt-3" Min="0" Step="100" Required="true"
-                                     RequiredError="How many items to process in one go when importing/exporting" />
+                                     RequiredError="How many items to process in one go when importing" />
                 }
             </MudForm>
         </DialogContent>
@@ -244,6 +242,9 @@
     private ConnectedSystemRunProfile _editRunProfile = new();
     private ConnectedSystemRunProfile? _editRunProfileOriginal;
     private bool _editRunProfileDialogVisible;
+
+    private static bool IsImportRunType(ConnectedSystemRunType runType) =>
+        runType is ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport;
 
     private string? ValidateRunType(ConnectedSystemRunType runType)
     {
