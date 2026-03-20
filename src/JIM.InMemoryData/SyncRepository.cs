@@ -1299,7 +1299,7 @@ public class SyncRepository : ISyncRepository
             if (avc.AttributeId == 0 && avc.Attribute != null)
                 avc.AttributeId = avc.Attribute.Id;
             else if (avc.Attribute == null && avc.AttributeId > 0 && csoType != null)
-                avc.Attribute = csoType.Attributes.FirstOrDefault(a => a.Id == avc.AttributeId);
+                avc.Attribute = csoType.Attributes.FirstOrDefault(a => a.Id == avc.AttributeId)!;
         }
     }
 
