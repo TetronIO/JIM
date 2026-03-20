@@ -192,7 +192,7 @@ public class Worker : BackgroundService
                             // IMPORTANT: taskJim must be disposed to release database connections and prevent deadlocks.
                             using var taskJim = _jimFactory.Create();
                             var syncRepo = new JIM.Application.SyncRepositoryAdapter(taskJim);
-                            var syncServer = new JIM.Application.SyncServer(taskJim);
+                            var syncServer = new JIM.Application.Servers.SyncServer(taskJim);
 
                             // we want to re-retrieve the worker task using this instance of JIM, so there's no chance of any cross-JIM-instance issues
                             var newWorkerTask = await taskJim.Tasking.GetWorkerTaskAsync(mainLoopNewWorkerTask.Id) ??

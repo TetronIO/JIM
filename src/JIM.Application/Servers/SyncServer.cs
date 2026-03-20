@@ -1,4 +1,3 @@
-using JIM.Application.Servers;
 using JIM.Application.Services;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
@@ -7,7 +6,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 
-namespace JIM.Application;
+namespace JIM.Application.Servers;
 
 /// <summary>
 /// Production implementation of <see cref="ISyncServer"/> that delegates to existing
