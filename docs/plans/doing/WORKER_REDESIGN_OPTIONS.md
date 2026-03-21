@@ -255,6 +255,7 @@ Keep the current architecture but surgically extract the sync processing logic i
    - Import: Multiple pages processed concurrently (each with own data access scope)
    - Sync: CSO batches processed in parallel (engine is stateless per-CSO, only shared state is MVO lookup)
    - Export: Already has parallelism; extend to use proper DI scopes
+   - **Critical insight (PostgreSQL write architecture):** PostgreSQL uses a process-per-connection model — a single SQL statement (INSERT/UPDATE/DELETE) always executes in one process on one core. Parallel query only applies to SELECT operations. Multi-connection write parallelism (splitting bulk writes across N concurrent connections) is the primary lever for utilising multiple cores during the "Saving changes" phase. See [PostgreSQL Write Parallelism](#postgresql-write-parallelism) below for details.
 
 ### What Stays the Same
 
@@ -624,6 +625,44 @@ docker compose / Kubernetes:
 - Message ordering across workers requires careful design (e.g., sync worker must process CSO batch N before N+1 for same connected system)
 - Phase barrier synchronisation is complex (knowing all import batches are done before sync starts)
 - Integration testing of the distributed system requires more infrastructure
+
+---
+
+## PostgreSQL Write Parallelism
+
+> **Added March 2026** — observed during integration testing with 5,000+ object imports.
+
+During the "Saving changes" phase of large imports, PostgreSQL sits at 100% CPU on a single core while other cores are idle. This is **expected behaviour**, not a misconfiguration — it is a fundamental consequence of PostgreSQL's process-per-connection architecture.
+
+### Why PostgreSQL Uses One Core Per Write
+
+PostgreSQL assigns one OS process per connection. A single SQL statement (INSERT, UPDATE, DELETE) executes entirely within that one process on one core. PostgreSQL's parallel query feature (introduced in v9.6) only applies to **read operations** — sequential scans, hash joins, and aggregates. It does **not** parallelise writes.
+
+The single-core bottleneck during bulk writes comes from:
+- **WAL (write-ahead log) generation** — serialised by design for crash safety
+- **Index updates** — each row insert/update must update all indexes on the table
+- **MVCC overhead** — creating new tuple versions
+- **fsync/flush** — ensuring durability
+
+No amount of PostgreSQL configuration tuning (shared_buffers, work_mem, max_parallel_workers, etc.) will change this for write workloads.
+
+### Application-Side Levers
+
+Since the constraint is architectural (one core per connection for writes), the performance levers are on the application side:
+
+| Lever | Phase | Impact | Notes |
+|-------|-------|--------|-------|
+| **Multi-connection write parallelism** | Phase 10 | Very High | Split bulk write batches across N concurrent `NpgsqlDataSource` connections. Each connection gets its own postgres process and CPU core. This directly addresses the observed single-core bottleneck. |
+| **COPY binary import for all bulk writes** | Phase 8 | High | `NpgsqlBinaryImporter` (COPY protocol) is dramatically faster than parameterised INSERT for bulk loads. Already used for change history and RPEI outcomes (#398); extend to CSO creates/updates and MVO operations. |
+| **Larger batch sizes** | Phase 8 | Medium | EF Core's default max batch size for PostgreSQL is 42 statements. Direct SQL in `PostgresData.SyncRepository` should use larger batches (or COPY) to reduce round-trip overhead. |
+| **Deferred constraint checking** | Phase 8 | Medium | Making FK constraints `DEFERRABLE INITIALLY DEFERRED` moves validation to commit time, reducing per-row overhead during bulk operations where referential integrity is guaranteed by application logic. |
+| **Unlogged staging tables** | Phase 8 | High (staging only) | `UNLOGGED` tables skip WAL entirely, giving massive write speedup. Applicable if staging/import tables don't need crash recovery — the application already re-imports on failure, so durability of in-flight staging data may not be critical. |
+
+### Implications for Phase 8 and Phase 10
+
+**Phase 8 (`PostgresData.SyncRepository`)** should prioritise COPY binary import over parameterised INSERT for all bulk write methods. The existing COPY implementations for change history (#398) provide a proven pattern.
+
+**Phase 10 (intra-phase parallelism)** should implement multi-connection write parallelism as a primary objective, not just as a nice-to-have. The observed bottleneck (100% on one core, other cores idle) demonstrates that single-connection writes are the dominant constraint during the save phase. Splitting writes across N connections (where N ≈ available cores) would allow PostgreSQL to utilise all available server resources.
 
 ---
 
