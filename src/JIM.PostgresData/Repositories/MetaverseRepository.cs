@@ -453,27 +453,16 @@ public class MetaverseRepository : IMetaverseRepository
         //
         // By explicitly setting Entry().State on each attribute value, we ensure new attribute
         // values (IsKeySet=false → Added) are always persisted regardless of change detection.
-        //
-        // The try/catch handles unit tests using mocked DbContext where Entry() throws
-        // NullReferenceException (mock doesn't initialise internal DbContext state).
-        try
+        foreach (var mvo in objectList)
         {
-            foreach (var mvo in objectList)
-            {
-                Repository.UpdateDetachedSafe(mvo);
+            Repository.UpdateDetachedSafe(mvo);
 
-                foreach (var av in mvo.AttributeValues)
-                {
-                    var avEntry = Repository.Database.Entry(av);
-                    if (avEntry.State is EntityState.Detached or EntityState.Unchanged)
-                        avEntry.State = avEntry.IsKeySet ? EntityState.Modified : EntityState.Added;
-                }
+            foreach (var av in mvo.AttributeValues)
+            {
+                var avEntry = Repository.Database.Entry(av);
+                if (avEntry.State is EntityState.Detached or EntityState.Unchanged)
+                    avEntry.State = avEntry.IsKeySet ? EntityState.Modified : EntityState.Added;
             }
-        }
-        catch (NullReferenceException)
-        {
-            // Fallback for mocked DbContext in unit tests where ChangeTracker is not initialised.
-            Repository.Database.UpdateRange(objectList);
         }
 
         await Repository.Database.SaveChangesAsync();
@@ -992,56 +981,48 @@ public class MetaverseRepository : IMetaverseRepository
     public async Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
     {
         // Null out the FK references in related tables to preserve audit history before deletion.
-        // Only execute raw SQL if we have a real database connection (not mocked)
-        try
+
+        // Null out FK reference in Activities to preserve audit history
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""Activities"" SET ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = {0}",
+            metaverseObject.Id);
+
+        // Stamp DeletedMetaverseObjectId on all prior change records for this MVO so that
+        // GetDeletedMvoChangeHistoryAsync can correlate them after the FK is nulled.
+        // Then null the FK to allow the MVO to be deleted without constraint violations.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""MetaverseObjectChanges"" SET ""DeletedMetaverseObjectId"" = {0}, ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = {0}",
+            metaverseObject.Id);
+
+        // Null out FK reference in ConnectedSystemObjects to detach any CSOs still joined
+        // to this MVO. Without this, SaveChangesAsync may try to flush tracked CSO modifications
+        // that reference the now-deleted MVO, causing FK constraint violations when multiple
+        // MVOs are deleted in the same batch.
+        // Also update tracked entities in EF Core's change tracker to match the DB state,
+        // otherwise SaveChangesAsync will try to write the stale FK value.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ConnectedSystemObjects"" SET ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = {0}",
+            metaverseObject.Id);
+        foreach (var trackedCso in Repository.Database.ChangeTracker.Entries<ConnectedSystemObject>()
+            .Where(e => e.Entity.MetaverseObjectId == metaverseObject.Id))
         {
-            // Null out FK reference in Activities to preserve audit history
-            await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""Activities"" SET ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = {0}",
-                metaverseObject.Id);
-
-            // Stamp DeletedMetaverseObjectId on all prior change records for this MVO so that
-            // GetDeletedMvoChangeHistoryAsync can correlate them after the FK is nulled.
-            // Then null the FK to allow the MVO to be deleted without constraint violations.
-            await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""MetaverseObjectChanges"" SET ""DeletedMetaverseObjectId"" = {0}, ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = {0}",
-                metaverseObject.Id);
-
-            // Null out FK reference in ConnectedSystemObjects to detach any CSOs still joined
-            // to this MVO. Without this, SaveChangesAsync may try to flush tracked CSO modifications
-            // that reference the now-deleted MVO, causing FK constraint violations when multiple
-            // MVOs are deleted in the same batch.
-            // Also update tracked entities in EF Core's change tracker to match the DB state,
-            // otherwise SaveChangesAsync will try to write the stale FK value.
-            await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""ConnectedSystemObjects"" SET ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = {0}",
-                metaverseObject.Id);
-            foreach (var trackedCso in Repository.Database.ChangeTracker.Entries<ConnectedSystemObject>()
-                .Where(e => e.Entity.MetaverseObjectId == metaverseObject.Id))
-            {
-                trackedCso.Entity.MetaverseObjectId = null;
-                trackedCso.Entity.MetaverseObject = null;
-            }
-
-            // Null out reference attribute values on other MVOs that point to this MVO.
-            // Without this, deleting an MVO that is referenced (e.g., as a Manager) by other
-            // MVOs would violate the FK constraint on MetaverseObjectAttributeValues.ReferenceValueId.
-            await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""MetaverseObjectAttributeValues"" SET ""ReferenceValueId"" = NULL WHERE ""ReferenceValueId"" = {0}",
-                metaverseObject.Id);
-
-            // Null out reference values in change tracking attribute records that point to this MVO.
-            // Change history records may reference this MVO (e.g., "Manager was set to Alice")
-            // and must be preserved with a null reference rather than blocking deletion.
-            await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""MetaverseObjectChangeAttributeValues"" SET ""ReferenceValueId"" = NULL WHERE ""ReferenceValueId"" = {0}",
-                metaverseObject.Id);
+            trackedCso.Entity.MetaverseObjectId = null;
+            trackedCso.Entity.MetaverseObject = null;
         }
-        catch (Exception)
-        {
-            // Expected when running with mocked DbContext in tests - the Database property may be null
-            // or the InMemory provider doesn't support raw SQL. In production with PostgreSQL, this works.
-        }
+
+        // Null out reference attribute values on other MVOs that point to this MVO.
+        // Without this, deleting an MVO that is referenced (e.g., as a Manager) by other
+        // MVOs would violate the FK constraint on MetaverseObjectAttributeValues.ReferenceValueId.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""MetaverseObjectAttributeValues"" SET ""ReferenceValueId"" = NULL WHERE ""ReferenceValueId"" = {0}",
+            metaverseObject.Id);
+
+        // Null out reference values in change tracking attribute records that point to this MVO.
+        // Change history records may reference this MVO (e.g., "Manager was set to Alice")
+        // and must be preserved with a null reference rather than blocking deletion.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""MetaverseObjectChangeAttributeValues"" SET ""ReferenceValueId"" = NULL WHERE ""ReferenceValueId"" = {0}",
+            metaverseObject.Id);
 
         Repository.Database.MetaverseObjects.Remove(metaverseObject);
         await Repository.Database.SaveChangesAsync();
@@ -1064,17 +1045,9 @@ public class MetaverseRepository : IMetaverseRepository
     /// <inheritdoc />
     public async Task SetDeletedMetaverseObjectIdAsync(Guid changeId, Guid metaverseObjectId)
     {
-        try
-        {
-            await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""MetaverseObjectChanges"" SET ""DeletedMetaverseObjectId"" = {0} WHERE ""Id"" = {1}",
-                metaverseObjectId, changeId);
-        }
-        catch (Exception)
-        {
-            // Expected when running with mocked DbContext in tests - the Database property may be null
-            // or the InMemory provider doesn't support raw SQL. In production with PostgreSQL, this works.
-        }
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""MetaverseObjectChanges"" SET ""DeletedMetaverseObjectId"" = {0} WHERE ""Id"" = {1}",
+            metaverseObjectId, changeId);
     }
 
     /// <summary>
@@ -1258,60 +1231,53 @@ public class MetaverseRepository : IMetaverseRepository
     /// </summary>
     public async Task CreateMetaverseObjectChangeDirectAsync(MetaverseObjectChange change)
     {
-        try
+        var changeId = Guid.NewGuid();
+        change.Id = changeId;
+
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"INSERT INTO ""MetaverseObjectChanges"" (""Id"", ""ChangeType"", ""ChangeTime"", ""InitiatedByType"", ""InitiatedById"", ""InitiatedByName"", ""ChangeInitiatorType"", ""DeletedMetaverseObjectId"", ""DeletedObjectTypeId"", ""DeletedObjectDisplayName"")
+              VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9})",
+            changeId,
+            (int)change.ChangeType,
+            change.ChangeTime,
+            (int)change.InitiatedByType,
+            (object?)change.InitiatedById ?? DBNull.Value,
+            (object?)change.InitiatedByName ?? DBNull.Value,
+            (int)change.ChangeInitiatorType,
+            (object?)change.DeletedMetaverseObjectId ?? DBNull.Value,
+            (object?)change.DeletedObjectTypeId ?? DBNull.Value,
+            (object?)change.DeletedObjectDisplayName ?? DBNull.Value);
+
+        // Insert attribute changes and their values
+        foreach (var attrChange in change.AttributeChanges)
         {
-            var changeId = Guid.NewGuid();
-            change.Id = changeId;
+            var attrChangeId = Guid.NewGuid();
+            attrChange.Id = attrChangeId;
 
             await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"INSERT INTO ""MetaverseObjectChanges"" (""Id"", ""ChangeType"", ""ChangeTime"", ""InitiatedByType"", ""InitiatedById"", ""InitiatedByName"", ""ChangeInitiatorType"", ""DeletedMetaverseObjectId"", ""DeletedObjectTypeId"", ""DeletedObjectDisplayName"")
-                  VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9})",
-                changeId,
-                (int)change.ChangeType,
-                change.ChangeTime,
-                (int)change.InitiatedByType,
-                (object?)change.InitiatedById ?? DBNull.Value,
-                (object?)change.InitiatedByName ?? DBNull.Value,
-                (int)change.ChangeInitiatorType,
-                (object?)change.DeletedMetaverseObjectId ?? DBNull.Value,
-                (object?)change.DeletedObjectTypeId ?? DBNull.Value,
-                (object?)change.DeletedObjectDisplayName ?? DBNull.Value);
+                @"INSERT INTO ""MetaverseObjectChangeAttributes"" (""Id"", ""MetaverseObjectChangeId"", ""AttributeId"")
+                  VALUES ({0}, {1}, {2})",
+                attrChangeId, changeId, attrChange.Attribute.Id);
 
-            // Insert attribute changes and their values
-            foreach (var attrChange in change.AttributeChanges)
+            foreach (var valueChange in attrChange.ValueChanges)
             {
-                var attrChangeId = Guid.NewGuid();
-                attrChange.Id = attrChangeId;
+                var valueChangeId = Guid.NewGuid();
+                valueChange.Id = valueChangeId;
 
                 await Repository.Database.Database.ExecuteSqlRawAsync(
-                    @"INSERT INTO ""MetaverseObjectChangeAttributes"" (""Id"", ""MetaverseObjectChangeId"", ""AttributeId"")
-                      VALUES ({0}, {1}, {2})",
-                    attrChangeId, changeId, attrChange.Attribute.Id);
-
-                foreach (var valueChange in attrChange.ValueChanges)
-                {
-                    var valueChangeId = Guid.NewGuid();
-                    valueChange.Id = valueChangeId;
-
-                    await Repository.Database.Database.ExecuteSqlRawAsync(
-                        @"INSERT INTO ""MetaverseObjectChangeAttributeValues"" (""Id"", ""MetaverseObjectChangeAttributeId"", ""ValueChangeType"", ""StringValue"", ""IntValue"", ""GuidValue"", ""BoolValue"", ""DateTimeValue"", ""ByteValueLength"", ""ReferenceValueId"")
-                          VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9})",
-                        valueChangeId,
-                        attrChangeId,
-                        (int)valueChange.ValueChangeType,
-                        (object?)valueChange.StringValue ?? DBNull.Value,
-                        (object?)valueChange.IntValue ?? DBNull.Value,
-                        (object?)valueChange.GuidValue ?? DBNull.Value,
-                        (object?)valueChange.BoolValue ?? DBNull.Value,
-                        (object?)valueChange.DateTimeValue ?? DBNull.Value,
-                        (object?)valueChange.ByteValueLength ?? DBNull.Value,
-                        (object?)(valueChange.ReferenceValue?.Id) ?? DBNull.Value);
-                }
+                    @"INSERT INTO ""MetaverseObjectChangeAttributeValues"" (""Id"", ""MetaverseObjectChangeAttributeId"", ""ValueChangeType"", ""StringValue"", ""IntValue"", ""GuidValue"", ""BoolValue"", ""DateTimeValue"", ""ByteValueLength"", ""ReferenceValueId"")
+                      VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9})",
+                    valueChangeId,
+                    attrChangeId,
+                    (int)valueChange.ValueChangeType,
+                    (object?)valueChange.StringValue ?? DBNull.Value,
+                    (object?)valueChange.IntValue ?? DBNull.Value,
+                    (object?)valueChange.GuidValue ?? DBNull.Value,
+                    (object?)valueChange.BoolValue ?? DBNull.Value,
+                    (object?)valueChange.DateTimeValue ?? DBNull.Value,
+                    (object?)valueChange.ByteValueLength ?? DBNull.Value,
+                    (object?)(valueChange.ReferenceValue?.Id) ?? DBNull.Value);
             }
-        }
-        catch (Exception)
-        {
-            // Expected when running with mocked DbContext in tests
         }
     }
 

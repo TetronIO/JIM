@@ -116,6 +116,7 @@ public class ExportConfirmationWorkflowTests
             ConnectedSystemId = TargetSystem.Id,
             ConnectedSystem = TargetSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
@@ -164,7 +165,7 @@ public class ExportConfirmationWorkflowTests
 
     private async Task<PendingExportReconciliationResult> SimulateImportAndReconcileAsync(ConnectedSystemObject cso)
     {
-        var reconciliationService = new PendingExportReconciliationService(Jim);
+        var reconciliationService = new PendingExportReconciliationService(SyncRepo);
         return await reconciliationService.ReconcileAsync(cso);
     }
 

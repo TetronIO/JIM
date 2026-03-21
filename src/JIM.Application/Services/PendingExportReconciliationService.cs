@@ -1,3 +1,4 @@
+using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -11,16 +12,16 @@ namespace JIM.Application.Services;
 /// </summary>
 public class PendingExportReconciliationService
 {
-    private readonly JimApplication _jim;
+    private readonly ISyncRepository _syncRepo;
 
     /// <summary>
     /// Default maximum number of export attempts before marking an attribute change as Failed.
     /// </summary>
     public const int DefaultMaxRetries = 5;
 
-    public PendingExportReconciliationService(JimApplication jim)
+    public PendingExportReconciliationService(ISyncRepository syncRepo)
     {
-        _jim = jim;
+        _syncRepo = syncRepo;
     }
 
     /// <summary>
@@ -35,7 +36,7 @@ public class PendingExportReconciliationService
         var result = new PendingExportReconciliationResult();
 
         // Get any pending export for this CSO
-        var pendingExport = await _jim.Repository.ConnectedSystems.GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObject.Id);
+        var pendingExport = await _syncRepo.GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObject.Id);
 
         if (pendingExport == null)
         {
@@ -49,12 +50,12 @@ public class PendingExportReconciliationService
         // Persist changes immediately (non-batched mode)
         if (result.PendingExportDeleted)
         {
-            await _jim.Repository.ConnectedSystems.DeletePendingExportAsync(pendingExport);
+            await _syncRepo.DeletePendingExportAsync(pendingExport);
             Log.Information("ReconcileAsync: All attribute changes confirmed. Deleted pending export {ExportId}", pendingExport.Id);
         }
         else if (result.HasChanges)
         {
-            await _jim.Repository.ConnectedSystems.UpdatePendingExportAsync(pendingExport);
+            await _syncRepo.UpdatePendingExportAsync(pendingExport);
             Log.Debug("ReconcileAsync: Updated pending export {ExportId} with {Confirmed} confirmed, {Retry} for retry, {Failed} failed",
                 pendingExport.Id, result.ConfirmedChanges.Count, result.RetryChanges.Count, result.FailedChanges.Count);
         }
