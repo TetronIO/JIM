@@ -2431,6 +2431,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(pe => pe.AttributeValueChanges)
             .Include(pe => pe.ConnectedSystemObject)
                 .ThenInclude(cso => cso!.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
             .Include(pe => pe.SourceMetaverseObject)
                 .ThenInclude(mvo => mvo!.AttributeValues)
                     .ThenInclude(av => av.Attribute)
@@ -2512,23 +2513,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Convert to headers
         var headers = pagedItems.Select(pe =>
         {
-            // Get target object identifier from CSO if available
-            string? targetIdentifier = null;
-            if (pe.ConnectedSystemObject != null)
-            {
-                // Try to get external ID attribute value
-                var externalIdAttr = pe.ConnectedSystemObject.AttributeValues?
-                    .FirstOrDefault(av => av.AttributeId == pe.ConnectedSystemObject.ExternalIdAttributeId);
-                targetIdentifier = externalIdAttr?.StringValue ?? pe.ConnectedSystemObject.Id.ToString();
-            }
+            // Get target object display name from CSO if available (priority: display name > external ID > secondary external ID)
+            var targetIdentifier = pe.ConnectedSystemObject?.DisplayNameOrId;
 
             // Get source MVO display name if available
-            string? sourceMvoDisplayName = null;
-            if (pe.SourceMetaverseObject != null)
-            {
-                sourceMvoDisplayName = pe.SourceMetaverseObject.AttributeValues?
-                    .FirstOrDefault(av => av.Attribute?.Name?.Equals("displayname", StringComparison.OrdinalIgnoreCase) == true)?.StringValue;
-            }
+            var sourceMvoDisplayName = pe.SourceMetaverseObject?.DisplayName;
 
             return PendingExportHeader.FromEntity(pe, targetIdentifier, sourceMvoDisplayName);
         }).ToList();
