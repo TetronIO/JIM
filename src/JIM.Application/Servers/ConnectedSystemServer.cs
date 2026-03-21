@@ -4120,6 +4120,39 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Retrieves a single Pending Export with capped multi-valued attribute changes for the detail page.
+    /// Multi-valued attribute changes are capped at 10 per attribute; total counts are returned separately.
+    /// </summary>
+    /// <param name="id">The unique identifier of the Pending Export.</param>
+    /// <returns>A <see cref="PendingExportDetailResult"/> containing the pending export and per-attribute
+    /// total change counts, or null if not found.</returns>
+    public async Task<PendingExportDetailResult?> GetPendingExportDetailAsync(Guid id)
+    {
+        return await Application.Repository.ConnectedSystems.GetPendingExportDetailAsync(id);
+    }
+
+    /// <summary>
+    /// Retrieves a paged list of attribute value changes for a specific attribute on a Pending Export.
+    /// Used by the MVA dialog for server-side pagination.
+    /// </summary>
+    /// <param name="pendingExportId">The unique identifier of the Pending Export.</param>
+    /// <param name="attributeName">The name of the attribute to retrieve changes for.</param>
+    /// <param name="page">The 1-based page number.</param>
+    /// <param name="pageSize">The number of results per page (max 100).</param>
+    /// <param name="searchText">Optional search text to filter changes by string value.</param>
+    /// <returns>A paged result set of attribute value changes.</returns>
+    public async Task<PagedResultSet<PendingExportAttributeValueChange>> GetPendingExportAttributeChangesPagedAsync(
+        Guid pendingExportId,
+        string attributeName,
+        int page,
+        int pageSize,
+        string? searchText = null)
+    {
+        return await Application.Repository.ConnectedSystems.GetPendingExportAttributeChangesPagedAsync(
+            pendingExportId, attributeName, page, pageSize, searchText);
+    }
+
+    /// <summary>
     /// Retrieves the Pending Export for a specific Connected System Object.
     /// </summary>
     /// <param name="connectedSystemObjectId">The unique identifier of the Connected System Object.</param>

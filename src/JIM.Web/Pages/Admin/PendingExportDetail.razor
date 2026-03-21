@@ -2,10 +2,12 @@
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Transactional
+@using JIM.Models.Transactional.DTOs
 @using JIM.Utilities
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 
 <PageTitle>Pending Export Detail</PageTitle>
 
@@ -32,7 +34,7 @@
                         <tbody>
                             <tr>
                                 <td><strong>ID</strong></td>
-                                <td><code>@_pendingExport.Id</code></td>
+                                <td>@_pendingExport.Id</td>
                             </tr>
                             <tr>
                                 <td><strong>Status</strong></td>
@@ -194,32 +196,82 @@
             <MudCard Outlined="true" Elevation="0">
                 <MudCardHeader>
                     <CardHeaderContent>
-                        <MudText Typo="Typo.h6">Attribute Changes (@_pendingExport.AttributeValueChanges.Count.ToString("N0"))</MudText>
+                        <MudText Typo="Typo.h6">Attribute Changes (@_attributeChangeTotalCounts.Values.Sum().ToString("N0"))</MudText>
                     </CardHeaderContent>
                 </MudCardHeader>
                 <MudCardContent>
                     @if (_pendingExport.AttributeValueChanges.Count > 0)
                     {
-                        <MudTable Items="@_pendingExport.AttributeValueChanges" Hover="true" Dense="true" Outlined="true" Elevation="0">
+                        <MudTable Items="@GetGroupedChanges()" Hover="true" Elevation="0" Outlined="true"
+                                  Class="jim-attribute-table" Breakpoint="Breakpoint.None">
                             <HeaderContent>
-                                <MudTh><MudText Typo="Typo.button">Attribute</MudText></MudTh>
+                                <MudTh Class="jim-attr-header-name"><MudText Typo="Typo.button">Attribute</MudText></MudTh>
                                 <MudTh><MudText Typo="Typo.button">Change Type</MudText></MudTh>
                                 <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
-                                <MudTh><MudText Typo="Typo.button">Value</MudText></MudTh>
+                                <MudTh Class="jim-attr-header-value"><MudText Typo="Typo.button">Value</MudText></MudTh>
                             </HeaderContent>
                             <RowTemplate>
-                                <MudTd DataLabel="Attribute">@(context.Attribute?.Name ?? $"Attribute {context.AttributeId}")</MudTd>
-                                <MudTd DataLabel="Change Type">
-                                    <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeTypeColor(context.ChangeType)">
-                                        @context.ChangeType
-                                    </MudChip>
+                                <MudTd DataLabel="Attribute" Class="@(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")">
+                                    <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.AttributeName</MudText>
                                 </MudTd>
-                                <MudTd DataLabel="Status">
-                                    <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeStatusColor(context.Status)">
-                                        @context.Status.ToString().SplitOnCapitalLetters()
-                                    </MudChip>
+                                <MudTd DataLabel="Change Type" Class="@(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")">
+                                    @if (context.Values.Count == 1)
+                                    {
+                                        <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeTypeColor(context.Values[0].ChangeType)">
+                                            @context.Values[0].ChangeType
+                                        </MudChip>
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.Values.Count changes</MudText>
+                                    }
                                 </MudTd>
-                                <MudTd DataLabel="Value">@GetAttributeValue(context)</MudTd>
+                                <MudTd DataLabel="Status" Class="@(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")">
+                                    @if (context.Values.Count == 1)
+                                    {
+                                        <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeStatusColor(context.Values[0].Status)">
+                                            @context.Values[0].Status.ToString().SplitOnCapitalLetters()
+                                        </MudChip>
+                                    }
+                                </MudTd>
+                                <MudTd DataLabel="Value" Class="@($"jim-attr-value {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
+                                    @if (context.Values.Count == 1)
+                                    {
+                                        @GetAttributeValue(context.Values[0])
+                                    }
+                                    else if (context.TotalCount <= MvaInlineThreshold)
+                                    {
+                                        <div class="jim-attr-expanded">
+                                            @foreach (var val in context.Values)
+                                            {
+                                                <div class="jim-attr-expanded-item">
+                                                    <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeTypeColor(val.ChangeType)">
+                                                        @val.ChangeType
+                                                    </MudChip>
+                                                    @GetAttributeValue(val)
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="jim-attr-expanded">
+                                            @foreach (var val in context.Values.Take(MvaInlineThreshold))
+                                            {
+                                                <div class="jim-attr-expanded-item">
+                                                    <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeTypeColor(val.ChangeType)">
+                                                        @val.ChangeType
+                                                    </MudChip>
+                                                    @GetAttributeValue(val)
+                                                </div>
+                                            }
+                                            <MudButton Variant="Variant.Outlined" Class="jim-attr-expand-btn"
+                                                OnClick="@(() => OpenMvaDialogAsync(context.AttributeName, context.TotalCount))">
+                                                +@(context.TotalCount - MvaInlineThreshold) more
+                                            </MudButton>
+                                        </div>
+                                    }
+                                </MudTd>
                             </RowTemplate>
                             <NoRecordsContent>
                                 <MudText>No attribute changes.</MudText>
@@ -264,8 +316,11 @@ else
     [Parameter]
     public Guid Id { get; set; }
 
+    private const int MvaInlineThreshold = 10;
+
     private PendingExport? _pendingExport;
     private ConnectedSystemHeader? _connectedSystemHeader;
+    private Dictionary<string, int> _attributeChangeTotalCounts = new();
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private bool _notFound;
 
@@ -279,7 +334,9 @@ else
             return;
         }
 
-        _pendingExport = await jim.ConnectedSystems.GetPendingExportAsync(Id);
+        var detailResult = await jim.ConnectedSystems.GetPendingExportDetailAsync(Id);
+        _pendingExport = detailResult?.PendingExport;
+        _attributeChangeTotalCounts = detailResult?.AttributeChangeTotalCounts ?? new();
         if (_pendingExport == null)
         {
             _notFound = true;
@@ -309,17 +366,8 @@ else
         if (_pendingExport?.ConnectedSystemObject == null)
             return "Unknown";
 
-        var displayNameAttr = _pendingExport.ConnectedSystemObject.AttributeValues?
-            .FirstOrDefault(av => av.Attribute?.Name?.ToLower() == "displayname");
-        if (displayNameAttr?.StringValue != null)
-            return displayNameAttr.StringValue;
-
-        var externalIdAttr = _pendingExport.ConnectedSystemObject.AttributeValues?
-            .FirstOrDefault(av => av.AttributeId == _pendingExport.ConnectedSystemObject.ExternalIdAttributeId);
-        if (externalIdAttr?.StringValue != null)
-            return externalIdAttr.StringValue;
-
-        return _pendingExport.ConnectedSystemObject.Id.ToString();
+        return _pendingExport.ConnectedSystemObject.DisplayNameOrId
+            ?? _pendingExport.ConnectedSystemObject.Id.ToString();
     }
 
     private string GetMvoDisplayName()
@@ -375,4 +423,43 @@ else
             _ => MudBlazor.Color.Default,
         };
     }
+
+    private List<AttributeChangeGroup> GetGroupedChanges()
+    {
+        if (_pendingExport == null)
+            return new List<AttributeChangeGroup>();
+
+        return _pendingExport.AttributeValueChanges
+            .GroupBy(v => v.Attribute?.Name ?? $"Attribute {v.AttributeId}")
+            .Select(g => new AttributeChangeGroup(
+                g.Key,
+                g.ToList(),
+                _attributeChangeTotalCounts.GetValueOrDefault(g.Key, g.Count())))
+            .OrderBy(g => g.AttributeName)
+            .ToList();
+    }
+
+    private async Task OpenMvaDialogAsync(string attributeName, int totalCount)
+    {
+        var parameters = new DialogParameters<PendingExportMvaDialog>
+        {
+            { x => x.AttributeName, attributeName },
+            { x => x.PendingExportId, Id },
+            { x => x.TotalCount, totalCount }
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        await DialogService.ShowAsync<PendingExportMvaDialog>(attributeName, parameters, options);
+    }
+
+    private record AttributeChangeGroup(
+        string AttributeName,
+        List<PendingExportAttributeValueChange> Values,
+        int TotalCount);
 }

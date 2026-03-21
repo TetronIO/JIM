@@ -2554,6 +2554,116 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .FirstOrDefaultAsync(pe => pe.Id == id);
     }
 
+    private const int PendingExportCappedMvaLimit = 10;
+
+    /// <inheritdoc />
+    public async Task<PendingExportDetailResult?> GetPendingExportDetailAsync(Guid id)
+    {
+        // Step 1: Load the pending export shell without attribute value changes
+        var entity = await Repository.Database.PendingExports
+            .AsSplitQuery()
+            .Include(pe => pe.ConnectedSystem)
+            .Include(pe => pe.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.Type)
+            .Include(pe => pe.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+            .Include(pe => pe.SourceMetaverseObject)
+                .ThenInclude(mvo => mvo!.Type)
+            .Include(pe => pe.SourceMetaverseObject)
+                .ThenInclude(mvo => mvo!.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+            .FirstOrDefaultAsync(pe => pe.Id == id);
+
+        if (entity == null)
+            return null;
+
+        // Step 2: Get per-attribute total counts
+        var attributeChangeCounts = await Repository.Database.Set<PendingExportAttributeValueChange>()
+            .Where(avc => avc.PendingExportId == id)
+            .GroupBy(avc => avc.Attribute.Name)
+            .Select(g => new { AttributeName = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        var totalCounts = attributeChangeCounts.ToDictionary(x => x.AttributeName, x => x.Count);
+
+        // Step 3: Identify which attributes have more changes than the cap
+        var mvaAttributeIds = attributeChangeCounts
+            .Where(x => x.Count > 1)
+            .Select(x => x.AttributeName)
+            .ToHashSet();
+
+        // Load all SVA changes (single change per attribute)
+        var svaChanges = await Repository.Database.Set<PendingExportAttributeValueChange>()
+            .Where(avc => avc.PendingExportId == id && !mvaAttributeIds.Contains(avc.Attribute.Name))
+            .Include(avc => avc.Attribute)
+            .ToListAsync();
+
+        // Load capped MVA changes per attribute
+        var cappedMvaChanges = new List<PendingExportAttributeValueChange>();
+        foreach (var attrName in mvaAttributeIds)
+        {
+            var values = await Repository.Database.Set<PendingExportAttributeValueChange>()
+                .Where(avc => avc.PendingExportId == id && avc.Attribute.Name == attrName)
+                .OrderBy(avc => avc.Id)
+                .Take(PendingExportCappedMvaLimit)
+                .Include(avc => avc.Attribute)
+                .ToListAsync();
+
+            cappedMvaChanges.AddRange(values);
+        }
+
+        entity.AttributeValueChanges = svaChanges.Concat(cappedMvaChanges).ToList();
+
+        return new PendingExportDetailResult
+        {
+            PendingExport = entity,
+            AttributeChangeTotalCounts = totalCounts
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<PagedResultSet<PendingExportAttributeValueChange>> GetPendingExportAttributeChangesPagedAsync(
+        Guid pendingExportId,
+        string attributeName,
+        int page,
+        int pageSize,
+        string? searchText = null)
+    {
+        var query = Repository.Database.Set<PendingExportAttributeValueChange>()
+            .Where(avc => avc.PendingExportId == pendingExportId
+                          && avc.Attribute.Name == attributeName);
+
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            var searchPattern = $"%{searchText}%";
+            query = query.Where(avc =>
+                (avc.StringValue != null && EF.Functions.ILike(avc.StringValue, searchPattern))
+                || (avc.UnresolvedReferenceValue != null && EF.Functions.ILike(avc.UnresolvedReferenceValue, searchPattern)));
+        }
+
+        var totalCount = await query.CountAsync();
+
+        if (page < 1) page = 1;
+        if (pageSize > 100) pageSize = 100;
+
+        var offset = (page - 1) * pageSize;
+        var items = await query
+            .OrderBy(avc => avc.Id)
+            .Skip(offset)
+            .Take(pageSize)
+            .Include(avc => avc.Attribute)
+            .ToListAsync();
+
+        return new PagedResultSet<PendingExportAttributeValueChange>
+        {
+            PageSize = pageSize,
+            TotalResults = totalCount,
+            CurrentPage = page,
+            Results = items
+        };
+    }
+
     public async Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
     {
         return await Repository.Database.PendingExports

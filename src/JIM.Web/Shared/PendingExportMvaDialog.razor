@@ -1,0 +1,156 @@
+@using JIM.Models.Transactional
+@using JIM.Utilities
+@inject IJimApplicationFactory JimFactory
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body1" Class="mb-3 mud-text-secondary">
+            @TotalCount.ToString("N0") changes
+        </MudText>
+        <MudTable @ref="_table" T="PendingExportAttributeValueChange"
+                  ServerData="ServerReloadAsync"
+                  Dense="true" Hover="true" Elevation="0" Outlined="true"
+                  FixedHeader="true" Height="400px"
+                  Loading="@_loading" LoadingProgressColor="Color.Primary">
+            <ToolBarContent>
+                <MudTextField T="string" Value="@_searchText"
+                              ValueChanged="@OnSearch"
+                              Placeholder="@($"Search {AttributeName.ToLower()}...")"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              Immediate="true" DebounceInterval="300"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh>Change Type</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Value</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Change Type">
+                    <MudChip T="string" Variant="Variant.Text" Color="GetChangeTypeColor(context.ChangeType)">
+                        @context.ChangeType
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Variant="Variant.Text" Color="GetStatusColor(context.Status)">
+                        @context.Status.ToString().SplitOnCapitalLetters()
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Value">@GetValueText(context)</MudTd>
+            </RowTemplate>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
+        </MudTable>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public string AttributeName { get; set; } = string.Empty;
+
+    [Parameter]
+    public Guid PendingExportId { get; set; }
+
+    [Parameter]
+    public int TotalCount { get; set; }
+
+    private MudTable<PendingExportAttributeValueChange>? _table;
+    private string _searchText = string.Empty;
+    private bool _loading;
+
+    private async Task<TableData<PendingExportAttributeValueChange>> ServerReloadAsync(
+        TableState state, CancellationToken token)
+    {
+        _loading = true;
+
+        try
+        {
+            var page = state.Page + 1;
+            var pageSize = state.PageSize;
+            var searchText = string.IsNullOrWhiteSpace(_searchText) ? null : _searchText;
+
+            using var jim = JimFactory.Create();
+            var result = await jim.ConnectedSystems.GetPendingExportAttributeChangesPagedAsync(
+                PendingExportId, AttributeName, page, pageSize, searchText);
+
+            return new TableData<PendingExportAttributeValueChange>
+            {
+                Items = result.Results,
+                TotalItems = result.TotalResults
+            };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OnSearch(string text)
+    {
+        _searchText = text;
+        _table?.ReloadServerData();
+    }
+
+    private static string GetValueText(PendingExportAttributeValueChange change)
+    {
+        if (!string.IsNullOrEmpty(change.UnresolvedReferenceValue))
+            return $"[Unresolved Reference: {change.UnresolvedReferenceValue}]";
+
+        if (change.StringValue != null)
+            return change.StringValue;
+
+        if (change.DateTimeValue.HasValue)
+            return change.DateTimeValue.Value.ToFriendlyDate();
+
+        if (change.IntValue.HasValue)
+            return change.IntValue.Value.ToString();
+
+        if (change.LongValue.HasValue)
+            return change.LongValue.Value.ToString();
+
+        if (change.GuidValue.HasValue)
+            return change.GuidValue.Value.ToString();
+
+        if (change.BoolValue.HasValue)
+            return change.BoolValue.Value.ToString();
+
+        if (change.ByteValue != null)
+            return $"[Binary data: {change.ByteValue.Length} bytes]";
+
+        return "[null]";
+    }
+
+    private static MudBlazor.Color GetChangeTypeColor(PendingExportAttributeChangeType changeType)
+    {
+        return changeType switch
+        {
+            PendingExportAttributeChangeType.Add => MudBlazor.Color.Primary,
+            PendingExportAttributeChangeType.Update => MudBlazor.Color.Info,
+            PendingExportAttributeChangeType.Remove => MudBlazor.Color.Warning,
+            PendingExportAttributeChangeType.RemoveAll => MudBlazor.Color.Error,
+            _ => MudBlazor.Color.Default,
+        };
+    }
+
+    private static MudBlazor.Color GetStatusColor(PendingExportAttributeChangeStatus status)
+    {
+        return status switch
+        {
+            PendingExportAttributeChangeStatus.Pending => MudBlazor.Color.Default,
+            PendingExportAttributeChangeStatus.ExportedPendingConfirmation => MudBlazor.Color.Info,
+            PendingExportAttributeChangeStatus.ExportedNotConfirmed => MudBlazor.Color.Warning,
+            PendingExportAttributeChangeStatus.Failed => MudBlazor.Color.Error,
+            _ => MudBlazor.Color.Default,
+        };
+    }
+
+    private void Close() => MudDialog.Close();
+}
