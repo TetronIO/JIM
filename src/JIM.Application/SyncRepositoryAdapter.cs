@@ -11,46 +11,290 @@ using JIM.Models.Utility;
 namespace JIM.Application;
 
 /// <summary>
-/// Adapter that implements <see cref="ISyncRepository"/> by delegating to the existing
-/// <see cref="JimApplication"/> server methods and repository interfaces.
+/// Production implementation of <see cref="ISyncRepository"/> that composes a base data-access
+/// implementation with Application-layer business logic overrides.
 /// <para>
-/// This is the production implementation for the transitional period while sync processors
-/// are being migrated from direct <c>_jim.*</c> calls to <c>ISyncRepository</c>.
-/// It preserves all existing business logic (CSO change tracking, RPEI linking, etc.)
-/// by routing through the application-layer servers rather than bypassing them.
-/// </para>
-/// <para>
-/// In a future phase, this adapter will be replaced by a direct <c>SyncRepository</c>
-/// in JIM.PostgresData that uses raw SQL/Npgsql for all operations.
+/// Pure data-access methods (queries, simple CRUD) are delegated to the base <see cref="ISyncRepository"/>
+/// (typically <c>PostgresData.SyncRepository</c>). Methods that require business logic — RPEI linking,
+/// change tracking, caching, object matching, settings defaults, complex orchestration — are
+/// handled by this adapter through the <see cref="JimApplication"/> server layer.
 /// </para>
 /// </summary>
 public class SyncRepositoryAdapter : ISyncRepository
 {
     private readonly JimApplication _jim;
+    private readonly ISyncRepository _base;
 
-    public SyncRepositoryAdapter(JimApplication jim)
+    /// <summary>
+    /// Creates a SyncRepositoryAdapter with an explicit base data-access implementation.
+    /// Used in production when <c>PostgresData.SyncRepository</c> is available.
+    /// </summary>
+    public SyncRepositoryAdapter(JimApplication jim, ISyncRepository baseSyncRepo)
     {
         _jim = jim;
+        _base = baseSyncRepo;
     }
 
-    #region Connected System Object — Reads
+    /// <summary>
+    /// Creates a SyncRepositoryAdapter using <c>JimApplication.Repository</c> for data-access.
+    /// Used when no explicit base implementation is available (e.g., non-Worker contexts).
+    /// </summary>
+    public SyncRepositoryAdapter(JimApplication jim)
+        : this(jim, new RepositoryShim(jim))
+    {
+    }
+
+    /// <summary>
+    /// Lightweight shim that delegates <see cref="ISyncRepository"/> data-access methods
+    /// to the existing <see cref="IRepository"/> sub-repositories on JimApplication.
+    /// This exists for backward compatibility — production Worker code should use
+    /// <c>PostgresData.SyncRepository</c> as the base instead.
+    /// </summary>
+    private class RepositoryShim : ISyncRepository
+    {
+        private readonly JimApplication _jim;
+
+        public RepositoryShim(JimApplication jim) => _jim = jim;
+
+        // All methods delegate to _jim.Repository.* — this is the old adapter pattern
+        // for data-access methods only. Business-logic methods throw NotSupportedException
+        // because they should be handled by the outer SyncRepositoryAdapter.
+
+        #region CSO Reads
+        public Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId)
+            => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId);
+        public Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
+            => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectModifiedSinceCountAsync(connectedSystemId, modifiedSince);
+        public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize)
+            => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize);
+        public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize)
+            => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectsModifiedSinceAsync(connectedSystemId, modifiedSince, page, pageSize);
+        public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid csoId)
+            => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, csoId);
+        public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int attributeId, int attributeValue)
+            => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, attributeId, attributeValue);
+        public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int attributeId, string attributeValue)
+            => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, attributeId, attributeValue);
+        public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int attributeId, Guid attributeValue)
+            => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, attributeId, attributeValue);
+        public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int attributeId, long attributeValue)
+            => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, attributeId, attributeValue);
+        public Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(int connectedSystemId, int objectTypeId, string secondaryExternalIdValue)
+            => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAsync(connectedSystemId, objectTypeId, secondaryExternalIdValue);
+        public Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(int connectedSystemId, string secondaryExternalIdValue)
+            => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(connectedSystemId, secondaryExternalIdValue);
+        public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(int connectedSystemId, int attributeId, IEnumerable<string> attributeValues)
+            => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectsByAttributeValuesAsync(connectedSystemId, attributeId, attributeValues);
+        public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(int connectedSystemId, IEnumerable<string> secondaryExternalIdValues)
+            => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(connectedSystemId, secondaryExternalIdValues);
+        public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId)
+            => _jim.Repository.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeIntAsync(connectedSystemId, objectTypeId);
+        public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId)
+            => _jim.Repository.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeStringAsync(connectedSystemId, objectTypeId);
+        public Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int objectTypeId)
+            => _jim.Repository.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeGuidAsync(connectedSystemId, objectTypeId);
+        public Task<List<long>> GetAllExternalIdAttributeValuesOfTypeLongAsync(int connectedSystemId, int objectTypeId)
+            => _jim.Repository.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeLongAsync(connectedSystemId, objectTypeId);
+        public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsForReferenceResolutionAsync(IList<Guid> csoIds)
+            => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectsForReferenceResolutionAsync(csoIds);
+        public Task<Dictionary<Guid, string>> GetReferenceExternalIdsAsync(Guid csoId)
+            => _jim.Repository.ConnectedSystems.GetReferenceExternalIdsAsync(csoId);
+        public Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId)
+            => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(metaverseObjectId);
+        public Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId)
+            => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectCountByMvoAsync(connectedSystemId, metaverseObjectId);
+        #endregion
+
+        #region CSO Writes
+        public Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
+            => _jim.Repository.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjects);
+        public Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> csos, List<ActivityRunProfileExecutionItem> rpeis, Func<int, Task>? onBatchPersisted = null)
+            => _jim.Repository.ConnectedSystems.CreateConnectedSystemObjectsAsync(csos, onBatchPersisted);
+        public Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
+            => _jim.Repository.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjects);
+        public Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> csos, List<ActivityRunProfileExecutionItem> rpeis)
+            => _jim.Repository.ConnectedSystems.UpdateConnectedSystemObjectsAsync(csos);
+        public Task UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects)
+            => _jim.Repository.ConnectedSystems.UpdateConnectedSystemObjectJoinStatesAsync(connectedSystemObjects);
+        public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates)
+            => _jim.Repository.ConnectedSystems.UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(updates);
+        public Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
+            => _jim.Repository.ConnectedSystems.DeleteConnectedSystemObjectsAsync(connectedSystemObjects);
+        public Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> csos, List<ActivityRunProfileExecutionItem> rpeis)
+            => _jim.Repository.ConnectedSystems.DeleteConnectedSystemObjectsAsync(csos);
+        public Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId)
+            => _jim.Repository.ConnectedSystems.FixupCrossBatchReferenceIdsAsync(connectedSystemId);
+        #endregion
+
+        #region MVO
+        public Task<MetaverseObject?> FindMatchingMetaverseObjectAsync(ConnectedSystemObject cso, List<ObjectMatchingRule> matchingRules)
+            => throw new NotSupportedException();
+        public Task CreateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
+            => _jim.Repository.Metaverse.CreateMetaverseObjectsAsync(metaverseObjects);
+        public Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
+            => _jim.Repository.Metaverse.UpdateMetaverseObjectsAsync(metaverseObjects);
+        public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
+            => _jim.Repository.Metaverse.UpdateMetaverseObjectAsync(metaverseObject);
+        public Task DeleteMetaverseObjectAsync(MetaverseObject mvo, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, List<MetaverseObjectAttributeValue>? finalAttributeValues)
+            => throw new NotSupportedException();
+        #endregion
+
+        #region Pending Exports
+        public Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId)
+            => _jim.Repository.ConnectedSystems.GetPendingExportsAsync(connectedSystemId);
+        public Task<int> GetPendingExportsCountAsync(int connectedSystemId)
+            => _jim.Repository.ConnectedSystems.GetPendingExportsCountAsync(connectedSystemId);
+        public Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
+            => _jim.Repository.ConnectedSystems.CreatePendingExportsAsync(pendingExports);
+        public Task DeletePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
+            => _jim.Repository.ConnectedSystems.DeletePendingExportsAsync(pendingExports);
+        public Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
+            => _jim.Repository.ConnectedSystems.UpdatePendingExportsAsync(pendingExports);
+        public Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
+            => _jim.Repository.ConnectedSystems.DeletePendingExportsByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
+        public Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
+            => _jim.Repository.ConnectedSystems.GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObjectId);
+        public Task<Dictionary<Guid, PendingExport>> GetPendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
+            => _jim.Repository.ConnectedSystems.GetPendingExportsByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
+        public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
+            => _jim.Repository.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
+        public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId)
+            => _jim.Repository.ConnectedSystems.GetCsoIdsWithPendingExportsByConnectedSystemAsync(connectedSystemId);
+        public Task DeleteUntrackedPendingExportsAsync(IEnumerable<PendingExport> untrackedPendingExports)
+            => _jim.Repository.ConnectedSystems.DeleteUntrackedPendingExportsAsync(untrackedPendingExports);
+        public Task DeleteUntrackedPendingExportAttributeValueChangesAsync(IEnumerable<PendingExportAttributeValueChange> untrackedAttributeValueChanges)
+            => _jim.Repository.ConnectedSystems.DeleteUntrackedPendingExportAttributeValueChangesAsync(untrackedAttributeValueChanges);
+        public Task UpdateUntrackedPendingExportsAsync(IEnumerable<PendingExport> untrackedPendingExports)
+            => _jim.Repository.ConnectedSystems.UpdateUntrackedPendingExportsAsync(untrackedPendingExports);
+        #endregion
+
+        #region Activity and RPEIs
+        public Task UpdateActivityAsync(Activity activity)
+            => _jim.Repository.Activity.UpdateActivityAsync(activity);
+        public Task UpdateActivityMessageAsync(Activity activity, string message)
+            => throw new NotSupportedException();
+        public Task UpdateActivityProgressOutOfBandAsync(Activity activity)
+            => _jim.Repository.Activity.UpdateActivityProgressOutOfBandAsync(activity);
+        public Task FailActivityWithErrorAsync(Activity activity, string errorMessage)
+            => throw new NotSupportedException();
+        public Task FailActivityWithErrorAsync(Activity activity, Exception exception)
+            => throw new NotSupportedException();
+        public Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis)
+            => _jim.Repository.Activity.BulkInsertRpeisAsync(rpeis);
+        public Task BulkUpdateRpeiOutcomesAsync(List<ActivityRunProfileExecutionItem> rpeis, List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes)
+            => _jim.Repository.Activity.BulkUpdateRpeiOutcomesAsync(rpeis, newOutcomes);
+        public void DetachRpeisFromChangeTracker(List<ActivityRunProfileExecutionItem> rpeis)
+            => _jim.Repository.Activity.DetachRpeisFromChangeTracker(rpeis);
+        public Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId)
+            => _jim.Repository.Activity.GetActivityRpeiErrorCountsAsync(activityId);
+        public Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis)
+            => _jim.Repository.Activity.PersistRpeiCsoChangesAsync(rpeis);
+        #endregion
+
+        #region Sync Rules and Configuration
+        public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabled)
+            => _jim.Repository.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, includeDisabled);
+        public Task<List<SyncRule>> GetAllSyncRulesAsync()
+            => _jim.Repository.ConnectedSystems.GetSyncRulesAsync();
+        public Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId)
+            => _jim.Repository.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);
+        public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem)
+            => _jim.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        #endregion
+
+        #region Settings
+        public Task<int> GetSyncPageSizeAsync() => throw new NotSupportedException();
+        public Task<ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel> GetSyncOutcomeTrackingLevelAsync() => throw new NotSupportedException();
+        public Task<bool> GetCsoChangeTrackingEnabledAsync() => throw new NotSupportedException();
+        public Task<bool> GetMvoChangeTrackingEnabledAsync() => throw new NotSupportedException();
+        #endregion
+
+        #region Change Tracker Management
+        public void ClearChangeTracker() => _jim.Repository.ClearChangeTracker();
+        public void SetAutoDetectChangesEnabled(bool enabled) => _jim.Repository.SetAutoDetectChangesEnabled(enabled);
+        #endregion
+
+        #region CSO Lookup Cache
+        public void AddCsoToCache(int connectedSystemId, int externalIdAttributeId, string externalIdValue, Guid csoId) { }
+        public void EvictCsoFromCache(int connectedSystemId, int externalIdAttributeId, string externalIdValue) { }
+        #endregion
+
+        #region Connected System Operations
+        public Task RefreshAndAutoSelectContainersWithTriadAsync(ConnectedSystem cs, IConnector connector, IReadOnlyList<string> createdContainerExternalIds, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, Activity? parentActivity = null)
+            => throw new NotSupportedException();
+        public Task UpdateConnectedSystemWithTriadAsync(ConnectedSystem cs, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName)
+            => throw new NotSupportedException();
+        #endregion
+
+        #region MVO Change History
+        public Task CreateMetaverseObjectChangeDirectAsync(MetaverseObjectChange change)
+            => _jim.Repository.Metaverse.CreateMetaverseObjectChangeDirectAsync(change);
+        #endregion
+
+        #region Singular Convenience Methods
+        public Task CreateConnectedSystemObjectAsync(ConnectedSystemObject cso)
+            => _jim.Repository.ConnectedSystems.CreateConnectedSystemObjectAsync(cso);
+        public Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject cso)
+            => _jim.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(cso);
+        public Task UpdateConnectedSystemObjectWithNewAttributeValuesAsync(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)
+            => _jim.Repository.ConnectedSystems.UpdateConnectedSystemObjectWithNewAttributeValuesAsync(cso, newAttributeValues);
+        public Task CreatePendingExportAsync(PendingExport pe) => _jim.Repository.ConnectedSystems.CreatePendingExportAsync(pe);
+        public Task DeletePendingExportAsync(PendingExport pe) => _jim.Repository.ConnectedSystems.DeletePendingExportAsync(pe);
+        public Task UpdatePendingExportAsync(PendingExport pe) => _jim.Repository.ConnectedSystems.UpdatePendingExportAsync(pe);
+        #endregion
+
+        #region Export Evaluation Support
+        public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId)
+            => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdAsync(metaverseObjectId);
+        public Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByTargetSystemsAsync(IEnumerable<int> targetConnectedSystemIds)
+            => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectsByTargetSystemsAsync(targetConnectedSystemIds);
+        public Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesByCsoIdsAsync(IEnumerable<Guid> csoIds)
+            => _jim.Repository.ConnectedSystems.GetCsoAttributeValuesByCsoIdsAsync(csoIds);
+        public Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId)
+            => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectByMetaverseObjectIdAsync(metaverseObjectId, connectedSystemId);
+        public Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(IEnumerable<Guid> metaverseObjectIds, int connectedSystemId)
+            => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
+        public Task<ConnectedSystemObjectTypeAttribute?> GetAttributeAsync(int id)
+            => _jim.Repository.ConnectedSystems.GetAttributeAsync(id);
+        public Task<Dictionary<int, ConnectedSystemObjectTypeAttribute>> GetAttributesByIdsAsync(IEnumerable<int> ids)
+            => _jim.Repository.ConnectedSystems.GetAttributesByIdsAsync(ids);
+        public Task<ConnectedSystemObject?> FindMatchingConnectedSystemObjectAsync(MetaverseObject mvo, ConnectedSystem cs, ConnectedSystemObjectType csot, List<ObjectMatchingRule> matchingRules)
+            => throw new NotSupportedException();
+        #endregion
+
+        #region Export Execution Support
+        public Task<int> GetExecutableExportCountAsync(int connectedSystemId)
+            => _jim.Repository.ConnectedSystems.GetExecutableExportCountAsync(connectedSystemId);
+        public Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId)
+            => _jim.Repository.ConnectedSystems.GetExecutableExportsAsync(connectedSystemId);
+        public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take)
+            => _jim.Repository.ConnectedSystems.GetExecutableExportBatchAsync(connectedSystemId, skip, take);
+        public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
+            => _jim.Repository.ConnectedSystems.MarkPendingExportsAsExecutingAsync(pendingExports);
+        public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds)
+            => _jim.Repository.ConnectedSystems.GetPendingExportsByIdsAsync(pendingExportIds);
+        #endregion
+    }
+
+    #region Connected System Object — Reads (delegated to base, except cached lookups)
 
     public Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId)
-        => _jim.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId);
+        => _base.GetConnectedSystemObjectCountAsync(connectedSystemId);
 
     public Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
-        => _jim.ConnectedSystems.GetConnectedSystemObjectModifiedSinceCountAsync(connectedSystemId, modifiedSince);
+        => _base.GetConnectedSystemObjectModifiedSinceCountAsync(connectedSystemId, modifiedSince);
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize)
-        => _jim.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize);
+        => _base.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize);
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
         int connectedSystemId, DateTime modifiedSince, int page, int pageSize)
-        => _jim.ConnectedSystems.GetConnectedSystemObjectsModifiedSinceAsync(connectedSystemId, modifiedSince, page, pageSize);
+        => _base.GetConnectedSystemObjectsModifiedSinceAsync(connectedSystemId, modifiedSince, page, pageSize);
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid csoId)
-        => _jim.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, csoId);
+        => _base.GetConnectedSystemObjectAsync(connectedSystemId, csoId);
 
+    // Business logic: CSO lookup caching
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int attributeId, int attributeValue)
         => _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, attributeId, attributeValue);
 
@@ -63,53 +307,55 @@ public class SyncRepositoryAdapter : ISyncRepository
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int attributeId, long attributeValue)
         => _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, attributeId, attributeValue);
 
+    // Business logic: conditional caching
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(
         int connectedSystemId, int objectTypeId, string secondaryExternalIdValue)
         => _jim.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAsync(connectedSystemId, objectTypeId, secondaryExternalIdValue);
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(
         int connectedSystemId, string secondaryExternalIdValue)
-        => _jim.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(connectedSystemId, secondaryExternalIdValue);
+        => _base.GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(connectedSystemId, secondaryExternalIdValue);
 
     public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(
         int connectedSystemId, int attributeId, IEnumerable<string> attributeValues)
-        => _jim.ConnectedSystems.GetConnectedSystemObjectsByAttributeValuesAsync(connectedSystemId, attributeId, attributeValues);
+        => _base.GetConnectedSystemObjectsByAttributeValuesAsync(connectedSystemId, attributeId, attributeValues);
 
     public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(
         int connectedSystemId, IEnumerable<string> secondaryExternalIdValues)
-        => _jim.ConnectedSystems.GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(connectedSystemId, secondaryExternalIdValues);
+        => _base.GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(connectedSystemId, secondaryExternalIdValues);
 
     public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId)
-        => _jim.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeIntAsync(connectedSystemId, objectTypeId);
+        => _base.GetAllExternalIdAttributeValuesOfTypeIntAsync(connectedSystemId, objectTypeId);
 
     public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId)
-        => _jim.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeStringAsync(connectedSystemId, objectTypeId);
+        => _base.GetAllExternalIdAttributeValuesOfTypeStringAsync(connectedSystemId, objectTypeId);
 
     public Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int objectTypeId)
-        => _jim.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeGuidAsync(connectedSystemId, objectTypeId);
+        => _base.GetAllExternalIdAttributeValuesOfTypeGuidAsync(connectedSystemId, objectTypeId);
 
     public Task<List<long>> GetAllExternalIdAttributeValuesOfTypeLongAsync(int connectedSystemId, int objectTypeId)
-        => _jim.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeLongAsync(connectedSystemId, objectTypeId);
+        => _base.GetAllExternalIdAttributeValuesOfTypeLongAsync(connectedSystemId, objectTypeId);
 
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsForReferenceResolutionAsync(IList<Guid> csoIds)
-        => _jim.ConnectedSystems.GetConnectedSystemObjectsForReferenceResolutionAsync(csoIds);
+        => _base.GetConnectedSystemObjectsForReferenceResolutionAsync(csoIds);
 
     public Task<Dictionary<Guid, string>> GetReferenceExternalIdsAsync(Guid csoId)
-        => _jim.ConnectedSystems.GetReferenceExternalIdsAsync(csoId);
+        => _base.GetReferenceExternalIdsAsync(csoId);
 
     public Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId)
-        => _jim.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(metaverseObjectId);
+        => _base.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(metaverseObjectId);
 
     public Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId)
-        => _jim.ConnectedSystems.GetConnectedSystemObjectCountByMvoAsync(connectedSystemId, metaverseObjectId);
+        => _base.GetConnectedSystemObjectCountByMvoAsync(connectedSystemId, metaverseObjectId);
 
     #endregion
 
     #region Connected System Object — Writes
 
     public Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
-        => _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjects);
+        => _base.CreateConnectedSystemObjectsAsync(connectedSystemObjects);
 
+    // Business logic: RPEI linking + change tracking
     public Task CreateConnectedSystemObjectsAsync(
         List<ConnectedSystemObject> connectedSystemObjects,
         List<ActivityRunProfileExecutionItem> rpeis,
@@ -117,35 +363,38 @@ public class SyncRepositoryAdapter : ISyncRepository
         => _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjects, rpeis, onBatchPersisted);
 
     public Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
-        => _jim.Repository.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjects);
+        => _base.UpdateConnectedSystemObjectsAsync(connectedSystemObjects);
 
+    // Business logic: RPEI linking + change tracking
     public Task UpdateConnectedSystemObjectsAsync(
         List<ConnectedSystemObject> connectedSystemObjects,
         List<ActivityRunProfileExecutionItem> rpeis)
         => _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjects, rpeis);
 
     public Task UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects)
-        => _jim.ConnectedSystems.UpdateConnectedSystemObjectJoinStatesAsync(connectedSystemObjects);
+        => _base.UpdateConnectedSystemObjectJoinStatesAsync(connectedSystemObjects);
 
     public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(
         List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates)
-        => _jim.Repository.ConnectedSystems.UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(updates);
+        => _base.UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(updates);
 
     public Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
-        => _jim.ConnectedSystems.DeleteConnectedSystemObjectsAsync(connectedSystemObjects);
+        => _base.DeleteConnectedSystemObjectsAsync(connectedSystemObjects);
 
+    // Business logic: attribute snapshot capture on RPEIs before deletion
     public Task DeleteConnectedSystemObjectsAsync(
         List<ConnectedSystemObject> connectedSystemObjects,
         List<ActivityRunProfileExecutionItem> rpeis)
         => _jim.ConnectedSystems.DeleteConnectedSystemObjectsAsync(connectedSystemObjects, rpeis);
 
     public Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId)
-        => _jim.ConnectedSystems.FixupCrossBatchReferenceIdsAsync(connectedSystemId);
+        => _base.FixupCrossBatchReferenceIdsAsync(connectedSystemId);
 
     #endregion
 
     #region Metaverse Object — Reads
 
+    // Business logic: matching rule evaluation
     public Task<MetaverseObject?> FindMatchingMetaverseObjectAsync(ConnectedSystemObject cso, List<ObjectMatchingRule> matchingRules)
         => _jim.ObjectMatching.FindMatchingMetaverseObjectAsync(cso, matchingRules);
 
@@ -154,14 +403,16 @@ public class SyncRepositoryAdapter : ISyncRepository
     #region Metaverse Object — Writes
 
     public Task CreateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
-        => _jim.Metaverse.CreateMetaverseObjectsAsync(metaverseObjects);
+        => _base.CreateMetaverseObjectsAsync(metaverseObjects);
 
     public Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
-        => _jim.Metaverse.UpdateMetaverseObjectsAsync(metaverseObjects);
+        => _base.UpdateMetaverseObjectsAsync(metaverseObjects);
 
+    // Business logic: MVO change tracking
     public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
         => _jim.Metaverse.UpdateMetaverseObjectAsync(metaverseObject);
 
+    // Business logic: cascade deletion + change tracking
     public Task DeleteMetaverseObjectAsync(
         MetaverseObject metaverseObject,
         ActivityInitiatorType initiatorType,
@@ -175,100 +426,104 @@ public class SyncRepositoryAdapter : ISyncRepository
     #region Pending Exports
 
     public Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId)
-        => _jim.ConnectedSystems.GetPendingExportsAsync(connectedSystemId);
+        => _base.GetPendingExportsAsync(connectedSystemId);
 
     public Task<int> GetPendingExportsCountAsync(int connectedSystemId)
-        => _jim.ConnectedSystems.GetPendingExportsCountAsync(connectedSystemId);
+        => _base.GetPendingExportsCountAsync(connectedSystemId);
 
     public Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
-        => _jim.ConnectedSystems.CreatePendingExportsAsync(pendingExports);
+        => _base.CreatePendingExportsAsync(pendingExports);
 
     public Task DeletePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
-        => _jim.ConnectedSystems.DeletePendingExportsAsync(pendingExports);
+        => _base.DeletePendingExportsAsync(pendingExports);
 
     public Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
-        => _jim.ConnectedSystems.UpdatePendingExportsAsync(pendingExports);
+        => _base.UpdatePendingExportsAsync(pendingExports);
 
     public Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
-        => _jim.ConnectedSystems.DeletePendingExportsByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
+        => _base.DeletePendingExportsByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
 
     public Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
-        => _jim.Repository.ConnectedSystems.GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObjectId);
+        => _base.GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObjectId);
 
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
-        => _jim.Repository.ConnectedSystems.GetPendingExportsByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
+        => _base.GetPendingExportsByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
 
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
-        => _jim.Repository.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
+        => _base.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
 
     public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId)
-        => _jim.Repository.ConnectedSystems.GetCsoIdsWithPendingExportsByConnectedSystemAsync(connectedSystemId);
+        => _base.GetCsoIdsWithPendingExportsByConnectedSystemAsync(connectedSystemId);
 
     public Task DeleteUntrackedPendingExportsAsync(IEnumerable<PendingExport> untrackedPendingExports)
-        => _jim.Repository.ConnectedSystems.DeleteUntrackedPendingExportsAsync(untrackedPendingExports);
+        => _base.DeleteUntrackedPendingExportsAsync(untrackedPendingExports);
 
     public Task DeleteUntrackedPendingExportAttributeValueChangesAsync(IEnumerable<PendingExportAttributeValueChange> untrackedAttributeValueChanges)
-        => _jim.Repository.ConnectedSystems.DeleteUntrackedPendingExportAttributeValueChangesAsync(untrackedAttributeValueChanges);
+        => _base.DeleteUntrackedPendingExportAttributeValueChangesAsync(untrackedAttributeValueChanges);
 
     public Task UpdateUntrackedPendingExportsAsync(IEnumerable<PendingExport> untrackedPendingExports)
-        => _jim.Repository.ConnectedSystems.UpdateUntrackedPendingExportsAsync(untrackedPendingExports);
+        => _base.UpdateUntrackedPendingExportsAsync(untrackedPendingExports);
 
     #endregion
 
     #region Activity and RPEIs
 
     public Task UpdateActivityAsync(Activity activity)
-        => _jim.Activities.UpdateActivityAsync(activity);
+        => _base.UpdateActivityAsync(activity);
 
+    // Business logic: sets message then persists
     public Task UpdateActivityMessageAsync(Activity activity, string message)
         => _jim.Activities.UpdateActivityMessageAsync(activity, message);
 
     public Task UpdateActivityProgressOutOfBandAsync(Activity activity)
-        => _jim.Activities.UpdateActivityProgressOutOfBandAsync(activity);
+        => _base.UpdateActivityProgressOutOfBandAsync(activity);
 
+    // Business logic: timing calculation + error formatting
     public Task FailActivityWithErrorAsync(Activity activity, string errorMessage)
         => _jim.Activities.FailActivityWithErrorAsync(activity, errorMessage);
 
+    // Business logic: exception unwrapping + timing + stack trace capture
     public Task FailActivityWithErrorAsync(Activity activity, Exception exception)
         => _jim.Activities.FailActivityWithErrorAsync(activity, exception);
 
     public Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis)
-        => _jim.Activities.BulkInsertRpeisAsync(rpeis);
+        => _base.BulkInsertRpeisAsync(rpeis);
 
     public Task BulkUpdateRpeiOutcomesAsync(
         List<ActivityRunProfileExecutionItem> rpeis,
         List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes)
-        => _jim.Activities.BulkUpdateRpeiOutcomesAsync(rpeis, newOutcomes);
+        => _base.BulkUpdateRpeiOutcomesAsync(rpeis, newOutcomes);
 
     public void DetachRpeisFromChangeTracker(List<ActivityRunProfileExecutionItem> rpeis)
-        => _jim.Activities.DetachRpeisFromChangeTracker(rpeis);
+        => _base.DetachRpeisFromChangeTracker(rpeis);
 
     public Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId)
-        => _jim.Activities.GetActivityRpeiErrorCountsAsync(activityId);
+        => _base.GetActivityRpeiErrorCountsAsync(activityId);
 
     public Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis)
-        => _jim.Activities.PersistRpeiCsoChangesAsync(rpeis);
+        => _base.PersistRpeiCsoChangesAsync(rpeis);
 
     #endregion
 
     #region Sync Rules and Configuration
 
     public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabled)
-        => _jim.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, includeDisabled);
+        => _base.GetSyncRulesAsync(connectedSystemId, includeDisabled);
 
     public Task<List<SyncRule>> GetAllSyncRulesAsync()
-        => _jim.ConnectedSystems.GetSyncRulesAsync();
+        => _base.GetAllSyncRulesAsync();
 
     public Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId)
-        => _jim.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);
+        => _base.GetObjectTypesAsync(connectedSystemId);
 
     public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem)
-        => _jim.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        => _base.UpdateConnectedSystemAsync(connectedSystem);
 
     #endregion
 
     #region Settings
 
+    // Business logic: setting defaults and type conversion
     public Task<int> GetSyncPageSizeAsync()
         => _jim.ServiceSettings.GetSyncPageSizeAsync();
 
@@ -286,15 +541,16 @@ public class SyncRepositoryAdapter : ISyncRepository
     #region Change Tracker Management
 
     public void ClearChangeTracker()
-        => _jim.Repository.ClearChangeTracker();
+        => _base.ClearChangeTracker();
 
     public void SetAutoDetectChangesEnabled(bool enabled)
-        => _jim.Repository.SetAutoDetectChangesEnabled(enabled);
+        => _base.SetAutoDetectChangesEnabled(enabled);
 
     #endregion
 
     #region CSO Lookup Cache
 
+    // Business logic: cache management
     public void AddCsoToCache(int connectedSystemId, int externalIdAttributeId, string externalIdValue, Guid csoId)
         => _jim.ConnectedSystems.AddCsoToCache(connectedSystemId, externalIdAttributeId, externalIdValue, csoId);
 
@@ -305,6 +561,7 @@ public class SyncRepositoryAdapter : ISyncRepository
 
     #region Connected System Operations
 
+    // Business logic: container hierarchy, partition management, activity tracking
     public Task RefreshAndAutoSelectContainersWithTriadAsync(
         ConnectedSystem connectedSystem,
         IConnector connector,
@@ -317,6 +574,7 @@ public class SyncRepositoryAdapter : ISyncRepository
             connectedSystem, connector, createdContainerExternalIds,
             initiatorType, initiatorId, initiatorName, parentActivity);
 
+    // Business logic: validation, audit tracking, activity creation
     public Task UpdateConnectedSystemWithTriadAsync(
         ConnectedSystem connectedSystem,
         ActivityInitiatorType initiatorType,
@@ -330,64 +588,64 @@ public class SyncRepositoryAdapter : ISyncRepository
     #region MVO Change History
 
     public Task CreateMetaverseObjectChangeDirectAsync(MetaverseObjectChange change)
-        => _jim.Repository.Metaverse.CreateMetaverseObjectChangeDirectAsync(change);
+        => _base.CreateMetaverseObjectChangeDirectAsync(change);
 
     #endregion
 
     #region Connected System Object — Singular Convenience Methods
 
     public Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
-        => _jim.Repository.ConnectedSystems.CreateConnectedSystemObjectAsync(connectedSystemObject);
+        => _base.CreateConnectedSystemObjectAsync(connectedSystemObject);
 
     public Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
-        => _jim.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(connectedSystemObject);
+        => _base.UpdateConnectedSystemObjectAsync(connectedSystemObject);
 
     public Task UpdateConnectedSystemObjectWithNewAttributeValuesAsync(
         ConnectedSystemObject connectedSystemObject,
         List<ConnectedSystemObjectAttributeValue> newAttributeValues)
-        => _jim.Repository.ConnectedSystems.UpdateConnectedSystemObjectWithNewAttributeValuesAsync(
-            connectedSystemObject, newAttributeValues);
+        => _base.UpdateConnectedSystemObjectWithNewAttributeValuesAsync(connectedSystemObject, newAttributeValues);
 
     #endregion
 
     #region Pending Export — Singular Convenience Methods
 
     public Task CreatePendingExportAsync(PendingExport pendingExport)
-        => _jim.Repository.ConnectedSystems.CreatePendingExportAsync(pendingExport);
+        => _base.CreatePendingExportAsync(pendingExport);
 
     public Task DeletePendingExportAsync(PendingExport pendingExport)
-        => _jim.Repository.ConnectedSystems.DeletePendingExportAsync(pendingExport);
+        => _base.DeletePendingExportAsync(pendingExport);
 
     public Task UpdatePendingExportAsync(PendingExport pendingExport)
-        => _jim.Repository.ConnectedSystems.UpdatePendingExportAsync(pendingExport);
+        => _base.UpdatePendingExportAsync(pendingExport);
 
     #endregion
 
     #region Export Evaluation Support
 
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId)
-        => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdAsync(metaverseObjectId);
+        => _base.GetConnectedSystemObjectsByMetaverseObjectIdAsync(metaverseObjectId);
 
     public Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByTargetSystemsAsync(
         IEnumerable<int> targetConnectedSystemIds)
-        => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectsByTargetSystemsAsync(targetConnectedSystemIds);
+        => _base.GetConnectedSystemObjectsByTargetSystemsAsync(targetConnectedSystemIds);
 
     public Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesByCsoIdsAsync(IEnumerable<Guid> csoIds)
-        => _jim.Repository.ConnectedSystems.GetCsoAttributeValuesByCsoIdsAsync(csoIds);
+        => _base.GetCsoAttributeValuesByCsoIdsAsync(csoIds);
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId)
-        => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectByMetaverseObjectIdAsync(metaverseObjectId, connectedSystemId);
+        => _base.GetConnectedSystemObjectByMetaverseObjectIdAsync(metaverseObjectId, connectedSystemId);
 
     public Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
         IEnumerable<Guid> metaverseObjectIds, int connectedSystemId)
-        => _jim.Repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
+        => _base.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
 
     public Task<ConnectedSystemObjectTypeAttribute?> GetAttributeAsync(int id)
-        => _jim.Repository.ConnectedSystems.GetAttributeAsync(id);
+        => _base.GetAttributeAsync(id);
 
     public Task<Dictionary<int, ConnectedSystemObjectTypeAttribute>> GetAttributesByIdsAsync(IEnumerable<int> ids)
-        => _jim.Repository.ConnectedSystems.GetAttributesByIdsAsync(ids);
+        => _base.GetAttributesByIdsAsync(ids);
 
+    // Business logic: matching rule evaluation
     public Task<ConnectedSystemObject?> FindMatchingConnectedSystemObjectAsync(
         MetaverseObject metaverseObject,
         ConnectedSystem connectedSystem,
@@ -401,19 +659,19 @@ public class SyncRepositoryAdapter : ISyncRepository
     #region Export Execution Support
 
     public Task<int> GetExecutableExportCountAsync(int connectedSystemId)
-        => _jim.Repository.ConnectedSystems.GetExecutableExportCountAsync(connectedSystemId);
+        => _base.GetExecutableExportCountAsync(connectedSystemId);
 
     public Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId)
-        => _jim.Repository.ConnectedSystems.GetExecutableExportsAsync(connectedSystemId);
+        => _base.GetExecutableExportsAsync(connectedSystemId);
 
     public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take)
-        => _jim.Repository.ConnectedSystems.GetExecutableExportBatchAsync(connectedSystemId, skip, take);
+        => _base.GetExecutableExportBatchAsync(connectedSystemId, skip, take);
 
     public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
-        => _jim.Repository.ConnectedSystems.MarkPendingExportsAsExecutingAsync(pendingExports);
+        => _base.MarkPendingExportsAsExecutingAsync(pendingExports);
 
     public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds)
-        => _jim.Repository.ConnectedSystems.GetPendingExportsByIdsAsync(pendingExportIds);
+        => _base.GetPendingExportsByIdsAsync(pendingExportIds);
 
     #endregion
 }
