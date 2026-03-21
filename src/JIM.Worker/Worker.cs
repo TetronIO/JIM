@@ -192,8 +192,7 @@ public class Worker : BackgroundService
                             // we can't use the main-loop instance, due to Entity Framework having connection sharing issues.
                             // IMPORTANT: taskJim must be disposed to release database connections and prevent deadlocks.
                             using var taskJim = _jimFactory.Create();
-                            var baseSyncRepo = new JIM.PostgresData.SyncRepository((JIM.PostgresData.PostgresDataRepository)taskJim.Repository);
-                            var syncRepo = new JIM.Application.SyncRepositoryAdapter(taskJim, baseSyncRepo);
+                            var syncRepo = new JIM.Application.SyncRepositoryAdapter(taskJim);
                             var syncServer = new JIM.Application.Servers.SyncServer(taskJim);
 
                             // we want to re-retrieve the worker task using this instance of JIM, so there's no chance of any cross-JIM-instance issues
@@ -312,12 +311,7 @@ public class Worker : BackgroundService
                                                         case ConnectedSystemRunType.Export:
                                                         {
                                                             var syncExportTaskProcessor = new SyncExportTaskProcessor(syncServer, syncRepo, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource,
-                                                                                        syncRepoFactory: () =>
-                                                                                        {
-                                                                                            var exportJim = _jimFactory.Create();
-                                                                                            var exportBaseSyncRepo = new JIM.PostgresData.SyncRepository((JIM.PostgresData.PostgresDataRepository)exportJim.Repository);
-                                                                                            return new JIM.Application.SyncRepositoryAdapter(exportJim, exportBaseSyncRepo);
-                                                                                        });
+                                                                                        syncRepoFactory: () => new JIM.Application.SyncRepositoryAdapter(_jimFactory.Create()));
                                                             await syncExportTaskProcessor.PerformExportAsync();
                                                             break;
                                                         }
