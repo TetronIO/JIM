@@ -198,6 +198,14 @@ public interface ISyncRepository
     /// </summary>
     Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId);
 
+    /// <summary>
+    /// Resolves cross-batch reference values in CSO change records (ConnectedSystemObjectChangeAttributeValues)
+    /// that were nulled during COPY binary persistence to avoid FK violations. The DN string is preserved
+    /// in StringValue and is matched against the secondary external ID attribute values of CSOs in the
+    /// same connected system using case-insensitive comparison.
+    /// </summary>
+    Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId);
+
     #endregion
 
     #region Object Matching — Data Access

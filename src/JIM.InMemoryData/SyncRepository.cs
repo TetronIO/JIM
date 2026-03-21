@@ -531,6 +531,47 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(resolved);
     }
 
+    public Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId)
+    {
+        // Build a lookup of secondary external ID values → CSO for the connected system
+        var secondaryIdLookup = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+        foreach (var cso in GetCsosForSystem(connectedSystemId))
+        {
+            foreach (var av in cso.AttributeValues)
+            {
+                if (av.Attribute?.IsSecondaryExternalId == true && av.StringValue != null)
+                    secondaryIdLookup.TryAdd(av.StringValue, cso);
+            }
+        }
+
+        var resolved = 0;
+
+        // Iterate all RPEIs and resolve change record attribute values
+        foreach (var rpei in _rpeis.Values)
+        {
+            var change = rpei.ConnectedSystemObjectChange;
+            if (change == null || change.ConnectedSystemId != connectedSystemId)
+                continue;
+
+            foreach (var attrChange in change.AttributeChanges)
+            {
+                foreach (var valueChange in attrChange.ValueChanges)
+                {
+                    if (valueChange.ReferenceValue != null || valueChange.StringValue == null)
+                        continue;
+
+                    if (secondaryIdLookup.TryGetValue(valueChange.StringValue, out var targetCso))
+                    {
+                        valueChange.ReferenceValue = targetCso;
+                        resolved++;
+                    }
+                }
+            }
+        }
+
+        return Task.FromResult(resolved);
+    }
+
     #endregion
 
     #region Metaverse Object — Reads

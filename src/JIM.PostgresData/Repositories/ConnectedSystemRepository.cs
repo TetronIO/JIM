@@ -1578,6 +1578,50 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }
     }
 
+    public async Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId)
+    {
+        // Change record attribute values (ConnectedSystemObjectChangeAttributeValues) store reference
+        // DN strings in StringValue but have ReferenceValueId nulled during COPY binary persistence
+        // to avoid FK violations when the referenced CSO is in a later batch. After all batches
+        // complete, this method resolves those references by matching StringValue against the
+        // secondary external ID attribute values of CSOs in the same connected system.
+        //
+        // Unlike the CSO attribute value fixup, there is no dedicated "UnresolvedReferenceValue"
+        // column on change records — the DN is stored in StringValue alongside regular string values.
+        // The UPDATE is safe because it only matches when StringValue equals a secondary external ID
+        // value (case-insensitive), so non-reference string values are naturally excluded by the JOIN.
+        //
+        // Uses case-insensitive LOWER() comparison because LDAP Distinguished Names are
+        // case-insensitive per RFC 4514.
+        var previousTimeout = Repository.Database.Database.GetCommandTimeout();
+        Repository.Database.Database.SetCommandTimeout(300);
+        try
+        {
+            return await Repository.Database.Database.ExecuteSqlRawAsync(
+                """
+                UPDATE "ConnectedSystemObjectChangeAttributeValues" cav
+                SET "ReferenceValueId" = target_cso."Id"
+                FROM "ConnectedSystemObjectChangeAttributes" ca
+                JOIN "ConnectedSystemObjectChanges" cc ON cc."Id" = ca."ConnectedSystemChangeId"
+                JOIN "ConnectedSystemObjects" target_cso ON target_cso."ConnectedSystemId" = {0}
+                JOIN "ConnectedSystemObjectAttributeValues" target_av ON target_av."ConnectedSystemObjectId" = target_cso."Id"
+                JOIN "ConnectedSystemAttributes" target_attr ON target_attr."Id" = target_av."AttributeId"
+                    AND target_attr."IsSecondaryExternalId" = true
+                WHERE cc."ConnectedSystemId" = {0}
+                  AND cav."ConnectedSystemObjectChangeAttributeId" = ca."Id"
+                  AND cav."StringValue" IS NOT NULL
+                  AND cav."ReferenceValueId" IS NULL
+                  AND target_av."StringValue" IS NOT NULL
+                  AND LOWER(cav."StringValue") = LOWER(target_av."StringValue")
+                """,
+                connectedSystemId);
+        }
+        finally
+        {
+            Repository.Database.Database.SetCommandTimeout(previousTimeout);
+        }
+    }
+
     public async Task<int> GetUnresolvedReferenceCountAsync(int connectedSystemId)
     {
         // Use raw SQL with a JOIN for performance — the EF subquery approach times out on large datasets

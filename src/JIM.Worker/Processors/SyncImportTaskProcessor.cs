@@ -419,6 +419,10 @@ public class SyncImportTaskProcessor
             if (crossBatchFixed > 0)
                 Log.Information("PerformFullImportAsync: Fixed up {Count} cross-batch reference FKs after all create batches completed.", crossBatchFixed);
 
+            var changeRecordFixed = await _syncRepo.FixupCrossBatchChangeRecordReferenceIdsAsync(_connectedSystem.Id);
+            if (changeRecordFixed > 0)
+                Log.Information("PerformFullImportAsync: Fixed up {Count} cross-batch change record reference FKs after all create batches completed.", changeRecordFixed);
+
             // Process CSO updates in batches to reduce EF change tracker pressure and report progress.
             // UpdateConnectedSystemObjectsAsync builds ConnectedSystemObjectChange graphs and EF tracks
             // child entity changes (attribute value adds/deletes). At 100K CSOs this creates millions of

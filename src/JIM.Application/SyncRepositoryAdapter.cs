@@ -142,6 +142,9 @@ public class SyncRepositoryAdapter : ISyncRepository
     public Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId)
         => _jim.ConnectedSystems.FixupCrossBatchReferenceIdsAsync(connectedSystemId);
 
+    public Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId)
+        => _jim.ConnectedSystems.FixupCrossBatchChangeRecordReferenceIdsAsync(connectedSystemId);
+
     #endregion
 
     #region Object Matching — Data Access

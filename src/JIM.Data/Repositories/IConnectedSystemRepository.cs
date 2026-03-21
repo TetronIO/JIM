@@ -594,6 +594,15 @@ public interface IConnectedSystemRepository
     /// <returns>The number of references resolved.</returns>
     public Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId);
 
+    /// <summary>
+    /// Resolves cross-batch reference values in CSO change records (ConnectedSystemObjectChangeAttributeValues)
+    /// that were nulled during COPY binary persistence to avoid FK violations. The DN string is preserved
+    /// in StringValue and is matched against the secondary external ID attribute values of CSOs in the
+    /// same connected system using case-insensitive comparison.
+    /// </summary>
+    /// <returns>The number of change record references resolved.</returns>
+    public Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId);
+
     public int GetConnectedSystemCount();
     public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId);
     public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId);
