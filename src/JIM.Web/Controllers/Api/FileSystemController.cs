@@ -1,6 +1,7 @@
 using Asp.Versioning;
 using JIM.Application;
 using JIM.Application.Servers;
+using JIM.Models.Utility;
 using JIM.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using JIM.Models.Core;
+using JIM.Models.Utility;
 using Serilog;
 
 namespace JIM.Application.Services;
@@ -462,74 +463,3 @@ public class LogReaderService
     }
 }
 
-/// <summary>
-/// Represents information about a log file.
-/// </summary>
-public class LogFileInfo
-{
-    /// <summary>
-    /// The file name without path.
-    /// </summary>
-    public string FileName { get; set; } = string.Empty;
-
-    /// <summary>
-    /// The full file path.
-    /// </summary>
-    public string FilePath { get; set; } = string.Empty;
-
-    /// <summary>
-    /// The service that generated the log file (web, worker, scheduler).
-    /// </summary>
-    public string Service { get; set; } = string.Empty;
-
-    /// <summary>
-    /// The date of the log file.
-    /// </summary>
-    public DateTime Date { get; set; }
-
-    /// <summary>
-    /// The file size in bytes.
-    /// </summary>
-    public long SizeBytes { get; set; }
-}
-
-/// <summary>
-/// Represents a parsed log entry.
-/// </summary>
-public class LogEntry
-{
-    /// <summary>
-    /// The timestamp when the log entry was created (UTC).
-    /// </summary>
-    public DateTime Timestamp { get; set; }
-
-    /// <summary>
-    /// The log level (Verbose, Debug, Information, Warning, Error, Fatal).
-    /// </summary>
-    public string Level { get; set; } = string.Empty;
-
-    /// <summary>
-    /// The short log level abbreviation (VRB, DBG, INF, WRN, ERR, FTL).
-    /// </summary>
-    public string LevelShort { get; set; } = string.Empty;
-
-    /// <summary>
-    /// The rendered log message.
-    /// </summary>
-    public string Message { get; set; } = string.Empty;
-
-    /// <summary>
-    /// The exception details, if any.
-    /// </summary>
-    public string? Exception { get; set; }
-
-    /// <summary>
-    /// The service that generated the log entry (web, worker, scheduler).
-    /// </summary>
-    public string Service { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Additional structured properties from the log entry.
-    /// </summary>
-    public Dictionary<string, object>? Properties { get; set; }
-}
