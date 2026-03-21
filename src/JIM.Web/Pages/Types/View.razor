@@ -30,6 +30,10 @@
                                Color="Color.Primary" Size="Size.Small"
                                StartIcon="@Icons.Material.Filled.ViewModule"
                                OnClick="@(() => OnDetailViewModeChangedAsync("form"))">Form</MudButton>
+                    <MudButton Variant="@(_detailViewMode == "tabs" ? Variant.Filled : Variant.Outlined)"
+                               Color="Color.Primary" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Tab"
+                               OnClick="@(() => OnDetailViewModeChangedAsync("tabs"))">Tabs</MudButton>
                     <MudButton Variant="@(_detailViewMode == "table" ? Variant.Filled : Variant.Outlined)"
                                Color="Color.Primary" Size="Size.Small"
                                StartIcon="@Icons.Material.Filled.ViewList"
@@ -42,6 +46,10 @@
             @if (_detailViewMode == "table")
             {
                 <MvoDetailsTable MetaverseObject="MetaverseObject" AttributeValueTotalCounts="_attributeValueTotalCounts" />
+            }
+            else if (_detailViewMode == "tabs")
+            {
+                <MvoDetailsTabs MetaverseObject="MetaverseObject" ObjectTypeId="MetaverseObjectType!.Id" AttributeValueTotalCounts="_attributeValueTotalCounts" />
             }
             else
             {
@@ -151,16 +159,26 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        // Load user's preferred detail view mode (form or table)
-        try
+        // If ?c= is present, force tabs view (overrides saved preference)
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        if (query["c"] != null)
         {
-            var savedMode = await UserPreferences.GetMvoDetailViewModeAsync();
-            if (savedMode != null)
-                _detailViewMode = savedMode;
+            _detailViewMode = "tabs";
         }
-        catch
+        else
         {
-            // JS interop not yet available; keep default
+            // Load user's preferred detail view mode (form, tabs, or table)
+            try
+            {
+                var savedMode = await UserPreferences.GetMvoDetailViewModeAsync();
+                if (savedMode != null)
+                    _detailViewMode = savedMode;
+            }
+            catch
+            {
+                // JS interop not yet available; keep default
+            }
         }
 
         using var jim = JimFactory.Create();
@@ -210,6 +228,21 @@
     {
         _detailViewMode = mode;
         await UserPreferences.SetMvoDetailViewModeAsync(_detailViewMode);
+
+        // Clean up the ?cat= query parameter when leaving tabs view
+        if (mode != "tabs")
+        {
+            var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+            if (query["c"] != null)
+            {
+                query.Remove("c");
+                var baseUri = uri.GetLeftPart(UriPartial.Path);
+                var qs = query.ToString();
+                var newUrl = string.IsNullOrEmpty(qs) ? baseUri : $"{baseUri}?{qs}";
+                NavManager.NavigateTo(newUrl, new NavigationOptions { ReplaceHistoryEntry = true });
+            }
+        }
     }
 
     private string GetChangeCount()

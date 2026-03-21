@@ -44,6 +44,13 @@
     [Parameter] public bool Ripple { get; set; } = true;
 
     /// <summary>
+    /// The query string parameter name used for URL-based tab navigation.
+    /// Defaults to "t". Change this when nesting multiple NavigableMudTabs
+    /// on the same page to avoid conflicts (e.g. "cat" for category tabs).
+    /// </summary>
+    [Parameter] public string QueryParameterName { get; set; } = "t";
+
+    /// <summary>
     /// Optional two-way binding for the active tab index, allowing parent pages
     /// to read or set the active tab programmatically.
     /// </summary>
@@ -101,7 +108,14 @@
                 var baseUri = uri.GetLeftPart(UriPartial.Path);
 
                 // First tab (index 0) = no query string for clean URLs
-                var newUrl = newIndex == 0 ? baseUri : $"{baseUri}?t={slug}";
+                // Preserve other query parameters when updating the tab slug
+                var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+                if (newIndex == 0)
+                    query.Remove(QueryParameterName);
+                else
+                    query[QueryParameterName] = slug;
+                var qs = query.ToString();
+                var newUrl = string.IsNullOrEmpty(qs) ? baseUri : $"{baseUri}?{qs}";
                 NavManager.NavigateTo(newUrl, new NavigationOptions { ReplaceHistoryEntry = false });
             }
             finally
@@ -141,7 +155,7 @@
     {
         var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
         var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
-        return query["t"];
+        return query[QueryParameterName];
     }
 
     private int FindPanelIndexBySlug(string slug)
