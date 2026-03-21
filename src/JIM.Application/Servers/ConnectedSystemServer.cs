@@ -3257,8 +3257,14 @@ public class ConnectedSystemServer
         // delete attribute values to be removed and create change (if enabled)
         foreach (var pendingAttributeValueRemoval in connectedSystemObject.PendingAttributeValueRemovals)
         {
-            // this will cause a cascade delete of the attribute value object
-            connectedSystemObject.AttributeValues.RemoveAll(av => av.Id == pendingAttributeValueRemoval.Id);
+            // Use reference equality when Id is Guid.Empty (newly created, not yet persisted).
+            // With EF Core, attribute values get DB-generated IDs on SaveChanges. In InMemoryData
+            // or before persistence, they remain Guid.Empty — matching by ID would incorrectly
+            // remove ALL unassigned attribute values, including ones just added above.
+            if (pendingAttributeValueRemoval.Id == Guid.Empty)
+                connectedSystemObject.AttributeValues.Remove(pendingAttributeValueRemoval);
+            else
+                connectedSystemObject.AttributeValues.RemoveAll(av => av.Id == pendingAttributeValueRemoval.Id);
         }
 
         // Only create change object if tracking is enabled
