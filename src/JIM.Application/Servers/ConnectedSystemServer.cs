@@ -3178,6 +3178,15 @@ public class ConnectedSystemServer
                     AddChangeAttributeValueObject(change, av, ValueChangeType.Remove);
             }
         }
+
+        // Null out the CSO FK on all RPEIs. The CSOs are about to be deleted from the database,
+        // so when BulkInsertRpeisAsync runs later, the FK must be null to avoid FK constraint violations.
+        // The ExternalIdSnapshot (set earlier by SnapshotCsoDisplayFields) preserves the CSO identity for display.
+        for (int i = 0; i < rpeis.Count; i++)
+        {
+            rpeis[i].ConnectedSystemObject = null;
+            rpeis[i].ConnectedSystemObjectId = null;
+        }
     }
 
     /// <summary>
