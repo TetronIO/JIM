@@ -8,6 +8,7 @@ using JIM.Worker.Tests.Models;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
 using Moq;
+using SyncRepository = JIM.InMemoryData.SyncRepository;
 
 namespace JIM.Worker.Tests.OutboundSync;
 
@@ -28,6 +29,7 @@ public class ExportAttributeChangeStatusTests
     private List<PendingExport> PendingExportsData { get; set; } = null!;
     private Mock<DbSet<PendingExport>> MockDbSetPendingExports { get; set; } = null!;
     private JimApplication Jim { get; set; } = null!;
+    private SyncRepository SyncRepo { get; set; } = null!;
     private ConnectedSystem TargetSystem { get; set; } = null!;
     private ConnectedSystemObjectType TargetUserType { get; set; } = null!;
     private ConnectedSystemObjectTypeAttribute DisplayNameAttr { get; set; } = null!;
@@ -68,7 +70,8 @@ public class ExportAttributeChangeStatusTests
         MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
 
         // Instantiate Jim using the mocked db context
-        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+        SyncRepo = TestUtilities.CreateSyncRepository();
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
 
         // Store references to commonly used objects
         TargetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
@@ -104,12 +107,14 @@ public class ExportAttributeChangeStatusTests
             ConnectedSystemId = TargetSystem.Id,
             ConnectedSystem = TargetSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             Status = status,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>()
         };
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
         return pendingExport;
     }
 
@@ -504,6 +509,7 @@ public class ExportAttributeChangeStatusTests
             ConnectedSystemId = TargetSystem.Id,
             ConnectedSystem = TargetSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             Status = PendingExportStatus.Exported,
             ChangeType = PendingExportChangeType.Delete,
             CreatedAt = DateTime.UtcNow.AddMinutes(-5),
@@ -511,6 +517,7 @@ public class ExportAttributeChangeStatusTests
             AttributeValueChanges = new List<PendingExportAttributeValueChange>()
         };
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
 
         var mockConnector = new Mock<IConnector>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
@@ -541,12 +548,14 @@ public class ExportAttributeChangeStatusTests
             ConnectedSystemId = TargetSystem.Id,
             ConnectedSystem = TargetSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Delete,
             CreatedAt = DateTime.UtcNow,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>()
         };
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
 
         var mockConnector = new Mock<IConnector>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");

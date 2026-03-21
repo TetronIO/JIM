@@ -10,6 +10,7 @@ using JIM.Worker.Tests.Models;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
 using Moq;
+using SyncRepository = JIM.InMemoryData.SyncRepository;
 
 namespace JIM.Worker.Tests.OutboundSync;
 
@@ -43,6 +44,7 @@ public class ExportExecutionTests
     private List<SyncRule> SyncRulesData { get; set; } = null!;
     private Mock<DbSet<SyncRule>> MockDbSetSyncRules { get; set; } = null!;
     private JimApplication Jim { get; set; } = null!;
+    private SyncRepository SyncRepo { get; set; } = null!;
     #endregion
 
     [TearDown]
@@ -116,7 +118,8 @@ public class ExportExecutionTests
         MockJimDbContext.Setup(m => m.SyncRules).Returns(MockDbSetSyncRules.Object);
 
         // Instantiate Jim using the mocked db context
-        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+        SyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First());
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
     }
 
     /// <summary>
@@ -147,6 +150,7 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             ConnectedSystem = targetSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
@@ -163,6 +167,7 @@ public class ExportExecutionTests
             }
         };
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
 
         // Mock connector - use IConnector as the base type
         var mockConnector = new Mock<IConnector>();
@@ -239,6 +244,7 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             ConnectedSystem = targetSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             Status = PendingExportStatus.ExportNotConfirmed, // Failed status
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow.AddMinutes(-30),
@@ -248,6 +254,7 @@ public class ExportExecutionTests
             AttributeValueChanges = new List<PendingExportAttributeValueChange>()
         };
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
 
         var mockConnector = new Mock<IConnector>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
@@ -289,6 +296,7 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             ConnectedSystem = targetSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             Status = PendingExportStatus.ExportNotConfirmed,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow.AddHours(-1),
@@ -297,6 +305,7 @@ public class ExportExecutionTests
             AttributeValueChanges = new List<PendingExportAttributeValueChange>()
         };
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
 
         var mockConnector = new Mock<IConnector>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
@@ -339,6 +348,7 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             ConnectedSystem = targetSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
@@ -356,6 +366,7 @@ public class ExportExecutionTests
             }
         };
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
 
         var mockConnector = new Mock<IConnector>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
@@ -405,12 +416,13 @@ public class ExportExecutionTests
             };
             ConnectedSystemObjectsData.Add(cso);
 
-            PendingExportsData.Add(new PendingExport
+            var pe = new PendingExport
             {
                 Id = Guid.NewGuid(),
                 ConnectedSystemId = targetSystem.Id,
                 ConnectedSystem = targetSystem,
                 ConnectedSystemObject = cso,
+                ConnectedSystemObjectId = cso.Id,
                 Status = PendingExportStatus.Pending,
                 ChangeType = PendingExportChangeType.Update,
                 CreatedAt = DateTime.UtcNow,
@@ -426,7 +438,9 @@ public class ExportExecutionTests
                         Status = PendingExportAttributeChangeStatus.Pending
                     }
                 }
-            });
+            };
+            PendingExportsData.Add(pe);
+            SyncRepo.SeedPendingExport(pe);
         }
 
         var mockConnector = new Mock<IConnector>();
@@ -474,6 +488,7 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             ConnectedSystem = targetSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             SourceMetaverseObjectId = Guid.NewGuid(),
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
@@ -499,6 +514,7 @@ public class ExportExecutionTests
             }
         };
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
 
         var mockConnector = new Mock<IConnector>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
@@ -556,6 +572,7 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             ConnectedSystem = targetSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
@@ -572,6 +589,7 @@ public class ExportExecutionTests
             }
         };
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
 
         var mockConnector = new Mock<IConnector>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
@@ -614,6 +632,7 @@ public class ExportExecutionTests
             AttributeValueChanges = new List<PendingExportAttributeValueChange>()
         };
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
 
         var mockConnector = new Mock<IConnector>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
@@ -659,12 +678,14 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             ConnectedSystem = targetSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Delete,
             CreatedAt = DateTime.UtcNow,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>()
         };
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
 
         var mockConnector = new Mock<IConnector>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
@@ -712,6 +733,7 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             ConnectedSystem = targetSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Create,
             CreatedAt = DateTime.UtcNow,
@@ -729,6 +751,7 @@ public class ExportExecutionTests
             }
         };
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
 
         // Mock connector that implements IConnector, IConnectorExportUsingCalls, and IConnectorContainerCreation
         var mockConnector = new Mock<IConnector>();
@@ -787,6 +810,7 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             ConnectedSystem = targetSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
@@ -804,6 +828,7 @@ public class ExportExecutionTests
             }
         };
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
 
         // Mock connector that only implements IConnector and IConnectorExportUsingCalls (not IConnectorContainerCreation)
         var mockConnector = new Mock<IConnector>();
@@ -858,6 +883,7 @@ public class ExportExecutionTests
             AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
         };
         ConnectedSystemObjectsData.Add(pendingProvisioningCso);
+        SyncRepo.SeedConnectedSystemObject(pendingProvisioningCso);
 
         // Create a pending Create export that references the CSO
         var pendingExport = new PendingExport
@@ -866,6 +892,7 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             ConnectedSystem = targetSystem,
             ConnectedSystemObject = pendingProvisioningCso,
+            ConnectedSystemObjectId = pendingProvisioningCso.Id,
             SourceMetaverseObjectId = mvo.Id,
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Create,
@@ -883,6 +910,7 @@ public class ExportExecutionTests
             }
         };
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
 
         // Mock connector that implements both IConnector and IConnectorExportUsingCalls
         var mockConnector = new Mock<IConnector>();
@@ -892,19 +920,6 @@ public class ExportExecutionTests
             .ReturnsAsync(new List<ConnectedSystemExportResult>
             {
                 ConnectedSystemExportResult.Failed("Connection to target system failed")
-            });
-
-        // Mock update methods
-        MockDbSetPendingExports.Setup(set => set.Update(It.IsAny<PendingExport>()))
-            .Callback((PendingExport pe) =>
-            {
-                var existingPe = PendingExportsData.Find(p => p.Id == pe.Id);
-                if (existingPe != null)
-                {
-                    existingPe.Status = pe.Status;
-                    existingPe.ErrorCount = pe.ErrorCount;
-                    existingPe.LastErrorMessage = pe.LastErrorMessage;
-                }
             });
 
         // Act
@@ -954,6 +969,8 @@ public class ExportExecutionTests
         };
         targetUserType.Attributes.Add(objectGuidAttr);
         ConnectedSystemAttributesData.Add(objectGuidAttr);
+        // Re-seed the object type so SyncRepo sees the new attribute
+        SyncRepo.SeedObjectType(targetUserType);
 
         // Create a CSO in PendingProvisioning state with ExternalIdAttributeId set
         var pendingProvisioningCso = new ConnectedSystemObject
@@ -972,6 +989,7 @@ public class ExportExecutionTests
             AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
         };
         ConnectedSystemObjectsData.Add(pendingProvisioningCso);
+        SyncRepo.SeedConnectedSystemObject(pendingProvisioningCso);
 
         // Create a pending Create export
         var pendingExport = new PendingExport
@@ -980,6 +998,7 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             ConnectedSystem = targetSystem,
             ConnectedSystemObject = pendingProvisioningCso,
+            ConnectedSystemObjectId = pendingProvisioningCso.Id,
             SourceMetaverseObjectId = mvo.Id,
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Create,
@@ -998,6 +1017,7 @@ public class ExportExecutionTests
             }
         };
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
 
         // Mock connector that implements both IConnector and IConnectorExportUsingCalls
         var generatedObjectGuid = Guid.NewGuid();
@@ -1008,22 +1028,6 @@ public class ExportExecutionTests
             .ReturnsAsync(new List<ConnectedSystemExportResult>
             {
                 ConnectedSystemExportResult.Succeeded(generatedObjectGuid.ToString())
-            });
-
-        // Track CSO updates
-        var updatedCsos = new List<ConnectedSystemObject>();
-        MockDbSetConnectedSystemObjects.Setup(set => set.Update(It.IsAny<ConnectedSystemObject>()))
-            .Callback((ConnectedSystemObject cso) =>
-            {
-                updatedCsos.Add(cso);
-            });
-
-        // Mock PendingExport updates (now we update instead of delete after export)
-        var updatedPendingExports = new List<PendingExport>();
-        MockDbSetPendingExports.Setup(set => set.Update(It.IsAny<PendingExport>()))
-            .Callback((PendingExport pe) =>
-            {
-                updatedPendingExports.Add(pe);
             });
 
         // Act
@@ -1104,6 +1108,7 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             ConnectedSystem = targetSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             SourceMetaverseObjectId = mvo.Id,
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
@@ -1123,6 +1128,7 @@ public class ExportExecutionTests
             }
         };
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
 
         // Mock connector that returns a failure
         var mockConnector = new Mock<IConnector>();
@@ -1132,14 +1138,6 @@ public class ExportExecutionTests
             .ReturnsAsync(new List<ConnectedSystemExportResult>
             {
                 ConnectedSystemExportResult.Failed("LDAP error: The object exists. Attribute member already exists")
-            });
-
-        // Track pending export updates
-        PendingExport? updatedPendingExport = null;
-        MockDbSetPendingExports.Setup(set => set.Update(It.IsAny<PendingExport>()))
-            .Callback((PendingExport pe) =>
-            {
-                updatedPendingExport = pe;
             });
 
         // Act
@@ -1209,6 +1207,7 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             ConnectedSystem = targetSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             SourceMetaverseObjectId = mvo.Id,
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
@@ -1229,6 +1228,7 @@ public class ExportExecutionTests
             }
         };
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
 
         // Mock connector that returns a failure
         var mockConnector = new Mock<IConnector>();
@@ -1239,10 +1239,6 @@ public class ExportExecutionTests
             {
                 ConnectedSystemExportResult.Failed("Connection timeout")
             });
-
-        // Track pending export updates
-        MockDbSetPendingExports.Setup(set => set.Update(It.IsAny<PendingExport>()))
-            .Callback((PendingExport pe) => { });
 
         // Act
         var result = await Jim.ExportExecution.ExecuteExportsAsync(
@@ -1296,6 +1292,7 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             ConnectedSystem = targetSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             Status = PendingExportStatus.Exported,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
@@ -1313,6 +1310,7 @@ public class ExportExecutionTests
             }
         };
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
 
         var mockConnector = new Mock<IConnector>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
@@ -1354,12 +1352,14 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             ConnectedSystem = targetSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             Status = PendingExportStatus.Exported,
             ChangeType = PendingExportChangeType.Delete,
             CreatedAt = DateTime.UtcNow,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>()
         };
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
 
         var mockConnector = new Mock<IConnector>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
@@ -1401,6 +1401,7 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             ConnectedSystem = targetSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
@@ -1418,6 +1419,7 @@ public class ExportExecutionTests
             }
         };
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
 
         var mockConnector = new Mock<IConnector>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
@@ -1458,12 +1460,14 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             ConnectedSystem = targetSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Create,
             CreatedAt = DateTime.UtcNow,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>()
         };
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
 
         var mockConnector = new Mock<IConnector>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");

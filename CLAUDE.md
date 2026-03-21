@@ -215,7 +215,7 @@ All dependency updates from Dependabot require human review before merging - the
 - Blazor components: `src/JIM.Web/Shared/`
 - Business logic: `src/JIM.Application/Servers/`
 - Performance diagnostics: `src/JIM.Application/Diagnostics/`
-- Domain models: `src/JIM.Models/Core/` or `src/JIM.Models/Staging/`
+- Domain models: `src/JIM.Models/` (see subdirectories: `Core/`, `Staging/`, `Transactional/`, `Utility/`)
 - Database repositories: `src/JIM.PostgresData/`
 - Connectors: `src/JIM.Connectors/` or new connector project
 - Tests: `test/JIM.Web.Api.Tests/`, `test/JIM.Models.Tests/`, `test/JIM.Worker.Tests/`
@@ -261,6 +261,9 @@ When creating ASCII diagrams in documentation or code comments, use only reliabl
 - One class per file - each class should have its own `.cs` file named after the class
 - Exception: Enums are grouped into a single file per area/folder (e.g., `ConnectedSystemEnums.cs`, `PendingExportEnums.cs`)
 - File names must match the class/interface name exactly (e.g., `MetaverseObject.cs` for `class MetaverseObject`)
+- **Model placement**: All model/POCO/result classes MUST live in `src/JIM.Models/` — NEVER define them inline in service or server files in `JIM.Application` or other projects
+  - Exceptions: UI-specific models may live in `src/JIM.Web/Models/`, and API DTOs in `src/JIM.Web/Models/Api/`
+  - If a service method needs a result type, create it as its own file in the appropriate `JIM.Models/` subdirectory
 
 **Naming Patterns:**
 - Methods: `GetObjectAsync`, `CreateMetaverseObjectAsync`

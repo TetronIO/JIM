@@ -50,6 +50,37 @@ public class SyncRepository : ISyncRepository
 
     #endregion
 
+    #region Test Inspection — Read-Only Access to Internal State
+
+    /// <summary>All connected system objects, keyed by CSO ID.</summary>
+    public IReadOnlyDictionary<Guid, ConnectedSystemObject> ConnectedSystemObjects => _csos;
+
+    /// <summary>All metaverse objects, keyed by MVO ID.</summary>
+    public IReadOnlyDictionary<Guid, MetaverseObject> MetaverseObjects => _mvos;
+
+    /// <summary>All pending exports, keyed by pending export ID.</summary>
+    public IReadOnlyDictionary<Guid, PendingExport> PendingExports => _pendingExports;
+
+    /// <summary>All activities, keyed by activity ID.</summary>
+    public IReadOnlyDictionary<Guid, Activity> Activities => _activities;
+
+    /// <summary>All run profile execution items, keyed by RPEI ID.</summary>
+    public IReadOnlyDictionary<Guid, ActivityRunProfileExecutionItem> Rpeis => _rpeis;
+
+    /// <summary>All connected systems, keyed by connected system ID.</summary>
+    public IReadOnlyDictionary<int, ConnectedSystem> ConnectedSystems => _connectedSystems;
+
+    /// <summary>All sync rules, keyed by sync rule ID.</summary>
+    public IReadOnlyDictionary<int, SyncRule> SyncRules => _syncRules;
+
+    /// <summary>All connected system object types, keyed by object type ID.</summary>
+    public IReadOnlyDictionary<int, ConnectedSystemObjectType> ObjectTypes => _objectTypes;
+
+    /// <summary>All metaverse object change records, keyed by change ID.</summary>
+    public IReadOnlyDictionary<Guid, MetaverseObjectChange> MetaverseObjectChanges => _mvoChanges;
+
+    #endregion
+
     #region Seeding API
 
     public void SeedConnectedSystem(ConnectedSystem cs)
@@ -103,6 +134,16 @@ public class SyncRepository : ISyncRepository
     public void SeedActivity(Activity activity)
     {
         _activities[activity.Id] = activity;
+    }
+
+    /// <summary>
+    /// Removes all pending exports from the store. Used by tests to reset state between sync cycles.
+    /// </summary>
+    public void ClearAllPendingExports()
+    {
+        _pendingExports.Clear();
+        _pendingExportsByCs.Clear();
+        _pendingExportsByCsoId.Clear();
     }
 
     public void SetSyncPageSize(int pageSize) => _syncPageSize = pageSize;
@@ -326,10 +367,12 @@ public class SyncRepository : ISyncRepository
 
     public Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId)
     {
-        if (!_csosByMvo.TryGetValue(metaverseObjectId, out var ids))
-            return Task.FromResult(0);
-
-        var count = ids.Count(id => _csos.TryGetValue(id, out var cso) && cso.ConnectedSystemId == connectedSystemId);
+        // Scan _csos directly rather than using the _csosByMvo index so that within-page joins
+        // (where MetaverseObjectId has been set in-memory but the index hasn't been flushed yet)
+        // are counted correctly. This matches the behaviour of the production EF Core query.
+        var count = _csos.Values.Count(c =>
+            c.ConnectedSystemId == connectedSystemId &&
+            c.MetaverseObjectId == metaverseObjectId);
         return Task.FromResult(count);
     }
 
@@ -343,6 +386,8 @@ public class SyncRepository : ISyncRepository
         {
             if (cso.Id == Guid.Empty)
                 cso.Id = Guid.NewGuid();
+
+            FixupCsoNavigationProperties(cso);
             _csos[cso.Id] = cso;
             AddToCsIndex(cso);
         }
@@ -363,6 +408,7 @@ public class SyncRepository : ISyncRepository
     {
         foreach (var cso in connectedSystemObjects)
         {
+            FixupCsoNavigationProperties(cso);
             _csos[cso.Id] = cso;
             UpdateMvoIndex(cso);
         }
@@ -372,7 +418,40 @@ public class SyncRepository : ISyncRepository
     public Task UpdateConnectedSystemObjectsAsync(
         List<ConnectedSystemObject> connectedSystemObjects,
         List<ActivityRunProfileExecutionItem> rpeis)
-        => UpdateConnectedSystemObjectsAsync(connectedSystemObjects);
+    {
+        // Apply PendingAttributeValueAdditions/Removals — in production this is done by
+        // ConnectedSystemServer.ProcessConnectedSystemObjectAttributeValueChanges before
+        // delegating to the repository. InMemoryData must do it here.
+        foreach (var cso in connectedSystemObjects)
+        {
+            foreach (var addition in cso.PendingAttributeValueAdditions)
+            {
+                if (addition.AttributeId == 0 && addition.Attribute != null)
+                    addition.AttributeId = addition.Attribute.Id;
+                cso.AttributeValues.Add(addition);
+            }
+
+            foreach (var removal in cso.PendingAttributeValueRemovals)
+            {
+                // Use reference equality when Id is Guid.Empty (newly created, not yet persisted).
+                // With EF Core, these objects have DB-generated IDs. In-memory, they remain empty.
+                if (removal.Id == Guid.Empty)
+                    cso.AttributeValues.Remove(removal);
+                else
+                    cso.AttributeValues.RemoveAll(av => av.Id == removal.Id);
+            }
+
+            cso.PendingAttributeValueAdditions = new List<ConnectedSystemObjectAttributeValue>();
+            cso.PendingAttributeValueRemovals = new List<ConnectedSystemObjectAttributeValue>();
+
+            // Also fixup the joined MVO's attribute values — ApplyPendingMetaverseObjectAttributeChanges
+            // adds values with Attribute nav prop set but AttributeId == 0
+            if (cso.MetaverseObject != null)
+                FixupMvoAttributeValues(cso.MetaverseObject);
+        }
+
+        return UpdateConnectedSystemObjectsAsync(connectedSystemObjects);
+    }
 
     public Task UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects)
     {
@@ -397,7 +476,17 @@ public class SyncRepository : ISyncRepository
         {
             if (_csos.TryGetValue(cso.Id, out var stored))
             {
-                stored.AttributeValues.AddRange(newAvs);
+                // Since InMemoryData stores references (not copies), stored and cso may be the same object.
+                // Only add values that aren't already in the collection to avoid duplicates.
+                foreach (var av in newAvs)
+                {
+                    // Fixup FK from nav prop (EF Core does this automatically on SaveChanges)
+                    if (av.AttributeId == 0 && av.Attribute != null)
+                        av.AttributeId = av.Attribute.Id;
+
+                    if (!stored.AttributeValues.Contains(av))
+                        stored.AttributeValues.Add(av);
+                }
             }
         }
         return Task.CompletedTask;
@@ -513,6 +602,7 @@ public class SyncRepository : ISyncRepository
         {
             if (mvo.Id == Guid.Empty)
                 mvo.Id = Guid.NewGuid();
+            FixupMvoAttributeValues(mvo);
             _mvos[mvo.Id] = mvo;
         }
         return Task.CompletedTask;
@@ -521,12 +611,16 @@ public class SyncRepository : ISyncRepository
     public Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
     {
         foreach (var mvo in metaverseObjects)
+        {
+            FixupMvoAttributeValues(mvo);
             _mvos[mvo.Id] = mvo;
+        }
         return Task.CompletedTask;
     }
 
     public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
     {
+        FixupMvoAttributeValues(metaverseObject);
         _mvos[metaverseObject.Id] = metaverseObject;
         return Task.CompletedTask;
     }
@@ -565,6 +659,18 @@ public class SyncRepository : ISyncRepository
         {
             if (pe.Id == Guid.Empty)
                 pe.Id = Guid.NewGuid();
+
+            if (pe.ConnectedSystem == null && pe.ConnectedSystemId > 0 && _connectedSystems.TryGetValue(pe.ConnectedSystemId, out var cs))
+                pe.ConnectedSystem = cs;
+            if (pe.ConnectedSystemObject == null && pe.ConnectedSystemObjectId.HasValue)
+            {
+                if (_csos.TryGetValue(pe.ConnectedSystemObjectId.Value, out var cso))
+                    pe.ConnectedSystemObject = cso;
+            }
+
+            // Fixup AttributeValueChange nav props (production code may set only Attribute or only AttributeId)
+            FixupPendingExportAttributeChanges(pe);
+
             _pendingExports[pe.Id] = pe;
             AddToPeIndex(pe);
         }
@@ -702,8 +808,34 @@ public class SyncRepository : ISyncRepository
             if (rpei.Id == Guid.Empty)
                 rpei.Id = Guid.NewGuid();
             _rpeis[rpei.Id] = rpei;
+
+            // Generate IDs for SyncOutcomes (matches PostgresDataRepository.FlattenSyncOutcomes behaviour)
+            AssignSyncOutcomeIds(rpei.SyncOutcomes, rpei.Id, null);
         }
-        return Task.FromResult(true);
+        // Return false to indicate "not raw SQL" — tells the processor to keep RPEIs in
+        // the activity's RunProfileExecutionItems collection for test assertions, rather
+        // than clearing them (which is the production raw SQL path).
+        return Task.FromResult(false);
+    }
+
+    private static void AssignSyncOutcomeIds(
+        List<ActivityRunProfileExecutionItemSyncOutcome> outcomes, Guid rpeiId, Guid? parentId)
+    {
+        // Process only root outcomes from the flat list to avoid visiting children twice
+        var roots = parentId == null
+            ? outcomes.Where(o => o.ParentSyncOutcome == null && o.ParentSyncOutcomeId == null).ToList()
+            : outcomes;
+
+        foreach (var outcome in roots)
+        {
+            if (outcome.Id == Guid.Empty)
+                outcome.Id = Guid.NewGuid();
+            outcome.ActivityRunProfileExecutionItemId = rpeiId;
+            outcome.ParentSyncOutcomeId = parentId;
+
+            if (outcome.Children.Count > 0)
+                AssignSyncOutcomeIds(outcome.Children, rpeiId, outcome.Id);
+        }
     }
 
     public Task BulkUpdateRpeiOutcomesAsync(
@@ -929,7 +1061,13 @@ public class SyncRepository : ISyncRepository
         foreach (var cso in _csos.Values)
         {
             if (ids.Contains(cso.Id) && cso.AttributeValues != null)
-                result.AddRange(cso.AttributeValues);
+            {
+                foreach (var av in cso.AttributeValues)
+                {
+                    av.ConnectedSystemObject ??= cso;
+                    result.Add(av);
+                }
+            }
         }
 
         return Task.FromResult(result);
@@ -1064,27 +1202,51 @@ public class SyncRepository : ISyncRepository
 
     public Task<int> GetExecutableExportCountAsync(int connectedSystemId)
     {
-        var count = GetPendingExportsForSystem(connectedSystemId)
-            .Count(pe => pe.Status == PendingExportStatus.Pending || pe.Status == PendingExportStatus.ExportNotConfirmed);
+        var count = GetExecutableExportsForSystem(connectedSystemId).Count();
         return Task.FromResult(count);
     }
 
     public Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId)
     {
-        var result = GetPendingExportsForSystem(connectedSystemId)
-            .Where(pe => pe.Status == PendingExportStatus.Pending || pe.Status == PendingExportStatus.ExportNotConfirmed)
-            .ToList();
+        var result = GetExecutableExportsForSystem(connectedSystemId).ToList();
         return Task.FromResult(result);
     }
 
     public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take)
     {
-        var result = GetPendingExportsForSystem(connectedSystemId)
-            .Where(pe => pe.Status == PendingExportStatus.Pending || pe.Status == PendingExportStatus.ExportNotConfirmed)
+        var result = GetExecutableExportsForSystem(connectedSystemId)
             .Skip(skip)
             .Take(take)
             .ToList();
         return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// Applies the same eligibility filters as the Postgres ExecutableExportsQuery:
+    /// status must be Pending, Exported, or ExportNotConfirmed; exports not yet due for retry or
+    /// that have exceeded max retries are excluded; Update exports must have at least one Pending or
+    /// ExportedNotConfirmed attribute change; Delete exports that were already Exported are excluded
+    /// (awaiting import confirmation, not re-execution).
+    /// </summary>
+    private IEnumerable<PendingExport> GetExecutableExportsForSystem(int connectedSystemId)
+    {
+        var now = DateTime.UtcNow;
+        return GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.Status == PendingExportStatus.Pending
+                      || pe.Status == PendingExportStatus.Exported
+                      || pe.Status == PendingExportStatus.ExportNotConfirmed)
+            // Exclude exports not yet due for retry
+            .Where(pe => !pe.NextRetryAt.HasValue || pe.NextRetryAt <= now)
+            // Exclude exports that have exceeded max retries
+            .Where(pe => pe.ErrorCount < pe.MaxRetries)
+            // Update exports must have at least one exportable attribute change
+            .Where(pe => pe.ChangeType != PendingExportChangeType.Update
+                      || pe.AttributeValueChanges.Any(ac =>
+                            ac.Status == PendingExportAttributeChangeStatus.Pending
+                         || ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed))
+            // Delete exports already exported are awaiting import confirmation — do not re-execute
+            .Where(pe => !(pe.ChangeType == PendingExportChangeType.Delete
+                        && pe.Status == PendingExportStatus.Exported));
     }
 
     public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
@@ -1115,7 +1277,16 @@ public class SyncRepository : ISyncRepository
     {
         if (!_csosByConnectedSystem.TryGetValue(connectedSystemId, out var ids))
             return Enumerable.Empty<ConnectedSystemObject>();
-        return ids.Where(id => _csos.ContainsKey(id)).Select(id => _csos[id]);
+        return ids.Where(id => _csos.ContainsKey(id)).Select(id =>
+        {
+            var cso = _csos[id];
+            // Lazy fixup: production code may add attribute values with Attribute nav prop
+            // but without AttributeId (relying on EF SaveChanges to resolve). Fix on read.
+            FixupCsoNavigationProperties(cso);
+            if (cso.MetaverseObject != null)
+                FixupMvoAttributeValues(cso.MetaverseObject);
+            return cso;
+        });
     }
 
     private IEnumerable<PendingExport> GetPendingExportsForSystem(int connectedSystemId)
@@ -1135,6 +1306,71 @@ public class SyncRepository : ISyncRepository
             CurrentPage = page,
             PageSize = pageSize
         };
+    }
+
+    /// <summary>
+    /// Simulates EF Core's automatic FK ↔ navigation property resolution.
+    /// Production code may set only FK (TypeId) or only nav prop (Type) — EF resolves
+    /// the other side on SaveChanges. InMemoryData must do this explicitly.
+    /// Also fixes up AttributeValue FK/nav prop mismatches (AttributeId ↔ Attribute).
+    /// </summary>
+    private void FixupCsoNavigationProperties(ConnectedSystemObject cso)
+    {
+        // CSO-level nav props
+        if (cso.Type == null && cso.TypeId > 0 && _objectTypes.TryGetValue(cso.TypeId, out var objectType))
+            cso.Type = objectType;
+        else if (cso.TypeId == 0 && cso.Type != null)
+            cso.TypeId = cso.Type.Id; // reverse: nav prop set but FK missing (common in tests)
+        if (cso.ConnectedSystem == null && cso.ConnectedSystemId > 0 && _connectedSystems.TryGetValue(cso.ConnectedSystemId, out var cs))
+            cso.ConnectedSystem = cs;
+        if (cso.MetaverseObject == null && cso.MetaverseObjectId.HasValue && _mvos.TryGetValue(cso.MetaverseObjectId.Value, out var mvo))
+            cso.MetaverseObject = mvo;
+
+        // Attribute value FK ↔ nav prop fixup
+        foreach (var av in cso.AttributeValues)
+        {
+            if (av.AttributeId == 0 && av.Attribute != null)
+                av.AttributeId = av.Attribute.Id;
+            else if (av.Attribute == null && av.AttributeId > 0 && cso.Type != null)
+                av.Attribute = cso.Type.Attributes.FirstOrDefault(a => a.Id == av.AttributeId)!;
+        }
+    }
+
+    /// <summary>
+    /// Fixes up PendingExportAttributeValueChange FK/nav prop mismatches.
+    /// Drift detection creates changes with only AttributeId; export evaluation creates with both.
+    /// </summary>
+    private void FixupPendingExportAttributeChanges(PendingExport pe)
+    {
+        if (pe.AttributeValueChanges == null || pe.AttributeValueChanges.Count == 0) return;
+
+        // Build attribute lookup from the CSO type (if available)
+        ConnectedSystemObjectType? csoType = null;
+        if (pe.ConnectedSystemObject?.Type != null)
+            csoType = pe.ConnectedSystemObject.Type;
+        else if (pe.ConnectedSystemObject?.TypeId > 0 && _objectTypes.TryGetValue(pe.ConnectedSystemObject.TypeId, out var ot))
+            csoType = ot;
+
+        foreach (var avc in pe.AttributeValueChanges)
+        {
+            if (avc.AttributeId == 0 && avc.Attribute != null)
+                avc.AttributeId = avc.Attribute.Id;
+            else if (avc.Attribute == null && avc.AttributeId > 0 && csoType != null)
+                avc.Attribute = csoType.Attributes.FirstOrDefault(a => a.Id == avc.AttributeId)!;
+        }
+    }
+
+    /// <summary>
+    /// Fixes up MVO attribute value FK/nav prop mismatches.
+    /// Production code sets Attribute nav prop but not AttributeId; EF resolves on SaveChanges.
+    /// </summary>
+    private static void FixupMvoAttributeValues(MetaverseObject mvo)
+    {
+        foreach (var av in mvo.AttributeValues)
+        {
+            if (av.AttributeId == 0 && av.Attribute != null)
+                av.AttributeId = av.Attribute.Id;
+        }
     }
 
     private void AddToCsIndex(ConnectedSystemObject cso)
@@ -1159,6 +1395,12 @@ public class SyncRepository : ISyncRepository
         }
         mvoSet.Add(csoId);
     }
+
+    /// <summary>
+    /// Updates the MVO index for a CSO after its MetaverseObjectId has been changed externally.
+    /// Call this after manually setting cso.MetaverseObjectId in tests.
+    /// </summary>
+    public void RefreshCsoMvoIndex(ConnectedSystemObject cso) => UpdateMvoIndex(cso);
 
     private void UpdateMvoIndex(ConnectedSystemObject cso)
     {

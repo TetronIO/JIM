@@ -679,26 +679,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var itemsToGet = grossCount >= pageSize ? pageSize : grossCount;
         var pagedCsoQuery = csoQuery.Skip(offset).Take(itemsToGet);
 
-        List<ConnectedSystemObject> results;
-        try
-        {
-            await using var transaction = await Repository.Database.Database
-                .BeginTransactionAsync(IsolationLevel.RepeatableRead);
+        await using var transaction = await Repository.Database.Database
+            .BeginTransactionAsync(IsolationLevel.RepeatableRead);
 
-            results = await pagedCsoQuery.ToListAsync();
+        var results = await pagedCsoQuery.ToListAsync();
 
-            // Load MVOs separately — EF relationship fixup populates cso.MetaverseObject automatically.
-            // This avoids the deep Include chain that caused AsSplitQuery materialisation failures.
-            await LoadMetaverseObjectsForCsosAsync(results);
+        // Load MVOs separately — EF relationship fixup populates cso.MetaverseObject automatically.
+        // This avoids the deep Include chain that caused AsSplitQuery materialisation failures.
+        await LoadMetaverseObjectsForCsosAsync(results);
 
-            await transaction.CommitAsync();
-        }
-        catch (Exception ex) when (IsInMemoryProviderException(ex))
-        {
-            // Fallback for unit tests with mocked/in-memory provider where transactions are not supported.
-            results = await pagedCsoQuery.ToListAsync();
-            await LoadMetaverseObjectsForCsosAsync(results);
-        }
+        await transaction.CommitAsync();
 
         // now with all the ids we know how many total results there are and so can populate paging info
         var pagedResultSet = new PagedResultSet<ConnectedSystemObject>
@@ -827,23 +817,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var itemsToGet = grossCount >= pageSize ? pageSize : grossCount;
         var pagedCsoQuery = csoQuery.Skip(offset).Take(itemsToGet);
 
-        List<ConnectedSystemObject> results;
-        try
-        {
-            await using var transaction = await Repository.Database.Database
-                .BeginTransactionAsync(IsolationLevel.RepeatableRead);
+        await using var transaction = await Repository.Database.Database
+            .BeginTransactionAsync(IsolationLevel.RepeatableRead);
 
-            results = await pagedCsoQuery.ToListAsync();
-            await LoadMetaverseObjectsForCsosAsync(results);
+        var results = await pagedCsoQuery.ToListAsync();
+        await LoadMetaverseObjectsForCsosAsync(results);
 
-            await transaction.CommitAsync();
-        }
-        catch (Exception ex) when (IsInMemoryProviderException(ex))
-        {
-            // Fallback for unit tests with mocked/in-memory provider where transactions are not supported.
-            results = await pagedCsoQuery.ToListAsync();
-            await LoadMetaverseObjectsForCsosAsync(results);
-        }
+        await transaction.CommitAsync();
 
         // Build the paged result set
         var pagedResultSet = new PagedResultSet<ConnectedSystemObject>
@@ -887,23 +867,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .ThenInclude(rv => rv!.MetaverseObject)
             .Where(cso => csoIds.Contains(cso.Id));
 
-        List<ConnectedSystemObject> results;
-        try
-        {
-            await using var transaction = await Repository.Database.Database
-                .BeginTransactionAsync(IsolationLevel.RepeatableRead);
+        await using var transaction = await Repository.Database.Database
+            .BeginTransactionAsync(IsolationLevel.RepeatableRead);
 
-            results = await csoQuery.ToListAsync();
-            await LoadMetaverseObjectsForCsosAsync(results);
+        var results = await csoQuery.ToListAsync();
+        await LoadMetaverseObjectsForCsosAsync(results);
 
-            await transaction.CommitAsync();
-        }
-        catch (Exception ex) when (IsInMemoryProviderException(ex))
-        {
-            // Fallback for unit tests with mocked/in-memory provider where transactions are not supported.
-            results = await csoQuery.ToListAsync();
-            await LoadMetaverseObjectsForCsosAsync(results);
-        }
+        await transaction.CommitAsync();
 
         return results;
     }
@@ -961,37 +931,24 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // back to primary) for every CSO referenced by the given CSO's attribute values.
         // This bypasses EF's AsSplitQuery() materialisation which can silently drop navigations
         // (see dotnet/efcore#33826), providing a reliable fallback for ImportRefMatchesCsoValue.
-        List<ReferenceExternalIdRow> rows;
-        try
-        {
-            if (!Repository.Database.Database.IsRelational())
-                return new Dictionary<Guid, string>();
-
-            rows = await Repository.Database.Database
-                .SqlQueryRaw<ReferenceExternalIdRow>(
-                    """
-                    SELECT av."ReferenceValueId",
-                           COALESCE(sec_av."StringValue", pri_av."StringValue") AS "ExternalId"
-                    FROM "ConnectedSystemObjectAttributeValues" av
-                    JOIN "ConnectedSystemObjects" ref_cso ON av."ReferenceValueId" = ref_cso."Id"
-                    LEFT JOIN "ConnectedSystemObjectAttributeValues" sec_av
-                        ON sec_av."ConnectedSystemObjectId" = ref_cso."Id"
-                       AND sec_av."AttributeId" = ref_cso."SecondaryExternalIdAttributeId"
-                    LEFT JOIN "ConnectedSystemObjectAttributeValues" pri_av
-                        ON pri_av."ConnectedSystemObjectId" = ref_cso."Id"
-                       AND pri_av."AttributeId" = ref_cso."ExternalIdAttributeId"
-                    WHERE av."ConnectedSystemObjectId" = {0}
-                      AND av."ReferenceValueId" IS NOT NULL
-                    """,
-                    csoId)
-                .ToListAsync();
-        }
-        catch (Exception ex) when (IsInMemoryProviderException(ex))
-        {
-            // Non-relational providers (e.g., in-memory for tests) do not support raw SQL.
-            // Return empty dictionary so callers fall back to navigation chain only.
-            return new Dictionary<Guid, string>();
-        }
+        var rows = await Repository.Database.Database
+            .SqlQueryRaw<ReferenceExternalIdRow>(
+                """
+                SELECT av."ReferenceValueId",
+                       COALESCE(sec_av."StringValue", pri_av."StringValue") AS "ExternalId"
+                FROM "ConnectedSystemObjectAttributeValues" av
+                JOIN "ConnectedSystemObjects" ref_cso ON av."ReferenceValueId" = ref_cso."Id"
+                LEFT JOIN "ConnectedSystemObjectAttributeValues" sec_av
+                    ON sec_av."ConnectedSystemObjectId" = ref_cso."Id"
+                   AND sec_av."AttributeId" = ref_cso."SecondaryExternalIdAttributeId"
+                LEFT JOIN "ConnectedSystemObjectAttributeValues" pri_av
+                    ON pri_av."ConnectedSystemObjectId" = ref_cso."Id"
+                   AND pri_av."AttributeId" = ref_cso."ExternalIdAttributeId"
+                WHERE av."ConnectedSystemObjectId" = {0}
+                  AND av."ReferenceValueId" IS NOT NULL
+                """,
+                csoId)
+            .ToListAsync();
 
         var result = new Dictionary<Guid, string>();
         foreach (var row in rows)
@@ -1586,49 +1543,38 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Uses case-insensitive LOWER() comparison because LDAP Distinguished Names are
         // case-insensitive per RFC 4514, and different connector runs or LDAP servers may
         // return DNs with different capitalisation.
+        var previousTimeout = Repository.Database.Database.GetCommandTimeout();
+        Repository.Database.Database.SetCommandTimeout(300);
         try
         {
-            var previousTimeout = Repository.Database.Database.GetCommandTimeout();
-            Repository.Database.Database.SetCommandTimeout(300);
-            try
-            {
-                // Fast early exit: skip the expensive multi-table JOIN UPDATE when there are no
-                // unresolved references. This is the common case for CSV imports, training imports,
-                // and confirming imports — only LDAP imports with out-of-order batched groups need fixup.
-                var unresolvedCount = await GetUnresolvedReferenceCountAsync(connectedSystemId);
-                if (unresolvedCount == 0)
-                    return 0;
+            // Fast early exit: skip the expensive multi-table JOIN UPDATE when there are no
+            // unresolved references. This is the common case for CSV imports, training imports,
+            // and confirming imports — only LDAP imports with out-of-order batched groups need fixup.
+            var unresolvedCount = await GetUnresolvedReferenceCountAsync(connectedSystemId);
+            if (unresolvedCount == 0)
+                return 0;
 
-                return await Repository.Database.Database.ExecuteSqlRawAsync(
-                    """
-                    UPDATE "ConnectedSystemObjectAttributeValues" av
-                    SET "ReferenceValueId" = target_cso."Id"
-                    FROM "ConnectedSystemObjects" owner_cso
-                    JOIN "ConnectedSystemObjects" target_cso ON target_cso."ConnectedSystemId" = {0}
-                    JOIN "ConnectedSystemObjectAttributeValues" target_av ON target_av."ConnectedSystemObjectId" = target_cso."Id"
-                    JOIN "ConnectedSystemAttributes" target_attr ON target_attr."Id" = target_av."AttributeId"
-                        AND target_attr."IsSecondaryExternalId" = true
-                    WHERE owner_cso."ConnectedSystemId" = {0}
-                      AND av."ConnectedSystemObjectId" = owner_cso."Id"
-                      AND av."UnresolvedReferenceValue" IS NOT NULL
-                      AND av."ReferenceValueId" IS NULL
-                      AND target_av."StringValue" IS NOT NULL
-                      AND LOWER(av."UnresolvedReferenceValue") = LOWER(target_av."StringValue")
-                    """,
-                    connectedSystemId);
-            }
-            finally
-            {
-                Repository.Database.Database.SetCommandTimeout(previousTimeout);
-            }
+            return await Repository.Database.Database.ExecuteSqlRawAsync(
+                """
+                UPDATE "ConnectedSystemObjectAttributeValues" av
+                SET "ReferenceValueId" = target_cso."Id"
+                FROM "ConnectedSystemObjects" owner_cso
+                JOIN "ConnectedSystemObjects" target_cso ON target_cso."ConnectedSystemId" = {0}
+                JOIN "ConnectedSystemObjectAttributeValues" target_av ON target_av."ConnectedSystemObjectId" = target_cso."Id"
+                JOIN "ConnectedSystemAttributes" target_attr ON target_attr."Id" = target_av."AttributeId"
+                    AND target_attr."IsSecondaryExternalId" = true
+                WHERE owner_cso."ConnectedSystemId" = {0}
+                  AND av."ConnectedSystemObjectId" = owner_cso."Id"
+                  AND av."UnresolvedReferenceValue" IS NOT NULL
+                  AND av."ReferenceValueId" IS NULL
+                  AND target_av."StringValue" IS NOT NULL
+                  AND LOWER(av."UnresolvedReferenceValue") = LOWER(target_av."StringValue")
+                """,
+                connectedSystemId);
         }
-        catch (Exception ex) when (IsInMemoryProviderException(ex))
+        finally
         {
-            // Fallback for unit tests using a mocked or in-memory DbContext that does not support raw SQL.
-            // The in-memory provider auto-resolves FKs from navigation properties so cross-batch
-            // reference issues do not manifest in tests. Return 0 — no fixup needed.
-            Log.Warning(ex, "FixupCrossBatchReferenceIdsAsync: Raw SQL not available (likely in-memory test provider). Skipping cross-batch FK fixup.");
-            return 0;
+            Repository.Database.Database.SetCommandTimeout(previousTimeout);
         }
     }
 
@@ -1668,106 +1614,62 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (connectedSystemObjects.Count == 0)
             return;
 
-        try
+        // Pre-generate IDs for all CSOs and their attribute values (bypasses EF ValueGeneratedOnAdd)
+        foreach (var cso in connectedSystemObjects)
         {
-            // Pre-generate IDs for all CSOs and their attribute values (bypasses EF ValueGeneratedOnAdd)
-            foreach (var cso in connectedSystemObjects)
+            if (cso.Id == Guid.Empty)
+                cso.Id = Guid.NewGuid();
+
+            foreach (var av in cso.AttributeValues)
             {
-                if (cso.Id == Guid.Empty)
-                    cso.Id = Guid.NewGuid();
-
-                foreach (var av in cso.AttributeValues)
-                {
-                    if (av.Id == Guid.Empty)
-                        av.Id = Guid.NewGuid();
-                }
+                if (av.Id == Guid.Empty)
+                    av.Id = Guid.NewGuid();
             }
-
-            // Fixup ReferenceValueId FKs from navigation properties. ResolveReferencesAsync sets
-            // ReferenceValue (navigation) but not ReferenceValueId (FK). EF change tracking would
-            // normally sync these, but raw SQL bulk insert bypasses change tracking entirely,
-            // so we must explicitly copy the ID from the navigation property to the FK column.
-            //
-            // IMPORTANT: Only set the FK when the referenced CSO is in THIS batch. Cross-batch
-            // references (where the referenced CSO is in a later batch) cannot have their FK set
-            // here because the referenced CSO row doesn't exist in the database yet — the FK
-            // constraint would reject the INSERT. Cross-batch FKs are resolved after all batches
-            // complete via FixupCrossBatchReferenceIdsAsync.
-            var batchCsoIds = new HashSet<Guid>(connectedSystemObjects.Select(c => c.Id));
-            foreach (var cso in connectedSystemObjects)
-            {
-                foreach (var av in cso.AttributeValues)
-                {
-                    if (av.ReferenceValue != null && av.ReferenceValue.Id != Guid.Empty && !av.ReferenceValueId.HasValue
-                        && batchCsoIds.Contains(av.ReferenceValue.Id))
-                        av.ReferenceValueId = av.ReferenceValue.Id;
-                }
-            }
-
-            // Increase command timeout for large bulk inserts. At 100K+ objects with 20 attributes each,
-            // individual SQL statements can take 30+ seconds under memory pressure or slower I/O.
-            var previousTimeout = Repository.Database.Database.GetCommandTimeout();
-            Repository.Database.Database.SetCommandTimeout(300); // 5 minutes
-
-            await using var transaction = await Repository.Database.Database.BeginTransactionAsync();
-
-            // Step 1: INSERT parent CSO rows
-            await BulkInsertConnectedSystemObjectsRawAsync(connectedSystemObjects, onBatchPersisted);
-
-            // Step 2: INSERT child attribute value rows
-            var allAttributeValues = connectedSystemObjects
-                .SelectMany(cso => cso.AttributeValues.Select(av => (CsoId: cso.Id, Value: av)))
-                .ToList();
-
-            if (allAttributeValues.Count > 0)
-                await BulkInsertCsoAttributeValuesRawAsync(allAttributeValues);
-
-            await transaction.CommitAsync();
-
-            // Restore previous timeout
-            Repository.Database.Database.SetCommandTimeout(previousTimeout);
         }
-        catch (Exception ex)
+
+        // Fixup ReferenceValueId FKs from navigation properties. ResolveReferencesAsync sets
+        // ReferenceValue (navigation) but not ReferenceValueId (FK). EF change tracking would
+        // normally sync these, but raw SQL bulk insert bypasses change tracking entirely,
+        // so we must explicitly copy the ID from the navigation property to the FK column.
+        //
+        // IMPORTANT: Only set the FK when the referenced CSO is in THIS batch. Cross-batch
+        // references (where the referenced CSO is in a later batch) cannot have their FK set
+        // here because the referenced CSO row doesn't exist in the database yet — the FK
+        // constraint would reject the INSERT. Cross-batch FKs are resolved after all batches
+        // complete via FixupCrossBatchReferenceIdsAsync.
+        var batchCsoIds = new HashSet<Guid>(connectedSystemObjects.Select(c => c.Id));
+        foreach (var cso in connectedSystemObjects)
         {
-            // Fallback for unit tests with mocked DbContext where raw SQL is not available.
-            // Log in production so we know the raw SQL path failed — EF fallback is orders of
-            // magnitude slower and will cause the import to appear stuck.
-            Serilog.Log.Warning(ex, "CreateConnectedSystemObjectsAsync: Raw SQL bulk insert failed, falling back to EF. This will be slow for large batches. Count={Count}", connectedSystemObjects.Count);
-            try
+            foreach (var av in cso.AttributeValues)
             {
-                // Use Entry().State instead of AddRange() to avoid graph traversal identity
-                // conflicts with already-tracked entities (in-memory provider / workflow tests).
-                foreach (var cso in connectedSystemObjects)
-                {
-                    var tracked = Repository.Database.ChangeTracker.Entries<ConnectedSystemObject>()
-                        .FirstOrDefault(e => e.Entity.Id == cso.Id);
-                    if (tracked == null)
-                    {
-                        var entry = Repository.Database.Entry(cso);
-                        if (entry.State == EntityState.Detached)
-                            entry.State = EntityState.Added;
-                    }
-
-                    foreach (var av in cso.AttributeValues)
-                    {
-                        var trackedAv = Repository.Database.ChangeTracker.Entries<ConnectedSystemObjectAttributeValue>()
-                            .FirstOrDefault(e => e.Entity.Id == av.Id);
-                        if (trackedAv == null)
-                        {
-                            var avEntry = Repository.Database.Entry(av);
-                            if (avEntry.State == EntityState.Detached)
-                                avEntry.State = EntityState.Added;
-                        }
-                    }
-                }
+                if (av.ReferenceValue != null && av.ReferenceValue.Id != Guid.Empty && !av.ReferenceValueId.HasValue
+                    && batchCsoIds.Contains(av.ReferenceValue.Id))
+                    av.ReferenceValueId = av.ReferenceValue.Id;
             }
-            catch (NullReferenceException)
-            {
-                // Mocked DbContext: ChangeTracker/Entry() unavailable, use AddRange.
-                Repository.Database.ConnectedSystemObjects.AddRange(connectedSystemObjects);
-            }
-            await Repository.Database.SaveChangesAsync();
         }
+
+        // Increase command timeout for large bulk inserts. At 100K+ objects with 20 attributes each,
+        // individual SQL statements can take 30+ seconds under memory pressure or slower I/O.
+        var previousTimeout = Repository.Database.Database.GetCommandTimeout();
+        Repository.Database.Database.SetCommandTimeout(300); // 5 minutes
+
+        await using var transaction = await Repository.Database.Database.BeginTransactionAsync();
+
+        // Step 1: INSERT parent CSO rows
+        await BulkInsertConnectedSystemObjectsRawAsync(connectedSystemObjects, onBatchPersisted);
+
+        // Step 2: INSERT child attribute value rows
+        var allAttributeValues = connectedSystemObjects
+            .SelectMany(cso => cso.AttributeValues.Select(av => (CsoId: cso.Id, Value: av)))
+            .ToList();
+
+        if (allAttributeValues.Count > 0)
+            await BulkInsertCsoAttributeValuesRawAsync(allAttributeValues);
+
+        await transaction.CommitAsync();
+
+        // Restore previous timeout
+        Repository.Database.Database.SetCommandTimeout(previousTimeout);
     }
 
     public async Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
@@ -1786,36 +1688,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (connectedSystemObjects.Count == 0)
             return;
 
-        try
-        {
-            // Use raw SQL for the parent CSO row updates (bypasses change tracker overhead for the
-            // parent rows). Then call SaveChangesAsync to let the change tracker handle child entity
-            // operations: attribute value additions (Added) and removals (Deleted) that were queued
-            // by ProcessConnectedSystemObjectAttributeValueChanges modifying CSO.AttributeValues.
-            await BulkUpdateConnectedSystemObjectsRawAsync(connectedSystemObjects);
+        // Use raw SQL for the parent CSO row updates (bypasses change tracker overhead for the
+        // parent rows). Then call SaveChangesAsync to let the change tracker handle child entity
+        // operations: attribute value additions (Added) and removals (Deleted) that were queued
+        // by ProcessConnectedSystemObjectAttributeValueChanges modifying CSO.AttributeValues.
+        await BulkUpdateConnectedSystemObjectsRawAsync(connectedSystemObjects);
 
-            // Mark CSOs as Unchanged to prevent SaveChangesAsync from re-updating them
-            // (the raw SQL already wrote the correct values)
-            foreach (var cso in connectedSystemObjects)
-            {
-                var entry = Repository.Database.Entry(cso);
-                if (entry.State == EntityState.Modified)
-                    entry.State = EntityState.Unchanged;
-            }
-
-            // Flush pending child entity changes (attribute value adds/deletes)
-            await Repository.Database.SaveChangesAsync();
-        }
-        catch (Exception ex)
+        // Mark CSOs as Unchanged to prevent SaveChangesAsync from re-updating them
+        // (the raw SQL already wrote the correct values)
+        foreach (var cso in connectedSystemObjects)
         {
-            // Fallback for unit tests with mocked DbContext where raw SQL is not available.
-            // Use per-entity Entry().State instead of UpdateRange() to avoid graph traversal
-            // that causes identity conflicts after ClearChangeTracker().
-            Serilog.Log.Warning(ex, "UpdateConnectedSystemObjectsAsync: Raw SQL bulk update failed, falling back to EF. Count={Count}", connectedSystemObjects.Count);
-            foreach (var cso in connectedSystemObjects)
-                Repository.UpdateDetachedSafe(cso);  // Already has NullReferenceException fallback
-            await Repository.Database.SaveChangesAsync();
+            var entry = Repository.Database.Entry(cso);
+            if (entry.State == EntityState.Modified)
+                entry.State = EntityState.Unchanged;
         }
+
+        // Flush pending child entity changes (attribute value adds/deletes)
+        await Repository.Database.SaveChangesAsync();
     }
 
     /// <inheritdoc />
@@ -1824,29 +1713,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (connectedSystemObjects.Count == 0)
             return;
 
-        try
-        {
-            await BulkUpdateConnectedSystemObjectJoinStatesRawAsync(connectedSystemObjects);
-        }
-        catch
-        {
-            // Fallback for unit tests with mocked DbContext where raw SQL is not available.
-            // Try Entry().State first to avoid graph traversal identity conflicts (in-memory provider).
-            // Fall back to UpdateRange for mocked DbContext where Entry() throws NullReferenceException.
-            try
-            {
-                foreach (var cso in connectedSystemObjects)
-                {
-                    var entry = Repository.Database.Entry(cso);
-                    entry.State = EntityState.Modified;
-                }
-            }
-            catch (NullReferenceException)
-            {
-                Repository.Database.ConnectedSystemObjects.UpdateRange(connectedSystemObjects);
-            }
-            await Repository.Database.SaveChangesAsync();
-        }
+        await BulkUpdateConnectedSystemObjectJoinStatesRawAsync(connectedSystemObjects);
     }
 
     /// <summary>
@@ -1859,22 +1726,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Explicitly mark new attribute values as Added so they are persisted.
         // Use Entry().State instead of DbSet.Add() to avoid graph traversal that causes
         // identity conflicts after ClearChangeTracker().
-        try
+        foreach (var attrValue in newAttributeValues)
         {
-            foreach (var attrValue in newAttributeValues)
-            {
-                Log.Verbose("UpdateConnectedSystemObjectWithNewAttributeValuesAsync: Adding new attribute value for CSO {CsoId}, AttributeId={AttrId}, GuidValue={GuidValue}, StringValue='{StringValue}'",
-                    connectedSystemObject.Id, attrValue.AttributeId, attrValue.GuidValue, attrValue.StringValue);
-                var avEntry = Repository.Database.Entry(attrValue);
-                if (avEntry.State == EntityState.Detached)
-                    avEntry.State = EntityState.Added;
-            }
-        }
-        catch (NullReferenceException)
-        {
-            // Mocked DbContext: Entry() unavailable, use Add().
-            foreach (var attrValue in newAttributeValues)
-                Repository.Database.ConnectedSystemObjectAttributeValues.Add(attrValue);
+            Log.Verbose("UpdateConnectedSystemObjectWithNewAttributeValuesAsync: Adding new attribute value for CSO {CsoId}, AttributeId={AttrId}, GuidValue={GuidValue}, StringValue='{StringValue}'",
+                connectedSystemObject.Id, attrValue.AttributeId, attrValue.GuidValue, attrValue.StringValue);
+            var avEntry = Repository.Database.Entry(attrValue);
+            if (avEntry.State == EntityState.Detached)
+                avEntry.State = EntityState.Added;
         }
 
         // Use Entry().State instead of DbSet.Update() to avoid graph traversal.
@@ -1893,134 +1751,34 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (updates.Count == 0)
             return;
 
-        try
+        // Pre-generate IDs for all new attribute values (bypasses EF ValueGeneratedOnAdd).
+        // Without this, raw SQL inserts Guid.Empty for all rows, causing PK violations.
+        // Mirrors the pattern in CreateConnectedSystemObjectsAsync.
+        foreach (var (_, newAttributeValues) in updates)
         {
-            // Pre-generate IDs for all new attribute values (bypasses EF ValueGeneratedOnAdd).
-            // Without this, raw SQL inserts Guid.Empty for all rows, causing PK violations.
-            // Mirrors the pattern in CreateConnectedSystemObjectsAsync.
-            foreach (var (_, newAttributeValues) in updates)
+            foreach (var av in newAttributeValues)
             {
-                foreach (var av in newAttributeValues)
-                {
-                    if (av.Id == Guid.Empty)
-                        av.Id = Guid.NewGuid();
+                if (av.Id == Guid.Empty)
+                    av.Id = Guid.NewGuid();
 
-                    // Fixup ReferenceValueId FK from navigation property (same reason as
-                    // CreateConnectedSystemObjectsAsync — raw SQL bypasses EF change tracking).
-                    if (av.ReferenceValue != null && av.ReferenceValue.Id != Guid.Empty && !av.ReferenceValueId.HasValue)
-                        av.ReferenceValueId = av.ReferenceValue.Id;
-                }
+                // Fixup ReferenceValueId FK from navigation property (same reason as
+                // CreateConnectedSystemObjectsAsync — raw SQL bypasses EF change tracking).
+                if (av.ReferenceValue != null && av.ReferenceValue.Id != Guid.Empty && !av.ReferenceValueId.HasValue)
+                    av.ReferenceValueId = av.ReferenceValue.Id;
             }
-
-            // Insert new attribute values via raw SQL (works with untracked entities from AsNoTracking)
-            var allNewValues = updates
-                .SelectMany(u => u.newAttributeValues.Select(av => (u.cso.Id, av)))
-                .ToList();
-            if (allNewValues.Count > 0)
-            {
-                await BulkInsertCsoAttributeValuesRawAsync(allNewValues);
-            }
-
-            Log.Verbose("UpdateConnectedSystemObjectsWithNewAttributeValuesAsync: Inserted {AttrCount} new attribute values for {CsoCount} CSOs via raw SQL",
-                allNewValues.Count, updates.Count);
         }
-        catch (Exception ex)
+
+        // Insert new attribute values via raw SQL (works with untracked entities from AsNoTracking)
+        var allNewValues = updates
+            .SelectMany(u => u.newAttributeValues.Select(av => (u.cso.Id, av)))
+            .ToList();
+        if (allNewValues.Count > 0)
         {
-            // Fallback for unit tests with mocked DbContext where raw SQL is not available
-            Log.Warning(ex, "UpdateConnectedSystemObjectsWithNewAttributeValuesAsync: Raw SQL failed, falling back to EF");
-
-            try
-            {
-                // The in-memory provider requires saving through tracked entity instances.
-                // After ClearChangeTracker(), the CSO instances passed in are detached copies.
-                // We must: (1) add genuinely new attribute values, and (2) update existing
-                // attribute values that were modified on the detached CSO instances.
-                foreach (var (cso, newAttributeValues) in updates)
-                {
-                    // Add genuinely new attribute values
-                    foreach (var attrValue in newAttributeValues)
-                    {
-                        Log.Verbose("UpdateConnectedSystemObjectsWithNewAttributeValuesAsync: Adding new attribute value for CSO {CsoId}, AttributeId={AttrId}, GuidValue={GuidValue}, StringValue='{StringValue}'",
-                            cso.Id, attrValue.AttributeId, attrValue.GuidValue, attrValue.StringValue);
-
-                        // Null out navigation properties to avoid graph traversal
-                        attrValue.ConnectedSystemObject = null!;
-
-                        var avEntry = Repository.Database.Entry(attrValue);
-                        if (avEntry.State == EntityState.Detached)
-                            avEntry.State = EntityState.Added;
-                    }
-
-                    // For existing attribute values that were modified on the detached CSO
-                    // (e.g., external ID values updated by BatchUpdateCsosAfterSuccessfulExportAsync),
-                    // find the tracked version and update it, or load from store via FindAsync.
-                    foreach (var av in cso.AttributeValues.Where(a => !newAttributeValues.Contains(a)))
-                    {
-                        var trackedAv = Repository.Database.ChangeTracker.Entries<ConnectedSystemObjectAttributeValue>()
-                            .FirstOrDefault(e => e.Entity.Id == av.Id);
-
-                        if (trackedAv != null)
-                        {
-                            // Update the already-tracked instance with new values
-                            trackedAv.Entity.StringValue = av.StringValue;
-                            trackedAv.Entity.GuidValue = av.GuidValue;
-                            trackedAv.Entity.IntValue = av.IntValue;
-                            trackedAv.Entity.LongValue = av.LongValue;
-                            trackedAv.Entity.BoolValue = av.BoolValue;
-                            trackedAv.Entity.DateTimeValue = av.DateTimeValue;
-                            trackedAv.Entity.ByteValue = av.ByteValue;
-                            trackedAv.Entity.ReferenceValueId = av.ReferenceValueId;
-                            trackedAv.Entity.UnresolvedReferenceValue = av.UnresolvedReferenceValue;
-                        }
-                        else
-                        {
-                            // Not tracked. Load from store so we get the persisted instance.
-                            var existingAv = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
-                                .FindAsync(av.Id);
-                            if (existingAv != null)
-                            {
-                                existingAv.StringValue = av.StringValue;
-                                existingAv.GuidValue = av.GuidValue;
-                                existingAv.IntValue = av.IntValue;
-                                existingAv.LongValue = av.LongValue;
-                                existingAv.BoolValue = av.BoolValue;
-                                existingAv.DateTimeValue = av.DateTimeValue;
-                                existingAv.ByteValue = av.ByteValue;
-                                existingAv.ReferenceValueId = av.ReferenceValueId;
-                                existingAv.UnresolvedReferenceValue = av.UnresolvedReferenceValue;
-                            }
-                        }
-                    }
-                }
-
-                // Reset stale Deleted entries from prior operations (e.g., CSO attribute value
-                // deletions queued by ProcessConnectedSystemObjectAttributeValueChanges during
-                // import update). These were already handled by UpdateConnectedSystemObjectsAsync
-                // but remain in the change tracker. Without this, SaveChangesAsync throws
-                // DbUpdateConcurrencyException because the rows no longer exist in the store.
-                foreach (var e in Repository.Database.ChangeTracker.Entries()
-                    .Where(e => e.State == EntityState.Deleted))
-                {
-                    e.State = EntityState.Detached;
-                }
-            }
-            catch (NullReferenceException)
-            {
-                // Mocked DbContext: ChangeTracker/Entry() unavailable.
-                // Fall back to AddRange for new values and Update for CSOs.
-                foreach (var (cso, newAttributeValues) in updates)
-                {
-                    foreach (var attrValue in newAttributeValues)
-                        Repository.Database.ConnectedSystemObjectAttributeValues.Add(attrValue);
-                    Repository.Database.ConnectedSystemObjects.Update(cso);
-                }
-            }
-
-            await Repository.Database.SaveChangesAsync();
-
-            Log.Verbose("UpdateConnectedSystemObjectsWithNewAttributeValuesAsync: Batch saved {Count} CSO updates via EF fallback",
-                updates.Count);
+            await BulkInsertCsoAttributeValuesRawAsync(allNewValues);
         }
+
+        Log.Verbose("UpdateConnectedSystemObjectsWithNewAttributeValuesAsync: Inserted {AttrCount} new attribute values for {CsoCount} CSOs via raw SQL",
+            allNewValues.Count, updates.Count);
     }
 
     public async Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int connectedSystemObjectTypeId)
@@ -2233,17 +1991,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile runProfile)
     {
         // Null out the FK reference in Activities to preserve audit history
-        // Only execute raw SQL if we have a real database connection (not mocked)
-        try
-        {
-            await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""Activities"" SET ""ConnectedSystemRunProfileId"" = NULL WHERE ""ConnectedSystemRunProfileId"" = {0}",
-                runProfile.Id);
-        }
-        catch (Exception)
-        {
-            // Expected when running with mocked DbContext in tests
-        }
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""Activities"" SET ""ConnectedSystemRunProfileId"" = NULL WHERE ""ConnectedSystemRunProfileId"" = {0}",
+            runProfile.Id);
 
         // Find the tracked instance if one exists (e.g. loaded by GetConnectedSystemAsync
         // in the application layer), otherwise use the passed-in entity.
@@ -2448,16 +2198,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task UpdatePendingExportAsync(PendingExport pendingExport)
     {
-        try
-        {
-            await BulkUpdatePendingExportsRawAsync(new List<PendingExport> { pendingExport });
-        }
-        catch
-        {
-            // Fallback for unit tests with mocked DbContext where raw SQL is not available
-            Repository.Database.PendingExports.Update(pendingExport);
-            await Repository.Database.SaveChangesAsync();
-        }
+        await BulkUpdatePendingExportsRawAsync(new List<PendingExport> { pendingExport });
     }
 
     public async Task DeletePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
@@ -2466,101 +2207,26 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (exportList.Count == 0)
             return;
 
+        var ids = exportList.Select(pe => pe.Id).ToArray();
+
+        // Delete child records first (FK constraint)
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""PendingExportAttributeValueChanges"" WHERE ""PendingExportId"" = ANY({0})",
+            ids);
+
+        // Delete parent records
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""PendingExports"" WHERE ""Id"" = ANY({0})",
+            ids);
+
+        // Best-effort detach of deleted entities from the change tracker.
+        // After ClearChangeTracker() (e.g. cross-page reference resolution), calling Entry()
+        // can trigger change detection that encounters MetaverseAttribute identity conflicts
+        // (multiple instances with the same key loaded by different queries). Since the rows
+        // are already deleted via raw SQL, a detach failure is non-critical — the entities
+        // will simply remain in the tracker as stale entries until the next clear.
         try
         {
-            var ids = exportList.Select(pe => pe.Id).ToArray();
-
-            // Delete child records first (FK constraint)
-            await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"DELETE FROM ""PendingExportAttributeValueChanges"" WHERE ""PendingExportId"" = ANY({0})",
-                ids);
-
-            // Delete parent records
-            await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"DELETE FROM ""PendingExports"" WHERE ""Id"" = ANY({0})",
-                ids);
-
-            // Best-effort detach of deleted entities from the change tracker.
-            // After ClearChangeTracker() (e.g. cross-page reference resolution), calling Entry()
-            // can trigger change detection that encounters MetaverseAttribute identity conflicts
-            // (multiple instances with the same key loaded by different queries). Since the rows
-            // are already deleted via raw SQL, a detach failure is non-critical — the entities
-            // will simply remain in the tracker as stale entries until the next clear.
-            try
-            {
-                foreach (var export in exportList)
-                {
-                    foreach (var avc in export.AttributeValueChanges)
-                    {
-                        var avcEntry = Repository.Database.Entry(avc);
-                        if (avcEntry.State != EntityState.Detached)
-                            avcEntry.State = EntityState.Detached;
-                    }
-
-                    var entry = Repository.Database.Entry(export);
-                    if (entry.State != EntityState.Detached)
-                        entry.State = EntityState.Detached;
-                }
-            }
-            catch (InvalidOperationException)
-            {
-                // Identity conflict during detach — safe to ignore since rows are already deleted
-            }
-        }
-        catch
-        {
-            // Fallback for unit tests with mocked DbContext where raw SQL is not available
-            Repository.Database.PendingExports.RemoveRange(exportList);
-            await Repository.Database.SaveChangesAsync();
-        }
-    }
-
-    public async Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
-    {
-        var csoIds = connectedSystemObjectIds.ToArray();
-        if (csoIds.Length == 0)
-            return 0;
-
-        try
-        {
-            // Use raw SQL for performance and to avoid change tracker identity conflicts.
-            // After ClearChangeTracker(), loading PEs with Include chains would create
-            // MetaverseAttribute instances that conflict with instances already tracked by the
-            // cross-page CSO query, causing identity resolution failures.
-            await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"DELETE FROM ""PendingExportAttributeValueChanges""
-                  WHERE ""PendingExportId"" IN (
-                      SELECT pe.""Id"" FROM ""PendingExports"" pe
-                      WHERE pe.""ConnectedSystemObjectId"" = ANY({0})
-                  )",
-                csoIds);
-
-            // Delete parent records and return count
-            var deleted = await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"DELETE FROM ""PendingExports"" WHERE ""ConnectedSystemObjectId"" = ANY({0})",
-                csoIds);
-
-            return deleted;
-        }
-        catch (Exception)
-        {
-            // Expected when running with mocked DbContext in unit tests —
-            // Database.Database is not mocked and raw SQL is not supported.
-            return 0;
-        }
-    }
-
-    public async Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
-    {
-        var exportList = pendingExports.ToList();
-        if (exportList.Count == 0)
-            return;
-
-        try
-        {
-            await BulkUpdatePendingExportsRawAsync(exportList);
-
-            // Detach updated entities and their children from change tracker (no-op if loaded with AsNoTracking)
             foreach (var export in exportList)
             {
                 foreach (var avc in export.AttributeValueChanges)
@@ -2575,44 +2241,59 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     entry.State = EntityState.Detached;
             }
         }
-        catch
+        catch (InvalidOperationException)
         {
-            // Fallback for unit tests with in-memory DbContext where raw SQL is not available.
-            // After ClearChangeTracker, a subsequent query may re-load and auto-track a NEW
-            // PendingExport instance for the same ID. We must find and update that tracked
-            // instance rather than trying to attach our original (now-stale) copy.
-            try
-            {
-                foreach (var export in exportList)
-                {
-                    var tracked = Repository.Database.ChangeTracker.Entries<PendingExport>()
-                        .FirstOrDefault(e => e.Entity.Id == export.Id);
+            // Identity conflict during detach — safe to ignore since rows are already deleted
+        }
+    }
 
-                    if (tracked != null)
-                    {
-                        // Update the already-tracked instance to match our in-memory entity
-                        tracked.Entity.Status = export.Status;
-                        tracked.Entity.HasUnresolvedReferences = export.HasUnresolvedReferences;
-                        tracked.Entity.LastAttemptedAt = export.LastAttemptedAt;
-                        tracked.Entity.ErrorCount = export.ErrorCount;
-                        tracked.State = EntityState.Modified;
-                    }
-                    else
-                    {
-                        // Not tracked — safe to attach
-                        var entry = Repository.Database.Entry(export);
-                        if (entry.State == EntityState.Detached)
-                            entry.State = EntityState.Modified;
-                    }
-                }
-            }
-            catch (NullReferenceException)
+    public async Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
+    {
+        var csoIds = connectedSystemObjectIds.ToArray();
+        if (csoIds.Length == 0)
+            return 0;
+
+        // Use raw SQL for performance and to avoid change tracker identity conflicts.
+        // After ClearChangeTracker(), loading PEs with Include chains would create
+        // MetaverseAttribute instances that conflict with instances already tracked by the
+        // cross-page CSO query, causing identity resolution failures.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""PendingExportAttributeValueChanges""
+              WHERE ""PendingExportId"" IN (
+                  SELECT pe.""Id"" FROM ""PendingExports"" pe
+                  WHERE pe.""ConnectedSystemObjectId"" = ANY({0})
+              )",
+            csoIds);
+
+        // Delete parent records and return count
+        var deleted = await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""PendingExports"" WHERE ""ConnectedSystemObjectId"" = ANY({0})",
+            csoIds);
+
+        return deleted;
+    }
+
+    public async Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
+    {
+        var exportList = pendingExports.ToList();
+        if (exportList.Count == 0)
+            return;
+
+        await BulkUpdatePendingExportsRawAsync(exportList);
+
+        // Detach updated entities and their children from change tracker (no-op if loaded with AsNoTracking)
+        foreach (var export in exportList)
+        {
+            foreach (var avc in export.AttributeValueChanges)
             {
-                // Mocked DbContext: ChangeTracker/Entry() are null — fall back to Update()
-                foreach (var export in exportList)
-                    Repository.Database.PendingExports.Update(export);
+                var avcEntry = Repository.Database.Entry(avc);
+                if (avcEntry.State != EntityState.Detached)
+                    avcEntry.State = EntityState.Detached;
             }
-            await Repository.Database.SaveChangesAsync();
+
+            var entry = Repository.Database.Entry(export);
+            if (entry.State != EntityState.Detached)
+                entry.State = EntityState.Detached;
         }
     }
 
@@ -2623,53 +2304,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         var now = DateTime.UtcNow;
 
-        // Try raw SQL first for maximum efficiency (bypasses EF Core change tracking)
-        try
-        {
-            var ids = pendingExports.Select(pe => pe.Id).ToArray();
-            var statusValue = (int)PendingExportStatus.Executing;
+        var ids = pendingExports.Select(pe => pe.Id).ToArray();
+        var statusValue = (int)PendingExportStatus.Executing;
 
-            await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""PendingExports"" SET ""Status"" = {0}, ""LastAttemptedAt"" = {1} WHERE ""Id"" = ANY({2})",
-                statusValue, now, ids);
-        }
-        catch
-        {
-            // Fallback for unit tests with in-memory DbContext where raw SQL is not available.
-            // After ClearChangeTracker, a subsequent query (e.g. CSO lookup) may re-load and
-            // auto-track a NEW PendingExport instance for the same ID. We must find and update
-            // that tracked instance rather than trying to attach our original (now-stale) copy.
-            try
-            {
-                foreach (var pe in pendingExports)
-                {
-                    var tracked = Repository.Database.ChangeTracker.Entries<PendingExport>()
-                        .FirstOrDefault(e => e.Entity.Id == pe.Id);
-
-                    if (tracked != null)
-                    {
-                        // Update the already-tracked instance directly
-                        tracked.Entity.Status = PendingExportStatus.Executing;
-                        tracked.Entity.LastAttemptedAt = DateTime.UtcNow;
-                        tracked.State = EntityState.Modified;
-                    }
-                    else
-                    {
-                        // Not tracked — safe to attach
-                        var entry = Repository.Database.Entry(pe);
-                        if (entry.State == EntityState.Detached)
-                            entry.State = EntityState.Modified;
-                    }
-                }
-            }
-            catch (NullReferenceException)
-            {
-                // Mocked DbContext: ChangeTracker/Entry() are null — fall back to Update()
-                foreach (var pe in pendingExports)
-                    Repository.Database.PendingExports.Update(pe);
-            }
-            await Repository.Database.SaveChangesAsync();
-        }
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""PendingExports"" SET ""Status"" = {0}, ""LastAttemptedAt"" = {1} WHERE ""Id"" = ANY({2})",
+            statusValue, now, ids);
 
         // Always update the in-memory entities to keep them consistent
         foreach (var export in pendingExports)
@@ -2691,67 +2331,33 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (pendingExportsList.Count == 0)
             return;
 
-        try
+        // Pre-generate IDs for all pending exports and their attribute value changes
+        foreach (var pe in pendingExportsList)
         {
-            // Pre-generate IDs for all pending exports and their attribute value changes
-            foreach (var pe in pendingExportsList)
+            if (pe.Id == Guid.Empty)
+                pe.Id = Guid.NewGuid();
+
+            foreach (var avc in pe.AttributeValueChanges)
             {
-                if (pe.Id == Guid.Empty)
-                    pe.Id = Guid.NewGuid();
-
-                foreach (var avc in pe.AttributeValueChanges)
-                {
-                    if (avc.Id == Guid.Empty)
-                        avc.Id = Guid.NewGuid();
-                }
+                if (avc.Id == Guid.Empty)
+                    avc.Id = Guid.NewGuid();
             }
-
-            await using var transaction = await Repository.Database.Database.BeginTransactionAsync();
-
-            // Step 1: INSERT parent PendingExport rows
-            await BulkInsertPendingExportsRawAsync(pendingExportsList);
-
-            // Step 2: INSERT child attribute value change rows
-            var allChanges = pendingExportsList
-                .SelectMany(pe => pe.AttributeValueChanges.Select(avc => (PendingExportId: pe.Id, Change: avc)))
-                .ToList();
-
-            if (allChanges.Count > 0)
-                await BulkInsertPendingExportAttributeValueChangesRawAsync(allChanges);
-
-            await transaction.CommitAsync();
         }
-        catch (Exception ex) when (IsInMemoryProviderException(ex))
-        {
-            // Fallback for unit tests with mocked DbContext where raw SQL is not available.
-            // Only catch InvalidOperationException (in-memory provider can't begin transactions)
-            // and NullReferenceException (mocked DbContext). All other exceptions (SQL errors,
-            // constraint violations) must propagate — falling back to AddRangeAsync in production
-            // causes graph traversal identity conflicts with already-tracked entities.
-            Log.Warning(ex, "CreatePendingExportsAsync: Raw SQL path failed, falling back to EF (test environment)");
-            try
-            {
-                foreach (var pe in pendingExportsList)
-                {
-                    var peEntry = Repository.Database.Entry(pe);
-                    if (peEntry.State == EntityState.Detached)
-                        peEntry.State = EntityState.Added;
 
-                    foreach (var avc in pe.AttributeValueChanges)
-                    {
-                        var avcEntry = Repository.Database.Entry(avc);
-                        if (avcEntry.State == EntityState.Detached)
-                            avcEntry.State = EntityState.Added;
-                    }
-                }
-            }
-            catch (NullReferenceException)
-            {
-                // Mocked DbContext: Entry() unavailable, use AddRangeAsync.
-                await Repository.Database.PendingExports.AddRangeAsync(pendingExportsList);
-            }
-            await Repository.Database.SaveChangesAsync();
-        }
+        await using var transaction = await Repository.Database.Database.BeginTransactionAsync();
+
+        // Step 1: INSERT parent PendingExport rows
+        await BulkInsertPendingExportsRawAsync(pendingExportsList);
+
+        // Step 2: INSERT child attribute value change rows
+        var allChanges = pendingExportsList
+            .SelectMany(pe => pe.AttributeValueChanges.Select(avc => (PendingExportId: pe.Id, Change: avc)))
+            .ToList();
+
+        if (allChanges.Count > 0)
+            await BulkInsertPendingExportAttributeValueChangesRawAsync(allChanges);
+
+        await transaction.CommitAsync();
     }
 
     /// <summary>
@@ -3060,22 +2666,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Delete any duplicate PEs found. Use raw SQL since entities are AsNoTracking.
         if (duplicateIdsToDelete.Count > 0)
         {
-            try
-            {
-                await Repository.Database.Database.ExecuteSqlRawAsync(
-                    @"DELETE FROM ""PendingExportAttributeValueChanges"" WHERE ""PendingExportId"" = ANY({0})",
-                    duplicateIdsToDelete.ToArray());
-                await Repository.Database.Database.ExecuteSqlRawAsync(
-                    @"DELETE FROM ""PendingExports"" WHERE ""Id"" = ANY({0})",
-                    duplicateIdsToDelete.ToArray());
-            }
-            catch (Exception)
-            {
-                // Expected when running with mocked DbContext in unit tests —
-                // Database.Database is not mocked and raw SQL is not supported.
-                // The correct result dictionary is still returned; the stale duplicates
-                // will be cleaned up on the next real database execution.
-            }
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"DELETE FROM ""PendingExportAttributeValueChanges"" WHERE ""PendingExportId"" = ANY({0})",
+                duplicateIdsToDelete.ToArray());
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"DELETE FROM ""PendingExports"" WHERE ""Id"" = ANY({0})",
+                duplicateIdsToDelete.ToArray());
 
             Log.Information("GetPendingExportsLightweightByConnectedSystemObjectIdsAsync: Self-healed {Count} duplicate pending export(s)",
                 duplicateIdsToDelete.Count);
@@ -3747,17 +3343,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task DeleteSyncRuleAsync(SyncRule syncRule)
     {
         // Null out the FK reference in Activities to preserve audit history
-        // Only execute raw SQL if we have a real database connection (not mocked)
-        try
-        {
-            await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""Activities"" SET ""SyncRuleId"" = NULL WHERE ""SyncRuleId"" = {0}",
-                syncRule.Id);
-        }
-        catch (Exception)
-        {
-            // Expected when running with mocked DbContext in tests
-        }
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""Activities"" SET ""SyncRuleId"" = NULL WHERE ""SyncRuleId"" = {0}",
+            syncRule.Id);
 
         Repository.Database.Remove(syncRule);
         await Repository.Database.SaveChangesAsync();
@@ -4442,32 +4030,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     private static Npgsql.NpgsqlParameter NullableParam(object? value, NpgsqlTypes.NpgsqlDbType dbType)
     {
         return new Npgsql.NpgsqlParameter { Value = value ?? DBNull.Value, NpgsqlDbType = dbType };
-    }
-
-    /// <summary>
-    /// Determines whether an exception is from the EF Core in-memory provider (used in unit tests)
-    /// rather than a transient database failure. Only these should be silently swallowed when
-    /// falling back from raw SQL operations that the in-memory provider does not support.
-    /// </summary>
-    /// <remarks>
-    /// The previous pattern — <c>catch (Exception ex) when (IsInMemoryProviderException(ex))</c> —
-    /// was too broad: Npgsql wraps transient failures (timeouts, connection drops) in
-    /// <see cref="InvalidOperationException"/> with message "An exception has been raised that is likely due to a transient failure",
-    /// causing real database errors to be silently swallowed.
-    /// </remarks>
-    private static bool IsInMemoryProviderException(Exception ex)
-    {
-        // In-memory provider throws InvalidOperationException or NullReferenceException
-        // when raw SQL is attempted. Transient DB failures also throw InvalidOperationException
-        // but always have an inner exception from Npgsql (NpgsqlException, TimeoutException, etc.).
-        if (ex is not (InvalidOperationException or NullReferenceException))
-            return false;
-
-        // If the exception has an inner Npgsql/timeout exception, it's a real DB error, not in-memory.
-        if (ex.InnerException is Npgsql.NpgsqlException or TimeoutException or System.IO.IOException)
-            return false;
-
-        return true;
     }
 
     #endregion

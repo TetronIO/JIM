@@ -27,6 +27,7 @@
     <ItemGroup>
       <ProjectReference Include="..\..\src\JIM.Application\JIM.Application.csproj" />
       <ProjectReference Include="..\..\src\JIM.Connectors\JIM.Connectors.csproj" />
+      <ProjectReference Include="..\..\src\JIM.InMemoryData\JIM.InMemoryData.csproj" />
       <ProjectReference Include="..\..\src\JIM.PostgresData\JIM.PostgresData.csproj" />
       <ProjectReference Include="..\..\src\JIM.Worker\JIM.Worker.csproj" />
     </ItemGroup>

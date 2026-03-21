@@ -1,3 +1,4 @@
+using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -11,16 +12,16 @@ namespace JIM.Application.Services;
 /// </summary>
 public class PendingExportReconciliationService
 {
-    private readonly JimApplication _jim;
+    private readonly ISyncRepository _syncRepo;
 
     /// <summary>
     /// Default maximum number of export attempts before marking an attribute change as Failed.
     /// </summary>
     public const int DefaultMaxRetries = 5;
 
-    public PendingExportReconciliationService(JimApplication jim)
+    public PendingExportReconciliationService(ISyncRepository syncRepo)
     {
-        _jim = jim;
+        _syncRepo = syncRepo;
     }
 
     /// <summary>
@@ -35,7 +36,7 @@ public class PendingExportReconciliationService
         var result = new PendingExportReconciliationResult();
 
         // Get any pending export for this CSO
-        var pendingExport = await _jim.Repository.ConnectedSystems.GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObject.Id);
+        var pendingExport = await _syncRepo.GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObject.Id);
 
         if (pendingExport == null)
         {
@@ -49,12 +50,12 @@ public class PendingExportReconciliationService
         // Persist changes immediately (non-batched mode)
         if (result.PendingExportDeleted)
         {
-            await _jim.Repository.ConnectedSystems.DeletePendingExportAsync(pendingExport);
+            await _syncRepo.DeletePendingExportAsync(pendingExport);
             Log.Information("ReconcileAsync: All attribute changes confirmed. Deleted pending export {ExportId}", pendingExport.Id);
         }
         else if (result.HasChanges)
         {
-            await _jim.Repository.ConnectedSystems.UpdatePendingExportAsync(pendingExport);
+            await _syncRepo.UpdatePendingExportAsync(pendingExport);
             Log.Debug("ReconcileAsync: Updated pending export {ExportId} with {Confirmed} confirmed, {Retry} for retry, {Failed} failed",
                 pendingExport.Id, result.ConfirmedChanges.Count, result.RetryChanges.Count, result.FailedChanges.Count);
         }
@@ -417,48 +418,4 @@ public class PendingExportReconciliationService
             pendingExport.Status = PendingExportStatus.Exported;
         }
     }
-}
-
-/// <summary>
-/// Result of a pending export reconciliation operation.
-/// </summary>
-public class PendingExportReconciliationResult
-{
-    /// <summary>
-    /// Attribute changes that were confirmed (value matched imported value).
-    /// These have been removed from the PendingExport.
-    /// </summary>
-    public List<PendingExportAttributeValueChange> ConfirmedChanges { get; } = new();
-
-    /// <summary>
-    /// Attribute changes that were not confirmed and will be retried.
-    /// </summary>
-    public List<PendingExportAttributeValueChange> RetryChanges { get; } = new();
-
-    /// <summary>
-    /// Attribute changes that exceeded max retries and are now Failed.
-    /// </summary>
-    public List<PendingExportAttributeValueChange> FailedChanges { get; } = new();
-
-    /// <summary>
-    /// Whether the PendingExport was deleted (all changes confirmed).
-    /// </summary>
-    public bool PendingExportDeleted { get; set; }
-
-    /// <summary>
-    /// The pending export to delete (for batched operations).
-    /// Only set when PendingExportDeleted is true.
-    /// </summary>
-    public PendingExport? PendingExportToDelete { get; set; }
-
-    /// <summary>
-    /// The pending export to update (for batched operations).
-    /// Only set when there are changes but the export should not be deleted.
-    /// </summary>
-    public PendingExport? PendingExportToUpdate { get; set; }
-
-    /// <summary>
-    /// True if any reconciliation was performed.
-    /// </summary>
-    public bool HasChanges => ConfirmedChanges.Count > 0 || RetryChanges.Count > 0 || FailedChanges.Count > 0;
 }

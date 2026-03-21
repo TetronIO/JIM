@@ -69,16 +69,16 @@ public class DriftDetectionWorkflowTests
 
         // Execute exports to AD and populate CSO values
         await _harness.ExecuteExportAsync("AD");
-        await PopulateCsoAttributeValuesFromPendingExportsAsync();
+        PopulateCsoAttributeValuesFromPendingExports();
 
         // Clear pending exports (mark as complete)
-        await ClearPendingExportsAsync();
+        ClearPendingExports();
         var beforeDrift = await _harness.TakeSnapshotAsync("Before Drift");
         Assert.That(beforeDrift.PendingExportCount, Is.EqualTo(0));
 
         // Step 2: Simulate unauthorised change directly in AD (bypass JIM)
         // Change the displayName on AD CSOs to simulate drift
-        await SimulateUnauthorisedCsoChangeAsync("AD", "cn", "Drifted Value");
+        SimulateUnauthorisedCsoChange("AD", "cn", "Drifted Value");
 
         // Step 3: Run delta sync on AD to detect drift
         // This should:
@@ -93,10 +93,7 @@ public class DriftDetectionWorkflowTests
             "Corrective pending exports should be created when drift is detected");
 
         // Verify the pending exports are corrective (Update type, not Create)
-        var pendingExports = await _harness.DbContext.PendingExports
-            .Include(pe => pe.AttributeValueChanges)
-            .ThenInclude(avc => avc.Attribute)
-            .ToListAsync();
+        var pendingExports = _harness.SyncRepo.PendingExports.Values.ToList();
 
         Assert.That(pendingExports.All(pe => pe.ChangeType == PendingExportChangeType.Update),
             "Drift correction exports should be Update type");
@@ -130,11 +127,11 @@ public class DriftDetectionWorkflowTests
 
         // Execute exports and populate CSO values
         await _harness.ExecuteExportAsync("AD");
-        await PopulateCsoAttributeValuesFromPendingExportsAsync();
-        await ClearPendingExportsAsync();
+        PopulateCsoAttributeValuesFromPendingExports();
+        ClearPendingExports();
 
         // Step 2: Simulate drift in AD
-        await SimulateUnauthorisedCsoChangeAsync("AD", "cn", "Drifted Value");
+        SimulateUnauthorisedCsoChange("AD", "cn", "Drifted Value");
 
         // Step 3: Run delta sync - should NOT detect drift because EnforceState=false
         await _harness.ExecuteDeltaSyncAsync("AD");
@@ -169,12 +166,12 @@ public class DriftDetectionWorkflowTests
 
         // Execute exports to AD and populate CSO values
         await _harness.ExecuteExportAsync("AD");
-        await PopulateCsoAttributeValuesFromPendingExportsAsync();
-        await ClearPendingExportsAsync();
+        PopulateCsoAttributeValuesFromPendingExports();
+        ClearPendingExports();
 
         // Step 2: Simulate change in AD (but AD is a contributor, so this is legitimate)
         // In a real scenario, this would come from AD import
-        await SimulateUnauthorisedCsoChangeAsync("AD", "cn", "AD Updated Value");
+        SimulateUnauthorisedCsoChange("AD", "cn", "AD Updated Value");
 
         // Step 3: Run delta sync - should NOT flag as drift because AD is a contributor
         await _harness.ExecuteDeltaSyncAsync("AD");
@@ -209,12 +206,12 @@ public class DriftDetectionWorkflowTests
 
         // Execute exports and populate CSO values
         await _harness.ExecuteExportAsync("AD");
-        await PopulateCsoAttributeValuesFromPendingExportsAsync();
-        await ClearPendingExportsAsync();
+        PopulateCsoAttributeValuesFromPendingExports();
+        ClearPendingExports();
 
         // Step 2: Simulate change to an attribute that is NOT in the export rule
         // The harness uses "cn" for export, so change a different attribute
-        await SimulateUnauthorisedCsoChangeAsync("AD", "description", "Some description");
+        SimulateUnauthorisedCsoChange("AD", "description", "Some description");
 
         // Step 3: Run delta sync - should NOT detect drift for unmapped attribute
         await _harness.ExecuteDeltaSyncAsync("AD");
@@ -262,10 +259,10 @@ public class DriftDetectionWorkflowTests
         await _harness.ExecuteExportAsync("AD");
 
         // Populate CSO attribute values from pending exports (simulating confirming import)
-        await PopulateCsoAttributeValuesFromPendingExportsAsync();
+        PopulateCsoAttributeValuesFromPendingExports();
 
         // Clear pending exports (mark as complete)
-        await ClearPendingExportsAsync();
+        ClearPendingExports();
         var beforeFullSync = await _harness.TakeSnapshotAsync("Before Full Sync on AD");
         Assert.That(beforeFullSync.PendingExportCount, Is.EqualTo(0),
             "Should have no pending exports before full sync");
@@ -287,7 +284,7 @@ public class DriftDetectionWorkflowTests
 
         // If there were pending exports (bug scenario), it would mean drift was incorrectly detected
         // Additional verification: check there are no pending exports in database
-        var pendingExportCount = await _harness.DbContext.PendingExports.CountAsync();
+        var pendingExportCount = _harness.SyncRepo.PendingExports.Count;
         Assert.That(pendingExportCount, Is.EqualTo(0),
             "Database should have no pending exports - drift detection should not create false positives");
     }
@@ -313,12 +310,12 @@ public class DriftDetectionWorkflowTests
 
         // Execute exports to AD and populate CSO values
         await _harness.ExecuteExportAsync("AD");
-        await PopulateCsoAttributeValuesFromPendingExportsAsync();
-        await ClearPendingExportsAsync();
+        PopulateCsoAttributeValuesFromPendingExports();
+        ClearPendingExports();
 
         // Step 2: Simulate ACTUAL drift - modify AD CSO values to differ from MVO
         // This represents an unauthorised change made directly in AD
-        await SimulateUnauthorisedCsoChangeAsync("AD", "cn", "Drifted Value");
+        SimulateUnauthorisedCsoChange("AD", "cn", "Drifted Value");
 
         // Step 3: Run full sync on AD - should detect the drift
         await _harness.ExecuteFullSyncAsync("AD");
@@ -329,10 +326,7 @@ public class DriftDetectionWorkflowTests
             "Should have pending exports to correct the drift");
 
         // Verify the pending exports are corrective (Update type)
-        var pendingExports = await _harness.DbContext.PendingExports
-            .Include(pe => pe.AttributeValueChanges)
-            .ThenInclude(avc => avc.Attribute)
-            .ToListAsync();
+        var pendingExports = _harness.SyncRepo.PendingExports.Values.ToList();
 
         Assert.That(pendingExports.All(pe => pe.ChangeType == PendingExportChangeType.Update),
             "Drift correction exports should be Update type");
@@ -447,16 +441,16 @@ public class DriftDetectionWorkflowTests
             "Should have 4 pending exports (3 users + 1 group) after initial sync");
 
         // Capture pending export data BEFORE export execution (export will clear these)
-        var pendingExportData = await CapturePendingExportDataAsync();
+        var pendingExportData = CapturePendingExportData();
 
         // Execute exports to Target
         await _harness.ExecuteExportAsync("Target");
 
         // Now populate CSO values using the captured data
-        await PopulateEntitlementCsoAttributeValuesFromCapturedDataAsync(pendingExportData);
+        PopulateEntitlementCsoAttributeValuesFromCapturedData(pendingExportData);
 
         // Clear pending exports
-        await ClearPendingExportsAsync();
+        ClearPendingExports();
         var beforeDriftTest = await _harness.TakeSnapshotAsync("Before Drift Test");
         Assert.That(beforeDriftTest.PendingExportCount, Is.EqualTo(0),
             "Should have no pending exports before drift test");
@@ -474,7 +468,7 @@ public class DriftDetectionWorkflowTests
             $"Found {afterTargetSync.PendingExportCount} pending exports, which indicates drift detection bug.");
 
         // Additional verification: no pending exports in database
-        var pendingExportCount = await _harness.DbContext.PendingExports.CountAsync();
+        var pendingExportCount = _harness.SyncRepo.PendingExports.Count;
         Assert.That(pendingExportCount, Is.EqualTo(0),
             "Database should have no pending exports - drift detection should correctly compare all member values");
     }
@@ -539,16 +533,16 @@ public class DriftDetectionWorkflowTests
         await _harness.ExecuteFullSyncAsync("Source");
 
         // Capture pending export data BEFORE execution
-        var pendingExportData = await CapturePendingExportDataAsync();
+        var pendingExportData = CapturePendingExportData();
 
         // Execute exports and populate CSO values
         await _harness.ExecuteExportAsync("Target");
-        await PopulateEntitlementCsoAttributeValuesFromCapturedDataAsync(pendingExportData);
-        await ClearPendingExportsAsync();
+        PopulateEntitlementCsoAttributeValuesFromCapturedData(pendingExportData);
+        ClearPendingExports();
 
         // Step 2: Simulate drift - add User4 to the group membership in Target CSO
         // (bypassing JIM - simulating unauthorised change directly in Target AD)
-        await SimulateMembershipDriftAsync(groupGuid, user4Guid, addMember: true);
+        SimulateMembershipDrift(groupGuid, user4Guid, addMember: true);
 
         // Step 3: Run full sync on Target to detect drift
         await _harness.ExecuteFullSyncAsync("Target");
@@ -559,12 +553,7 @@ public class DriftDetectionWorkflowTests
             "Should detect drift when group has unauthorised extra member");
 
         // Verify it's a corrective export for the group
-        var pendingExports = await _harness.DbContext.PendingExports
-            .Include(pe => pe.ConnectedSystemObject)
-            .ThenInclude(cso => cso!.Type)
-            .Include(pe => pe.AttributeValueChanges)
-            .ThenInclude(avc => avc.Attribute)
-            .ToListAsync();
+        var pendingExports = _harness.SyncRepo.PendingExports.Values.ToList();
 
         // Find the group export - look for an export on a Group type CSO
         var groupExport = pendingExports.FirstOrDefault(pe =>
@@ -641,10 +630,7 @@ public class DriftDetectionWorkflowTests
             "Should have 1 pending export after initial sync");
 
         // Verify the pending export has the expected long value from ToFileTime expression
-        var pendingExport = await _harness.DbContext.PendingExports
-            .Include(pe => pe.AttributeValueChanges)
-            .ThenInclude(avc => avc.Attribute)
-            .FirstAsync();
+        var pendingExport = _harness.SyncRepo.PendingExports.Values.First();
 
         var accountExpiresChange = pendingExport.AttributeValueChanges
             .FirstOrDefault(avc => avc.Attribute?.Name == "accountExpires");
@@ -656,8 +642,8 @@ public class DriftDetectionWorkflowTests
 
         // Step 2: Execute exports and populate CSO values (simulating confirming import)
         await _harness.ExecuteExportAsync("AD");
-        await PopulateCsoAttributeValuesFromPendingExportsAsync();
-        await ClearPendingExportsAsync();
+        PopulateCsoAttributeValuesFromPendingExports();
+        ClearPendingExports();
 
         var beforeDriftCheck = await _harness.TakeSnapshotAsync("Before Drift Check");
         Assert.That(beforeDriftCheck.PendingExportCount, Is.EqualTo(0),
@@ -716,8 +702,8 @@ public class DriftDetectionWorkflowTests
 
         // Step 2: Execute exports and populate CSO values
         await _harness.ExecuteExportAsync("AD");
-        await PopulateCsoAttributeValuesFromPendingExportsAsync();
-        await ClearPendingExportsAsync();
+        PopulateCsoAttributeValuesFromPendingExports();
+        ClearPendingExports();
 
         var beforeDriftCheck = await _harness.TakeSnapshotAsync("Before Drift Check");
         Assert.That(beforeDriftCheck.PendingExportCount, Is.EqualTo(0));
@@ -990,15 +976,9 @@ public class DriftDetectionWorkflowTests
     /// Populates CSO attribute values based on pending exports.
     /// This simulates what would happen after a confirming import.
     /// </summary>
-    private async Task PopulateCsoAttributeValuesFromPendingExportsAsync()
+    private void PopulateCsoAttributeValuesFromPendingExports()
     {
-        var pendingExports = await _harness.DbContext.PendingExports
-            .Include(pe => pe.ConnectedSystemObject)
-            .ThenInclude(cso => cso!.Type)
-            .ThenInclude(csot => csot.Attributes)
-            .Include(pe => pe.AttributeValueChanges)
-            .ThenInclude(avc => avc.Attribute)
-            .ToListAsync();
+        var pendingExports = _harness.SyncRepo.PendingExports.Values.ToList();
 
         foreach (var pe in pendingExports)
         {
@@ -1011,10 +991,8 @@ public class DriftDetectionWorkflowTests
                 if (avc.Attribute == null) continue;
 
                 // Find or create CSO attribute value
-                var existingAttrValue = await _harness.DbContext.ConnectedSystemObjectAttributeValues
-                    .FirstOrDefaultAsync(av =>
-                        av.ConnectedSystemObject.Id == cso.Id &&
-                        av.AttributeId == avc.AttributeId);
+                var existingAttrValue = cso.AttributeValues
+                    .FirstOrDefault(av => av.AttributeId == avc.AttributeId);
 
                 if (existingAttrValue == null)
                 {
@@ -1023,7 +1001,7 @@ public class DriftDetectionWorkflowTests
                         ConnectedSystemObject = cso,
                         AttributeId = avc.AttributeId
                     };
-                    _harness.DbContext.ConnectedSystemObjectAttributeValues.Add(existingAttrValue);
+                    cso.AttributeValues.Add(existingAttrValue);
                 }
 
                 // Copy values from pending export
@@ -1043,18 +1021,14 @@ public class DriftDetectionWorkflowTests
                 cso.Status = ConnectedSystemObjectStatus.Normal;
             }
         }
-
-        await _harness.DbContext.SaveChangesAsync();
     }
 
     /// <summary>
-    /// Clears all pending exports from the database.
+    /// Clears all pending exports from the in-memory store.
     /// </summary>
-    private async Task ClearPendingExportsAsync()
+    private void ClearPendingExports()
     {
-        var pendingExports = await _harness.DbContext.PendingExports.ToListAsync();
-        _harness.DbContext.PendingExports.RemoveRange(pendingExports);
-        await _harness.DbContext.SaveChangesAsync();
+        _harness.SyncRepo.ClearAllPendingExports();
     }
 
     /// <summary>
@@ -1176,15 +1150,9 @@ public class DriftDetectionWorkflowTests
     /// <summary>
     /// Captures pending export data before export execution.
     /// </summary>
-    private async Task<List<CapturedPendingExport>> CapturePendingExportDataAsync()
+    private List<CapturedPendingExport> CapturePendingExportData()
     {
-        var pendingExports = await _harness.DbContext.PendingExports
-            .Include(pe => pe.ConnectedSystemObject)
-            .ThenInclude(cso => cso!.Type)
-            .ThenInclude(csot => csot.Attributes)
-            .Include(pe => pe.AttributeValueChanges)
-            .ThenInclude(avc => avc.Attribute)
-            .ToListAsync();
+        var pendingExports = _harness.SyncRepo.PendingExports.Values.ToList();
 
         var result = new List<CapturedPendingExport>();
 
@@ -1246,13 +1214,12 @@ public class DriftDetectionWorkflowTests
     /// <summary>
     /// Populates CSO attribute values from captured pending export data.
     /// </summary>
-    private async Task PopulateEntitlementCsoAttributeValuesFromCapturedDataAsync(List<CapturedPendingExport> capturedData)
+    private void PopulateEntitlementCsoAttributeValuesFromCapturedData(List<CapturedPendingExport> capturedData)
     {
         foreach (var captured in capturedData)
         {
-            var cso = await _harness.DbContext.ConnectedSystemObjects
-                .Include(c => c.AttributeValues)
-                .FirstOrDefaultAsync(c => c.Id == captured.CsoId);
+            var cso = _harness.SyncRepo.ConnectedSystemObjects.Values
+                .FirstOrDefault(c => c.Id == captured.CsoId);
 
             if (cso == null) continue;
 
@@ -1264,8 +1231,8 @@ public class DriftDetectionWorkflowTests
                     if (Guid.TryParse(av.UnresolvedReferenceValue, out var mvoId))
                     {
                         // Find the CSO that represents this MVO in the target system
-                        var referencedCso = await _harness.DbContext.ConnectedSystemObjects
-                            .FirstOrDefaultAsync(c =>
+                        var referencedCso = _harness.SyncRepo.ConnectedSystemObjects.Values
+                            .FirstOrDefault(c =>
                                 c.MetaverseObjectId == mvoId &&
                                 c.ConnectedSystemId == captured.ConnectedSystemId);
 
@@ -1277,7 +1244,7 @@ public class DriftDetectionWorkflowTests
                                 AttributeId = av.AttributeId,
                                 ReferenceValue = referencedCso
                             };
-                            _harness.DbContext.ConnectedSystemObjectAttributeValues.Add(refAttrValue);
+                            cso.AttributeValues.Add(refAttrValue);
                         }
                     }
                 }
@@ -1294,7 +1261,7 @@ public class DriftDetectionWorkflowTests
                             ConnectedSystemObject = cso,
                             AttributeId = av.AttributeId
                         };
-                        _harness.DbContext.ConnectedSystemObjectAttributeValues.Add(existingAttrValue);
+                        cso.AttributeValues.Add(existingAttrValue);
                     }
 
                     existingAttrValue.StringValue = av.StringValue;
@@ -1310,26 +1277,15 @@ public class DriftDetectionWorkflowTests
                 cso.Status = ConnectedSystemObjectStatus.Normal;
             }
         }
-
-        await _harness.DbContext.SaveChangesAsync();
     }
 
     /// <summary>
     /// Populates CSO attribute values for entitlement scenario, including reference attributes.
     /// Handles multi-valued references by creating separate attribute values for each member.
     /// </summary>
-    private async Task PopulateEntitlementCsoAttributeValuesAsync()
+    private void PopulateEntitlementCsoAttributeValues()
     {
-        var pendingExports = await _harness.DbContext.PendingExports
-            .Include(pe => pe.ConnectedSystemObject)
-            .ThenInclude(cso => cso!.Type)
-            .ThenInclude(csot => csot.Attributes)
-            .Include(pe => pe.ConnectedSystemObject)
-            .ThenInclude(cso => cso!.MetaverseObject)
-            .ThenInclude(mvo => mvo!.AttributeValues)
-            .Include(pe => pe.AttributeValueChanges)
-            .ThenInclude(avc => avc.Attribute)
-            .ToListAsync();
+        var pendingExports = _harness.SyncRepo.PendingExports.Values.ToList();
 
         foreach (var pe in pendingExports)
         {
@@ -1348,8 +1304,8 @@ public class DriftDetectionWorkflowTests
                     if (Guid.TryParse(avc.UnresolvedReferenceValue, out var mvoId))
                     {
                         // Find the CSO that represents this MVO in the target system
-                        var referencedCso = await _harness.DbContext.ConnectedSystemObjects
-                            .FirstOrDefaultAsync(c =>
+                        var referencedCso = _harness.SyncRepo.ConnectedSystemObjects.Values
+                            .FirstOrDefault(c =>
                                 c.MetaverseObjectId == mvoId &&
                                 c.ConnectedSystemId == cso.ConnectedSystemId);
 
@@ -1362,17 +1318,15 @@ public class DriftDetectionWorkflowTests
                                 AttributeId = avc.AttributeId,
                                 ReferenceValue = referencedCso
                             };
-                            _harness.DbContext.ConnectedSystemObjectAttributeValues.Add(refAttrValue);
+                            cso.AttributeValues.Add(refAttrValue);
                         }
                     }
                 }
                 else
                 {
                     // Find or create CSO attribute value for non-reference attributes
-                    var existingAttrValue = await _harness.DbContext.ConnectedSystemObjectAttributeValues
-                        .FirstOrDefaultAsync(av =>
-                            av.ConnectedSystemObject.Id == cso.Id &&
-                            av.AttributeId == avc.AttributeId);
+                    var existingAttrValue = cso.AttributeValues
+                        .FirstOrDefault(av => av.AttributeId == avc.AttributeId);
 
                     if (existingAttrValue == null)
                     {
@@ -1381,7 +1335,7 @@ public class DriftDetectionWorkflowTests
                             ConnectedSystemObject = cso,
                             AttributeId = avc.AttributeId
                         };
-                        _harness.DbContext.ConnectedSystemObjectAttributeValues.Add(existingAttrValue);
+                        cso.AttributeValues.Add(existingAttrValue);
                     }
 
                     // Copy values from pending export
@@ -1398,23 +1352,20 @@ public class DriftDetectionWorkflowTests
                 cso.Status = ConnectedSystemObjectStatus.Normal;
             }
         }
-
-        await _harness.DbContext.SaveChangesAsync();
     }
 
     /// <summary>
     /// Simulates drift in group membership by adding or removing a member directly in the Target CSO.
     /// This bypasses JIM and simulates an unauthorised change in the target system.
     /// </summary>
-    private async Task SimulateMembershipDriftAsync(Guid groupObjectGuid, Guid userObjectGuid, bool addMember)
+    private void SimulateMembershipDrift(Guid groupObjectGuid, Guid userObjectGuid, bool addMember)
     {
         var targetSystem = _harness.GetConnectedSystem("Target");
         var sourceSystem = _harness.GetConnectedSystem("Source");
 
         // First, find the source CSO that has this objectGUID
-        var sourceGroupCso = await _harness.DbContext.ConnectedSystemObjects
-            .Include(cso => cso.AttributeValues)
-            .FirstOrDefaultAsync(cso =>
+        var sourceGroupCso = _harness.SyncRepo.ConnectedSystemObjects.Values
+            .FirstOrDefault(cso =>
                 cso.ConnectedSystemId == sourceSystem.Id &&
                 cso.AttributeValues.Any(av => av.AttributeId == cso.ExternalIdAttributeId && av.GuidValue == groupObjectGuid));
 
@@ -1424,11 +1375,8 @@ public class DriftDetectionWorkflowTests
         }
 
         // Find the target CSO joined to the same MVO
-        var groupCso = await _harness.DbContext.ConnectedSystemObjects
-            .Include(cso => cso.Type)
-            .ThenInclude(csot => csot.Attributes)
-            .Include(cso => cso.AttributeValues)
-            .FirstOrDefaultAsync(cso =>
+        var groupCso = _harness.SyncRepo.ConnectedSystemObjects.Values
+            .FirstOrDefault(cso =>
                 cso.ConnectedSystemId == targetSystem.Id &&
                 cso.MetaverseObjectId == sourceGroupCso.MetaverseObjectId);
 
@@ -1438,9 +1386,8 @@ public class DriftDetectionWorkflowTests
         }
 
         // Find the source user CSO
-        var sourceUserCso = await _harness.DbContext.ConnectedSystemObjects
-            .Include(cso => cso.AttributeValues)
-            .FirstOrDefaultAsync(cso =>
+        var sourceUserCso = _harness.SyncRepo.ConnectedSystemObjects.Values
+            .FirstOrDefault(cso =>
                 cso.ConnectedSystemId == sourceSystem.Id &&
                 cso.AttributeValues.Any(av => av.AttributeId == cso.ExternalIdAttributeId && av.GuidValue == userObjectGuid));
 
@@ -1450,8 +1397,8 @@ public class DriftDetectionWorkflowTests
         }
 
         // Find the target CSO for the user (joined to the same MVO)
-        var userCso = await _harness.DbContext.ConnectedSystemObjects
-            .FirstOrDefaultAsync(cso =>
+        var userCso = _harness.SyncRepo.ConnectedSystemObjects.Values
+            .FirstOrDefault(cso =>
                 cso.ConnectedSystemId == targetSystem.Id &&
                 cso.MetaverseObjectId == sourceUserCso.MetaverseObjectId);
 
@@ -1471,7 +1418,7 @@ public class DriftDetectionWorkflowTests
                 AttributeId = memberAttribute.Id,
                 ReferenceValue = userCso
             };
-            _harness.DbContext.ConnectedSystemObjectAttributeValues.Add(newMemberValue);
+            groupCso.AttributeValues.Add(newMemberValue);
         }
         else
         {
@@ -1481,30 +1428,25 @@ public class DriftDetectionWorkflowTests
 
             if (existingMemberValue != null)
             {
-                _harness.DbContext.ConnectedSystemObjectAttributeValues.Remove(existingMemberValue);
+                groupCso.AttributeValues.Remove(existingMemberValue);
             }
         }
 
         // Mark CSO as updated to trigger delta sync processing
         groupCso.LastUpdated = DateTime.UtcNow;
-
-        await _harness.DbContext.SaveChangesAsync();
     }
 
     /// <summary>
     /// Simulates an unauthorised change made directly in the target system (bypassing JIM).
     /// This modifies CSO attribute values to simulate drift.
     /// </summary>
-    private async Task SimulateUnauthorisedCsoChangeAsync(string systemName, string attributeName, string newValue)
+    private void SimulateUnauthorisedCsoChange(string systemName, string attributeName, string newValue)
     {
         var system = _harness.GetConnectedSystem(systemName);
 
-        var csos = await _harness.DbContext.ConnectedSystemObjects
+        var csos = _harness.SyncRepo.ConnectedSystemObjects.Values
             .Where(cso => cso.ConnectedSystemId == system.Id)
-            .Include(cso => cso.Type)
-            .ThenInclude(csot => csot.Attributes)
-            .Include(cso => cso.AttributeValues)
-            .ToListAsync();
+            .ToList();
 
         foreach (var cso in csos)
         {
@@ -1521,7 +1463,7 @@ public class DriftDetectionWorkflowTests
                     ConnectedSystemObject = cso,
                     AttributeId = attribute.Id
                 };
-                _harness.DbContext.ConnectedSystemObjectAttributeValues.Add(attrValue);
+                cso.AttributeValues.Add(attrValue);
             }
 
             // Update to drifted value
@@ -1530,8 +1472,6 @@ public class DriftDetectionWorkflowTests
             // Mark CSO as having been updated (to trigger delta sync processing)
             cso.LastUpdated = DateTime.UtcNow;
         }
-
-        await _harness.DbContext.SaveChangesAsync();
     }
 
     #endregion
@@ -1591,19 +1531,18 @@ public class DriftDetectionWorkflowTests
 
         // Verify setup: CSO should be joined to MVO
         var system = _harness.GetConnectedSystem("TestSystem");
-        var allCsos = await _harness.DbContext.ConnectedSystemObjects
+        var allCsos = _harness.SyncRepo.ConnectedSystemObjects.Values
             .Where(cso => cso.ConnectedSystemId == system.Id)
-            .ToListAsync();
+            .ToList();
         Assert.That(allCsos.Count, Is.EqualTo(1), "Setup: Should have one CSO");
 
         // Mark CSO as modified so delta query returns it
         var cso = allCsos.First();
         cso.LastUpdated = DateTime.UtcNow;
-        await _harness.DbContext.SaveChangesAsync();
 
-        // Act: Call the repository method that delta sync uses
+        // Act: Call the ISyncRepository method that delta sync uses
         var watermark = DateTime.UtcNow.AddHours(-1);
-        var pagedResult = await _harness.Repository.ConnectedSystems.GetConnectedSystemObjectsModifiedSinceAsync(
+        var pagedResult = await _harness.SyncRepo.GetConnectedSystemObjectsModifiedSinceAsync(
             system.Id,
             watermark,
             page: 1,
@@ -1700,18 +1639,17 @@ public class DriftDetectionWorkflowTests
 
         // Execute exports and simulate confirming import
         await _harness.ExecuteExportAsync("Target");
-        await PopulateCsoAttributeValuesFromPendingExportsAsync();
-        await ClearPendingExportsAsync();
+        PopulateCsoAttributeValuesFromPendingExports();
+        ClearPendingExports();
 
         var beforeDrift = await _harness.TakeSnapshotAsync("Before Drift");
         Assert.That(beforeDrift.PendingExportCount, Is.EqualTo(0), "Setup: No pending exports before drift");
 
         // Step 2: Simulate unauthorised change directly in Target (drift)
         var targetSystem = _harness.GetConnectedSystem("Target");
-        var targetCsos = await _harness.DbContext.ConnectedSystemObjects
-            .Include(c => c.AttributeValues)
+        var targetCsos = _harness.SyncRepo.ConnectedSystemObjects.Values
             .Where(c => c.ConnectedSystemId == targetSystem.Id)
-            .ToListAsync();
+            .ToList();
 
         Assert.That(targetCsos.Count, Is.EqualTo(1), "Should have one Target CSO");
         var targetCso = targetCsos.First();
@@ -1726,11 +1664,10 @@ public class DriftDetectionWorkflowTests
                 ConnectedSystemObject = targetCso,
                 AttributeId = targetCn.Id
             };
-            _harness.DbContext.ConnectedSystemObjectAttributeValues.Add(cnAttrValue);
+            targetCso.AttributeValues.Add(cnAttrValue);
         }
         cnAttrValue.StringValue = "Drifted Value"; // Different from MVO's "Original Value"
         targetCso.LastUpdated = DateTime.UtcNow;
-        await _harness.DbContext.SaveChangesAsync();
 
         // Step 3: Run delta sync on Target to detect drift
         await _harness.ExecuteDeltaSyncAsync("Target");
@@ -1742,10 +1679,9 @@ public class DriftDetectionWorkflowTests
             "if this fails, check that MVO.Type is loaded in GetConnectedSystemObjectsModifiedSinceAsync");
 
         // Verify the pending export has the correct expected value
-        var pendingExports = await _harness.DbContext.PendingExports
-            .Include(pe => pe.AttributeValueChanges)
+        var pendingExports = _harness.SyncRepo.PendingExports.Values
             .Where(pe => pe.ConnectedSystemId == targetSystem.Id)
-            .ToListAsync();
+            .ToList();
 
         Assert.That(pendingExports.Count, Is.EqualTo(1), "Should have one corrective pending export");
 

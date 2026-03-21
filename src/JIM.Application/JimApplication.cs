@@ -2,6 +2,7 @@ using JIM.Application.Interfaces;
 using JIM.Application.Servers;
 using JIM.Application.Services;
 using JIM.Data;
+using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using Microsoft.Extensions.Caching.Memory;
@@ -25,6 +26,13 @@ public class JimApplication : IDisposable
     /// </summary>
     public IMemoryCache? Cache { get; }
 
+    /// <summary>
+    /// The sync repository used by ExportEvaluationServer and ExportExecutionServer.
+    /// In production, this is a <see cref="SyncRepositoryAdapter"/> wrapping this JimApplication.
+    /// In tests, this can be an <c>InMemoryData.SyncRepository</c> for deterministic behaviour.
+    /// </summary>
+    public ISyncRepository SyncRepo { get; }
+
     private SeedingServer Seeding { get; }
     public ActivityServer Activities { get; }
     public CertificateServer Certificates { get; }
@@ -44,7 +52,7 @@ public class JimApplication : IDisposable
     public ServiceSettingsServer ServiceSettings { get; }
     public TaskingServer Tasking { get; }
 
-    public JimApplication(IRepository dataRepository, IMemoryCache? cache = null)
+    public JimApplication(IRepository dataRepository, IMemoryCache? cache = null, ISyncRepository? syncRepository = null)
     {
         Activities = new ActivityServer(this);
         Certificates = new CertificateServer(this);
@@ -52,9 +60,9 @@ public class JimApplication : IDisposable
         ConnectedSystems = new ConnectedSystemServer(this);
         ExampleData = new ExampleDataServer(this);
         DriftDetection = new DriftDetectionService(this);
-        var syncRepo = new SyncRepositoryAdapter(this);
-        ExportEvaluation = new ExportEvaluationServer(this, syncRepo);
-        ExportExecution = new ExportExecutionServer(this, syncRepo);
+        SyncRepo = syncRepository ?? new SyncRepositoryAdapter(this);
+        ExportEvaluation = new ExportEvaluationServer(this, SyncRepo);
+        ExportExecution = new ExportExecutionServer(this, SyncRepo);
         ScopingEvaluation = new ScopingEvaluationServer();
         FileSystem = new FileSystemServer(this);
         Metaverse = new MetaverseServer(this);

@@ -2,6 +2,7 @@ using JIM.Application;
 using JIM.Application.Servers;
 using JIM.Connectors.Mock;
 using JIM.Data;
+using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -25,6 +26,7 @@ public class WorkflowTestHarness : IDisposable
     private readonly JimDbContext _dbContext;
     private readonly IRepository _repository;
     private readonly JimApplication _jim;
+    private readonly JIM.InMemoryData.SyncRepository _syncRepo;
     private readonly Dictionary<string, ConnectedSystem> _connectedSystems = new();
     private readonly Dictionary<string, MockCallConnector> _connectors = new();
     private readonly Dictionary<string, ConnectedSystemObjectType> _objectTypes = new();
@@ -33,6 +35,7 @@ public class WorkflowTestHarness : IDisposable
     public JimDbContext DbContext => _dbContext;
     public IRepository Repository => _repository;
     public JimApplication Jim => _jim;
+    public JIM.InMemoryData.SyncRepository SyncRepo => _syncRepo;
 
     /// <summary>
     /// All snapshots taken during this test.
@@ -60,7 +63,8 @@ public class WorkflowTestHarness : IDisposable
 
         _dbContext = new JimDbContext(options);
         _repository = new PostgresDataRepository(_dbContext);
-        _jim = new JimApplication(_repository);
+        _syncRepo = new JIM.InMemoryData.SyncRepository();
+        _jim = new JimApplication(_repository, syncRepository: _syncRepo);
     }
 
     #region Setup Methods
@@ -84,6 +88,7 @@ public class WorkflowTestHarness : IDisposable
         _dbContext.ConnectedSystems.Add(connectedSystem);
         await _dbContext.SaveChangesAsync();
 
+        _syncRepo.SeedConnectedSystem(connectedSystem);
         _connectedSystems[name] = connectedSystem;
         _connectors[name] = connector;
 
@@ -129,6 +134,7 @@ public class WorkflowTestHarness : IDisposable
         _dbContext.ConnectedSystemObjectTypes.Add(objectType);
         await _dbContext.SaveChangesAsync();
 
+        _syncRepo.SeedObjectType(objectType);
         var key = $"{systemName}:{typeName}";
         _objectTypes[key] = objectType;
 
@@ -200,6 +206,8 @@ public class WorkflowTestHarness : IDisposable
         _dbContext.SyncRules.Add(syncRule);
         await _dbContext.SaveChangesAsync();
 
+        _syncRepo.SeedSyncRule(syncRule);
+
         return syncRule;
     }
 
@@ -245,7 +253,7 @@ public class WorkflowTestHarness : IDisposable
         var cts = new CancellationTokenSource();
         var processor = new SyncImportTaskProcessor(
             _jim,
-            new SyncRepositoryAdapter(_jim),
+            _syncRepo,
             connector,
             system,
             runProfile,
@@ -253,6 +261,11 @@ public class WorkflowTestHarness : IDisposable
             cts);
 
         await processor.PerformFullImportAsync();
+
+        // Clear DbContext change tracker to prevent stale entity conflicts
+        // Processors write to InMemoryData.SyncRepository, but DbContext still
+        // tracks the original activity entity. Clear to avoid SaveChanges conflicts.
+        _dbContext.ChangeTracker.Clear();
 
         return await ReloadEntityAsync(activity);
     }
@@ -270,13 +283,14 @@ public class WorkflowTestHarness : IDisposable
         var cts = new CancellationTokenSource();
         var processor = new SyncFullSyncTaskProcessor(
             new SyncServer(_jim),
-            new SyncRepositoryAdapter(_jim),
+            _syncRepo,
             system,
             runProfile,
             activity,
             cts);
 
         await processor.PerformFullSyncAsync();
+        _dbContext.ChangeTracker.Clear();
 
         return await ReloadEntityAsync(activity);
     }
@@ -289,14 +303,10 @@ public class WorkflowTestHarness : IDisposable
     {
         var sourceSystem = GetConnectedSystem(sourceSystemName);
 
-        // Get all MVOs and evaluate export rules for each
-        var mvos = await _dbContext.MetaverseObjects
-            .Include(m => m.Type)
-            .Include(m => m.AttributeValues)
-                .ThenInclude(av => av.Attribute)
-            .ToListAsync();
+        // Get all MVOs from InMemoryData (where processors write)
+        var mvos = _syncRepo.MetaverseObjects.Values.ToList();
 
-        // Build export evaluation cache
+        // Build export evaluation cache (uses ISyncRepository internally via JimApplication)
         var cache = await _jim.ExportEvaluation.BuildExportEvaluationCacheAsync(sourceSystem.Id);
 
         foreach (var mvo in mvos)
@@ -319,6 +329,7 @@ public class WorkflowTestHarness : IDisposable
         var activity = await CreateActivityAsync(system.Id, runProfile, ConnectedSystemRunType.Export);
 
         await _jim.ExportExecution.ExecuteExportsAsync(system, connector, SyncRunMode.PreviewAndSync);
+        _dbContext.ChangeTracker.Clear();
 
         return await ReloadEntityAsync(activity);
     }
@@ -350,13 +361,14 @@ public class WorkflowTestHarness : IDisposable
         var cts = new CancellationTokenSource();
         var processor = new SyncDeltaSyncTaskProcessor(
             new SyncServer(_jim),
-            new SyncRepositoryAdapter(_jim),
+            _syncRepo,
             system,
             runProfile,
             activity,
             cts);
 
         await processor.PerformDeltaSyncAsync();
+        _dbContext.ChangeTracker.Clear();
 
         return await ReloadEntityAsync(activity);
     }
@@ -368,11 +380,11 @@ public class WorkflowTestHarness : IDisposable
     /// <summary>
     /// Takes a snapshot of the current database state.
     /// </summary>
-    public async Task<WorkflowStateSnapshot> TakeSnapshotAsync(string stepName)
+    public Task<WorkflowStateSnapshot> TakeSnapshotAsync(string stepName)
     {
-        var snapshot = await WorkflowStateSnapshot.CaptureAsync(_dbContext, stepName);
+        var snapshot = WorkflowStateSnapshot.CaptureFrom(_syncRepo, stepName);
         _snapshots.Add(snapshot);
-        return snapshot;
+        return Task.FromResult(snapshot);
     }
 
     /// <summary>
@@ -427,32 +439,16 @@ public class WorkflowTestHarness : IDisposable
         _dbContext.Activities.Add(activity);
         await _dbContext.SaveChangesAsync();
 
+        _syncRepo.SeedActivity(activity);
+
         return activity;
     }
 
-    private async Task<T> ReloadEntityAsync<T>(T entity) where T : class
+    private Task<T> ReloadEntityAsync<T>(T entity) where T : class
     {
-        _dbContext.Entry(entity).State = EntityState.Detached;
-
-        var idProperty = typeof(T).GetProperty("Id");
-        if (idProperty != null)
-        {
-            var id = idProperty.GetValue(entity);
-
-            // Special handling for Activity to include RunProfileExecutionItems
-            if (typeof(T) == typeof(Activity) && id is Guid activityId)
-            {
-                var activity = await _dbContext.Set<Activity>()
-                    .Include(a => a.RunProfileExecutionItems)
-                    .FirstOrDefaultAsync(a => a.Id == activityId);
-                return (activity as T) ?? entity;
-            }
-
-            var reloaded = await _dbContext.Set<T>().FindAsync(id);
-            return reloaded ?? entity;
-        }
-
-        return entity;
+        // With InMemoryData.SyncRepository, entities are plain C# objects — same references
+        // are used throughout the test. No need to reload from DbContext.
+        return Task.FromResult(entity);
     }
 
     private SynchronisationWorkerTask CreateWorkerTask(Activity activity)

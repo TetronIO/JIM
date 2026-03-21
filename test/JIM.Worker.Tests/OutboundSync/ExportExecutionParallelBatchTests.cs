@@ -1,5 +1,4 @@
 using JIM.Application;
-using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -12,6 +11,7 @@ using JIM.Worker.Tests.Models;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
 using Moq;
+using SyncRepository = JIM.InMemoryData.SyncRepository;
 
 namespace JIM.Worker.Tests.OutboundSync;
 
@@ -48,6 +48,7 @@ public class ExportExecutionParallelBatchTests
     private List<SyncRule> SyncRulesData { get; set; } = null!;
     private Mock<DbSet<SyncRule>> MockDbSetSyncRules { get; set; } = null!;
     private JimApplication Jim { get; set; } = null!;
+    private SyncRepository SyncRepo { get; set; } = null!;
     #endregion
 
     [TearDown]
@@ -108,7 +109,8 @@ public class ExportExecutionParallelBatchTests
         MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
         MockJimDbContext.Setup(m => m.SyncRules).Returns(MockDbSetSyncRules.Object);
 
-        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+        SyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First());
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
     }
 
     /// <summary>
@@ -128,7 +130,9 @@ public class ExportExecutionParallelBatchTests
         {
             var cso = CreateCso(targetSystem, targetUserType);
             ConnectedSystemObjectsData.Add(cso);
-            PendingExportsData.Add(CreatePendingExport(targetSystem, cso, displayNameAttr, $"Value {i}"));
+            var pe = CreatePendingExport(targetSystem, cso, displayNameAttr, $"Value {i}");
+            PendingExportsData.Add(pe);
+            SyncRepo.SeedPendingExport(pe);
         }
 
         var mockConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
@@ -169,7 +173,9 @@ public class ExportExecutionParallelBatchTests
         {
             var cso = CreateCso(targetSystem, targetUserType);
             ConnectedSystemObjectsData.Add(cso);
-            PendingExportsData.Add(CreatePendingExport(targetSystem, cso, displayNameAttr, $"Value {i}"));
+            var pe = CreatePendingExport(targetSystem, cso, displayNameAttr, $"Value {i}");
+            PendingExportsData.Add(pe);
+            SyncRepo.SeedPendingExport(pe);
         }
 
         var mockConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
@@ -214,6 +220,7 @@ public class ExportExecutionParallelBatchTests
             ConnectedSystemObjectsData.Add(cso);
             var pe = CreatePendingExport(targetSystem, cso, displayNameAttr, $"Value {i}");
             PendingExportsData.Add(pe);
+            SyncRepo.SeedPendingExport(pe);
             pendingExportIds.Add(pe.Id);
         }
 
@@ -231,7 +238,7 @@ public class ExportExecutionParallelBatchTests
         Func<ISyncRepository> repositoryFactory = () =>
         {
             repoFactoryCalled = true;
-            return new SyncRepositoryAdapter(new JimApplication(CreateMockRepository(PendingExportsData)));
+            return TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData);
         };
 
         var options = new ExportExecutionOptions
@@ -278,7 +285,9 @@ public class ExportExecutionParallelBatchTests
         {
             var cso = CreateCso(targetSystem, targetUserType);
             ConnectedSystemObjectsData.Add(cso);
-            PendingExportsData.Add(CreatePendingExport(targetSystem, cso, displayNameAttr, $"Value {i}"));
+            var pe = CreatePendingExport(targetSystem, cso, displayNameAttr, $"Value {i}");
+            PendingExportsData.Add(pe);
+            SyncRepo.SeedPendingExport(pe);
         }
 
         // Connector succeeds on first call, throws on second call
@@ -329,13 +338,15 @@ public class ExportExecutionParallelBatchTests
         {
             var cso = CreateCso(targetSystem, targetUserType);
             ConnectedSystemObjectsData.Add(cso);
-            PendingExportsData.Add(CreatePendingExport(targetSystem, cso, displayNameAttr, $"Value {i}"));
+            var pe = CreatePendingExport(targetSystem, cso, displayNameAttr, $"Value {i}");
+            PendingExportsData.Add(pe);
+            SyncRepo.SeedPendingExport(pe);
         }
 
         var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
 
         Func<IConnector> connectorFactory = () => CreateMockConnector(ConnectedSystemExportResult.Succeeded()).Object;
-        Func<ISyncRepository> repositoryFactory = () => new SyncRepositoryAdapter(new JimApplication(CreateMockRepository(PendingExportsData)));
+        Func<ISyncRepository> repositoryFactory = () => TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData);
 
         using var cts = new CancellationTokenSource();
         cts.Cancel(); // Cancel immediately
@@ -376,13 +387,15 @@ public class ExportExecutionParallelBatchTests
         {
             var cso = CreateCso(targetSystem, targetUserType);
             ConnectedSystemObjectsData.Add(cso);
-            PendingExportsData.Add(CreatePendingExport(targetSystem, cso, displayNameAttr, $"Value {i}"));
+            var pe = CreatePendingExport(targetSystem, cso, displayNameAttr, $"Value {i}");
+            PendingExportsData.Add(pe);
+            SyncRepo.SeedPendingExport(pe);
         }
 
         var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
 
         Func<IConnector> connectorFactory = () => CreateMockConnector(ConnectedSystemExportResult.Succeeded()).Object;
-        Func<ISyncRepository> repositoryFactory = () => new SyncRepositoryAdapter(new JimApplication(CreateMockRepository(PendingExportsData)));
+        Func<ISyncRepository> repositoryFactory = () => TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData);
 
         var progressReports = new List<ExportProgressInfo>();
         Func<ExportProgressInfo, Task> progressCallback = info =>
@@ -435,7 +448,9 @@ public class ExportExecutionParallelBatchTests
         {
             var cso = CreateCso(targetSystem, targetUserType);
             ConnectedSystemObjectsData.Add(cso);
-            PendingExportsData.Add(CreatePendingExport(targetSystem, cso, displayNameAttr, $"Value {i}"));
+            var pe = CreatePendingExport(targetSystem, cso, displayNameAttr, $"Value {i}");
+            PendingExportsData.Add(pe);
+            SyncRepo.SeedPendingExport(pe);
         }
 
         var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
@@ -451,7 +466,7 @@ public class ExportExecutionParallelBatchTests
         Func<ISyncRepository> repositoryFactory = () =>
         {
             repoFactoryCalled = true;
-            return new SyncRepositoryAdapter(new JimApplication(CreateMockRepository(PendingExportsData)));
+            return TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData);
         };
 
         var options = new ExportExecutionOptions
@@ -495,12 +510,13 @@ public class ExportExecutionParallelBatchTests
             ConnectedSystemObjectsData.Add(cso);
             var pe = CreatePendingExport(targetSystem, cso, displayNameAttr, $"Value {i}");
             PendingExportsData.Add(pe);
+            SyncRepo.SeedPendingExport(pe);
             expectedIds.Add(pe.Id);
         }
 
         var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
         Func<IConnector> connectorFactory = () => CreateMockConnector(ConnectedSystemExportResult.Succeeded()).Object;
-        Func<ISyncRepository> repositoryFactory = () => new SyncRepositoryAdapter(new JimApplication(CreateMockRepository(PendingExportsData)));
+        Func<ISyncRepository> repositoryFactory = () => TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData);
 
         var options = new ExportExecutionOptions
         {
@@ -597,27 +613,6 @@ public class ExportExecutionParallelBatchTests
             .ReturnsAsync((IList<PendingExport> exports, CancellationToken _) =>
                 exports.Select(_ => defaultResult).ToList());
         return mockConnector;
-    }
-
-    /// <summary>
-    /// Creates a mock IRepository with its own mock DbContext that can serve
-    /// GetPendingExportsByIdsAsync from the shared pending exports data.
-    /// This simulates what each parallel batch's per-batch repository would do.
-    /// </summary>
-    private static IRepository CreateMockRepository(List<PendingExport> pendingExportsData)
-    {
-        var mockPendingExports = pendingExportsData.BuildMockDbSet();
-
-        var mockDbContext = new Mock<JimDbContext>();
-        mockDbContext.Setup(m => m.PendingExports).Returns(mockPendingExports.Object);
-
-        // Also need to set up the other DbSets that might be accessed during batch processing
-        mockDbContext.Setup(m => m.ConnectedSystemAttributes)
-            .Returns(new List<ConnectedSystemObjectTypeAttribute>().BuildMockDbSet().Object);
-        mockDbContext.Setup(m => m.ConnectedSystemObjects)
-            .Returns(new List<ConnectedSystemObject>().BuildMockDbSet().Object);
-
-        return new PostgresDataRepository(mockDbContext.Object);
     }
 
     #endregion

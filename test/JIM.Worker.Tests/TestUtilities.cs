@@ -1,8 +1,10 @@
-﻿using JIM.Models.Activities;
+﻿using JIM.InMemoryData;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
+using JIM.Models.Transactional;
 using JIM.Utilities;
 using JIM.Worker.Tests.Models;
 
@@ -1111,5 +1113,53 @@ public static class TestUtilities
             InitiatedByName = initiatedBy?.DisplayName
         };
         return workerTask;
+    }
+
+    /// <summary>
+    /// Creates and seeds an InMemoryData.SyncRepository with the standard test data.
+    /// Seeds connected systems, object types, sync rules, and configures settings.
+    /// Optionally seeds CSOs, MVOs, pending exports, and activities.
+    /// </summary>
+    public static SyncRepository CreateSyncRepository(
+        List<ConnectedSystemObject>? csos = null,
+        List<MetaverseObject>? mvos = null,
+        List<PendingExport>? pendingExports = null,
+        Activity? activity = null,
+        List<SyncRule>? syncRules = null)
+    {
+        var syncRepo = new SyncRepository();
+        syncRepo.SetSyncOutcomeTrackingLevel(
+            ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed);
+
+        // Seed connected systems
+        foreach (var cs in GetConnectedSystemData())
+            syncRepo.SeedConnectedSystem(cs);
+
+        // Seed object types
+        foreach (var ot in GetConnectedSystemObjectTypeData())
+            syncRepo.SeedObjectType(ot);
+
+        // Seed sync rules — use provided instances so test-level modifications are visible to the processor
+        var rulesToSeed = syncRules ?? GetSyncRuleData();
+        foreach (var sr in rulesToSeed)
+            syncRepo.SeedSyncRule(sr);
+
+        // Seed optional data
+        if (csos != null)
+            foreach (var cso in csos)
+                syncRepo.SeedConnectedSystemObject(cso);
+
+        if (mvos != null)
+            foreach (var mvo in mvos)
+                syncRepo.SeedMetaverseObject(mvo);
+
+        if (pendingExports != null)
+            foreach (var pe in pendingExports)
+                syncRepo.SeedPendingExport(pe);
+
+        if (activity != null)
+            syncRepo.SeedActivity(activity);
+
+        return syncRepo;
     }
 }

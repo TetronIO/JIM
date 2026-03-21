@@ -1,5 +1,6 @@
 using JIM.Application;
 using JIM.Data;
+using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
@@ -22,6 +23,7 @@ public abstract class WorkflowTestBase
     protected JimDbContext DbContext = null!;
     protected IRepository Repository = null!;
     protected JimApplication Jim = null!;
+    protected JIM.InMemoryData.SyncRepository SyncRepo = null!;
 
     [SetUp]
     public void BaseSetUp()
@@ -38,7 +40,10 @@ public abstract class WorkflowTestBase
 
         DbContext = new JimDbContext(options);
         Repository = new PostgresDataRepository(DbContext);
-        Jim = new JimApplication(Repository);
+        SyncRepo = new JIM.InMemoryData.SyncRepository();
+        SyncRepo.SetSyncOutcomeTrackingLevel(
+            JIM.Models.Activities.ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed);
+        Jim = new JimApplication(Repository, syncRepository: SyncRepo);
 
         // Seed required service settings for sync processors
         SeedServiceSettingsAsync().GetAwaiter().GetResult();
@@ -106,6 +111,8 @@ public abstract class WorkflowTestBase
         DbContext.ConnectedSystems.Add(connectedSystem);
         await DbContext.SaveChangesAsync();
 
+        SyncRepo.SeedConnectedSystem(connectedSystem);
+
         return connectedSystem;
     }
 
@@ -149,6 +156,8 @@ public abstract class WorkflowTestBase
         DbContext.ConnectedSystemObjectTypes.Add(csoType);
         await DbContext.SaveChangesAsync();
 
+        SyncRepo.SeedObjectType(csoType);
+
         return csoType;
     }
 
@@ -171,8 +180,11 @@ public abstract class WorkflowTestBase
         // Create the CSO
         var cso = new ConnectedSystemObject
         {
+            Id = Guid.NewGuid(),
             ConnectedSystemId = connectedSystemId,
             TypeId = csoType.Id,
+            Type = csoType,
+            ConnectedSystem = SyncRepo.ConnectedSystems.TryGetValue(connectedSystemId, out var cs) ? cs : null!,
             Created = created ?? DateTime.UtcNow,
             LastUpdated = lastUpdated
         };
@@ -180,7 +192,9 @@ public abstract class WorkflowTestBase
         // Add attribute values
         cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
+            Id = Guid.NewGuid(),
             AttributeId = externalIdAttr.Id,
+            Attribute = externalIdAttr,
             GuidValue = Guid.NewGuid()
         });
 
@@ -188,7 +202,9 @@ public abstract class WorkflowTestBase
         {
             cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
             {
+                Id = Guid.NewGuid(),
                 AttributeId = displayNameAttr.Id,
+                Attribute = displayNameAttr,
                 StringValue = displayName
             });
         }
@@ -197,14 +213,16 @@ public abstract class WorkflowTestBase
         {
             cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
             {
+                Id = Guid.NewGuid(),
                 AttributeId = employeeIdAttr.Id,
+                Attribute = employeeIdAttr,
                 StringValue = employeeId
             });
         }
 
-        DbContext.ConnectedSystemObjects.Add(cso);
-        await DbContext.SaveChangesAsync();
+        SyncRepo.SeedConnectedSystemObject(cso);
 
+        await Task.CompletedTask;
         return cso;
     }
 
@@ -303,6 +321,8 @@ public abstract class WorkflowTestBase
         DbContext.SyncRules.Add(syncRule);
         await DbContext.SaveChangesAsync();
 
+        SyncRepo.SeedSyncRule(syncRule);
+
         return syncRule;
     }
 
@@ -325,6 +345,9 @@ public abstract class WorkflowTestBase
             RunType = runType
         };
 
+        // Detach modified entities to avoid EF trying to persist processor-modified properties
+        foreach (var entry in DbContext.ChangeTracker.Entries().Where(e => e.State == EntityState.Modified).ToList())
+            entry.State = EntityState.Detached;
         DbContext.ConnectedSystemRunProfiles.Add(runProfile);
         await DbContext.SaveChangesAsync();
 
@@ -352,8 +375,13 @@ public abstract class WorkflowTestBase
             ConnectedSystemRunType = runType
         };
 
+        // Detach modified entities to avoid EF trying to persist processor-modified properties
+        foreach (var entry in DbContext.ChangeTracker.Entries().Where(e => e.State == EntityState.Modified).ToList())
+            entry.State = EntityState.Detached;
         DbContext.Activities.Add(activity);
         await DbContext.SaveChangesAsync();
+
+        SyncRepo.SeedActivity(activity);
 
         return activity;
     }
@@ -363,39 +391,46 @@ public abstract class WorkflowTestBase
     #region Helper Methods - Utilities
 
     /// <summary>
-    /// Reloads an entity from the database to get the latest values.
+    /// Reloads an entity from the SyncRepo or DbContext to get the latest values.
     /// Essential after processors modify entities.
     /// </summary>
-    protected async Task<T> ReloadEntityAsync<T>(T entity) where T : class
+    protected Task<T> ReloadEntityAsync<T>(T entity) where T : class
     {
-        DbContext.Entry(entity).State = EntityState.Detached;
 
-        // For entities with Id property
+        // For entities stored in SyncRepo, return the current reference directly
         var idProperty = typeof(T).GetProperty("Id");
         if (idProperty != null)
         {
             var id = idProperty.GetValue(entity);
-            var reloaded = await DbContext.Set<T>().FindAsync(id);
-            return reloaded ?? entity;
+
+            if (id is Guid guidId)
+            {
+                if (typeof(T) == typeof(Activity) && SyncRepo.Activities.TryGetValue(guidId, out var activity))
+                    return Task.FromResult((T)(object)activity);
+                if (typeof(T) == typeof(ConnectedSystemObject) && SyncRepo.ConnectedSystemObjects.TryGetValue(guidId, out var cso))
+                    return Task.FromResult((T)(object)cso);
+                if (typeof(T) == typeof(MetaverseObject) && SyncRepo.MetaverseObjects.TryGetValue(guidId, out var mvo))
+                    return Task.FromResult((T)(object)mvo);
+            }
+
+            if (id is int intId)
+            {
+                if (typeof(T) == typeof(ConnectedSystem) && SyncRepo.ConnectedSystems.TryGetValue(intId, out var cs))
+                    return Task.FromResult((T)(object)cs);
+            }
         }
 
-        return entity;
+        // Fallback to DbContext for entities not in SyncRepo
+        return Task.FromResult(entity);
     }
 
     /// <summary>
     /// Updates a CSO's LastUpdated timestamp to simulate a modification.
     /// </summary>
-    protected async Task ModifyCsoAsync(ConnectedSystemObject cso, DateTime? modifiedAt = null)
+    protected Task ModifyCsoAsync(ConnectedSystemObject cso, DateTime? modifiedAt = null)
     {
-        // Reload the entity from the database to get a tracked instance
-        var trackedCso = await DbContext.ConnectedSystemObjects.FindAsync(cso.Id);
-        if (trackedCso != null)
-        {
-            trackedCso.LastUpdated = modifiedAt ?? DateTime.UtcNow;
-            await DbContext.SaveChangesAsync();
-            // Update the caller's reference
-            cso.LastUpdated = trackedCso.LastUpdated;
-        }
+        cso.LastUpdated = modifiedAt ?? DateTime.UtcNow;
+        return Task.CompletedTask;
     }
 
     /// <summary>

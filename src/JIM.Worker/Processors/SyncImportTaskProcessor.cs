@@ -10,6 +10,7 @@ using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
+using JIM.Models.Transactional;
 using Serilog;
 using JIM.Worker.Models;
 
@@ -2362,7 +2363,7 @@ public class SyncImportTaskProcessor
         Log.Debug("ReconcilePendingExportsAsync: {FilteredCount} of {TotalCount} CSOs have pending exports",
             csoList.Count, updatedCsos.Count);
 
-        var reconciliationService = new PendingExportReconciliationService(_jim);
+        var reconciliationService = new PendingExportReconciliationService(_syncRepo);
         var totalConfirmed = 0;
         var totalRetry = 0;
         var totalFailed = 0;

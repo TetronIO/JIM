@@ -12,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
 using Moq;
 using NUnit.Framework;
+using SyncRepository = JIM.InMemoryData.SyncRepository;
 
 // ReSharper disable PossibleNullReferenceException
 
@@ -43,6 +44,7 @@ public class ImportDeduplicationTests
     private Mock<DbSet<PendingExport>> MockDbSetPendingExports { get; set; } = null!;
     private Mock<JimDbContext> MockJimDbContext { get; set; } = null!;
     private JimApplication Jim { get; set; } = null!;
+    private SyncRepository SyncRepo { get; set; } = null!;
     #endregion
 
     [TearDown]
@@ -96,8 +98,9 @@ public class ImportDeduplicationTests
         MockJimDbContext.Setup(m => m.ServiceSettingItems).Returns(MockDbSetServiceSettings.Object);
         MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
 
-        // instantiate Jim using the mocked db context
-        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+        // instantiate the SyncRepository and Jim using the mocked db context
+        SyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First());
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
 
         // Set up the connected system objects mock
         ConnectedSystemObjectsData = new List<ConnectedSystemObject>();
@@ -199,13 +202,13 @@ public class ImportDeduplicationTests
 
         // Act
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
-            Jim, new SyncRepositoryAdapter(Jim), mockFileConnector, connectedSystem, runProfile,
+            Jim, SyncRepo, mockFileConnector, connectedSystem, runProfile,
             TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await syncImportTaskProcessor.PerformFullImportAsync();
 
         // Assert: Verify the CSO was created with deduplicated values
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(1));
-        var createdCso = ConnectedSystemObjectsData[0];
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(1));
+        var createdCso = SyncRepo.ConnectedSystemObjects.Values.First();
 
         var qualificationsAttribute = ConnectedSystemObjectTypesData[0].Attributes
             .Single(a => a.Name == MockSourceSystemAttributeNames.QUALIFICATIONS.ToString());
@@ -242,13 +245,13 @@ public class ImportDeduplicationTests
 
         // Act
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
-            Jim, new SyncRepositoryAdapter(Jim), mockFileConnector, connectedSystem, runProfile,
+            Jim, SyncRepo, mockFileConnector, connectedSystem, runProfile,
             TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await syncImportTaskProcessor.PerformFullImportAsync();
 
         // Assert: All 3 values should be retained
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(1));
-        var createdCso = ConnectedSystemObjectsData[0];
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(1));
+        var createdCso = SyncRepo.ConnectedSystemObjects.Values.First();
 
         var qualificationsAttribute = ConnectedSystemObjectTypesData[0].Attributes
             .Single(a => a.Name == MockSourceSystemAttributeNames.QUALIFICATIONS.ToString());
@@ -284,13 +287,13 @@ public class ImportDeduplicationTests
 
         // Act
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
-            Jim, new SyncRepositoryAdapter(Jim), mockFileConnector, connectedSystem, runProfile,
+            Jim, SyncRepo, mockFileConnector, connectedSystem, runProfile,
             TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await syncImportTaskProcessor.PerformFullImportAsync();
 
         // Assert: Single value retained
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(1));
-        var createdCso = ConnectedSystemObjectsData[0];
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(1));
+        var createdCso = SyncRepo.ConnectedSystemObjects.Values.First();
 
         var qualificationsAttribute = ConnectedSystemObjectTypesData[0].Attributes
             .Single(a => a.Name == MockSourceSystemAttributeNames.QUALIFICATIONS.ToString());
@@ -327,13 +330,13 @@ public class ImportDeduplicationTests
 
         // Act
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
-            Jim, new SyncRepositoryAdapter(Jim), mockFileConnector, connectedSystem, runProfile,
+            Jim, SyncRepo, mockFileConnector, connectedSystem, runProfile,
             TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await syncImportTaskProcessor.PerformFullImportAsync();
 
         // Assert: Object created, no attribute values for the empty attribute
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(1));
-        var createdCso = ConnectedSystemObjectsData[0];
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(1));
+        var createdCso = SyncRepo.ConnectedSystemObjects.Values.First();
 
         var qualificationsAttribute = ConnectedSystemObjectTypesData[0].Attributes
             .Single(a => a.Name == MockSourceSystemAttributeNames.QUALIFICATIONS.ToString());
@@ -369,13 +372,13 @@ public class ImportDeduplicationTests
 
         // Act
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
-            Jim, new SyncRepositoryAdapter(Jim), mockFileConnector, connectedSystem, runProfile,
+            Jim, SyncRepo, mockFileConnector, connectedSystem, runProfile,
             TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await syncImportTaskProcessor.PerformFullImportAsync();
 
         // Assert
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(1));
-        var createdCso = ConnectedSystemObjectsData[0];
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(1));
+        var createdCso = SyncRepo.ConnectedSystemObjects.Values.First();
 
         var qualificationsAttribute = ConnectedSystemObjectTypesData[0].Attributes
             .Single(a => a.Name == MockSourceSystemAttributeNames.QUALIFICATIONS.ToString());
@@ -416,13 +419,13 @@ public class ImportDeduplicationTests
 
         // Act
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
-            Jim, new SyncRepositoryAdapter(Jim), mockFileConnector, connectedSystem, runProfile,
+            Jim, SyncRepo, mockFileConnector, connectedSystem, runProfile,
             TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await syncImportTaskProcessor.PerformFullImportAsync();
 
         // Assert: All 3 case-different values should be retained (case-sensitive comparison)
-        Assert.That(ConnectedSystemObjectsData, Has.Count.EqualTo(1));
-        var createdCso = ConnectedSystemObjectsData[0];
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(1));
+        var createdCso = SyncRepo.ConnectedSystemObjects.Values.First();
 
         var qualificationsAttribute = ConnectedSystemObjectTypesData[0].Attributes
             .Single(a => a.Name == MockSourceSystemAttributeNames.QUALIFICATIONS.ToString());

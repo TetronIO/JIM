@@ -8,6 +8,7 @@ using JIM.Worker.Tests.Models;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
 using Moq;
+using SyncRepository = JIM.InMemoryData.SyncRepository;
 
 namespace JIM.Worker.Tests.OutboundSync;
 
@@ -30,6 +31,7 @@ public class PendingExportReconciliationTests
     private List<PendingExportAttributeValueChange> PendingExportAttributeValueChangesData { get; set; } = null!;
     private Mock<DbSet<PendingExportAttributeValueChange>> MockDbSetPendingExportAttributeValueChanges { get; set; } = null!;
     private JimApplication Jim { get; set; } = null!;
+    private SyncRepository SyncRepo { get; set; } = null!;
     private ConnectedSystem TargetSystem { get; set; } = null!;
     private ConnectedSystemObjectType TargetUserType { get; set; } = null!;
     private ConnectedSystemObjectTypeAttribute DisplayNameAttr { get; set; } = null!;
@@ -76,7 +78,10 @@ public class PendingExportReconciliationTests
         MockJimDbContext.Setup(m => m.PendingExportAttributeValueChanges).Returns(MockDbSetPendingExportAttributeValueChanges.Object);
 
         // Instantiate Jim using the mocked db context
-        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+        SyncRepo = TestUtilities.CreateSyncRepository(
+            csos: ConnectedSystemObjectsData,
+            pendingExports: PendingExportsData);
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
 
         // Store references to commonly used objects
         TargetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
@@ -113,12 +118,14 @@ public class PendingExportReconciliationTests
             ConnectedSystemId = TargetSystem.Id,
             ConnectedSystem = TargetSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             Status = status,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>()
         };
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
         return pendingExport;
     }
 
@@ -175,7 +182,7 @@ public class PendingExportReconciliationTests
         // Import has the same value
         AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe");
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -201,7 +208,7 @@ public class PendingExportReconciliationTests
         // Import has a different value
         AddCsoAttributeValue(cso, DisplayNameAttr, "Jane Doe");
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -232,7 +239,7 @@ public class PendingExportReconciliationTests
         // Import has a different value
         AddCsoAttributeValue(cso, DisplayNameAttr, "Wrong Value");
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -265,7 +272,7 @@ public class PendingExportReconciliationTests
         AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe");
         AddCsoAttributeValue(cso, MailAttr, "john@example.com");
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -292,7 +299,7 @@ public class PendingExportReconciliationTests
         AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe"); // Matches
         AddCsoAttributeValue(cso, MailAttr, "wrong@example.com"); // Doesn't match
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -324,7 +331,7 @@ public class PendingExportReconciliationTests
         // After second export attempt, import now shows the correct value
         AddCsoAttributeValue(cso, MailAttr, "john@example.com");
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -361,7 +368,7 @@ public class PendingExportReconciliationTests
         AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe");
         // New change hasn't been exported yet, so it won't be on the CSO
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -407,7 +414,7 @@ public class PendingExportReconciliationTests
         // Value exists on CSO
         AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe");
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -440,7 +447,7 @@ public class PendingExportReconciliationTests
         // Value does NOT exist on CSO (was removed)
         // Don't add any value for DisplayNameAttr
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -473,7 +480,7 @@ public class PendingExportReconciliationTests
         // Value STILL exists on CSO (wasn't removed)
         AddCsoAttributeValue(cso, DisplayNameAttr, "Old Value");
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -506,7 +513,7 @@ public class PendingExportReconciliationTests
         // No values exist for the attribute
         // Don't add any value for DisplayNameAttr
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -534,7 +541,7 @@ public class PendingExportReconciliationTests
 
         AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe");
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -554,7 +561,7 @@ public class PendingExportReconciliationTests
         var cso = CreateTestCso();
         // Don't create any pending export
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -586,7 +593,7 @@ public class PendingExportReconciliationTests
         AddCsoAttributeValue(cso, DisplayNameAttr, "Wrong Name");
         AddCsoAttributeValue(cso, MailAttr, "wrong@example.com");
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -613,7 +620,7 @@ public class PendingExportReconciliationTests
         // Import has different value
         AddCsoAttributeValue(cso, DisplayNameAttr, "Wrong Name");
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -665,7 +672,7 @@ public class PendingExportReconciliationTests
         // But displayName doesn't match - needs retry
         AddCsoAttributeValue(cso, DisplayNameAttr, "Wrong Name");
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -711,7 +718,7 @@ public class PendingExportReconciliationTests
         // Nothing is on the CSO (object creation failed)
         // Don't add any attribute values
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -751,7 +758,7 @@ public class PendingExportReconciliationTests
         // Import confirms the Secondary External ID
         AddCsoAttributeValue(cso, secondaryExtIdAttr, "CN=John Doe,OU=Users,DC=test,DC=local");
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -793,7 +800,7 @@ public class PendingExportReconciliationTests
         // Import confirms the Secondary External ID
         AddCsoAttributeValue(cso, secondaryExtIdAttr, "CN=John Doe,OU=Users,DC=test,DC=local");
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -841,7 +848,7 @@ public class PendingExportReconciliationTests
             IntValue = 512
         });
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -896,7 +903,7 @@ public class PendingExportReconciliationTests
             BoolValue = true
         });
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -946,7 +953,7 @@ public class PendingExportReconciliationTests
             BoolValue = false // Different value
         });
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -997,7 +1004,7 @@ public class PendingExportReconciliationTests
             BoolValue = false
         });
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -1053,7 +1060,7 @@ public class PendingExportReconciliationTests
             GuidValue = testGuid
         });
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -1103,7 +1110,7 @@ public class PendingExportReconciliationTests
             GuidValue = Guid.NewGuid() // Different GUID
         });
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -1154,7 +1161,7 @@ public class PendingExportReconciliationTests
             GuidValue = Guid.Empty
         });
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -1201,7 +1208,7 @@ public class PendingExportReconciliationTests
             LongValue = 133456789012345678L
         });
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -1243,7 +1250,7 @@ public class PendingExportReconciliationTests
             LongValue = 9223372036854775807L // Different value (never expires)
         });
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -1289,7 +1296,7 @@ public class PendingExportReconciliationTests
             LongValue = long.MaxValue
         });
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -1349,7 +1356,7 @@ public class PendingExportReconciliationTests
             LongValue = 9223372036854775807L
         });
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -1397,7 +1404,7 @@ public class PendingExportReconciliationTests
             IntValue = 512
         });
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -1430,7 +1437,7 @@ public class PendingExportReconciliationTests
         AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe");
         AddCsoAttributeValue(cso, DisplayNameAttr, "John D");
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -1458,7 +1465,7 @@ public class PendingExportReconciliationTests
         AddCsoAttributeValue(cso, DisplayNameAttr, "Jane Doe");
         AddCsoAttributeValue(cso, DisplayNameAttr, "Previous Name");
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -1499,7 +1506,7 @@ public class PendingExportReconciliationTests
         AddCsoAttributeValue(cso, DisplayNameAttr, "Existing Value");
         AddCsoAttributeValue(cso, DisplayNameAttr, "New Value");
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -1537,7 +1544,7 @@ public class PendingExportReconciliationTests
         // CSO still has other values but NOT the removed one
         AddCsoAttributeValue(cso, DisplayNameAttr, "Remaining Value");
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -1591,7 +1598,7 @@ public class PendingExportReconciliationTests
         // CSO has no values for managedBy (attribute was cleared)
         // Don't add any attribute value
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -1630,7 +1637,7 @@ public class PendingExportReconciliationTests
 
         // CSO has no values for displayName (attribute was cleared)
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);
@@ -1686,7 +1693,7 @@ public class PendingExportReconciliationTests
             UnresolvedReferenceValue = "CN=SomeUser,OU=Users,DC=test,DC=local"
         });
 
-        var service = new PendingExportReconciliationService(Jim);
+        var service = new PendingExportReconciliationService(SyncRepo);
 
         // Act
         var result = await service.ReconcileAsync(cso);

@@ -78,13 +78,8 @@ public class GroupMembershipSyncTests
         await _harness.ExecuteFullImportAsync("Source");
 
         // Debug: Check if the group CSO has member attribute values with resolved references
-        var groupCso = await _harness.DbContext.ConnectedSystemObjects
-            .Include(c => c.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .Include(c => c.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.MetaverseObject)
-            .FirstOrDefaultAsync(c => c.AttributeValues.Any(av => av.Attribute != null && av.Attribute.Name == "cn" && av.StringValue == "Project-Alpha"));
+        var groupCso = _harness.SyncRepo.ConnectedSystemObjects.Values
+            .FirstOrDefault(c => c.AttributeValues.Any(av => av.Attribute != null && av.Attribute.Name == "cn" && av.StringValue == "Project-Alpha"));
         Console.WriteLine($"Group CSO found: {groupCso != null}");
         if (groupCso != null)
         {
@@ -104,12 +99,8 @@ public class GroupMembershipSyncTests
             "Should have MVOs for all users and the group");
 
         // Debug: Check MVO for group
-        var groupMvo = await _harness.DbContext.MetaverseObjects
-            .Include(m => m.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .Include(m => m.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .FirstOrDefaultAsync(m => m.AttributeValues.Any(av => av.Attribute != null && av.Attribute.Name == "cn" && av.StringValue == "Project-Alpha"));
+        var groupMvo = _harness.SyncRepo.MetaverseObjects.Values
+            .FirstOrDefault(m => m.AttributeValues.Any(av => av.Attribute != null && av.Attribute.Name == "cn" && av.StringValue == "Project-Alpha"));
         Console.WriteLine($"Group MVO found: {groupMvo != null}");
         if (groupMvo != null)
         {
@@ -121,10 +112,8 @@ public class GroupMembershipSyncTests
         }
 
         // Debug: Check pending export for group
-        var groupPeDb = await _harness.DbContext.PendingExports
-            .Include(pe => pe.AttributeValueChanges)
-            .ThenInclude(avc => avc.Attribute)
-            .FirstOrDefaultAsync(pe => pe.AttributeValueChanges.Any(avc => avc.Attribute != null && avc.Attribute.Name == "cn" && avc.StringValue == "Project-Alpha"));
+        var groupPeDb = _harness.SyncRepo.PendingExports.Values
+            .FirstOrDefault(pe => pe.AttributeValueChanges.Any(avc => avc.Attribute != null && avc.Attribute.Name == "cn" && avc.StringValue == "Project-Alpha"));
         Console.WriteLine($"Group Pending Export found in DB: {groupPeDb != null}");
         if (groupPeDb != null)
         {

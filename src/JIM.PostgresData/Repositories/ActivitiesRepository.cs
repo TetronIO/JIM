@@ -37,25 +37,7 @@ public class ActivityRepository : IActivityRepository
     {
         // Open an independent connection to bypass any in-flight transaction on the main DbContext.
         // This ensures progress updates are immediately visible to other sessions (e.g., UI polling).
-        string? connectionString;
-        try
-        {
-            connectionString = Repository.Database.Database.GetConnectionString();
-        }
-        catch
-        {
-            // In-memory test databases don't support relational extensions — GetConnectionString()
-            // throws NullReferenceException via GetFacadeDependencies.
-            connectionString = null;
-        }
-
-        if (string.IsNullOrEmpty(connectionString))
-        {
-            // Fallback for in-memory test databases that have no connection string
-            await UpdateActivityAsync(activity);
-            return;
-        }
-
+        var connectionString = Repository.Database.Database.GetConnectionString();
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
@@ -982,25 +964,17 @@ public class ActivityRepository : IActivityRepository
                 rpei.Id = Guid.NewGuid();
         }
 
-        // Try raw SQL path first (production with real database).
-        // BeginTransactionAsync throws InvalidOperationException in test environments (in-memory/mocked
-        // providers) and NullReferenceException with mocked DbContext. We catch those narrowly to
-        // detect the test environment, then fall back to EF tracking.
-        //
-        // IMPORTANT: Once raw SQL succeeds, any subsequent failure MUST propagate — never fall back
-        // to EF's AddRange in production, as it triggers graph traversal causing identity conflicts
-        // with shared MetaverseAttribute/MetaverseObjectType entities.
+        // If a transaction is already active (e.g., caller opened one), reuse it.
+        // Otherwise start a new one. This prevents InvalidOperationException when
+        // FlushRpeisAsync is called during cross-page resolution where preceding
+        // operations may have left a transaction open.
         IDbContextTransaction? transaction = null;
+        var existingTransaction = Repository.Database.Database.CurrentTransaction;
+        if (existingTransaction == null)
+            transaction = await Repository.Database.Database.BeginTransactionAsync();
+
         try
         {
-            // If a transaction is already active (e.g., caller opened one), reuse it.
-            // Otherwise start a new one. This prevents InvalidOperationException when
-            // FlushRpeisAsync is called during cross-page resolution where preceding
-            // operations may have left a transaction open.
-            var existingTransaction = Repository.Database.Database.CurrentTransaction;
-            if (existingTransaction == null)
-                transaction = await Repository.Database.Database.BeginTransactionAsync();
-
             await BulkInsertRpeisRawAsync(rpeis);
 
             // Bulk insert sync outcomes for all RPEIs (within the same transaction)
@@ -1028,63 +1002,6 @@ public class ActivityRepository : IActivityRepository
                 await transaction.CommitAsync();
 
             return true; // Raw SQL used — RPEIs persisted outside EF change tracker
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
-        {
-            // This catch ONLY handles test environment detection where transactions/raw SQL
-            // are not available. If we already executed any SQL, this is a real error — rethrow.
-            if (transaction != null)
-                throw; // Transaction was created but SQL failed — real production error
-
-            // Test environment fallback: RPEIs need explicit AddRange to be tracked by EF.
-            // List<T> navigation properties don't trigger automatic change detection in
-            // the in-memory provider — items must be explicitly added to the change tracker.
-            var untracked = new List<ActivityRunProfileExecutionItem>();
-            foreach (var rpei in rpeis)
-            {
-                try
-                {
-                    var entry = Repository.Database.Entry(rpei);
-                    if (entry.State == EntityState.Detached)
-                        untracked.Add(rpei);
-                }
-                catch (NullReferenceException)
-                {
-                    // Mocked DbContext: Entry() not available — treat as untracked
-                    untracked.Add(rpei);
-                }
-            }
-
-            // Pre-generate IDs and set FK references on sync outcomes before EF tracking.
-            // FlattenSyncOutcomes assigns IDs and links ParentSyncOutcomeId/ActivityRunProfileExecutionItemId.
-            // The outcomes themselves are NOT explicitly added via AddRange — EF's AddRange
-            // traverses RPEI → SyncOutcomes navigation and discovers them automatically.
-            // Explicitly adding them would cause duplicate key errors.
-            foreach (var rpei in rpeis)
-                FlattenSyncOutcomes(rpei);
-
-            if (untracked.Count > 0)
-            {
-                try
-                {
-                    // Use per-entity Entry().State to avoid graph traversal that causes
-                    // identity conflicts with already-tracked shared entities
-                    // (e.g. ConnectedSystemObjectTypeAttribute) after ClearChangeTracker.
-                    foreach (var rpei in untracked)
-                    {
-                        var entry = Repository.Database.Entry(rpei);
-                        if (entry.State == EntityState.Detached)
-                            entry.State = EntityState.Added;
-                    }
-                }
-                catch (NullReferenceException)
-                {
-                    // Mocked DbContext: Entry() not available — fall back to AddRange
-                    Repository.Database.AddRange(untracked);
-                }
-            }
-
-            return false; // EF fallback used — RPEIs tracked by EF
         }
         finally
         {
@@ -1141,65 +1058,31 @@ public class ActivityRepository : IActivityRepository
             }
         }
 
-        try
-        {
-            // Use an EF transaction for atomicity — COPY binary imports on the underlying
-            // NpgsqlConnection participate in the active transaction automatically.
-            await using var transaction = await Repository.Database.Database.BeginTransactionAsync();
+        // Use an EF transaction for atomicity — COPY binary imports on the underlying
+        // NpgsqlConnection participate in the active transaction automatically.
+        await using var transaction = await Repository.Database.Database.BeginTransactionAsync();
 
-            // Step 1: INSERT parent ConnectedSystemObjectChange rows
-            await BulkInsertCsoChangesRawAsync(changes);
+        // Step 1: INSERT parent ConnectedSystemObjectChange rows
+        await BulkInsertCsoChangesRawAsync(changes);
 
-            // Step 2: INSERT ConnectedSystemObjectChangeAttribute rows
-            var allAttrChanges = changes
-                .SelectMany(c => c.AttributeChanges.Select(ac => (ChangeId: c.Id, AttributeId: ac.Attribute.Id, AttrChange: ac)))
-                .ToList();
+        // Step 2: INSERT ConnectedSystemObjectChangeAttribute rows
+        var allAttrChanges = changes
+            .SelectMany(c => c.AttributeChanges.Select(ac => (ChangeId: c.Id, AttributeId: ac.Attribute.Id, AttrChange: ac)))
+            .ToList();
 
-            if (allAttrChanges.Count > 0)
-                await BulkInsertCsoChangeAttributesRawAsync(allAttrChanges);
+        if (allAttrChanges.Count > 0)
+            await BulkInsertCsoChangeAttributesRawAsync(allAttrChanges);
 
-            // Step 3: INSERT ConnectedSystemObjectChangeAttributeValue rows
-            var allValueChanges = changes
-                .SelectMany(c => c.AttributeChanges
-                    .SelectMany(ac => ac.ValueChanges.Select(vc => (AttrChangeId: ac.Id, Value: vc))))
-                .ToList();
+        // Step 3: INSERT ConnectedSystemObjectChangeAttributeValue rows
+        var allValueChanges = changes
+            .SelectMany(c => c.AttributeChanges
+                .SelectMany(ac => ac.ValueChanges.Select(vc => (AttrChangeId: ac.Id, Value: vc))))
+            .ToList();
 
-            if (allValueChanges.Count > 0)
-                await BulkInsertCsoChangeAttributeValuesRawAsync(allValueChanges);
+        if (allValueChanges.Count > 0)
+            await BulkInsertCsoChangeAttributeValuesRawAsync(allValueChanges);
 
-            await transaction.CommitAsync();
-        }
-        catch (Exception ex)
-        {
-            // Fallback for unit tests with mocked/in-memory DbContext where raw SQL is not available.
-            Serilog.Log.Warning(ex, "PersistRpeiCsoChangesAsync: Raw SQL bulk insert failed, falling back to EF. This will be slow for large batches. Count={Count}", changes.Count);
-
-            // Use Entry().State = Added instead of AddRange() to avoid graph traversal
-            // from discovering already-persisted entities (CSOs, attribute values, etc.).
-            try
-            {
-                foreach (var change in changes)
-                {
-                    change.ActivityRunProfileExecutionItem = null;
-                    change.ConnectedSystemObject = null;
-                    var entry = Repository.Database.Entry(change);
-                    if (entry.State == EntityState.Detached)
-                        entry.State = EntityState.Added;
-                }
-            }
-            catch (NullReferenceException)
-            {
-                // Mocked DbContext: Entry() unavailable, use AddRange.
-                foreach (var change in changes)
-                {
-                    change.ActivityRunProfileExecutionItem = null;
-                    change.ConnectedSystemObject = null;
-                }
-                Repository.Database.AddRange(changes);
-            }
-
-            await Repository.Database.SaveChangesAsync();
-        }
+        await transaction.CommitAsync();
     }
 
     /// <summary>
@@ -1404,12 +1287,12 @@ public class ActivityRepository : IActivityRepository
             return;
 
         IDbContextTransaction? transaction = null;
+        var existingTransaction = Repository.Database.Database.CurrentTransaction;
+        if (existingTransaction == null)
+            transaction = await Repository.Database.Database.BeginTransactionAsync();
+
         try
         {
-            var existingTransaction = Repository.Database.Database.CurrentTransaction;
-            if (existingTransaction == null)
-                transaction = await Repository.Database.Database.BeginTransactionAsync();
-
             // Bulk UPDATE OutcomeSummary and error fields on existing RPEIs
             await BulkUpdateRpeiFieldsRawAsync(rpeis);
 
@@ -1419,34 +1302,6 @@ public class ActivityRepository : IActivityRepository
 
             if (transaction != null)
                 await transaction.CommitAsync();
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
-        {
-            // Test environment detection — same pattern as BulkInsertRpeisAsync
-            if (transaction != null)
-                throw;
-
-            // EF fallback: mark modified fields as changed
-            foreach (var rpei in rpeis)
-            {
-                try
-                {
-                    var entry = Repository.Database.Entry(rpei);
-                    if (entry.State == EntityState.Detached)
-                        Repository.Database.Attach(rpei);
-                    entry.Property(r => r.OutcomeSummary).IsModified = true;
-                    entry.Property(r => r.ErrorType).IsModified = true;
-                    entry.Property(r => r.ErrorMessage).IsModified = true;
-                    entry.Property(r => r.AttributeFlowCount).IsModified = true;
-                }
-                catch (NullReferenceException)
-                {
-                    // Mocked DbContext — property marking not available
-                }
-            }
-
-            // EF will discover new outcomes via navigation property traversal
-            // when the RPEI is already tracked — no explicit AddRange needed.
         }
         finally
         {

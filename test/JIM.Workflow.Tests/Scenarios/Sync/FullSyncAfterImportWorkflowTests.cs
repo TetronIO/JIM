@@ -148,9 +148,9 @@ public class FullSyncAfterImportWorkflowTests
 
         // Verify MVOs were created
         var mvoType = await _harness.DbContext.MetaverseObjectTypes.FirstAsync(t => t.Name == "Person");
-        var mvos = await _harness.DbContext.MetaverseObjects
+        var mvos = _harness.SyncRepo.MetaverseObjects.Values
             .Where(m => m.Type!.Id == mvoType.Id)
-            .ToListAsync();
+            .ToList();
         Assert.That(mvos, Has.Count.EqualTo(ReferenceUsers.Count),
             $"Should have {ReferenceUsers.Count} person MVOs");
 

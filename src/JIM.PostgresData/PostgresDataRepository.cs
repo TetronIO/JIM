@@ -102,33 +102,19 @@ public class PostgresDataRepository : IRepository
 
     public void ClearChangeTracker()
     {
-        try
-        {
-            // NOTE: Do NOT call ChangeTracker.Entries() before Clear() — Entries() triggers
-            // DetectChanges() which walks navigation properties and can throw identity conflicts
-            // when the tracker contains multiple in-memory instances of the same entity (e.g.
-            // MetaverseAttribute loaded via different Include paths after a prior ClearChangeTracker).
-            // ChangeTracker.Clear() does NOT trigger DetectChanges.
-            Database.ChangeTracker.Clear();
-            Log.Debug("ClearChangeTracker: Cleared change tracker");
-        }
-        catch (NullReferenceException)
-        {
-            // ChangeTracker is unavailable in unit test environments with mocked DbContext
-        }
+        // NOTE: Do NOT call ChangeTracker.Entries() before Clear() — Entries() triggers
+        // DetectChanges() which walks navigation properties and can throw identity conflicts
+        // when the tracker contains multiple in-memory instances of the same entity (e.g.
+        // MetaverseAttribute loaded via different Include paths after a prior ClearChangeTracker).
+        // ChangeTracker.Clear() does NOT trigger DetectChanges.
+        Database.ChangeTracker.Clear();
+        Log.Debug("ClearChangeTracker: Cleared change tracker");
     }
 
     public void SetAutoDetectChangesEnabled(bool enabled)
     {
-        try
-        {
-            Database.ChangeTracker.AutoDetectChangesEnabled = enabled;
-            Log.Debug("SetAutoDetectChangesEnabled: {Enabled}", enabled);
-        }
-        catch (NullReferenceException)
-        {
-            // ChangeTracker is unavailable in unit test environments with mocked DbContext
-        }
+        Database.ChangeTracker.AutoDetectChangesEnabled = enabled;
+        Log.Debug("SetAutoDetectChangesEnabled: {Enabled}", enabled);
     }
 
     /// <summary>
@@ -147,8 +133,6 @@ public class PostgresDataRepository : IRepository
     /// This is necessary because callers invoke this method to persist changes, and when
     /// AutoDetectChangesEnabled is false (e.g., during page flush sequences), EF Core won't
     /// auto-detect property changes on Unchanged entities — causing SaveChangesAsync to skip them.
-    ///
-    /// Falls back to Update() in unit test environments where Entry() is unavailable (mocked DbContext).
     /// </summary>
     internal void UpdateDetachedSafe<T>(T entity) where T : class
     {
@@ -187,11 +171,6 @@ public class PostgresDataRepository : IRepository
                     trackedEntry.State = EntityState.Modified;
                 }
             }
-        }
-        catch (NullReferenceException)
-        {
-            // Fallback for mocked DbContext in unit tests
-            Database.Update(entity);
         }
     }
 

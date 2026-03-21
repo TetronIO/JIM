@@ -11,6 +11,7 @@ using JIM.Worker.Tests.Models;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
 using Moq;
+using SyncRepository = JIM.InMemoryData.SyncRepository;
 
 namespace JIM.Worker.Tests.Synchronisation;
 
@@ -32,8 +33,9 @@ public class ImportDeleteObjectTests
     private Mock<DbSet<ServiceSetting>> MockDbSetServiceSettings { get; set; }
     private List<PendingExport> PendingExportsData { get; set; }
     private Mock<DbSet<PendingExport>> MockDbSetPendingExports { get; set; }
-    private Mock<JimDbContext> MockJimDbContext { get; set; }
-    private JimApplication Jim { get; set; }
+    private Mock<JimDbContext> MockJimDbContext { get; set; } = null!;
+    private JimApplication Jim { get; set; } = null!;
+    private SyncRepository SyncRepo { get; set; } = null!;
     #endregion
 
     [TearDown]
@@ -87,8 +89,7 @@ public class ImportDeleteObjectTests
         MockJimDbContext.Setup(m => m.ServiceSettingItems).Returns(MockDbSetServiceSettings.Object);
         MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
 
-        // instantiate Jim using the mocked db context
-        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+        // Note: Jim and SyncRepo are created per-test after CSOs are set up, as each test seeds different CSOs
     }
     
     [Test]
@@ -211,8 +212,12 @@ public class ImportDeleteObjectTests
                     entity.Id = Guid.NewGuid(); // assign the ids here, mocking what the db would do in SaveChanges()
                 connectedSystemObjectData.AddRange(connectedSystemObjects);
             });
-        MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object); 
-        
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
+
+        // create the sync repository with the CSOs seeded, then instantiate Jim
+        SyncRepo = TestUtilities.CreateSyncRepository(csos: connectedSystemObjectData, activity: ActivitiesData.First());
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
+
         // mock up a connector that will return updates for our existing connected system objects above.
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
@@ -261,14 +266,14 @@ public class ImportDeleteObjectTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
-        // confirm the results persisted to the mocked db context
-        Assert.That(connectedSystemObjectData, Has.Count.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {connectedSystemObjectData.Count}.");
-        
+        // confirm the results persisted to the sync repository
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
+
         // inspect the user we expect to be marked for obsolescence
-        var obsoleteUser = connectedSystemObjectData.SingleOrDefault(q => q.AttributeValues.Any(a => a.Attribute.Name == MockSourceSystemAttributeNames.HR_ID.ToString() && a.GuidValue == TestConstants.CS_OBJECT_2_HR_ID));
+        var obsoleteUser = SyncRepo.ConnectedSystemObjects.Values.SingleOrDefault(q => q.AttributeValues.Any(a => a.Attribute.Name == MockSourceSystemAttributeNames.HR_ID.ToString() && a.GuidValue == TestConstants.CS_OBJECT_2_HR_ID));
         Assert.That(obsoleteUser, Is.Not.Null, "Expected to find our second user amongst the Connected System Objects.");
         Assert.That(obsoleteUser.Status, Is.EqualTo(ConnectedSystemObjectStatus.Obsolete), "Expected our second user to have been marked as Obsolete after dropping off the full import.");
         Assert.Pass();
@@ -329,6 +334,10 @@ public class ImportDeleteObjectTests
             });
         MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
 
+        // create the sync repository with the CSOs seeded, then instantiate Jim
+        SyncRepo = TestUtilities.CreateSyncRepository(csos: connectedSystemObjectData, activity: ActivitiesData.First());
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
+
         // mock up a connector that will return a delete change type for the existing object
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
@@ -352,12 +361,12 @@ public class ImportDeleteObjectTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
 
         // verify the CSO was marked as Obsolete
-        var updatedCso = connectedSystemObjectData.SingleOrDefault(q => q.Id == cso1.Id);
-        Assert.That(updatedCso, Is.Not.Null, "Expected to find our CSO.");
+        Assert.That(SyncRepo.ConnectedSystemObjects.ContainsKey(cso1.Id), Is.True, "Expected to find our CSO in SyncRepo.");
+        var updatedCso = SyncRepo.ConnectedSystemObjects[cso1.Id];
         Assert.That(updatedCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Obsolete),
             "Expected CSO to be marked as Obsolete when connector requests Delete.");
     }
@@ -380,6 +389,10 @@ public class ImportDeleteObjectTests
                 connectedSystemObjectData.AddRange(connectedSystemObjects);
             });
         MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
+
+        // create the sync repository with no CSOs seeded, then instantiate Jim
+        SyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First());
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
 
         // mock up a connector that will return a delete for a non-existent object
         var mockFileConnector = new MockFileConnector();
@@ -404,13 +417,13 @@ public class ImportDeleteObjectTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, new SyncRepositoryAdapter(Jim),mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
 
         // Should not throw
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
 
         // verify no CSOs were created or updated
-        Assert.That(connectedSystemObjectData, Has.Count.EqualTo(0),
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(0),
             "Expected no CSOs to be created when deleting a non-existent object.");
     }
 

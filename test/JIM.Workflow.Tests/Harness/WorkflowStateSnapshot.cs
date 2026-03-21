@@ -3,6 +3,7 @@ using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
+using InMemorySyncRepository = JIM.InMemoryData.SyncRepository;
 
 namespace JIM.Workflow.Tests.Harness;
 
@@ -104,6 +105,30 @@ public class WorkflowStateSnapshot
             .ToListAsync();
 
         var peSnapshots = pendingExports.Select(pe => new PendingExportSnapshot(pe)).ToList();
+
+        return new WorkflowStateSnapshot(stepName, mvoSnapshots, csosBySystem, peSnapshots);
+    }
+
+    /// <summary>
+    /// Creates a snapshot from an in-memory sync repository.
+    /// </summary>
+    public static WorkflowStateSnapshot CaptureFrom(InMemorySyncRepository syncRepo, string stepName)
+    {
+        var mvoSnapshots = syncRepo.MetaverseObjects.Values
+            .Select(m => new MetaverseObjectSnapshot(m))
+            .ToList();
+
+        var csosBySystem = syncRepo.ConnectedSystemObjects.Values
+            .GroupBy(c => syncRepo.ConnectedSystems.TryGetValue(c.ConnectedSystemId, out var cs)
+                ? cs.Name
+                : $"System_{c.ConnectedSystemId}")
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<ConnectedSystemObjectSnapshot>)g.Select(c => new ConnectedSystemObjectSnapshot(c)).ToList());
+
+        var peSnapshots = syncRepo.PendingExports.Values
+            .Select(pe => new PendingExportSnapshot(pe))
+            .ToList();
 
         return new WorkflowStateSnapshot(stepName, mvoSnapshots, csosBySystem, peSnapshots);
     }

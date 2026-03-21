@@ -10,6 +10,7 @@ using JIM.Worker.Tests.Models;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
 using Moq;
+using SyncRepository = JIM.InMemoryData.SyncRepository;
 
 namespace JIM.Worker.Tests.OutboundSync;
 
@@ -38,6 +39,7 @@ public class ExportEvaluationNoChangeTests
     private List<ConnectedSystemObjectAttributeValue> ConnectedSystemObjectAttributeValuesData { get; set; } = null!;
     private Mock<DbSet<ConnectedSystemObjectAttributeValue>> MockDbSetConnectedSystemObjectAttributeValues { get; set; } = null!;
     private JimApplication Jim { get; set; } = null!;
+    private SyncRepository SyncRepo { get; set; } = null!;
     #endregion
 
     [TearDown]
@@ -95,7 +97,8 @@ public class ExportEvaluationNoChangeTests
         MockJimDbContext.Setup(m => m.SyncRules).Returns(MockDbSetSyncRules.Object);
 
         // Instantiate Jim using the mocked db context
-        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+        SyncRepo = TestUtilities.CreateSyncRepository();
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
     }
 
     #region Single-Valued Update Tests (String)
@@ -855,11 +858,6 @@ public class ExportEvaluationNoChangeTests
             MetaverseObjectId = mvo.Id,
             MetaverseObject = mvo
         };
-
-        // Mock PendingExports.AddAsync to capture created pending exports
-        MockDbSetPendingExports.Setup(set => set.AddAsync(It.IsAny<PendingExport>(), It.IsAny<CancellationToken>()))
-            .Callback((PendingExport entity, CancellationToken _) => { PendingExportsData.Add(entity); })
-            .ReturnsAsync((PendingExport entity, CancellationToken _) => null!);
 
         // Build the ExportEvaluationCache manually
         var exportRulesByMvoTypeId = new Dictionary<int, List<SyncRule>>

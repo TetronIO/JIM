@@ -9,6 +9,7 @@ using JIM.Worker.Tests.Models;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
 using Moq;
+using SyncRepository = JIM.InMemoryData.SyncRepository;
 
 namespace JIM.Worker.Tests.Workflows;
 
@@ -31,6 +32,7 @@ public class ExportConfirmationWorkflowTests
     private List<PendingExportAttributeValueChange> PendingExportAttributeValueChangesData { get; set; } = null!;
     private Mock<DbSet<PendingExportAttributeValueChange>> MockDbSetPendingExportAttributeValueChanges { get; set; } = null!;
     private JimApplication Jim { get; set; } = null!;
+    private SyncRepository SyncRepo { get; set; } = null!;
     private ConnectedSystem TargetSystem { get; set; } = null!;
     private ConnectedSystemObjectType TargetUserType { get; set; } = null!;
     private ConnectedSystemObjectTypeAttribute DisplayNameAttr { get; set; } = null!;
@@ -76,8 +78,9 @@ public class ExportConfirmationWorkflowTests
         MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
         MockJimDbContext.Setup(m => m.PendingExportAttributeValueChanges).Returns(MockDbSetPendingExportAttributeValueChanges.Object);
 
-        // Instantiate Jim using the mocked db context
-        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+        // Instantiate Jim using the mocked db context and an in-memory sync repository
+        SyncRepo = TestUtilities.CreateSyncRepository(csos: ConnectedSystemObjectsData);
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
 
         // Store references to commonly used objects
         TargetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
@@ -101,6 +104,7 @@ public class ExportConfirmationWorkflowTests
             AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
         };
         ConnectedSystemObjectsData.Add(cso);
+        SyncRepo.SeedConnectedSystemObject(cso);
         return cso;
     }
 
@@ -112,12 +116,14 @@ public class ExportConfirmationWorkflowTests
             ConnectedSystemId = TargetSystem.Id,
             ConnectedSystem = TargetSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>()
         };
         PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
         return pendingExport;
     }
 
@@ -151,8 +157,6 @@ public class ExportConfirmationWorkflowTests
                 .ReturnsAsync(new List<ConnectedSystemExportResult> { ConnectedSystemExportResult.Failed("Export failed") });
         }
 
-        MockDbSetPendingExports.Setup(set => set.Update(It.IsAny<PendingExport>()));
-
         await Jim.ExportExecution.ExecuteExportsAsync(
             TargetSystem,
             mockConnector.Object,
@@ -161,7 +165,7 @@ public class ExportConfirmationWorkflowTests
 
     private async Task<PendingExportReconciliationResult> SimulateImportAndReconcileAsync(ConnectedSystemObject cso)
     {
-        var reconciliationService = new PendingExportReconciliationService(Jim);
+        var reconciliationService = new PendingExportReconciliationService(SyncRepo);
         return await reconciliationService.ReconcileAsync(cso);
     }
 

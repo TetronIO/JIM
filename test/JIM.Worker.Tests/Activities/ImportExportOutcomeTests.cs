@@ -11,6 +11,7 @@ using JIM.Worker.Tests.Models;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
 using Moq;
+using SyncRepository = JIM.InMemoryData.SyncRepository;
 
 namespace JIM.Worker.Tests.Activities;
 
@@ -35,6 +36,7 @@ public class ImportExportOutcomeTests
     private List<PendingExport> _pendingExportsData = null!;
     private Mock<JimDbContext> _mockDbContext = null!;
     private JimApplication _jim = null!;
+    private SyncRepository _syncRepo = null!;
 
     [TearDown]
     public void TearDown()
@@ -83,7 +85,8 @@ public class ImportExportOutcomeTests
             });
         _mockDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSet.Object);
         _mockDbContext.Setup(m => m.AddRange(It.IsAny<IEnumerable<object>>()));
-        _jim = new JimApplication(new PostgresDataRepository(_mockDbContext.Object));
+        _syncRepo = TestUtilities.CreateSyncRepository(activity: _activitiesData.First());
+        _jim = new JimApplication(new PostgresDataRepository(_mockDbContext.Object), syncRepository: _syncRepo);
 
         var mockConnector = new MockFileConnector();
         mockConnector.TestImportObjects.Add(new ConnectedSystemImportObject
@@ -104,7 +107,7 @@ public class ImportExportOutcomeTests
         var workerTask = TestUtilities.CreateTestWorkerTask(activity, _initiatedBy);
 
         // Act
-        var processor = new SyncImportTaskProcessor(_jim, new SyncRepositoryAdapter(_jim),mockConnector, connectedSystem!, runProfile, workerTask, new CancellationTokenSource());
+        var processor = new SyncImportTaskProcessor(_jim, _syncRepo,mockConnector, connectedSystem!, runProfile, workerTask, new CancellationTokenSource());
         await processor.PerformFullImportAsync();
 
         // Assert - RPEIs should have CsoAdded outcomes (default tracking level is Detailed)
@@ -135,7 +138,8 @@ public class ImportExportOutcomeTests
             });
         _mockDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSet.Object);
         _mockDbContext.Setup(m => m.AddRange(It.IsAny<IEnumerable<object>>()));
-        _jim = new JimApplication(new PostgresDataRepository(_mockDbContext.Object));
+        _syncRepo = TestUtilities.CreateSyncRepository(activity: _activitiesData.First());
+        _jim = new JimApplication(new PostgresDataRepository(_mockDbContext.Object), syncRepository: _syncRepo);
 
         var mockConnector = new MockFileConnector();
         // Object 1: 3 attributes
@@ -171,7 +175,7 @@ public class ImportExportOutcomeTests
         var workerTask = TestUtilities.CreateTestWorkerTask(activity, _initiatedBy);
 
         // Act
-        var processor = new SyncImportTaskProcessor(_jim, new SyncRepositoryAdapter(_jim),mockConnector, connectedSystem!, runProfile, workerTask, new CancellationTokenSource());
+        var processor = new SyncImportTaskProcessor(_jim, _syncRepo,mockConnector, connectedSystem!, runProfile, workerTask, new CancellationTokenSource());
         await processor.PerformFullImportAsync();
 
         // Assert - two Added RPEIs, each with independent CsoAdded outcomes
@@ -211,7 +215,8 @@ public class ImportExportOutcomeTests
             });
         _mockDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSet.Object);
         _mockDbContext.Setup(m => m.AddRange(It.IsAny<IEnumerable<object>>()));
-        _jim = new JimApplication(new PostgresDataRepository(_mockDbContext.Object));
+        _syncRepo = TestUtilities.CreateSyncRepository(activity: _activitiesData.First());
+        _jim = new JimApplication(new PostgresDataRepository(_mockDbContext.Object), syncRepository: _syncRepo);
 
         var mockConnector = new MockFileConnector();
         // Good object
@@ -243,7 +248,7 @@ public class ImportExportOutcomeTests
         var workerTask = TestUtilities.CreateTestWorkerTask(activity, _initiatedBy);
 
         // Act
-        var processor = new SyncImportTaskProcessor(_jim, new SyncRepositoryAdapter(_jim),mockConnector, connectedSystem!, runProfile, workerTask, new CancellationTokenSource());
+        var processor = new SyncImportTaskProcessor(_jim, _syncRepo,mockConnector, connectedSystem!, runProfile, workerTask, new CancellationTokenSource());
         await processor.PerformFullImportAsync();
 
         // Assert - good object has outcome, error object does not

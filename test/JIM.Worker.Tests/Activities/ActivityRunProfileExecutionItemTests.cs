@@ -10,6 +10,7 @@ using JIM.Worker.Tests.Models;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
 using Moq;
+using SyncRepository = JIM.InMemoryData.SyncRepository;
 
 namespace JIM.Worker.Tests.Activities;
 
@@ -37,6 +38,7 @@ public class ActivityRunProfileExecutionItemTests
     private Mock<DbSet<ServiceSetting>> MockDbSetServiceSettings { get; set; } = null!;
     private Mock<JimDbContext> MockJimDbContext { get; set; } = null!;
     private JimApplication Jim { get; set; } = null!;
+    private SyncRepository SyncRepo { get; set; } = null!;
     #endregion
 
     [TearDown]
@@ -127,7 +129,8 @@ public class ActivityRunProfileExecutionItemTests
             });
         MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
 
-        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+        SyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First());
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
 
         // Create mock connector with test import data
         var mockFileConnector = new MockFileConnector();
@@ -158,7 +161,7 @@ public class ActivityRunProfileExecutionItemTests
         var runProfile = ConnectedSystemRunProfilesData.Single(q =>
             q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
-            Jim, new SyncRepositoryAdapter(Jim), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+            Jim, SyncRepo, mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
 
         await syncImportTaskProcessor.PerformFullImportAsync();
 
@@ -205,7 +208,8 @@ public class ActivityRunProfileExecutionItemTests
         var mockDbSetConnectedSystemObject = connectedSystemObjectData.BuildMockDbSet();
         MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
 
-        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+        SyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First());
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
 
         // Create import object with duplicate attributes (error condition)
         var mockFileConnector = new MockFileConnector();
@@ -228,7 +232,7 @@ public class ActivityRunProfileExecutionItemTests
         var runProfile = ConnectedSystemRunProfilesData.Single(q =>
             q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
-            Jim, new SyncRepositoryAdapter(Jim), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+            Jim, SyncRepo, mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
 
         await syncImportTaskProcessor.PerformFullImportAsync();
 
@@ -271,7 +275,8 @@ public class ActivityRunProfileExecutionItemTests
             });
         MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
 
-        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+        SyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First());
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
 
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
@@ -291,7 +296,7 @@ public class ActivityRunProfileExecutionItemTests
         var runProfile = ConnectedSystemRunProfilesData.Single(q =>
             q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
-            Jim, new SyncRepositoryAdapter(Jim), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+            Jim, SyncRepo, mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
 
         await syncImportTaskProcessor.PerformFullImportAsync();
 
@@ -334,7 +339,8 @@ public class ActivityRunProfileExecutionItemTests
             });
         MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
 
-        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+        SyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First());
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
 
         var mockFileConnector = new MockFileConnector();
         const int objectCount = 5;
@@ -358,7 +364,7 @@ public class ActivityRunProfileExecutionItemTests
         var runProfile = ConnectedSystemRunProfilesData.Single(q =>
             q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
-            Jim, new SyncRepositoryAdapter(Jim), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+            Jim, SyncRepo, mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
 
         await syncImportTaskProcessor.PerformFullImportAsync();
 
@@ -405,7 +411,8 @@ public class ActivityRunProfileExecutionItemTests
             });
         MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
 
-        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+        SyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First());
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
 
         var mockFileConnector = new MockFileConnector();
 
@@ -443,7 +450,7 @@ public class ActivityRunProfileExecutionItemTests
         var runProfile = ConnectedSystemRunProfilesData.Single(q =>
             q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
-            Jim, new SyncRepositoryAdapter(Jim), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+            Jim, SyncRepo, mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
 
         await syncImportTaskProcessor.PerformFullImportAsync();
 

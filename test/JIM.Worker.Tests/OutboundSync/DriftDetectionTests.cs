@@ -10,6 +10,7 @@ using JIM.Worker.Tests.Models;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
 using Moq;
+using SyncRepository = JIM.InMemoryData.SyncRepository;
 
 namespace JIM.Worker.Tests.OutboundSync;
 
@@ -35,6 +36,7 @@ public class DriftDetectionTests
     private List<PendingExport> PendingExportsData { get; set; } = null!;
     private Mock<DbSet<PendingExport>> MockDbSetPendingExports { get; set; } = null!;
     private JimApplication Jim { get; set; } = null!;
+    private SyncRepository SyncRepo { get; set; } = null!;
     private ConnectedSystem TargetSystem { get; set; } = null!;
     private ConnectedSystemObjectType TargetUserType { get; set; } = null!;
     private MetaverseObjectType MvoUserType { get; set; } = null!;
@@ -92,7 +94,8 @@ public class DriftDetectionTests
         MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
 
         // Instantiate Jim using the mocked db context
-        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+        SyncRepo = TestUtilities.CreateSyncRepository(syncRules: SyncRulesData);
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
 
         // Store references to commonly used objects
         TargetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
