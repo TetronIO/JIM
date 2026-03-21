@@ -1025,9 +1025,9 @@ public class ExportExecutionServer
 
         // Update cache after successful persistence: evict stale entries, then add current ones
         foreach (var (connectedSystemId, attributeId, oldValue) in cacheEvictions)
-            SyncRepo.EvictCsoFromCache(connectedSystemId, attributeId, oldValue);
+            Application.ConnectedSystems.EvictCsoFromCache(connectedSystemId, attributeId, oldValue);
         foreach (var (connectedSystemId, attributeId, newValue, csoId) in cacheAdditions)
-            SyncRepo.AddCsoToCache(connectedSystemId, attributeId, newValue, csoId);
+            Application.ConnectedSystems.AddCsoToCache(connectedSystemId, attributeId, newValue, csoId);
     }
 
     /// <summary>

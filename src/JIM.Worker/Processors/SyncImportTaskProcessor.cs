@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using JIM.Application;
 using JIM.Application.Diagnostics;
+using JIM.Application.Interfaces;
 using JIM.Application.Services;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
@@ -20,6 +21,7 @@ public class SyncImportTaskProcessor
 {
     private readonly JimApplication _jim;
     private readonly ISyncRepository _syncRepo;
+    private readonly ISyncServer _syncServer;
     private readonly IConnector _connector;
     private readonly ConnectedSystem _connectedSystem;
     private readonly ConnectedSystemRunProfile _connectedSystemRunProfile;
@@ -57,6 +59,7 @@ public class SyncImportTaskProcessor
     public SyncImportTaskProcessor(
         JimApplication jimApplication,
         ISyncRepository syncRepository,
+        ISyncServer syncServer,
         IConnector connector,
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile connectedSystemRunProfile,
@@ -65,6 +68,7 @@ public class SyncImportTaskProcessor
     {
         _jim = jimApplication;
         _syncRepo = syncRepository;
+        _syncServer = syncServer;
         _connector = connector;
         _connectedSystem = connectedSystem;
         _cancellationTokenSource = cancellationTokenSource;
@@ -104,7 +108,7 @@ public class SyncImportTaskProcessor
             Log.Information("PerformFullImportAsync: Connected system {ConnectedSystemId} has no existing CSOs. Skipping CSO lookups for this import.", _connectedSystem.Id);
 
         // Load sync outcome tracking level once at start of import
-        _syncOutcomeTrackingLevel = await _syncRepo.GetSyncOutcomeTrackingLevelAsync();
+        _syncOutcomeTrackingLevel = await _syncServer.GetSyncOutcomeTrackingLevelAsync();
 
         // we keep track of all processed CSOs here, so we can bulk-persist later, when all waves of CSO changes are prepared
         var connectedSystemObjectsToBeCreated = new List<ConnectedSystemObject>();
@@ -361,7 +365,7 @@ public class SyncImportTaskProcessor
                     .ToList();
 
                 var batchSw = System.Diagnostics.Stopwatch.StartNew();
-                await _syncRepo.CreateConnectedSystemObjectsAsync(csoBatch, batchRpeis);
+                await _syncServer.CreateConnectedSystemObjectsAsync(csoBatch, batchRpeis);
                 Log.Debug("PerformFullImportAsync: CreateConnectedSystemObjectsAsync took {ElapsedMs}ms for {Count} CSOs",
                     batchSw.ElapsedMilliseconds, batchSize);
 
@@ -377,13 +381,13 @@ public class SyncImportTaskProcessor
                 {
                     var extIdValue = newCso.ExternalIdAttributeValue;
                     if (extIdValue?.StringValue != null)
-                        _syncRepo.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.StringValue, newCso.Id);
+                        _syncServer.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.StringValue, newCso.Id);
                     else if (extIdValue?.IntValue != null)
-                        _syncRepo.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), newCso.Id);
+                        _syncServer.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), newCso.Id);
                     else if (extIdValue?.LongValue != null)
-                        _syncRepo.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), newCso.Id);
+                        _syncServer.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), newCso.Id);
                     else if (extIdValue?.GuidValue != null)
-                        _syncRepo.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), newCso.Id);
+                        _syncServer.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), newCso.Id);
                 }
 
                 // Remove batch RPEIs from the main list and flush them
@@ -462,7 +466,7 @@ public class SyncImportTaskProcessor
                     .Where(r => r.ConnectedSystemObjectId.HasValue && batchCsoIds.Contains(r.ConnectedSystemObjectId.Value))
                     .ToList();
 
-                await _syncRepo.UpdateConnectedSystemObjectsAsync(csoBatch, batchRpeis);
+                await _syncServer.UpdateConnectedSystemObjectsAsync(csoBatch, batchRpeis);
 
                 // Populate the reconciliation RPEI lookup before flushing.
                 // Only update-phase RPEIs are needed — created CSOs can't have pending exports.
@@ -498,24 +502,24 @@ public class SyncImportTaskProcessor
                     if (oldIds.primaryIdValue != null && newPrimaryId != null
                         && !oldIds.primaryIdValue.Equals(newPrimaryId, StringComparison.OrdinalIgnoreCase))
                     {
-                        _syncRepo.EvictCsoFromCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, oldIds.primaryIdValue);
+                        _syncServer.EvictCsoFromCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, oldIds.primaryIdValue);
                     }
 
                     // Evict old secondary cache entry if this CSO has a secondary external ID
                     if (updatedCso.SecondaryExternalIdAttributeId.HasValue && oldIds.secondaryIdValue != null)
                     {
-                        _syncRepo.EvictCsoFromCache(_connectedSystem.Id, updatedCso.SecondaryExternalIdAttributeId.Value, oldIds.secondaryIdValue);
+                        _syncServer.EvictCsoFromCache(_connectedSystem.Id, updatedCso.SecondaryExternalIdAttributeId.Value, oldIds.secondaryIdValue);
                     }
 
                     // Add/refresh primary external ID cache entry
                     if (extIdValue.StringValue != null)
-                        _syncRepo.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.StringValue, updatedCso.Id);
+                        _syncServer.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.StringValue, updatedCso.Id);
                     else if (extIdValue.IntValue != null)
-                        _syncRepo.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), updatedCso.Id);
+                        _syncServer.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), updatedCso.Id);
                     else if (extIdValue.LongValue != null)
-                        _syncRepo.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), updatedCso.Id);
+                        _syncServer.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), updatedCso.Id);
                     else if (extIdValue.GuidValue != null)
-                        _syncRepo.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), updatedCso.Id);
+                        _syncServer.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), updatedCso.Id);
                 }
 
                 _activity.ObjectsProcessed = createdCount + batchStart + batchSize;
@@ -1946,7 +1950,7 @@ public class SyncImportTaskProcessor
         // create a connected system object change for this
 
         // Use sync page size for consistent progress persistence across all sync operations
-        var pageSize = await _syncRepo.GetSyncPageSizeAsync();
+        var pageSize = await _syncServer.GetSyncPageSizeAsync();
         var processedCount = 0;
 
         // Build RPEI lookup dictionary for O(1) error reporting instead of O(N) linear scans
@@ -2370,7 +2374,7 @@ public class SyncImportTaskProcessor
         var exportsDeleted = 0;
 
         // Use sync page size for consistent batching across all sync operations
-        var pageSize = await _syncRepo.GetSyncPageSizeAsync();
+        var pageSize = await _syncServer.GetSyncPageSizeAsync();
         var totalPages = (int)Math.Ceiling((double)csoList.Count / pageSize);
 
         Log.Debug("ReconcilePendingExportsAsync: Processing {CsoCount} CSOs in {PageCount} pages of {PageSize}",
@@ -2688,7 +2692,7 @@ public class SyncImportTaskProcessor
     /// </summary>
     private async Task UpdateConnectedSystemWithInitiatorAsync()
     {
-        await _syncRepo.UpdateConnectedSystemWithTriadAsync(
+        await _syncServer.UpdateConnectedSystemWithTriadAsync(
             _connectedSystem,
             _initiatedByType,
             _initiatedById,

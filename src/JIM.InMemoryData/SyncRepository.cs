@@ -592,6 +592,104 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult<MetaverseObject?>(null);
     }
 
+    public Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(
+        ConnectedSystemObject connectedSystemObject,
+        MetaverseObjectType metaverseObjectType,
+        ObjectMatchingRule rule)
+    {
+        if (rule.TargetMetaverseAttributeId == null)
+            return Task.FromResult<MetaverseObject?>(null);
+
+        // Get the source value from the CSO
+        string? sourceValue = null;
+        foreach (var source in rule.Sources.OrderBy(s => s.Order))
+        {
+            if (source.ConnectedSystemAttributeId.HasValue || source.ConnectedSystemAttribute != null)
+            {
+                var attrId = source.ConnectedSystemAttribute?.Id ?? source.ConnectedSystemAttributeId!.Value;
+                var av = connectedSystemObject.AttributeValues
+                    .FirstOrDefault(a => a.AttributeId == attrId);
+                sourceValue = av?.StringValue ?? av?.IntValue?.ToString() ??
+                              av?.GuidValue?.ToString() ?? av?.LongValue?.ToString();
+                if (sourceValue != null) break;
+            }
+        }
+
+        if (sourceValue == null)
+            return Task.FromResult<MetaverseObject?>(null);
+
+        var comparison = rule.CaseSensitive
+            ? StringComparison.Ordinal
+            : StringComparison.OrdinalIgnoreCase;
+
+        var targetAttrId = rule.TargetMetaverseAttribute?.Id ?? rule.TargetMetaverseAttributeId!.Value;
+        var matches = _mvos.Values
+            .Where(mvo =>
+            {
+                if (mvo.Type?.Id != metaverseObjectType.Id)
+                    return false;
+                return mvo.AttributeValues.Any(a =>
+                    a.AttributeId == targetAttrId &&
+                    string.Equals(
+                        a.StringValue ?? a.IntValue?.ToString() ?? a.GuidValue?.ToString() ?? a.LongValue?.ToString(),
+                        sourceValue,
+                        comparison));
+            })
+            .ToList();
+
+        if (matches.Count > 1)
+            throw new MultipleMatchesException(
+                $"Multiple metaverse objects matched for rule {rule.Id}",
+                matches.Select(m => m.Id).ToList());
+
+        return Task.FromResult(matches.Count == 1 ? matches[0] : null);
+    }
+
+    public Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
+        MetaverseObject metaverseObject,
+        ConnectedSystem connectedSystem,
+        ConnectedSystemObjectType connectedSystemObjectType,
+        ObjectMatchingRule rule)
+    {
+        if (rule.Sources.Count == 0)
+            return Task.FromResult<ConnectedSystemObject?>(null);
+
+        var source = rule.Sources[0];
+        if (source.MetaverseAttribute == null && source.MetaverseAttributeId == null)
+            return Task.FromResult<ConnectedSystemObject?>(null);
+        if (source.ConnectedSystemAttribute == null && source.ConnectedSystemAttributeId == null)
+            return Task.FromResult<ConnectedSystemObject?>(null);
+
+        var mvoAttrId = source.MetaverseAttribute?.Id ?? source.MetaverseAttributeId;
+        var mvoAttr = metaverseObject.AttributeValues?
+            .FirstOrDefault(av => av.AttributeId == mvoAttrId);
+        if (mvoAttr == null)
+            return Task.FromResult<ConnectedSystemObject?>(null);
+
+        var mvoVal = mvoAttr.StringValue ?? mvoAttr.GuidValue?.ToString() ?? mvoAttr.IntValue?.ToString();
+        if (mvoVal == null)
+            return Task.FromResult<ConnectedSystemObject?>(null);
+
+        var csAttrId = source.ConnectedSystemAttribute?.Id ?? source.ConnectedSystemAttributeId;
+        var comparison = rule.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+
+        foreach (var cso in _csos.Values)
+        {
+            if (cso.ConnectedSystemId != connectedSystem.Id) continue;
+            if (cso.TypeId != connectedSystemObjectType.Id) continue;
+
+            var csoAttr = cso.AttributeValues?
+                .FirstOrDefault(av => av.AttributeId == csAttrId);
+            if (csoAttr == null) continue;
+
+            var csoVal = csoAttr.StringValue ?? csoAttr.GuidValue?.ToString() ?? csoAttr.IntValue?.ToString();
+            if (string.Equals(mvoVal, csoVal, comparison))
+                return Task.FromResult<ConnectedSystemObject?>(cso);
+        }
+
+        return Task.FromResult<ConnectedSystemObject?>(null);
+    }
+
     #endregion
 
     #region Metaverse Object — Writes

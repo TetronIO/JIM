@@ -119,12 +119,12 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         }
 
         // Load settings once at start of sync
-        _syncOutcomeTrackingLevel = await _syncRepo.GetSyncOutcomeTrackingLevelAsync();
-        _csoChangeTrackingEnabled = await _syncRepo.GetCsoChangeTrackingEnabledAsync();
+        _syncOutcomeTrackingLevel = await _syncServer.GetSyncOutcomeTrackingLevelAsync();
+        _csoChangeTrackingEnabled = await _syncServer.GetCsoChangeTrackingEnabledAsync();
 
         // Process only the modified CSOs in batches. This enables us to respond to cancellation requests in a reasonable timeframe.
         // Page size is configurable via service settings for performance tuning.
-        var pageSize = await _syncRepo.GetSyncPageSizeAsync();
+        var pageSize = await _syncServer.GetSyncPageSizeAsync();
         var totalCsoPages = Convert.ToInt16(Math.Ceiling((double)totalCsosToProcess / pageSize));
         await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing modified Connected System Objects");
 

@@ -1,3 +1,4 @@
+using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
@@ -22,6 +23,7 @@ public class ObjectMatchingServer
         Application = application;
     }
     #endregion
+
 
     #region public methods
 
@@ -59,7 +61,7 @@ public class ObjectMatchingServer
 
             try
             {
-                var mvo = await Application.Repository.Metaverse.FindMetaverseObjectUsingMatchingRuleAsync(
+                var mvo = await Application.SyncRepo.FindMetaverseObjectUsingMatchingRuleAsync(
                     connectedSystemObject,
                     metaverseObjectType,
                     matchingRule);
@@ -112,7 +114,7 @@ public class ObjectMatchingServer
         {
             try
             {
-                var cso = await Application.Repository.ConnectedSystems.FindConnectedSystemObjectUsingMatchingRuleAsync(
+                var cso = await Application.SyncRepo.FindConnectedSystemObjectUsingMatchingRuleAsync(
                     metaverseObject,
                     connectedSystem,
                     connectedSystemObjectType,

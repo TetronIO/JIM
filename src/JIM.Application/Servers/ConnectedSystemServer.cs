@@ -3075,6 +3075,112 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Links RPEI change records to CSOs after creation. Pure business logic — no data access.
+    /// Called by SyncServer after persisting CSOs via ISyncRepository.
+    /// </summary>
+    public void LinkCreateChangeRecords(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<ActivityRunProfileExecutionItem> rpeis,
+        bool changeTrackingEnabled)
+    {
+        var rpeisByCsoId = new Dictionary<Guid, ActivityRunProfileExecutionItem>(rpeis.Count);
+        foreach (var rpei in rpeis)
+        {
+            if (rpei.ConnectedSystemObject != null)
+                rpeisByCsoId.TryAdd(rpei.ConnectedSystemObject.Id, rpei);
+        }
+
+        foreach (var cso in connectedSystemObjects)
+        {
+            if (!rpeisByCsoId.TryGetValue(cso.Id, out var rpei))
+                throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem referencing CSO {cso.Id}! It should have been created before now.");
+
+            rpei.ConnectedSystemObjectId = cso.Id;
+            AddConnectedSystemObjectChange(cso, rpei, changeTrackingEnabled);
+        }
+    }
+
+    /// <summary>
+    /// Links RPEI change records to CSOs before update. Pure business logic — no data access.
+    /// Called by SyncServer before persisting CSO updates via ISyncRepository.
+    /// </summary>
+    public void LinkUpdateChangeRecords(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<ActivityRunProfileExecutionItem> rpeis,
+        bool changeTrackingEnabled)
+    {
+        var rpeisByCsoId = new Dictionary<Guid, ActivityRunProfileExecutionItem>(rpeis.Count);
+        foreach (var rpei in rpeis)
+        {
+            if (rpei.ConnectedSystemObject != null)
+                rpeisByCsoId.TryAdd(rpei.ConnectedSystemObject.Id, rpei);
+        }
+
+        foreach (var cso in connectedSystemObjects)
+        {
+            rpeisByCsoId.TryGetValue(cso.Id, out var rpei);
+            if (rpei != null)
+            {
+                rpei.ConnectedSystemObjectId = cso.Id;
+                ProcessConnectedSystemObjectAttributeValueChanges(cso, rpei, changeTrackingEnabled);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Links RPEI change records to CSOs before deletion. Pure business logic — no data access.
+    /// Captures final attribute snapshots for audit trail before the CSOs are deleted.
+    /// Called by SyncServer before deleting CSOs via ISyncRepository.
+    /// </summary>
+    public void LinkDeleteChangeRecords(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<ActivityRunProfileExecutionItem> rpeis,
+        bool changeTrackingEnabled)
+    {
+        if (connectedSystemObjects.Count != rpeis.Count)
+            throw new ArgumentException("CSO count must match execution item count");
+
+        var deletedObjectInfo = connectedSystemObjects
+            .Select(cso => (
+                ExternalId: cso.ExternalIdAttributeValue?.ToStringNoName(),
+                DisplayName: cso.AttributeValues
+                    .SingleOrDefault(q => q.Attribute?.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase) == true)
+                    ?.StringValue,
+                FinalAttributeValues: cso.AttributeValues
+                    .Where(av => av.Attribute != null && av.Attribute.Type != AttributeDataType.NotSet)
+                    .ToList()))
+            .ToList();
+
+        if (changeTrackingEnabled)
+        {
+            for (int i = 0; i < connectedSystemObjects.Count; i++)
+            {
+                var cso = connectedSystemObjects[i];
+                var executionItem = rpeis[i];
+                var (externalId, displayName, finalAttributeValues) = deletedObjectInfo[i];
+
+                var change = new ConnectedSystemObjectChange
+                {
+                    ConnectedSystemId = cso.ConnectedSystemId,
+                    ChangeType = ObjectChangeType.Deleted,
+                    ChangeTime = DateTime.UtcNow,
+                    DeletedObjectType = cso.Type,
+                    DeletedObjectExternalId = externalId,
+                    DeletedObjectDisplayName = displayName,
+                    ActivityRunProfileExecutionItem = executionItem,
+                    InitiatedByType = executionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
+                    InitiatedById = executionItem.Activity?.InitiatedById,
+                    InitiatedByName = executionItem.Activity?.InitiatedByName
+                };
+                executionItem.ConnectedSystemObjectChange = change;
+
+                foreach (var av in finalAttributeValues)
+                    AddChangeAttributeValueObject(change, av, ValueChangeType.Remove);
+            }
+        }
+    }
+
+    /// <summary>
     /// Batch updates only the join-related columns (JoinType, DateJoined, MetaverseObjectId) on
     /// Connected System Objects. Used during sync page flush where AutoDetectChangesEnabled is
     /// disabled and EF cannot detect CSO scalar property changes automatically.

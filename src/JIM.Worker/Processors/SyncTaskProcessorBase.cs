@@ -1804,7 +1804,7 @@ public abstract class SyncTaskProcessorBase
             .ToDictionary(sr => sr.Id);
 
         // Process in batches to avoid loading too many CSOs at once
-        var pageSize = await _syncRepo.GetSyncPageSizeAsync();
+        var pageSize = await _syncServer.GetSyncPageSizeAsync();
         var totalItems = _unresolvedCrossPageReferences.Count;
         var totalBatches = (int)Math.Ceiling((double)totalItems / pageSize);
 
@@ -2192,7 +2192,7 @@ public abstract class SyncTaskProcessorBase
                 {
                     var secondaryIdValue = cso.AttributeValues?.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
                     if (secondaryIdValue?.StringValue != null)
-                        _syncRepo.AddCsoToCache(cso.ConnectedSystemId, cso.SecondaryExternalIdAttributeId.Value, secondaryIdValue.StringValue, cso.Id);
+                        _syncServer.AddCsoToCache(cso.ConnectedSystemId, cso.SecondaryExternalIdAttributeId.Value, secondaryIdValue.StringValue, cso.Id);
                 }
             }
 
@@ -2253,7 +2253,7 @@ public abstract class SyncTaskProcessorBase
         var csosToDelete = _obsoleteCsosToDelete.Select(x => x.Cso).ToList();
         var executionItems = _obsoleteCsosToDelete.Select(x => x.ExecutionItem).ToList();
 
-        await _syncRepo.DeleteConnectedSystemObjectsAsync(csosToDelete, executionItems);
+        await _syncServer.DeleteConnectedSystemObjectsAsync(csosToDelete, executionItems);
         Log.Verbose("FlushObsoleteCsoOperationsAsync: Deleted {Count} obsolete CSOs in batch", _obsoleteCsosToDelete.Count);
 
         _obsoleteCsosToDelete.Clear();
@@ -2356,7 +2356,7 @@ public abstract class SyncTaskProcessorBase
             return;
 
         // Check feature flag
-        var changeTrackingEnabled = await _syncRepo.GetMvoChangeTrackingEnabledAsync();
+        var changeTrackingEnabled = await _syncServer.GetMvoChangeTrackingEnabledAsync();
         if (!changeTrackingEnabled)
         {
             _pendingMvoChanges.Clear();
@@ -2536,7 +2536,7 @@ public abstract class SyncTaskProcessorBase
     {
         try
         {
-            return await _syncRepo.FindMatchingMetaverseObjectAsync(connectedSystemObject, matchingRules);
+            return await _syncServer.FindMatchingMetaverseObjectAsync(connectedSystemObject, matchingRules);
         }
         catch (JIM.Models.Exceptions.MultipleMatchesException ex)
         {

@@ -27,6 +27,7 @@ public class WorkflowTestHarness : IDisposable
     private readonly IRepository _repository;
     private readonly JimApplication _jim;
     private readonly JIM.InMemoryData.SyncRepository _syncRepo;
+    private readonly SyncServer _syncServer;
     private readonly Dictionary<string, ConnectedSystem> _connectedSystems = new();
     private readonly Dictionary<string, MockCallConnector> _connectors = new();
     private readonly Dictionary<string, ConnectedSystemObjectType> _objectTypes = new();
@@ -65,6 +66,7 @@ public class WorkflowTestHarness : IDisposable
         _repository = new PostgresDataRepository(_dbContext);
         _syncRepo = new JIM.InMemoryData.SyncRepository();
         _jim = new JimApplication(_repository, syncRepository: _syncRepo);
+        _syncServer = new SyncServer(_jim);
     }
 
     #region Setup Methods
@@ -254,6 +256,7 @@ public class WorkflowTestHarness : IDisposable
         var processor = new SyncImportTaskProcessor(
             _jim,
             _syncRepo,
+            _syncServer,
             connector,
             system,
             runProfile,

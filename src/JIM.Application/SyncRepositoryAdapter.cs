@@ -144,6 +144,19 @@ public class SyncRepositoryAdapter : ISyncRepository
 
     #endregion
 
+    #region Object Matching — Data Access
+
+    public Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(
+        ConnectedSystemObject connectedSystemObject, MetaverseObjectType metaverseObjectType, ObjectMatchingRule objectMatchingRule)
+        => _jim.Repository.Metaverse.FindMetaverseObjectUsingMatchingRuleAsync(connectedSystemObject, metaverseObjectType, objectMatchingRule);
+
+    public Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
+        MetaverseObject metaverseObject, ConnectedSystem connectedSystem,
+        ConnectedSystemObjectType connectedSystemObjectType, ObjectMatchingRule objectMatchingRule)
+        => _jim.Repository.ConnectedSystems.FindConnectedSystemObjectUsingMatchingRuleAsync(metaverseObject, connectedSystem, connectedSystemObjectType, objectMatchingRule);
+
+    #endregion
+
     #region Metaverse Object — Reads
 
     public Task<MetaverseObject?> FindMatchingMetaverseObjectAsync(ConnectedSystemObject cso, List<ObjectMatchingRule> matchingRules)

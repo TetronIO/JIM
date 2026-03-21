@@ -91,8 +91,8 @@ public class SyncExportTaskProcessor
         await _syncRepo.UpdateActivityMessageAsync(_activity, "Preparing export");
 
         // Load settings once at start of export
-        _syncOutcomeTrackingLevel = await _syncRepo.GetSyncOutcomeTrackingLevelAsync();
-        _csoChangeTrackingEnabled = await _syncRepo.GetCsoChangeTrackingEnabledAsync();
+        _syncOutcomeTrackingLevel = await _syncServer.GetSyncOutcomeTrackingLevelAsync();
+        _csoChangeTrackingEnabled = await _syncServer.GetCsoChangeTrackingEnabledAsync();
 
         // Get count of pending exports for progress tracking
         int pendingExportCount;
@@ -116,7 +116,7 @@ public class SyncExportTaskProcessor
         {
             var errorMessage = $"Connector {_connector.Name} does not support export operations";
             Log.Error("PerformExportAsync: {Error}", errorMessage);
-            await _syncRepo.FailActivityWithErrorAsync(_activity, errorMessage);
+            await _syncServer.FailActivityWithErrorAsync(_activity, errorMessage);
             return;
         }
 
@@ -176,7 +176,7 @@ public class SyncExportTaskProcessor
 
                 using (Diagnostics.Sync.StartSpan("AutoSelectContainers").SetTag("containerCount", result.CreatedContainerExternalIds.Count))
                 {
-                    await _syncRepo.RefreshAndAutoSelectContainersWithTriadAsync(
+                    await _syncServer.RefreshAndAutoSelectContainersWithTriadAsync(
                         _connectedSystem,
                         _connector,
                         result.CreatedContainerExternalIds,
@@ -197,7 +197,7 @@ public class SyncExportTaskProcessor
         catch (Exception ex)
         {
             Log.Error(ex, "PerformExportAsync: Error during export for {SystemName}", _connectedSystem.Name);
-            await _syncRepo.FailActivityWithErrorAsync(_activity, ex);
+            await _syncServer.FailActivityWithErrorAsync(_activity, ex);
             throw;
         }
     }

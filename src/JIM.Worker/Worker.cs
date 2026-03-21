@@ -289,7 +289,7 @@ public class Worker : BackgroundService
                                                         // hand processing of the sync task to a dedicated task processor to keep the worker abstract of specific tasks
                                                         case ConnectedSystemRunType.FullImport:
                                                         {
-                                                            var syncImportTaskProcessor = new SyncImportTaskProcessor(taskJim, syncRepo, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource);
+                                                            var syncImportTaskProcessor = new SyncImportTaskProcessor(taskJim, syncRepo, syncServer, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource);
                                                             await syncImportTaskProcessor.PerformFullImportAsync();
                                                             break;
                                                         }
@@ -298,7 +298,7 @@ public class Worker : BackgroundService
                                                             // Delta Import uses the import processor just like Full Import.
                                                             // The connector's ImportAsync method checks the run profile type
                                                             // to determine whether to do full or delta import.
-                                                            var syncDeltaImportTaskProcessor = new SyncImportTaskProcessor(taskJim, syncRepo, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource);
+                                                            var syncDeltaImportTaskProcessor = new SyncImportTaskProcessor(taskJim, syncRepo, syncServer, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource);
                                                             await syncDeltaImportTaskProcessor.PerformFullImportAsync();
                                                             break;
                                                         }
