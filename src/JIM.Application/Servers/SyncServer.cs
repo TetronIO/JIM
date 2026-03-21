@@ -3,6 +3,7 @@ using JIM.Application.Services;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Enums;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -104,6 +105,58 @@ public class SyncServer : ISyncServer
 
     public Task FailActivityWithErrorAsync(Activity activity, Exception exception)
         => _jim.Activities.FailActivityWithErrorAsync(activity, exception);
+
+    #endregion
+
+    #region MVO Deletion with Change Tracking
+
+    public async Task DeleteMetaverseObjectAsync(
+        MetaverseObject metaverseObject,
+        ActivityInitiatorType initiatorType,
+        Guid? initiatorId,
+        string? initiatorName,
+        List<MetaverseObjectAttributeValue>? finalAttributeValues)
+    {
+        var changeTrackingEnabled = await GetMvoChangeTrackingEnabledAsync();
+
+        if (changeTrackingEnabled)
+        {
+            var attributesToCapture = finalAttributeValues ?? metaverseObject.AttributeValues.ToList();
+            var mvoId = metaverseObject.Id;
+
+            var displayName = metaverseObject.DisplayName;
+            if (displayName == null && attributesToCapture.Count > 0)
+            {
+                var displayNameAttrValue = attributesToCapture.SingleOrDefault(
+                    av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName);
+                displayName = displayNameAttrValue?.StringValue;
+            }
+
+            var change = new MetaverseObjectChange
+            {
+                ChangeType = ObjectChangeType.Deleted,
+                ChangeTime = DateTime.UtcNow,
+                InitiatedByType = initiatorType,
+                InitiatedById = initiatorId,
+                InitiatedByName = initiatorName,
+                ChangeInitiatorType = initiatorType == ActivityInitiatorType.User
+                    ? MetaverseObjectChangeInitiatorType.User
+                    : MetaverseObjectChangeInitiatorType.NotSet,
+                DeletedMetaverseObjectId = mvoId,
+                DeletedObjectTypeId = metaverseObject.Type?.Id,
+                DeletedObjectDisplayName = displayName
+            };
+
+            foreach (var attributeValue in attributesToCapture)
+                MetaverseServer.AddMvoChangeAttributeValueObject(change, attributeValue, ValueChangeType.Remove);
+
+            await _syncRepo.DeleteMetaverseObjectAsync(metaverseObject);
+            await _syncRepo.CreateMetaverseObjectChangeDirectAsync(change);
+            return;
+        }
+
+        await _syncRepo.DeleteMetaverseObjectAsync(metaverseObject);
+    }
 
     #endregion
 

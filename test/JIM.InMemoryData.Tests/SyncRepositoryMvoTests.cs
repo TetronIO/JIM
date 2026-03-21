@@ -220,7 +220,7 @@ public class SyncRepositoryMvoTests
         };
         _repo.SeedMetaverseObject(mvo);
 
-        await _repo.DeleteMetaverseObjectAsync(mvo, ActivityInitiatorType.System, null, null, null);
+        await _repo.DeleteMetaverseObjectAsync(mvo);
 
         // Verify deleted by trying to match — should not find it
         var cso = new ConnectedSystemObject

@@ -2318,7 +2318,7 @@ public abstract class SyncTaskProcessorBase
 
                 // Delete the MVO, passing initiator info and the snapshotted final attribute values
                 // (captured before attribute recall removed them from the MVO)
-                await _syncRepo.DeleteMetaverseObjectAsync(
+                await _syncServer.DeleteMetaverseObjectAsync(
                     mvo,
                     _activity.InitiatedByType,
                     _activity.InitiatedById,

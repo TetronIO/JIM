@@ -243,14 +243,8 @@ public interface ISyncRepository
 
     /// <summary>
     /// Deletes an MVO, cascading FK cleanup via raw SQL to prevent constraint violations.
-    /// Records the deletion with initiator information for audit trail.
     /// </summary>
-    Task DeleteMetaverseObjectAsync(
-        MetaverseObject metaverseObject,
-        ActivityInitiatorType initiatorType,
-        Guid? initiatorId,
-        string? initiatorName,
-        List<MetaverseObjectAttributeValue>? finalAttributeValues);
+    Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject);
 
     #endregion
 

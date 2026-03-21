@@ -723,12 +723,7 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
-    public Task DeleteMetaverseObjectAsync(
-        MetaverseObject metaverseObject,
-        ActivityInitiatorType initiatorType,
-        Guid? initiatorId,
-        string? initiatorName,
-        List<MetaverseObjectAttributeValue>? finalAttributeValues)
+    public Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
     {
         _mvos.Remove(metaverseObject.Id);
         _csosByMvo.Remove(metaverseObject.Id);

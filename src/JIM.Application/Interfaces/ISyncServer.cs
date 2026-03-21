@@ -105,6 +105,21 @@ public interface ISyncServer
 
     #endregion
 
+    #region MVO Deletion with Change Tracking
+
+    /// <summary>
+    /// Deletes an MVO with initiator information for audit trail.
+    /// Handles change tracking (if enabled), then delegates the raw delete to ISyncRepository.
+    /// </summary>
+    Task DeleteMetaverseObjectAsync(
+        MetaverseObject metaverseObject,
+        ActivityInitiatorType initiatorType,
+        Guid? initiatorId,
+        string? initiatorName,
+        List<MetaverseObjectAttributeValue>? finalAttributeValues);
+
+    #endregion
+
     #region Activity Management
 
     /// <summary>

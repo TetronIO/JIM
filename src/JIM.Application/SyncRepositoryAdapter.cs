@@ -175,13 +175,8 @@ public class SyncRepositoryAdapter : ISyncRepository
     public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
         => _jim.Metaverse.UpdateMetaverseObjectAsync(metaverseObject);
 
-    public Task DeleteMetaverseObjectAsync(
-        MetaverseObject metaverseObject,
-        ActivityInitiatorType initiatorType,
-        Guid? initiatorId,
-        string? initiatorName,
-        List<MetaverseObjectAttributeValue>? finalAttributeValues)
-        => _jim.Metaverse.DeleteMetaverseObjectAsync(metaverseObject, initiatorType, initiatorId, initiatorName, finalAttributeValues);
+    public Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
+        => _jim.Repository.Metaverse.DeleteMetaverseObjectAsync(metaverseObject);
 
     #endregion
 
