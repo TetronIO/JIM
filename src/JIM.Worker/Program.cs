@@ -23,7 +23,7 @@ var host = Host.CreateDefaultBuilder(args)
         var dbLogSensitiveInfo = Environment.GetEnvironmentVariable(Constants.Config.DatabaseLogSensitiveInformation);
 
         var connectionString = $"Host={dbHostName};Database={dbName};Username={dbUsername};Password={dbPassword}" +
-                               ";Minimum Pool Size=5;Maximum Pool Size=30;Connection Idle Lifetime=300;Connection Pruning Interval=30";
+                               $";Minimum Pool Size=5;Maximum Pool Size=30;Connection Idle Lifetime=300;Connection Pruning Interval=30;Command Timeout={PostgresDataRepository.BulkOperationCommandTimeoutSeconds}";
         _ = bool.TryParse(dbLogSensitiveInfo, out var logSensitiveInfo);
         if (logSensitiveInfo)
             connectionString += ";Include Error Detail=True";
