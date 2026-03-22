@@ -297,8 +297,8 @@ public class Scheduler : BackgroundService
             formatter: new RenderedCompactJsonFormatter(),
             path: Path.Combine(loggingPath, "jim.scheduler..log"),
             rollingInterval: RollingInterval.Day,
-            retainedFileCountLimit: 31,
-            fileSizeLimitBytes: 500 * 1024 * 1024,
+            retainedFileCountLimit: 100,
+            fileSizeLimitBytes: 50 * 1024 * 1024,  // 50MB per file — keeps files manageable for analysis
             rollOnFileSizeLimit: true);
         loggerConfiguration.WriteTo.Console();
         Log.Logger = loggerConfiguration.CreateLogger();

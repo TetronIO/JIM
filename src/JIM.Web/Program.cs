@@ -486,8 +486,8 @@ static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assi
         formatter: new RenderedCompactJsonFormatter(),
         path: Path.Combine(loggingPath, "jim.web..log"),
         rollingInterval: RollingInterval.Day,
-        retainedFileCountLimit: 31,  // Keep 31 days of logs for integration test analysis
-        fileSizeLimitBytes: 500 * 1024 * 1024,  // 500MB per file max
+        retainedFileCountLimit: 100,
+        fileSizeLimitBytes: 50 * 1024 * 1024,  // 50MB per file — keeps files manageable for analysis
         rollOnFileSizeLimit: true);
     loggerConfiguration.WriteTo.Console();
 
