@@ -28,8 +28,9 @@ public class JimApplication : IDisposable
 
     /// <summary>
     /// The sync repository used by ExportEvaluationServer and ExportExecutionServer.
-    /// In production, this is a <see cref="SyncRepositoryAdapter"/> wrapping this JimApplication.
-    /// In tests, this can be an <c>InMemoryData.SyncRepository</c> for deterministic behaviour.
+    /// JIM.Web/Scheduler use <see cref="SyncRepositoryAdapter"/> (EF Core via shared repos).
+    /// Worker passes <c>PostgresData.SyncRepository</c> (Worker-optimised SQL).
+    /// Tests use <c>InMemoryData.SyncRepository</c> for deterministic behaviour.
     /// </summary>
     public ISyncRepository SyncRepo { get; }
 

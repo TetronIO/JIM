@@ -14,14 +14,8 @@ namespace JIM.Application;
 /// Adapter that implements <see cref="ISyncRepository"/> by delegating to the existing
 /// <see cref="JimApplication"/> server methods and repository interfaces.
 /// <para>
-/// This is the production implementation for the transitional period while sync processors
-/// are being migrated from direct <c>_jim.*</c> calls to <c>ISyncRepository</c>.
-/// It preserves all existing business logic (CSO change tracking, RPEI linking, etc.)
-/// by routing through the application-layer servers rather than bypassing them.
-/// </para>
-/// <para>
-/// In a future phase, this adapter will be replaced by a direct <c>SyncRepository</c>
-/// in JIM.PostgresData that uses raw SQL/Npgsql for all operations.
+/// Used by JIM.Web and JIM.Scheduler where no Worker-optimised SQL is needed.
+/// The Worker uses <c>PostgresData.SyncRepository</c> directly instead.
 /// </para>
 /// </summary>
 public class SyncRepositoryAdapter : ISyncRepository
