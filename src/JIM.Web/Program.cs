@@ -64,16 +64,7 @@ try
     var builder = WebApplication.CreateBuilder(args);
 
     // Configure database connection
-    var dbHostName = Environment.GetEnvironmentVariable(Constants.Config.DatabaseHostname);
-    var dbName = Environment.GetEnvironmentVariable(Constants.Config.DatabaseName);
-    var dbUsername = Environment.GetEnvironmentVariable(Constants.Config.DatabaseUsername);
-    var dbPassword = Environment.GetEnvironmentVariable(Constants.Config.DatabasePassword);
-    var dbLogSensitiveInfo = Environment.GetEnvironmentVariable(Constants.Config.DatabaseLogSensitiveInformation);
-
-    var connectionString = $"Host={dbHostName};Database={dbName};Username={dbUsername};Password={dbPassword};Minimum Pool Size=5;Maximum Pool Size=30;Connection Idle Lifetime=300;Connection Pruning Interval=30";
-    _ = bool.TryParse(dbLogSensitiveInfo, out var logSensitiveInfo);
-    if (logSensitiveInfo)
-        connectionString += ";Include Error Detail=True";
+    var connectionString = JimDbContext.BuildConnectionString();
 
     // Use DbContextFactory for Blazor Server to avoid concurrent DbContext access issues
     // Blazor Server pre-rendering and interactive rendering can happen concurrently

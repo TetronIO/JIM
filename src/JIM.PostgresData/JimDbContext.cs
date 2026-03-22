@@ -79,10 +79,20 @@ public class JimDbContext : DbContext
     public virtual DbSet<TrustedCertificate> TrustedCertificates { get; set; } = null!;
     public virtual DbSet<WorkerTask> WorkerTasks { get; set; } = null!;
 
+    // Connection pooling constants
+    private const int MinimumPoolSize = 5;
+    private const int MaximumPoolSize = 30;
+    private const int ConnectionIdleLifetimeSeconds = 300;
+    private const int ConnectionPruningIntervalSeconds = 30;
+
     private readonly string? _connectionString;
 
-    // Parameterless constructor for migrations and manual instantiation
-    public JimDbContext()
+    /// <summary>
+    /// Builds a standardised Npgsql connection string from environment variables.
+    /// All JIM services should use this method to ensure uniform pool and timeout settings.
+    /// </summary>
+    /// <param name="commandTimeoutSeconds">Optional command timeout override (e.g. for bulk operations in the Worker).</param>
+    public static string BuildConnectionString(int? commandTimeoutSeconds = null)
     {
         var dbHostName = Environment.GetEnvironmentVariable(Constants.Config.DatabaseHostname);
         var dbName = Environment.GetEnvironmentVariable(Constants.Config.DatabaseName);
@@ -104,11 +114,24 @@ public class JimDbContext : DbContext
         // - Maximum Pool Size: Limit per-process connections (3 services × 30 = 90, leaving headroom within PostgreSQL's max_connections=200)
         // - Connection Idle Lifetime: Recycle idle connections after 5 minutes
         // - Connection Pruning Interval: Check for idle connections every 30 seconds
-        _connectionString = $"Host={dbHostName};Database={dbName};Username={dbUsername};Password={dbPassword};Minimum Pool Size=5;Maximum Pool Size=30;Connection Idle Lifetime=300;Connection Pruning Interval=30";
+        var connectionString = $"Host={dbHostName};Database={dbName};Username={dbUsername};Password={dbPassword}" +
+                               $";Minimum Pool Size={MinimumPoolSize};Maximum Pool Size={MaximumPoolSize}" +
+                               $";Connection Idle Lifetime={ConnectionIdleLifetimeSeconds};Connection Pruning Interval={ConnectionPruningIntervalSeconds}";
+
+        if (commandTimeoutSeconds.HasValue)
+            connectionString += $";Command Timeout={commandTimeoutSeconds.Value}";
 
         _ = bool.TryParse(dbLogSensitiveInfo, out var logSensitiveInfo);
         if (logSensitiveInfo)
-            _connectionString += ";Include Error Detail=True";
+            connectionString += ";Include Error Detail=True";
+
+        return connectionString;
+    }
+
+    // Parameterless constructor for migrations and manual instantiation
+    public JimDbContext()
+    {
+        _connectionString = BuildConnectionString();
     }
 
     // Constructor for dependency injection with DbContextOptions

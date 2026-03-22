@@ -3,7 +3,6 @@ using JIM.Application.Interfaces;
 using JIM.Application.Services;
 using JIM.Connectors;
 using JIM.Data;
-using JIM.Models.Core;
 using JIM.PostgresData;
 using JIM.Worker;
 using Microsoft.AspNetCore.DataProtection;
@@ -15,18 +14,9 @@ using Microsoft.Extensions.Caching.Memory;
 var host = Host.CreateDefaultBuilder(args)
     .ConfigureServices((hostContext, services) =>
     {
-        // Database connection — reads from environment variables, matching JIM.Web's pattern
-        var dbHostName = Environment.GetEnvironmentVariable(Constants.Config.DatabaseHostname);
-        var dbName = Environment.GetEnvironmentVariable(Constants.Config.DatabaseName);
-        var dbUsername = Environment.GetEnvironmentVariable(Constants.Config.DatabaseUsername);
-        var dbPassword = Environment.GetEnvironmentVariable(Constants.Config.DatabasePassword);
-        var dbLogSensitiveInfo = Environment.GetEnvironmentVariable(Constants.Config.DatabaseLogSensitiveInformation);
-
-        var connectionString = $"Host={dbHostName};Database={dbName};Username={dbUsername};Password={dbPassword}" +
-                               $";Minimum Pool Size=5;Maximum Pool Size=30;Connection Idle Lifetime=300;Connection Pruning Interval=30;Command Timeout={PostgresDataRepository.BulkOperationCommandTimeoutSeconds}";
-        _ = bool.TryParse(dbLogSensitiveInfo, out var logSensitiveInfo);
-        if (logSensitiveInfo)
-            connectionString += ";Include Error Detail=True";
+        // Database connection — uses shared connection string builder with bulk operation timeout
+        var connectionString = JimDbContext.BuildConnectionString(
+            commandTimeoutSeconds: PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
 
         // DbContextFactory — each CreateDbContext() call gets a fresh connection (no concurrency issues)
         services.AddDbContextFactory<JimDbContext>(options =>
