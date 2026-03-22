@@ -524,8 +524,8 @@ public class ExportExecutionServer
                 await ReportProgressAsync(progressCallback, new ExportProgressInfo
                 {
                     Phase = ExportPhase.ResolvingReferences,
-                    TotalExports = result.TotalPendingExports + deferredExports.Count,
-                    ProcessedExports = result.SuccessCount + resolveProcessedCount,
+                    TotalExports = result.TotalPendingExports,
+                    ProcessedExports = result.SuccessCount + result.FailedCount,
                     Message = $"Resolving deferred exports ({resolveProcessedCount} / {deferredExports.Count})"
                 });
             }
@@ -599,6 +599,10 @@ public class ExportExecutionServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback)
     {
+        // Snapshot the counts from the immediate export phase. ProcessBatchSuccessAsync
+        // increments result.SuccessCount/FailedCount for deferred batches too, so using
+        // the live counters plus processedCount would double-count completed deferred items.
+        var immediateProcessedCount = result.SuccessCount + result.FailedCount;
         var processedCount = 0;
         foreach (var batch in batches)
         {
@@ -609,7 +613,7 @@ public class ExportExecutionServer
             {
                 Phase = ExportPhase.Executing,
                 TotalExports = result.TotalPendingExports,
-                ProcessedExports = result.SuccessCount + result.FailedCount + processedCount,
+                ProcessedExports = immediateProcessedCount + processedCount,
                 CurrentBatchSize = batch.Count,
                 Message = "Exporting deferred"
             });

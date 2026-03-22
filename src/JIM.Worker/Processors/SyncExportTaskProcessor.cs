@@ -94,11 +94,13 @@ public class SyncExportTaskProcessor
         _syncOutcomeTrackingLevel = await _syncServer.GetSyncOutcomeTrackingLevelAsync();
         _csoChangeTrackingEnabled = await _syncServer.GetCsoChangeTrackingEnabledAsync();
 
-        // Get count of pending exports for progress tracking
+        // Get count of executable exports for progress tracking.
+        // Uses the same filtered query as ExportExecutionServer to ensure the denominator
+        // (ObjectsToProcess) matches the numerator (ProcessedExports from progress callbacks).
         int pendingExportCount;
         using (Diagnostics.Sync.StartSpan("GetPendingExportsCount"))
         {
-            pendingExportCount = await _syncRepo.GetPendingExportsCountAsync(_connectedSystem.Id);
+            pendingExportCount = await _syncRepo.GetExecutableExportCountAsync(_connectedSystem.Id);
         }
         _activity.ObjectsToProcess = pendingExportCount;
         _activity.ObjectsProcessed = 0;
