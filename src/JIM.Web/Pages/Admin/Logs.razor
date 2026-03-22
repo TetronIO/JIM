@@ -150,7 +150,7 @@
 </div>
 
 @* Log Entry Detail Panel with Overlay *@
-<MudOverlay @bind-Visible="_drawerOpen" DarkBackground="true" AutoClose="true" />
+<MudOverlay @bind-Visible="_drawerOpen" DarkBackground="true" AutoClose="true" ZIndex="1250" />
 <div class="jim-log-panel @(_drawerOpen ? "jim-log-panel-open" : "")">
     @if (_selectedEntry != null)
     {
