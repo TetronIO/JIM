@@ -964,6 +964,11 @@ public class ActivityRepository : IActivityRepository
                 rpei.Id = Guid.NewGuid();
         }
 
+        // Increase command timeout for large RPEI persistence. With 5K+ RPEIs, the bulk
+        // insert of RPEIs, sync outcomes, and CSO change records can exceed the default 30s.
+        var previousTimeout = Repository.Database.Database.GetCommandTimeout();
+        Repository.Database.Database.SetCommandTimeout(300); // 5 minutes
+
         // If a transaction is already active (e.g., caller opened one), reuse it.
         // Otherwise start a new one. This prevents InvalidOperationException when
         // FlushRpeisAsync is called during cross-page resolution where preceding
@@ -1005,6 +1010,7 @@ public class ActivityRepository : IActivityRepository
         }
         finally
         {
+            Repository.Database.Database.SetCommandTimeout(previousTimeout);
             if (transaction != null)
                 await transaction.DisposeAsync();
         }
@@ -1058,6 +1064,11 @@ public class ActivityRepository : IActivityRepository
             }
         }
 
+        // Increase command timeout for large change record persistence. With 5K+ CSOs and
+        // 20+ attributes each, the three-table bulk insert can generate 100K+ rows.
+        var previousTimeout = Repository.Database.Database.GetCommandTimeout();
+        Repository.Database.Database.SetCommandTimeout(300); // 5 minutes
+
         // Use an EF transaction for atomicity — COPY binary imports on the underlying
         // NpgsqlConnection participate in the active transaction automatically.
         await using var transaction = await Repository.Database.Database.BeginTransactionAsync();
@@ -1083,6 +1094,7 @@ public class ActivityRepository : IActivityRepository
             await BulkInsertCsoChangeAttributeValuesRawAsync(allValueChanges);
 
         await transaction.CommitAsync();
+        Repository.Database.Database.SetCommandTimeout(previousTimeout);
     }
 
     /// <summary>

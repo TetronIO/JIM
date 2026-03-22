@@ -148,10 +148,11 @@ public class SyncExportTaskProcessor
                     _cancellationTokenSource.Token,
                     async progressInfo =>
                     {
-                        // Update activity with progress
+                        // Update activity with progress.
+                        // UpdateActivityMessageAsync sets Message then calls UpdateActivityAsync
+                        // internally, so a separate UpdateActivityAsync call is not needed.
                         _activity.ObjectsProcessed = progressInfo.ProcessedExports;
                         await _syncRepo.UpdateActivityMessageAsync(_activity, progressInfo.Message);
-                        await _syncRepo.UpdateActivityAsync(_activity);
                     },
                     connectorFactory: CreateConnectorForParallelBatch,
                     repositoryFactory: _syncRepoFactory);

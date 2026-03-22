@@ -515,13 +515,20 @@ public class ExportExecutionServer
             }
 
             resolveProcessedCount++;
-            await ReportProgressAsync(progressCallback, new ExportProgressInfo
+
+            // Throttle progress reporting — resolution is a microsecond dictionary lookup,
+            // but each progress report triggers a SaveChangesAsync round-trip. Report every
+            // 50 items or on the final item to avoid hundreds of unnecessary DB writes.
+            if (resolveProcessedCount % 50 == 0 || resolveProcessedCount == deferredExports.Count)
             {
-                Phase = ExportPhase.ResolvingReferences,
-                TotalExports = result.TotalPendingExports,
-                ProcessedExports = result.SuccessCount + resolveProcessedCount,
-                Message = $"Resolving deferred exports ({resolveProcessedCount} / {deferredExports.Count})"
-            });
+                await ReportProgressAsync(progressCallback, new ExportProgressInfo
+                {
+                    Phase = ExportPhase.ResolvingReferences,
+                    TotalExports = result.TotalPendingExports + deferredExports.Count,
+                    ProcessedExports = result.SuccessCount + resolveProcessedCount,
+                    Message = $"Resolving deferred exports ({resolveProcessedCount} / {deferredExports.Count})"
+                });
+            }
         }
 
         // Batch-export resolved deferred exports
