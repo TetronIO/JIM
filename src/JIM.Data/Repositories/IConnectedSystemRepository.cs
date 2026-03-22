@@ -145,15 +145,6 @@ public interface IConnectedSystemRepository
     public Task DeletePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
 
     /// <summary>
-    /// Deletes pending exports by their associated Connected System Object IDs using raw SQL.
-    /// This avoids loading PE entities into the change tracker, preventing identity conflicts
-    /// when the change tracker has been cleared (e.g. during cross-page reference resolution).
-    /// </summary>
-    /// <param name="connectedSystemObjectIds">The CSO IDs whose pending exports should be deleted.</param>
-    /// <returns>The number of pending exports deleted.</returns>
-    public Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
-
-    /// <summary>
     /// Updates multiple Pending Export objects in a single batch operation.
     /// Used to efficiently update pending exports during sync.
     /// </summary>
@@ -174,13 +165,6 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="pendingExport">The Pending Export to create.</param>
     public Task CreatePendingExportAsync(PendingExport pendingExport);
-
-    /// <summary>
-    /// Creates multiple Pending Export objects in a single batch operation.
-    /// More efficient than creating one at a time when processing pages of objects.
-    /// </summary>
-    /// <param name="pendingExports">The Pending Exports to create.</param>
-    public Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
 
     /// <summary>
     /// Retrieves a page of Pending Export headers for a Connected System.
@@ -270,28 +254,7 @@ public interface IConnectedSystemRepository
     /// </exception>
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
 
-    /// <summary>
-    /// Deletes pending exports loaded via AsNoTracking, handling change tracker conflicts
-    /// when the same entities may already be tracked from earlier processing.
-    /// Deletes both the parent PendingExport and all child AttributeValueChange records.
-    /// </summary>
-    /// <param name="untrackedPendingExports">The untracked pending export entities to delete (with AttributeValueChanges populated).</param>
-    public Task DeleteUntrackedPendingExportsAsync(IEnumerable<PendingExport> untrackedPendingExports);
 
-    /// <summary>
-    /// Updates pending exports loaded via AsNoTracking, handling change tracker conflicts
-    /// when the same entities may already be tracked from earlier processing.
-    /// Copies property values to tracked instances when they exist.
-    /// </summary>
-    /// <param name="untrackedPendingExports">The untracked pending export entities with updated property values.</param>
-    public Task UpdateUntrackedPendingExportsAsync(IEnumerable<PendingExport> untrackedPendingExports);
-
-    /// <summary>
-    /// Deletes specific PendingExportAttributeValueChange records loaded via AsNoTracking,
-    /// handling change tracker conflicts when the same entities may already be tracked.
-    /// </summary>
-    /// <param name="untrackedAttributeValueChanges">The untracked attribute value change entities to delete.</param>
-    public Task DeleteUntrackedPendingExportAttributeValueChangesAsync(IEnumerable<PendingExportAttributeValueChange> untrackedAttributeValueChanges);
 
     /// <summary>
     /// Lightweight query that returns the CSO IDs that have pending exports for a given connected system.
@@ -609,25 +572,6 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
     public Task<int> GetUnresolvedReferenceCountAsync(int connectedSystemId);
-
-    /// <summary>
-    /// Resolves cross-batch reference FKs after a full import.
-    /// When groups are imported before the users they reference (due to container ordering),
-    /// the ReferenceValueId FK cannot be set during the group's batch save because the user CSOs
-    /// don't have real IDs yet. This method runs after all batches complete and resolves any
-    /// remaining unresolved references using the secondary external ID (e.g., distinguishedName).
-    /// </summary>
-    /// <returns>The number of references resolved.</returns>
-    public Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId);
-
-    /// <summary>
-    /// Resolves cross-batch reference values in CSO change records (ConnectedSystemObjectChangeAttributeValues)
-    /// that were nulled during COPY binary persistence to avoid FK violations. The DN string is preserved
-    /// in StringValue and is matched against the secondary external ID attribute values of CSOs in the
-    /// same connected system using case-insensitive comparison.
-    /// </summary>
-    /// <returns>The number of change record references resolved.</returns>
-    public Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId);
 
     public int GetConnectedSystemCount();
     public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId);

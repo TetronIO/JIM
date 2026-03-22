@@ -2966,16 +2966,6 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetUnresolvedReferenceCountAsync(connectedSystemId);
     }
 
-    public async Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId)
-    {
-        return await Application.Repository.ConnectedSystems.FixupCrossBatchReferenceIdsAsync(connectedSystemId);
-    }
-
-    public async Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId)
-    {
-        return await Application.Repository.ConnectedSystems.FixupCrossBatchChangeRecordReferenceIdsAsync(connectedSystemId);
-    }
-
     /// <summary>
     /// Bulk persists Connected System Objects without activity tracking.
     /// Use this for provisioning CSOs created during sync where activity execution items are not needed.
@@ -4052,31 +4042,6 @@ public class ConnectedSystemServer
     /// Used to efficiently create pending exports during sync export evaluation.
     /// </summary>
     /// <param name="pendingExports">The Pending Exports to create.</param>
-    public async Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
-    {
-        await Application.Repository.ConnectedSystems.CreatePendingExportsAsync(pendingExports);
-    }
-
-    /// <summary>
-    /// Deletes multiple Pending Export objects in a single batch operation.
-    /// Used to efficiently remove confirmed pending exports during sync.
-    /// </summary>
-    /// <param name="pendingExports">The Pending Exports to delete.</param>
-    public async Task DeletePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
-    {
-        await Application.Repository.ConnectedSystems.DeletePendingExportsAsync(pendingExports);
-    }
-
-    /// <summary>
-    /// Deletes pending exports by their associated Connected System Object IDs using raw SQL.
-    /// Avoids loading PE entities into the change tracker, preventing identity conflicts
-    /// when the change tracker has been cleared (e.g. during cross-page reference resolution).
-    /// </summary>
-    public async Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
-    {
-        return await Application.Repository.ConnectedSystems.DeletePendingExportsByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
-    }
-
     /// <summary>
     /// Updates multiple Pending Export objects in a single batch operation.
     /// Used to efficiently update pending exports during sync.

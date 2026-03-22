@@ -123,11 +123,11 @@ public partial class SyncRepository : ISyncRepository
     public Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
         => _repo.ConnectedSystems.DeleteConnectedSystemObjectsAsync(connectedSystemObjects);
 
-    public Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId)
-        => _repo.ConnectedSystems.FixupCrossBatchReferenceIdsAsync(connectedSystemId);
-
-    public Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId)
-        => _repo.ConnectedSystems.FixupCrossBatchChangeRecordReferenceIdsAsync(connectedSystemId);
+    // FixupCrossBatchReferenceIdsAsync, FixupCrossBatchChangeRecordReferenceIdsAsync,
+    // CreatePendingExportsAsync, DeletePendingExportsByConnectedSystemObjectIdsAsync,
+    // DeleteUntrackedPendingExportsAsync, DeleteUntrackedPendingExportAttributeValueChangesAsync,
+    // UpdateUntrackedPendingExportsAsync are owned implementations in
+    // SyncRepository.CsOperations.cs — not delegates.
 
     #endregion
 
@@ -168,17 +168,11 @@ public partial class SyncRepository : ISyncRepository
     public Task<int> GetPendingExportsCountAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetPendingExportsCountAsync(connectedSystemId);
 
-    public Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
-        => _repo.ConnectedSystems.CreatePendingExportsAsync(pendingExports);
-
     public Task DeletePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
         => _repo.ConnectedSystems.DeletePendingExportsAsync(pendingExports);
 
     public Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
         => _repo.ConnectedSystems.UpdatePendingExportsAsync(pendingExports);
-
-    public Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
-        => _repo.ConnectedSystems.DeletePendingExportsByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
 
     public Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
         => _repo.ConnectedSystems.GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObjectId);
@@ -191,15 +185,6 @@ public partial class SyncRepository : ISyncRepository
 
     public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetCsoIdsWithPendingExportsByConnectedSystemAsync(connectedSystemId);
-
-    public Task DeleteUntrackedPendingExportsAsync(IEnumerable<PendingExport> untrackedPendingExports)
-        => _repo.ConnectedSystems.DeleteUntrackedPendingExportsAsync(untrackedPendingExports);
-
-    public Task DeleteUntrackedPendingExportAttributeValueChangesAsync(IEnumerable<PendingExportAttributeValueChange> untrackedAttributeValueChanges)
-        => _repo.ConnectedSystems.DeleteUntrackedPendingExportAttributeValueChangesAsync(untrackedAttributeValueChanges);
-
-    public Task UpdateUntrackedPendingExportsAsync(IEnumerable<PendingExport> untrackedPendingExports)
-        => _repo.ConnectedSystems.UpdateUntrackedPendingExportsAsync(untrackedPendingExports);
 
     #endregion
 
