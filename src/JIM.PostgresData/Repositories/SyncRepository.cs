@@ -25,10 +25,12 @@ namespace JIM.PostgresData.Repositories;
 public class SyncRepository : ISyncRepository
 {
     private readonly PostgresDataRepository _repo;
+    private readonly JimDbContext _context;
 
     public SyncRepository(PostgresDataRepository repo)
     {
         _repo = repo;
+        _context = repo.Database;
     }
 
     #region Connected System Object — Reads

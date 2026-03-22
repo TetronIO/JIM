@@ -947,10 +947,6 @@ public class ActivityRepository : IActivityRepository
     // Bulk RPEI persistence (Phase 5 - Worker Database Performance Optimisation)
     // -----------------------------------------------------------------------------------------------------------------
 
-    /// <summary>
-    /// Maximum number of parameters per SQL statement to stay under PostgreSQL's 65,535 limit.
-    /// </summary>
-    private const int MaxParametersPerStatement = 60000;
 
     public async Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis)
     {
@@ -1281,11 +1277,6 @@ public class ActivityRepository : IActivityRepository
         await writer.CompleteAsync();
     }
 
-    private static NpgsqlParameter NullableParam(object? value, NpgsqlTypes.NpgsqlDbType dbType)
-    {
-        return new NpgsqlParameter { Value = value ?? DBNull.Value, NpgsqlDbType = dbType };
-    }
-
     /// <summary>
     /// Bulk updates OutcomeSummary and error fields on already-persisted RPEIs,
     /// and inserts any new SyncOutcomes that were added after initial persistence.
@@ -1337,7 +1328,7 @@ public class ActivityRepository : IActivityRepository
         // Get the current EF-managed transaction (if any) so raw commands participate in it
         var npgsqlTx = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
 
-        foreach (var chunk in ChunkList(rpeis, copyChunkSize))
+        foreach (var chunk in BulkSqlHelpers.ChunkList(rpeis, copyChunkSize))
         {
             // Create a temp table (IF NOT EXISTS handles subsequent chunks within the same transaction)
             await using (var createCmd = new NpgsqlCommand { Connection = npgsqlConn, Transaction = npgsqlTx })
@@ -1413,9 +1404,9 @@ public class ActivityRepository : IActivityRepository
     private async Task BulkInsertRpeisRawAsync(List<ActivityRunProfileExecutionItem> rpeis)
     {
         const int columnsPerRow = 13;
-        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
-        foreach (var chunk in ChunkList(rpeis, chunkSize))
+        foreach (var chunk in BulkSqlHelpers.ChunkList(rpeis, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
             sql.Append(@"INSERT INTO ""ActivityRunProfileExecutionItems"" (""Id"", ""ActivityId"", ""ObjectChangeType"", ""NoChangeReason"", ""ConnectedSystemObjectId"", ""ExternalIdSnapshot"", ""DisplayNameSnapshot"", ""ObjectTypeSnapshot"", ""ErrorType"", ""ErrorMessage"", ""ErrorStackTrace"", ""AttributeFlowCount"", ""OutcomeSummary"") VALUES ");
@@ -1457,9 +1448,9 @@ public class ActivityRepository : IActivityRepository
     private async Task BulkInsertSyncOutcomesRawAsync(List<ActivityRunProfileExecutionItemSyncOutcome> outcomes)
     {
         const int columnsPerRow = 10;
-        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
-        foreach (var chunk in ChunkList(outcomes, chunkSize))
+        foreach (var chunk in BulkSqlHelpers.ChunkList(outcomes, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
             sql.Append(@"INSERT INTO ""ActivityRunProfileExecutionItemSyncOutcomes"" (""Id"", ""ActivityRunProfileExecutionItemId"", ""ParentSyncOutcomeId"", ""OutcomeType"", ""TargetEntityId"", ""TargetEntityDescription"", ""DetailCount"", ""DetailMessage"", ""Ordinal"", ""ConnectedSystemObjectChangeId"") VALUES ");
@@ -1526,13 +1517,4 @@ public class ActivityRepository : IActivityRepository
         }
     }
 
-    private static List<List<T>> ChunkList<T>(List<T> source, int chunkSize)
-    {
-        var chunks = new List<List<T>>();
-        for (var i = 0; i < source.Count; i += chunkSize)
-        {
-            chunks.Add(source.GetRange(i, Math.Min(chunkSize, source.Count - i)));
-        }
-        return chunks;
-    }
 }

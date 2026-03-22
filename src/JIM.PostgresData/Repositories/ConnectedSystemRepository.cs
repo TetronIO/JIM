@@ -3813,21 +3813,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     #region Bulk SQL Helpers
 
     /// <summary>
-    /// Maximum number of parameters per SQL statement to stay under PostgreSQL's 65,535 limit.
-    /// </summary>
-    private const int MaxParametersPerStatement = 60000;
-
-    /// <summary>
     /// Bulk inserts ConnectedSystemObject rows using parameterised multi-row INSERT.
     /// Chunks automatically to stay within the PostgreSQL parameter limit.
     /// </summary>
     private async Task BulkInsertConnectedSystemObjectsRawAsync(List<ConnectedSystemObject> objects, Func<int, Task>? onBatchPersisted = null)
     {
         const int columnsPerRow = 11;
-        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
         var totalPersisted = 0;
 
-        foreach (var chunk in ChunkList(objects, chunkSize))
+        foreach (var chunk in BulkSqlHelpers.ChunkList(objects, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
             sql.Append(@"INSERT INTO ""ConnectedSystemObjects"" (""Id"", ""ConnectedSystemId"", ""Created"", ""LastUpdated"", ""TypeId"", ""ExternalIdAttributeId"", ""SecondaryExternalIdAttributeId"", ""Status"", ""MetaverseObjectId"", ""JoinType"", ""DateJoined"") VALUES ");
@@ -3843,14 +3838,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(cso.Id);
                 parameters.Add(cso.ConnectedSystemId);
                 parameters.Add(cso.Created);
-                parameters.Add(NullableParam(cso.LastUpdated, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.LastUpdated, NpgsqlTypes.NpgsqlDbType.TimestampTz));
                 parameters.Add(cso.TypeId);
                 parameters.Add(cso.ExternalIdAttributeId);
-                parameters.Add(NullableParam(cso.SecondaryExternalIdAttributeId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.SecondaryExternalIdAttributeId, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add((int)cso.Status);
-                parameters.Add(NullableParam(cso.MetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.MetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add((int)cso.JoinType);
-                parameters.Add(NullableParam(cso.DateJoined, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.DateJoined, NpgsqlTypes.NpgsqlDbType.TimestampTz));
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -3870,9 +3865,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     private async Task BulkInsertCsoAttributeValuesRawAsync(List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)> attributeValues)
     {
         const int columnsPerRow = 12;
-        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
-        foreach (var chunk in ChunkList(attributeValues, chunkSize))
+        foreach (var chunk in BulkSqlHelpers.ChunkList(attributeValues, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
             sql.Append(@"INSERT INTO ""ConnectedSystemObjectAttributeValues"" (""Id"", ""ConnectedSystemObjectId"", ""AttributeId"", ""StringValue"", ""DateTimeValue"", ""IntValue"", ""LongValue"", ""ByteValue"", ""GuidValue"", ""BoolValue"", ""ReferenceValueId"", ""UnresolvedReferenceValue"") VALUES ");
@@ -3888,15 +3883,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(av.Id);
                 parameters.Add(csoId);
                 parameters.Add(av.AttributeId);
-                parameters.Add(NullableParam(av.StringValue, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add(NullableParam(av.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz));
-                parameters.Add(NullableParam(av.IntValue, NpgsqlTypes.NpgsqlDbType.Integer));
-                parameters.Add(NullableParam(av.LongValue, NpgsqlTypes.NpgsqlDbType.Bigint));
-                parameters.Add(NullableParam(av.ByteValue, NpgsqlTypes.NpgsqlDbType.Bytea));
-                parameters.Add(NullableParam(av.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid));
-                parameters.Add(NullableParam(av.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean));
-                parameters.Add(NullableParam(av.ReferenceValueId, NpgsqlTypes.NpgsqlDbType.Uuid));
-                parameters.Add(NullableParam(av.UnresolvedReferenceValue, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(av.StringValue, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(av.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(BulkSqlHelpers.NullableParam(av.IntValue, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(av.LongValue, NpgsqlTypes.NpgsqlDbType.Bigint));
+                parameters.Add(BulkSqlHelpers.NullableParam(av.ByteValue, NpgsqlTypes.NpgsqlDbType.Bytea));
+                parameters.Add(BulkSqlHelpers.NullableParam(av.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(BulkSqlHelpers.NullableParam(av.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean));
+                parameters.Add(BulkSqlHelpers.NullableParam(av.ReferenceValueId, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(BulkSqlHelpers.NullableParam(av.UnresolvedReferenceValue, NpgsqlTypes.NpgsqlDbType.Text));
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -3909,9 +3904,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     private async Task BulkInsertPendingExportsRawAsync(List<PendingExport> exports)
     {
         const int columnsPerRow = 14;
-        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
-        foreach (var chunk in ChunkList(exports, chunkSize))
+        foreach (var chunk in BulkSqlHelpers.ChunkList(exports, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
             sql.Append(@"INSERT INTO ""PendingExports"" (""Id"", ""ConnectedSystemId"", ""ConnectedSystemObjectId"", ""ChangeType"", ""Status"", ""ErrorCount"", ""MaxRetries"", ""LastAttemptedAt"", ""NextRetryAt"", ""LastErrorMessage"", ""LastErrorStackTrace"", ""SourceMetaverseObjectId"", ""HasUnresolvedReferences"", ""CreatedAt"") VALUES ");
@@ -3926,16 +3921,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 var pe = chunk[i];
                 parameters.Add(pe.Id);
                 parameters.Add(pe.ConnectedSystemId);
-                parameters.Add(NullableParam(pe.ConnectedSystemObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(BulkSqlHelpers.NullableParam(pe.ConnectedSystemObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add((int)pe.ChangeType);
                 parameters.Add((int)pe.Status);
                 parameters.Add(pe.ErrorCount);
                 parameters.Add(pe.MaxRetries);
-                parameters.Add(NullableParam(pe.LastAttemptedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
-                parameters.Add(NullableParam(pe.NextRetryAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
-                parameters.Add(NullableParam(pe.LastErrorMessage, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add(NullableParam(pe.LastErrorStackTrace, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add(NullableParam(pe.SourceMetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(BulkSqlHelpers.NullableParam(pe.LastAttemptedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(BulkSqlHelpers.NullableParam(pe.NextRetryAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(BulkSqlHelpers.NullableParam(pe.LastErrorMessage, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(pe.LastErrorStackTrace, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(pe.SourceMetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add(pe.HasUnresolvedReferences);
                 parameters.Add(pe.CreatedAt);
             }
@@ -3951,9 +3946,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     private async Task BulkInsertPendingExportAttributeValueChangesRawAsync(List<(Guid PendingExportId, PendingExportAttributeValueChange Change)> changes)
     {
         const int columnsPerRow = 16;
-        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
-        foreach (var chunk in ChunkList(changes, chunkSize))
+        foreach (var chunk in BulkSqlHelpers.ChunkList(changes, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
             sql.Append(@"INSERT INTO ""PendingExportAttributeValueChanges"" (""Id"", ""PendingExportId"", ""AttributeId"", ""StringValue"", ""DateTimeValue"", ""IntValue"", ""LongValue"", ""ByteValue"", ""GuidValue"", ""BoolValue"", ""UnresolvedReferenceValue"", ""ChangeType"", ""Status"", ""ExportAttemptCount"", ""LastExportedAt"", ""LastImportedValue"") VALUES ");
@@ -3969,19 +3964,19 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(avc.Id);
                 parameters.Add(pendingExportId);
                 parameters.Add(avc.AttributeId);
-                parameters.Add(NullableParam(avc.StringValue, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add(NullableParam(avc.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz));
-                parameters.Add(NullableParam(avc.IntValue, NpgsqlTypes.NpgsqlDbType.Integer));
-                parameters.Add(NullableParam(avc.LongValue, NpgsqlTypes.NpgsqlDbType.Bigint));
-                parameters.Add(NullableParam(avc.ByteValue, NpgsqlTypes.NpgsqlDbType.Bytea));
-                parameters.Add(NullableParam(avc.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid));
-                parameters.Add(NullableParam(avc.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean));
-                parameters.Add(NullableParam(avc.UnresolvedReferenceValue, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(avc.StringValue, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(avc.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(BulkSqlHelpers.NullableParam(avc.IntValue, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(avc.LongValue, NpgsqlTypes.NpgsqlDbType.Bigint));
+                parameters.Add(BulkSqlHelpers.NullableParam(avc.ByteValue, NpgsqlTypes.NpgsqlDbType.Bytea));
+                parameters.Add(BulkSqlHelpers.NullableParam(avc.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(BulkSqlHelpers.NullableParam(avc.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean));
+                parameters.Add(BulkSqlHelpers.NullableParam(avc.UnresolvedReferenceValue, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add((int)avc.ChangeType);
                 parameters.Add((int)avc.Status);
                 parameters.Add(avc.ExportAttemptCount);
-                parameters.Add(NullableParam(avc.LastExportedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
-                parameters.Add(NullableParam(avc.LastImportedValue, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(avc.LastExportedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(BulkSqlHelpers.NullableParam(avc.LastImportedValue, NpgsqlTypes.NpgsqlDbType.Text));
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -3996,9 +3991,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     private async Task BulkUpdateConnectedSystemObjectsRawAsync(List<ConnectedSystemObject> objects)
     {
         const int columnsPerRow = 8; // Id + 7 mutable columns
-        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
-        foreach (var chunk in ChunkList(objects, chunkSize))
+        foreach (var chunk in BulkSqlHelpers.ChunkList(objects, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
             sql.Append(@"UPDATE ""ConnectedSystemObjects"" AS t SET ""LastUpdated"" = v.""LastUpdated"", ""Status"" = v.""Status"", ""MetaverseObjectId"" = v.""MetaverseObjectId"", ""JoinType"" = v.""JoinType"", ""DateJoined"" = v.""DateJoined"", ""ExternalIdAttributeId"" = v.""ExternalIdAttributeId"", ""SecondaryExternalIdAttributeId"" = v.""SecondaryExternalIdAttributeId"" FROM (VALUES ");
@@ -4012,13 +4007,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
                 var cso = chunk[i];
                 parameters.Add(cso.Id);
-                parameters.Add(NullableParam(cso.LastUpdated, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.LastUpdated, NpgsqlTypes.NpgsqlDbType.TimestampTz));
                 parameters.Add((int)cso.Status);
-                parameters.Add(NullableParam(cso.MetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.MetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add((int)cso.JoinType);
-                parameters.Add(NullableParam(cso.DateJoined, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.DateJoined, NpgsqlTypes.NpgsqlDbType.TimestampTz));
                 parameters.Add(cso.ExternalIdAttributeId);
-                parameters.Add(NullableParam(cso.SecondaryExternalIdAttributeId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.SecondaryExternalIdAttributeId, NpgsqlTypes.NpgsqlDbType.Integer));
             }
 
             sql.Append(@") AS v(""Id"", ""LastUpdated"", ""Status"", ""MetaverseObjectId"", ""JoinType"", ""DateJoined"", ""ExternalIdAttributeId"", ""SecondaryExternalIdAttributeId"") WHERE t.""Id"" = v.""Id""");
@@ -4035,9 +4030,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     private async Task BulkUpdateConnectedSystemObjectJoinStatesRawAsync(List<ConnectedSystemObject> objects)
     {
         const int columnsPerRow = 4; // Id + 3 mutable columns
-        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
-        foreach (var chunk in ChunkList(objects, chunkSize))
+        foreach (var chunk in BulkSqlHelpers.ChunkList(objects, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
             sql.Append(@"UPDATE ""ConnectedSystemObjects"" AS t SET ""MetaverseObjectId"" = v.""MetaverseObjectId"", ""JoinType"" = v.""JoinType"", ""DateJoined"" = v.""DateJoined"" FROM (VALUES ");
@@ -4051,9 +4046,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
                 var cso = chunk[i];
                 parameters.Add(cso.Id);
-                parameters.Add(NullableParam(cso.MetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.MetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add((int)cso.JoinType);
-                parameters.Add(NullableParam(cso.DateJoined, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.DateJoined, NpgsqlTypes.NpgsqlDbType.TimestampTz));
             }
 
             sql.Append(@") AS v(""Id"", ""MetaverseObjectId"", ""JoinType"", ""DateJoined"") WHERE t.""Id"" = v.""Id""");
@@ -4070,9 +4065,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     private async Task BulkUpdatePendingExportsRawAsync(List<PendingExport> exports)
     {
         const int columnsPerRow = 10; // Id + 9 mutable columns
-        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
-        foreach (var chunk in ChunkList(exports, chunkSize))
+        foreach (var chunk in BulkSqlHelpers.ChunkList(exports, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
             sql.Append(@"UPDATE ""PendingExports"" AS t SET ""Status"" = v.""Status"", ""ErrorCount"" = v.""ErrorCount"", ""MaxRetries"" = v.""MaxRetries"", ""LastAttemptedAt"" = v.""LastAttemptedAt"", ""NextRetryAt"" = v.""NextRetryAt"", ""LastErrorMessage"" = v.""LastErrorMessage"", ""LastErrorStackTrace"" = v.""LastErrorStackTrace"", ""HasUnresolvedReferences"" = v.""HasUnresolvedReferences"", ""ConnectedSystemObjectId"" = v.""ConnectedSystemObjectId"" FROM (VALUES ");
@@ -4089,12 +4084,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add((int)pe.Status);
                 parameters.Add(pe.ErrorCount);
                 parameters.Add(pe.MaxRetries);
-                parameters.Add(NullableParam(pe.LastAttemptedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
-                parameters.Add(NullableParam(pe.NextRetryAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
-                parameters.Add(NullableParam(pe.LastErrorMessage, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add(NullableParam(pe.LastErrorStackTrace, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(pe.LastAttemptedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(BulkSqlHelpers.NullableParam(pe.NextRetryAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(BulkSqlHelpers.NullableParam(pe.LastErrorMessage, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(pe.LastErrorStackTrace, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(pe.HasUnresolvedReferences);
-                parameters.Add(NullableParam(pe.ConnectedSystemObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(BulkSqlHelpers.NullableParam(pe.ConnectedSystemObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
 
             sql.Append(@") AS v(""Id"", ""Status"", ""ErrorCount"", ""MaxRetries"", ""LastAttemptedAt"", ""NextRetryAt"", ""LastErrorMessage"", ""LastErrorStackTrace"", ""HasUnresolvedReferences"", ""ConnectedSystemObjectId"") WHERE t.""Id"" = v.""Id""");
@@ -4122,9 +4117,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return;
 
         const int columnsPerRow = 7; // Id + 6 mutable columns
-        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
-        foreach (var chunk in ChunkList(allChanges, chunkSize))
+        foreach (var chunk in BulkSqlHelpers.ChunkList(allChanges, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
             sql.Append(@"UPDATE ""PendingExportAttributeValueChanges"" AS t SET ""Status"" = v.""Status"", ""ExportAttemptCount"" = v.""ExportAttemptCount"", ""LastExportedAt"" = v.""LastExportedAt"", ""StringValue"" = v.""StringValue"", ""UnresolvedReferenceValue"" = v.""UnresolvedReferenceValue"", ""LastImportedValue"" = v.""LastImportedValue"" FROM (VALUES ");
@@ -4140,39 +4135,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(avc.Id);
                 parameters.Add((int)avc.Status);
                 parameters.Add(avc.ExportAttemptCount);
-                parameters.Add(NullableParam(avc.LastExportedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
-                parameters.Add(NullableParam(avc.StringValue, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add(NullableParam(avc.UnresolvedReferenceValue, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add(NullableParam(avc.LastImportedValue, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(avc.LastExportedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(BulkSqlHelpers.NullableParam(avc.StringValue, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(avc.UnresolvedReferenceValue, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(avc.LastImportedValue, NpgsqlTypes.NpgsqlDbType.Text));
             }
 
             sql.Append(@") AS v(""Id"", ""Status"", ""ExportAttemptCount"", ""LastExportedAt"", ""StringValue"", ""UnresolvedReferenceValue"", ""LastImportedValue"") WHERE t.""Id"" = v.""Id""");
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }
-    }
-
-    /// <summary>
-    /// Splits a list into chunks of at most the specified size.
-    /// </summary>
-    private static List<List<T>> ChunkList<T>(List<T> source, int chunkSize)
-    {
-        var chunks = new List<List<T>>();
-        for (var i = 0; i < source.Count; i += chunkSize)
-        {
-            chunks.Add(source.GetRange(i, Math.Min(chunkSize, source.Count - i)));
-        }
-        return chunks;
-    }
-
-    /// <summary>
-    /// Creates a typed NpgsqlParameter for nullable values. Npgsql's ExecuteSqlRawAsync cannot
-    /// infer the PostgreSQL type from DBNull.Value when ALL rows in a chunk have null for a column.
-    /// Using an explicit NpgsqlDbType ensures the parameter is correctly typed even when null.
-    /// </summary>
-    private static Npgsql.NpgsqlParameter NullableParam(object? value, NpgsqlTypes.NpgsqlDbType dbType)
-    {
-        return new Npgsql.NpgsqlParameter { Value = value ?? DBNull.Value, NpgsqlDbType = dbType };
     }
 
     #endregion
