@@ -59,7 +59,7 @@ else
                                              Style="margin: 0;">
                                         <MudChip T="string" Color="Color.Default" Size="Size.Medium"
                                                  Style="margin: 0;">
-                                            @CsoObjectTypeName: @CsoExternalId
+                                            <b>@CsoObjectTypeName:</b> @CsoExternalId
                                         </MudChip>
                                     </MudLink>
                                 }
@@ -67,14 +67,14 @@ else
                                 {
                                     <MudChip T="string" Color="Color.Default" Size="Size.Medium"
                                              Style="margin: 0;">
-                                        @CsoObjectTypeName: @CsoExternalId
+                                        <b>@CsoObjectTypeName:</b> @CsoExternalId
                                     </MudChip>
                                 }
                                 else if (!string.IsNullOrEmpty(CsoObjectTypeName))
                                 {
                                     <MudChip T="string" Color="Color.Default" Size="Size.Medium"
                                              Style="margin: 0;">
-                                        @CsoObjectTypeName
+                                        <b>@CsoObjectTypeName</b>
                                     </MudChip>
                                 }
                                 else if (!string.IsNullOrEmpty(CsoExternalId))
