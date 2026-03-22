@@ -57,7 +57,9 @@ var host = Host.CreateDefaultBuilder(args)
         // JimApplication — transient (Scheduler does not need IMemoryCache)
         services.AddTransient<JimApplication>(sp =>
         {
-            var jim = new JimApplication(sp.GetRequiredService<IRepository>());
+            var repo = sp.GetRequiredService<IRepository>();
+            var syncRepo = new JIM.PostgresData.SyncRepository((JIM.PostgresData.PostgresDataRepository)repo);
+            var jim = new JimApplication(repo, syncRepository: syncRepo);
             jim.CredentialProtection = sp.GetService<ICredentialProtectionService>();
             return jim;
         });

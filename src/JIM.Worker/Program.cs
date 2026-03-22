@@ -62,9 +62,9 @@ var host = Host.CreateDefaultBuilder(args)
         // JimApplication — transient, each task gets its own instance with fresh DbContext
         services.AddTransient<JimApplication>(sp =>
         {
-            var jim = new JimApplication(
-                sp.GetRequiredService<IRepository>(),
-                sp.GetRequiredService<IMemoryCache>());
+            var repo = sp.GetRequiredService<IRepository>();
+            var syncRepo = new JIM.PostgresData.SyncRepository((JIM.PostgresData.PostgresDataRepository)repo);
+            var jim = new JimApplication(repo, sp.GetRequiredService<IMemoryCache>(), syncRepo);
             jim.CredentialProtection = sp.GetService<ICredentialProtectionService>();
             return jim;
         });

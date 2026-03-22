@@ -28,8 +28,7 @@ public class JimApplication : IDisposable
 
     /// <summary>
     /// The sync repository used by ExportEvaluationServer and ExportExecutionServer.
-    /// JIM.Web/Scheduler use <see cref="SyncRepositoryAdapter"/> (EF Core via shared repos).
-    /// Worker passes <c>PostgresData.SyncRepository</c> (Worker-optimised SQL).
+    /// All apps pass <c>PostgresData.SyncRepository</c> in production.
     /// Tests use <c>InMemoryData.SyncRepository</c> for deterministic behaviour.
     /// </summary>
     public ISyncRepository SyncRepo { get; }
@@ -61,7 +60,8 @@ public class JimApplication : IDisposable
         ConnectedSystems = new ConnectedSystemServer(this);
         ExampleData = new ExampleDataServer(this);
         DriftDetection = new DriftDetectionService(this);
-        SyncRepo = syncRepository ?? new SyncRepositoryAdapter(this);
+        SyncRepo = syncRepository!; // All DI registrations pass PostgresData.SyncRepository explicitly.
+                                     // Bootstrap calls (SSO init, auth) don't use SyncRepo.
         ExportEvaluation = new ExportEvaluationServer(this, SyncRepo);
         ExportExecution = new ExportExecutionServer(this, SyncRepo);
         ScopingEvaluation = new ScopingEvaluationServer();

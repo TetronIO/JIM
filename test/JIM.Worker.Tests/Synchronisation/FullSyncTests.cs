@@ -2785,10 +2785,6 @@ public class FullSyncTests
         MockDbSetMetaverseObjects = MetaverseObjectsData.BuildMockDbSet();
         MockJimDbContext.Setup(m => m.MetaverseObjects).Returns(MockDbSetMetaverseObjects.Object);
 
-        // Recreate Jim with updated mocks
-        Jim?.Dispose();
-        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
-
         // Recreate SyncRepo with the new CSOs (original SyncRepo still has the old default CSOs)
         SyncRepo = TestUtilities.CreateSyncRepository(
             csos: ConnectedSystemObjectsData,
@@ -2797,6 +2793,10 @@ public class FullSyncTests
             syncRules: SyncRulesData);
         // Apply the page size override so CSOs are split across pages as the test requires
         SyncRepo.SetSyncPageSize(1);
+
+        // Recreate Jim with updated mocks and the new SyncRepo
+        Jim?.Dispose();
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
 
         // Set up sync rule: enable projection + add Manager reference attribute flow mapping
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
@@ -2974,10 +2974,6 @@ public class FullSyncTests
         MockDbSetMetaverseObjects = MetaverseObjectsData.BuildMockDbSet();
         MockJimDbContext.Setup(m => m.MetaverseObjects).Returns(MockDbSetMetaverseObjects.Object);
 
-        // Recreate Jim with updated mocks
-        Jim?.Dispose();
-        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
-
         // Recreate SyncRepo with the new CSOs (original SyncRepo still has the old default CSOs)
         SyncRepo = TestUtilities.CreateSyncRepository(
             csos: ConnectedSystemObjectsData,
@@ -2986,6 +2982,10 @@ public class FullSyncTests
             syncRules: SyncRulesData);
         // Apply the page size override so CSOs are split across pages as the test requires
         SyncRepo.SetSyncPageSize(1);
+
+        // Recreate Jim with updated mocks and the new SyncRepo
+        Jim?.Dispose();
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
 
         // Set up sync rule: enable projection + add Manager reference attribute flow mapping
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
