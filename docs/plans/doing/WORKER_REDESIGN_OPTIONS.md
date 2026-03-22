@@ -1,8 +1,8 @@
 # JIM.Worker Redesign - High-Level Design Options
 
-- **Status:** Doing (Phase 1a complete, Phase 1b largely complete — see [Progress Since Original Analysis](#progress-since-original-analysis))
+- **Status:** Doing (Phase 1a complete, Phase 1b complete — see [Progress Since Original Analysis](#progress-since-original-analysis))
 - **Created**: 2026-02-23
-- **Updated**: 2026-03-21
+- **Updated**: 2026-03-22
 - **Author**: Architecture Review
 
 ## Context
@@ -226,16 +226,19 @@ Keep the current architecture but surgically extract the sync processing logic i
    - Fully unit testable with plain objects - no mocking needed
    - The ~3,970 lines of SyncTaskProcessorBase + SyncRuleMappingProcessor become the engine
 
-2. **Extract `ISyncRepository`** (JIM.Data / JIM.PostgresData / JIM.InMemoryData) - Explicit data boundary for all worker data access — **LARGELY DONE (#394 Phases 1-7)**
-   - Interface defined in JIM.Data — **done** (`ISyncRepository.cs`, ~80 methods)
+2. **Extract `ISyncRepository`** (JIM.Data / JIM.PostgresData / JIM.InMemoryData) - Explicit data boundary for all worker data access — **DONE (#394 Phases 1-8, #428)**
+   - Interface defined in JIM.Data — **done** (`ISyncRepository.cs`, ~80 methods, pure data access)
+   - `ISyncServer` extracted for domain logic boundary — **done** (settings, caching, object matching, change tracking, connector triad ops)
    - `SyncRepository` in JIM.InMemoryData for tests — **done** (86 tests, purpose-built, no EF Core quirks)
    - All Worker and Workflow tests migrated from mocked DbContext to InMemoryData.SyncRepository — **done** (~1,276 tests)
    - All ~32 try/catch EF fallback blocks removed from repository files — **done** (-642 lines)
-   - `SyncRepositoryAdapter` provides transitional production wiring via `JimApplication` — **done** (delegates to existing Application servers and shared repositories)
-   - `PostgresData.SyncRepository` with direct SQL for Worker hot paths — **not started** (see Data Access Vision below)
+   - `PostgresData.SyncRepository` — **done** (#428). Delegates simple reads to shared EF repos; hot-path bulk ops use direct SQL already in `ConnectedSystemRepository`/`ActivitiesRepository`
+   - `SyncRepositoryAdapter` deleted — **done** (#428). All apps (Web, Worker, Scheduler) use `PostgresData.SyncRepository` directly via unified DI registration
    - CSO lookup cache via `IMemoryCache` eliminates N+1 import queries — **done**
    - Lightweight ID-only MVO matching with `Take(2)` — **done**
-   - **Integration tests required:** The production `SyncRepository`'s direct SQL must be verified by integration tests against real PostgreSQL
+   - Functional indexes for cross-batch reference fixup — **done** (#428, 300s→6s at MediumLarge scale)
+   - Cross-batch change record reference resolution — **done** (#428, ~78% of RPEI references were permanently unresolved)
+   - **Integration tests:** Scenario 1 and Scenario 8 MediumLarge pass against real PostgreSQL
 
    **Data Access Vision (revised March 2026):**
 
@@ -596,7 +599,7 @@ docker compose / Kubernetes:
 | Code disruption | ~30% of worker | ~70% of worker | ~90% of worker |
 | Air-gap compatible | Yes | Yes | Yes (Redis self-hosted) |
 | Time to initial PR | Incremental | Needs critical mass | Needs critical mass |
-| **Progress to date** | ~75% (data boundary + DI done, engine not started, direct SQL not started) | 0% | 0% |
+| **Progress to date** | ~85% (data boundary + DI + SyncRepository done, engine not started) | 0% | 0% |
 
 ### Recommendation Matrix by Organisation Size
 
@@ -816,9 +819,10 @@ A 5-phase surgical optimisation programme was completed in February 2026, replac
 - ~~Test migration from mocked DbContext to InMemoryData~~ — **done** (#394 Phase 7b, ~1,276 tests)
 - ~~Elimination of try/catch fallback blocks~~ — **done** (#394 Phase 7d, -642 lines)
 - ~~DI introduction~~ — **done** (#422)
-- `PostgresData.SyncRepository` with direct SQL for Worker hot-path operations — remains for Phase 1b (see revised Data Access Vision in Option A section)
-- Integration tests for PostgresData `SyncRepository` against real PostgreSQL — remains for Phase 1b
+- ~~`PostgresData.SyncRepository` with direct SQL for Worker hot-path operations~~ — **done** (#428). Delegates to shared EF repos for simple reads; hot-path bulk ops use existing direct SQL in `ConnectedSystemRepository`/`ActivitiesRepository`. `SyncRepositoryAdapter` deleted — all apps use `PostgresData.SyncRepository` directly
+- ~~Integration tests for PostgresData `SyncRepository` against real PostgreSQL~~ — **done** (#428). Scenario 1 and Scenario 8 MediumLarge pass
 - Intra-phase parallelism — deferred
+- Systematic database index/query performance analysis — tracked in #427
 
 **Full details:** See `docs/plans/done/WORKER_DATABASE_PERFORMANCE_OPTIMISATION.md`
 
