@@ -48,6 +48,7 @@
         <MudCheckBox @bind-Value="@_connector.SupportsPartitionContainers" Disabled="true">Supports partition containers?</MudCheckBox>
 
         <MudText Typo="Typo.subtitle2" Class="mt-2">Data Handling</MudText>
+        <MudCheckBox @bind-Value="@_connector.SupportsFilePaths" Disabled="true">Supports file paths?</MudCheckBox>
         <MudCheckBox @bind-Value="@_connector.SupportsPaging" Disabled="true">Supports paging?</MudCheckBox>
         <MudCheckBox @bind-Value="@_connector.SupportsSecondaryExternalId" Disabled="true">Supports secondary external id?</MudCheckBox>
         <MudCheckBox @bind-Value="@_connector.SupportsUserSelectedExternalId" Disabled="true">Supports user selected external id?</MudCheckBox>

@@ -31,6 +31,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public bool SupportsAutoConfirmExport => true;
     public bool SupportsParallelExport => false;
     public bool SupportsPaging => false;
+    public bool SupportsFilePaths => true;
     #endregion
 
     #region IConnectorSettings members

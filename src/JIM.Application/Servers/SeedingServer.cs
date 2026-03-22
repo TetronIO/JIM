@@ -972,7 +972,8 @@ internal class SeedingServer
             existingDefinition.SupportsUserSelectedAttributeTypes != connectorCapabilities.SupportsUserSelectedAttributeTypes ||
             existingDefinition.SupportsAutoConfirmExport != connectorCapabilities.SupportsAutoConfirmExport ||
             existingDefinition.SupportsParallelExport != connectorCapabilities.SupportsParallelExport ||
-            existingDefinition.SupportsPaging != connectorCapabilities.SupportsPaging)
+            existingDefinition.SupportsPaging != connectorCapabilities.SupportsPaging ||
+            existingDefinition.SupportsFilePaths != connectorCapabilities.SupportsFilePaths)
         {
             existingDefinition.SupportsFullImport = connectorCapabilities.SupportsFullImport;
             existingDefinition.SupportsDeltaImport = connectorCapabilities.SupportsDeltaImport;
@@ -985,6 +986,7 @@ internal class SeedingServer
             existingDefinition.SupportsAutoConfirmExport = connectorCapabilities.SupportsAutoConfirmExport;
             existingDefinition.SupportsParallelExport = connectorCapabilities.SupportsParallelExport;
             existingDefinition.SupportsPaging = connectorCapabilities.SupportsPaging;
+            existingDefinition.SupportsFilePaths = connectorCapabilities.SupportsFilePaths;
             hasChanges = true;
             Log.Information($"SyncConnectorDefinitionAsync: Updated capability flags for '{connector.Name}'");
         }
@@ -1161,7 +1163,8 @@ internal class SeedingServer
             SupportsUserSelectedAttributeTypes = connectorCapabilities.SupportsUserSelectedAttributeTypes,
             SupportsAutoConfirmExport = connectorCapabilities.SupportsAutoConfirmExport,
             SupportsParallelExport = connectorCapabilities.SupportsParallelExport,
-            SupportsPaging = connectorCapabilities.SupportsPaging
+            SupportsPaging = connectorCapabilities.SupportsPaging,
+            SupportsFilePaths = connectorCapabilities.SupportsFilePaths
         };
 
         Application.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition(connectorSettings, connectorDefinition);
