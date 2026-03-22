@@ -219,49 +219,6 @@ public class ActivityServer
     }
 
     /// <summary>
-    /// Updates only the progress fields (ObjectsProcessed, ObjectsToProcess, Message) on an Activity
-    /// using an independent database connection, bypassing any in-flight transaction on the main DbContext.
-    /// Use this when progress updates need to be immediately visible to other sessions (e.g., the UI)
-    /// whilst a long-running transaction is in progress.
-    /// </summary>
-    public async Task UpdateActivityProgressOutOfBandAsync(Activity activity)
-    {
-        await Application.Repository.Activity.UpdateActivityProgressOutOfBandAsync(activity);
-    }
-
-    /// <summary>
-    /// Bulk inserts ActivityRunProfileExecutionItems directly via raw SQL,
-    /// bypassing the EF change tracker for performance during large sync runs.
-    /// Returns true if raw SQL was used (RPEIs persisted outside EF), false if EF fallback was used.
-    /// </summary>
-    public async Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis)
-    {
-        return await Application.Repository.Activity.BulkInsertRpeisAsync(rpeis);
-    }
-
-    public async Task BulkUpdateRpeiOutcomesAsync(
-        List<ActivityRunProfileExecutionItem> rpeis,
-        List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes)
-    {
-        await Application.Repository.Activity.BulkUpdateRpeiOutcomesAsync(rpeis, newOutcomes);
-    }
-
-    public void DetachRpeisFromChangeTracker(List<ActivityRunProfileExecutionItem> rpeis)
-    {
-        Application.Repository.Activity.DetachRpeisFromChangeTracker(rpeis);
-    }
-
-    /// <summary>
-    /// Persists ConnectedSystemObjectChange records attached to RPEIs.
-    /// Call after BulkInsertRpeisAsync when RPEIs have CSO change records that need
-    /// to be persisted separately (raw SQL bulk insert only covers RPEI scalar columns).
-    /// </summary>
-    public async Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis)
-    {
-        await Application.Repository.Activity.PersistRpeiCsoChangesAsync(rpeis);
-    }
-
-    /// <summary>
     /// Updates the message on an Activity.
     /// </summary>
     public async Task UpdateActivityMessageAsync(Activity activity, string message)

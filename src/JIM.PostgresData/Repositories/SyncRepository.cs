@@ -22,7 +22,7 @@ namespace JIM.PostgresData.Repositories;
 /// into this class with Worker-optimised direct SQL (COPY binary, batch UPDATE FROM VALUES).
 /// </para>
 /// </summary>
-public class SyncRepository : ISyncRepository
+public partial class SyncRepository : ISyncRepository
 {
     private readonly PostgresDataRepository _repo;
     private readonly JimDbContext _context;
@@ -203,7 +203,7 @@ public class SyncRepository : ISyncRepository
 
     #endregion
 
-    #region Activity and RPEIs
+    #region Activity — Delegates (non-bulk operations remain on shared ActivityRepository)
 
     public Task UpdateActivityAsync(Activity activity)
         => _repo.Activity.UpdateActivityAsync(activity);
@@ -214,25 +214,13 @@ public class SyncRepository : ISyncRepository
         await _repo.Activity.UpdateActivityAsync(activity);
     }
 
-    public Task UpdateActivityProgressOutOfBandAsync(Activity activity)
-        => _repo.Activity.UpdateActivityProgressOutOfBandAsync(activity);
-
-    public Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis)
-        => _repo.Activity.BulkInsertRpeisAsync(rpeis);
-
-    public Task BulkUpdateRpeiOutcomesAsync(
-        List<ActivityRunProfileExecutionItem> rpeis,
-        List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes)
-        => _repo.Activity.BulkUpdateRpeiOutcomesAsync(rpeis, newOutcomes);
-
-    public void DetachRpeisFromChangeTracker(List<ActivityRunProfileExecutionItem> rpeis)
-        => _repo.Activity.DetachRpeisFromChangeTracker(rpeis);
-
     public Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId)
         => _repo.Activity.GetActivityRpeiErrorCountsAsync(activityId);
 
-    public Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis)
-        => _repo.Activity.PersistRpeiCsoChangesAsync(rpeis);
+    // Bulk RPEI operations (BulkInsertRpeisAsync, BulkUpdateRpeiOutcomesAsync,
+    // PersistRpeiCsoChangesAsync, DetachRpeisFromChangeTracker,
+    // UpdateActivityProgressOutOfBandAsync) are owned implementations in
+    // SyncRepository.RpeiOperations.cs — not delegates.
 
     #endregion
 
