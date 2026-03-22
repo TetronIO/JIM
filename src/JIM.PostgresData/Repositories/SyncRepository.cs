@@ -7,7 +7,7 @@ using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using Serilog;
 
-namespace JIM.PostgresData;
+namespace JIM.PostgresData.Repositories;
 
 /// <summary>
 /// Production implementation of <see cref="ISyncRepository"/> for the Worker.

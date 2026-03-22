@@ -192,7 +192,7 @@ public class Worker : BackgroundService
                             // we can't use the main-loop instance, due to Entity Framework having connection sharing issues.
                             // IMPORTANT: taskJim must be disposed to release database connections and prevent deadlocks.
                             using var taskJim = _jimFactory.Create();
-                            var syncRepo = new JIM.PostgresData.SyncRepository((JIM.PostgresData.PostgresDataRepository)taskJim.Repository);
+                            var syncRepo = new JIM.PostgresData.Repositories.SyncRepository((JIM.PostgresData.PostgresDataRepository)taskJim.Repository);
                             var syncServer = new JIM.Application.Servers.SyncServer(taskJim);
 
                             // we want to re-retrieve the worker task using this instance of JIM, so there's no chance of any cross-JIM-instance issues
@@ -313,7 +313,7 @@ public class Worker : BackgroundService
                                                             var syncExportTaskProcessor = new SyncExportTaskProcessor(syncServer, syncRepo, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource,
                                                                                         syncRepoFactory: () => {
                                                                                             var parallelJim = _jimFactory.Create();
-                                                                                            return new JIM.PostgresData.SyncRepository((JIM.PostgresData.PostgresDataRepository)parallelJim.Repository);
+                                                                                            return new JIM.PostgresData.Repositories.SyncRepository((JIM.PostgresData.PostgresDataRepository)parallelJim.Repository);
                                                                                         });
                                                             await syncExportTaskProcessor.PerformExportAsync();
                                                             break;
