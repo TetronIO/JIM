@@ -258,12 +258,12 @@ else
         using var jim = JimFactory.Create();
         _connectedSystemHeaders = await jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
 
-        // In development, ?demo query string activates demo mode with mock data
+        // In development, ?d=true query string activates demo mode with mock data
         if (Environment.IsDevelopment())
         {
             var uri = new Uri(NavigationManager.Uri);
-            var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
-            if (query.ContainsKey("demo"))
+            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+            if (string.Equals(query["d"], "true", StringComparison.OrdinalIgnoreCase))
             {
                 var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
                 _workerTaskHeaders = GenerateDemoData(user.Id, user.DisplayName ?? "Unknown User");
