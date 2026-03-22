@@ -1544,7 +1544,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // case-insensitive per RFC 4514, and different connector runs or LDAP servers may
         // return DNs with different capitalisation.
         var previousTimeout = Repository.Database.Database.GetCommandTimeout();
-        Repository.Database.Database.SetCommandTimeout(300);
+        Repository.Database.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
         try
         {
             // Fast early exit: skip the expensive multi-table JOIN UPDATE when there are no
@@ -1594,7 +1594,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Uses case-insensitive LOWER() comparison because LDAP Distinguished Names are
         // case-insensitive per RFC 4514.
         var previousTimeout = Repository.Database.Database.GetCommandTimeout();
-        Repository.Database.Database.SetCommandTimeout(300);
+        Repository.Database.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
         try
         {
             return await Repository.Database.Database.ExecuteSqlRawAsync(
@@ -1695,7 +1695,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Increase command timeout for large bulk inserts. At 100K+ objects with 20 attributes each,
         // individual SQL statements can take 30+ seconds under memory pressure or slower I/O.
         var previousTimeout = Repository.Database.Database.GetCommandTimeout();
-        Repository.Database.Database.SetCommandTimeout(300); // 5 minutes
+        Repository.Database.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds); // 5 minutes
 
         await using var transaction = await Repository.Database.Database.BeginTransactionAsync();
 

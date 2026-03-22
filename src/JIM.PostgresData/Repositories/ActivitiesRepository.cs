@@ -967,7 +967,7 @@ public class ActivityRepository : IActivityRepository
         // Increase command timeout for large RPEI persistence. With 5K+ RPEIs, the bulk
         // insert of RPEIs, sync outcomes, and CSO change records can exceed the default 30s.
         var previousTimeout = Repository.Database.Database.GetCommandTimeout();
-        Repository.Database.Database.SetCommandTimeout(300); // 5 minutes
+        Repository.Database.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
 
         // If a transaction is already active (e.g., caller opened one), reuse it.
         // Otherwise start a new one. This prevents InvalidOperationException when
@@ -1067,7 +1067,7 @@ public class ActivityRepository : IActivityRepository
         // Increase command timeout for large change record persistence. With 5K+ CSOs and
         // 20+ attributes each, the three-table bulk insert can generate 100K+ rows.
         var previousTimeout = Repository.Database.Database.GetCommandTimeout();
-        Repository.Database.Database.SetCommandTimeout(300); // 5 minutes
+        Repository.Database.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
 
         // Use an EF transaction for atomicity — COPY binary imports on the underlying
         // NpgsqlConnection participate in the active transaction automatically.

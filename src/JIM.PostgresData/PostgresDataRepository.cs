@@ -8,6 +8,13 @@ namespace JIM.PostgresData;
 
 public class PostgresDataRepository : IRepository
 {
+    /// <summary>
+    /// Command timeout in seconds for bulk database operations (COPY binary, multi-row INSERT,
+    /// cross-batch reference fixup). These operations can exceed the default 30-second timeout
+    /// when processing thousands of objects with many attributes.
+    /// </summary>
+    public const int BulkOperationCommandTimeoutSeconds = 300;
+
     public IActivityRepository Activity { get; }
     public IApiKeyRepository ApiKeys { get; }
     public IChangeHistoryRepository ChangeHistory { get; }
