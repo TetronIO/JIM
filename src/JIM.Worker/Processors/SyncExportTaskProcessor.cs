@@ -91,14 +91,16 @@ public class SyncExportTaskProcessor
         await _syncRepo.UpdateActivityMessageAsync(_activity, "Preparing export");
 
         // Load settings once at start of export
-        _syncOutcomeTrackingLevel = await _syncRepo.GetSyncOutcomeTrackingLevelAsync();
-        _csoChangeTrackingEnabled = await _syncRepo.GetCsoChangeTrackingEnabledAsync();
+        _syncOutcomeTrackingLevel = await _syncServer.GetSyncOutcomeTrackingLevelAsync();
+        _csoChangeTrackingEnabled = await _syncServer.GetCsoChangeTrackingEnabledAsync();
 
-        // Get count of pending exports for progress tracking
+        // Get count of executable exports for progress tracking.
+        // Uses the same filtered query as ExportExecutionServer to ensure the denominator
+        // (ObjectsToProcess) matches the numerator (ProcessedExports from progress callbacks).
         int pendingExportCount;
         using (Diagnostics.Sync.StartSpan("GetPendingExportsCount"))
         {
-            pendingExportCount = await _syncRepo.GetPendingExportsCountAsync(_connectedSystem.Id);
+            pendingExportCount = await _syncRepo.GetExecutableExportCountAsync(_connectedSystem.Id);
         }
         _activity.ObjectsToProcess = pendingExportCount;
         _activity.ObjectsProcessed = 0;
@@ -116,7 +118,7 @@ public class SyncExportTaskProcessor
         {
             var errorMessage = $"Connector {_connector.Name} does not support export operations";
             Log.Error("PerformExportAsync: {Error}", errorMessage);
-            await _syncRepo.FailActivityWithErrorAsync(_activity, errorMessage);
+            await _syncServer.FailActivityWithErrorAsync(_activity, errorMessage);
             return;
         }
 
@@ -148,10 +150,11 @@ public class SyncExportTaskProcessor
                     _cancellationTokenSource.Token,
                     async progressInfo =>
                     {
-                        // Update activity with progress
+                        // Update activity with progress.
+                        // UpdateActivityMessageAsync sets Message then calls UpdateActivityAsync
+                        // internally, so a separate UpdateActivityAsync call is not needed.
                         _activity.ObjectsProcessed = progressInfo.ProcessedExports;
                         await _syncRepo.UpdateActivityMessageAsync(_activity, progressInfo.Message);
-                        await _syncRepo.UpdateActivityAsync(_activity);
                     },
                     connectorFactory: CreateConnectorForParallelBatch,
                     repositoryFactory: _syncRepoFactory);
@@ -176,7 +179,7 @@ public class SyncExportTaskProcessor
 
                 using (Diagnostics.Sync.StartSpan("AutoSelectContainers").SetTag("containerCount", result.CreatedContainerExternalIds.Count))
                 {
-                    await _syncRepo.RefreshAndAutoSelectContainersWithTriadAsync(
+                    await _syncServer.RefreshAndAutoSelectContainersWithTriadAsync(
                         _connectedSystem,
                         _connector,
                         result.CreatedContainerExternalIds,
@@ -197,7 +200,7 @@ public class SyncExportTaskProcessor
         catch (Exception ex)
         {
             Log.Error(ex, "PerformExportAsync: Error during export for {SystemName}", _connectedSystem.Name);
-            await _syncRepo.FailActivityWithErrorAsync(_activity, ex);
+            await _syncServer.FailActivityWithErrorAsync(_activity, ex);
             throw;
         }
     }

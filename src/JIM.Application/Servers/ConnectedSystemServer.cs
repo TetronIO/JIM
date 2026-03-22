@@ -2971,6 +2971,11 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.FixupCrossBatchReferenceIdsAsync(connectedSystemId);
     }
 
+    public async Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.FixupCrossBatchChangeRecordReferenceIdsAsync(connectedSystemId);
+    }
+
     /// <summary>
     /// Bulk persists Connected System Objects without activity tracking.
     /// Use this for provisioning CSOs created during sync where activity execution items are not needed.
@@ -3075,6 +3080,121 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Links RPEI change records to CSOs after creation. Pure business logic — no data access.
+    /// Called by SyncServer after persisting CSOs via ISyncRepository.
+    /// </summary>
+    public void LinkCreateChangeRecords(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<ActivityRunProfileExecutionItem> rpeis,
+        bool changeTrackingEnabled)
+    {
+        var rpeisByCsoId = new Dictionary<Guid, ActivityRunProfileExecutionItem>(rpeis.Count);
+        foreach (var rpei in rpeis)
+        {
+            if (rpei.ConnectedSystemObject != null)
+                rpeisByCsoId.TryAdd(rpei.ConnectedSystemObject.Id, rpei);
+        }
+
+        foreach (var cso in connectedSystemObjects)
+        {
+            if (!rpeisByCsoId.TryGetValue(cso.Id, out var rpei))
+                throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem referencing CSO {cso.Id}! It should have been created before now.");
+
+            rpei.ConnectedSystemObjectId = cso.Id;
+            AddConnectedSystemObjectChange(cso, rpei, changeTrackingEnabled);
+        }
+    }
+
+    /// <summary>
+    /// Links RPEI change records to CSOs before update. Pure business logic — no data access.
+    /// Called by SyncServer before persisting CSO updates via ISyncRepository.
+    /// </summary>
+    public void LinkUpdateChangeRecords(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<ActivityRunProfileExecutionItem> rpeis,
+        bool changeTrackingEnabled)
+    {
+        var rpeisByCsoId = new Dictionary<Guid, ActivityRunProfileExecutionItem>(rpeis.Count);
+        foreach (var rpei in rpeis)
+        {
+            if (rpei.ConnectedSystemObject != null)
+                rpeisByCsoId.TryAdd(rpei.ConnectedSystemObject.Id, rpei);
+        }
+
+        foreach (var cso in connectedSystemObjects)
+        {
+            rpeisByCsoId.TryGetValue(cso.Id, out var rpei);
+            if (rpei != null)
+            {
+                rpei.ConnectedSystemObjectId = cso.Id;
+                ProcessConnectedSystemObjectAttributeValueChanges(cso, rpei, changeTrackingEnabled);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Links RPEI change records to CSOs before deletion. Pure business logic — no data access.
+    /// Captures final attribute snapshots for audit trail before the CSOs are deleted.
+    /// Called by SyncServer before deleting CSOs via ISyncRepository.
+    /// </summary>
+    public void LinkDeleteChangeRecords(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<ActivityRunProfileExecutionItem> rpeis,
+        bool changeTrackingEnabled)
+    {
+        if (connectedSystemObjects.Count != rpeis.Count)
+            throw new ArgumentException("CSO count must match execution item count");
+
+        var deletedObjectInfo = connectedSystemObjects
+            .Select(cso => (
+                ExternalId: cso.ExternalIdAttributeValue?.ToStringNoName(),
+                DisplayName: cso.AttributeValues
+                    .SingleOrDefault(q => q.Attribute?.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase) == true)
+                    ?.StringValue,
+                FinalAttributeValues: cso.AttributeValues
+                    .Where(av => av.Attribute != null && av.Attribute.Type != AttributeDataType.NotSet)
+                    .ToList()))
+            .ToList();
+
+        if (changeTrackingEnabled)
+        {
+            for (int i = 0; i < connectedSystemObjects.Count; i++)
+            {
+                var cso = connectedSystemObjects[i];
+                var executionItem = rpeis[i];
+                var (externalId, displayName, finalAttributeValues) = deletedObjectInfo[i];
+
+                var change = new ConnectedSystemObjectChange
+                {
+                    ConnectedSystemId = cso.ConnectedSystemId,
+                    ChangeType = ObjectChangeType.Deleted,
+                    ChangeTime = DateTime.UtcNow,
+                    DeletedObjectType = cso.Type,
+                    DeletedObjectExternalId = externalId,
+                    DeletedObjectDisplayName = displayName,
+                    ActivityRunProfileExecutionItem = executionItem,
+                    InitiatedByType = executionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
+                    InitiatedById = executionItem.Activity?.InitiatedById,
+                    InitiatedByName = executionItem.Activity?.InitiatedByName
+                };
+                executionItem.ConnectedSystemObjectChange = change;
+
+                foreach (var av in finalAttributeValues)
+                    AddChangeAttributeValueObject(change, av, ValueChangeType.Remove);
+            }
+        }
+
+        // Null out the CSO FK on all RPEIs. The CSOs are about to be deleted from the database,
+        // so when BulkInsertRpeisAsync runs later, the FK must be null to avoid FK constraint violations.
+        // The ExternalIdSnapshot (set earlier by SnapshotCsoDisplayFields) preserves the CSO identity for display.
+        for (int i = 0; i < rpeis.Count; i++)
+        {
+            rpeis[i].ConnectedSystemObject = null;
+            rpeis[i].ConnectedSystemObjectId = null;
+        }
+    }
+
+    /// <summary>
     /// Batch updates only the join-related columns (JoinType, DateJoined, MetaverseObjectId) on
     /// Connected System Objects. Used during sync page flush where AutoDetectChangesEnabled is
     /// disabled and EF cannot detect CSO scalar property changes automatically.
@@ -3151,8 +3271,14 @@ public class ConnectedSystemServer
         // delete attribute values to be removed and create change (if enabled)
         foreach (var pendingAttributeValueRemoval in connectedSystemObject.PendingAttributeValueRemovals)
         {
-            // this will cause a cascade delete of the attribute value object
-            connectedSystemObject.AttributeValues.RemoveAll(av => av.Id == pendingAttributeValueRemoval.Id);
+            // Use reference equality when Id is Guid.Empty (newly created, not yet persisted).
+            // With EF Core, attribute values get DB-generated IDs on SaveChanges. In InMemoryData
+            // or before persistence, they remain Guid.Empty — matching by ID would incorrectly
+            // remove ALL unassigned attribute values, including ones just added above.
+            if (pendingAttributeValueRemoval.Id == Guid.Empty)
+                connectedSystemObject.AttributeValues.Remove(pendingAttributeValueRemoval);
+            else
+                connectedSystemObject.AttributeValues.RemoveAll(av => av.Id == pendingAttributeValueRemoval.Id);
         }
 
         // Only create change object if tracking is enabled
@@ -3991,6 +4117,39 @@ public class ConnectedSystemServer
     public async Task<PendingExport?> GetPendingExportAsync(Guid id)
     {
         return await Application.Repository.ConnectedSystems.GetPendingExportAsync(id);
+    }
+
+    /// <summary>
+    /// Retrieves a single Pending Export with capped multi-valued attribute changes for the detail page.
+    /// Multi-valued attribute changes are capped at 10 per attribute; total counts are returned separately.
+    /// </summary>
+    /// <param name="id">The unique identifier of the Pending Export.</param>
+    /// <returns>A <see cref="PendingExportDetailResult"/> containing the pending export and per-attribute
+    /// total change counts, or null if not found.</returns>
+    public async Task<PendingExportDetailResult?> GetPendingExportDetailAsync(Guid id)
+    {
+        return await Application.Repository.ConnectedSystems.GetPendingExportDetailAsync(id);
+    }
+
+    /// <summary>
+    /// Retrieves a paged list of attribute value changes for a specific attribute on a Pending Export.
+    /// Used by the MVA dialog for server-side pagination.
+    /// </summary>
+    /// <param name="pendingExportId">The unique identifier of the Pending Export.</param>
+    /// <param name="attributeName">The name of the attribute to retrieve changes for.</param>
+    /// <param name="page">The 1-based page number.</param>
+    /// <param name="pageSize">The number of results per page (max 100).</param>
+    /// <param name="searchText">Optional search text to filter changes by string value.</param>
+    /// <returns>A paged result set of attribute value changes.</returns>
+    public async Task<PagedResultSet<PendingExportAttributeValueChange>> GetPendingExportAttributeChangesPagedAsync(
+        Guid pendingExportId,
+        string attributeName,
+        int page,
+        int pageSize,
+        string? searchText = null)
+    {
+        return await Application.Repository.ConnectedSystems.GetPendingExportAttributeChangesPagedAsync(
+            pendingExportId, attributeName, page, pageSize, searchText);
     }
 
     /// <summary>

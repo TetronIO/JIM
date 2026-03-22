@@ -208,6 +208,32 @@ public interface IConnectedSystemRepository
     public Task<PendingExport?> GetPendingExportAsync(Guid id);
 
     /// <summary>
+    /// Retrieves a single Pending Export with capped multi-valued attribute changes for the detail page.
+    /// Multi-valued attribute changes are capped at 10 per attribute; total counts are returned separately.
+    /// </summary>
+    /// <param name="id">The unique identifier of the Pending Export.</param>
+    /// <returns>A <see cref="PendingExportDetailResult"/> containing the pending export and per-attribute
+    /// total change counts, or null if not found.</returns>
+    public Task<PendingExportDetailResult?> GetPendingExportDetailAsync(Guid id);
+
+    /// <summary>
+    /// Retrieves a paged list of attribute value changes for a specific attribute on a Pending Export.
+    /// Used by the MVA dialog for server-side pagination.
+    /// </summary>
+    /// <param name="pendingExportId">The unique identifier of the Pending Export.</param>
+    /// <param name="attributeName">The name of the attribute to retrieve changes for.</param>
+    /// <param name="page">The 1-based page number.</param>
+    /// <param name="pageSize">The number of results per page (max 100).</param>
+    /// <param name="searchText">Optional search text to filter changes by string value.</param>
+    /// <returns>A paged result set of attribute value changes.</returns>
+    public Task<PagedResultSet<PendingExportAttributeValueChange>> GetPendingExportAttributeChangesPagedAsync(
+        Guid pendingExportId,
+        string attributeName,
+        int page,
+        int pageSize,
+        string? searchText = null);
+
+    /// <summary>
     /// Retrieves the Pending Export for a specific Connected System Object.
     /// There should only be one PendingExport per CSO at any time.
     /// </summary>
@@ -593,6 +619,15 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <returns>The number of references resolved.</returns>
     public Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Resolves cross-batch reference values in CSO change records (ConnectedSystemObjectChangeAttributeValues)
+    /// that were nulled during COPY binary persistence to avoid FK violations. The DN string is preserved
+    /// in StringValue and is matched against the secondary external ID attribute values of CSOs in the
+    /// same connected system using case-insensitive comparison.
+    /// </summary>
+    /// <returns>The number of change record references resolved.</returns>
+    public Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId);
 
     public int GetConnectedSystemCount();
     public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId);

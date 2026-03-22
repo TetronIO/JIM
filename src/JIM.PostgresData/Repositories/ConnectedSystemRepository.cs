@@ -1544,7 +1544,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // case-insensitive per RFC 4514, and different connector runs or LDAP servers may
         // return DNs with different capitalisation.
         var previousTimeout = Repository.Database.Database.GetCommandTimeout();
-        Repository.Database.Database.SetCommandTimeout(300);
+        Repository.Database.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
         try
         {
             // Fast early exit: skip the expensive multi-table JOIN UPDATE when there are no
@@ -1569,6 +1569,50 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                   AND av."ReferenceValueId" IS NULL
                   AND target_av."StringValue" IS NOT NULL
                   AND LOWER(av."UnresolvedReferenceValue") = LOWER(target_av."StringValue")
+                """,
+                connectedSystemId);
+        }
+        finally
+        {
+            Repository.Database.Database.SetCommandTimeout(previousTimeout);
+        }
+    }
+
+    public async Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId)
+    {
+        // Change record attribute values (ConnectedSystemObjectChangeAttributeValues) store reference
+        // DN strings in StringValue but have ReferenceValueId nulled during COPY binary persistence
+        // to avoid FK violations when the referenced CSO is in a later batch. After all batches
+        // complete, this method resolves those references by matching StringValue against the
+        // secondary external ID attribute values of CSOs in the same connected system.
+        //
+        // Unlike the CSO attribute value fixup, there is no dedicated "UnresolvedReferenceValue"
+        // column on change records — the DN is stored in StringValue alongside regular string values.
+        // The UPDATE is safe because it only matches when StringValue equals a secondary external ID
+        // value (case-insensitive), so non-reference string values are naturally excluded by the JOIN.
+        //
+        // Uses case-insensitive LOWER() comparison because LDAP Distinguished Names are
+        // case-insensitive per RFC 4514.
+        var previousTimeout = Repository.Database.Database.GetCommandTimeout();
+        Repository.Database.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
+        try
+        {
+            return await Repository.Database.Database.ExecuteSqlRawAsync(
+                """
+                UPDATE "ConnectedSystemObjectChangeAttributeValues" cav
+                SET "ReferenceValueId" = target_cso."Id"
+                FROM "ConnectedSystemObjectChangeAttributes" ca
+                JOIN "ConnectedSystemObjectChanges" cc ON cc."Id" = ca."ConnectedSystemChangeId"
+                JOIN "ConnectedSystemObjects" target_cso ON target_cso."ConnectedSystemId" = {0}
+                JOIN "ConnectedSystemObjectAttributeValues" target_av ON target_av."ConnectedSystemObjectId" = target_cso."Id"
+                JOIN "ConnectedSystemAttributes" target_attr ON target_attr."Id" = target_av."AttributeId"
+                    AND target_attr."IsSecondaryExternalId" = true
+                WHERE cc."ConnectedSystemId" = {0}
+                  AND cav."ConnectedSystemObjectChangeAttributeId" = ca."Id"
+                  AND cav."StringValue" IS NOT NULL
+                  AND cav."ReferenceValueId" IS NULL
+                  AND target_av."StringValue" IS NOT NULL
+                  AND LOWER(cav."StringValue") = LOWER(target_av."StringValue")
                 """,
                 connectedSystemId);
         }
@@ -1651,7 +1695,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Increase command timeout for large bulk inserts. At 100K+ objects with 20 attributes each,
         // individual SQL statements can take 30+ seconds under memory pressure or slower I/O.
         var previousTimeout = Repository.Database.Database.GetCommandTimeout();
-        Repository.Database.Database.SetCommandTimeout(300); // 5 minutes
+        Repository.Database.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds); // 5 minutes
 
         await using var transaction = await Repository.Database.Database.BeginTransactionAsync();
 
@@ -2387,6 +2431,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(pe => pe.AttributeValueChanges)
             .Include(pe => pe.ConnectedSystemObject)
                 .ThenInclude(cso => cso!.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
             .Include(pe => pe.SourceMetaverseObject)
                 .ThenInclude(mvo => mvo!.AttributeValues)
                     .ThenInclude(av => av.Attribute)
@@ -2468,23 +2513,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Convert to headers
         var headers = pagedItems.Select(pe =>
         {
-            // Get target object identifier from CSO if available
-            string? targetIdentifier = null;
-            if (pe.ConnectedSystemObject != null)
-            {
-                // Try to get external ID attribute value
-                var externalIdAttr = pe.ConnectedSystemObject.AttributeValues?
-                    .FirstOrDefault(av => av.AttributeId == pe.ConnectedSystemObject.ExternalIdAttributeId);
-                targetIdentifier = externalIdAttr?.StringValue ?? pe.ConnectedSystemObject.Id.ToString();
-            }
+            // Get target object display name from CSO if available (priority: display name > external ID > secondary external ID)
+            var targetIdentifier = pe.ConnectedSystemObject?.DisplayNameOrId;
 
             // Get source MVO display name if available
-            string? sourceMvoDisplayName = null;
-            if (pe.SourceMetaverseObject != null)
-            {
-                sourceMvoDisplayName = pe.SourceMetaverseObject.AttributeValues?
-                    .FirstOrDefault(av => av.Attribute?.Name?.Equals("displayname", StringComparison.OrdinalIgnoreCase) == true)?.StringValue;
-            }
+            var sourceMvoDisplayName = pe.SourceMetaverseObject?.DisplayName;
 
             return PendingExportHeader.FromEntity(pe, targetIdentifier, sourceMvoDisplayName);
         }).ToList();
@@ -2519,6 +2552,116 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .ThenInclude(mvo => mvo!.AttributeValues)
                     .ThenInclude(av => av.Attribute)
             .FirstOrDefaultAsync(pe => pe.Id == id);
+    }
+
+    private const int PendingExportCappedMvaLimit = 10;
+
+    /// <inheritdoc />
+    public async Task<PendingExportDetailResult?> GetPendingExportDetailAsync(Guid id)
+    {
+        // Step 1: Load the pending export shell without attribute value changes
+        var entity = await Repository.Database.PendingExports
+            .AsSplitQuery()
+            .Include(pe => pe.ConnectedSystem)
+            .Include(pe => pe.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.Type)
+            .Include(pe => pe.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+            .Include(pe => pe.SourceMetaverseObject)
+                .ThenInclude(mvo => mvo!.Type)
+            .Include(pe => pe.SourceMetaverseObject)
+                .ThenInclude(mvo => mvo!.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+            .FirstOrDefaultAsync(pe => pe.Id == id);
+
+        if (entity == null)
+            return null;
+
+        // Step 2: Get per-attribute total counts
+        var attributeChangeCounts = await Repository.Database.Set<PendingExportAttributeValueChange>()
+            .Where(avc => avc.PendingExportId == id)
+            .GroupBy(avc => avc.Attribute.Name)
+            .Select(g => new { AttributeName = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        var totalCounts = attributeChangeCounts.ToDictionary(x => x.AttributeName, x => x.Count);
+
+        // Step 3: Identify which attributes have more changes than the cap
+        var mvaAttributeIds = attributeChangeCounts
+            .Where(x => x.Count > 1)
+            .Select(x => x.AttributeName)
+            .ToHashSet();
+
+        // Load all SVA changes (single change per attribute)
+        var svaChanges = await Repository.Database.Set<PendingExportAttributeValueChange>()
+            .Where(avc => avc.PendingExportId == id && !mvaAttributeIds.Contains(avc.Attribute.Name))
+            .Include(avc => avc.Attribute)
+            .ToListAsync();
+
+        // Load capped MVA changes per attribute
+        var cappedMvaChanges = new List<PendingExportAttributeValueChange>();
+        foreach (var attrName in mvaAttributeIds)
+        {
+            var values = await Repository.Database.Set<PendingExportAttributeValueChange>()
+                .Where(avc => avc.PendingExportId == id && avc.Attribute.Name == attrName)
+                .OrderBy(avc => avc.Id)
+                .Take(PendingExportCappedMvaLimit)
+                .Include(avc => avc.Attribute)
+                .ToListAsync();
+
+            cappedMvaChanges.AddRange(values);
+        }
+
+        entity.AttributeValueChanges = svaChanges.Concat(cappedMvaChanges).ToList();
+
+        return new PendingExportDetailResult
+        {
+            PendingExport = entity,
+            AttributeChangeTotalCounts = totalCounts
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<PagedResultSet<PendingExportAttributeValueChange>> GetPendingExportAttributeChangesPagedAsync(
+        Guid pendingExportId,
+        string attributeName,
+        int page,
+        int pageSize,
+        string? searchText = null)
+    {
+        var query = Repository.Database.Set<PendingExportAttributeValueChange>()
+            .Where(avc => avc.PendingExportId == pendingExportId
+                          && avc.Attribute.Name == attributeName);
+
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            var searchPattern = $"%{searchText}%";
+            query = query.Where(avc =>
+                (avc.StringValue != null && EF.Functions.ILike(avc.StringValue, searchPattern))
+                || (avc.UnresolvedReferenceValue != null && EF.Functions.ILike(avc.UnresolvedReferenceValue, searchPattern)));
+        }
+
+        var totalCount = await query.CountAsync();
+
+        if (page < 1) page = 1;
+        if (pageSize > 100) pageSize = 100;
+
+        var offset = (page - 1) * pageSize;
+        var items = await query
+            .OrderBy(avc => avc.Id)
+            .Skip(offset)
+            .Take(pageSize)
+            .Include(avc => avc.Attribute)
+            .ToListAsync();
+
+        return new PagedResultSet<PendingExportAttributeValueChange>
+        {
+            PageSize = pageSize,
+            TotalResults = totalCount,
+            CurrentPage = page,
+            Results = items
+        };
     }
 
     public async Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)

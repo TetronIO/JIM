@@ -237,6 +237,12 @@ html[lang] .jim-expansion-panel .mud-paper-outlined {
     border-color: var(--jim-inner-border-color, var(--jim-paper-border-color, transparent)) !important;
 }
 
+/* Tabs view surface background — gives the tab content panel the same
+   surface fill as MudPaper so content doesn't float on the page background. */
+.jim-tabs-surface {
+    background-color: var(--mud-palette-surface);
+}
+
 /* Operations Queue: hide task rows when their schedule group is collapsed */
 .jim-queue-collapsed-row {
     display: none !important;

@@ -128,5 +128,11 @@ public class ConnectorDefinition : IAuditable, IConnectorCapabilities
     /// per request.
     /// </summary>
     public bool SupportsPaging { get; set; }
+
+    /// <summary>
+    /// Does the Connector use file paths for import and/or export operations? When true,
+    /// the File Path setting is shown on import and export run profiles.
+    /// </summary>
+    public bool SupportsFilePaths { get; set; }
     #endregion
 }

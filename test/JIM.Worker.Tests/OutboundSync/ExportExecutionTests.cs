@@ -1483,5 +1483,195 @@ public class ExportExecutionTests
             "Create export should be eligible even without attribute changes");
     }
 
+    /// <summary>
+    /// Tests that progress reports during deferred export processing do not double-count
+    /// processed exports. Previously, ProcessDeferredBatchesSequentiallyAsync reported
+    /// ProcessedExports = result.SuccessCount + result.FailedCount + processedCount,
+    /// but after each batch both result.SuccessCount and processedCount were incremented
+    /// for the same items, causing the numerator to exceed the denominator.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_WithDeferredExports_ProgressNeverExceedsTotalAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+        var objectGuidAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.ObjectGuid.ToString());
+
+        // Create 3 immediate exports (no unresolved references)
+        for (var i = 0; i < 3; i++)
+        {
+            var cso = new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                Type = targetUserType,
+                TypeId = targetUserType.Id,
+                AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            };
+            ConnectedSystemObjectsData.Add(cso);
+            SyncRepo.SeedConnectedSystemObject(cso);
+
+            var pe = new PendingExport
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                ConnectedSystem = targetSystem,
+                ConnectedSystemObject = cso,
+                ConnectedSystemObjectId = cso.Id,
+                Status = PendingExportStatus.Pending,
+                ChangeType = PendingExportChangeType.Update,
+                CreatedAt = DateTime.UtcNow.AddMinutes(-10 + i),
+                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                {
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        ChangeType = PendingExportAttributeChangeType.Update,
+                        AttributeId = displayNameAttr.Id,
+                        Attribute = displayNameAttr,
+                        StringValue = $"Immediate User {i}",
+                        Status = PendingExportAttributeChangeStatus.Pending
+                    }
+                }
+            };
+            PendingExportsData.Add(pe);
+            SyncRepo.SeedPendingExport(pe);
+        }
+
+        // Create MVOs and target CSOs that the deferred references will resolve to
+        var referencedMvoIds = new List<Guid>();
+        for (var i = 0; i < 6; i++)
+        {
+            var mvoId = Guid.NewGuid();
+            referencedMvoIds.Add(mvoId);
+            var mvo = new MetaverseObject { Id = mvoId };
+            SyncRepo.SeedMetaverseObject(mvo);
+
+            // Create a CSO in the target system linked to this MVO (for reference resolution)
+            var targetCso = new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                Type = targetUserType,
+                TypeId = targetUserType.Id,
+                MetaverseObjectId = mvoId,
+                AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+                {
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        Attribute = objectGuidAttr,
+                        AttributeId = objectGuidAttr.Id,
+                        GuidValue = Guid.NewGuid()
+                    }
+                }
+            };
+            SyncRepo.SeedConnectedSystemObject(targetCso);
+        }
+
+        // Create 6 deferred exports (with unresolved references) — use batch size 2
+        // so they span 3 batches, exposing the double-counting bug from the second iteration onward
+        for (var i = 0; i < 6; i++)
+        {
+            var cso = new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                Type = targetUserType,
+                TypeId = targetUserType.Id,
+                AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            };
+            ConnectedSystemObjectsData.Add(cso);
+            SyncRepo.SeedConnectedSystemObject(cso);
+
+            var pe = new PendingExport
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                ConnectedSystem = targetSystem,
+                ConnectedSystemObject = cso,
+                ConnectedSystemObjectId = cso.Id,
+                Status = PendingExportStatus.Pending,
+                ChangeType = PendingExportChangeType.Update,
+                HasUnresolvedReferences = true,
+                CreatedAt = DateTime.UtcNow.AddMinutes(i),
+                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                {
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        ChangeType = PendingExportAttributeChangeType.Update,
+                        AttributeId = displayNameAttr.Id,
+                        Attribute = displayNameAttr,
+                        StringValue = $"Deferred User {i}",
+                        Status = PendingExportAttributeChangeStatus.Pending
+                    },
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        ChangeType = PendingExportAttributeChangeType.Update,
+                        AttributeId = managerAttr.Id,
+                        Attribute = managerAttr,
+                        UnresolvedReferenceValue = referencedMvoIds[i].ToString(),
+                        Status = PendingExportAttributeChangeStatus.Pending
+                    }
+                }
+            };
+            PendingExportsData.Add(pe);
+            SyncRepo.SeedPendingExport(pe);
+        }
+
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _) =>
+                exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
+
+        var progressReports = new List<ExportProgressInfo>();
+        Func<ExportProgressInfo, Task> progressCallback = info =>
+        {
+            progressReports.Add(new ExportProgressInfo
+            {
+                Phase = info.Phase,
+                TotalExports = info.TotalExports,
+                ProcessedExports = info.ProcessedExports,
+                Message = info.Message
+            });
+            return Task.CompletedTask;
+        };
+
+        var options = new ExportExecutionOptions
+        {
+            BatchSize = 2,
+            MaxParallelism = 1
+        };
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync,
+            options,
+            CancellationToken.None,
+            progressCallback);
+
+        // Assert — ProcessedExports must never exceed TotalExports in any progress report
+        var overcountedReports = progressReports
+            .Where(p => p.ProcessedExports > p.TotalExports)
+            .ToList();
+
+        Assert.That(overcountedReports, Is.Empty,
+            $"Progress reports should never have ProcessedExports > TotalExports. " +
+            $"Overcounted reports: {string.Join("; ", overcountedReports.Select(p => $"Phase={p.Phase}, Processed={p.ProcessedExports}, Total={p.TotalExports}, Message={p.Message}"))}");
+
+        // Verify all exports were processed
+        Assert.That(result.SuccessCount + result.FailedCount + result.DeferredCount, Is.EqualTo(9),
+            "All 9 exports (3 immediate + 6 deferred) should be accounted for");
+    }
+
     #endregion
 }

@@ -8,6 +8,7 @@ using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Serilog;
 namespace JIM.PostgresData.Repositories;
 
@@ -1241,12 +1242,12 @@ public class MetaverseRepository : IMetaverseRepository
             (int)change.ChangeType,
             change.ChangeTime,
             (int)change.InitiatedByType,
-            (object?)change.InitiatedById ?? DBNull.Value,
-            (object?)change.InitiatedByName ?? DBNull.Value,
+            NullableParam(change.InitiatedById, NpgsqlTypes.NpgsqlDbType.Uuid),
+            NullableParam(change.InitiatedByName, NpgsqlTypes.NpgsqlDbType.Text),
             (int)change.ChangeInitiatorType,
-            (object?)change.DeletedMetaverseObjectId ?? DBNull.Value,
-            (object?)change.DeletedObjectTypeId ?? DBNull.Value,
-            (object?)change.DeletedObjectDisplayName ?? DBNull.Value);
+            NullableParam(change.DeletedMetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid),
+            NullableParam(change.DeletedObjectTypeId, NpgsqlTypes.NpgsqlDbType.Integer),
+            NullableParam(change.DeletedObjectDisplayName, NpgsqlTypes.NpgsqlDbType.Text));
 
         // Insert attribute changes and their values
         foreach (var attrChange in change.AttributeChanges)
@@ -1270,13 +1271,13 @@ public class MetaverseRepository : IMetaverseRepository
                     valueChangeId,
                     attrChangeId,
                     (int)valueChange.ValueChangeType,
-                    (object?)valueChange.StringValue ?? DBNull.Value,
-                    (object?)valueChange.IntValue ?? DBNull.Value,
-                    (object?)valueChange.GuidValue ?? DBNull.Value,
-                    (object?)valueChange.BoolValue ?? DBNull.Value,
-                    (object?)valueChange.DateTimeValue ?? DBNull.Value,
-                    (object?)valueChange.ByteValueLength ?? DBNull.Value,
-                    (object?)(valueChange.ReferenceValue?.Id) ?? DBNull.Value);
+                    NullableParam(valueChange.StringValue, NpgsqlTypes.NpgsqlDbType.Text),
+                    NullableParam(valueChange.IntValue, NpgsqlTypes.NpgsqlDbType.Integer),
+                    NullableParam(valueChange.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid),
+                    NullableParam(valueChange.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean),
+                    NullableParam(valueChange.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz),
+                    NullableParam(valueChange.ByteValueLength, NpgsqlTypes.NpgsqlDbType.Integer),
+                    NullableParam(valueChange.ReferenceValue?.Id, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
         }
     }
@@ -1433,4 +1434,9 @@ public class MetaverseRepository : IMetaverseRepository
             .ToList();
     }
     #endregion
+
+    private static NpgsqlParameter NullableParam(object? value, NpgsqlTypes.NpgsqlDbType dbType)
+    {
+        return new NpgsqlParameter { Value = value ?? DBNull.Value, NpgsqlDbType = dbType };
+    }
 }

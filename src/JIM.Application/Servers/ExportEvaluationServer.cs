@@ -1301,7 +1301,7 @@ public class ExportEvaluationServer
             // by secondary external ID without a DB round-trip.
             // When deferSave=true, the caller (FlushPendingExportOperationsAsync) handles cache population.
             if (secondaryIdChange.StringValue != null)
-                SyncRepo.AddCsoToCache(cso.ConnectedSystemId, cso.SecondaryExternalIdAttributeId.Value, secondaryIdChange.StringValue, cso.Id);
+                Application.ConnectedSystems.AddCsoToCache(cso.ConnectedSystemId, cso.SecondaryExternalIdAttributeId.Value, secondaryIdChange.StringValue, cso.Id);
         }
 
         Log.Debug("AddSecondaryExternalIdToCsoAsync: Added secondary external ID value '{SecondaryIdValue}' to CSO {CsoId} for confirming import matching (deferSave={DeferSave})",
@@ -1988,7 +1988,7 @@ public class ExportEvaluationServer
 
         try
         {
-            return await SyncRepo.FindMatchingConnectedSystemObjectAsync(
+            return await Application.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
                 mvo,
                 exportRule.ConnectedSystem,
                 exportRule.ConnectedSystemObjectType,

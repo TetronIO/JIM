@@ -41,11 +41,14 @@
                     </MudTableSortLabel>
                 </MudTh>
             }
-            <MudTh>
-                <MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.FilePath!)">
-                    <MudText Typo="Typo.button">File Path</MudText>
-                </MudTableSortLabel>
-            </MudTh>
+            @if (ConnectedSystem.ConnectorDefinition.SupportsFilePaths)
+            {
+                <MudTh>
+                    <MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.FilePath!)">
+                        <MudText Typo="Typo.button">File Path</MudText>
+                    </MudTableSortLabel>
+                </MudTh>
+            }
             <MudTh Style="text-align: center">
                 <MudText Typo="Typo.button">Actions</MudText>
             </MudTh>
@@ -55,22 +58,25 @@
             <MudTd DataLabel="Run Type">@context.RunType.ToString().SplitOnCapitalLetters()</MudTd>
             @if (ConnectedSystem.ConnectorDefinition.SupportsPartitions)
             {
-                <MudTd DataLabel="Partition">@(context.Partition != null ? context.Partition.Name : "-")</MudTd>
+                <MudTd DataLabel="Partition">@(context.Partition != null ? context.Partition.Name : "All selected")</MudTd>
             }
             @if (ConnectedSystem.ConnectorDefinition.SupportsPaging)
             {
                 <MudTd DataLabel="Page Size">@context.PageSize</MudTd>
             }
-            <MudTd DataLabel="File Path">
-                @if (!string.IsNullOrEmpty(context.FilePath))
-                {
-                    <span class="jim-code-inline">@context.FilePath</span>
-                }
-                else
-                {
-                    <span>-</span>
-                }
-            </MudTd>
+            @if (ConnectedSystem.ConnectorDefinition.SupportsFilePaths)
+            {
+                <MudTd DataLabel="File Path">
+                    @if (!string.IsNullOrEmpty(context.FilePath))
+                    {
+                        <span class="jim-code-inline">@context.FilePath</span>
+                    }
+                    else
+                    {
+                        <span>-</span>
+                    }
+                </MudTd>
+            }
             <MudTd DataLabel="Actions" Style="text-align: center">
                 <MudTooltip Text="Edit" Arrow="true" Placement="Placement.Top">
                     <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Variant="Variant.Filled"
@@ -132,9 +138,8 @@
                     }
                 </MudSelect>
 
-                @if (_newRunProfile.RunType == ConnectedSystemRunType.FullImport ||
-                                                                                 _newRunProfile.RunType == ConnectedSystemRunType.DeltaImport ||
-                                                                                 _newRunProfile.RunType == ConnectedSystemRunType.Export)
+                @if (ConnectedSystem.ConnectorDefinition.SupportsFilePaths &&
+                     IsImportOrExportRunType(_newRunProfile.RunType))
                 {
                     <MudTextField T="string" @bind-Value="_newRunProfile.FilePath" Label="File Path" Variant="Variant.Outlined"
                                   Class="mt-3"
@@ -187,9 +192,8 @@
                               Variant="Variant.Outlined" Class="mt-5" Disabled="true"
                               HelperText="The run type cannot be changed. Delete and recreate the profile to use a different type." />
 
-                @if (_editRunProfile.RunType == ConnectedSystemRunType.FullImport ||
-                                                                                 _editRunProfile.RunType == ConnectedSystemRunType.DeltaImport ||
-                                                                                 _editRunProfile.RunType == ConnectedSystemRunType.Export)
+                @if (ConnectedSystem.ConnectorDefinition.SupportsFilePaths &&
+                     IsImportOrExportRunType(_editRunProfile.RunType))
                 {
                     <MudTextField T="string" @bind-Value="_editRunProfile.FilePath" Label="File Path" Variant="Variant.Outlined"
                                   Class="mt-3"
@@ -245,6 +249,9 @@
 
     private static bool IsImportRunType(ConnectedSystemRunType runType) =>
         runType is ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport;
+
+    private static bool IsImportOrExportRunType(ConnectedSystemRunType runType) =>
+        runType is ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport or ConnectedSystemRunType.Export;
 
     private string? ValidateRunType(ConnectedSystemRunType runType)
     {

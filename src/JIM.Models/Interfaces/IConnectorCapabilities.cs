@@ -75,4 +75,12 @@ public interface IConnectorCapabilities
     /// file-based connectors read the entire file in one pass and do not use the page size.
     /// </summary>
     public bool SupportsPaging { get; }
+
+    /// <summary>
+    /// Does the Connector use file paths for import and/or export operations? When true, the
+    /// File Path setting is shown on import and export run profiles so the user can specify
+    /// the in-container path to the data file. Connectors that read from or write to files
+    /// (e.g. CSV) should return true; connectors that use API calls should return false.
+    /// </summary>
+    public bool SupportsFilePaths { get; }
 }

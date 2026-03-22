@@ -90,6 +90,12 @@ public class LdapConnectorTests
         Assert.That(_connector.SupportsAutoConfirmExport, Is.False);
     }
 
+    [Test]
+    public void SupportsFilePaths_ReturnsFalse()
+    {
+        Assert.That(_connector.SupportsFilePaths, Is.False);
+    }
+
     #endregion
 
     #region GetSettings tests

@@ -7,6 +7,8 @@ function Get-JIMConnectedSystem {
         Retrieves Connected System configurations from JIM. Can retrieve all systems,
         a specific system by ID, or filter by name using wildcards.
 
+        To retrieve Connected System Objects, use Get-JIMConnectedSystemObject instead.
+
     .PARAMETER Id
         The unique identifier of a specific Connected System to retrieve.
 
@@ -15,10 +17,6 @@ function Get-JIMConnectedSystem {
 
     .PARAMETER ObjectTypes
         If specified, retrieves the object types defined in the Connected System's schema.
-        Only valid when -Id is specified.
-
-    .PARAMETER ObjectId
-        Retrieves a specific object from the Connected System by its GUID.
         Only valid when -Id is specified.
 
     .PARAMETER DeletionPreview
@@ -54,6 +52,7 @@ function Get-JIMConnectedSystem {
         Gets a preview of what would be affected by deleting the Connected System.
 
     .LINK
+        Get-JIMConnectedSystemObject
         New-JIMConnectedSystem
         Set-JIMConnectedSystem
         Remove-JIMConnectedSystem
@@ -63,7 +62,6 @@ function Get-JIMConnectedSystem {
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [Parameter(Mandatory, ParameterSetName = 'ObjectTypes', ValueFromPipelineByPropertyName)]
-        [Parameter(Mandatory, ParameterSetName = 'Object', ValueFromPipelineByPropertyName)]
         [Parameter(Mandatory, ParameterSetName = 'DeletionPreview', ValueFromPipelineByPropertyName)]
         [int]$Id,
 
@@ -73,9 +71,6 @@ function Get-JIMConnectedSystem {
 
         [Parameter(Mandatory, ParameterSetName = 'ObjectTypes')]
         [switch]$ObjectTypes,
-
-        [Parameter(Mandatory, ParameterSetName = 'Object')]
-        [guid]$ObjectId,
 
         [Parameter(Mandatory, ParameterSetName = 'DeletionPreview')]
         [switch]$DeletionPreview
@@ -92,12 +87,6 @@ function Get-JIMConnectedSystem {
             'ObjectTypes' {
                 Write-Verbose "Getting object types for Connected System ID: $Id"
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$Id/object-types"
-                $result
-            }
-
-            'Object' {
-                Write-Verbose "Getting object $ObjectId from Connected System ID: $Id"
-                $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$Id/staging/$ObjectId"
                 $result
             }
 

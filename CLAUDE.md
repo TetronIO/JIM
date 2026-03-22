@@ -257,6 +257,12 @@ When creating ASCII diagrams in documentation or code comments, use only reliabl
 - See `DynamicExpressoEvaluator.ToFileTime()` for an example of handling both types
 - This design choice maintains database portability (MySQL, SQL Server, etc. handle DateTimeOffset differently)
 
+**Raw SQL Nullable Parameters (CRITICAL):**
+- NEVER use `(object?)value ?? DBNull.Value` as a parameter to `ExecuteSqlRawAsync` or `ExecuteSqlInterpolatedAsync`
+- EF Core cannot infer the PostgreSQL type from bare `DBNull.Value`, causing: `InvalidOperationException: The current provider doesn't have a store type mapping for properties of type 'DBNull'`
+- ALWAYS wrap nullable parameters with a typed `NpgsqlParameter`: `NullableParam(value, NpgsqlTypes.NpgsqlDbType.Text)` (see helper method in `ConnectedSystemRepository`, `ActivitiesRepository`, `MetaverseRepository`)
+- This applies to ALL nullable columns in raw SQL INSERT/UPDATE statements — string, int, Guid, DateTime, bool, etc.
+
 **File Organisation:**
 - One class per file - each class should have its own `.cs` file named after the class
 - Exception: Enums are grouped into a single file per area/folder (e.g., `ConnectedSystemEnums.cs`, `PendingExportEnums.cs`)

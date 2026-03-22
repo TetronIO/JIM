@@ -1,4 +1,5 @@
 ﻿using JIM.Application;
+using JIM.Application.Servers;
 using JIM.Connectors.Mock;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -235,7 +236,7 @@ public class ImportCreateObjectTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
         // confirm the results persisted to the sync repository
@@ -360,7 +361,7 @@ public class ImportCreateObjectTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
         
         // confirm the results persisted to the sync repository
@@ -414,7 +415,7 @@ public class ImportCreateObjectTests
             var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
             var activity = ActivitiesData.First();
             var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
-            var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+            var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
             await synchronisationImportTaskProcessor.PerformFullImportAsync();
         });
 
@@ -482,7 +483,7 @@ public class ImportCreateObjectTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
 
         // no CSOs should have been created due to the error
@@ -551,7 +552,7 @@ public class ImportCreateObjectTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
 
         // no CSOs should have been created due to the error
@@ -650,7 +651,7 @@ public class ImportCreateObjectTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
 
         // NO CSOs should have been created - both objects should be rejected
@@ -731,7 +732,7 @@ public class ImportCreateObjectTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
 
         // NO CSOs should have been created
@@ -860,7 +861,7 @@ public class ImportCreateObjectTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo,mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await synchronisationImportTaskProcessor.PerformFullImportAsync();
 
         // Only ONE CSO should have been created (the unique one)

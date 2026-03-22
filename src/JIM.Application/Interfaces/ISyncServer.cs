@@ -1,4 +1,5 @@
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
@@ -10,19 +11,158 @@ namespace JIM.Application.Interfaces;
 /// <summary>
 /// Domain logic boundary for sync operations.
 /// <para>
-/// This interface encapsulates all domain logic that sync processors need beyond data access
-/// (which is handled by <see cref="ISyncRepository"/>). It covers scoping evaluation, drift
-/// detection, export rule evaluation, and export execution.
+/// This interface encapsulates all domain/application logic that sync processors need beyond
+/// data access (which is handled by <see cref="ISyncRepository"/>). It covers settings,
+/// CSO caching, object matching, RPEI-linking, connector triad operations, scoping evaluation,
+/// drift detection, export rule evaluation, and export execution.
 /// </para>
 /// <para>
 /// The production implementation (<c>SyncServer</c>) delegates to existing application-layer
 /// servers (ExportEvaluationServer, ExportExecutionServer, ScopingEvaluationServer,
-/// DriftDetectionService). Those servers now use <see cref="ISyncRepository"/> for all data
-/// access rather than reaching through JimApplication.
+/// DriftDetectionService, ConnectedSystemServer, ServiceSettingsServer, etc.).
 /// </para>
 /// </summary>
 public interface ISyncServer
 {
+    #region Settings
+
+    /// <summary>
+    /// Gets the configured sync page size (number of CSOs per page).
+    /// </summary>
+    Task<int> GetSyncPageSizeAsync();
+
+    /// <summary>
+    /// Gets the configured sync outcome tracking level.
+    /// </summary>
+    Task<ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel> GetSyncOutcomeTrackingLevelAsync();
+
+    /// <summary>
+    /// Gets whether CSO change tracking is enabled.
+    /// </summary>
+    Task<bool> GetCsoChangeTrackingEnabledAsync();
+
+    /// <summary>
+    /// Gets whether MVO change tracking is enabled.
+    /// </summary>
+    Task<bool> GetMvoChangeTrackingEnabledAsync();
+
+    #endregion
+
+    #region CSO Lookup Cache
+
+    /// <summary>
+    /// Adds a CSO to the in-memory lookup cache for fast external ID matching during import.
+    /// </summary>
+    void AddCsoToCache(int connectedSystemId, int externalIdAttributeId, string externalIdValue, Guid csoId);
+
+    /// <summary>
+    /// Removes a CSO from the in-memory lookup cache.
+    /// </summary>
+    void EvictCsoFromCache(int connectedSystemId, int externalIdAttributeId, string externalIdValue);
+
+    #endregion
+
+    #region Object Matching
+
+    /// <summary>
+    /// Finds a matching MVO for join evaluation using the configured matching rules.
+    /// </summary>
+    Task<MetaverseObject?> FindMatchingMetaverseObjectAsync(ConnectedSystemObject cso, List<ObjectMatchingRule> matchingRules);
+
+    /// <summary>
+    /// Finds a matching CSO for export provisioning using object matching rules.
+    /// </summary>
+    Task<ConnectedSystemObject?> FindMatchingConnectedSystemObjectAsync(
+        MetaverseObject metaverseObject,
+        ConnectedSystem connectedSystem,
+        ConnectedSystemObjectType connectedSystemObjectType,
+        List<ObjectMatchingRule> matchingRules);
+
+    #endregion
+
+    #region Connected System Operations
+
+    /// <summary>
+    /// Refreshes the auto-selected containers for a connected system using the connector triad.
+    /// </summary>
+    Task RefreshAndAutoSelectContainersWithTriadAsync(
+        ConnectedSystem connectedSystem,
+        IConnector connector,
+        IReadOnlyList<string> createdContainerExternalIds,
+        ActivityInitiatorType initiatorType,
+        Guid? initiatorId,
+        string? initiatorName,
+        Activity? parentActivity = null);
+
+    /// <summary>
+    /// Updates a connected system with the latest triad data from the connector.
+    /// </summary>
+    Task UpdateConnectedSystemWithTriadAsync(
+        ConnectedSystem connectedSystem,
+        ActivityInitiatorType initiatorType,
+        Guid? initiatorId,
+        string? initiatorName);
+
+    #endregion
+
+    #region MVO Deletion with Change Tracking
+
+    /// <summary>
+    /// Deletes an MVO with initiator information for audit trail.
+    /// Handles change tracking (if enabled), then delegates the raw delete to ISyncRepository.
+    /// </summary>
+    Task DeleteMetaverseObjectAsync(
+        MetaverseObject metaverseObject,
+        ActivityInitiatorType initiatorType,
+        Guid? initiatorId,
+        string? initiatorName,
+        List<MetaverseObjectAttributeValue>? finalAttributeValues);
+
+    #endregion
+
+    #region Activity Management
+
+    /// <summary>
+    /// Marks an activity as failed with the specified error message.
+    /// </summary>
+    Task FailActivityWithErrorAsync(Activity activity, string errorMessage);
+
+    /// <summary>
+    /// Marks an activity as failed with details from the specified exception.
+    /// </summary>
+    Task FailActivityWithErrorAsync(Activity activity, Exception exception);
+
+    #endregion
+
+    #region CSO Persistence with Change Tracking
+
+    /// <summary>
+    /// Bulk creates CSOs with associated RPEIs. Persists the CSOs via the data layer,
+    /// then links change tracking records to the corresponding RPEIs.
+    /// </summary>
+    Task CreateConnectedSystemObjectsAsync(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<ActivityRunProfileExecutionItem> rpeis,
+        Func<int, Task>? onBatchPersisted = null);
+
+    /// <summary>
+    /// Bulk updates CSOs with associated RPEIs. Persists the CSO updates,
+    /// then links change tracking records to the corresponding RPEIs.
+    /// </summary>
+    Task UpdateConnectedSystemObjectsAsync(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<ActivityRunProfileExecutionItem> rpeis);
+
+    /// <summary>
+    /// Deletes CSOs with associated RPEIs. Captures final attribute snapshots on the RPEIs
+    /// before deletion for audit trail, then deletes the CSOs.
+    /// </summary>
+    Task DeleteConnectedSystemObjectsAsync(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<ActivityRunProfileExecutionItem> rpeis);
+
+    #endregion
+
     #region Scoping Evaluation
 
     /// <summary>

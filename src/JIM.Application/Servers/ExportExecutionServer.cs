@@ -515,13 +515,20 @@ public class ExportExecutionServer
             }
 
             resolveProcessedCount++;
-            await ReportProgressAsync(progressCallback, new ExportProgressInfo
+
+            // Throttle progress reporting — resolution is a microsecond dictionary lookup,
+            // but each progress report triggers a SaveChangesAsync round-trip. Report every
+            // 50 items or on the final item to avoid hundreds of unnecessary DB writes.
+            if (resolveProcessedCount % 50 == 0 || resolveProcessedCount == deferredExports.Count)
             {
-                Phase = ExportPhase.ResolvingReferences,
-                TotalExports = result.TotalPendingExports,
-                ProcessedExports = result.SuccessCount + resolveProcessedCount,
-                Message = $"Resolving deferred exports ({resolveProcessedCount} / {deferredExports.Count})"
-            });
+                await ReportProgressAsync(progressCallback, new ExportProgressInfo
+                {
+                    Phase = ExportPhase.ResolvingReferences,
+                    TotalExports = result.TotalPendingExports,
+                    ProcessedExports = result.SuccessCount + result.FailedCount,
+                    Message = $"Resolving deferred exports ({resolveProcessedCount} / {deferredExports.Count})"
+                });
+            }
         }
 
         // Batch-export resolved deferred exports
@@ -592,6 +599,10 @@ public class ExportExecutionServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback)
     {
+        // Snapshot the counts from the immediate export phase. ProcessBatchSuccessAsync
+        // increments result.SuccessCount/FailedCount for deferred batches too, so using
+        // the live counters plus processedCount would double-count completed deferred items.
+        var immediateProcessedCount = result.SuccessCount + result.FailedCount;
         var processedCount = 0;
         foreach (var batch in batches)
         {
@@ -602,7 +613,7 @@ public class ExportExecutionServer
             {
                 Phase = ExportPhase.Executing,
                 TotalExports = result.TotalPendingExports,
-                ProcessedExports = result.SuccessCount + result.FailedCount + processedCount,
+                ProcessedExports = immediateProcessedCount + processedCount,
                 CurrentBatchSize = batch.Count,
                 Message = "Exporting deferred"
             });
@@ -1025,9 +1036,9 @@ public class ExportExecutionServer
 
         // Update cache after successful persistence: evict stale entries, then add current ones
         foreach (var (connectedSystemId, attributeId, oldValue) in cacheEvictions)
-            SyncRepo.EvictCsoFromCache(connectedSystemId, attributeId, oldValue);
+            Application.ConnectedSystems.EvictCsoFromCache(connectedSystemId, attributeId, oldValue);
         foreach (var (connectedSystemId, attributeId, newValue, csoId) in cacheAdditions)
-            SyncRepo.AddCsoToCache(connectedSystemId, attributeId, newValue, csoId);
+            Application.ConnectedSystems.AddCsoToCache(connectedSystemId, attributeId, newValue, csoId);
     }
 
     /// <summary>

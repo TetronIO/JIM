@@ -383,7 +383,7 @@ public class MetaverseServer
     /// Helper method to create attribute change records for MVO changes.
     /// Mirrors the pattern used in SyncTaskProcessorBase for consistency.
     /// </summary>
-    private static void AddMvoChangeAttributeValueObject(
+    internal static void AddMvoChangeAttributeValueObject(
         MetaverseObjectChange metaverseObjectChange,
         MetaverseObjectAttributeValue metaverseObjectAttributeValue,
         ValueChangeType valueChangeType)

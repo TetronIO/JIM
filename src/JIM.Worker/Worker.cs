@@ -192,7 +192,7 @@ public class Worker : BackgroundService
                             // we can't use the main-loop instance, due to Entity Framework having connection sharing issues.
                             // IMPORTANT: taskJim must be disposed to release database connections and prevent deadlocks.
                             using var taskJim = _jimFactory.Create();
-                            var syncRepo = new JIM.Application.SyncRepositoryAdapter(taskJim);
+                            var syncRepo = new JIM.PostgresData.SyncRepository((JIM.PostgresData.PostgresDataRepository)taskJim.Repository);
                             var syncServer = new JIM.Application.Servers.SyncServer(taskJim);
 
                             // we want to re-retrieve the worker task using this instance of JIM, so there's no chance of any cross-JIM-instance issues
@@ -289,7 +289,7 @@ public class Worker : BackgroundService
                                                         // hand processing of the sync task to a dedicated task processor to keep the worker abstract of specific tasks
                                                         case ConnectedSystemRunType.FullImport:
                                                         {
-                                                            var syncImportTaskProcessor = new SyncImportTaskProcessor(taskJim, syncRepo, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource);
+                                                            var syncImportTaskProcessor = new SyncImportTaskProcessor(taskJim, syncRepo, syncServer, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource);
                                                             await syncImportTaskProcessor.PerformFullImportAsync();
                                                             break;
                                                         }
@@ -298,7 +298,7 @@ public class Worker : BackgroundService
                                                             // Delta Import uses the import processor just like Full Import.
                                                             // The connector's ImportAsync method checks the run profile type
                                                             // to determine whether to do full or delta import.
-                                                            var syncDeltaImportTaskProcessor = new SyncImportTaskProcessor(taskJim, syncRepo, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource);
+                                                            var syncDeltaImportTaskProcessor = new SyncImportTaskProcessor(taskJim, syncRepo, syncServer, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource);
                                                             await syncDeltaImportTaskProcessor.PerformFullImportAsync();
                                                             break;
                                                         }
@@ -311,7 +311,10 @@ public class Worker : BackgroundService
                                                         case ConnectedSystemRunType.Export:
                                                         {
                                                             var syncExportTaskProcessor = new SyncExportTaskProcessor(syncServer, syncRepo, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource,
-                                                                                        syncRepoFactory: () => new JIM.Application.SyncRepositoryAdapter(_jimFactory.Create()));
+                                                                                        syncRepoFactory: () => {
+                                                                                            var parallelJim = _jimFactory.Create();
+                                                                                            return new JIM.PostgresData.SyncRepository((JIM.PostgresData.PostgresDataRepository)parallelJim.Repository);
+                                                                                        });
                                                             await syncExportTaskProcessor.PerformExportAsync();
                                                             break;
                                                         }
@@ -999,8 +1002,8 @@ public class Worker : BackgroundService
             formatter: new RenderedCompactJsonFormatter(),
             path: Path.Combine(loggingPath, "jim.worker..log"),
             rollingInterval: RollingInterval.Day,
-            retainedFileCountLimit: 31,  // Keep 31 days of logs for integration test analysis
-            fileSizeLimitBytes: 500 * 1024 * 1024,  // 500MB per file max
+            retainedFileCountLimit: 100,
+            fileSizeLimitBytes: 50 * 1024 * 1024,  // 50MB per file — keeps files manageable for analysis
             rollOnFileSizeLimit: true);
         loggerConfiguration.WriteTo.Console();
         Log.Logger = loggerConfiguration.CreateLogger();

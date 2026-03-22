@@ -836,7 +836,7 @@
     private static string BuildFingerprint(IEnumerable<Activity> activities)
     {
         return string.Join("|", activities.Select(a =>
-            $"{a.Id}:{a.Status}:{a.TotalAdded},{a.TotalUpdated},{a.TotalDeleted},{a.TotalProjected},{a.TotalJoined},{a.TotalAttributeFlows},{a.TotalDisconnected},{a.TotalDriftCorrections},{a.TotalProvisioned},{a.TotalExported},{a.TotalDeprovisioned},{a.TotalErrors}"));
+            $"{a.Id}:{a.Status}:{a.ObjectsProcessed},{a.ObjectsToProcess},{a.TotalAdded},{a.TotalUpdated},{a.TotalDeleted},{a.TotalProjected},{a.TotalJoined},{a.TotalAttributeFlows},{a.TotalDisconnected},{a.TotalDriftCorrections},{a.TotalProvisioned},{a.TotalExported},{a.TotalDeprovisioned},{a.TotalErrors}"));
     }
 
     private void OnConnectedSystemFilterChanged(IEnumerable<string> values)

@@ -11,6 +11,7 @@ using JIM.Models.Logic.DTOs;
 using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
+using JIM.Models.Transactional.DTOs;
 using JIM.Models.Tasking;
 using JIM.Utilities;
 using Microsoft.AspNetCore.Authorization;
@@ -478,6 +479,111 @@ public class SynchronisationController(
         var count = await _application.ConnectedSystems.GetUnresolvedReferenceCountAsync(connectedSystemId);
         return Ok(count);
     }
+
+    #region Pending Exports
+
+    /// <summary>
+    /// Gets a paginated list of Pending Exports for a Connected System.
+    /// </summary>
+    /// <remarks>
+    /// Returns lightweight header objects suitable for list views. Use the detail endpoint
+    /// to retrieve full attribute change data for a specific pending export.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="page">Page number (1-based). Default: 1.</param>
+    /// <param name="pageSize">Number of items per page (1-100). Default: 50.</param>
+    /// <param name="search">Optional search text to filter by target object, source MVO, or error message.</param>
+    /// <returns>A paginated set of pending export headers.</returns>
+    [HttpGet("connected-systems/{connectedSystemId:int}/pending-exports", Name = "GetPendingExports")]
+    [ProducesResponseType(typeof(PaginatedResponse<PendingExportHeader>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetPendingExportsAsync(
+        int connectedSystemId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        [FromQuery] string? search = null)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 50;
+        if (pageSize > 100) pageSize = 100;
+
+        var result = await _application.ConnectedSystems.GetPendingExportHeadersAsync(
+            connectedSystemId, page, pageSize, searchQuery: search);
+
+        return Ok(new PaginatedResponse<PendingExportHeader>
+        {
+            Items = result.Results,
+            TotalCount = result.TotalResults,
+            Page = result.CurrentPage,
+            PageSize = result.PageSize
+        });
+    }
+
+    /// <summary>
+    /// Gets a specific Pending Export by ID with capped multi-valued attribute changes.
+    /// </summary>
+    /// <remarks>
+    /// Multi-valued attribute changes are capped at 10 per attribute. Use the
+    /// <c>attributeChangeSummaries</c> array to identify truncated attributes, then
+    /// call the paged attribute changes endpoint to retrieve all values.
+    /// </remarks>
+    /// <param name="pendingExportId">The unique identifier (GUID) of the pending export.</param>
+    /// <returns>The pending export details with capped attribute changes and per-attribute summaries.</returns>
+    [HttpGet("pending-exports/{pendingExportId:guid}", Name = "GetPendingExport")]
+    [ProducesResponseType(typeof(PendingExportDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetPendingExportAsync(Guid pendingExportId)
+    {
+        _logger.LogTrace("Requested pending export: {PendingExportId}", pendingExportId);
+        var result = await _application.ConnectedSystems.GetPendingExportDetailAsync(pendingExportId);
+        if (result == null)
+            return NotFound(ApiErrorResponse.NotFound($"Pending export with ID {pendingExportId} not found."));
+
+        return Ok(PendingExportDetailDto.FromDetailResult(result));
+    }
+
+    /// <summary>
+    /// Gets a paginated list of attribute value changes for a specific attribute on a Pending Export.
+    /// </summary>
+    /// <remarks>
+    /// Use this endpoint to retrieve large multi-valued attribute change data (e.g. group member additions)
+    /// with server-side search and pagination. The pending export detail endpoint caps multi-valued attribute
+    /// changes; use this endpoint to page through all changes for a specific attribute.
+    /// </remarks>
+    /// <param name="pendingExportId">The unique identifier (GUID) of the pending export.</param>
+    /// <param name="attributeName">The attribute name to retrieve changes for.</param>
+    /// <param name="page">Page number (1-based). Default: 1.</param>
+    /// <param name="pageSize">Number of changes per page (1-100). Default: 50.</param>
+    /// <param name="search">Optional search text to filter changes by value.</param>
+    /// <returns>A paginated set of attribute value changes with total count.</returns>
+    [HttpGet("pending-exports/{pendingExportId:guid}/attribute-changes/{attributeName}/values", Name = "GetPendingExportAttributeChangesPaged")]
+    [ProducesResponseType(typeof(PaginatedResponse<PendingExportAttributeValueChangeDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetPendingExportAttributeChangesPagedAsync(
+        Guid pendingExportId,
+        string attributeName,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        [FromQuery] string? search = null)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 50;
+        if (pageSize > 100) pageSize = 100;
+
+        var result = await _application.ConnectedSystems.GetPendingExportAttributeChangesPagedAsync(
+            pendingExportId, attributeName, page, pageSize, search);
+
+        return Ok(new PaginatedResponse<PendingExportAttributeValueChangeDto>
+        {
+            Items = result.Results.Select(PendingExportAttributeValueChangeDto.FromEntity),
+            TotalCount = result.TotalResults,
+            Page = result.CurrentPage,
+            PageSize = result.PageSize
+        });
+    }
+
+    #endregion
 
     #region Partitions and Containers
     /// <summary>

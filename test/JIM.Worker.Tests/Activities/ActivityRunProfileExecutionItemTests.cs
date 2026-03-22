@@ -1,4 +1,5 @@
 using JIM.Application;
+using JIM.Application.Servers;
 using JIM.Connectors.Mock;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -161,7 +162,7 @@ public class ActivityRunProfileExecutionItemTests
         var runProfile = ConnectedSystemRunProfilesData.Single(q =>
             q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
-            Jim, SyncRepo, mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+            Jim, SyncRepo, new SyncServer(Jim), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
 
         await syncImportTaskProcessor.PerformFullImportAsync();
 
@@ -232,7 +233,7 @@ public class ActivityRunProfileExecutionItemTests
         var runProfile = ConnectedSystemRunProfilesData.Single(q =>
             q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
-            Jim, SyncRepo, mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+            Jim, SyncRepo, new SyncServer(Jim), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
 
         await syncImportTaskProcessor.PerformFullImportAsync();
 
@@ -296,7 +297,7 @@ public class ActivityRunProfileExecutionItemTests
         var runProfile = ConnectedSystemRunProfilesData.Single(q =>
             q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
-            Jim, SyncRepo, mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+            Jim, SyncRepo, new SyncServer(Jim), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
 
         await syncImportTaskProcessor.PerformFullImportAsync();
 
@@ -364,7 +365,7 @@ public class ActivityRunProfileExecutionItemTests
         var runProfile = ConnectedSystemRunProfilesData.Single(q =>
             q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
-            Jim, SyncRepo, mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+            Jim, SyncRepo, new SyncServer(Jim), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
 
         await syncImportTaskProcessor.PerformFullImportAsync();
 
@@ -450,7 +451,7 @@ public class ActivityRunProfileExecutionItemTests
         var runProfile = ConnectedSystemRunProfilesData.Single(q =>
             q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
-            Jim, SyncRepo, mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+            Jim, SyncRepo, new SyncServer(Jim), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
 
         await syncImportTaskProcessor.PerformFullImportAsync();
 

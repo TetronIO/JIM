@@ -72,13 +72,13 @@
                 </MudTableSortLabel>
             </MudTh>
             <MudTh>
-                <MudTableSortLabel SortLabel="targetobject" T="PendingExportHeader">
-                    <MudText Typo="Typo.button">Target Object</MudText>
+                <MudTableSortLabel SortLabel="sourcemvo" T="PendingExportHeader">
+                    <MudText Typo="Typo.button">Source MVO</MudText>
                 </MudTableSortLabel>
             </MudTh>
             <MudTh>
-                <MudTableSortLabel SortLabel="sourcemvo" T="PendingExportHeader">
-                    <MudText Typo="Typo.button">Source MVO</MudText>
+                <MudTableSortLabel SortLabel="targetobject" T="PendingExportHeader">
+                    <MudText Typo="Typo.button">Target Object</MudText>
                 </MudTableSortLabel>
             </MudTh>
             <MudTh>
@@ -113,18 +113,6 @@
                     @context.Status.ToString().SplitOnCapitalLetters()
                 </MudChip>
             </MudTd>
-            <MudTd DataLabel="Target Object">
-                @if (context.ConnectedSystemObjectId.HasValue)
-                {
-                    <MudLink Href="@($"/admin/connected-systems/{Id}/staging/{context.ConnectedSystemObjectId}")">
-                        @(context.TargetObjectIdentifier ?? context.ConnectedSystemObjectId.ToString())
-                    </MudLink>
-                }
-                else
-                {
-                    <span class="mud-text-secondary">New object</span>
-                }
-            </MudTd>
             <MudTd DataLabel="Source MVO">
                 @if (context.SourceMetaverseObjectId.HasValue)
                 {
@@ -135,6 +123,18 @@
                 else
                 {
                     <span>-</span>
+                }
+            </MudTd>
+            <MudTd DataLabel="Target Object">
+                @if (context.ConnectedSystemObjectId.HasValue)
+                {
+                    <MudLink Href="@($"/admin/connected-systems/{Id}/staging/{context.ConnectedSystemObjectId}")">
+                        @(context.TargetObjectIdentifier ?? context.ConnectedSystemObjectId.ToString())
+                    </MudLink>
+                }
+                else
+                {
+                    <span class="mud-text-secondary">New object</span>
                 }
             </MudTd>
             <MudTd DataLabel="Changes">@context.AttributeChangeCount</MudTd>

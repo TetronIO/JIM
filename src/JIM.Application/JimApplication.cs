@@ -28,8 +28,8 @@ public class JimApplication : IDisposable
 
     /// <summary>
     /// The sync repository used by ExportEvaluationServer and ExportExecutionServer.
-    /// In production, this is a <see cref="SyncRepositoryAdapter"/> wrapping this JimApplication.
-    /// In tests, this can be an <c>InMemoryData.SyncRepository</c> for deterministic behaviour.
+    /// All apps pass <c>PostgresData.SyncRepository</c> in production.
+    /// Tests use <c>InMemoryData.SyncRepository</c> for deterministic behaviour.
     /// </summary>
     public ISyncRepository SyncRepo { get; }
 
@@ -60,7 +60,8 @@ public class JimApplication : IDisposable
         ConnectedSystems = new ConnectedSystemServer(this);
         ExampleData = new ExampleDataServer(this);
         DriftDetection = new DriftDetectionService(this);
-        SyncRepo = syncRepository ?? new SyncRepositoryAdapter(this);
+        SyncRepo = syncRepository!; // All DI registrations pass PostgresData.SyncRepository explicitly.
+                                     // Bootstrap calls (SSO init, auth) don't use SyncRepo.
         ExportEvaluation = new ExportEvaluationServer(this, SyncRepo);
         ExportExecution = new ExportExecutionServer(this, SyncRepo);
         ScopingEvaluation = new ScopingEvaluationServer();

@@ -1,4 +1,5 @@
 using JIM.Application;
+using JIM.Application.Servers;
 using JIM.Connectors.Mock;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -185,7 +186,7 @@ public class ConfirmingImportOutcomeTests
         var activity = _activitiesData.First();
         var importProcessor = new SyncImportTaskProcessor(
             _jim,
-            _syncRepo,
+            _syncRepo, new SyncServer(_jim),
             mockConnector,
             targetSystem!,
             importRunProfile,

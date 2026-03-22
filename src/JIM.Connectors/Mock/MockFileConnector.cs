@@ -22,6 +22,7 @@ public class MockFileConnector : IConnector, IConnectorCapabilities, IConnectorI
     public bool SupportsAutoConfirmExport => false;
     public bool SupportsParallelExport => false;
     public bool SupportsPaging => false;
+    public bool SupportsFilePaths => true;
 
     public Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, ILogger logger, CancellationToken cancellationToken)
     {

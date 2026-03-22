@@ -64,16 +64,7 @@ try
     var builder = WebApplication.CreateBuilder(args);
 
     // Configure database connection
-    var dbHostName = Environment.GetEnvironmentVariable(Constants.Config.DatabaseHostname);
-    var dbName = Environment.GetEnvironmentVariable(Constants.Config.DatabaseName);
-    var dbUsername = Environment.GetEnvironmentVariable(Constants.Config.DatabaseUsername);
-    var dbPassword = Environment.GetEnvironmentVariable(Constants.Config.DatabasePassword);
-    var dbLogSensitiveInfo = Environment.GetEnvironmentVariable(Constants.Config.DatabaseLogSensitiveInformation);
-
-    var connectionString = $"Host={dbHostName};Database={dbName};Username={dbUsername};Password={dbPassword};Minimum Pool Size=5;Maximum Pool Size=30;Connection Idle Lifetime=300;Connection Pruning Interval=30";
-    _ = bool.TryParse(dbLogSensitiveInfo, out var logSensitiveInfo);
-    if (logSensitiveInfo)
-        connectionString += ";Include Error Detail=True";
+    var connectionString = JimDbContext.BuildConnectionString();
 
     // Use DbContextFactory for Blazor Server to avoid concurrent DbContext access issues
     // Blazor Server pre-rendering and interactive rendering can happen concurrently
@@ -98,7 +89,9 @@ try
     });
     builder.Services.AddTransient<JimApplication>(sp =>
     {
-        var jim = new JimApplication(sp.GetRequiredService<IRepository>());
+        var repo = sp.GetRequiredService<IRepository>();
+        var syncRepo = new JIM.PostgresData.SyncRepository((JIM.PostgresData.PostgresDataRepository)repo);
+        var jim = new JimApplication(repo, syncRepository: syncRepo);
         // Inject credential protection service for connector password encryption/decryption
         jim.CredentialProtection = sp.GetService<ICredentialProtectionService>();
         return jim;
@@ -486,8 +479,8 @@ static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assi
         formatter: new RenderedCompactJsonFormatter(),
         path: Path.Combine(loggingPath, "jim.web..log"),
         rollingInterval: RollingInterval.Day,
-        retainedFileCountLimit: 31,  // Keep 31 days of logs for integration test analysis
-        fileSizeLimitBytes: 500 * 1024 * 1024,  // 500MB per file max
+        retainedFileCountLimit: 100,
+        fileSizeLimitBytes: 50 * 1024 * 1024,  // 50MB per file — keeps files manageable for analysis
         rollOnFileSizeLimit: true);
     loggerConfiguration.WriteTo.Console();
 

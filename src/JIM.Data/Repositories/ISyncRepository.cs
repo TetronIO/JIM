@@ -1,6 +1,5 @@
 using JIM.Models.Activities;
 using JIM.Models.Core;
-using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -27,11 +26,8 @@ namespace JIM.Data.Repositories;
 /// Design decisions:
 /// <list type="bullet">
 /// <item>
-/// Export evaluation, drift detection, and scoping evaluation are NOT on this interface.
-/// They are application-layer domain logic that will move to ISyncEngine in a future phase.
-/// </item>
-/// <item>
-/// Settings reads (page size, tracking levels) ARE included because they require database access.
+/// This interface is PURE DATA ACCESS. Business logic (object matching, CSO caching, settings,
+/// RPEI-linking, connector triad operations, activity failure) lives on <c>ISyncServer</c>.
 /// </item>
 /// <item>
 /// Change tracker management (clear, auto-detect toggle) IS included because sync processors
@@ -173,27 +169,10 @@ public interface ISyncRepository
     Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
 
     /// <summary>
-    /// Bulk creates CSOs with associated RPEIs. Persists the CSOs via raw SQL,
-    /// then links change tracking records to the corresponding RPEIs.
-    /// </summary>
-    Task CreateConnectedSystemObjectsAsync(
-        List<ConnectedSystemObject> connectedSystemObjects,
-        List<ActivityRunProfileExecutionItem> rpeis,
-        Func<int, Task>? onBatchPersisted = null);
-
-    /// <summary>
     /// Bulk updates CSOs with their attribute values.
     /// Uses raw SQL bulk operations in production for performance.
     /// </summary>
     Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
-
-    /// <summary>
-    /// Bulk updates CSOs with associated RPEIs. Persists the CSO updates,
-    /// then links change tracking records to the corresponding RPEIs.
-    /// </summary>
-    Task UpdateConnectedSystemObjectsAsync(
-        List<ConnectedSystemObject> connectedSystemObjects,
-        List<ActivityRunProfileExecutionItem> rpeis);
 
     /// <summary>
     /// Updates only the join state fields (MetaverseObjectId, JoinType, Status) on CSOs
@@ -213,30 +192,42 @@ public interface ISyncRepository
     Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
 
     /// <summary>
-    /// Deletes CSOs with associated RPEIs. Captures final attribute snapshots on the RPEIs
-    /// before deletion for audit trail, then deletes the CSOs.
-    /// </summary>
-    Task DeleteConnectedSystemObjectsAsync(
-        List<ConnectedSystemObject> connectedSystemObjects,
-        List<ActivityRunProfileExecutionItem> rpeis);
-
-    /// <summary>
     /// Resolves cross-batch reference attribute values that could not be resolved during initial import
     /// because the target CSO was in a later batch. Uses raw SQL JOIN with partial indexes.
     /// Returns the count of resolved references.
     /// </summary>
     Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId);
 
+    /// <summary>
+    /// Resolves cross-batch reference values in CSO change records (ConnectedSystemObjectChangeAttributeValues)
+    /// that were nulled during COPY binary persistence to avoid FK violations. The DN string is preserved
+    /// in StringValue and is matched against the secondary external ID attribute values of CSOs in the
+    /// same connected system using case-insensitive comparison.
+    /// </summary>
+    Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId);
+
     #endregion
 
-    #region Metaverse Object — Reads
+    #region Object Matching — Data Access
 
     /// <summary>
-    /// Finds a matching MVO for join evaluation using the configured matching rules.
-    /// Returns null if no match is found; throws or returns specific results for multiple matches
-    /// depending on the matching rule configuration.
+    /// Finds an MVO that matches a CSO using the specified matching rule.
+    /// Used by object matching during import (CSO→MVO join).
     /// </summary>
-    Task<MetaverseObject?> FindMatchingMetaverseObjectAsync(ConnectedSystemObject cso, List<ObjectMatchingRule> matchingRules);
+    Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(
+        ConnectedSystemObject connectedSystemObject,
+        MetaverseObjectType metaverseObjectType,
+        ObjectMatchingRule objectMatchingRule);
+
+    /// <summary>
+    /// Finds a CSO that matches an MVO using the specified matching rule.
+    /// Used by object matching during export (MVO→CSO lookup).
+    /// </summary>
+    Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
+        MetaverseObject metaverseObject,
+        ConnectedSystem connectedSystem,
+        ConnectedSystemObjectType connectedSystemObjectType,
+        ObjectMatchingRule objectMatchingRule);
 
     #endregion
 
@@ -260,14 +251,8 @@ public interface ISyncRepository
 
     /// <summary>
     /// Deletes an MVO, cascading FK cleanup via raw SQL to prevent constraint violations.
-    /// Records the deletion with initiator information for audit trail.
     /// </summary>
-    Task DeleteMetaverseObjectAsync(
-        MetaverseObject metaverseObject,
-        ActivityInitiatorType initiatorType,
-        Guid? initiatorId,
-        string? initiatorName,
-        List<MetaverseObjectAttributeValue>? finalAttributeValues);
+    Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject);
 
     #endregion
 
@@ -375,16 +360,6 @@ public interface ISyncRepository
     Task UpdateActivityProgressOutOfBandAsync(Activity activity);
 
     /// <summary>
-    /// Marks an activity as failed with the specified error message.
-    /// </summary>
-    Task FailActivityWithErrorAsync(Activity activity, string errorMessage);
-
-    /// <summary>
-    /// Marks an activity as failed with details from the specified exception.
-    /// </summary>
-    Task FailActivityWithErrorAsync(Activity activity, Exception exception);
-
-    /// <summary>
     /// Bulk inserts RPEIs via raw SQL, bypassing the EF change tracker.
     /// Returns true if raw SQL was used (RPEIs are outside EF tracking),
     /// false if the EF fallback was used (RPEIs remain tracked).
@@ -447,33 +422,6 @@ public interface ISyncRepository
 
     #endregion
 
-    #region Settings
-
-    /// <summary>
-    /// Gets the configured sync page size (number of CSOs per page).
-    /// </summary>
-    Task<int> GetSyncPageSizeAsync();
-
-    /// <summary>
-    /// Gets the configured sync outcome tracking level.
-    /// Controls how much detail is captured in RPEI outcome trees.
-    /// </summary>
-    Task<ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel> GetSyncOutcomeTrackingLevelAsync();
-
-    /// <summary>
-    /// Gets whether CSO change tracking is enabled.
-    /// When enabled, attribute-level change records are persisted during import.
-    /// </summary>
-    Task<bool> GetCsoChangeTrackingEnabledAsync();
-
-    /// <summary>
-    /// Gets whether MVO change tracking is enabled.
-    /// When enabled, attribute-level change records are persisted during sync.
-    /// </summary>
-    Task<bool> GetMvoChangeTrackingEnabledAsync();
-
-    #endregion
-
     #region Change Tracker Management
 
     /// <summary>
@@ -490,49 +438,6 @@ public interface ISyncRepository
     /// In the in-memory test implementation, this is a no-op.
     /// </summary>
     void SetAutoDetectChangesEnabled(bool enabled);
-
-    #endregion
-
-    #region CSO Lookup Cache
-
-    /// <summary>
-    /// Adds a CSO to the in-memory lookup cache for fast external ID matching during import.
-    /// Keyed by (connectedSystemId, externalIdAttributeId, externalIdValue).
-    /// </summary>
-    void AddCsoToCache(int connectedSystemId, int externalIdAttributeId, string externalIdValue, Guid csoId);
-
-    /// <summary>
-    /// Removes a CSO from the in-memory lookup cache.
-    /// Called when a CSO is deleted or its external ID changes.
-    /// </summary>
-    void EvictCsoFromCache(int connectedSystemId, int externalIdAttributeId, string externalIdValue);
-
-    #endregion
-
-    #region Connected System Operations
-
-    /// <summary>
-    /// Refreshes the auto-selected containers for a connected system using the connector triad
-    /// (ObjectTypes, Partitions, Attributes), and creates RPEIs for any new containers discovered.
-    /// </summary>
-    Task RefreshAndAutoSelectContainersWithTriadAsync(
-        ConnectedSystem connectedSystem,
-        IConnector connector,
-        IReadOnlyList<string> createdContainerExternalIds,
-        ActivityInitiatorType initiatorType,
-        Guid? initiatorId,
-        string? initiatorName,
-        Activity? parentActivity = null);
-
-    /// <summary>
-    /// Updates a connected system with the latest triad data from the connector.
-    /// Called during import to refresh schema and partition information.
-    /// </summary>
-    Task UpdateConnectedSystemWithTriadAsync(
-        ConnectedSystem connectedSystem,
-        ActivityInitiatorType initiatorType,
-        Guid? initiatorId,
-        string? initiatorName);
 
     #endregion
 
@@ -634,16 +539,6 @@ public interface ISyncRepository
     /// Used during batch export processing to pre-fetch attribute definitions.
     /// </summary>
     Task<Dictionary<int, ConnectedSystemObjectTypeAttribute>> GetAttributesByIdsAsync(IEnumerable<int> ids);
-
-    /// <summary>
-    /// Finds a matching CSO for export provisioning using object matching rules.
-    /// Evaluates rules in order until a match is found.
-    /// </summary>
-    Task<ConnectedSystemObject?> FindMatchingConnectedSystemObjectAsync(
-        MetaverseObject metaverseObject,
-        ConnectedSystem connectedSystem,
-        ConnectedSystemObjectType connectedSystemObjectType,
-        List<ObjectMatchingRule> matchingRules);
 
     #endregion
 

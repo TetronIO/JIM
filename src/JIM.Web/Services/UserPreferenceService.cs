@@ -351,7 +351,7 @@ public class UserPreferenceService : IUserPreferenceService
     /// <summary>
     /// Valid MVO detail view mode values.
     /// </summary>
-    private static readonly string[] ValidMvoDetailViewModes = ["form", "table"];
+    private static readonly string[] ValidMvoDetailViewModes = ["form", "tabs", "table"];
 
     /// <inheritdoc />
     public async Task<string?> GetMvoDetailViewModeAsync()

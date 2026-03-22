@@ -153,14 +153,14 @@
                                 <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))"
                                          Underline="Underline.None" Class="jim-chip-link">
                                     <MudChip T="string" Color="Color.Default">
-                                        @_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name: @_externalIdAttributeValue.ToStringNoName()
+                                        <b>@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name:</b>&nbsp;@_externalIdAttributeValue.ToStringNoName()
                                     </MudChip>
                                 </MudLink>
                             }
                             else
                             {
                                 <MudChip T="string" Color="Color.Default">
-                                    @_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name
+                                    <b>@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name</b>
                                 </MudChip>
                                 <MudLink
                                     Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))">
