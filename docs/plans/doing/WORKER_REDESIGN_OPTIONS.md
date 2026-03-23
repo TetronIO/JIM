@@ -1,8 +1,8 @@
 # JIM.Worker Redesign - High-Level Design Options
 
-- **Status:** Doing (Phases 1a–1b complete, Phase 8 next — see [Progress Since Original Analysis](#progress-since-original-analysis))
+- **Status:** Doing (Phases 1a–1b + Phase 8 complete — see [Progress Since Original Analysis](#progress-since-original-analysis))
 - **Created**: 2026-02-23
-- **Updated**: 2026-03-22
+- **Updated**: 2026-03-23
 - **Author**: Architecture Review
 
 ## Context
@@ -69,7 +69,7 @@ JIM.Worker is the synchronisation engine - the beating heart of JIM. It processe
    - ~~`AddRange`/`UpdateRange` generate N individual SQL statements, not bulk operations~~ **(Addressed by #338)** — CSO creates/updates, pending export creates/updates/deletes, and RPEI persistence all use raw SQL bulk operations
    - In-memory provider masks missing `.Include()` bugs, making unit tests unreliable — **still a problem**
    - Cannot fully unit test repository logic - requires integration tests with real PostgreSQL — **still a problem**
-   - ~~**New concern (#338):** Production and test code paths now diverge via `_hasRawSqlSupport` flag and try/catch EF fallbacks~~ **(Resolved by #394)** — `_hasRawSqlSupport` flag and all try/catch EF fallback blocks deleted. Worker tests use purpose-built in-memory `SyncRepository` (JIM.InMemoryData); production uses `PostgresData.SyncRepository` which delegates to shared EF repos (hot-path bulk SQL still lives in `ConnectedSystemRepository`/`ActivitiesRepository` — next: migrate into `SyncRepository`)
+   - ~~**New concern (#338):** Production and test code paths now diverge via `_hasRawSqlSupport` flag and try/catch EF fallbacks~~ **(Resolved by #394 + Phase 8)** — `_hasRawSqlSupport` flag and all try/catch EF fallback blocks deleted. Worker tests use purpose-built in-memory `SyncRepository` (JIM.InMemoryData); production uses `PostgresData.SyncRepository` which owns Worker-only bulk SQL directly (partial classes) and delegates dual-called methods to shared EF repos
 
 2. **Sequential per-object processing** — **unchanged**
    - `ProcessConnectedSystemObjectAsync` processes one CSO at a time in a `foreach` loop
@@ -115,7 +115,26 @@ JIM.Worker is the synchronisation engine - the beating heart of JIM. It processe
 
 - **GitHub Issue:** [#394](https://github.com/TetronIO/JIM/issues/394)
 
-> **Status: Phase 1b complete, Phase 8 next.** The `ISyncRepository` interface has been formalised (#394 Phases 1-8). In-memory `SyncRepository` for tests is complete and all tests migrated. EF fallback blocks deleted (-642 lines). DI introduced in Worker and Scheduler. `PostgresData.SyncRepository` is wired into all apps (Web, Worker, Scheduler) but currently acts as a **pass-through facade** — every method delegates to the shared EF repositories (`ConnectedSystemRepository`, `ActivitiesRepository`, `MetaverseRepository`). The hot-path bulk SQL implementations still live in those shared repos. **Next: migrate hot-path bulk SQL implementations into `SyncRepository`** so it owns Worker-optimised data access directly rather than delegating. The domain engine extraction (ISyncEngine) has **not** been started. See [Progress Since Original Analysis](#progress-since-original-analysis).
+> **Status: ~90% complete.** Data boundary (`ISyncRepository`), DI, test migration, EF fallback removal, `SyncRepository` wiring, and hot-path migration are all done. Two items remain.
+
+### What's Left
+
+| # | Item | Scope | Value | Status |
+|---|------|-------|-------|--------|
+| 1 | **ISyncEngine extraction** (Phase 1c) | Extract ~3,970 LOC of pure join/project/attribute-flow logic from `SyncTaskProcessorBase` + `SyncRuleMappingProcessor` into a stateless domain engine with zero I/O dependencies. Fully unit-testable with plain C# objects — no mocking, no database. | **Provability** — the single highest-value change remaining. Makes the core sync logic independently testable and reasoned about. | Not started |
+| 2 | **Intra-phase parallelism** (Phase 10) | Import: multiple pages concurrently. Sync: CSO batches in parallel (engine is stateless per-CSO). Export: extend existing parallelism with proper DI scopes. Multi-connection write parallelism for PostgreSQL (one core per connection). | **Performance** — the primary lever for utilising multiple CPU cores during sync. Required for 2-5x improvement target. | Not started |
+
+**Everything else is done:**
+- ISyncRepository interface (~80 methods) — done
+- In-memory SyncRepository for tests (86 tests) — done
+- All Worker/Workflow tests migrated (~1,276 tests) — done
+- EF fallback blocks removed (-642 lines) — done
+- DI in Worker and Scheduler — done
+- ISyncServer domain logic boundary — done
+- PostgresData.SyncRepository wired into all apps — done
+- Hot-path bulk SQL migrated into SyncRepository partial classes — done
+- Dead wrappers/interfaces cleaned from shared repos (-1,200+ lines) — done
+- Shared helpers deduplicated (BulkSqlHelpers.cs) — done
 
 ### Philosophy
 
@@ -179,11 +198,12 @@ Keep the current architecture but surgically extract the sync processing logic i
 +-------------------------------------------------------+
 |      JIM.PostgresData (Implementations)               |
 |                                                       |
-|  SyncRepository (new - implements ISyncRepository     |
-|    using Npgsql bulk + raw SQL for ALL worker ops)    |
+|  SyncRepository (implements ISyncRepository)          |
+|    Owns Worker-only bulk SQL (partial classes)        |
+|    Delegates dual-called methods to shared repos      |
 |                                                       |
-|  Existing repositories (unchanged)                    |
-|    EF Core retained for Web/Scheduler operations      |
+|  Shared repositories (reduced scope)                  |
+|    EF Core for Web/Scheduler + dual-called methods    |
 +-------------------------------------------------------+
                           |
                           v
@@ -231,7 +251,7 @@ Keep the current architecture but surgically extract the sync processing logic i
    - `SyncRepository` in JIM.InMemoryData for tests — **done** (86 tests, purpose-built, no EF Core quirks)
    - All Worker and Workflow tests migrated from mocked DbContext to InMemoryData.SyncRepository — **done** (~1,276 tests)
    - All ~32 try/catch EF fallback blocks removed from repository files — **done** (-642 lines)
-   - `PostgresData.SyncRepository` — **done** (#428). Wired into all apps (Web, Worker, Scheduler) via DI. Currently a pass-through facade — delegates all methods to shared EF repos. Hot-path bulk SQL still lives in `ConnectedSystemRepository`/`ActivitiesRepository`. **Phase 8 will migrate hot-path implementations into `SyncRepository`**
+   - `PostgresData.SyncRepository` — **done** (#428 + Phase 8). Wired into all apps via DI. Worker-only bulk SQL implementations owned directly via partial classes (`SyncRepository.RpeiOperations.cs`, `SyncRepository.CsOperations.cs`). Dual-called methods remain as delegates to shared EF repos. Dead code removed from shared repos (-1,200+ lines total)
    - CSO lookup cache via `IMemoryCache` eliminates N+1 import queries — **done**
    - Lightweight ID-only MVO matching with `Take(2)` — **done**
    - Functional indexes for cross-batch reference fixup — **done** (#428, 300s→6s at MediumLarge scale)
@@ -244,8 +264,8 @@ Keep the current architecture but surgically extract the sync processing logic i
 
    - **Shared EF Core repositories** (`ConnectedSystemRepository`, `MetaverseRepository`, etc.) — used by the Web UI, API, and for generic reads/writes. Over time, individual methods can be swapped from EF LINQ to raw SQL where EF quirks cause issues — benefiting all callers.
    - **`PostgresData.SyncRepository`** — used exclusively by the Worker. Exposes the full `ISyncRepository` interface (~80 methods). Generic reads (counts, single-record lookups, sync rules, settings) delegate to the shared EF repos. Hot-path bulk/batch operations (~15-20 methods) should own their implementations directly using Npgsql COPY binary imports and raw SQL.
-   - **Current state:** `SyncRepository` is a pass-through facade — *all* methods delegate to shared repos, including the hot-path bulk ops. The bulk SQL implementations still live in `ConnectedSystemRepository` (7 private `BulkInsert*Raw`/`BulkUpdate*Raw` helpers) and `ActivitiesRepository` (6 private bulk helpers). **Phase 8** will migrate these into `SyncRepository`.
-   - **Key principle:** `SyncRepository` does NOT duplicate every method from the shared repositories. Generic reads stay as delegates. Only Worker-specific bulk/batch operations get moved to own their SQL directly.
+   - **Current state (Phase 8 complete):** `SyncRepository` owns all Worker-only bulk SQL directly via partial classes. 12 public methods + 11 private helpers moved from `ActivitiesRepository` and `ConnectedSystemRepository`. Dual-called methods (CSO CRUD, PE update/delete, mark-executing) remain as delegates to shared EF repos. Dead wrappers removed from `ActivityServer` and `ConnectedSystemServer`. Shared helpers (`NullableParam`, `ChunkList`, `MaxParametersPerStatement`) deduplicated into `BulkSqlHelpers.cs`.
+   - **Key principle:** `SyncRepository` does NOT duplicate methods from the shared repositories. Only Worker-only methods were moved; dual-called methods stay as delegates.
 
 3. **Introduce DI throughout the worker** (JIM.Worker) — **DONE (#422)**
    - Full DI registration in Worker and Scheduler `Program.cs`
@@ -270,7 +290,7 @@ Keep the current architecture but surgically extract the sync processing logic i
 ### Estimates
 
 - **Completed (#338)**: Bulk SQL persistence for CSOs, pending exports, RPEIs; CSO lookup cache; lightweight MVO matching; `AsSplitQuery` elimination. Measured ~34% FullSync improvement, ~37% faster CSO processing
-- **Remaining scope**: Migrate hot-path bulk SQL from shared repos into `PostgresData.SyncRepository` (Phase 8), ISyncEngine extraction (~3,970 LOC to refactor, Phase 1c), intra-phase parallelism (Phase 10)
+- **Remaining scope**: ISyncEngine extraction (~3,970 LOC to refactor, Phase 1c), intra-phase parallelism (Phase 10)
 - **Risk**: Medium - mechanical refactoring with clear seams; high test coverage before/after
 - **Breaking Changes**: None externally; internal restructuring only
 
@@ -304,7 +324,7 @@ The introduction of `ISyncRepository` fundamentally changes how worker code is t
 **What gets deleted:**
 - ~~The `_hasRawSqlSupport` flag and all conditional branching based on it~~ — **done** (#394)
 - ~~All ~17 two-tier try/catch fallback blocks across `ConnectedSystemRepository`, `ActivitiesRepository`, `MetaverseRepository`, and `PostgresDataRepository`~~ — **done** (#394, -642 lines)
-- The sync-hot-path bulk SQL methods in `ConnectedSystemRepository` and `ActivitiesRepository` (those implementations move into `PostgresData.SyncRepository`) — **not started (Phase 8)**
+- ~~The sync-hot-path bulk SQL methods in `ConnectedSystemRepository` and `ActivitiesRepository` (those implementations move into `PostgresData.SyncRepository`)~~ — **done** (Phase 8: 12 public + 11 private methods moved, dead code removed from shared repos)
 - ~~EF in-memory provider usage for worker tests (replaced by the purpose-built in-memory `SyncRepository`)~~ — **done** (#394)
 - ~~Mocked `DbContext`/`DbSet` usage for worker tests (replaced by the purpose-built in-memory `SyncRepository`)~~ — **done** (#394)
 
@@ -598,7 +618,7 @@ docker compose / Kubernetes:
 | Code disruption | ~30% of worker | ~70% of worker | ~90% of worker |
 | Air-gap compatible | Yes | Yes | Yes (Redis self-hosted) |
 | Time to initial PR | Incremental | Needs critical mass | Needs critical mass |
-| **Progress to date** | ~85% (data boundary + DI + SyncRepository wiring done; hot-path migration + engine extraction remaining) | 0% | 0% |
+| **Progress to date** | ~90% (data boundary + DI + SyncRepository + hot-path migration done; engine extraction remaining) | 0% | 0% |
 
 ### Recommendation Matrix by Organisation Size
 
@@ -662,7 +682,7 @@ Since the constraint is architectural (one core per connection for writes), the 
 
 ### Implications for Phase 8 and Phase 10
 
-**Phase 8 (`PostgresData.SyncRepository`)** should migrate the existing bulk SQL implementations from the shared repositories into `SyncRepository`, and prioritise COPY binary import over parameterised INSERT for any remaining bulk write methods that still use parameterised SQL. The existing COPY implementations for change history (#398) and RPEIs (#338) provide proven patterns.
+**Phase 8 (`PostgresData.SyncRepository`)** — **DONE.** Worker-only bulk SQL implementations have been migrated from shared repositories into `SyncRepository` partial classes. Future optimisation (e.g., converting remaining parameterised INSERT methods to COPY binary) can be done incrementally within `SyncRepository` without affecting shared repos.
 
 **Phase 10 (intra-phase parallelism)** should implement multi-connection write parallelism as a primary objective, not just as a nice-to-have. The observed bottleneck (100% on one core, other cores idle) demonstrates that single-connection writes are the dominant constraint during the save phase. Splitting writes across N connections (where N ≈ available cores) would allow PostgreSQL to utilise all available server resources.
 
@@ -721,7 +741,7 @@ No database. No mocking. No flaky tests. Just logic.
 
 ### D2: Persistence Must Be Batch-Oriented
 
-> **Largely implemented by #338 + #394 + #428.** The flush mechanism bypasses EF change tracking for most hot-path writes (see status annotations below). The `ISyncRepository` interface is formalised, the in-memory `SyncRepository` for tests is complete (~1,276 tests migrated), and all ~32 try/catch EF fallback blocks have been deleted (-642 lines). `PostgresData.SyncRepository` is wired into all apps but currently delegates to shared EF repositories — the hot-path bulk SQL implementations have not yet been moved into it (Phase 8). The ISyncEngine extraction has not been started (Phase 1c).
+> **Implemented by #338 + #394 + #428 + Phase 8.** The flush mechanism bypasses EF change tracking for all hot-path writes. `ISyncRepository` is formalised, in-memory `SyncRepository` for tests is complete (~1,276 tests migrated), all try/catch EF fallback blocks deleted (-642 lines). `PostgresData.SyncRepository` owns Worker-only bulk SQL directly via partial classes; dual-called methods delegate to shared EF repos. The ISyncEngine extraction has not been started (Phase 1c).
 
 All options should use batch persistence. The current pattern of accumulating changes and flushing at page boundaries is correct. But the flush mechanism needs to bypass EF change tracking:
 
@@ -778,7 +798,7 @@ However, **Option A is the pragmatic starting point** if the team wants to de-ri
 
 - **Phase 1a** (Option A - persistence): Replace EF Core on hot paths with raw SQL bulk operations. **DONE (#338)** — ~34% FullSync improvement measured.
 - **Phase 1b** (Option A - data boundary + DI): Formalise `ISyncRepository` interface. Build in-memory `SyncRepository` for tests. Migrate all tests. Eliminate ~32 try/catch fallback blocks. Introduce DI in Worker and Scheduler. Wire `PostgresData.SyncRepository` into all apps. **DONE (#394 Phases 1-8, #422, #424, #425, #428).**
-- **Phase 8** (Option A - hot-path migration): Migrate bulk SQL implementations from shared EF repositories (`ConnectedSystemRepository`, `ActivitiesRepository`) into `PostgresData.SyncRepository` so it owns Worker-optimised data access directly. Currently `SyncRepository` is a pass-through facade — every method delegates to shared repos. **NOT STARTED.**
+- **Phase 8** (Option A - hot-path migration): Migrate Worker-only bulk SQL implementations from shared EF repositories into `PostgresData.SyncRepository`. **DONE.** 12 public methods + 11 private helpers moved into partial class files. Shared helpers deduplicated into `BulkSqlHelpers.cs`. Dead wrappers and interface members cleaned up from `ActivityServer`, `ConnectedSystemServer`, `IActivityRepository`, `IConnectedSystemRepository`. Net -1,200+ lines from shared repos.
 - **Phase 1c** (Option A - engine extraction): Extract ISyncEngine as a pure domain service. **NOT STARTED** — this is the remaining high-value work for provability.
 - **Phase 2** (Option B): Rewire orchestration to use Channels pipeline. Ship and validate.
 - **Phase 3** (Option C, if needed): Add Redis message bus between pipeline stages for horizontal scaling.
@@ -817,7 +837,7 @@ A 5-phase surgical optimisation programme was completed in February 2026, replac
 - ~~Test migration from mocked DbContext to InMemoryData~~ — **done** (#394 Phase 7b, ~1,276 tests)
 - ~~Elimination of try/catch fallback blocks~~ — **done** (#394 Phase 7d, -642 lines)
 - ~~DI introduction~~ — **done** (#422)
-- ~~`PostgresData.SyncRepository` wiring~~ — **done** (#428). All apps (Web, Worker, Scheduler) use `PostgresData.SyncRepository` directly. Currently a pass-through facade — delegates to shared EF repos. Hot-path bulk SQL implementations still live in `ConnectedSystemRepository`/`ActivitiesRepository` — **Phase 8 will migrate these into `SyncRepository`**
+- ~~`PostgresData.SyncRepository` wiring + hot-path migration~~ — **done** (#428 + Phase 8). All apps use `PostgresData.SyncRepository` directly. Worker-only bulk SQL moved into partial classes (`SyncRepository.RpeiOperations.cs`, `SyncRepository.CsOperations.cs`). Dual-called methods remain as delegates. Dead code removed from shared repos
 - ~~Integration tests for PostgresData `SyncRepository` against real PostgreSQL~~ — **done** (#428). Scenario 1 and Scenario 8 MediumLarge pass
 - Intra-phase parallelism — deferred
 - Systematic database index/query performance analysis — tracked in #427
