@@ -480,7 +480,9 @@
     // Filter state
     private IEnumerable<ActivityTargetOperationType> _filterOperations = [];
     private IEnumerable<ActivityOutcomeType> _filterOutcomes = [];
-    private IEnumerable<ActivityTargetType> _filterTypes = [];
+    private IEnumerable<ActivityTargetType> _filterTypes = Enum.GetValues<ActivityTargetType>()
+        .Where(t => t != ActivityTargetType.NotSet && t != ActivityTargetType.ConnectedSystemRunProfile)
+        .ToList();
     private IEnumerable<ActivityStatus> _filterStatuses = [];
     private bool _filterHasChildren;
 
