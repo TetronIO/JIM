@@ -84,17 +84,27 @@ public partial class SyncRepository
                     outcome.ConnectedSystemObjectChangeId = outcome.ConnectedSystemObjectChange!.Id;
             }
 
-            // Step 3: Insert sync outcomes in parallel (RPEIs and CSO changes now exist)
+            // Step 3: Insert sync outcomes in parallel (RPEIs and CSO changes now exist).
+            // Outcomes have a self-referencing FK (ParentSyncOutcomeId) forming a tree per RPEI.
+            // We must partition by RPEI to keep each outcome tree on one connection — otherwise
+            // a child on connection 2 may commit before its parent on connection 1, causing
+            // an FK violation.
             if (allOutcomes.Count > 0)
             {
+                var outcomesByRpei = allOutcomes
+                    .GroupBy(o => o.ActivityRunProfileExecutionItemId)
+                    .Select(g => g.ToList())
+                    .ToList();
+
                 await ParallelBatchWriter.ExecuteAsync(
-                    allOutcomes,
+                    outcomesByRpei,
                     parallelism,
                     connectionString,
                     async (connection, partition) =>
                     {
+                        var flatOutcomes = partition.SelectMany(g => g).ToList();
                         await using var tx = await connection!.BeginTransactionAsync();
-                        await BulkInsertSyncOutcomesOnConnectionAsync(connection, tx, partition.ToList());
+                        await BulkInsertSyncOutcomesOnConnectionAsync(connection, tx, flatOutcomes);
                         await tx.CommitAsync();
                     });
             }
