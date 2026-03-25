@@ -107,8 +107,8 @@ public partial class SyncRepository : ISyncRepository
 
     #region Connected System Object — Writes
 
-    public Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
-        => _repo.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjects);
+    // CreateConnectedSystemObjectsAsync is an owned implementation in
+    // SyncRepository.CsOperations.cs — uses parallel multi-connection writes.
 
     public Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
         => _repo.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjects);
