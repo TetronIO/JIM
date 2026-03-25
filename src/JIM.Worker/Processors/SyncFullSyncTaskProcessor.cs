@@ -21,13 +21,14 @@ namespace JIM.Worker.Processors;
 public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
 {
     public SyncFullSyncTaskProcessor(
+        ISyncEngine syncEngine,
         ISyncServer syncServer,
         ISyncRepository syncRepository,
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile connectedSystemRunProfile,
         Activity activity,
         CancellationTokenSource cancellationTokenSource)
-        : base(syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource)
+        : base(syncEngine, syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource)
     {
     }
 

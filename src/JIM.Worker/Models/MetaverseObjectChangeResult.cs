@@ -1,6 +1,6 @@
 using JIM.Models.Core;
 using JIM.Models.Enums;
-using JIM.Worker.Processors;
+using JIM.Models.Sync;
 
 namespace JIM.Worker.Models;
 

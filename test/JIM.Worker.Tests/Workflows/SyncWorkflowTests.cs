@@ -57,6 +57,7 @@ public class SyncWorkflowTests : WorkflowTestBase
         // Act: Run Full Sync
         var cts = new CancellationTokenSource();
         var processor = new SyncFullSyncTaskProcessor(
+            new SyncEngine(),
             new SyncServer(Jim),
             SyncRepo,
             connectedSystem,
@@ -108,6 +109,7 @@ public class SyncWorkflowTests : WorkflowTestBase
             ConnectedSystemRunType.FullSynchronisation);
         var cts1 = new CancellationTokenSource();
         var fullSyncProcessor = new SyncFullSyncTaskProcessor(
+            new SyncEngine(),
             new SyncServer(Jim),
             SyncRepo,
             connectedSystem,
@@ -127,6 +129,7 @@ public class SyncWorkflowTests : WorkflowTestBase
             ConnectedSystemRunType.DeltaSynchronisation);
         var cts2 = new CancellationTokenSource();
         var deltaSyncProcessor = new SyncDeltaSyncTaskProcessor(
+            new SyncEngine(),
             new SyncServer(Jim),
             SyncRepo,
             connectedSystem,
@@ -176,6 +179,7 @@ public class SyncWorkflowTests : WorkflowTestBase
             ConnectedSystemRunType.FullSynchronisation);
         var cts1 = new CancellationTokenSource();
         var fullSyncProcessor = new SyncFullSyncTaskProcessor(
+            new SyncEngine(),
             new SyncServer(Jim),
             SyncRepo,
             connectedSystem,
@@ -199,6 +203,7 @@ public class SyncWorkflowTests : WorkflowTestBase
             ConnectedSystemRunType.DeltaSynchronisation);
         var cts2 = new CancellationTokenSource();
         var deltaSyncProcessor = new SyncDeltaSyncTaskProcessor(
+            new SyncEngine(),
             new SyncServer(Jim),
             SyncRepo,
             connectedSystem,
@@ -247,6 +252,7 @@ public class SyncWorkflowTests : WorkflowTestBase
             ConnectedSystemRunType.FullSynchronisation);
         var cts1 = new CancellationTokenSource();
         var fullSyncProcessor = new SyncFullSyncTaskProcessor(
+            new SyncEngine(),
             new SyncServer(Jim),
             SyncRepo,
             connectedSystem,
@@ -274,6 +280,7 @@ public class SyncWorkflowTests : WorkflowTestBase
             ConnectedSystemRunType.DeltaSynchronisation);
         var cts2 = new CancellationTokenSource();
         var deltaSyncProcessor = new SyncDeltaSyncTaskProcessor(
+            new SyncEngine(),
             new SyncServer(Jim),
             SyncRepo,
             connectedSystem,
@@ -325,6 +332,7 @@ public class SyncWorkflowTests : WorkflowTestBase
             ConnectedSystemRunType.FullSynchronisation);
         var cts1 = new CancellationTokenSource();
         var fullSyncProcessor = new SyncFullSyncTaskProcessor(
+            new SyncEngine(),
             new SyncServer(Jim),
             SyncRepo,
             connectedSystem,
@@ -347,6 +355,7 @@ public class SyncWorkflowTests : WorkflowTestBase
             ConnectedSystemRunType.DeltaSynchronisation);
         var cts2 = new CancellationTokenSource();
         var deltaSyncProcessor = new SyncDeltaSyncTaskProcessor(
+            new SyncEngine(),
             new SyncServer(Jim),
             SyncRepo,
             connectedSystem,
@@ -394,7 +403,7 @@ public class SyncWorkflowTests : WorkflowTestBase
             fullSyncProfile,
             ConnectedSystemRunType.FullSynchronisation);
         var cts1 = new CancellationTokenSource();
-        await new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo, connectedSystem, fullSyncProfile, fullSyncActivity, cts1)
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, connectedSystem, fullSyncProfile, fullSyncActivity, cts1)
             .PerformFullSyncAsync();
         connectedSystem = await ReloadEntityAsync(connectedSystem);
 
@@ -410,7 +419,7 @@ public class SyncWorkflowTests : WorkflowTestBase
             deltaSyncProfile,
             ConnectedSystemRunType.DeltaSynchronisation);
         var cts2 = new CancellationTokenSource();
-        await new SyncDeltaSyncTaskProcessor(new SyncServer(Jim), SyncRepo, connectedSystem, deltaSyncProfile, deltaSyncActivity1, cts2)
+        await new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, connectedSystem, deltaSyncProfile, deltaSyncActivity1, cts2)
             .PerformDeltaSyncAsync();
         deltaSyncActivity1 = await ReloadEntityAsync(deltaSyncActivity1);
         connectedSystem = await ReloadEntityAsync(connectedSystem);
@@ -429,7 +438,7 @@ public class SyncWorkflowTests : WorkflowTestBase
             deltaSyncProfile,
             ConnectedSystemRunType.DeltaSynchronisation);
         var cts3 = new CancellationTokenSource();
-        await new SyncDeltaSyncTaskProcessor(new SyncServer(Jim), SyncRepo, connectedSystem, deltaSyncProfile, deltaSyncActivity2, cts3)
+        await new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, connectedSystem, deltaSyncProfile, deltaSyncActivity2, cts3)
             .PerformDeltaSyncAsync();
         deltaSyncActivity2 = await ReloadEntityAsync(deltaSyncActivity2);
 

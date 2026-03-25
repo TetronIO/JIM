@@ -285,6 +285,7 @@ public class WorkflowTestHarness : IDisposable
 
         var cts = new CancellationTokenSource();
         var processor = new SyncFullSyncTaskProcessor(
+            new SyncEngine(),
             new SyncServer(_jim),
             _syncRepo,
             system,
@@ -363,6 +364,7 @@ public class WorkflowTestHarness : IDisposable
 
         var cts = new CancellationTokenSource();
         var processor = new SyncDeltaSyncTaskProcessor(
+            new SyncEngine(),
             new SyncServer(_jim),
             _syncRepo,
             system,

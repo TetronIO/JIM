@@ -1,7 +1,7 @@
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Sync;
 using JIM.Worker.Models;
-using JIM.Worker.Processors;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.Models;

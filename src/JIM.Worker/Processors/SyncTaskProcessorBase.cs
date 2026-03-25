@@ -14,6 +14,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Utility;
+using JIM.Models.Sync;
 using JIM.Utilities;
 using JIM.Data.Repositories;
 using JIM.Worker.Models;
@@ -28,22 +29,9 @@ namespace JIM.Worker.Processors;
 /// - Full Sync: processes ALL CSOs in the Connected System
 /// - Delta Sync: processes only CSOs modified since the last sync (based on LastUpdated timestamp)
 /// </summary>
-/// <summary>
-/// Describes the fate of a Metaverse Object after its deletion rule was evaluated
-/// during CSO disconnection. Used to build the appropriate causality tree outcome.
-/// </summary>
-public enum MvoDeletionFate
-{
-    /// <summary>MVO was not marked for deletion (Manual rule, remaining connectors, non-authoritative source, etc.).</summary>
-    NotDeleted,
-    /// <summary>MVO was queued for immediate synchronous deletion (0 grace period).</summary>
-    DeletedImmediately,
-    /// <summary>MVO was marked for deferred deletion by housekeeping (grace period configured).</summary>
-    DeletionScheduled
-}
-
 public abstract class SyncTaskProcessorBase
 {
+    protected readonly ISyncEngine _syncEngine;
     protected readonly ISyncServer _syncServer;
     protected readonly ISyncRepository _syncRepo;
     protected readonly ConnectedSystem _connectedSystem;
@@ -162,6 +150,7 @@ public abstract class SyncTaskProcessorBase
     protected readonly IExpressionEvaluator _expressionEvaluator = new DynamicExpressoEvaluator();
 
     protected SyncTaskProcessorBase(
+        ISyncEngine syncEngine,
         ISyncServer syncServer,
         ISyncRepository syncRepository,
         ConnectedSystem connectedSystem,
@@ -169,6 +158,7 @@ public abstract class SyncTaskProcessorBase
         Activity activity,
         CancellationTokenSource cancellationTokenSource)
     {
+        _syncEngine = syncEngine;
         _syncServer = syncServer;
         _syncRepo = syncRepository;
         _connectedSystem = connectedSystem;
@@ -513,157 +503,20 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     protected void ProcessPendingExport(ConnectedSystemObject connectedSystemObject)
     {
-        Log.Verbose($"ProcessPendingExport: Executing for: {connectedSystemObject}.");
-
-        // use pre-loaded pending exports dictionary for O(1) lookup instead of O(n) database query
-        if (_pendingExportsByCsoId == null || !_pendingExportsByCsoId.TryGetValue(connectedSystemObject.Id, out var pendingExportsForThisCso))
-        {
-            Log.Verbose($"ProcessPendingExport: No pending exports found for CSO {connectedSystemObject.Id}.");
+        var result = _syncEngine.EvaluatePendingExportConfirmation(connectedSystemObject, _pendingExportsByCsoId);
+        if (!result.HasResults)
             return;
-        }
 
-        if (pendingExportsForThisCso.Count == 0)
-        {
-            Log.Verbose($"ProcessPendingExport: No pending exports found for CSO {connectedSystemObject.Id}.");
-            return;
-        }
-
-        Log.Verbose($"ProcessPendingExport: Found {pendingExportsForThisCso.Count} pending export(s) for CSO {connectedSystemObject.Id}.");
-
-        // Create a copy to iterate over, since we may remove items from the original list during processing
-        foreach (var pendingExport in pendingExportsForThisCso.ToList())
-        {
-            // Skip pending exports that have not been exported yet.
-            // This method is for confirming whether already-exported changes were persisted.
-            // Pending exports with Status=Pending haven't been sent to the connector yet -
-            // comparing CSO attributes against unexported changes would incorrectly detect
-            // "partial success" and change ChangeType from Create to Update, causing exports to fail.
-            if (pendingExport.Status == JIM.Models.Transactional.PendingExportStatus.Pending)
-            {
-                Log.Verbose($"ProcessPendingExport: Skipping pending export {pendingExport.Id} - not yet exported (Status=Pending).");
-                continue;
-            }
-
-            // Skip pending exports that are awaiting confirmation via PendingExportReconciliationService.
-            // The "Exported" status means the export was successfully sent to the connector and is now
-            // waiting for a confirming import to verify the values were persisted. The reconciliation
-            // service (called during import) handles this state - we should not interfere here.
-            if (pendingExport.Status == JIM.Models.Transactional.PendingExportStatus.Exported)
-            {
-                Log.Verbose($"ProcessPendingExport: Skipping pending export {pendingExport.Id} - awaiting confirmation via import (Status=Exported).");
-                continue;
-            }
-
-            // track which attribute changes succeeded and which failed
-            var successfulChanges = new List<JIM.Models.Transactional.PendingExportAttributeValueChange>();
-            var failedChanges = new List<JIM.Models.Transactional.PendingExportAttributeValueChange>();
-
-            foreach (var attributeChange in pendingExport.AttributeValueChanges)
-            {
-                // find the corresponding attribute value on the CSO
-                var csoAttributeValue = connectedSystemObject.AttributeValues
-                    .FirstOrDefault(av => av.AttributeId == attributeChange.AttributeId);
-
-                // check if the attribute change matches the CSO's current state
-                var changeMatches = attributeChange.ChangeType switch
-                {
-                    JIM.Models.Transactional.PendingExportAttributeChangeType.Add or
-                    JIM.Models.Transactional.PendingExportAttributeChangeType.Update =>
-                        csoAttributeValue != null && AttributeValuesMatch(csoAttributeValue, attributeChange),
-
-                    JIM.Models.Transactional.PendingExportAttributeChangeType.Remove or
-                    JIM.Models.Transactional.PendingExportAttributeChangeType.RemoveAll =>
-                        csoAttributeValue == null || string.IsNullOrEmpty(csoAttributeValue.StringValue),
-
-                    _ => false
-                };
-
-                if (changeMatches)
-                {
-                    successfulChanges.Add(attributeChange);
-                    Log.Verbose($"ProcessPendingExport: Attribute change for {attributeChange.AttributeId} confirmed on CSO.");
-                }
-                else
-                {
-                    failedChanges.Add(attributeChange);
-                    Log.Verbose($"ProcessPendingExport: Attribute change for {attributeChange.AttributeId} does not match CSO state.");
-                }
-            }
-
-            // if all changes have been confirmed, queue pending export for deletion
-            if (failedChanges.Count == 0)
-            {
-                Log.Information($"ProcessPendingExport: All changes confirmed for pending export {pendingExport.Id}. Queuing for deletion.");
-                _pendingExportsToDelete.Add(pendingExport);
-
-                // remove from in-memory cache to keep it consistent
-                pendingExportsForThisCso.Remove(pendingExport);
-            }
-            else if (successfulChanges.Count > 0)
-            {
-                // partial success: remove successful attribute changes, keep failed ones
-                Log.Information($"ProcessPendingExport: Partial success for pending export {pendingExport.Id}. " +
-                    $"{successfulChanges.Count} succeeded, {failedChanges.Count} failed. Queuing for update.");
-
-                // remove the successful attribute changes from the pending export
-                foreach (var successfulChange in successfulChanges)
-                {
-                    pendingExport.AttributeValueChanges.Remove(successfulChange);
-                }
-
-                // If this was a Create operation and it partially succeeded, the object now exists.
-                // Change to Update so subsequent export attempts update the existing object
-                // rather than trying to create it again (which would fail without DN).
-                if (pendingExport.ChangeType == JIM.Models.Transactional.PendingExportChangeType.Create)
-                {
-                    Log.Information($"ProcessPendingExport: Changing pending export {pendingExport.Id} from Create to Update (object was created, updating remaining attributes).");
-                    pendingExport.ChangeType = JIM.Models.Transactional.PendingExportChangeType.Update;
-                }
-
-                // increment error count and update status
-                pendingExport.ErrorCount++;
-                pendingExport.Status = JIM.Models.Transactional.PendingExportStatus.ExportNotConfirmed;
-
-                _pendingExportsToUpdate.Add(pendingExport);
-            }
-            else
-            {
-                // complete failure: all attribute changes failed
-                Log.Warning($"ProcessPendingExport: Complete failure for pending export {pendingExport.Id}. " +
-                    $"All {failedChanges.Count} attribute changes failed. Queuing for update.");
-
-                // increment error count and update status
-                pendingExport.ErrorCount++;
-                pendingExport.Status = JIM.Models.Transactional.PendingExportStatus.ExportNotConfirmed;
-
-                _pendingExportsToUpdate.Add(pendingExport);
-            }
-        }
+        // Apply the engine's decisions to the batch collections
+        _pendingExportsToDelete.AddRange(result.ToDelete);
+        _pendingExportsToUpdate.AddRange(result.ToUpdate);
     }
 
     /// <summary>
     /// Checks if a CSO attribute value matches a pending export attribute change.
     /// </summary>
-    protected static bool AttributeValuesMatch(ConnectedSystemObjectAttributeValue csoValue, JIM.Models.Transactional.PendingExportAttributeValueChange pendingChange)
-    {
-        // compare based on the data type
-        if (pendingChange.StringValue != null && csoValue.StringValue != pendingChange.StringValue)
-            return false;
-
-        if (pendingChange.IntValue.HasValue && csoValue.IntValue != pendingChange.IntValue)
-            return false;
-
-        if (pendingChange.DateTimeValue.HasValue && csoValue.DateTimeValue != pendingChange.DateTimeValue)
-            return false;
-
-        if (pendingChange.ByteValue != null && !Utilities.Utilities.AreByteArraysTheSame(csoValue.ByteValue, pendingChange.ByteValue))
-            return false;
-
-        if (pendingChange.UnresolvedReferenceValue != null && csoValue.UnresolvedReferenceValue != pendingChange.UnresolvedReferenceValue)
-            return false;
-
-        return true;
-    }
+    protected bool AttributeValuesMatch(ConnectedSystemObjectAttributeValue csoValue, JIM.Models.Transactional.PendingExportAttributeValueChange pendingChange)
+        => _syncEngine.AttributeValuesMatch(csoValue, pendingChange);
 
     /// <summary>
     /// Check if a CSO has been obsoleted and delete it, applying any joined Metaverse Object changes as necessary.
@@ -890,22 +743,8 @@ public abstract class SyncTaskProcessorBase
     /// If multiple import sync rules exist for this CSO type, the first one's setting is used.
     /// Uses pre-loaded sync rules to avoid database round trips.
     /// </summary>
-    protected static InboundOutOfScopeAction DetermineInboundOutOfScopeAction(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
-    {
-        // Find import sync rule for this CSO type from the already-loaded sync rules
-        var importSyncRule = activeSyncRules.FirstOrDefault(sr =>
-            sr.Direction == SyncRuleDirection.Import &&
-            sr.Enabled &&
-            sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId);
-
-        if (importSyncRule == null)
-        {
-            // No import sync rule found - default to Disconnect
-            return InboundOutOfScopeAction.Disconnect;
-        }
-
-        return importSyncRule.InboundOutOfScopeAction;
-    }
+    protected InboundOutOfScopeAction DetermineInboundOutOfScopeAction(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
+        => _syncEngine.DetermineOutOfScopeAction(connectedSystemObject, activeSyncRules);
 
     /// <summary>
     /// Processes the MVO deletion rule when a connector is disconnected.
@@ -921,67 +760,27 @@ public abstract class SyncTaskProcessorBase
     /// <param name="remainingCsoCount">The count of remaining CSOs still joined to the MVO.</param>
     protected async Task<MvoDeletionFate> ProcessMvoDeletionRuleAsync(MetaverseObject mvo, int disconnectingSystemId, int remainingCsoCount)
     {
-        if (mvo.Type == null)
-        {
-            Log.Warning($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} has no Type set. Cannot determine deletion rule.");
-            return MvoDeletionFate.NotDeleted;
-        }
+        var decision = _syncEngine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId, remainingCsoCount);
+        return await ApplyMvoDeletionDecisionAsync(mvo, decision);
+    }
 
-        // Only apply to Projected MVOs (Internal MVOs like admin accounts are protected)
-        if (mvo.Origin == MetaverseObjectOrigin.Internal)
+    /// <summary>
+    /// Applies an MVO deletion decision from the engine — handles I/O (queuing immediate deletion or persisting grace period).
+    /// </summary>
+    private async Task<MvoDeletionFate> ApplyMvoDeletionDecisionAsync(MetaverseObject mvo, MvoDeletionDecision decision)
+    {
+        switch (decision.Fate)
         {
-            Log.Verbose($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} has Origin=Internal. Protected from automatic deletion.");
-            return MvoDeletionFate.NotDeleted;
-        }
-
-        switch (mvo.Type.DeletionRule)
-        {
-            case MetaverseObjectDeletionRule.Manual:
-                // No automatic deletion - MVO remains intact
-                Log.Verbose($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} has DeletionRule=Manual. No automatic deletion.");
+            case MvoDeletionFate.NotDeleted:
                 return MvoDeletionFate.NotDeleted;
 
-            case MetaverseObjectDeletionRule.WhenLastConnectorDisconnected:
-                // Only delete when ALL CSOs are disconnected
-                if (remainingCsoCount > 0)
-                {
-                    Log.Verbose($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} has {remainingCsoCount} remaining connector(s). Not marking for deletion yet.");
-                    return MvoDeletionFate.NotDeleted;
-                }
+            case MvoDeletionFate.DeletedImmediately:
+                return await MarkMvoForDeletionAsync(mvo, decision.Reason ?? "deletion rule triggered");
 
-                return await MarkMvoForDeletionAsync(mvo, "last connector disconnected");
-
-            case MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected:
-                // Delete when ANY authoritative source disconnects
-                var triggerIds = mvo.Type.DeletionTriggerConnectedSystemIds;
-                if (triggerIds == null || triggerIds.Count == 0)
-                {
-                    // No authoritative sources configured - fall back to last connector behaviour
-                    Log.Warning($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} has DeletionRule=WhenAuthoritativeSourceDisconnected but no DeletionTriggerConnectedSystemIds configured. " +
-                        "Falling back to WhenLastConnectorDisconnected behaviour.");
-                    if (remainingCsoCount == 0)
-                    {
-                        return await MarkMvoForDeletionAsync(mvo, "last connector disconnected (no authoritative sources configured)");
-                    }
-                    return MvoDeletionFate.NotDeleted;
-                }
-
-                // Check if the disconnecting system is an authoritative source
-                if (triggerIds.Contains(disconnectingSystemId))
-                {
-                    Log.Information($"ProcessMvoDeletionRuleAsync: Authoritative source (system ID {disconnectingSystemId}) disconnected from MVO {mvo.Id}. " +
-                        "Triggering deletion even though {RemainingCount} connector(s) remain.", remainingCsoCount);
-                    return await MarkMvoForDeletionAsync(mvo, $"authoritative source (system ID {disconnectingSystemId}) disconnected");
-                }
-                else
-                {
-                    Log.Verbose($"ProcessMvoDeletionRuleAsync: System ID {disconnectingSystemId} disconnected from MVO {mvo.Id} but is not an authoritative source. " +
-                        "Authoritative sources: [{AuthSources}]. Not marking for deletion.", string.Join(", ", triggerIds));
-                }
-                return MvoDeletionFate.NotDeleted;
+            case MvoDeletionFate.DeletionScheduled:
+                return await MarkMvoForDeletionAsync(mvo, decision.Reason ?? "deletion rule triggered");
 
             default:
-                Log.Warning($"ProcessMvoDeletionRuleAsync: Unknown DeletionRule {mvo.Type.DeletionRule} for MVO {mvo.Id}.");
                 return MvoDeletionFate.NotDeleted;
         }
     }
@@ -2605,29 +2404,22 @@ public abstract class SyncTaskProcessorBase
     /// <returns>True if projection occurred, false otherwise.</returns>
     /// <exception cref="InvalidDataException">Will be thrown if not all required properties are populated on the Sync Rule.</exception>
     /// <exception cref="NotImplementedException">Will be thrown if a Sync Rule attempts to use a Function as a source.</exception>
-    protected static bool AttemptProjection(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
+    protected bool AttemptProjection(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
-        // see if there are any sync rules for this object type where projection is enabled. first to project, wins.
-        var projectionSyncRule = activeSyncRules?.FirstOrDefault(sr =>
-            sr.ProjectToMetaverse.HasValue && sr.ProjectToMetaverse.Value &&
-            sr.ConnectedSystemObjectType.Id == connectedSystemObject.TypeId);
-
-        if (projectionSyncRule == null)
+        var decision = _syncEngine.EvaluateProjection(connectedSystemObject, activeSyncRules);
+        if (!decision.ShouldProject)
             return false;
 
-        // create the MVO using type from the Sync Rule.
+        // Apply the projection decision: create MVO and link to CSO.
         // Note: Do NOT assign Id here - let it remain Guid.Empty so that
         // ProcessMetaverseObjectChangesAsync knows to call CreateMetaverseObjectAsync.
-        // The Id will be assigned by EF when the MVO is saved to the database.
         var mvo = new MetaverseObject();
-        mvo.Type = projectionSyncRule.MetaverseObjectType;
+        mvo.Type = decision.MetaverseObjectType!;
         connectedSystemObject.MetaverseObject = mvo;
         mvo.ConnectedSystemObjects.Add(connectedSystemObject);
-        // Don't set MetaverseObjectId yet - it will be set after the MVO is persisted
         connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Projected;
         connectedSystemObject.DateJoined = DateTime.UtcNow;
 
-        // do not flow attributes at this point. let that happen separately, so we don't re-process sync rules later.
         return true;
     }
 
@@ -2865,22 +2657,10 @@ public abstract class SyncTaskProcessorBase
     /// <exception cref="NotImplementedException">Will be thrown whilst Functions have not been implemented, but are being used in the Sync Rule.</exception>
     protected void ProcessInboundAttributeFlow(ConnectedSystemObject connectedSystemObject, SyncRule syncRule, bool skipReferenceAttributes = false, bool onlyReferenceAttributes = false, bool isFinalReferencePass = false)
     {
-        if (connectedSystemObject.MetaverseObject == null)
-        {
-            Log.Error($"AssignMetaverseObjectAttributeValues: CSO ({connectedSystemObject}) has no MVO!");
-            return;
-        }
-
         if (_objectTypes == null)
             throw new MissingMemberException("_objectTypes is null!");
 
-        foreach (var syncRuleMapping in syncRule.AttributeFlowRules)
-        {
-            if (syncRuleMapping.TargetMetaverseAttribute == null)
-                throw new InvalidDataException("SyncRuleMapping.TargetMetaverseAttribute must not be null.");
-
-            SyncRuleMappingProcessor.Process(connectedSystemObject, syncRuleMapping, _objectTypes, _expressionEvaluator, skipReferenceAttributes, onlyReferenceAttributes, isFinalReferencePass, connectedSystemObject.ConnectedSystemId);
-        }
+        _syncEngine.FlowInboundAttributes(connectedSystemObject, syncRule, _objectTypes, _expressionEvaluator, skipReferenceAttributes, onlyReferenceAttributes, isFinalReferencePass);
     }
 
     /// <summary>
@@ -2889,34 +2669,8 @@ public abstract class SyncTaskProcessorBase
     /// and removes values listed in PendingAttributeValueRemovals.
     /// </summary>
     /// <param name="mvo">The Metaverse Object to apply pending changes to.</param>
-    protected static void ApplyPendingMetaverseObjectAttributeChanges(MetaverseObject mvo)
-    {
-        var addCount = mvo.PendingAttributeValueAdditions.Count;
-        var removeCount = mvo.PendingAttributeValueRemovals.Count;
-
-        // If there are no pending changes, nothing to do
-        if (addCount == 0 && removeCount == 0)
-            return;
-
-        // Apply removals first
-        foreach (var removal in mvo.PendingAttributeValueRemovals)
-        {
-            mvo.AttributeValues.Remove(removal);
-        }
-
-        // Apply additions
-        foreach (var addition in mvo.PendingAttributeValueAdditions)
-        {
-            mvo.AttributeValues.Add(addition);
-        }
-
-        // Clear the pending lists now that changes have been applied
-        mvo.PendingAttributeValueRemovals.Clear();
-        mvo.PendingAttributeValueAdditions.Clear();
-
-        Log.Verbose("ApplyPendingMetaverseObjectAttributeChanges: Applied {AddCount} additions and {RemoveCount} removals to MVO {MvoId}",
-            addCount, removeCount, mvo.Id);
-    }
+    protected void ApplyPendingMetaverseObjectAttributeChanges(MetaverseObject mvo)
+        => _syncEngine.ApplyPendingAttributeChanges(mvo);
 
     /// <summary>
     /// Gets the list of import sync rules for which the CSO is in scope.
