@@ -107,92 +107,117 @@ public partial class SyncRepository
     }
 
     /// <summary>
-    /// Inserts CSO rows on an independent NpgsqlConnection (for parallel writes).
+    /// Inserts CSO rows on an independent NpgsqlConnection using COPY binary import.
+    /// COPY binary streams data directly without SQL parsing or parameter limits,
+    /// providing significantly higher throughput than parameterised INSERT.
     /// </summary>
     private static async Task BulkInsertCsosOnConnectionAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         IReadOnlyList<ConnectedSystemObject> objects)
     {
-        const int columnsPerRow = 11;
-        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
+        await using var writer = await connection.BeginBinaryImportAsync(
+            """
+            COPY "ConnectedSystemObjects" (
+                "Id", "ConnectedSystemId", "Created", "LastUpdated", "TypeId",
+                "ExternalIdAttributeId", "SecondaryExternalIdAttributeId",
+                "Status", "MetaverseObjectId", "JoinType", "DateJoined"
+            ) FROM STDIN (FORMAT binary)
+            """);
 
-        foreach (var chunk in BulkSqlHelpers.ChunkList(objects.ToList(), chunkSize))
+        foreach (var cso in objects)
         {
-            var sql = new StringBuilder();
-            sql.Append(@"INSERT INTO ""ConnectedSystemObjects"" (""Id"", ""ConnectedSystemId"", ""Created"", ""LastUpdated"", ""TypeId"", ""ExternalIdAttributeId"", ""SecondaryExternalIdAttributeId"", ""Status"", ""MetaverseObjectId"", ""JoinType"", ""DateJoined"") VALUES ");
-
-            var parameters = new List<NpgsqlParameter>();
-            for (var i = 0; i < chunk.Count; i++)
-            {
-                if (i > 0) sql.Append(", ");
-                var offset = i * columnsPerRow;
-                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8}, @p{offset + 9}, @p{offset + 10})");
-
-                var cso = chunk[i];
-                parameters.Add(new NpgsqlParameter($"p{offset}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = cso.Id });
-                parameters.Add(new NpgsqlParameter($"p{offset + 1}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = cso.ConnectedSystemId });
-                parameters.Add(new NpgsqlParameter($"p{offset + 2}", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = cso.Created });
-                parameters.Add(new NpgsqlParameter($"p{offset + 3}", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = (object?)cso.LastUpdated ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 4}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = cso.TypeId });
-                parameters.Add(new NpgsqlParameter($"p{offset + 5}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = cso.ExternalIdAttributeId });
-                parameters.Add(new NpgsqlParameter($"p{offset + 6}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)cso.SecondaryExternalIdAttributeId ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 7}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)cso.Status });
-                parameters.Add(new NpgsqlParameter($"p{offset + 8}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)cso.MetaverseObjectId ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 9}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)cso.JoinType });
-                parameters.Add(new NpgsqlParameter($"p{offset + 10}", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = (object?)cso.DateJoined ?? DBNull.Value });
-            }
-
-            await using var command = new NpgsqlCommand(sql.ToString(), connection, transaction);
-            command.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
-            command.Parameters.AddRange(parameters.ToArray());
-            await command.ExecuteNonQueryAsync();
+            await writer.StartRowAsync();
+            await writer.WriteAsync(cso.Id, NpgsqlTypes.NpgsqlDbType.Uuid);
+            await writer.WriteAsync(cso.ConnectedSystemId, NpgsqlTypes.NpgsqlDbType.Integer);
+            await writer.WriteAsync(cso.Created, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+            if (cso.LastUpdated.HasValue)
+                await writer.WriteAsync(cso.LastUpdated.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+            else
+                await writer.WriteNullAsync();
+            await writer.WriteAsync(cso.TypeId, NpgsqlTypes.NpgsqlDbType.Integer);
+            await writer.WriteAsync(cso.ExternalIdAttributeId, NpgsqlTypes.NpgsqlDbType.Integer);
+            if (cso.SecondaryExternalIdAttributeId.HasValue)
+                await writer.WriteAsync(cso.SecondaryExternalIdAttributeId.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            await writer.WriteAsync((int)cso.Status, NpgsqlTypes.NpgsqlDbType.Integer);
+            if (cso.MetaverseObjectId.HasValue)
+                await writer.WriteAsync(cso.MetaverseObjectId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
+            await writer.WriteAsync((int)cso.JoinType, NpgsqlTypes.NpgsqlDbType.Integer);
+            if (cso.DateJoined.HasValue)
+                await writer.WriteAsync(cso.DateJoined.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+            else
+                await writer.WriteNullAsync();
         }
+
+        await writer.CompleteAsync();
     }
 
     /// <summary>
-    /// Inserts CSO attribute value rows on an independent NpgsqlConnection (for parallel writes).
+    /// Inserts CSO attribute value rows on an independent NpgsqlConnection using COPY binary import.
     /// </summary>
     private static async Task BulkInsertCsoAttributeValuesOnConnectionAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)> attributeValues)
     {
-        const int columnsPerRow = 12;
-        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
+        await using var writer = await connection.BeginBinaryImportAsync(
+            """
+            COPY "ConnectedSystemObjectAttributeValues" (
+                "Id", "ConnectedSystemObjectId", "AttributeId", "StringValue",
+                "DateTimeValue", "IntValue", "LongValue", "ByteValue",
+                "GuidValue", "BoolValue", "ReferenceValueId", "UnresolvedReferenceValue"
+            ) FROM STDIN (FORMAT binary)
+            """);
 
-        foreach (var chunk in BulkSqlHelpers.ChunkList(attributeValues, chunkSize))
+        foreach (var (csoId, av) in attributeValues)
         {
-            var sql = new StringBuilder();
-            sql.Append(@"INSERT INTO ""ConnectedSystemObjectAttributeValues"" (""Id"", ""ConnectedSystemObjectId"", ""AttributeId"", ""StringValue"", ""DateTimeValue"", ""IntValue"", ""LongValue"", ""ByteValue"", ""GuidValue"", ""BoolValue"", ""ReferenceValueId"", ""UnresolvedReferenceValue"") VALUES ");
-
-            var parameters = new List<NpgsqlParameter>();
-            for (var i = 0; i < chunk.Count; i++)
-            {
-                if (i > 0) sql.Append(", ");
-                var offset = i * columnsPerRow;
-                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8}, @p{offset + 9}, @p{offset + 10}, @p{offset + 11})");
-
-                var (csoId, av) = chunk[i];
-                parameters.Add(new NpgsqlParameter($"p{offset}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = av.Id });
-                parameters.Add(new NpgsqlParameter($"p{offset + 1}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = csoId });
-                parameters.Add(new NpgsqlParameter($"p{offset + 2}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = av.AttributeId });
-                parameters.Add(new NpgsqlParameter($"p{offset + 3}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)av.StringValue ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 4}", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = (object?)av.DateTimeValue ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 5}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)av.IntValue ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 6}", NpgsqlTypes.NpgsqlDbType.Bigint) { Value = (object?)av.LongValue ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 7}", NpgsqlTypes.NpgsqlDbType.Bytea) { Value = (object?)av.ByteValue ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 8}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)av.GuidValue ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 9}", NpgsqlTypes.NpgsqlDbType.Boolean) { Value = (object?)av.BoolValue ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 10}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)av.ReferenceValueId ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 11}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)av.UnresolvedReferenceValue ?? DBNull.Value });
-            }
-
-            await using var command = new NpgsqlCommand(sql.ToString(), connection, transaction);
-            command.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
-            command.Parameters.AddRange(parameters.ToArray());
-            await command.ExecuteNonQueryAsync();
+            await writer.StartRowAsync();
+            await writer.WriteAsync(av.Id, NpgsqlTypes.NpgsqlDbType.Uuid);
+            await writer.WriteAsync(csoId, NpgsqlTypes.NpgsqlDbType.Uuid);
+            await writer.WriteAsync(av.AttributeId, NpgsqlTypes.NpgsqlDbType.Integer);
+            if (av.StringValue is not null)
+                await writer.WriteAsync(av.StringValue, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            if (av.DateTimeValue.HasValue)
+                await writer.WriteAsync(av.DateTimeValue.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+            else
+                await writer.WriteNullAsync();
+            if (av.IntValue.HasValue)
+                await writer.WriteAsync(av.IntValue.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            if (av.LongValue.HasValue)
+                await writer.WriteAsync(av.LongValue.Value, NpgsqlTypes.NpgsqlDbType.Bigint);
+            else
+                await writer.WriteNullAsync();
+            if (av.ByteValue is not null)
+                await writer.WriteAsync(av.ByteValue, NpgsqlTypes.NpgsqlDbType.Bytea);
+            else
+                await writer.WriteNullAsync();
+            if (av.GuidValue.HasValue)
+                await writer.WriteAsync(av.GuidValue.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
+            if (av.BoolValue.HasValue)
+                await writer.WriteAsync(av.BoolValue.Value, NpgsqlTypes.NpgsqlDbType.Boolean);
+            else
+                await writer.WriteNullAsync();
+            if (av.ReferenceValueId.HasValue)
+                await writer.WriteAsync(av.ReferenceValueId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
+            if (av.UnresolvedReferenceValue is not null)
+                await writer.WriteAsync(av.UnresolvedReferenceValue, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
         }
+
+        await writer.CompleteAsync();
     }
 
     /// <summary>
