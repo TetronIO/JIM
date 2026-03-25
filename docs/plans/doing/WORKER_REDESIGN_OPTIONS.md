@@ -1,8 +1,8 @@
 # JIM.Worker Redesign - High-Level Design Options
 
-- **Status:** Doing (Phases 1a–1b + Phase 8 complete — see [Progress Since Original Analysis](#progress-since-original-analysis))
+- **Status:** Doing (Phases 1a–1c + Phase 8 complete — Phase 10 remaining. See [Progress Since Original Analysis](#progress-since-original-analysis))
 - **Created**: 2026-02-23
-- **Updated**: 2026-03-23
+- **Updated**: 2026-03-25
 - **Author**: Architecture Review
 
 ## Context
@@ -115,14 +115,14 @@ JIM.Worker is the synchronisation engine - the beating heart of JIM. It processe
 
 - **GitHub Issue:** [#394](https://github.com/TetronIO/JIM/issues/394)
 
-> **Status: ~90% complete.** Data boundary (`ISyncRepository`), DI, test migration, EF fallback removal, `SyncRepository` wiring, and hot-path migration are all done. Two items remain.
+> **Status: ~95% complete.** Data boundary (`ISyncRepository`), DI, test migration, EF fallback removal, `SyncRepository` wiring, hot-path migration, and ISyncEngine extraction are all done. One item remains: intra-phase parallelism (Phase 10).
 
 ### What's Left
 
 | # | Item | Scope | Value | Status |
 |---|------|-------|-------|--------|
-| 1 | **ISyncEngine extraction** (Phase 1c) | Extract ~3,970 LOC of pure join/project/attribute-flow logic from `SyncTaskProcessorBase` + `SyncRuleMappingProcessor` into a stateless domain engine with zero I/O dependencies. Fully unit-testable with plain C# objects — no mocking, no database. | **Provability** — the single highest-value change remaining. Makes the core sync logic independently testable and reasoned about. | Not started |
-| 2 | **Intra-phase parallelism** (Phase 10) | Import: multiple pages concurrently. Sync: CSO batches in parallel (engine is stateless per-CSO). Export: extend existing parallelism with proper DI scopes. Multi-connection write parallelism for PostgreSQL (one core per connection). | **Performance** — the primary lever for utilising multiple CPU cores during sync. Required for 2-5x improvement target. | Not started |
+| 1 | ~~**ISyncEngine extraction** (Phase 1c)~~ | ~~Extract ~2,040 LOC of pure domain logic into a stateless engine with zero I/O.~~ | ~~**Provability** — makes core sync logic independently testable with plain objects.~~ | **Done** |
+| 2 | **Intra-phase parallelism** (Phase 10) | Import page concurrency, sync batch parallelism, export DI scopes, multi-connection write parallelism for PostgreSQL. | **Performance** — primary lever for utilising multiple CPU cores during sync. Required for 2-5x improvement target. | Not started |
 
 **Everything else is done:**
 - ISyncRepository interface (~80 methods) — done
@@ -135,6 +135,154 @@ JIM.Worker is the synchronisation engine - the beating heart of JIM. It processe
 - Hot-path bulk SQL migrated into SyncRepository partial classes — done
 - Dead wrappers/interfaces cleaned from shared repos (-1,200+ lines) — done
 - Shared helpers deduplicated (BulkSqlHelpers.cs) — done
+
+### Phase 1c Implementation Plan
+
+#### Revised Scope (from code analysis, March 2026)
+
+The original estimate of ~3,970 LOC assumed the entire `SyncTaskProcessorBase` (3,155 LOC) + `SyncRuleMappingProcessor` (821 LOC) would move. After detailed method-by-method classification, the actual breakdown is:
+
+| Source | Pure domain (moves to engine) | Orchestration/I/O (stays in processor) |
+|--------|-------------------------------|---------------------------------------|
+| `SyncRuleMappingProcessor` | ~821 LOC (entire file, already static) | 0 |
+| `SyncTaskProcessorBase` pure methods | ~1,220 LOC | ~1,935 LOC |
+| New result types + interface | ~200 LOC (new) | -- |
+| **Total** | **~2,240 LOC** | ~1,935 LOC stays |
+
+#### The Natural Seam
+
+The boundary between engine and orchestrator is: **"deciding what changes should happen to in-memory objects"** vs **"persisting those changes and wiring activity/outcome tracking"**.
+
+**Engine decides (no I/O, no async, plain objects in, decisions out):**
+- Scope evaluation: is this CSO in scope for each import sync rule?
+- Join evaluation: given candidates and existing join count, should this CSO join an MVO?
+- Projection: should a new MVO be created for this CSO?
+- Inbound attribute flow: what MVO attribute values change?
+- Pending export confirmation: does the CSO's current state confirm a pending export?
+- Obsolete CSO handling: disconnect, recall attributes, determine MVO deletion fate
+- Drift detection and corrective export evaluation
+- MVO deletion rule evaluation
+
+**Orchestrator does (I/O, RPEI wiring, batching):**
+- Loading CSO pages from the database
+- Querying for MVO join candidates (DB)
+- Querying for existing join counts (DB)
+- Loading CSO attributes for scoping (DB)
+- Creating RPEIs and wiring sync outcome trees
+- Batching MVO creates/updates, PE creates/deletes
+- Cross-page reference resolution (DB reload)
+- Progress reporting, cancellation, diagnostics spans
+- Change history recording
+
+#### The Key Challenge: I/O Trapped Inside Pure Logic
+
+Several methods in `SyncTaskProcessorBase` that contain pure decision logic also have I/O calls embedded within them:
+
+| Mixed method | Embedded I/O | Solution |
+|-------------|-------------|----------|
+| `AttemptJoinAsync` | `FindMatchingMvoForJoinAsync` (DB query for candidates), `GetConnectedSystemObjectCountByMvoAsync` (DB) | Orchestrator pre-loads join candidates and existing join counts, passes to engine |
+| `GetInScopeImportRulesAsync` | `GetConnectedSystemObjectAsync` (loads CSO attributes for scoping) | Orchestrator ensures CSO attributes are loaded before calling engine |
+| `ProcessObsoleteConnectedSystemObjectAsync` | `GetConnectedSystemObjectCountByMetaverseObjectIdAsync` (DB) | Orchestrator pre-loads remaining CSO counts, passes to engine |
+| `HandleCsoOutOfScopeAsync` | Same as above + `UpdateMetaverseObjectAsync` | Engine returns decision; orchestrator persists |
+| `ProcessMvoDeletionRuleAsync` | `MarkMvoForDeletionAsync` -> `UpdateMetaverseObjectAsync` | Engine returns `MvoDeletionDecision`; orchestrator applies |
+| `EvaluateOutboundExportsAsync` | `ISyncServer` methods that internally query DB | Engine receives pre-loaded export evaluation cache |
+
+**Pattern: pre-load and pass-in.** The orchestrator loads all data the engine needs upfront and passes it as parameters. The engine returns decisions; the orchestrator persists them.
+
+#### Proposed ISyncEngine Interface
+
+```csharp
+public interface ISyncEngine
+{
+    // Scope
+    ScopeDecision DetermineScope(
+        ConnectedSystemObject cso,
+        IReadOnlyList<SyncRule> importSyncRules);
+
+    // Join
+    JoinDecision EvaluateJoin(
+        ConnectedSystemObject cso,
+        IReadOnlyList<SyncRule> syncRules,
+        IReadOnlyList<ObjectMatchingRule> matchingRules,
+        MetaverseObject? joinCandidate,
+        int existingJoinCount);
+
+    // Projection
+    ProjectionDecision EvaluateProjection(
+        ConnectedSystemObject cso,
+        IReadOnlyList<SyncRule> syncRules);
+
+    // Inbound attribute flow
+    AttributeFlowResult FlowInboundAttributes(
+        ConnectedSystemObject cso,
+        MetaverseObject mvo,
+        SyncRule syncRule,
+        IReadOnlyList<ConnectedSystemObjectType> objectTypes,
+        bool skipReferenceAttributes);
+
+    // Pending export confirmation
+    PendingExportConfirmationResult EvaluatePendingExportConfirmation(
+        ConnectedSystemObject cso,
+        Dictionary<Guid, PendingExport> pendingExports);
+
+    // Obsolete CSO handling
+    ObsoleteDecision EvaluateObsoleteCso(
+        ConnectedSystemObject cso,
+        MetaverseObject? mvo,
+        IReadOnlyList<SyncRule> syncRules,
+        int remainingCsoCount);
+
+    // MVO deletion rule
+    MvoDeletionDecision EvaluateMvoDeletionRule(
+        MetaverseObject mvo,
+        int disconnectingConnectedSystemId,
+        int remainingCsoCount);
+
+    // Apply pending attribute changes (pure mutation)
+    void ApplyPendingAttributeChanges(MetaverseObject mvo);
+
+    // Out-of-scope action
+    OutOfScopeAction DetermineOutOfScopeAction(
+        ConnectedSystemObject cso,
+        IReadOnlyList<SyncRule> syncRules);
+}
+```
+
+Each method is synchronous (no `Task`), takes plain objects, returns decision records. The orchestrator interprets decisions and handles I/O.
+
+#### Implementation Phases
+
+**Phase 1c-1: Interface + result types** — ✅ DONE
+- `ISyncEngine` interface in `src/JIM.Application/Interfaces/` (9 methods, all synchronous)
+- Decision result types in `src/JIM.Models/Sync/`: `ScopeDecision`, `JoinDecision`, `ProjectionDecision`, `MvoDeletionDecision`, `ObsoleteDecision`, `PendingExportConfirmationResult`
+- `MvoDeletionFate` enum moved from `JIM.Worker` to `JIM.Models/Sync/SyncEnums.cs`
+- Scoping evaluation intentionally omitted from ISyncEngine — already pure in `ISyncServer/ScopingEvaluationServer`
+
+**Phase 1c-2: Extract SyncEngine implementation** — ✅ DONE
+- `SyncEngine` class in `src/JIM.Application/Servers/SyncEngine.cs` (partial class)
+- `SyncEngine.AttributeFlow.cs` — `SyncRuleMappingProcessor` logic moved into engine as internal methods (Option 1)
+- Pure methods extracted: `EvaluateJoin`, `EvaluateProjection`, `EvaluateMvoDeletionRule`, `EvaluatePendingExportConfirmation`, `ApplyPendingAttributeChanges`, `DetermineOutOfScopeAction`, `AttributeValuesMatch`, `FlowInboundAttributes`
+- `JIM.Application.csproj` gained `JIM.Utilities` project reference for `AreByteArraysTheSame`
+
+**Phase 1c-3: Refactor processors to use ISyncEngine** — ✅ DONE
+- `ISyncEngine` injected via constructor into `SyncTaskProcessorBase` → `SyncFullSyncTaskProcessor` / `SyncDeltaSyncTaskProcessor`
+- 7 processor methods now delegate to `_syncEngine`:
+  - `ProcessInboundAttributeFlow` → `_syncEngine.FlowInboundAttributes`
+  - `ApplyPendingMetaverseObjectAttributeChanges` → `_syncEngine.ApplyPendingAttributeChanges`
+  - `AttemptProjection` → `_syncEngine.EvaluateProjection` + orchestrator applies decision
+  - `ProcessPendingExport` → `_syncEngine.EvaluatePendingExportConfirmation` + orchestrator batches
+  - `ProcessMvoDeletionRuleAsync` → `_syncEngine.EvaluateMvoDeletionRule` + orchestrator persists
+  - `DetermineInboundOutOfScopeAction` → `_syncEngine.DetermineOutOfScopeAction`
+  - `AttributeValuesMatch` → `_syncEngine.AttributeValuesMatch`
+- `Worker.cs` creates `SyncEngine()` and passes to processors
+- 85 test constructor call sites updated across 5 test files
+- All 2,195 existing tests pass at each step
+
+**Phase 1c-4: Pure unit tests for SyncEngine** — ✅ DONE
+- 39 pure unit tests in `test/JIM.Worker.Tests/SyncEngineTests/`
+- No mocking, no database, no EF Core — plain C# objects only
+- Coverage: join evaluation (4 tests), projection (4 tests), deletion rules (11 tests), attribute flow (5 tests), out-of-scope action (5 tests), pending export confirmation (10 tests)
+- Total tests: 2,234 (39 new + 2,195 existing)
 
 ### Philosophy
 
@@ -290,7 +438,7 @@ Keep the current architecture but surgically extract the sync processing logic i
 ### Estimates
 
 - **Completed (#338)**: Bulk SQL persistence for CSOs, pending exports, RPEIs; CSO lookup cache; lightweight MVO matching; `AsSplitQuery` elimination. Measured ~34% FullSync improvement, ~37% faster CSO processing
-- **Remaining scope**: ISyncEngine extraction (~3,970 LOC to refactor, Phase 1c), intra-phase parallelism (Phase 10)
+- **Remaining scope**: intra-phase parallelism (Phase 10)
 - **Risk**: Medium - mechanical refactoring with clear seams; high test coverage before/after
 - **Breaking Changes**: None externally; internal restructuring only
 
@@ -618,7 +766,7 @@ docker compose / Kubernetes:
 | Code disruption | ~30% of worker | ~70% of worker | ~90% of worker |
 | Air-gap compatible | Yes | Yes | Yes (Redis self-hosted) |
 | Time to initial PR | Incremental | Needs critical mass | Needs critical mass |
-| **Progress to date** | ~90% (data boundary + DI + SyncRepository + hot-path migration done; engine extraction remaining) | 0% | 0% |
+| **Progress to date** | ~95% (data boundary + DI + SyncRepository + hot-path migration + ISyncEngine done; parallelism remaining) | 0% | 0% |
 
 ### Recommendation Matrix by Organisation Size
 
@@ -694,54 +842,30 @@ Since the constraint is architectural (one core per connection for writes), the 
 
 Regardless of option chosen, the sync engine (join/project/attribute-flow/export-evaluation logic) must be extracted as a pure domain service with **zero I/O dependencies**. This is the single highest-value change for provability.
 
-```csharp
-// Input: plain objects
-public interface ISyncEngine
-{
-    SyncDecision ProcessCso(
-        ConnectedSystemObject cso,
-        IReadOnlyList<SyncRule> applicableSyncRules,
-        MetaverseObject? existingMvo,
-        IReadOnlyList<MetaverseObject> joinCandidates);
+> **March 2026 update:** After detailed method-by-method analysis, the original coarse two-method interface (`ProcessCso`, `EvaluateExports`) has been replaced with a finer-grained interface that mirrors the actual decision steps in the sync pipeline. The revised interface is in the [Phase 1c Implementation Plan](#phase-1c-implementation-plan) above. Key changes: separate methods for scope/join/project/flow/obsolete/export-confirmation, each taking pre-loaded data and returning specific decision types. All methods are synchronous (no `Task`).
 
-    ExportDecision EvaluateExports(
-        MetaverseObject mvo,
-        IReadOnlyList<MetaverseObjectAttributeValue> changedAttributes,
-        IReadOnlyList<SyncRule> exportRules,
-        IReadOnlyDictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject> targetCsos);
-}
-
-// Output: decisions, not side effects
-public record SyncDecision(
-    SyncAction Action,           // Join, Project, AttributeFlow, Disconnect, NoChange
-    Guid? TargetMvoId,           // MVO to join to (if joining)
-    MetaverseObject? NewMvo,     // MVO to create (if projecting)
-    List<AttributeFlowResult> AttributeFlows,
-    List<ExportDecision> ExportDecisions);
-```
-
-This makes the entire sync engine testable with:
+This makes the entire sync engine testable with plain objects:
 ```csharp
 [Test]
-public void ProcessCso_WithMatchingJoinRule_ReturnsJoinDecision()
+public void EvaluateJoin_WithMatchingCandidate_ReturnsJoinToMvo()
 {
     var engine = new SyncEngine();
     var cso = CreateTestCso(employeeId: "EMP001");
     var mvo = CreateTestMvo(employeeId: "EMP001");
-    var rules = CreateJoinRule(matchOn: "EmployeeId");
+    var rules = CreateJoinRules(matchOn: "EmployeeId");
 
-    var decision = engine.ProcessCso(cso, rules, existingMvo: null, joinCandidates: [mvo]);
+    var decision = engine.EvaluateJoin(cso, rules, matchingRules, joinCandidate: mvo, existingJoinCount: 0);
 
-    Assert.That(decision.Action, Is.EqualTo(SyncAction.Join));
+    Assert.That(decision.Action, Is.EqualTo(JoinAction.JoinToExisting));
     Assert.That(decision.TargetMvoId, Is.EqualTo(mvo.Id));
 }
 ```
 
-No database. No mocking. No flaky tests. Just logic.
+No database. No mocking. No flaky tests. Just logic. See [Phase 1c Implementation Plan](#phase-1c-implementation-plan) for the full revised interface design.
 
 ### D2: Persistence Must Be Batch-Oriented
 
-> **Implemented by #338 + #394 + #428 + Phase 8.** The flush mechanism bypasses EF change tracking for all hot-path writes. `ISyncRepository` is formalised, in-memory `SyncRepository` for tests is complete (~1,276 tests migrated), all try/catch EF fallback blocks deleted (-642 lines). `PostgresData.SyncRepository` owns Worker-only bulk SQL directly via partial classes; dual-called methods delegate to shared EF repos. The ISyncEngine extraction has not been started (Phase 1c).
+> **Implemented by #338 + #394 + #428 + Phase 8.** The flush mechanism bypasses EF change tracking for all hot-path writes. `ISyncRepository` is formalised, in-memory `SyncRepository` for tests is complete (~1,276 tests migrated), all try/catch EF fallback blocks deleted (-642 lines). `PostgresData.SyncRepository` owns Worker-only bulk SQL directly via partial classes; dual-called methods delegate to shared EF repos. The ISyncEngine extraction is complete (Phase 1c) — 9 synchronous methods, 39 pure unit tests.
 
 All options should use batch persistence. The current pattern of accumulating changes and flushing at page boundaries is correct. But the flush mechanism needs to bypass EF change tracking:
 
@@ -799,7 +923,7 @@ However, **Option A is the pragmatic starting point** if the team wants to de-ri
 - **Phase 1a** (Option A - persistence): Replace EF Core on hot paths with raw SQL bulk operations. **DONE (#338)** — ~34% FullSync improvement measured.
 - **Phase 1b** (Option A - data boundary + DI): Formalise `ISyncRepository` interface. Build in-memory `SyncRepository` for tests. Migrate all tests. Eliminate ~32 try/catch fallback blocks. Introduce DI in Worker and Scheduler. Wire `PostgresData.SyncRepository` into all apps. **DONE (#394 Phases 1-8, #422, #424, #425, #428).**
 - **Phase 8** (Option A - hot-path migration): Migrate Worker-only bulk SQL implementations from shared EF repositories into `PostgresData.SyncRepository`. **DONE.** 12 public methods + 11 private helpers moved into partial class files. Shared helpers deduplicated into `BulkSqlHelpers.cs`. Dead wrappers and interface members cleaned up from `ActivityServer`, `ConnectedSystemServer`, `IActivityRepository`, `IConnectedSystemRepository`. Net -1,200+ lines from shared repos.
-- **Phase 1c** (Option A - engine extraction): Extract ISyncEngine as a pure domain service. **NOT STARTED** — this is the remaining high-value work for provability.
+- **Phase 1c** (Option A - engine extraction): Extract ISyncEngine as a pure domain service. **DONE.** 9 synchronous methods, zero I/O. SyncRuleMappingProcessor (821 LOC) absorbed. 7 processor methods delegate to engine. 39 new pure unit tests.
 - **Phase 2** (Option B): Rewire orchestration to use Channels pipeline. Ship and validate.
 - **Phase 3** (Option C, if needed): Add Redis message bus between pipeline stages for horizontal scaling.
 
@@ -831,7 +955,7 @@ A 5-phase surgical optimisation programme was completed in February 2026, replac
 3. Raw SQL modifying rows still tracked in EF memory causing `DbUpdateConcurrencyException` — fixed with `ClearChangeTracker()` after MVO deletion pages
 
 **What was NOT delivered (remains for Phases 1b/1c):**
-- ~~ISyncEngine extraction (pure domain logic, no I/O)~~ — remains for Phase 1c
+- ~~ISyncEngine extraction (pure domain logic, no I/O)~~ — **done** (Phase 1c). 9 methods, 39 pure tests, SyncRuleMappingProcessor absorbed
 - ~~Formal `ISyncRepository` interface~~ — **done** (#394 Phase 1)
 - ~~In-memory `SyncRepository` for tests~~ — **done** (#394 Phase 3, 86 tests)
 - ~~Test migration from mocked DbContext to InMemoryData~~ — **done** (#394 Phase 7b, ~1,276 tests)

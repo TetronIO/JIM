@@ -304,7 +304,8 @@ public class Worker : BackgroundService
                                                         }
                                                         case ConnectedSystemRunType.FullSynchronisation:
                                                         {
-                                                            var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(syncServer, syncRepo, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource);
+                                                            var syncEngine = new JIM.Application.Servers.SyncEngine();
+                                                            var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(syncEngine, syncServer, syncRepo, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource);
                                                             await syncFullSyncTaskProcessor.PerformFullSyncAsync();
                                                             break;
                                                         }
@@ -320,7 +321,8 @@ public class Worker : BackgroundService
                                                         }
                                                         case ConnectedSystemRunType.DeltaSynchronisation:
                                                         {
-                                                            var syncDeltaSyncTaskProcessor = new SyncDeltaSyncTaskProcessor(syncServer, syncRepo, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource);
+                                                            var syncEngine = new JIM.Application.Servers.SyncEngine();
+                                                            var syncDeltaSyncTaskProcessor = new SyncDeltaSyncTaskProcessor(syncEngine, syncServer, syncRepo, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource);
                                                             await syncDeltaSyncTaskProcessor.PerformDeltaSyncAsync();
                                                             break;
                                                         }

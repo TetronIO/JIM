@@ -264,7 +264,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         // --- Step 2: Full Sync on HR source — projects MVO, evaluates export ---
         var hrFullSyncProfile = await CreateRunProfileAsync(hrSystem.Id, "HR Full Sync", ConnectedSystemRunType.FullSynchronisation);
         var hrFullSyncActivity = await CreateActivityAsync(hrSystem.Id, hrFullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
-        await new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,hrSystem, hrFullSyncProfile, hrFullSyncActivity, new CancellationTokenSource())
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo,hrSystem, hrFullSyncProfile, hrFullSyncActivity, new CancellationTokenSource())
             .PerformFullSyncAsync();
 
         // Verify MVO was created with HR attributes
@@ -328,7 +328,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         trainingSystem = await ReloadEntityAsync(trainingSystem);
         var trainingFullSyncActivity = await CreateActivityAsync(
             trainingSystem.Id, trainingFullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
-        await new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,trainingSystem, trainingFullSyncProfile, trainingFullSyncActivity, new CancellationTokenSource())
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo,trainingSystem, trainingFullSyncProfile, trainingFullSyncActivity, new CancellationTokenSource())
             .PerformFullSyncAsync();
 
         // Verify Training CSO joined to the same MVO
@@ -369,7 +369,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         trainingSystem = await ReloadEntityAsync(trainingSystem);
         var trainingDeltaSyncActivity = await CreateActivityAsync(
             trainingSystem.Id, trainingDeltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
-        await new SyncDeltaSyncTaskProcessor(new SyncServer(Jim), SyncRepo,trainingSystem, trainingDeltaSyncProfile, trainingDeltaSyncActivity, new CancellationTokenSource())
+        await new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo,trainingSystem, trainingDeltaSyncProfile, trainingDeltaSyncActivity, new CancellationTokenSource())
             .PerformDeltaSyncAsync();
 
         // --- Assert: Check pending exports after Training recall ---
@@ -578,7 +578,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         // --- Step 2: Full Sync on HR source — projects MVO, evaluates export ---
         var hrFullSyncProfile = await CreateRunProfileAsync(hrSystem.Id, "HR Full Sync", ConnectedSystemRunType.FullSynchronisation);
         var hrFullSyncActivity = await CreateActivityAsync(hrSystem.Id, hrFullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
-        await new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,hrSystem, hrFullSyncProfile, hrFullSyncActivity, new CancellationTokenSource())
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo,hrSystem, hrFullSyncProfile, hrFullSyncActivity, new CancellationTokenSource())
             .PerformFullSyncAsync();
 
         // Verify MVO was created with HR attributes
@@ -613,7 +613,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         var hrDeltaSyncProfile = await CreateRunProfileAsync(hrSystem.Id, "HR Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
         hrSystem = await ReloadEntityAsync(hrSystem);
         var hrDeltaSyncActivity = await CreateActivityAsync(hrSystem.Id, hrDeltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
-        await new SyncDeltaSyncTaskProcessor(new SyncServer(Jim), SyncRepo,hrSystem, hrDeltaSyncProfile, hrDeltaSyncActivity, new CancellationTokenSource())
+        await new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo,hrSystem, hrDeltaSyncProfile, hrDeltaSyncActivity, new CancellationTokenSource())
             .PerformDeltaSyncAsync();
 
         // --- Assert: MVO attributes should be PRESERVED (not recalled) ---
@@ -794,7 +794,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         // --- Step 2: Full Sync on HR source — projects MVO ---
         var hrFullSyncProfile = await CreateRunProfileAsync(hrSystem.Id, "HR Full Sync", ConnectedSystemRunType.FullSynchronisation);
         var hrFullSyncActivity = await CreateActivityAsync(hrSystem.Id, hrFullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
-        await new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,hrSystem, hrFullSyncProfile, hrFullSyncActivity, new CancellationTokenSource())
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo,hrSystem, hrFullSyncProfile, hrFullSyncActivity, new CancellationTokenSource())
             .PerformFullSyncAsync();
 
         // Verify MVO was created
@@ -829,7 +829,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         var hrDeltaSyncProfile = await CreateRunProfileAsync(hrSystem.Id, "HR Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
         hrSystem = await ReloadEntityAsync(hrSystem);
         var hrDeltaSyncActivity = await CreateActivityAsync(hrSystem.Id, hrDeltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
-        await new SyncDeltaSyncTaskProcessor(new SyncServer(Jim), SyncRepo,hrSystem, hrDeltaSyncProfile, hrDeltaSyncActivity, new CancellationTokenSource())
+        await new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo,hrSystem, hrDeltaSyncProfile, hrDeltaSyncActivity, new CancellationTokenSource())
             .PerformDeltaSyncAsync();
 
         // Verify: Attributes PRESERVED (grace period prevents recall)
@@ -859,7 +859,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         hrSystem = await ReloadEntityAsync(hrSystem);
         var hrFullSync2Profile = await CreateRunProfileAsync(hrSystem.Id, "HR Full Sync 2", ConnectedSystemRunType.FullSynchronisation);
         var hrFullSync2Activity = await CreateActivityAsync(hrSystem.Id, hrFullSync2Profile, ConnectedSystemRunType.FullSynchronisation);
-        await new SyncFullSyncTaskProcessor(new SyncServer(Jim), SyncRepo,hrSystem, hrFullSync2Profile, hrFullSync2Activity, new CancellationTokenSource())
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo,hrSystem, hrFullSync2Profile, hrFullSync2Activity, new CancellationTokenSource())
             .PerformFullSyncAsync();
 
         // --- Assert: New CSO joined to existing MVO ---
