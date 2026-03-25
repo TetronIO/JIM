@@ -17,33 +17,6 @@ namespace JIM.Application.Servers;
 public partial class SyncEngine : ISyncEngine
 {
     /// <inheritdoc />
-    public JoinDecision EvaluateJoin(
-        ConnectedSystemObject cso,
-        MetaverseObject? joinCandidate,
-        int existingJoinCount)
-    {
-        if (joinCandidate == null)
-            return JoinDecision.NoMatch();
-
-        if (existingJoinCount > 1)
-        {
-            return JoinDecision.Failed(
-                JoinErrorType.ExistingJoin,
-                $"More than one CSO is already joined to the MVO {joinCandidate} we found that matches the matching rules. This is not good!");
-        }
-
-        if (existingJoinCount == 1)
-        {
-            return JoinDecision.Failed(
-                JoinErrorType.ExistingJoin,
-                $"Cannot join this Connected System Object to Metaverse Object ({joinCandidate}) - it already has a connector from this Connected System. " +
-                $"Check for duplicate data in your source system, or review your Object Matching Rules for uniqueness.");
-        }
-
-        return JoinDecision.Join(joinCandidate);
-    }
-
-    /// <inheritdoc />
     public ProjectionDecision EvaluateProjection(
         ConnectedSystemObject cso,
         IReadOnlyList<SyncRule> activeSyncRules)

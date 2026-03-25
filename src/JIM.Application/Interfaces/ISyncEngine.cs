@@ -14,25 +14,15 @@ namespace JIM.Application.Interfaces;
 /// The orchestrator (processor) is responsible for loading data, calling the engine,
 /// and persisting the decisions.
 ///
-/// Note: Scoping evaluation (IsCsoInScopeForImportRule) is intentionally NOT on this interface.
-/// Scoping is already pure and lives in ISyncServer/ScopingEvaluationServer. The orchestrator
-/// handles the I/O (loading CSO attributes) and delegates scoping to ISyncServer directly.
+/// Note: Two pure methods intentionally remain on ISyncServer rather than here:
+/// - IsCsoInScopeForImportRule — delegates to ScopingEvaluationServer (has its own state/dependencies)
+/// - EvaluateDrift — delegates to DriftDetectionService (has its own state/dependencies)
+/// Both are synchronous and pure, but moving them here would require SyncEngine to take
+/// constructor dependencies, breaking the stateless/zero-dependency design. The orchestrator
+/// calls them via ISyncServer directly.
 /// </summary>
 public interface ISyncEngine
 {
-    /// <summary>
-    /// Evaluates whether a CSO should join an existing MVO based on matching rules.
-    /// The orchestrator is responsible for pre-loading the join candidate and existing join count.
-    /// </summary>
-    /// <param name="cso">The CSO to evaluate for joining.</param>
-    /// <param name="joinCandidate">The MVO found by the matching engine, or null if no candidate.</param>
-    /// <param name="existingJoinCount">Number of CSOs from this connected system already joined to the candidate MVO.</param>
-    /// <returns>A decision indicating whether and how to join.</returns>
-    JoinDecision EvaluateJoin(
-        ConnectedSystemObject cso,
-        MetaverseObject? joinCandidate,
-        int existingJoinCount);
-
     /// <summary>
     /// Evaluates whether a new MVO should be projected for a CSO.
     /// Called when the CSO did not join an existing MVO.

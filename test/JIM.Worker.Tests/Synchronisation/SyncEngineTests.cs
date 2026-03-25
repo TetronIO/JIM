@@ -22,60 +22,6 @@ public class SyncEngineTests
         _engine = new SyncEngine();
     }
 
-    #region EvaluateJoin
-
-    [Test]
-    public void EvaluateJoin_NullCandidate_ReturnsNoMatchAsync()
-    {
-        var cso = CreateCso();
-        var result = _engine.EvaluateJoin(cso, joinCandidate: null, existingJoinCount: 0);
-
-        Assert.That(result.ShouldJoin, Is.False);
-        Assert.That(result.TargetMvo, Is.Null);
-        Assert.That(result.Error, Is.Null);
-    }
-
-    [Test]
-    public void EvaluateJoin_ValidCandidate_NoExistingJoin_ReturnsJoinAsync()
-    {
-        var cso = CreateCso();
-        var mvo = CreateMvo();
-
-        var result = _engine.EvaluateJoin(cso, joinCandidate: mvo, existingJoinCount: 0);
-
-        Assert.That(result.ShouldJoin, Is.True);
-        Assert.That(result.TargetMvo, Is.SameAs(mvo));
-        Assert.That(result.Error, Is.Null);
-    }
-
-    [Test]
-    public void EvaluateJoin_ExistingJoinCount1_ReturnsExistingJoinErrorAsync()
-    {
-        var cso = CreateCso();
-        var mvo = CreateMvo();
-
-        var result = _engine.EvaluateJoin(cso, joinCandidate: mvo, existingJoinCount: 1);
-
-        Assert.That(result.ShouldJoin, Is.False);
-        Assert.That(result.Error, Is.Not.Null);
-        Assert.That(result.Error!.ErrorType, Is.EqualTo(JoinErrorType.ExistingJoin));
-    }
-
-    [Test]
-    public void EvaluateJoin_ExistingJoinCountGreaterThan1_ReturnsExistingJoinErrorAsync()
-    {
-        var cso = CreateCso();
-        var mvo = CreateMvo();
-
-        var result = _engine.EvaluateJoin(cso, joinCandidate: mvo, existingJoinCount: 3);
-
-        Assert.That(result.ShouldJoin, Is.False);
-        Assert.That(result.Error, Is.Not.Null);
-        Assert.That(result.Error!.ErrorType, Is.EqualTo(JoinErrorType.ExistingJoin));
-    }
-
-    #endregion
-
     #region EvaluateProjection
 
     [Test]
