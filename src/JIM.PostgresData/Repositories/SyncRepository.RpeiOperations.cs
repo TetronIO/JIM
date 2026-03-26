@@ -3,6 +3,7 @@ using JIM.Models.Staging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
+using Serilog;
 
 namespace JIM.PostgresData.Repositories;
 
@@ -41,51 +42,108 @@ public partial class SyncRepository
         var previousTimeout = _context.Database.GetCommandTimeout();
         _context.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
 
-        // If a transaction is already active (e.g., caller opened one), reuse it.
-        // Otherwise start a new one. This prevents InvalidOperationException when
-        // FlushRpeisAsync is called during cross-page resolution where preceding
-        // operations may have left a transaction open.
-        IDbContextTransaction? transaction = null;
-        var existingTransaction = _context.Database.CurrentTransaction;
-        if (existingTransaction == null)
-            transaction = await _context.Database.BeginTransactionAsync();
+        var parallelism = ParallelBatchWriter.GetWriteParallelism();
+        var connectionString = _connectionStringForParallelWrites;
 
-        try
+        // Flatten sync outcomes upfront (before any persistence) so we can count them.
+        var allOutcomes = rpeis.SelectMany(r => FlattenSyncOutcomes(r)).ToList();
+
+        // Persist CSO change records linked to sync outcomes (PendingExportCreated snapshots)
+        // on the main EF connection — this is a small subset and needs EF AddRange.
+        var outcomeCsoChanges = allOutcomes
+            .Where(o => o.ConnectedSystemObjectChange != null)
+            .Select(o => o.ConnectedSystemObjectChange!)
+            .ToList();
+
+        // Use parallel writes for large batches; fall back to single connection for small ones.
+        var useParallel = rpeis.Count >= parallelism * 50 && connectionString != null;
+
+        if (useParallel)
         {
-            await BulkInsertRpeisRawAsync(rpeis);
+            // Step 1: Insert RPEIs in parallel (no FK dependencies on other new rows)
+            Log.Information("BulkInsertRpeisAsync: Writing {RpeiCount} RPEIs and {OutcomeCount} outcomes across {Parallelism} parallel connections",
+                rpeis.Count, allOutcomes.Count, parallelism);
 
-            // Bulk insert sync outcomes for all RPEIs (within the same transaction)
-            var allOutcomes = rpeis.SelectMany(r => FlattenSyncOutcomes(r)).ToList();
+            await ParallelBatchWriter.ExecuteAsync(
+                rpeis,
+                parallelism,
+                connectionString,
+                async (connection, partition) =>
+                {
+                    await using var tx = await connection!.BeginTransactionAsync();
+                    await BulkInsertRpeisOnConnectionAsync(connection, tx, partition.ToList());
+                    await tx.CommitAsync();
+                });
 
-            // Persist CSO change records that are linked to sync outcomes (PendingExportCreated snapshots)
-            // before inserting outcomes, so the FK references resolve correctly.
-            var outcomeCsoChanges = allOutcomes
-                .Where(o => o.ConnectedSystemObjectChange != null)
-                .Select(o => o.ConnectedSystemObjectChange!)
-                .ToList();
+            // Step 2: Persist CSO change records on main EF connection (small count, needs EF)
             if (outcomeCsoChanges.Count > 0)
             {
                 _context.AddRange(outcomeCsoChanges);
                 await _context.SaveChangesAsync();
-                // Set the FK on outcomes from the now-persisted change records
                 foreach (var outcome in allOutcomes.Where(o => o.ConnectedSystemObjectChange != null))
                     outcome.ConnectedSystemObjectChangeId = outcome.ConnectedSystemObjectChange!.Id;
             }
 
+            // Step 3: Insert sync outcomes in parallel (RPEIs and CSO changes now exist).
+            // Outcomes have a self-referencing FK (ParentSyncOutcomeId) forming a tree per RPEI.
+            // We must partition by RPEI to keep each outcome tree on one connection — otherwise
+            // a child on connection 2 may commit before its parent on connection 1, causing
+            // an FK violation.
             if (allOutcomes.Count > 0)
-                await BulkInsertSyncOutcomesRawAsync(allOutcomes);
+            {
+                var outcomesByRpei = allOutcomes
+                    .GroupBy(o => o.ActivityRunProfileExecutionItemId)
+                    .Select(g => g.ToList())
+                    .ToList();
 
-            if (transaction != null)
-                await transaction.CommitAsync();
-
-            return true; // Raw SQL used — RPEIs persisted outside EF change tracker
+                await ParallelBatchWriter.ExecuteAsync(
+                    outcomesByRpei,
+                    parallelism,
+                    connectionString,
+                    async (connection, partition) =>
+                    {
+                        var flatOutcomes = partition.SelectMany(g => g).ToList();
+                        await using var tx = await connection!.BeginTransactionAsync();
+                        await BulkInsertSyncOutcomesOnConnectionAsync(connection, tx, flatOutcomes);
+                        await tx.CommitAsync();
+                    });
+            }
         }
-        finally
+        else
         {
-            _context.Database.SetCommandTimeout(previousTimeout);
-            if (transaction != null)
-                await transaction.DisposeAsync();
+            // Small batch — single-connection path (existing behaviour)
+            IDbContextTransaction? transaction = null;
+            var existingTransaction = _context.Database.CurrentTransaction;
+            if (existingTransaction == null)
+                transaction = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                await BulkInsertRpeisRawAsync(rpeis);
+
+                if (outcomeCsoChanges.Count > 0)
+                {
+                    _context.AddRange(outcomeCsoChanges);
+                    await _context.SaveChangesAsync();
+                    foreach (var outcome in allOutcomes.Where(o => o.ConnectedSystemObjectChange != null))
+                        outcome.ConnectedSystemObjectChangeId = outcome.ConnectedSystemObjectChange!.Id;
+                }
+
+                if (allOutcomes.Count > 0)
+                    await BulkInsertSyncOutcomesRawAsync(allOutcomes);
+
+                if (transaction != null)
+                    await transaction.CommitAsync();
+            }
+            finally
+            {
+                if (transaction != null)
+                    await transaction.DisposeAsync();
+            }
         }
+
+        _context.Database.SetCommandTimeout(previousTimeout);
+        return true; // Raw SQL used — RPEIs persisted outside EF change tracker
     }
 
     public void DetachRpeisFromChangeTracker(List<ActivityRunProfileExecutionItem> rpeis)
@@ -547,6 +605,128 @@ public partial class SyncRepository
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }
+    }
+
+    /// <summary>
+    /// Inserts RPEI rows on an independent NpgsqlConnection using COPY binary import.
+    /// </summary>
+    private static async Task BulkInsertRpeisOnConnectionAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        List<ActivityRunProfileExecutionItem> rpeis)
+    {
+        await using var writer = await connection.BeginBinaryImportAsync(
+            """
+            COPY "ActivityRunProfileExecutionItems" (
+                "Id", "ActivityId", "ObjectChangeType", "NoChangeReason",
+                "ConnectedSystemObjectId", "ExternalIdSnapshot", "DisplayNameSnapshot",
+                "ObjectTypeSnapshot", "ErrorType", "ErrorMessage", "ErrorStackTrace",
+                "AttributeFlowCount", "OutcomeSummary"
+            ) FROM STDIN (FORMAT binary)
+            """);
+
+        foreach (var rpei in rpeis)
+        {
+            await writer.StartRowAsync();
+            await writer.WriteAsync(rpei.Id, NpgsqlTypes.NpgsqlDbType.Uuid);
+            await writer.WriteAsync(rpei.ActivityId, NpgsqlTypes.NpgsqlDbType.Uuid);
+            await writer.WriteAsync((int)rpei.ObjectChangeType, NpgsqlTypes.NpgsqlDbType.Integer);
+            if (rpei.NoChangeReason.HasValue)
+                await writer.WriteAsync((int)rpei.NoChangeReason.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            if (rpei.ConnectedSystemObjectId.HasValue)
+                await writer.WriteAsync(rpei.ConnectedSystemObjectId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
+            if (rpei.ExternalIdSnapshot is not null)
+                await writer.WriteAsync(rpei.ExternalIdSnapshot, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            if (rpei.DisplayNameSnapshot is not null)
+                await writer.WriteAsync(rpei.DisplayNameSnapshot, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            if (rpei.ObjectTypeSnapshot is not null)
+                await writer.WriteAsync(rpei.ObjectTypeSnapshot, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            if (rpei.ErrorType.HasValue)
+                await writer.WriteAsync((int)rpei.ErrorType.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            if (rpei.ErrorMessage is not null)
+                await writer.WriteAsync(rpei.ErrorMessage, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            if (rpei.ErrorStackTrace is not null)
+                await writer.WriteAsync(rpei.ErrorStackTrace, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            if (rpei.AttributeFlowCount.HasValue)
+                await writer.WriteAsync(rpei.AttributeFlowCount.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            if (rpei.OutcomeSummary is not null)
+                await writer.WriteAsync(rpei.OutcomeSummary, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+        }
+
+        await writer.CompleteAsync();
+    }
+
+    /// <summary>
+    /// Inserts sync outcome rows on an independent NpgsqlConnection using COPY binary import.
+    /// </summary>
+    private static async Task BulkInsertSyncOutcomesOnConnectionAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        List<ActivityRunProfileExecutionItemSyncOutcome> outcomes)
+    {
+        await using var writer = await connection.BeginBinaryImportAsync(
+            """
+            COPY "ActivityRunProfileExecutionItemSyncOutcomes" (
+                "Id", "ActivityRunProfileExecutionItemId", "ParentSyncOutcomeId",
+                "OutcomeType", "TargetEntityId", "TargetEntityDescription",
+                "DetailCount", "DetailMessage", "Ordinal", "ConnectedSystemObjectChangeId"
+            ) FROM STDIN (FORMAT binary)
+            """);
+
+        foreach (var outcome in outcomes)
+        {
+            await writer.StartRowAsync();
+            await writer.WriteAsync(outcome.Id, NpgsqlTypes.NpgsqlDbType.Uuid);
+            await writer.WriteAsync(outcome.ActivityRunProfileExecutionItemId, NpgsqlTypes.NpgsqlDbType.Uuid);
+            if (outcome.ParentSyncOutcomeId.HasValue)
+                await writer.WriteAsync(outcome.ParentSyncOutcomeId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
+            await writer.WriteAsync((int)outcome.OutcomeType, NpgsqlTypes.NpgsqlDbType.Integer);
+            if (outcome.TargetEntityId.HasValue)
+                await writer.WriteAsync(outcome.TargetEntityId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
+            if (outcome.TargetEntityDescription is not null)
+                await writer.WriteAsync(outcome.TargetEntityDescription, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            if (outcome.DetailCount.HasValue)
+                await writer.WriteAsync(outcome.DetailCount.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            if (outcome.DetailMessage is not null)
+                await writer.WriteAsync(outcome.DetailMessage, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            await writer.WriteAsync(outcome.Ordinal, NpgsqlTypes.NpgsqlDbType.Integer);
+            if (outcome.ConnectedSystemObjectChangeId.HasValue)
+                await writer.WriteAsync(outcome.ConnectedSystemObjectChangeId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
+        }
+
+        await writer.CompleteAsync();
     }
 
     /// <summary>
