@@ -14,6 +14,14 @@ internal enum LdapDirectoryType
     ActiveDirectory,
 
     /// <summary>
+    /// Samba Active Directory Domain Controller.
+    /// Advertises AD capability OIDs but has behavioural differences: paged search returns duplicates,
+    /// different error codes for missing objects, and different backend tooling (ldbadd vs ldapmodify).
+    /// Detected via AD capability OIDs combined with vendorName containing "Samba".
+    /// </summary>
+    SambaAD,
+
+    /// <summary>
     /// OpenLDAP directory server.
     /// Detected via vendorName or vendorVersion on rootDSE.
     /// </summary>

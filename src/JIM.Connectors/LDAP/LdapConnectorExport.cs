@@ -1096,8 +1096,9 @@ internal class LdapConnectorExport
         switch (rootDse.DirectoryType)
         {
             case LdapDirectoryType.ActiveDirectory:
+            case LdapDirectoryType.SambaAD:
             {
-                // AD objectGUID is a 16-byte binary value in Microsoft GUID byte order (little-endian first 3 components)
+                // AD/Samba AD objectGUID is a 16-byte binary value in Microsoft GUID byte order (little-endian first 3 components)
                 var guidBytes = entry.Attributes[externalIdAttr][0] as byte[];
                 if (guidBytes is { Length: 16 })
                 {

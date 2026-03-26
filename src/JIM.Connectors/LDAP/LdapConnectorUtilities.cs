@@ -412,11 +412,16 @@ internal static class LdapConnectorUtilities
     /// <param name="vendorName">The vendorName attribute from rootDSE (may be null).</param>
     internal static LdapDirectoryType DetectDirectoryType(IEnumerable<string>? supportedCapabilities, string? vendorName)
     {
-        if (supportedCapabilities != null &&
+        var hasAdCapability = supportedCapabilities != null &&
             (supportedCapabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_OID) ||
-             supportedCapabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_ADAM_OID)))
+             supportedCapabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_ADAM_OID));
+
+        if (hasAdCapability)
         {
-            return LdapDirectoryType.ActiveDirectory;
+            // Samba AD advertises the AD capability OID but has different behaviour
+            var isSamba = vendorName != null &&
+                vendorName.Contains("Samba", StringComparison.OrdinalIgnoreCase);
+            return isSamba ? LdapDirectoryType.SambaAD : LdapDirectoryType.ActiveDirectory;
         }
 
         if (vendorName != null &&
@@ -452,15 +457,10 @@ internal static class LdapConnectorUtilities
 
         var directoryType = DetectDirectoryType(capabilities, vendorName);
 
-        var isSambaAd = vendorName != null &&
-            vendorName.Contains("Samba", StringComparison.OrdinalIgnoreCase);
-        var supportsPaging = directoryType == LdapDirectoryType.ActiveDirectory && !isSambaAd;
-
         var rootDse = new LdapConnectorRootDse
         {
             DirectoryType = directoryType,
-            VendorName = vendorName,
-            SupportsPaging = supportsPaging
+            VendorName = vendorName
         };
 
         logger.Debug("GetBasicRootDseInformation: DirectoryType={DirectoryType}, VendorName={VendorName}",
@@ -487,11 +487,11 @@ internal static class LdapConnectorUtilities
     /// </summary>
     /// <param name="attributeName">The LDAP attribute name (e.g., "description").</param>
     /// <param name="objectTypeName">The structural object class name (e.g., "user", "group").</param>
-    /// <param name="isActiveDirectory">Whether the directory is Active Directory (AD-DS, AD-LDS, or Samba AD).</param>
+    /// <param name="directoryType">The detected directory type.</param>
     /// <returns>True if the attribute should be treated as single-valued despite the LDAP schema declaring it as multi-valued.</returns>
     internal static bool ShouldOverridePluralityToSingleValued(string attributeName, string objectTypeName, LdapDirectoryType directoryType)
     {
-        return directoryType == LdapDirectoryType.ActiveDirectory &&
+        return directoryType is LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD &&
                LdapConnectorConstants.SAM_ENFORCED_SINGLE_VALUED_ATTRIBUTES.Contains(attributeName) &&
                LdapConnectorConstants.SAM_MANAGED_OBJECT_CLASSES.Contains(objectTypeName);
     }

@@ -201,12 +201,73 @@ public class LdapDirectoryTypeTests
     }
 
     [Test]
-    public void DetectDirectoryType_SambaAdWithAdOid_ReturnsActiveDirectory()
+    public void DetectDirectoryType_SambaAdWithAdOid_ReturnsSambaAD()
     {
-        // Samba AD advertises the AD capability OID — it should be detected as AD, not generic
+        // Samba AD advertises the AD capability OID but has different behaviour
         var capabilities = new[] { "1.2.840.113556.1.4.800" };
         var result = LdapConnectorUtilities.DetectDirectoryType(capabilities, "Samba Team");
-        Assert.That(result, Is.EqualTo(LdapDirectoryType.ActiveDirectory));
+        Assert.That(result, Is.EqualTo(LdapDirectoryType.SambaAD));
+    }
+
+    #endregion
+
+    #region SambaAD computed properties
+
+    [Test]
+    public void ExternalIdAttributeName_SambaAD_ReturnsObjectGUID()
+    {
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.SambaAD };
+        Assert.That(rootDse.ExternalIdAttributeName, Is.EqualTo("objectGUID"));
+    }
+
+    [Test]
+    public void ExternalIdDataType_SambaAD_ReturnsGuid()
+    {
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.SambaAD };
+        Assert.That(rootDse.ExternalIdDataType, Is.EqualTo(AttributeDataType.Guid));
+    }
+
+    [Test]
+    public void UseUsnDeltaImport_SambaAD_ReturnsTrue()
+    {
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.SambaAD };
+        Assert.That(rootDse.UseUsnDeltaImport, Is.True);
+    }
+
+    [Test]
+    public void EnforcesSamSingleValuedRules_SambaAD_ReturnsTrue()
+    {
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.SambaAD };
+        Assert.That(rootDse.EnforcesSamSingleValuedRules, Is.True);
+    }
+
+    [Test]
+    public void SupportsPaging_SambaAD_ReturnsFalse()
+    {
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.SambaAD };
+        Assert.That(rootDse.SupportsPaging, Is.False);
+    }
+
+    [Test]
+    public void SupportsPaging_ActiveDirectory_ReturnsTrue()
+    {
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.ActiveDirectory };
+        Assert.That(rootDse.SupportsPaging, Is.True);
+    }
+
+    [Test]
+    public void SupportsPaging_OpenLDAP_ReturnsTrue()
+    {
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+        Assert.That(rootDse.SupportsPaging, Is.True);
+    }
+
+    [Test]
+    public void ShouldOverridePlurality_SambaAD_DescriptionOnUser_ReturnsTrue()
+    {
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued(
+            "description", "user", LdapDirectoryType.SambaAD);
+        Assert.That(result, Is.True);
     }
 
     #endregion

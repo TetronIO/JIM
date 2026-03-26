@@ -318,20 +318,12 @@ internal class LdapConnectorImport
         var vendorName = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "vendorName");
         var directoryType = LdapConnectorUtilities.DetectDirectoryType(capabilities, vendorName);
 
-        // Determine paging support based on directory type
-        // Samba AD claims AD compatibility but doesn't properly support paged searches
-        // (it returns paging cookies but then returns the same results on subsequent pages)
-        var isSambaAd = vendorName != null &&
-            vendorName.Contains("Samba", StringComparison.OrdinalIgnoreCase);
-        var supportsPaging = directoryType == LdapDirectoryType.ActiveDirectory && !isSambaAd;
-
         var rootDse = new LdapConnectorRootDse
         {
             DnsHostName = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "DNSHostName"),
             HighestCommittedUsn = LdapConnectorUtilities.GetEntryAttributeLongValue(rootDseEntry, "HighestCommittedUSN"),
             DirectoryType = directoryType,
-            VendorName = vendorName,
-            SupportsPaging = supportsPaging
+            VendorName = vendorName
         };
 
         // For non-AD directories, try to get the last change number from the changelog
