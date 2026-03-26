@@ -1,8 +1,8 @@
 # JIM.Worker Redesign - High-Level Design Options
 
-- **Status:** Doing (Phases 1a–1c + Phase 8 complete — Phase 10 remaining. See [Progress Since Original Analysis](#progress-since-original-analysis))
+- **Status:** Done (all phases complete — see [Progress Since Original Analysis](#progress-since-original-analysis))
 - **Created**: 2026-02-23
-- **Updated**: 2026-03-25
+- **Updated**: 2026-03-26
 - **Author**: Architecture Review
 
 ## Context
@@ -115,14 +115,16 @@ JIM.Worker is the synchronisation engine - the beating heart of JIM. It processe
 
 - **GitHub Issue:** [#394](https://github.com/TetronIO/JIM/issues/394)
 
-> **Status: ~95% complete.** Data boundary (`ISyncRepository`), DI, test migration, EF fallback removal, `SyncRepository` wiring, hot-path migration, and ISyncEngine extraction are all done. One item remains: intra-phase parallelism (Phase 10).
+> **Status: Complete.** All phases done: data boundary (`ISyncRepository`), DI, test migration, EF fallback removal, `SyncRepository` wiring, hot-path migration, ISyncEngine extraction, and intra-phase parallelism (Phase 10).
 
 ### What's Left
+
+All items complete.
 
 | # | Item | Scope | Value | Status |
 |---|------|-------|-------|--------|
 | 1 | ~~**ISyncEngine extraction** (Phase 1c)~~ | ~~Extract ~2,040 LOC of pure domain logic into a stateless engine with zero I/O.~~ | ~~**Provability** — makes core sync logic independently testable with plain objects.~~ | **Done** |
-| 2 | **Intra-phase parallelism** (Phase 10) | Import page concurrency, sync batch parallelism, export DI scopes, multi-connection write parallelism for PostgreSQL. | **Performance** — primary lever for utilising multiple CPU cores during sync. Required for 2-5x improvement target. | Not started |
+| 2 | ~~**Intra-phase parallelism** (Phase 10)~~ | ~~Multi-connection write parallelism for CSO creates, RPEIs, and sync outcomes using COPY binary protocol.~~ | ~~**Performance** — utilises multiple CPU cores during bulk write phases.~~ | **Done** (#430) |
 
 **Everything else is done:**
 - ISyncRepository interface (~80 methods) — done
@@ -421,10 +423,13 @@ Keep the current architecture but surgically extract the sync processing logic i
    - `IConnectorFactory` / `ConnectorFactory` in `JIM.Connectors`
    - Worker.cs and Scheduler.cs: constructor injection, manual `new` calls removed
 
-4. **Parallelise within sync phases** — **NOT STARTED**
-   - Import: Multiple pages processed concurrently (each with own data access scope)
-   - Sync: CSO batches processed in parallel (engine is stateless per-CSO, only shared state is MVO lookup)
-   - Export: Already has parallelism; extend to use proper DI scopes
+4. **Parallelise within sync phases** — **DONE (#430)**
+   - `ParallelBatchWriter` component splits bulk writes across N concurrent `NpgsqlConnection` instances
+   - CSO bulk creates use parallel COPY binary (import phase)
+   - RPEI and sync outcome inserts use parallel COPY binary (import + sync flush)
+   - Outcomes partitioned by RPEI to preserve self-referencing FK tree integrity
+   - Configurable via `JIM_WRITE_PARALLELISM` env var (defaults to `Environment.ProcessorCount`, minimum 2)
+   - **Remaining bottleneck:** MVO creates/updates still use EF `AddRange`/`SaveChangesAsync` — converting to COPY binary tracked as Phase 6 on #338
    - **Critical insight (PostgreSQL write architecture):** PostgreSQL uses a process-per-connection model — a single SQL statement (INSERT/UPDATE/DELETE) always executes in one process on one core. Parallel query only applies to SELECT operations. Multi-connection write parallelism (splitting bulk writes across N concurrent connections) is the primary lever for utilising multiple cores during the "Saving changes" phase. See [PostgreSQL Write Parallelism](#postgresql-write-parallelism) below for details.
 
 ### What Stays the Same
@@ -438,7 +443,7 @@ Keep the current architecture but surgically extract the sync processing logic i
 ### Estimates
 
 - **Completed (#338)**: Bulk SQL persistence for CSOs, pending exports, RPEIs; CSO lookup cache; lightweight MVO matching; `AsSplitQuery` elimination. Measured ~34% FullSync improvement, ~37% faster CSO processing
-- **Remaining scope**: intra-phase parallelism (Phase 10)
+- **Completed (#430)**: Intra-phase parallelism — `ParallelBatchWriter` + COPY binary for CSO creates, RPEIs, sync outcomes
 - **Risk**: Medium - mechanical refactoring with clear seams; high test coverage before/after
 - **Breaking Changes**: None externally; internal restructuring only
 
@@ -448,8 +453,8 @@ Keep the current architecture but surgically extract the sync processing logic i
 |---------|--------|-------|
 | Data Integrity | Good | Same logic, better tested. State-based re-assertion unchanged |
 | Provability | Very Good | Pure engine is 100% testable. In-memory SyncRepository purpose-built and deployed (~1,276 tests). Prod/test code path divergence eliminated (#394) |
-| Scalability | Moderate | Intra-process parallelism improved. Still single worker |
-| Performance | Good | Bulk SQL on hot paths delivers ~34% improvement (#338). Full 2-5x requires ISyncEngine extraction + parallelism |
+| Scalability | Moderate | Intra-process parallelism implemented. Still single worker |
+| Performance | Good | Bulk SQL on hot paths delivers ~34% improvement (#338). Parallel multi-connection COPY binary writes for CSOs, RPEIs, outcomes (#430). MVO persistence remains EF-based — COPY binary conversion tracked as #338 Phase 6 |
 | Telemetry | Moderate | Can add OpenTelemetry to orchestrator/engine. No architectural support |
 
 ### Testing Strategy
@@ -766,7 +771,7 @@ docker compose / Kubernetes:
 | Code disruption | ~30% of worker | ~70% of worker | ~90% of worker |
 | Air-gap compatible | Yes | Yes | Yes (Redis self-hosted) |
 | Time to initial PR | Incremental | Needs critical mass | Needs critical mass |
-| **Progress to date** | ~95% (data boundary + DI + SyncRepository + hot-path migration + ISyncEngine done; parallelism remaining) | 0% | 0% |
+| **Progress to date** | **100%** (all phases complete: data boundary + DI + SyncRepository + hot-path migration + ISyncEngine + intra-phase parallelism) | 0% | 0% |
 
 ### Recommendation Matrix by Organisation Size
 
@@ -832,7 +837,7 @@ Since the constraint is architectural (one core per connection for writes), the 
 
 **Phase 8 (`PostgresData.SyncRepository`)** — **DONE.** Worker-only bulk SQL implementations have been migrated from shared repositories into `SyncRepository` partial classes. Future optimisation (e.g., converting remaining parameterised INSERT methods to COPY binary) can be done incrementally within `SyncRepository` without affecting shared repos.
 
-**Phase 10 (intra-phase parallelism)** should implement multi-connection write parallelism as a primary objective, not just as a nice-to-have. The observed bottleneck (100% on one core, other cores idle) demonstrates that single-connection writes are the dominant constraint during the save phase. Splitting writes across N connections (where N ≈ available cores) would allow PostgreSQL to utilise all available server resources.
+**Phase 10 (intra-phase parallelism)** — **DONE (#430).** Multi-connection write parallelism implemented via `ParallelBatchWriter`. CSO creates, RPEIs, and sync outcomes now use COPY binary across N concurrent connections. Integration testing confirmed parallel connections are opened and utilised. MVO persistence remains the dominant single-core bottleneck — converting to COPY binary is tracked as #338 Phase 6.
 
 ---
 
@@ -924,6 +929,7 @@ However, **Option A is the pragmatic starting point** if the team wants to de-ri
 - **Phase 1b** (Option A - data boundary + DI): Formalise `ISyncRepository` interface. Build in-memory `SyncRepository` for tests. Migrate all tests. Eliminate ~32 try/catch fallback blocks. Introduce DI in Worker and Scheduler. Wire `PostgresData.SyncRepository` into all apps. **DONE (#394 Phases 1-8, #422, #424, #425, #428).**
 - **Phase 8** (Option A - hot-path migration): Migrate Worker-only bulk SQL implementations from shared EF repositories into `PostgresData.SyncRepository`. **DONE.** 12 public methods + 11 private helpers moved into partial class files. Shared helpers deduplicated into `BulkSqlHelpers.cs`. Dead wrappers and interface members cleaned up from `ActivityServer`, `ConnectedSystemServer`, `IActivityRepository`, `IConnectedSystemRepository`. Net -1,200+ lines from shared repos.
 - **Phase 1c** (Option A - engine extraction): Extract ISyncEngine as a pure domain service. **DONE.** 9 synchronous methods, zero I/O. SyncRuleMappingProcessor (821 LOC) absorbed. 7 processor methods delegate to engine. 39 new pure unit tests.
+- **Phase 10** (Option A - parallelism): Multi-connection write parallelism with COPY binary. **DONE (#430).** `ParallelBatchWriter` splits bulk writes across N connections. CSO creates, RPEIs, sync outcomes use COPY binary. 15 unit tests. MVO COPY binary conversion deferred to #338 Phase 6.
 - **Phase 2** (Option B): Rewire orchestration to use Channels pipeline. Ship and validate.
 - **Phase 3** (Option C, if needed): Add Redis message bus between pipeline stages for horizontal scaling.
 
@@ -963,7 +969,7 @@ A 5-phase surgical optimisation programme was completed in February 2026, replac
 - ~~DI introduction~~ — **done** (#422)
 - ~~`PostgresData.SyncRepository` wiring + hot-path migration~~ — **done** (#428 + Phase 8). All apps use `PostgresData.SyncRepository` directly. Worker-only bulk SQL moved into partial classes (`SyncRepository.RpeiOperations.cs`, `SyncRepository.CsOperations.cs`). Dual-called methods remain as delegates. Dead code removed from shared repos
 - ~~Integration tests for PostgresData `SyncRepository` against real PostgreSQL~~ — **done** (#428). Scenario 1 and Scenario 8 MediumLarge pass
-- Intra-phase parallelism — deferred
+- ~~Intra-phase parallelism~~ — **done** (#430). `ParallelBatchWriter` + COPY binary for CSOs, RPEIs, sync outcomes
 - Systematic database index/query performance analysis — tracked in #427
 
 **Full details:** See `docs/plans/done/WORKER_DATABASE_PERFORMANCE_OPTIMISATION.md`

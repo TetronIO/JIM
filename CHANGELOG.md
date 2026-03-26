@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+#### Worker Redesign Option A (#394)
+
+- ✨ Pure domain engine (`ISyncEngine`) — 7 stateless methods with zero I/O dependencies, making core sync logic independently testable with plain objects
+- ✨ Formal data access boundary (`ISyncRepository`) — ~80-method interface separating Worker data access from shared EF Core repositories, with purpose-built in-memory implementation for tests
+- ✨ Dependency injection throughout Worker and Scheduler — `IJimApplicationFactory`, `IConnectorFactory`, per-task context isolation
+
+### Performance
+
+#### Worker Redesign Option A (#394)
+
+- ⚡ Parallel multi-connection writes — `ParallelBatchWriter` splits bulk database writes across N concurrent PostgreSQL connections, utilising multiple CPU cores during save phases. Configurable via `JIM_WRITE_PARALLELISM` environment variable
+- ⚡ COPY binary protocol for bulk inserts — CSO creates, RPEIs, and sync outcomes now use PostgreSQL's COPY binary import, eliminating SQL parsing overhead and parameter limits
+- ⚡ Worker-exclusive bulk SQL in `SyncRepository` — hot-path operations (RPEI persistence, CSO bulk create, pending export operations) moved from shared repositories into dedicated partial classes, reducing shared repo surface by 1,200+ lines
+
+### Changed
+
+#### Worker Redesign Option A (#394)
+
+- 🔄 All Worker and Workflow tests (~1,300) migrated from mocked `DbContext` to purpose-built `InMemoryData.SyncRepository`, eliminating three-way code path divergence between production, workflow tests, and unit tests
+- 🔄 Removed ~32 try/catch EF fallback blocks from repository files (-642 lines) — production and test code paths are now identical
+
 ## [0.7.1] - 2026-03-19
 
 ### Fixed
