@@ -357,12 +357,25 @@ internal class LdapConnectorSchema
                         objectType.Attributes.Add(attr);
                 }
 
-                // Synthesise a distinguishedName attribute for every object type.
-                // OpenLDAP (and most RFC-compliant directories) don't expose distinguishedName
-                // in the subschema because it's the entry's DN, not a stored attribute.
-                // However, the LDAP connector needs it as a writable Text attribute because
-                // the DN is provided by the client in Add requests to specify where the object
-                // is created and is used for DN-based provisioning expressions.
+                // Synthesise operational attributes that are not part of any object class's
+                // MUST/MAY but are needed by the connector for identity management.
+
+                // External ID attribute (e.g., entryUUID for OpenLDAP) — global operational attribute
+                // not listed in any class hierarchy. Required for JIM to uniquely identify objects.
+                var externalIdAttrName = _rootDse.ExternalIdAttributeName;
+                if (objectType.Attributes.All(a => !a.Name.Equals(externalIdAttrName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    objectType.Attributes.Add(new ConnectorSchemaAttribute(
+                        externalIdAttrName, _rootDse.ExternalIdDataType, AttributePlurality.SingleValued,
+                        required: false, className: objectClassDef.Name!, writability: AttributeWritability.ReadOnly)
+                    {
+                        Description = "System-assigned unique identifier for this entry"
+                    });
+                }
+
+                // distinguishedName — OpenLDAP doesn't expose it in the subschema because it's
+                // the entry's DN, not a stored attribute. The LDAP connector needs it as a writable
+                // Text attribute for DN-based provisioning expressions.
                 if (objectType.Attributes.All(a => !a.Name.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase)))
                 {
                     objectType.Attributes.Add(new ConnectorSchemaAttribute(
