@@ -47,7 +47,10 @@ param(
     [int]$ExportConcurrency = 1,
 
     [Parameter(Mandatory=$false)]
-    [int]$MaxExportParallelism = 1
+    [int]$MaxExportParallelism = 1,
+
+    [Parameter(Mandatory=$false)]
+    [hashtable]$DirectoryConfig
 )
 
 Set-StrictMode -Version Latest
@@ -57,7 +60,12 @@ $ConfirmPreference = 'None'  # Disable confirmation prompts for non-interactive 
 # Import helpers
 . "$PSScriptRoot/utils/Test-Helpers.ps1"
 
-Write-TestSection "Scenario 1 Setup: HR to Enterprise Directory"
+# Default to SambaAD Primary if no config provided
+if (-not $DirectoryConfig) {
+    $DirectoryConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Primary
+}
+
+Write-TestSection "Scenario 1 Setup: HR to Enterprise Directory ($($DirectoryConfig.ConnectedSystemName))"
 
 # Step 1: Import JIM PowerShell module
 Write-TestStep "Step 1" "Importing JIM PowerShell module"
@@ -212,19 +220,20 @@ catch {
     throw
 }
 
-# Step 5: Create LDAP Connected System (Samba AD target)
-Write-TestStep "Step 5" "Creating LDAP Connected System"
+# Step 5: Create LDAP Connected System
+$ldapSystemName = $DirectoryConfig.ConnectedSystemName
+Write-TestStep "Step 5" "Creating LDAP Connected System ($ldapSystemName)"
 
 try {
-    $ldapSystem = $existingSystems | Where-Object { $_.name -eq "Panoply AD" }
+    $ldapSystem = $existingSystems | Where-Object { $_.name -eq $ldapSystemName }
 
     if ($ldapSystem) {
-        Write-Host "  Connected System 'Panoply AD' already exists (ID: $($ldapSystem.id))" -ForegroundColor Yellow
+        Write-Host "  Connected System '$ldapSystemName' already exists (ID: $($ldapSystem.id))" -ForegroundColor Yellow
     }
     else {
         $ldapSystem = New-JIMConnectedSystem `
-            -Name "Panoply AD" `
-            -Description "Samba Active Directory for integration testing" `
+            -Name $ldapSystemName `
+            -Description "LDAP directory for integration testing ($($DirectoryConfig.Host))" `
             -ConnectorDefinitionId $ldapConnector.id `
             -PassThru
 
@@ -249,37 +258,30 @@ try {
 
     $ldapSettings = @{}
     if ($hostSetting) {
-        $ldapSettings[$hostSetting.id] = @{ stringValue = "samba-ad-primary" }
+        $ldapSettings[$hostSetting.id] = @{ stringValue = $DirectoryConfig.Host }
     }
     if ($portSetting) {
-        # Use LDAPS port 636 for encrypted connection
-        $ldapSettings[$portSetting.id] = @{ intValue = 636 }
+        $ldapSettings[$portSetting.id] = @{ intValue = $DirectoryConfig.Port }
     }
     if ($usernameSetting) {
-        # DN format for Simple bind
-        $ldapSettings[$usernameSetting.id] = @{ stringValue = "CN=Administrator,CN=Users,DC=panoply,DC=local" }
+        $ldapSettings[$usernameSetting.id] = @{ stringValue = $DirectoryConfig.BindDN }
     }
     if ($passwordSetting) {
-        # Password setting uses stringValue - API stores it encrypted based on setting type
-        $ldapSettings[$passwordSetting.id] = @{ stringValue = "Test@123!" }
+        $ldapSettings[$passwordSetting.id] = @{ stringValue = $DirectoryConfig.BindPassword }
     }
     if ($useSSLSetting) {
-        # Enable LDAPS for encrypted connection
-        $ldapSettings[$useSSLSetting.id] = @{ checkboxValue = $true }
+        $ldapSettings[$useSSLSetting.id] = @{ checkboxValue = $DirectoryConfig.UseSSL }
     }
-    if ($certValidationSetting) {
-        # Skip cert validation for self-signed test certificates
-        $ldapSettings[$certValidationSetting.id] = @{ stringValue = "Skip Validation (Not Recommended)" }
+    if ($certValidationSetting -and $DirectoryConfig.CertValidation) {
+        $ldapSettings[$certValidationSetting.id] = @{ stringValue = $DirectoryConfig.CertValidation }
     }
     if ($connectionTimeoutSetting) {
         $ldapSettings[$connectionTimeoutSetting.id] = @{ intValue = 30 }
     }
     if ($authTypeSetting) {
-        # Simple authentication over TLS satisfies AD strong auth requirement
-        $ldapSettings[$authTypeSetting.id] = @{ stringValue = "Simple" }
+        $ldapSettings[$authTypeSetting.id] = @{ stringValue = $DirectoryConfig.AuthType }
     }
     if ($createContainersSetting) {
-        # Enable automatic OU creation when provisioning objects to non-existent OUs
         $ldapSettings[$createContainersSetting.id] = @{ checkboxValue = $true }
     }
 

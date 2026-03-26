@@ -230,6 +230,168 @@ function Get-TemplateScale {
     return $scales[$Template]
 }
 
+function Get-DirectoryConfig {
+    <#
+    .SYNOPSIS
+        Get directory-specific configuration for integration tests
+
+    .DESCRIPTION
+        Returns a hashtable with all directory-specific values needed by setup scripts,
+        scenario scripts, and LDAP helper functions. This abstraction allows the same
+        test scenarios to run against Samba AD or OpenLDAP by varying only the
+        directory-specific details.
+
+    .PARAMETER DirectoryType
+        Which directory type to configure for (SambaAD or OpenLDAP)
+
+    .PARAMETER Instance
+        Which instance to use. For SambaAD: Primary, Source, Target.
+        For OpenLDAP: Primary (the only instance, but with two suffixes).
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [ValidateSet("SambaAD", "OpenLDAP")]
+        [string]$DirectoryType,
+
+        [Parameter(Mandatory=$false)]
+        [string]$Instance = "Primary"
+    )
+
+    switch ($DirectoryType) {
+        "SambaAD" {
+            $instanceConfigs = @{
+                Primary = @{
+                    ContainerName    = "samba-ad-primary"
+                    Host             = "samba-ad-primary"
+                    Port             = 636
+                    UseSSL           = $true
+                    CertValidation   = "Skip Validation (Not Recommended)"
+                    BindDN           = "CN=Administrator,CN=Users,DC=panoply,DC=local"
+                    BindPassword     = "Test@123!"
+                    AuthType         = "Simple"
+                    BaseDN           = "DC=panoply,DC=local"
+                    UserContainer    = "OU=Users,OU=Corp,DC=panoply,DC=local"
+                    GroupContainer   = "OU=Groups,OU=Corp,DC=panoply,DC=local"
+                    UserObjectClass  = "user"
+                    GroupObjectClass = "group"
+                    UserRdnAttr      = "CN"
+                    UserNameAttr     = "sAMAccountName"
+                    ExternalIdAttr   = "objectGUID"
+                    DepartmentAttr   = "department"
+                    DeleteBehaviour  = "Disable"
+                    DisableAttribute = "userAccountControl"
+                    DnTemplate       = 'CN={displayName},OU=Users,OU=Corp,DC=panoply,DC=local'
+                    Domain           = "panoply.local"
+                    ShortDomain      = "PANOPLY"
+                    LdapSearchPort   = 636
+                    LdapSearchScheme = "ldaps"
+                    ComposeProfiles  = @()
+                    PopulateScript   = "Populate-SambaAD.ps1"
+                    ConnectedSystemName = "Panoply AD"
+                }
+                Source = @{
+                    ContainerName    = "samba-ad-source"
+                    Host             = "samba-ad-source"
+                    Port             = 636
+                    UseSSL           = $true
+                    CertValidation   = "Skip Validation (Not Recommended)"
+                    BindDN           = "CN=Administrator,CN=Users,DC=resurgam,DC=local"
+                    BindPassword     = "Test@123!"
+                    AuthType         = "Simple"
+                    BaseDN           = "DC=resurgam,DC=local"
+                    UserContainer    = "OU=Users,OU=Corp,DC=resurgam,DC=local"
+                    GroupContainer   = "OU=Groups,OU=Corp,DC=resurgam,DC=local"
+                    UserObjectClass  = "user"
+                    GroupObjectClass = "group"
+                    UserRdnAttr      = "CN"
+                    UserNameAttr     = "sAMAccountName"
+                    ExternalIdAttr   = "objectGUID"
+                    DepartmentAttr   = "department"
+                    DeleteBehaviour  = "Disable"
+                    DisableAttribute = "userAccountControl"
+                    DnTemplate       = 'CN={displayName},OU=Users,OU=Corp,DC=resurgam,DC=local'
+                    Domain           = "resurgam.local"
+                    ShortDomain      = "RESURGAM"
+                    LdapSearchPort   = 636
+                    LdapSearchScheme = "ldaps"
+                    ComposeProfiles  = @("scenario2")
+                    PopulateScript   = "Populate-SambaAD.ps1"
+                    ConnectedSystemName = "Resurgam AD"
+                }
+                Target = @{
+                    ContainerName    = "samba-ad-target"
+                    Host             = "samba-ad-target"
+                    Port             = 636
+                    UseSSL           = $true
+                    CertValidation   = "Skip Validation (Not Recommended)"
+                    BindDN           = "CN=Administrator,CN=Users,DC=gentian,DC=local"
+                    BindPassword     = "Test@123!"
+                    AuthType         = "Simple"
+                    BaseDN           = "DC=gentian,DC=local"
+                    UserContainer    = "OU=Users,OU=CorpManaged,DC=gentian,DC=local"
+                    GroupContainer   = "OU=Groups,OU=CorpManaged,DC=gentian,DC=local"
+                    UserObjectClass  = "user"
+                    GroupObjectClass = "group"
+                    UserRdnAttr      = "CN"
+                    UserNameAttr     = "sAMAccountName"
+                    ExternalIdAttr   = "objectGUID"
+                    DepartmentAttr   = "department"
+                    DeleteBehaviour  = "Disable"
+                    DisableAttribute = "userAccountControl"
+                    DnTemplate       = 'CN={displayName},OU=Users,OU=CorpManaged,DC=gentian,DC=local'
+                    Domain           = "gentian.local"
+                    ShortDomain      = "GENTIAN"
+                    LdapSearchPort   = 636
+                    LdapSearchScheme = "ldaps"
+                    ComposeProfiles  = @("scenario2")
+                    PopulateScript   = "Populate-SambaAD.ps1"
+                    ConnectedSystemName = "Gentian AD"
+                }
+            }
+
+            if (-not $instanceConfigs.ContainsKey($Instance)) {
+                throw "Unknown SambaAD instance: $Instance. Valid values: Primary, Source, Target"
+            }
+
+            return $instanceConfigs[$Instance]
+        }
+        "OpenLDAP" {
+            return @{
+                ContainerName    = "openldap-primary"
+                Host             = "openldap-primary"
+                Port             = 1389
+                UseSSL           = $false
+                CertValidation   = $null
+                BindDN           = "cn=admin,dc=yellowstone,dc=local"
+                BindPassword     = "Test@123!"
+                AuthType         = "Simple"
+                BaseDN           = "dc=yellowstone,dc=local"
+                UserContainer    = "ou=People,dc=yellowstone,dc=local"
+                GroupContainer   = "ou=Groups,dc=yellowstone,dc=local"
+                UserObjectClass  = "inetOrgPerson"
+                GroupObjectClass = "groupOfNames"
+                UserRdnAttr      = "uid"
+                UserNameAttr     = "uid"
+                ExternalIdAttr   = "entryUUID"
+                DepartmentAttr   = "departmentNumber"
+                DeleteBehaviour  = "Delete"
+                DisableAttribute = $null
+                DnTemplate       = 'uid={uid},ou=People,dc=yellowstone,dc=local'
+                Domain           = "yellowstone.local"
+                ShortDomain      = $null
+                LdapSearchPort   = 1389
+                LdapSearchScheme = "ldap"
+                ComposeProfiles  = @("openldap")
+                PopulateScript   = "Populate-OpenLDAP.ps1"
+                ConnectedSystemName = "Yellowstone OpenLDAP"
+                # Second suffix for multi-partition testing
+                SecondSuffix     = "dc=glitterband,dc=local"
+                SecondBindDN     = "cn=admin,dc=glitterband,dc=local"
+            }
+        }
+    }
+}
+
 # Script-level cache for name data (loaded once)
 $script:TestNameData = $null
 

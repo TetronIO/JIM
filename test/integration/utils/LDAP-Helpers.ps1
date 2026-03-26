@@ -4,7 +4,10 @@
 
 .DESCRIPTION
     Provides functions to interact with LDAP directories (Samba AD, OpenLDAP)
-    for test setup, data population, and validation
+    for test setup, data population, and validation.
+
+    Functions accept either a $DirectoryConfig hashtable (from Get-DirectoryConfig)
+    or individual parameters for backward compatibility.
 #>
 
 Set-StrictMode -Version Latest
@@ -47,14 +50,20 @@ function Test-LDAPConnection {
 function Invoke-LDAPSearch {
     <#
     .SYNOPSIS
-        Execute an LDAP search using ldapsearch command
+        Execute an LDAP search using ldapsearch command inside a container
     #>
     param(
+        [Parameter(Mandatory=$false)]
+        [string]$ContainerName = "samba-ad-primary",
+
         [Parameter(Mandatory=$true)]
         [string]$Server,
 
         [Parameter(Mandatory=$false)]
         [int]$Port = 389,
+
+        [Parameter(Mandatory=$false)]
+        [string]$Scheme = "ldap",
 
         [Parameter(Mandatory=$true)]
         [string]$BaseDN,
@@ -72,11 +81,11 @@ function Invoke-LDAPSearch {
         [string[]]$Attributes = @("*")
     )
 
-    $ldapUri = "ldap://${Server}:${Port}"
+    $ldapUri = "${Scheme}://${Server}:${Port}"
     $attrString = $Attributes -join " "
 
     try {
-        $result = docker exec samba-ad-primary ldapsearch `
+        $result = docker exec $ContainerName ldapsearch `
             -x `
             -H $ldapUri `
             -D $BindDN `
@@ -101,11 +110,23 @@ function Invoke-LDAPSearch {
 function Get-LDAPUser {
     <#
     .SYNOPSIS
-        Get a user from LDAP by sAMAccountName
+        Get a user from LDAP by username attribute
+
+    .DESCRIPTION
+        Searches for a user by the appropriate name attribute for the directory type.
+        For Samba AD this is sAMAccountName; for OpenLDAP this is uid.
+        Pass a $DirectoryConfig hashtable or individual parameters.
     #>
     param(
         [Parameter(Mandatory=$true)]
-        [string]$SamAccountName,
+        [string]$UserIdentifier,
+
+        [Parameter(Mandatory=$false)]
+        [hashtable]$DirectoryConfig,
+
+        # Individual parameters (used when DirectoryConfig not provided)
+        [Parameter(Mandatory=$false)]
+        [string]$ContainerName,
 
         [Parameter(Mandatory=$false)]
         [string]$Server = "localhost",
@@ -114,20 +135,42 @@ function Get-LDAPUser {
         [int]$Port = 389,
 
         [Parameter(Mandatory=$false)]
+        [string]$Scheme = "ldap",
+
+        [Parameter(Mandatory=$false)]
         [string]$BaseDN = "DC=panoply,DC=local",
 
         [Parameter(Mandatory=$false)]
         [string]$BindDN = "CN=Administrator,CN=Users,DC=panoply,DC=local",
 
         [Parameter(Mandatory=$false)]
-        [string]$BindPassword = "Test@123!"
+        [string]$BindPassword = "Test@123!",
+
+        [Parameter(Mandatory=$false)]
+        [string]$UserNameAttr = "sAMAccountName"
     )
 
-    $filter = "(sAMAccountName=$SamAccountName)"
+    # Resolve config
+    if ($DirectoryConfig) {
+        $ContainerName = $DirectoryConfig.ContainerName
+        $Server = "localhost"
+        $Port = $DirectoryConfig.LdapSearchPort
+        $Scheme = $DirectoryConfig.LdapSearchScheme
+        $BaseDN = $DirectoryConfig.BaseDN
+        $BindDN = $DirectoryConfig.BindDN
+        $BindPassword = $DirectoryConfig.BindPassword
+        $UserNameAttr = $DirectoryConfig.UserNameAttr
+    }
+
+    if (-not $ContainerName) { $ContainerName = "samba-ad-primary" }
+
+    $filter = "($UserNameAttr=$UserIdentifier)"
 
     $result = Invoke-LDAPSearch `
+        -ContainerName $ContainerName `
         -Server $Server `
         -Port $Port `
+        -Scheme $Scheme `
         -BaseDN $BaseDN `
         -BindDN $BindDN `
         -BindPassword $BindPassword `
@@ -171,7 +214,14 @@ function Test-LDAPUserExists {
     #>
     param(
         [Parameter(Mandatory=$true)]
-        [string]$SamAccountName,
+        [string]$UserIdentifier,
+
+        [Parameter(Mandatory=$false)]
+        [hashtable]$DirectoryConfig,
+
+        # Individual parameters (used when DirectoryConfig not provided)
+        [Parameter(Mandatory=$false)]
+        [string]$ContainerName,
 
         [Parameter(Mandatory=$false)]
         [string]$Server = "localhost",
@@ -180,37 +230,7 @@ function Test-LDAPUserExists {
         [int]$Port = 389,
 
         [Parameter(Mandatory=$false)]
-        [string]$BaseDN = "DC=panoply,DC=local",
-
-        [Parameter(Mandatory=$false)]
-        [string]$BindDN = "CN=Administrator,CN=Users,DC=panoply,DC=local",
-
-        [Parameter(Mandatory=$false)]
-        [string]$BindPassword = "Test@123!"
-    )
-
-    $user = Get-LDAPUser `
-        -SamAccountName $SamAccountName `
-        -Server $Server `
-        -Port $Port `
-        -BaseDN $BaseDN `
-        -BindDN $BindDN `
-        -BindPassword $BindPassword
-
-    return $null -ne $user
-}
-
-function Get-LDAPUserCount {
-    <#
-    .SYNOPSIS
-        Get count of users in LDAP
-    #>
-    param(
-        [Parameter(Mandatory=$false)]
-        [string]$Server = "localhost",
-
-        [Parameter(Mandatory=$false)]
-        [int]$Port = 389,
+        [string]$Scheme = "ldap",
 
         [Parameter(Mandatory=$false)]
         [string]$BaseDN = "DC=panoply,DC=local",
@@ -222,12 +242,85 @@ function Get-LDAPUserCount {
         [string]$BindPassword = "Test@123!",
 
         [Parameter(Mandatory=$false)]
-        [string]$Filter = "(&(objectClass=user)(!(objectClass=computer)))"
+        [string]$UserNameAttr = "sAMAccountName"
     )
 
+    $params = @{ UserIdentifier = $UserIdentifier }
+    if ($DirectoryConfig) { $params.DirectoryConfig = $DirectoryConfig }
+    else {
+        if ($ContainerName) { $params.ContainerName = $ContainerName }
+        $params.Server = $Server; $params.Port = $Port; $params.Scheme = $Scheme
+        $params.BaseDN = $BaseDN; $params.BindDN = $BindDN; $params.BindPassword = $BindPassword
+        $params.UserNameAttr = $UserNameAttr
+    }
+
+    $user = Get-LDAPUser @params
+    return $null -ne $user
+}
+
+function Get-LDAPUserCount {
+    <#
+    .SYNOPSIS
+        Get count of users in LDAP
+    #>
+    param(
+        [Parameter(Mandatory=$false)]
+        [hashtable]$DirectoryConfig,
+
+        # Individual parameters (used when DirectoryConfig not provided)
+        [Parameter(Mandatory=$false)]
+        [string]$ContainerName,
+
+        [Parameter(Mandatory=$false)]
+        [string]$Server = "localhost",
+
+        [Parameter(Mandatory=$false)]
+        [int]$Port = 389,
+
+        [Parameter(Mandatory=$false)]
+        [string]$Scheme = "ldap",
+
+        [Parameter(Mandatory=$false)]
+        [string]$BaseDN = "DC=panoply,DC=local",
+
+        [Parameter(Mandatory=$false)]
+        [string]$BindDN = "CN=Administrator,CN=Users,DC=panoply,DC=local",
+
+        [Parameter(Mandatory=$false)]
+        [string]$BindPassword = "Test@123!",
+
+        [Parameter(Mandatory=$false)]
+        [string]$Filter
+    )
+
+    # Resolve config
+    if ($DirectoryConfig) {
+        $ContainerName = $DirectoryConfig.ContainerName
+        $Server = "localhost"
+        $Port = $DirectoryConfig.LdapSearchPort
+        $Scheme = $DirectoryConfig.LdapSearchScheme
+        $BaseDN = $DirectoryConfig.BaseDN
+        $BindDN = $DirectoryConfig.BindDN
+        $BindPassword = $DirectoryConfig.BindPassword
+        if (-not $Filter) {
+            # Use appropriate filter for the directory type
+            $objectClass = $DirectoryConfig.UserObjectClass
+            if ($objectClass -eq "user") {
+                $Filter = "(&(objectClass=user)(!(objectClass=computer)))"
+            } else {
+                $Filter = "(objectClass=$objectClass)"
+            }
+        }
+    }
+
+    if (-not $ContainerName) { $ContainerName = "samba-ad-primary" }
+    if (-not $Filter) { $Filter = "(&(objectClass=user)(!(objectClass=computer)))" }
+
     $result = Invoke-LDAPSearch `
+        -ContainerName $ContainerName `
         -Server $Server `
         -Port $Port `
+        -Scheme $Scheme `
         -BaseDN $BaseDN `
         -BindDN $BindDN `
         -BindPassword $BindPassword `

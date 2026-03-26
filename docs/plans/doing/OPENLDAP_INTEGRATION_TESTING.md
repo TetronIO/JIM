@@ -1,6 +1,6 @@
 # OpenLDAP Integration Testing
 
-- **Status:** Doing (Phases 1-2 complete)
+- **Status:** Doing (Phases 1-3 complete)
 - **Created:** 2026-03-09
 - **Issue:** [#72](https://github.com/TetronIO/JIM/issues/72)
 
@@ -431,14 +431,15 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 - Additional memberships added via `ldapmodify`
 - Verified at Nano (3 users) and Micro (10 users) scales
 
-### Phase 3: Test Framework Parameterisation
+### Phase 3: Test Framework Parameterisation ✅
 
 **Deliverables:**
-- `Get-DirectoryConfig` function in `Test-Helpers.ps1`
-- `-DirectoryType` parameter on `Run-IntegrationTests.ps1`
-- Refactored `LDAP-Helpers.ps1` to accept directory config
-- Parameterised `Setup-Scenario1.ps1` (start with Scenario 1 as the pilot)
-- Parameterised `Invoke-Scenario1.ps1` validation assertions
+- `Get-DirectoryConfig` function in `Test-Helpers.ps1` — returns directory-specific config (container, host, port, bind DN, object classes, etc.) for SambaAD or OpenLDAP
+- `-DirectoryType` parameter on `Run-IntegrationTests.ps1` — controls Docker profile, health checks, population, and OU preparation
+- Refactored `LDAP-Helpers.ps1` — all functions accept `$DirectoryConfig` hashtable alongside individual params for backward compatibility
+- Parameterised `Setup-Scenario1.ps1` — LDAP connected system name, host, port, bind DN, SSL, and auth type all driven by `$DirectoryConfig`
+- Parameterised `Invoke-Scenario1.ps1` — container name for docker exec calls driven by `$DirectoryConfig`
+- SambaAD remains the default — all existing behaviour preserved when `-DirectoryType` is not specified
 
 ### Phase 4: Connector Fixes
 

@@ -144,7 +144,11 @@ param(
     [switch]$CaptureMetrics,
 
     [Parameter(Mandatory=$false)]
-    [switch]$IgnoreSnapshots
+    [switch]$IgnoreSnapshots,
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("SambaAD", "OpenLDAP")]
+    [string]$DirectoryType = "SambaAD"
 )
 
 Set-StrictMode -Version Latest
@@ -164,6 +168,12 @@ $NC = "$ESC[0m"
 # Script root
 $scriptRoot = $PSScriptRoot
 $repoRoot = (Get-Item $scriptRoot).Parent.Parent.FullName
+
+# Import helpers early so Get-DirectoryConfig is available
+. "$scriptRoot/utils/Test-Helpers.ps1"
+
+# Resolve directory configuration (used throughout for Docker profiles, population, setup)
+$script:DirectoryConfig = Get-DirectoryConfig -DirectoryType $DirectoryType
 
 # ============================================================================
 # Snapshot detection utilities
@@ -1036,13 +1046,13 @@ if (-not $SkipReset) {
     docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down -v 2>&1 | Out-Null
     # Use --profile to stop containers from all scenarios (scenario2, scenario8, etc.)
     # Without specifying profiles, containers started with profiles won't be stopped
-    docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down -v --remove-orphans 2>&1 | Out-Null
+    docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 --profile openldap down -v --remove-orphans 2>&1 | Out-Null
 
     # Force-remove any leftover integration test containers by name.
     # This handles containers that were created under a different Docker Compose project name
     # (e.g., 'jim' instead of 'jim-integration') and are therefore not cleaned up by 'down -v'.
     Write-Step "Removing any leftover integration test containers..."
-    $integrationContainers = @("samba-ad-primary", "samba-ad-source", "samba-ad-target", "sqlserver-hris-a", "oracle-hris-b", "postgres-target", "openldap-test", "mysql-test")
+    $integrationContainers = @("samba-ad-primary", "samba-ad-source", "samba-ad-target", "openldap-primary", "sqlserver-hris-a", "oracle-hris-b", "postgres-target", "mysql-test")
     foreach ($container in $integrationContainers) {
         docker rm -f $container 2>&1 | Out-Null
     }
@@ -1161,14 +1171,26 @@ if (-not $IgnoreSnapshots -and $Scenario -like "*Scenario1*") {
     }
 }
 
-Write-Step "Starting Samba AD (Primary)..."
-$sambaResult = docker compose -f docker-compose.integration-tests.yml up -d 2>&1
-if ($LASTEXITCODE -ne 0) {
-    Write-Failure "Failed to start Samba AD"
-    Write-Host "${GRAY}$sambaResult${NC}"
-    exit 1
+if ($DirectoryType -eq "OpenLDAP") {
+    Write-Step "Starting OpenLDAP (Primary)..."
+    $openldapResult = docker compose -f docker-compose.integration-tests.yml --profile openldap up -d 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Failure "Failed to start OpenLDAP"
+        Write-Host "${GRAY}$openldapResult${NC}"
+        exit 1
+    }
+    Write-Success "OpenLDAP Primary started"
 }
-Write-Success "Samba AD Primary started"
+else {
+    Write-Step "Starting Samba AD (Primary)..."
+    $sambaResult = docker compose -f docker-compose.integration-tests.yml up -d 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Failure "Failed to start Samba AD"
+        Write-Host "${GRAY}$sambaResult${NC}"
+        exit 1
+    }
+    Write-Success "Samba AD Primary started"
+}
 
 # Start Scenario 2 containers if running Scenario 2
 if ($Scenario -like "*Scenario2*") {
@@ -1233,20 +1255,44 @@ $timings["3. Start Services"] = (Get-Date) - $step3Start
 $step4Start = Get-Date
 Write-Section "Step 4: Waiting for Services"
 
-# Wait for Samba AD Primary
-Write-Step "Waiting for Samba AD Primary to be ready..."
-$waitScript = Join-Path $scriptRoot "Wait-SambaReady.ps1"
-if (Test-Path $waitScript) {
-    & $waitScript -TimeoutSeconds $TimeoutSeconds
-    if ($LASTEXITCODE -ne 0) {
-        Write-Failure "Samba AD did not become ready in time"
-        Write-Host "${YELLOW}  Check logs: docker logs samba-ad-primary${NC}"
+if ($DirectoryType -eq "OpenLDAP") {
+    # Wait for OpenLDAP
+    Write-Step "Waiting for OpenLDAP to be ready..."
+    $openldapReady = $false
+    $elapsed = 0
+    while (-not $openldapReady -and $elapsed -lt $TimeoutSeconds) {
+        $status = docker inspect --format='{{.State.Health.Status}}' openldap-primary 2>&1
+        if ($status -eq "healthy") {
+            $openldapReady = $true
+            Write-Success "OpenLDAP is healthy"
+        }
+        else {
+            Start-Sleep -Seconds 3
+            $elapsed += 3
+        }
+    }
+    if (-not $openldapReady) {
+        Write-Failure "OpenLDAP did not become ready in time"
+        Write-Host "${YELLOW}  Check logs: docker logs openldap-primary${NC}"
         exit 1
     }
 }
 else {
-    Write-Warning "Wait-SambaReady.ps1 not found, waiting 60 seconds..."
-    Start-Sleep -Seconds 60
+    # Wait for Samba AD Primary
+    Write-Step "Waiting for Samba AD Primary to be ready..."
+    $waitScript = Join-Path $scriptRoot "Wait-SambaReady.ps1"
+    if (Test-Path $waitScript) {
+        & $waitScript -TimeoutSeconds $TimeoutSeconds
+        if ($LASTEXITCODE -ne 0) {
+            Write-Failure "Samba AD did not become ready in time"
+            Write-Host "${YELLOW}  Check logs: docker logs samba-ad-primary${NC}"
+            exit 1
+        }
+    }
+    else {
+        Write-Warning "Wait-SambaReady.ps1 not found, waiting 60 seconds..."
+        Start-Sleep -Seconds 60
+    }
 }
 
 # Wait for Scenario 2 or Scenario 8 containers if applicable
@@ -1330,7 +1376,7 @@ $timings["4. Wait for Services"] = (Get-Date) - $step4Start
 # For Scenario 1, we need a clean Corp OU - delete if exists and recreate
 # Scenario 2 uses TestUsers OU which is handled by the scenario setup script
 # Skip when using snapshots — the snapshot already has populated data
-if ($Scenario -like "*Scenario1*" -and -not $script:UsingSnapshots) {
+if ($Scenario -like "*Scenario1*" -and -not $script:UsingSnapshots -and $DirectoryType -eq "SambaAD") {
     Write-Section "Step 4b: Preparing Samba AD for Testing"
 
     # First, try to delete the Corp OU if it exists (to ensure clean state)
@@ -1419,6 +1465,7 @@ if ($SetupOnly) {
             JIMUrl = "http://localhost:5200"
             ApiKey = $apiKey
             Template = $Template
+            DirectoryConfig = $script:DirectoryConfig
         }
         if ($PSBoundParameters.ContainsKey('ExportConcurrency')) {
             $setupParams.ExportConcurrency = $ExportConcurrency
@@ -1550,6 +1597,7 @@ $scenarioParams = @{
     Template = $Template
     Step = $Step
     ApiKey = $apiKey
+    DirectoryConfig = $script:DirectoryConfig
 }
 
 # Skip population if using snapshot images

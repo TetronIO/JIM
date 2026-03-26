@@ -66,12 +66,21 @@ param(
     [int]$MaxExportParallelism = 1,
 
     [Parameter(Mandatory=$false)]
-    [switch]$SkipPopulate
+    [switch]$SkipPopulate,
+
+    [Parameter(Mandatory=$false)]
+    [hashtable]$DirectoryConfig
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $ConfirmPreference = 'None'  # Disable confirmation prompts for non-interactive execution
+
+# Default to SambaAD Primary if no config provided
+if (-not $DirectoryConfig) {
+    . "$PSScriptRoot/../utils/Test-Helpers.ps1"
+    $DirectoryConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Primary
+}
 
 # Import helpers
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
@@ -230,7 +239,7 @@ try {
     foreach ($user in $testUsers) {
         # Try to delete the user - if they don't exist, samba-tool will error but that's OK
         # Use bash -c to properly capture the output and exit code
-        $output = & docker exec samba-ad-primary bash -c "samba-tool user delete '$user' 2>&1; echo EXIT_CODE:\$?"
+        $output = & docker exec $($DirectoryConfig.ContainerName) bash -c "samba-tool user delete '$user' 2>&1; echo EXIT_CODE:\$?"
         if ($output -match "Deleted user") {
             Write-Host "  ✓ Deleted $user from AD" -ForegroundColor Gray
             $deletedCount++
@@ -242,7 +251,7 @@ try {
     }
     Write-Host "  ✓ AD cleanup complete ($deletedCount test users deleted)" -ForegroundColor Green
 
-    $config = & "$PSScriptRoot/../Setup-Scenario1.ps1" -JIMUrl $JIMUrl -ApiKey $ApiKey -Template $Template -ExportConcurrency $ExportConcurrency -MaxExportParallelism $MaxExportParallelism
+    $config = & "$PSScriptRoot/../Setup-Scenario1.ps1" -JIMUrl $JIMUrl -ApiKey $ApiKey -Template $Template -ExportConcurrency $ExportConcurrency -MaxExportParallelism $MaxExportParallelism -DirectoryConfig $DirectoryConfig
 
     if (-not $config) {
         throw "Failed to setup Scenario 1 configuration"
@@ -571,7 +580,7 @@ try {
         # Validate user exists in AD
         Write-Host "Validating user in Samba AD..." -ForegroundColor Gray
 
-        docker exec samba-ad-primary samba-tool user show $testUser.SamAccountName 2>&1 | Out-Null
+        docker exec $($DirectoryConfig.ContainerName) samba-tool user show $testUser.SamAccountName 2>&1 | Out-Null
 
         if ($LASTEXITCODE -eq 0) {
             Write-Host "  ✓ User '$($testUser.SamAccountName)' provisioned to AD" -ForegroundColor Green
@@ -632,7 +641,7 @@ try {
         # Validate title change
         Write-Host "Validating attribute update in AD..." -ForegroundColor Gray
 
-        $adUserInfo = docker exec samba-ad-primary samba-tool user show $moverSamAccountName 2>&1
+        $adUserInfo = docker exec $($DirectoryConfig.ContainerName) samba-tool user show $moverSamAccountName 2>&1
 
         if ($adUserInfo -match "title:.*Senior Developer") {
             Write-Host "  ✓ Title updated to 'Senior Developer' in AD" -ForegroundColor Green
@@ -690,7 +699,7 @@ try {
         Write-Host "Validating rename in AD..." -ForegroundColor Gray
 
         # Try to find the user with the new name
-        $adUserInfo = docker exec samba-ad-primary bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=$moverSamAccountName)' dn displayName 2>&1"
+        $adUserInfo = docker exec $($DirectoryConfig.ContainerName) bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=$moverSamAccountName)' dn displayName 2>&1"
 
         if ($adUserInfo -match "CN=$([regex]::Escape($newDisplayName))") {
             Write-Host "  ✓ User renamed to 'CN=$newDisplayName' in AD" -ForegroundColor Green
@@ -749,7 +758,7 @@ try {
         Write-Host "Validating OU move in AD..." -ForegroundColor Gray
 
         # Query AD to find the user and check DN
-        $adUserInfo = docker exec samba-ad-primary bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=$moverSamAccountName)' dn department 2>&1"
+        $adUserInfo = docker exec $($DirectoryConfig.ContainerName) bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=$moverSamAccountName)' dn department 2>&1"
 
         # Check if user is now in OU=Finance
         if ($adUserInfo -match "OU=Finance") {
@@ -810,7 +819,7 @@ try {
         # userAccountControl 514 = 512 (normal) + 2 (disabled)
         Write-Host "Validating account disabled state in AD..." -ForegroundColor Gray
 
-        $adUserInfo = docker exec samba-ad-primary bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=$disableSamAccountName)' userAccountControl 2>&1"
+        $adUserInfo = docker exec $($DirectoryConfig.ContainerName) bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=$disableSamAccountName)' userAccountControl 2>&1"
 
         # Check if userAccountControl is 514 (disabled) - ldbsearch returns decimal value
         if ($adUserInfo -match "userAccountControl: 514") {
@@ -873,7 +882,7 @@ try {
         # Validate account is enabled in AD
         Write-Host "Validating account enabled state in AD..." -ForegroundColor Gray
 
-        $adUserInfo = docker exec samba-ad-primary bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=$enableSamAccountName)' userAccountControl 2>&1"
+        $adUserInfo = docker exec $($DirectoryConfig.ContainerName) bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=$enableSamAccountName)' userAccountControl 2>&1"
 
         # Check if userAccountControl is 512 (enabled)
         if ($adUserInfo -match "userAccountControl: 512") {
@@ -945,7 +954,7 @@ try {
         # so the user should still exist in AD but the CSO should be disconnected
         Write-Host "Validating leaver state in AD..." -ForegroundColor Gray
 
-        $adUserCheck = docker exec samba-ad-primary samba-tool user show $userToRemove 2>&1
+        $adUserCheck = docker exec $($DirectoryConfig.ContainerName) samba-tool user show $userToRemove 2>&1
 
         if ($LASTEXITCODE -eq 0) {
             # User still exists in AD - expected with grace period
@@ -1018,7 +1027,7 @@ try {
         Write-Host "  ✓ Initial sync completed" -ForegroundColor Green
 
         # Verify user was created in AD
-        docker exec samba-ad-primary samba-tool user show test.reconnect 2>&1 | Out-Null
+        docker exec $($DirectoryConfig.ContainerName) samba-tool user show test.reconnect 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  ✗ User was not created in AD during initial sync" -ForegroundColor Red
             $testResults.Steps += @{ Name = "Reconnection"; Success = $false; Error = "User not provisioned during initial sync" }
@@ -1048,7 +1057,7 @@ try {
             Write-Host "  ✓ Removal sync completed" -ForegroundColor Green
 
             # Verify user still exists in AD (grace period should prevent deletion)
-            docker exec samba-ad-primary samba-tool user show test.reconnect 2>&1 | Out-Null
+            docker exec $($DirectoryConfig.ContainerName) samba-tool user show test.reconnect 2>&1 | Out-Null
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  ✓ User still in AD after removal (grace period active)" -ForegroundColor Green
             }
@@ -1068,7 +1077,7 @@ try {
             Write-Host "  ✓ Restore sync completed" -ForegroundColor Green
 
             # Verify user still exists (reconnection should preserve AD account)
-            $adUserCheck = docker exec samba-ad-primary samba-tool user show test.reconnect 2>&1
+            $adUserCheck = docker exec $($DirectoryConfig.ContainerName) samba-tool user show test.reconnect 2>&1
 
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  ✓ Reconnection successful - user preserved in AD" -ForegroundColor Green
