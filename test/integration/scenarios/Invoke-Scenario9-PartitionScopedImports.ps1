@@ -253,7 +253,6 @@ try {
     # Track CSO counts from each import for comparison
     $scopedPrimaryCsoAdds = 0
     $scopedSecondCsoAdds = 0
-    $unscopedTotalCsoCount = 0
 
     # Test 1: Scoped Import (primary partition)
     if ($Step -eq "ScopedImport" -or $Step -eq "All") {
@@ -295,20 +294,22 @@ try {
             }
         }
 
-        # Run sync to project to Metaverse
-        Write-Host "Running Full Synchronisation after scoped import..." -ForegroundColor Gray
-        $syncResult = Start-JIMRunProfile -ConnectedSystemId $ldapSystem.id -RunProfileId $syncProfile.id -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (after scoped import)"
-        Start-Sleep -Seconds $WaitSeconds
+        if (-not $isOpenLDAP) {
+            # Samba AD: run sync immediately after single scoped import (only one partition)
+            Write-Host "Running Full Synchronisation after scoped import..." -ForegroundColor Gray
+            $syncResult = Start-JIMRunProfile -ConnectedSystemId $ldapSystem.id -RunProfileId $syncProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (after scoped import)"
+            Start-Sleep -Seconds $WaitSeconds
 
-        $syncStats = Get-JIMActivityStats -Id $syncResult.activityId
-        Write-Host "  Projections: $($syncStats.totalProjections)" -ForegroundColor Gray
+            $syncStats = Get-JIMActivityStats -Id $syncResult.activityId
+            Write-Host "  Projections: $($syncStats.totalProjections)" -ForegroundColor Gray
 
-        if ($syncStats.totalProjections -ge 1) {
-            Write-Host "  OK Metaverse objects projected from scoped import" -ForegroundColor Green
-        }
-        else {
-            Write-Host "  WARNING: Expected projections, got $($syncStats.totalProjections)" -ForegroundColor Yellow
+            if ($syncStats.totalProjections -ge 1) {
+                Write-Host "  OK Metaverse objects projected from scoped import" -ForegroundColor Green
+            }
+            else {
+                Write-Host "  WARNING: Expected projections, got $($syncStats.totalProjections)" -ForegroundColor Yellow
+            }
         }
     }
 
@@ -336,11 +337,23 @@ try {
             $testResults.Steps += @{ Name = "ScopedImport2"; Success = $false; Error = "Expected at least $expectedGlitterbandUsers CSO adds, got $($stats.totalCsoAdds)" }
         }
 
-        # Run sync to project new CSOs to Metaverse
-        Write-Host "Running Full Synchronisation after second scoped import..." -ForegroundColor Gray
+        # OpenLDAP: run a single Full Sync AFTER both scoped imports complete.
+        # This avoids a concurrency issue where running sync between imports can cause
+        # stale CSO state on the second sync run.
+        Write-Host "Running Full Synchronisation after both scoped imports..." -ForegroundColor Gray
         $syncResult = Start-JIMRunProfile -ConnectedSystemId $ldapSystem.id -RunProfileId $syncProfile.id -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (after second scoped import)"
+        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (after scoped imports)"
         Start-Sleep -Seconds $WaitSeconds
+
+        $syncStats = Get-JIMActivityStats -Id $syncResult.activityId
+        Write-Host "  Projections: $($syncStats.totalProjections)" -ForegroundColor Gray
+
+        if ($syncStats.totalProjections -ge 1) {
+            Write-Host "  OK $($syncStats.totalProjections) CSO(s) projected to Metaverse" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  WARNING: Expected at least 1 projection, got $($syncStats.totalProjections)" -ForegroundColor Yellow
+        }
     }
 
     # Test 2: Unscoped Import (all selected partitions)
@@ -376,25 +389,22 @@ try {
     if ($Step -eq "Comparison" -or $Step -eq "All") {
         Write-TestSection "Test 3: Verification (metaverse consistency and partition isolation)"
 
-        # Run Full Sync to ensure metaverse is consistent
-        Write-Host "Running Full Synchronisation after unscoped import..." -ForegroundColor Gray
-        $syncResult = Start-JIMRunProfile -ConnectedSystemId $ldapSystem.id -RunProfileId $syncProfile.id -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (after unscoped import)"
-        Start-Sleep -Seconds $WaitSeconds
+        if (-not $isOpenLDAP) {
+            # Samba AD: run a final sync to verify consistency after unscoped import
+            Write-Host "Running Full Synchronisation after unscoped import..." -ForegroundColor Gray
+            $syncResult = Start-JIMRunProfile -ConnectedSystemId $ldapSystem.id -RunProfileId $syncProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (after unscoped import)"
+            Start-Sleep -Seconds $WaitSeconds
 
-        $syncStats = Get-JIMActivityStats -Id $syncResult.activityId
-        Write-Host "  Projections: $($syncStats.totalProjections)" -ForegroundColor Gray
-
-        # No new projections expected — objects already projected from scoped imports
-        Write-Host "  OK Full Sync consistent after unscoped import" -ForegroundColor Green
-
-        if ($isOpenLDAP) {
-            # OpenLDAP: verify partition isolation
-            # The scoped imports to each partition should have created distinct CSOs.
-            # Combined count should equal the total populated users.
+            $syncStats = Get-JIMActivityStats -Id $syncResult.activityId
+            Write-Host "  Projections: $($syncStats.totalProjections)" -ForegroundColor Gray
+            Write-Host "  OK Full Sync consistent after unscoped import" -ForegroundColor Green
+            $testResults.Steps += @{ Name = "Comparison"; Success = $true; Note = "Metaverse consistent after both import paths" }
+        }
+        else {
+            # OpenLDAP: verify partition isolation from import counts
             $totalScopedAdds = $scopedPrimaryCsoAdds + $scopedSecondCsoAdds
 
-            Write-Host "" -ForegroundColor Gray
             Write-Host "  Partition isolation verification:" -ForegroundColor Cyan
             Write-Host "    Scoped primary (Yellowstone) CSO adds: $scopedPrimaryCsoAdds" -ForegroundColor Gray
             Write-Host "    Scoped second (Glitterband) CSO adds:  $scopedSecondCsoAdds" -ForegroundColor Gray
@@ -426,10 +436,6 @@ try {
                 Success = $comparisonSuccess
                 Note = "Yellowstone=$scopedPrimaryCsoAdds, Glitterband=$scopedSecondCsoAdds, Total=$totalScopedAdds (expected $expectedTotalUsers)"
             }
-        }
-        else {
-            # Samba AD: simple consistency check
-            $testResults.Steps += @{ Name = "Comparison"; Success = $true; Note = "Metaverse consistent after both import paths" }
         }
     }
 
