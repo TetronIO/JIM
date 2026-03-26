@@ -357,6 +357,22 @@ internal class LdapConnectorSchema
                         objectType.Attributes.Add(attr);
                 }
 
+                // Synthesise a distinguishedName attribute for every object type.
+                // OpenLDAP (and most RFC-compliant directories) don't expose distinguishedName
+                // in the subschema because it's the entry's DN, not a stored attribute.
+                // However, the LDAP connector needs it as a writable Text attribute because
+                // the DN is provided by the client in Add requests to specify where the object
+                // is created and is used for DN-based provisioning expressions.
+                if (objectType.Attributes.All(a => !a.Name.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase)))
+                {
+                    objectType.Attributes.Add(new ConnectorSchemaAttribute(
+                        "distinguishedName", AttributeDataType.Text, AttributePlurality.SingleValued,
+                        required: false, className: objectClassDef.Name!, writability: AttributeWritability.Writable)
+                    {
+                        Description = "The full distinguished name (DN) of this entry"
+                    });
+                }
+
                 objectType.Attributes = objectType.Attributes.OrderBy(a => a.Name).ToList();
 
                 ApplyExternalIdRecommendations(objectType);

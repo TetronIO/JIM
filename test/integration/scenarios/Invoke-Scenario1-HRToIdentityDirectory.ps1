@@ -577,18 +577,20 @@ try {
             Write-Host "  ⚠ Cross-Domain system not configured, skipping Cross-Domain export" -ForegroundColor Yellow
         }
 
-        # Validate user exists in AD
-        Write-Host "Validating user in Samba AD..." -ForegroundColor Gray
+        # Validate user exists in the directory
+        $directoryName = $DirectoryConfig.ConnectedSystemName
+        Write-Host "Validating user in $directoryName..." -ForegroundColor Gray
 
-        docker exec $($DirectoryConfig.ContainerName) samba-tool user show $testUser.SamAccountName 2>&1 | Out-Null
+        $userIdentifier = $testUser.SamAccountName
+        $ldapUser = Get-LDAPUser -UserIdentifier $userIdentifier -DirectoryConfig $DirectoryConfig
 
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  ✓ User '$($testUser.SamAccountName)' provisioned to AD" -ForegroundColor Green
+        if ($ldapUser) {
+            Write-Host "  ✓ User '$userIdentifier' provisioned to $directoryName" -ForegroundColor Green
             $testResults.Steps += @{ Name = "Joiner"; Success = $true }
         }
         else {
-            Write-Host "  ✗ User '$($testUser.SamAccountName)' NOT found in AD" -ForegroundColor Red
-            $testResults.Steps += @{ Name = "Joiner"; Success = $false; Error = "User not found in AD" }
+            Write-Host "  ✗ User '$userIdentifier' NOT found in $directoryName" -ForegroundColor Red
+            $testResults.Steps += @{ Name = "Joiner"; Success = $false; Error = "User not found in $directoryName" }
             if (-not $ContinueOnError) {
                 Write-Host ""
                 Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red

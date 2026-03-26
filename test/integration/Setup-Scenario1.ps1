@@ -494,11 +494,12 @@ try {
             Write-Host "    - Name: '$($p.name)', ExternalId: '$($p.externalId)', Selected: $($p.selected)" -ForegroundColor Gray
         }
 
-        # Find the main domain partition (DC=panoply,DC=local)
+        # Find the main domain partition using the configured base DN
         # Note: API returns 'name' (display name) and 'externalId' (distinguished name)
         # We need the exact domain partition, not ForestDnsZones or DomainDnsZones
+        $targetBaseDN = $DirectoryConfig.BaseDN
         $domainPartition = $partitions | Where-Object {
-            $_.name -eq "DC=panoply,DC=local" -or $_.externalId -eq "DC=panoply,DC=local"
+            $_.name -eq $targetBaseDN -or $_.externalId -eq $targetBaseDN
         } | Select-Object -First 1
 
         # Fallback: if only one partition and filter didn't match, use it (it's the domain partition)
@@ -512,21 +513,29 @@ try {
             Set-JIMConnectedSystemPartition -ConnectedSystemId $ldapSystem.id -PartitionId $domainPartition.id -Selected $true | Out-Null
             Write-Host "  ✓ Partition selected: $($domainPartition.name)" -ForegroundColor Green
 
-            # Find and select the "Corp" container within this partition
-            # The hierarchy structure is: partition -> containers (nested)
-            $corpContainer = $null
+            # Find and select the target container within this partition
+            # For Samba AD: "Corp" (OU=Corp)
+            # For OpenLDAP: "People" (ou=People)
+            $targetContainer = $null
+
+            # Determine which container to look for based on directory type
+            # Use the full UserContainer DN for matching (API returns full DNs as container names for OpenLDAP)
+            $targetContainerDN = $DirectoryConfig.UserContainer
+            # Also extract the short OU name for AD-style matching (e.g., "OU=Corp,..." → "Corp")
+            $targetContainerName = if ($targetContainerDN -match "^[Oo][Uu]=([^,]+)") { $matches[1] } else { "Corp" }
 
             # Helper function to search containers recursively
+            # Matches by short name OR full DN (OpenLDAP returns full DN as container name)
             # Note: API returns camelCase JSON, so use 'childContainers' for nested containers
             function Find-Container {
-                param($Containers, $Name)
+                param($Containers, $Name, $FullDN)
                 foreach ($container in $Containers) {
-                    if ($container.name -eq $Name) {
+                    if ($container.name -eq $Name -or $container.name -eq $FullDN -or $container.id -eq $FullDN) {
                         return $container
                     }
                     # Child containers are in the 'childContainers' property (camelCase from API)
                     if ($container.childContainers) {
-                        $found = Find-Container -Containers $container.childContainers -Name $Name
+                        $found = Find-Container -Containers $container.childContainers -Name $Name -FullDN $FullDN
                         if ($found) { return $found }
                     }
                 }
@@ -534,27 +543,26 @@ try {
             }
 
             # Partition's top-level containers are in the 'containers' property
-            Write-Host "  Looking for containers in partition..." -ForegroundColor Gray
+            Write-Host "  Looking for container '$targetContainerName' (DN: $targetContainerDN) in partition..." -ForegroundColor Gray
             if ($domainPartition.containers) {
                 Write-Host "    Found $($domainPartition.containers.Count) top-level container(s):" -ForegroundColor Gray
                 foreach ($c in $domainPartition.containers) {
                     Write-Host "      - Name: '$($c.name)', ID: $($c.id), Selected: $($c.selected)" -ForegroundColor Gray
                 }
-                $corpContainer = Find-Container -Containers $domainPartition.containers -Name "Corp"
+                $targetContainer = Find-Container -Containers $domainPartition.containers -Name $targetContainerName -FullDN $targetContainerDN
             }
             else {
                 Write-Host "    No containers found in partition (containers property is null/empty)" -ForegroundColor Yellow
             }
 
-            if ($corpContainer) {
-                Write-Host "  Selecting container: Corp (ID: $($corpContainer.id))" -ForegroundColor Gray
-                Set-JIMConnectedSystemContainer -ConnectedSystemId $ldapSystem.id -ContainerId $corpContainer.id -Selected $true | Out-Null
-                Write-Host "  ✓ Container selected: Corp" -ForegroundColor Green
-                Write-Host "    Users will be provisioned under: OU=Users,OU=Corp,DC=panoply,DC=local" -ForegroundColor DarkGray
-                Write-Host "    Department OUs will be auto-created: OU={Dept},OU=Users,OU=Corp,DC=panoply,DC=local" -ForegroundColor DarkGray
+            if ($targetContainer) {
+                Write-Host "  Selecting container: $targetContainerName (ID: $($targetContainer.id))" -ForegroundColor Gray
+                Set-JIMConnectedSystemContainer -ConnectedSystemId $ldapSystem.id -ContainerId $targetContainer.id -Selected $true | Out-Null
+                Write-Host "  ✓ Container selected: $targetContainerName" -ForegroundColor Green
+                Write-Host "    Users will be provisioned under: $($DirectoryConfig.UserContainer)" -ForegroundColor DarkGray
             }
             else {
-                Write-Host "  ⚠ 'Corp' container not found in hierarchy" -ForegroundColor Yellow
+                Write-Host "  ⚠ '$targetContainerName' container not found in hierarchy" -ForegroundColor Yellow
                 Write-Host "    Available top-level containers:" -ForegroundColor Gray
                 if ($domainPartition.containers) {
                     $domainPartition.containers | ForEach-Object { Write-Host "      - $($_.name)" -ForegroundColor Gray }
@@ -562,11 +570,10 @@ try {
                 else {
                     Write-Host "      (none)" -ForegroundColor Gray
                 }
-                Write-Host "    Ensure Populate-SambaAD.ps1 has been run to create the Corp OU" -ForegroundColor Yellow
             }
         }
         else {
-            Write-Host "  ⚠ Could not find panoply partition" -ForegroundColor Yellow
+            Write-Host "  ⚠ Could not find partition '$targetBaseDN'" -ForegroundColor Yellow
             Write-Host "    Available partitions:" -ForegroundColor Gray
             $partitions | ForEach-Object { Write-Host "      - $($_.name)" -ForegroundColor Gray }
         }
@@ -589,10 +596,11 @@ catch {
 Write-TestStep "Step 6b" "Creating Sync Rules"
 
 try {
-    # Get the "user" object type from both systems (common in identity management)
-    # For CSV, it might be "Person" or similar; for LDAP it's typically "user"
+    # Get the user object type from both systems
+    # For CSV, it might be "Person" or similar; for LDAP it depends on directory type
     $csvUserType = $csvObjectTypes | Where-Object { $_.name -match "^(user|person|record)$" } | Select-Object -First 1
-    $ldapUserType = $ldapObjectTypes | Where-Object { $_.name -eq "user" } | Select-Object -First 1
+    $ldapUserObjectClass = $DirectoryConfig.UserObjectClass  # "user" for AD, "inetOrgPerson" for OpenLDAP
+    $ldapUserType = $ldapObjectTypes | Where-Object { $_.name -eq $ldapUserObjectClass } | Select-Object -First 1
 
     # Get the Metaverse "User" object type
     $mvUserType = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "User" } | Select-Object -First 1
@@ -603,7 +611,7 @@ try {
         Write-Host "  Skipping sync rule creation" -ForegroundColor Yellow
     }
     elseif (-not $ldapUserType) {
-        Write-Host "  ⚠ No 'user' object type found in LDAP schema. Available types:" -ForegroundColor Yellow
+        Write-Host "  ⚠ No '$ldapUserObjectClass' object type found in LDAP schema. Available types:" -ForegroundColor Yellow
         $ldapObjectTypes | ForEach-Object { Write-Host "    - $($_.name)" -ForegroundColor Gray }
         Write-Host "  Skipping sync rule creation" -ForegroundColor Yellow
     }
@@ -645,24 +653,44 @@ try {
         # This is more representative of real-world ILM configuration where administrators
         # only import/export the attributes they actually need, rather than the entire schema.
         # See: https://github.com/TetronIO/JIM/issues/227
-        $requiredLdapAttributes = @(
-            'sAMAccountName',     # Account Name - required anchor
-            'givenName',          # First Name
-            'sn',                 # Last Name (surname)
-            'displayName',        # Display Name
-            'cn',                 # Common Name (also mapped from Display Name)
-            'mail',               # Email
-            'userPrincipalName',  # UPN (also mapped from Email)
-            'title',              # Job Title
-            'department',         # Department
-            'company',            # Company name (Panoply or partner company)
-            'employeeID',         # Employee ID - required for LDAP matching rule (join to existing AD accounts)
-            'distinguishedName',  # DN - required for LDAP provisioning
-            'accountExpires',     # Account expiry (Large Integer/Int64) - populated from HR Employee End Date via ToFileTime
-            'userAccountControl', # Account control flags (Number/Int32) - tests integer data type flow
-            'description',         # Training Status - supplementary attribute from Training source (recall testing)
-            'extensionAttribute1'  # Pronouns - AD has no native attribute, uses Exchange extension attribute
-        )
+        # The attribute set varies by directory type (AD vs OpenLDAP use different schema attributes)
+        $isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
+        $requiredLdapAttributes = if ($isOpenLDAP) {
+            @(
+                'uid',                # User identifier - used as RDN and account name
+                'givenName',          # First Name
+                'sn',                 # Last Name (surname)
+                'displayName',        # Display Name
+                'cn',                 # Common Name (MUST attribute for inetOrgPerson)
+                'mail',               # Email
+                'title',              # Job Title
+                'departmentNumber',   # Department (OpenLDAP equivalent of AD 'department')
+                'o',                  # Organisation (company name)
+                'employeeNumber',     # Employee ID (OpenLDAP equivalent of AD 'employeeID')
+                'distinguishedName',  # DN - required for LDAP provisioning (synthesised by JIM connector)
+                'description'         # Training Status - supplementary attribute from Training source
+            )
+        }
+        else {
+            @(
+                'sAMAccountName',     # Account Name - required anchor
+                'givenName',          # First Name
+                'sn',                 # Last Name (surname)
+                'displayName',        # Display Name
+                'cn',                 # Common Name (also mapped from Display Name)
+                'mail',               # Email
+                'userPrincipalName',  # UPN (also mapped from Email)
+                'title',              # Job Title
+                'department',         # Department
+                'company',            # Company name (Panoply or partner company)
+                'employeeID',         # Employee ID - required for LDAP matching rule (join to existing AD accounts)
+                'distinguishedName',  # DN - required for LDAP provisioning
+                'accountExpires',     # Account expiry (Large Integer/Int64) - populated from HR Employee End Date via ToFileTime
+                'userAccountControl', # Account control flags (Number/Int32) - tests integer data type flow
+                'description',         # Training Status - supplementary attribute from Training source (recall testing)
+                'extensionAttribute1'  # Pronouns - AD has no native attribute, uses Exchange extension attribute
+            )
+        }
 
         $ldapAttrUpdates = @{}
         foreach ($attr in $ldapUserType.attributes) {
@@ -675,9 +703,8 @@ try {
         $missingLdapAttrs = @($requiredLdapAttributes | Where-Object { $_ -notin $ldapSchemaAttrNames })
         if ($missingLdapAttrs.Count -gt 0) {
             Write-Host "  ✗ Required LDAP attributes not found in schema: $($missingLdapAttrs -join ', ')" -ForegroundColor Red
-            Write-Host "    This usually means the Samba AD image is outdated and needs rebuilding." -ForegroundColor Yellow
-            Write-Host "    Run: docker rmi samba-ad-prebuilt:latest && jim-build" -ForegroundColor Yellow
-            throw "Missing required LDAP attributes in schema: $($missingLdapAttrs -join ', '). Rebuild the Samba AD image."
+            Write-Host "    This usually means the directory image is outdated and needs rebuilding." -ForegroundColor Yellow
+            throw "Missing required LDAP attributes in schema: $($missingLdapAttrs -join ', ')"
         }
 
         $ldapResult = Set-JIMConnectedSystemAttribute -ConnectedSystemId $ldapSystem.id -ObjectTypeId $ldapUserType.id -AttributeUpdates $ldapAttrUpdates -PassThru -ErrorAction Stop
@@ -705,7 +732,7 @@ try {
         }
 
         # Create Export sync rule (Metaverse -> LDAP)
-        $exportRuleName = "Samba AD Export Users"
+        $exportRuleName = "$($DirectoryConfig.ConnectedSystemName) Export Users"
         $exportRule = $existingRules | Where-Object { $_.name -eq $exportRuleName }
 
         if (-not $exportRule) {
@@ -839,57 +866,72 @@ try {
             @{ CsAttr = "status";            MvAttr = "Status" }               # Established/Active/Archived - controls userAccountControl in AD
         )
 
-        $exportMappings = @(
-            @{ MvAttr = "Account Name";          LdapAttr = "sAMAccountName" }
-            @{ MvAttr = "First Name";            LdapAttr = "givenName" }
-            @{ MvAttr = "Last Name";             LdapAttr = "sn" }
-            @{ MvAttr = "Display Name";          LdapAttr = "displayName" }
-            @{ MvAttr = "Display Name";          LdapAttr = "cn" }
-            @{ MvAttr = "Email";                 LdapAttr = "mail" }
-            @{ MvAttr = "Email";                 LdapAttr = "userPrincipalName" }  # UPN = email for AD login
-            @{ MvAttr = "Job Title";             LdapAttr = "title" }
-            @{ MvAttr = "Department";            LdapAttr = "department" }
-            @{ MvAttr = "Company";               LdapAttr = "company" }  # Company name exported to AD
-            @{ MvAttr = "Pronouns";              LdapAttr = "extensionAttribute1" }  # Pronouns - AD has no native attribute, use extensionAttribute
-            @{ MvAttr = "Employee ID";           LdapAttr = "employeeID" }  # Required for LDAP matching rule
-            # Training export mappings (Training Status → description, Training Course Count → info)
-            # are created later in the Training configuration section, after Training MV attributes exist.
-        )
+        $exportMappings = if ($isOpenLDAP) {
+            @(
+                @{ MvAttr = "Account Name";          LdapAttr = "uid" }
+                @{ MvAttr = "First Name";            LdapAttr = "givenName" }
+                @{ MvAttr = "Last Name";             LdapAttr = "sn" }
+                @{ MvAttr = "Display Name";          LdapAttr = "displayName" }
+                @{ MvAttr = "Display Name";          LdapAttr = "cn" }
+                @{ MvAttr = "Email";                 LdapAttr = "mail" }
+                @{ MvAttr = "Job Title";             LdapAttr = "title" }
+                @{ MvAttr = "Department";            LdapAttr = "departmentNumber" }
+                @{ MvAttr = "Company";               LdapAttr = "o" }
+                @{ MvAttr = "Employee ID";           LdapAttr = "employeeNumber" }
+            )
+        }
+        else {
+            @(
+                @{ MvAttr = "Account Name";          LdapAttr = "sAMAccountName" }
+                @{ MvAttr = "First Name";            LdapAttr = "givenName" }
+                @{ MvAttr = "Last Name";             LdapAttr = "sn" }
+                @{ MvAttr = "Display Name";          LdapAttr = "displayName" }
+                @{ MvAttr = "Display Name";          LdapAttr = "cn" }
+                @{ MvAttr = "Email";                 LdapAttr = "mail" }
+                @{ MvAttr = "Email";                 LdapAttr = "userPrincipalName" }  # UPN = email for AD login
+                @{ MvAttr = "Job Title";             LdapAttr = "title" }
+                @{ MvAttr = "Department";            LdapAttr = "department" }
+                @{ MvAttr = "Company";               LdapAttr = "company" }  # Company name exported to AD
+                @{ MvAttr = "Pronouns";              LdapAttr = "extensionAttribute1" }  # Pronouns - AD has no native attribute, use extensionAttribute
+                @{ MvAttr = "Employee ID";           LdapAttr = "employeeID" }  # Required for LDAP matching rule
+                # Training export mappings (Training Status → description, Training Course Count → info)
+                # are created later in the Training configuration section, after Training MV attributes exist.
+            )
+        }
 
         # Expression-based mappings for computed values
-        # DN uses Department to place users in department OUs under OU=Users,OU=Corp
-        # Structure: CN={Display Name},OU={Department},OU=Users,OU=Corp,DC=panoply,DC=local
-        # This enables:
-        #   1. OU move testing when department changes
-        #   2. Auto-creation of department OUs by the LDAP connector (when "Create containers as needed?" is enabled)
-        #   3. Partition/container selection testing (only Corp is selected)
-        $expressionMappings = @(
-            @{
-                LdapAttr = "distinguishedName"
-                Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",OU=Users,OU=Corp,DC=panoply,DC=local"'
-            }
-            @{
-                # userAccountControl: Conditional expression based on Status
-                # - "Archived" → DisableUser() sets the ACCOUNTDISABLE bit (bit 2) on the existing value
-                # - All other statuses → EnableUser() clears the ACCOUNTDISABLE bit on the existing value
-                # Using EnableUser/DisableUser preserves other UAC flags (e.g. DONT_EXPIRE_PASSWORD)
-                # rather than hardcoding 512/514, which would clobber those flags.
-                # Coalesce defaults to 512 (NORMAL_ACCOUNT) for Create exports where cs["userAccountControl"]
-                # is null because the CSO doesn't yet exist in the directory.
-                # This tests:
-                #   1. Integer data type export to AD
-                #   2. Conditional expressions with IIF + bitwise UAC helpers
-                #   3. Coalesce for null-safe Create export handling
-                # Note: Use Eq() for string comparison, NOT ==, because AttributeAccessor returns object?
-                # and the == operator uses reference equality for object comparisons
-                LdapAttr = "userAccountControl"
-                Expression = 'IIF(Eq(mv["Status"], "Archived"), DisableUser(Coalesce(cs["userAccountControl"], 512)), EnableUser(Coalesce(cs["userAccountControl"], 512)))'
-            }
-            @{
-                LdapAttr = "accountExpires"
-                Expression = 'ToFileTime(mv["Employee End Date"])'  # DateTime → Large Integer (Int64) - HR end date converted to AD format
-            }
-        )
+        # These vary significantly between AD and OpenLDAP due to different DN structure,
+        # account control mechanisms, and attribute semantics
+        $expressionMappings = if ($isOpenLDAP) {
+            @(
+                @{
+                    # DN for OpenLDAP: uid={Account Name},ou=People,dc=yellowstone,dc=local
+                    LdapAttr = "distinguishedName"
+                    Expression = '"uid=" + mv["Account Name"] + ",' + $DirectoryConfig.UserContainer + '"'
+                }
+            )
+        }
+        else {
+            @(
+                @{
+                    # DN uses Department to place users in department OUs under OU=Users,OU=Corp
+                    # Structure: CN={Display Name},OU={Department},OU=Users,OU=Corp,DC=panoply,DC=local
+                    LdapAttr = "distinguishedName"
+                    Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",OU=Users,OU=Corp,DC=panoply,DC=local"'
+                }
+                @{
+                    # userAccountControl: Conditional expression based on Status
+                    # - "Archived" → DisableUser() sets the ACCOUNTDISABLE bit (bit 2) on the existing value
+                    # - All other statuses → EnableUser() clears the ACCOUNTDISABLE bit on the existing value
+                    LdapAttr = "userAccountControl"
+                    Expression = 'IIF(Eq(mv["Status"], "Archived"), DisableUser(Coalesce(cs["userAccountControl"], 512)), EnableUser(Coalesce(cs["userAccountControl"], 512)))'
+                }
+                @{
+                    LdapAttr = "accountExpires"
+                    Expression = 'ToFileTime(mv["Employee End Date"])'  # DateTime → Large Integer (Int64) - HR end date converted to AD format
+                }
+            )
+        }
 
         # Get all metaverse attributes for lookup
         $mvAttributes = Get-JIMMetaverseAttribute
@@ -1050,14 +1092,15 @@ try {
         }
 
         # Add object matching rule for LDAP object type (how to match CSOs to existing MVOs during export)
-        # This is important for joining to pre-existing AD accounts rather than provisioning duplicates
+        # This is important for joining to pre-existing directory accounts rather than provisioning duplicates
         Write-Host "  Configuring LDAP object matching rule..." -ForegroundColor Gray
 
-        $ldapEmployeeIdAttr = $ldapUserType.attributes | Where-Object { $_.name -eq 'employeeID' }
+        $ldapEmployeeIdAttrName = if ($isOpenLDAP) { 'employeeNumber' } else { 'employeeID' }
+        $ldapEmployeeIdAttr = $ldapUserType.attributes | Where-Object { $_.name -eq $ldapEmployeeIdAttrName }
 
         if (-not $ldapEmployeeIdAttr) {
-            Write-Host "  ✗ LDAP 'employeeID' attribute not found in schema" -ForegroundColor Red
-            throw "Required LDAP attribute 'employeeID' not found. Ensure the attribute is selected in the LDAP object type configuration."
+            Write-Host "  ✗ LDAP '$ldapEmployeeIdAttrName' attribute not found in schema" -ForegroundColor Red
+            throw "Required LDAP attribute '$ldapEmployeeIdAttrName' not found. Ensure the attribute is selected in the LDAP object type configuration."
         }
         if (-not $mvEmployeeIdAttr) {
             Write-Host "  ✗ Metaverse 'Employee ID' attribute not found" -ForegroundColor Red
@@ -1078,7 +1121,7 @@ try {
                 -MetaverseObjectTypeId $mvUserType.id `
                 -SourceAttributeId $ldapEmployeeIdAttr.id `
                 -TargetMetaverseAttributeId $mvEmployeeIdAttr.id | Out-Null
-            Write-Host "  ✓ LDAP object matching rule configured (employeeID → Employee ID)" -ForegroundColor Green
+            Write-Host "  ✓ LDAP object matching rule configured ($ldapEmployeeIdAttrName → Employee ID)" -ForegroundColor Green
         }
         else {
             Write-Host "  LDAP object matching rule already exists" -ForegroundColor Gray
