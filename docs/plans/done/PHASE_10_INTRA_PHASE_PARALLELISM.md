@@ -1,6 +1,7 @@
 # Phase 10: Intra-Phase Parallelism
 
-- **Status:** Doing
+- **Status:** Done
+- **Note:** MVO creates/updates remain EF-based. Converting to COPY binary tracked as #338 Phase 6.
 - **Issue:** [#394](https://github.com/TetronIO/JIM/issues/394)
 - **Parent:** [Worker Redesign Option A](WORKER_REDESIGN_OPTIONS.md)
 - **Created:** 2026-03-25
