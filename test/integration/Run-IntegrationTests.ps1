@@ -1507,6 +1507,27 @@ if ($Scenario -like "*Scenario1*" -and -not $script:UsingSnapshots -and $Directo
     }
 }
 
+# Step 4c: Populate OpenLDAP with test data
+# OpenLDAP starts empty (only base OUs from bootstrap). Unlike Samba AD which uses snapshot
+# images with pre-populated data, OpenLDAP needs live population via Populate-OpenLDAP.ps1.
+if ($DirectoryType -eq "OpenLDAP") {
+    Write-Section "Step 4c: Populating OpenLDAP with Test Data"
+    Write-Step "Running Populate-OpenLDAP.ps1 -Template $Template..."
+    $populateScript = Join-Path $scriptRoot "Populate-OpenLDAP.ps1"
+    if (Test-Path $populateScript) {
+        & $populateScript -Template $Template
+        if ($LASTEXITCODE -ne 0) {
+            Write-Failure "OpenLDAP population failed"
+            exit 1
+        }
+        Write-Success "OpenLDAP populated with $Template template data"
+    }
+    else {
+        Write-Failure "Populate-OpenLDAP.ps1 not found at $populateScript"
+        exit 1
+    }
+}
+
 # Step 5: Setup / Run test scenario
 $step5Start = Get-Date
 

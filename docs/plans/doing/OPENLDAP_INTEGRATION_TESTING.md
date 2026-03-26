@@ -1,6 +1,6 @@
 # OpenLDAP Integration Testing
 
-- **Status:** Doing (Phases 1-5 complete)
+- **Status:** Doing (Phases 1-5 complete, Phase 6 in progress — S9 done)
 - **Created:** 2026-03-09
 - **Issue:** [#72](https://github.com/TetronIO/JIM/issues/72)
 
@@ -479,16 +479,16 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 | Leaver | ✅ Pass | Grace period deprovisioning |
 | Reconnection | ✅ Pass | Delete → restore within grace period |
 
-### Phase 6: Remaining Scenarios
+### Phase 6: Remaining Scenarios (In Progress)
 
 **Goal:** Parameterise all remaining integration test scenarios for OpenLDAP.
 
 **Recommended order** (value vs effort):
 
-| Priority | Scenario | AD-specific refs | Effort | Notes |
-|----------|----------|-----------------|--------|-------|
-| 1 | **S9: Partition-Scoped Imports** | 5 | Low | Primary motivation for OpenLDAP's two suffixes (Yellowstone + Glitterband). Tests multi-partition import which Samba AD cannot test (single domain). |
-| 2 | **S7: Clear Connected System Objects** | 0 | Low | Likely already works — no AD-specific code. Verify and add `DirectoryConfig` parameter. |
+| Priority | Scenario | AD-specific refs | Effort | Status | Notes |
+|----------|----------|-----------------|--------|--------|-------|
+| 1 | **S9: Partition-Scoped Imports** | 5 | Low | ✅ Done | True multi-partition filtering with Yellowstone + Glitterband suffixes |
+| 2 | **S7: Clear Connected System Objects** | 0 | Low | | Likely already works — no AD-specific code. Verify and add `DirectoryConfig` parameter. |
 | 3 | **S6: Scheduler Service** | 2 | Low | Mostly infrastructure testing. Only 2 AD-specific refs to fix. |
 | 4 | **S2: Cross-Domain Sync** | 11 | Medium | Tests sync between two LDAP directories. Use Yellowstone→Glitterband as the two "domains". Needs two LDAP connected systems and cross-domain sync rules. |
 | 5 | **S5: Matching Rules** | 17 | Medium | Tests join/projection logic. Object type names (`user`→`inetOrgPerson`) and attribute names (`sAMAccountName`→`uid`) differ. |
@@ -498,7 +498,7 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 
 **Implementation advice for each scenario:**
 
-**S9 (Partition-Scoped Imports):** Start here — this is the scenario OpenLDAP was specifically designed to support. The two suffixes (`dc=yellowstone,dc=local` and `dc=glitterband,dc=local`) are already configured. The test should verify that selecting only one partition imports only objects from that suffix. Minimal connector changes expected.
+**S9 (Partition-Scoped Imports):** ✅ Complete. Both `Setup-Scenario9.ps1` and `Invoke-Scenario9-PartitionScopedImports.ps1` parameterised with `$DirectoryConfig`. For OpenLDAP: selects both partitions (Yellowstone + Glitterband), creates four run profiles (scoped primary, scoped second, unscoped, full sync), and asserts true partition isolation — scoped imports to each partition return only that partition's users, and combined counts match total. `Run-IntegrationTests.ps1` updated with Step 4c to call `Populate-OpenLDAP.ps1` before scenarios when using OpenLDAP.
 
 **S2 (Cross-Domain Sync):** Requires two LDAP connected systems pointing at the same OpenLDAP instance but different suffixes. The `Get-DirectoryConfig` function already has `SecondSuffix` and `SecondBindDN` for this purpose. Setup script needs a second connected system creation block.
 
