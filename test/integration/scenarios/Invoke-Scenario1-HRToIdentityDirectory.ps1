@@ -712,24 +712,48 @@ try {
         Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus | Out-Null
         Write-Host "  ✓ Sync sequence completed" -ForegroundColor Green
 
-        # Validate rename in AD
-        Write-Host "Validating rename in AD..." -ForegroundColor Gray
+        # Validate rename
+        $directoryName = $DirectoryConfig.ConnectedSystemName
+        $isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
+        Write-Host "Validating rename in $directoryName..." -ForegroundColor Gray
 
-        # Try to find the user with the new name
-        $adUserInfo = docker exec $($DirectoryConfig.ContainerName) bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=$moverSamAccountName)' dn displayName 2>&1"
+        if ($isOpenLDAP) {
+            # For OpenLDAP, the DN doesn't change when displayName changes (RDN is uid, not CN).
+            # Verify the attributes (cn, displayName, givenName) were updated instead.
+            $updatedUser = Get-LDAPUser -UserIdentifier $moverSamAccountName -DirectoryConfig $DirectoryConfig
+            $updatedCn = if ($updatedUser) { $updatedUser["cn"] } else { $null }
 
-        if ($adUserInfo -match "CN=$([regex]::Escape($newDisplayName))") {
-            Write-Host "  ✓ User renamed to 'CN=$newDisplayName' in AD" -ForegroundColor Green
-            $testResults.Steps += @{ Name = "Mover-Rename"; Success = $true }
+            if ($updatedCn -match [regex]::Escape($newDisplayName)) {
+                Write-Host "  ✓ User cn updated to '$newDisplayName' in $directoryName (DN unchanged — RDN is uid)" -ForegroundColor Green
+                $testResults.Steps += @{ Name = "Mover-Rename"; Success = $true }
+            }
+            else {
+                Write-Host "  ✗ User cn not updated in $directoryName (got: $updatedCn)" -ForegroundColor Red
+                $testResults.Steps += @{ Name = "Mover-Rename"; Success = $false; Error = "cn not updated" }
+                if (-not $ContinueOnError) {
+                    Write-Host ""
+                    Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                    exit 1
+                }
+            }
         }
         else {
-            Write-Host "  ✗ User NOT renamed in AD" -ForegroundColor Red
-            Write-Host "    AD output: $adUserInfo" -ForegroundColor Gray
-            $testResults.Steps += @{ Name = "Mover-Rename"; Success = $false; Error = "DN not renamed" }
-            if (-not $ContinueOnError) {
-                Write-Host ""
-                Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
-                exit 1
+            # For Samba AD, verify the DN changed (CN= component reflects new displayName)
+            $adUserInfo = docker exec $($DirectoryConfig.ContainerName) bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=$moverSamAccountName)' dn displayName 2>&1"
+
+            if ($adUserInfo -match "CN=$([regex]::Escape($newDisplayName))") {
+                Write-Host "  ✓ User renamed to 'CN=$newDisplayName' in $directoryName" -ForegroundColor Green
+                $testResults.Steps += @{ Name = "Mover-Rename"; Success = $true }
+            }
+            else {
+                Write-Host "  ✗ User NOT renamed in $directoryName" -ForegroundColor Red
+                Write-Host "    Output: $adUserInfo" -ForegroundColor Gray
+                $testResults.Steps += @{ Name = "Mover-Rename"; Success = $false; Error = "DN not renamed" }
+                if (-not $ContinueOnError) {
+                    Write-Host ""
+                    Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                    exit 1
+                }
             }
         }
         $stepTimings["2b. Mover-Rename"] = (Get-Date) - $step2bStart

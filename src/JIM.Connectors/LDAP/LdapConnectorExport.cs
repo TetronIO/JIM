@@ -1129,7 +1129,7 @@ internal class LdapConnectorExport
     {
         // Step 1: Collect all non-RDN attribute changes, grouped by (attribute name, operation)
         // This consolidates e.g. 200 individual "member Add" changes into a single modification with 200 values
-        var consolidatedModifications = ConsolidateModifications(pendingExport);
+        var consolidatedModifications = ConsolidateModifications(pendingExport, workingDn);
 
         if (consolidatedModifications.Count == 0)
             return [];
@@ -1146,7 +1146,7 @@ internal class LdapConnectorExport
     /// DirectoryAttributeModification containing all values. This is more efficient and correct
     /// than sending separate modifications for each value.
     /// </summary>
-    internal static List<ConsolidatedModification> ConsolidateModifications(PendingExport pendingExport)
+    internal static List<ConsolidatedModification> ConsolidateModifications(PendingExport pendingExport, string? workingDn = null)
     {
         // Group changes by (attribute name, operation type), preserving the original attribute changes
         // for protected attribute handling
@@ -1160,9 +1160,10 @@ internal class LdapConnectorExport
 
             var attrName = attrChange.Attribute.Name;
 
-            // Skip RDN (Relative Distinguished Name) attributes - they cannot be modified via LDAP ModifyRequest.
+            // Skip RDN (Relative Distinguished Name) attributes — they cannot be modified via LDAP ModifyRequest.
             // These require a ModifyDNRequest (rename operation) instead, which is handled separately.
-            if (IsRdnAttribute(attrName))
+            // The actual RDN attribute is determined from the object's DN (e.g., CN for AD, uid for OpenLDAP).
+            if (IsRdnAttribute(attrName, workingDn))
                 continue;
 
             var operation = attrChange.ChangeType switch
@@ -1349,14 +1350,34 @@ internal class LdapConnectorExport
 
     /// <summary>
     /// Checks if an attribute name is an RDN (Relative Distinguished Name) attribute.
-    /// RDN attributes cannot be modified via LDAP ModifyRequest - they require ModifyDNRequest.
+    /// RDN attributes cannot be modified via LDAP ModifyRequest — they require ModifyDNRequest.
+    /// The actual RDN attribute varies by directory and object type (e.g., CN for AD users, uid for OpenLDAP).
+    /// We determine the RDN by parsing it from the object's current DN.
     /// </summary>
-    private static bool IsRdnAttribute(string attrName)
+    /// <param name="attrName">The attribute name to check.</param>
+    /// <param name="dn">The current DN of the object, used to determine the actual RDN attribute.</param>
+    private static bool IsRdnAttribute(string attrName, string? dn = null)
     {
-        return attrName.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase) ||
-               attrName.Equals("cn", StringComparison.OrdinalIgnoreCase) ||
+        // distinguishedName is always skipped — it's the full DN, not a modifiable attribute
+        if (attrName.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // If we have the DN, determine the actual RDN attribute by parsing the first component
+        if (!string.IsNullOrEmpty(dn))
+        {
+            var equalsIndex = dn.IndexOf('=');
+            if (equalsIndex > 0)
+            {
+                var rdnAttr = dn[..equalsIndex].Trim();
+                return attrName.Equals(rdnAttr, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        // Fallback: common RDN attributes (when DN is not available)
+        return attrName.Equals("cn", StringComparison.OrdinalIgnoreCase) ||
                attrName.Equals("ou", StringComparison.OrdinalIgnoreCase) ||
-               attrName.Equals("dc", StringComparison.OrdinalIgnoreCase);
+               attrName.Equals("dc", StringComparison.OrdinalIgnoreCase) ||
+               attrName.Equals("uid", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
