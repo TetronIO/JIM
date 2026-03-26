@@ -335,42 +335,42 @@ public class LdapConnectorUtilitiesTests
     [Test]
     public void ShouldOverridePluralityToSingleValued_DescriptionOnUserInAd_ReturnsTrue()
     {
-        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "user", isActiveDirectory: true);
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "user", LdapDirectoryType.ActiveDirectory);
         Assert.That(result, Is.True);
     }
 
     [Test]
     public void ShouldOverridePluralityToSingleValued_DescriptionOnGroupInAd_ReturnsTrue()
     {
-        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "group", isActiveDirectory: true);
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "group", LdapDirectoryType.ActiveDirectory);
         Assert.That(result, Is.True);
     }
 
     [Test]
     public void ShouldOverridePluralityToSingleValued_DescriptionOnComputerInAd_ReturnsTrue()
     {
-        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "computer", isActiveDirectory: true);
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "computer", LdapDirectoryType.ActiveDirectory);
         Assert.That(result, Is.True);
     }
 
     [Test]
     public void ShouldOverridePluralityToSingleValued_DescriptionOnInetOrgPersonInAd_ReturnsTrue()
     {
-        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "inetOrgPerson", isActiveDirectory: true);
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "inetOrgPerson", LdapDirectoryType.ActiveDirectory);
         Assert.That(result, Is.True);
     }
 
     [Test]
     public void ShouldOverridePluralityToSingleValued_DescriptionOnSamDomainInAd_ReturnsTrue()
     {
-        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "samDomain", isActiveDirectory: true);
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "samDomain", LdapDirectoryType.ActiveDirectory);
         Assert.That(result, Is.True);
     }
 
     [Test]
     public void ShouldOverridePluralityToSingleValued_DescriptionOnSamServerInAd_ReturnsTrue()
     {
-        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "samServer", isActiveDirectory: true);
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "samServer", LdapDirectoryType.ActiveDirectory);
         Assert.That(result, Is.True);
     }
 
@@ -378,14 +378,14 @@ public class LdapConnectorUtilitiesTests
     public void ShouldOverridePluralityToSingleValued_DescriptionOnUserInGenericLdap_ReturnsFalse()
     {
         // Generic LDAP directories (OpenLDAP, 389DS) have no SAM layer — description is genuinely multi-valued
-        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "user", isActiveDirectory: false);
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "user", LdapDirectoryType.OpenLDAP);
         Assert.That(result, Is.False);
     }
 
     [Test]
     public void ShouldOverridePluralityToSingleValued_DescriptionOnGroupInGenericLdap_ReturnsFalse()
     {
-        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "group", isActiveDirectory: false);
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "group", LdapDirectoryType.OpenLDAP);
         Assert.That(result, Is.False);
     }
 
@@ -393,7 +393,7 @@ public class LdapConnectorUtilitiesTests
     public void ShouldOverridePluralityToSingleValued_DescriptionOnNonSamClassInAd_ReturnsFalse()
     {
         // Non-SAM-managed classes (e.g., organizationalUnit) should not have the override applied
-        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "organizationalUnit", isActiveDirectory: true);
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "organizationalUnit", LdapDirectoryType.ActiveDirectory);
         Assert.That(result, Is.False);
     }
 
@@ -401,7 +401,7 @@ public class LdapConnectorUtilitiesTests
     public void ShouldOverridePluralityToSingleValued_OtherAttributeOnUserInAd_ReturnsFalse()
     {
         // Non-SAM-enforced attributes should not be overridden even on SAM-managed classes
-        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("member", "user", isActiveDirectory: true);
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("member", "user", LdapDirectoryType.ActiveDirectory);
         Assert.That(result, Is.False);
     }
 
@@ -409,7 +409,7 @@ public class LdapConnectorUtilitiesTests
     public void ShouldOverridePluralityToSingleValued_CaseInsensitiveAttributeName_ReturnsTrue()
     {
         // LDAP attribute names are case-insensitive
-        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("Description", "group", isActiveDirectory: true);
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("Description", "group", LdapDirectoryType.ActiveDirectory);
         Assert.That(result, Is.True);
     }
 
@@ -417,14 +417,14 @@ public class LdapConnectorUtilitiesTests
     public void ShouldOverridePluralityToSingleValued_CaseInsensitiveObjectClass_ReturnsTrue()
     {
         // LDAP object class names are case-insensitive
-        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "Group", isActiveDirectory: true);
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "Group", LdapDirectoryType.ActiveDirectory);
         Assert.That(result, Is.True);
     }
 
     [Test]
     public void ShouldOverridePluralityToSingleValued_UpperCaseAttributeAndClass_ReturnsTrue()
     {
-        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("DESCRIPTION", "USER", isActiveDirectory: true);
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("DESCRIPTION", "USER", LdapDirectoryType.ActiveDirectory);
         Assert.That(result, Is.True);
     }
 

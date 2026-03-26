@@ -11,6 +11,7 @@ namespace JIM.Connectors.LDAP;
 public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IDisposable
 {
     private LdapConnection? _connection;
+    private LdapDirectoryType _directoryType = LdapDirectoryType.Generic;
     private bool _disposed;
     private ICertificateProvider? _certificateProvider;
     private ICredentialProtection? _credentialProtection;
@@ -348,6 +349,13 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
         // Reuse the same connection logic as import
         OpenImportConnection(settings.ToList(), Log.Logger);
+
+        // Detect directory type for export operations (external ID fetching, etc.)
+        if (_connection != null)
+        {
+            var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, Log.Logger);
+            _directoryType = rootDse.DirectoryType;
+        }
     }
 
     public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken)
@@ -367,7 +375,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             ?? LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE;
 
         var executor = new LdapOperationExecutor(_connection);
-        _currentExport = new LdapConnectorExport(executor, _exportSettings, Log.Logger, concurrency, modifyBatchSize);
+        _currentExport = new LdapConnectorExport(executor, _exportSettings, Log.Logger, concurrency, modifyBatchSize, _directoryType);
         return _currentExport.ExecuteAsync(pendingExports, cancellationToken);
     }
 

@@ -166,7 +166,7 @@ internal class LdapConnectorImport
         }
 
         // Determine which delta strategy to use
-        if (_previousRootDse.IsActiveDirectory)
+        if (_previousRootDse.UseUsnDeltaImport)
         {
             if (!_previousRootDse.HighestCommittedUsn.HasValue)
             {
@@ -313,39 +313,35 @@ internal class LdapConnectorImport
 
         var rootDseEntry = response.Entries[0];
 
-        // Check if this is Active Directory by looking for AD capability OIDs
+        // Detect directory type from rootDSE capabilities
         var capabilities = LdapConnectorUtilities.GetEntryAttributeStringValues(rootDseEntry, "supportedCapabilities");
-        var isActiveDirectory = capabilities != null &&
-            (capabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_OID) ||
-             capabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_ADAM_OID));
-
-        // Get vendor name for capability detection
         var vendorName = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "vendorName");
+        var directoryType = LdapConnectorUtilities.DetectDirectoryType(capabilities, vendorName);
 
         // Determine paging support based on directory type
         // Samba AD claims AD compatibility but doesn't properly support paged searches
         // (it returns paging cookies but then returns the same results on subsequent pages)
         var isSambaAd = vendorName != null &&
             vendorName.Contains("Samba", StringComparison.OrdinalIgnoreCase);
-        var supportsPaging = isActiveDirectory && !isSambaAd;
+        var supportsPaging = directoryType == LdapDirectoryType.ActiveDirectory && !isSambaAd;
 
         var rootDse = new LdapConnectorRootDse
         {
             DnsHostName = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "DNSHostName"),
             HighestCommittedUsn = LdapConnectorUtilities.GetEntryAttributeLongValue(rootDseEntry, "HighestCommittedUSN"),
-            IsActiveDirectory = isActiveDirectory,
+            DirectoryType = directoryType,
             VendorName = vendorName,
             SupportsPaging = supportsPaging
         };
 
         // For non-AD directories, try to get the last change number from the changelog
-        if (!isActiveDirectory)
+        if (!rootDse.UseUsnDeltaImport)
         {
             rootDse.LastChangeNumber = QueryDirectoryForLastChangeNumber(0);
         }
 
-        _logger.Information("GetRootDseInformation: Directory capabilities detected. IsActiveDirectory={IsAd}, VendorName={VendorName}, SupportsPaging={SupportsPaging}, HighestUSN={Usn}, LastChangeNumber={ChangeNum}",
-            rootDse.IsActiveDirectory, rootDse.VendorName ?? "(not set)", rootDse.SupportsPaging, rootDse.HighestCommittedUsn, rootDse.LastChangeNumber);
+        _logger.Information("GetRootDseInformation: Directory capabilities detected. DirectoryType={DirectoryType}, VendorName={VendorName}, SupportsPaging={SupportsPaging}, HighestUSN={Usn}, LastChangeNumber={ChangeNum}",
+            rootDse.DirectoryType, rootDse.VendorName ?? "(not set)", rootDse.SupportsPaging, rootDse.HighestCommittedUsn, rootDse.LastChangeNumber);
         return rootDse;
     }
 

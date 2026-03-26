@@ -406,7 +406,30 @@ internal static class LdapConnectorUtilities
     }
 
     /// <summary>
-    /// Queries the rootDSE to detect directory type (Active Directory, Samba AD, or generic LDAP).
+    /// Determines the <see cref="LdapDirectoryType"/> from rootDSE capabilities and vendor information.
+    /// </summary>
+    /// <param name="supportedCapabilities">OIDs from the rootDSE supportedCapabilities attribute.</param>
+    /// <param name="vendorName">The vendorName attribute from rootDSE (may be null).</param>
+    internal static LdapDirectoryType DetectDirectoryType(IEnumerable<string>? supportedCapabilities, string? vendorName)
+    {
+        if (supportedCapabilities != null &&
+            (supportedCapabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_OID) ||
+             supportedCapabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_ADAM_OID)))
+        {
+            return LdapDirectoryType.ActiveDirectory;
+        }
+
+        if (vendorName != null &&
+            vendorName.Contains("OpenLDAP", StringComparison.OrdinalIgnoreCase))
+        {
+            return LdapDirectoryType.OpenLDAP;
+        }
+
+        return LdapDirectoryType.Generic;
+    }
+
+    /// <summary>
+    /// Queries the rootDSE to detect directory type and basic capabilities.
     /// Used by schema discovery to apply directory-specific attribute overrides.
     /// </summary>
     internal static LdapConnectorRootDse GetBasicRootDseInformation(LdapConnection connection, ILogger logger)
@@ -425,25 +448,23 @@ internal static class LdapConnectorUtilities
         var rootDseEntry = response.Entries[0];
 
         var capabilities = GetEntryAttributeStringValues(rootDseEntry, "supportedCapabilities");
-        var isActiveDirectory = capabilities != null &&
-            (capabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_OID) ||
-             capabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_ADAM_OID));
-
         var vendorName = GetEntryAttributeStringValue(rootDseEntry, "vendorName");
+
+        var directoryType = DetectDirectoryType(capabilities, vendorName);
 
         var isSambaAd = vendorName != null &&
             vendorName.Contains("Samba", StringComparison.OrdinalIgnoreCase);
-        var supportsPaging = isActiveDirectory && !isSambaAd;
+        var supportsPaging = directoryType == LdapDirectoryType.ActiveDirectory && !isSambaAd;
 
         var rootDse = new LdapConnectorRootDse
         {
-            IsActiveDirectory = isActiveDirectory,
+            DirectoryType = directoryType,
             VendorName = vendorName,
             SupportsPaging = supportsPaging
         };
 
-        logger.Debug("GetBasicRootDseInformation: IsActiveDirectory={IsAd}, VendorName={VendorName}",
-            rootDse.IsActiveDirectory, rootDse.VendorName ?? "(not set)");
+        logger.Debug("GetBasicRootDseInformation: DirectoryType={DirectoryType}, VendorName={VendorName}",
+            rootDse.DirectoryType, rootDse.VendorName ?? "(not set)");
 
         return rootDse;
     }
@@ -468,9 +489,9 @@ internal static class LdapConnectorUtilities
     /// <param name="objectTypeName">The structural object class name (e.g., "user", "group").</param>
     /// <param name="isActiveDirectory">Whether the directory is Active Directory (AD-DS, AD-LDS, or Samba AD).</param>
     /// <returns>True if the attribute should be treated as single-valued despite the LDAP schema declaring it as multi-valued.</returns>
-    internal static bool ShouldOverridePluralityToSingleValued(string attributeName, string objectTypeName, bool isActiveDirectory)
+    internal static bool ShouldOverridePluralityToSingleValued(string attributeName, string objectTypeName, LdapDirectoryType directoryType)
     {
-        return isActiveDirectory &&
+        return directoryType == LdapDirectoryType.ActiveDirectory &&
                LdapConnectorConstants.SAM_ENFORCED_SINGLE_VALUED_ATTRIBUTES.Contains(attributeName) &&
                LdapConnectorConstants.SAM_MANAGED_OBJECT_CLASSES.Contains(objectTypeName);
     }

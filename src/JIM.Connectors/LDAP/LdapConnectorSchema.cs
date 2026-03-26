@@ -51,13 +51,27 @@ internal class LdapConnectorSchema
                 if (AddObjectTypeAttributes(objectType))
                 {
                     // make a recommendation on what unique identifier attribute(s) to use
-                    // for AD/AD LDS:
-                    var objectGuidSchemaAttribute = objectType.Attributes.Single(a => a.Name.Equals("objectguid", StringComparison.OrdinalIgnoreCase));
-                    objectType.RecommendedExternalIdAttribute = objectGuidSchemaAttribute;
+                    var externalIdAttrName = _rootDse.ExternalIdAttributeName;
+                    var externalIdSchemaAttribute = objectType.Attributes.SingleOrDefault(
+                        a => a.Name.Equals(externalIdAttrName, StringComparison.OrdinalIgnoreCase));
+
+                    if (externalIdSchemaAttribute != null)
+                    {
+                        objectType.RecommendedExternalIdAttribute = externalIdSchemaAttribute;
+                    }
+                    else
+                    {
+                        _logger.Warning("Schema discovery: external ID attribute '{ExternalIdAttr}' not found on object type '{ObjectType}'. " +
+                            "External ID recommendation will be unavailable — the administrator must select one manually.",
+                            externalIdAttrName, name);
+                    }
 
                     // say what the secondary external identifier needs to be for LDAP systems
-                    var dnSchemaAttribute = objectType.Attributes.Single(a => a.Name.Equals("distinguishedname", StringComparison.OrdinalIgnoreCase));
-                    objectType.RecommendedSecondaryExternalIdAttribute = dnSchemaAttribute;
+                    var dnSchemaAttribute = objectType.Attributes.SingleOrDefault(a => a.Name.Equals("distinguishedname", StringComparison.OrdinalIgnoreCase));
+                    if (dnSchemaAttribute != null)
+                    {
+                        objectType.RecommendedSecondaryExternalIdAttribute = dnSchemaAttribute;
+                    }
 
                     // override the data type for distinguishedName, we want to handle it as a string, not a reference type
                     // we do this as a DN attribute on an object cannot be a reference to itself. that would make no sense.
@@ -205,7 +219,7 @@ internal class LdapConnectorSchema
         // Active Directory SAM layer override: certain attributes are declared as multi-valued in the
         // LDAP schema but the SAM layer enforces single-valued semantics on security principals.
         // Override the plurality to match actual runtime behaviour so mapping validation works correctly.
-        if (!isSingleValued && LdapConnectorUtilities.ShouldOverridePluralityToSingleValued(attributeName, objectTypeName, _rootDse.IsActiveDirectory))
+        if (!isSingleValued && LdapConnectorUtilities.ShouldOverridePluralityToSingleValued(attributeName, objectTypeName, _rootDse.DirectoryType))
         {
             attributePlurality = AttributePlurality.SingleValued;
             _logger.Debug("GetSchemaAttribute: Overriding '{AttributeName}' from multi-valued to single-valued on object type '{ObjectType}' — " +
@@ -230,10 +244,11 @@ internal class LdapConnectorSchema
             }
         }
 
-        // handle exceptions:
-        // the objectGUID is typed as a string in the schema, but the byte-array returned does not decode to a string, but does to a Guid. go figure.
-        if (attributeName.Equals("objectguid", StringComparison.OrdinalIgnoreCase))
-            attributeDataType = AttributeDataType.Guid;
+        // Override the data type for the external ID attribute based on directory type.
+        // AD's objectGUID is declared as octet string in the schema but actually returns a binary GUID.
+        // OpenLDAP's entryUUID is a string-formatted UUID (RFC 4530).
+        if (attributeName.Equals(_rootDse.ExternalIdAttributeName, StringComparison.OrdinalIgnoreCase))
+            attributeDataType = _rootDse.ExternalIdDataType;
 
         // determine writability from schema metadata: systemOnly, systemFlags (constructed bit), and linkID (back-links)
         var systemOnlyRawValue = LdapConnectorUtilities.GetEntryAttributeStringValue(attributeEntry, "systemonly");

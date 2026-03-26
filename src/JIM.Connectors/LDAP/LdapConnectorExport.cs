@@ -17,6 +17,7 @@ internal class LdapConnectorExport
     private readonly ILogger _logger;
     private readonly int _exportConcurrency;
     private readonly int _modifyBatchSize;
+    private readonly LdapDirectoryType _directoryType;
 
     // Setting names
     private const string SettingDeleteBehaviour = "Delete Behaviour";
@@ -81,11 +82,13 @@ internal class LdapConnectorExport
         IList<ConnectedSystemSettingValue> settings,
         ILogger logger,
         int exportConcurrency = LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY,
-        int modifyBatchSize = LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE)
+        int modifyBatchSize = LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE,
+        LdapDirectoryType directoryType = LdapDirectoryType.ActiveDirectory)
     {
         _executor = executor;
         _settings = settings;
         _logger = logger;
+        _directoryType = directoryType;
         _exportConcurrency = Math.Clamp(exportConcurrency, 1, LdapConnectorConstants.MAX_EXPORT_CONCURRENCY);
         _modifyBatchSize = Math.Clamp(modifyBatchSize, LdapConnectorConstants.MIN_MODIFY_BATCH_SIZE, LdapConnectorConstants.MAX_MODIFY_BATCH_SIZE);
 
@@ -215,37 +218,40 @@ internal class LdapConnectorExport
 
         _logger.Debug("LdapConnectorExport.ProcessCreate: Successfully created object at '{Dn}'", dn);
 
-        // After successful create, fetch the system-assigned objectGUID
-        var objectGuid = FetchObjectGuid(dn);
-        if (objectGuid != null)
+        // After successful create, fetch the system-assigned external ID (objectGUID for AD, entryUUID for OpenLDAP)
+        var rootDse = new LdapConnectorRootDse { DirectoryType = _directoryType };
+        var externalId = FetchExternalId(dn, rootDse);
+        if (externalId != null)
         {
-            _logger.Debug("LdapConnectorExport.ProcessCreate: Retrieved objectGUID {ObjectGuid} for '{Dn}'", objectGuid, dn);
-            return ConnectedSystemExportResult.Succeeded(objectGuid, dn);
+            _logger.Debug("LdapConnectorExport.ProcessCreate: Retrieved external ID {ExternalId} for '{Dn}'", externalId, dn);
+            return ConnectedSystemExportResult.Succeeded(externalId, dn);
         }
 
-        // objectGUID not available, return success without external ID
+        // External ID not available, return success without it
         return ConnectedSystemExportResult.Succeeded(null, dn);
     }
 
     /// <summary>
-    /// Fetches the objectGUID for a newly created object.
+    /// Fetches the external ID attribute for a newly created object.
+    /// For AD this is objectGUID (binary GUID); for OpenLDAP this is entryUUID (string UUID).
     /// </summary>
-    private string? FetchObjectGuid(string dn)
+    private string? FetchExternalId(string dn, LdapConnectorRootDse rootDse)
     {
         try
         {
+            var externalIdAttr = rootDse.ExternalIdAttributeName;
             var searchRequest = new SearchRequest(
                 dn,
                 "(objectClass=*)",
                 SearchScope.Base,
-                "objectGUID");
+                externalIdAttr);
 
             var searchResponse = (SearchResponse)_executor.SendRequest(searchRequest);
-            return ParseObjectGuidFromResponse(searchResponse, dn);
+            return ParseExternalIdFromResponse(searchResponse, dn, rootDse);
         }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "LdapConnectorExport.FetchObjectGuid: Error fetching objectGUID for '{Dn}'", dn);
+            _logger.Warning(ex, "LdapConnectorExport.FetchExternalId: Error fetching external ID for '{Dn}'", dn);
             return null;
         }
     }
@@ -652,32 +658,34 @@ internal class LdapConnectorExport
 
         _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Successfully created object at '{Dn}'", dn);
 
-        var objectGuid = await FetchObjectGuidAsync(dn);
-        if (objectGuid != null)
+        var rootDse = new LdapConnectorRootDse { DirectoryType = _directoryType };
+        var externalId = await FetchExternalIdAsync(dn, rootDse);
+        if (externalId != null)
         {
-            _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Retrieved objectGUID {ObjectGuid} for '{Dn}'", objectGuid, dn);
-            return ConnectedSystemExportResult.Succeeded(objectGuid, dn);
+            _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Retrieved external ID {ExternalId} for '{Dn}'", externalId, dn);
+            return ConnectedSystemExportResult.Succeeded(externalId, dn);
         }
 
         return ConnectedSystemExportResult.Succeeded(null, dn);
     }
 
-    private async Task<string?> FetchObjectGuidAsync(string dn)
+    private async Task<string?> FetchExternalIdAsync(string dn, LdapConnectorRootDse rootDse)
     {
         try
         {
+            var externalIdAttr = rootDse.ExternalIdAttributeName;
             var searchRequest = new SearchRequest(
                 dn,
                 "(objectClass=*)",
                 SearchScope.Base,
-                "objectGUID");
+                externalIdAttr);
 
             var searchResponse = (SearchResponse)await _executor.SendRequestAsync(searchRequest);
-            return ParseObjectGuidFromResponse(searchResponse, dn);
+            return ParseExternalIdFromResponse(searchResponse, dn, rootDse);
         }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "LdapConnectorExport.FetchObjectGuidAsync: Error fetching objectGUID for '{Dn}'", dn);
+            _logger.Warning(ex, "LdapConnectorExport.FetchExternalIdAsync: Error fetching external ID for '{Dn}'", dn);
             return null;
         }
     }
@@ -1071,23 +1079,39 @@ internal class LdapConnectorExport
     /// <summary>
     /// Parses the objectGUID from a SearchResponse.
     /// </summary>
-    private string? ParseObjectGuidFromResponse(SearchResponse searchResponse, string dn)
+    private string? ParseExternalIdFromResponse(SearchResponse searchResponse, string dn, LdapConnectorRootDse rootDse)
     {
         if (searchResponse.ResultCode != ResultCode.Success || searchResponse.Entries.Count == 0)
         {
-            _logger.Warning("LdapConnectorExport.ParseObjectGuidFromResponse: Failed to fetch objectGUID for '{Dn}'", dn);
+            _logger.Warning("LdapConnectorExport.ParseExternalIdFromResponse: Failed to fetch external ID for '{Dn}'", dn);
             return null;
         }
 
         var entry = searchResponse.Entries[0];
-        if (entry.Attributes.Contains("objectGUID"))
+        var externalIdAttr = rootDse.ExternalIdAttributeName;
+
+        if (!entry.Attributes.Contains(externalIdAttr))
+            return null;
+
+        switch (rootDse.DirectoryType)
         {
-            var guidBytes = entry.Attributes["objectGUID"][0] as byte[];
-            if (guidBytes != null && guidBytes.Length == 16)
+            case LdapDirectoryType.ActiveDirectory:
             {
-                // AD objectGUID uses Microsoft GUID byte order (little-endian first 3 components)
-                var guid = IdentifierParser.FromMicrosoftBytes(guidBytes);
-                return guid.ToString();
+                // AD objectGUID is a 16-byte binary value in Microsoft GUID byte order (little-endian first 3 components)
+                var guidBytes = entry.Attributes[externalIdAttr][0] as byte[];
+                if (guidBytes is { Length: 16 })
+                {
+                    var guid = IdentifierParser.FromMicrosoftBytes(guidBytes);
+                    return guid.ToString();
+                }
+                break;
+            }
+            case LdapDirectoryType.OpenLDAP:
+            case LdapDirectoryType.Generic:
+            {
+                // OpenLDAP entryUUID is a string-formatted UUID (RFC 4530)
+                var uuidString = entry.Attributes[externalIdAttr][0] as string;
+                return uuidString?.Trim();
             }
         }
 
