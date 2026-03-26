@@ -507,8 +507,78 @@ function Show-TemplateMenu {
     return $templates[$selectedIndex].Name
 }
 
+# Interactive directory type selection function
+function Show-DirectoryTypeMenu {
+    $directoryTypes = @(
+        @{
+            Name = "SambaAD"
+            Description = "Samba Active Directory (default)"
+            Details = "LDAPS on port 636, objectGUID, AD schema"
+        }
+        @{
+            Name = "OpenLDAP"
+            Description = "OpenLDAP with multi-suffix partitions"
+            Details = "LDAP on port 1389, entryUUID, RFC 4512 schema"
+        }
+    )
+
+    $selectedIndex = 0
+    $exitMenu = $false
+
+    [Console]::CursorVisible = $false
+
+    try {
+        while (-not $exitMenu) {
+            Clear-Host
+
+            Write-Host ""
+            Write-Host "${CYAN}$("=" * 70)${NC}"
+            Write-Host "${CYAN}  JIM Integration Test - Directory Type Selection${NC}"
+            Write-Host "${CYAN}$("=" * 70)${NC}"
+            Write-Host ""
+            Write-Host "${GRAY}Use ↑/↓ arrow keys to navigate, Enter to select, Esc to exit${NC}"
+            Write-Host ""
+
+            for ($i = 0; $i -lt $directoryTypes.Count; $i++) {
+                $dt = $directoryTypes[$i]
+
+                if ($i -eq $selectedIndex) {
+                    Write-Host "${GREEN}► $($dt.Name)${NC} ${GRAY}— $($dt.Description)${NC}"
+                    Write-Host "${GRAY}  $($dt.Details)${NC}"
+                }
+                else {
+                    Write-Host "  $($dt.Name) ${GRAY}— $($dt.Description)${NC}"
+                    Write-Host "${GRAY}  $($dt.Details)${NC}"
+                }
+                Write-Host ""
+            }
+
+            $key = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+
+            switch ($key.VirtualKeyCode) {
+                38 { $selectedIndex = [Math]::Max(0, $selectedIndex - 1) }
+                40 { $selectedIndex = [Math]::Min($directoryTypes.Count - 1, $selectedIndex + 1) }
+                13 { $exitMenu = $true }
+                27 {
+                    Write-Host ""
+                    Write-Host "${YELLOW}Cancelled by user${NC}"
+                    [Console]::CursorVisible = $true
+                    exit 0
+                }
+            }
+        }
+    }
+    finally {
+        [Console]::CursorVisible = $true
+    }
+
+    Clear-Host
+    return $directoryTypes[$selectedIndex].Name
+}
+
 # Track if user explicitly set Template parameter
 $TemplateWasExplicitlySet = $PSBoundParameters.ContainsKey('Template')
+$DirectoryTypeWasExplicitlySet = $PSBoundParameters.ContainsKey('DirectoryType')
 
 # Scenarios that provision their own fixed test data and don't use the Template parameter
 # for data sizing. These scenarios accept Template but it has no effect on test execution.
@@ -541,6 +611,13 @@ if (-not $Scenario) {
         else {
             $Template = "Nano"
         }
+    }
+
+    # Show directory type menu only if not explicitly provided
+    if (-not $DirectoryTypeWasExplicitlySet) {
+        $DirectoryType = Show-DirectoryTypeMenu
+        # Re-resolve directory config with the selected type
+        $script:DirectoryConfig = Get-DirectoryConfig -DirectoryType $DirectoryType
     }
 }
 
