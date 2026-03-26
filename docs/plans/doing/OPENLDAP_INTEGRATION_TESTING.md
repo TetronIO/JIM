@@ -1,6 +1,6 @@
 # OpenLDAP Integration Testing
 
-- **Status:** Doing (Phase 1 complete)
+- **Status:** Doing (Phases 1-2 complete)
 - **Created:** 2026-03-09
 - **Issue:** [#72](https://github.com/TetronIO/JIM/issues/72)
 
@@ -422,11 +422,14 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 - Accesslog overlay enabled (`LDAP_ENABLE_ACCESSLOG=yes`) for future delta import testing
 - Health check passes, both suffixes queryable with admin bind
 
-### Phase 2: Test Data Population
+### Phase 2: Test Data Population ✅
 
 **Deliverables:**
-- `test/integration/Populate-OpenLDAP.ps1` — generates LDIF for `inetOrgPerson` users and `groupOfNames` groups, loads via `ldapadd`
-- Manual verification: population works at Nano/Micro/Small scales, users and groups queryable
+- `test/integration/Populate-OpenLDAP.ps1` — generates `inetOrgPerson` users and `groupOfNames` groups across both suffixes, loads via `ldapadd` piped through stdin
+- Users split between suffixes: odd indices to Yellowstone, even to Glitterband — distinct users per partition for Scenario 9 assertions
+- `groupOfNames` MUST constraint handled: initial member assigned during group creation
+- Additional memberships added via `ldapmodify`
+- Verified at Nano (3 users) and Micro (10 users) scales
 
 ### Phase 3: Test Framework Parameterisation
 
