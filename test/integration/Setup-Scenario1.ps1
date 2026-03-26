@@ -1677,7 +1677,8 @@ return @{
     TrainingSyncProfileId = $trainingSyncProfile.id
     TrainingDeltaSyncProfileId = $trainingDeltaSyncProfile.id
 
-    # Samba AD (primary target)
+    # LDAP target directory
+    IsOpenLDAP = ($DirectoryConfig.UserObjectClass -eq "inetOrgPerson")
     LDAPSystemId = $ldapSystem.id
     LDAPFullImportProfileId = $ldapFullImportProfile.id
     LDAPDeltaImportProfileId = $ldapDeltaImportProfile.id

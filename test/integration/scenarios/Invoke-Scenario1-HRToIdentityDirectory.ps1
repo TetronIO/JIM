@@ -137,10 +137,14 @@ function Invoke-SyncSequence {
     if ($ShowProgress) { Write-Host "  Waiting 5s for AD replication..." -ForegroundColor DarkGray }
     Start-Sleep -Seconds 5
 
-    # Step 4: LDAP Delta Import (confirming export)
-    if ($ShowProgress) { Write-Host "  [4/8] LDAP Delta Import (confirming)..." -ForegroundColor DarkGray }
-    $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPDeltaImportProfileId -Wait -PassThru
-    $results.Steps += @{ Name = "LDAP Delta Import"; ActivityId = $confirmImportResult.activityId }
+    # Step 4: LDAP Import (confirming export)
+    # Use Full Import for OpenLDAP (delta import via changelog not yet supported)
+    # Use Delta Import for AD/Samba AD (USN-based delta)
+    $confirmProfileId = if ($Config.IsOpenLDAP) { $Config.LDAPFullImportProfileId } else { $Config.LDAPDeltaImportProfileId }
+    $confirmProfileName = if ($isOpenLDAP) { "LDAP Full Import" } else { "LDAP Delta Import" }
+    if ($ShowProgress) { Write-Host "  [4/8] $confirmProfileName (confirming)..." -ForegroundColor DarkGray }
+    $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $confirmProfileId -Wait -PassThru
+    $results.Steps += @{ Name = $confirmProfileName; ActivityId = $confirmImportResult.activityId }
     if ($ValidateActivityStatus) {
         Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "LDAP Delta Import"
         Assert-NoUnresolvedReferences -ConnectedSystemId $Config.LDAPSystemId -Name "LDAP" -Context "after Delta Import (confirming)"
@@ -431,9 +435,12 @@ try {
         Start-Sleep -Seconds 5
 
         # Confirming Import - import the changes we just exported to LDAP
-        Write-Host "Triggering LDAP delta import (confirming export)..." -ForegroundColor Gray
-        $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "LDAP Delta Import (Joiner confirm)"
+        # Use Full Import for OpenLDAP (delta import via changelog not yet supported)
+        $confirmProfileId = if ($config.IsOpenLDAP) { $config.LDAPFullImportProfileId } else { $config.LDAPDeltaImportProfileId }
+        $confirmName = if ($config.IsOpenLDAP) { "LDAP Full Import" } else { "LDAP Delta Import" }
+        Write-Host "Triggering $confirmName (confirming export)..." -ForegroundColor Gray
+        $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $confirmProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "$confirmName (Joiner confirm)"
 
         # Delta Sync - synchronise the confirmed imports
         Write-Host "Triggering LDAP delta sync..." -ForegroundColor Gray

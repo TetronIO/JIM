@@ -326,8 +326,12 @@ internal class LdapConnectorImport
             VendorName = vendorName
         };
 
-        // For non-AD directories, try to get the last change number from the changelog
-        if (!rootDse.UseUsnDeltaImport)
+        // For non-AD directories, try to get the last change number from the changelog.
+        // Only attempt this during delta imports — full imports don't need it, and querying
+        // cn=changelog will fail on directories that don't support it (e.g., OpenLDAP without
+        // the retcode/accesslog-to-changelog overlay).
+        if (!rootDse.UseUsnDeltaImport &&
+            _connectedSystemRunProfile.RunType == ConnectedSystemRunType.DeltaImport)
         {
             rootDse.LastChangeNumber = QueryDirectoryForLastChangeNumber(0);
         }
