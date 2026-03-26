@@ -49,7 +49,7 @@ public partial class SyncRepository
         }
 
         var parallelism = ParallelBatchWriter.GetWriteParallelism();
-        var connectionString = _context.Database.GetConnectionString();
+        var connectionString = _connectionStringForParallelWrites;
 
         // For small batches (under parallelism threshold), use the main EF connection directly.
         // The parallel overhead (opening N connections, partitioning) isn't worthwhile for small writes.

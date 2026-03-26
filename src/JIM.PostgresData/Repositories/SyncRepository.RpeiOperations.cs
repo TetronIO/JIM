@@ -43,7 +43,7 @@ public partial class SyncRepository
         _context.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
 
         var parallelism = ParallelBatchWriter.GetWriteParallelism();
-        var connectionString = _context.Database.GetConnectionString();
+        var connectionString = _connectionStringForParallelWrites;
 
         // Flatten sync outcomes upfront (before any persistence) so we can count them.
         var allOutcomes = rpeis.SelectMany(r => FlattenSyncOutcomes(r)).ToList();

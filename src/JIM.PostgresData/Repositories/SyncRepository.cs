@@ -27,10 +27,30 @@ public partial class SyncRepository : ISyncRepository
     private readonly PostgresDataRepository _repo;
     private readonly JimDbContext _context;
 
+    /// <summary>
+    /// Connection string for parallel writes via independent NpgsqlConnection instances.
+    /// Built directly from environment variables rather than from the EF DbContext, because
+    /// <c>GetConnectionString()</c> can return null when the context is created via
+    /// <c>DbContextFactory</c> with <c>DbContextOptions</c>.
+    /// </summary>
+    private readonly string? _connectionStringForParallelWrites;
+
     public SyncRepository(PostgresDataRepository repo)
     {
         _repo = repo;
         _context = repo.Database;
+
+        // Build connection string for parallel writes. This may fail if environment variables
+        // are not set (e.g., in unit tests), which is fine — parallel writes fall back to
+        // single-connection mode when the connection string is null.
+        try
+        {
+            _connectionStringForParallelWrites = JimDbContext.BuildConnectionString();
+        }
+        catch
+        {
+            _connectionStringForParallelWrites = null;
+        }
     }
 
     #region Connected System Object — Reads
