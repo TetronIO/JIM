@@ -82,17 +82,27 @@ function Invoke-LDAPSearch {
     )
 
     $ldapUri = "${Scheme}://${Server}:${Port}"
-    $attrString = $Attributes -join " "
 
     try {
-        $result = docker exec $ContainerName ldapsearch `
-            -x `
-            -H $ldapUri `
-            -D $BindDN `
-            -w $BindPassword `
-            -b $BaseDN `
-            $Filter `
-            $attrString 2>&1
+        # Build ldapsearch arguments array — pass args directly to docker exec
+        # to avoid shell glob expansion issues with '*'
+        $ldapArgs = @(
+            "exec", $ContainerName, "ldapsearch",
+            "-x", "-LLL",
+            "-H", $ldapUri,
+            "-D", $BindDN,
+            "-w", $BindPassword,
+            "-b", $BaseDN,
+            $Filter
+        )
+        # Only add explicit attribute names — omitting attributes returns all user attributes by default
+        # (the LDAP protocol default). Do NOT pass '*' as it gets glob-expanded by shells.
+        $explicitAttrs = @($Attributes | Where-Object { $_ -ne "*" })
+        foreach ($attr in $explicitAttrs) {
+            $ldapArgs += $attr
+        }
+
+        $result = & docker @ldapArgs 2>&1
 
         if ($LASTEXITCODE -ne 0) {
             Write-Verbose "LDAP search failed: $result"

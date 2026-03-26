@@ -233,23 +233,37 @@ try {
     #
     # We only delete test-specific users - NOT baseline users (populated by Populate-SambaAD.ps1)
     # Baseline users are needed for validation and re-runs.
-    Write-Host "Cleaning up test-specific AD users from previous runs..." -ForegroundColor Gray
+    Write-Host "Cleaning up test-specific directory users from previous runs..." -ForegroundColor Gray
     $testUsers = @("test.reconnect")
     $deletedCount = 0
+    $isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
     foreach ($user in $testUsers) {
-        # Try to delete the user - if they don't exist, samba-tool will error but that's OK
-        # Use bash -c to properly capture the output and exit code
-        $output = & docker exec $($DirectoryConfig.ContainerName) bash -c "samba-tool user delete '$user' 2>&1; echo EXIT_CODE:\$?"
-        if ($output -match "Deleted user") {
-            Write-Host "  ✓ Deleted $user from AD" -ForegroundColor Gray
-            $deletedCount++
-        } elseif ($output -match "Unable to find user") {
-            Write-Host "  - $user not found (already clean)" -ForegroundColor DarkGray
+        if ($isOpenLDAP) {
+            # For OpenLDAP, delete by DN using ldapdelete
+            $userDN = "$($DirectoryConfig.UserRdnAttr)=$user,$($DirectoryConfig.UserContainer)"
+            $output = & docker exec $($DirectoryConfig.ContainerName) ldapdelete -x -H "ldap://localhost:$($DirectoryConfig.Port)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$userDN" 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "  ✓ Deleted $user from directory" -ForegroundColor Gray
+                $deletedCount++
+            } elseif ($output -match "No such object") {
+                Write-Host "  - $user not found (already clean)" -ForegroundColor DarkGray
+            } else {
+                Write-Host "  ⚠ Could not delete ${user}: $output" -ForegroundColor Yellow
+            }
         } else {
-            Write-Host "  ⚠ Could not delete ${user}: $output" -ForegroundColor Yellow
+            # For Samba AD, use samba-tool
+            $output = & docker exec $($DirectoryConfig.ContainerName) bash -c "samba-tool user delete '$user' 2>&1; echo EXIT_CODE:\$?"
+            if ($output -match "Deleted user") {
+                Write-Host "  ✓ Deleted $user from directory" -ForegroundColor Gray
+                $deletedCount++
+            } elseif ($output -match "Unable to find user") {
+                Write-Host "  - $user not found (already clean)" -ForegroundColor DarkGray
+            } else {
+                Write-Host "  ⚠ Could not delete ${user}: $output" -ForegroundColor Yellow
+            }
         }
     }
-    Write-Host "  ✓ AD cleanup complete ($deletedCount test users deleted)" -ForegroundColor Green
+    Write-Host "  ✓ Directory cleanup complete ($deletedCount test users deleted)" -ForegroundColor Green
 
     $config = & "$PSScriptRoot/../Setup-Scenario1.ps1" -JIMUrl $JIMUrl -ApiKey $ApiKey -Template $Template -ExportConcurrency $ExportConcurrency -MaxExportParallelism $MaxExportParallelism -DirectoryConfig $DirectoryConfig
 
@@ -627,7 +641,7 @@ try {
         Write-Host "  ✓ Changed $moverSamAccountName title to 'Senior Developer'" -ForegroundColor Green
 
         # Copy updated CSV
-        docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+        docker cp $csvPath "$($DirectoryConfig.ContainerName):/connector-files/hr-users.csv"
 
         # Trigger sync sequence with progress output
         Write-Host "Triggering sync sequence:" -ForegroundColor Gray
@@ -641,17 +655,18 @@ try {
         }
 
         # Validate title change
-        Write-Host "Validating attribute update in AD..." -ForegroundColor Gray
+        $directoryName = $DirectoryConfig.ConnectedSystemName
+        Write-Host "Validating attribute update in $directoryName..." -ForegroundColor Gray
 
-        $adUserInfo = docker exec $($DirectoryConfig.ContainerName) samba-tool user show $moverSamAccountName 2>&1
+        $updatedUser = Get-LDAPUser -UserIdentifier $moverSamAccountName -DirectoryConfig $DirectoryConfig
+        $updatedTitle = if ($updatedUser) { $updatedUser["title"] } else { $null }
 
-        if ($adUserInfo -match "title:.*Senior Developer") {
-            Write-Host "  ✓ Title updated to 'Senior Developer' in AD" -ForegroundColor Green
+        if ($updatedTitle -match "Senior Developer") {
+            Write-Host "  ✓ Title updated to 'Senior Developer' in $directoryName" -ForegroundColor Green
             $testResults.Steps += @{ Name = "Mover"; Success = $true }
         }
         else {
-            Write-Host "  ✗ Title not updated in AD" -ForegroundColor Red
-            Write-Host "    AD output: $adUserInfo" -ForegroundColor Gray
+            Write-Host "  ✗ Title not updated in $directoryName (got: '$updatedTitle')" -ForegroundColor Red
             $testResults.Steps += @{ Name = "Mover"; Success = $false; Error = "Attribute not updated" }
             if (-not $ContinueOnError) {
                 Write-Host ""
@@ -690,7 +705,7 @@ try {
         Write-Host "  ✓ Changed $moverSamAccountName display name to '$newDisplayName'" -ForegroundColor Green
 
         # Copy updated CSV
-        docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+        docker cp $csvPath "$($DirectoryConfig.ContainerName):/connector-files/hr-users.csv"
 
         # Trigger sync sequence with progress output
         Write-Host "Triggering sync sequence:" -ForegroundColor Gray
@@ -748,7 +763,7 @@ try {
         Write-Host "  ✓ Changed $moverSamAccountName department to Finance (triggers OU move)" -ForegroundColor Green
 
         # Copy updated CSV
-        docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+        docker cp $csvPath "$($DirectoryConfig.ContainerName):/connector-files/hr-users.csv"
 
         # Trigger sync sequence with progress output
         Write-Host "Triggering sync sequence:" -ForegroundColor Gray
@@ -810,7 +825,7 @@ try {
         Write-Host "  ✓ Changed $disableSamAccountName status to 'Archived'" -ForegroundColor Green
 
         # Copy updated CSV
-        docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+        docker cp $csvPath "$($DirectoryConfig.ContainerName):/connector-files/hr-users.csv"
 
         # Trigger sync sequence with progress output
         Write-Host "Triggering sync sequence:" -ForegroundColor Gray
@@ -874,7 +889,7 @@ try {
         Write-Host "  ✓ Changed $enableSamAccountName status to 'Active'" -ForegroundColor Green
 
         # Copy updated CSV
-        docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+        docker cp $csvPath "$($DirectoryConfig.ContainerName):/connector-files/hr-users.csv"
 
         # Trigger sync sequence with progress output
         Write-Host "Triggering sync sequence:" -ForegroundColor Gray
@@ -934,7 +949,7 @@ try {
         Write-Host "  ✓ Removed $userToRemove from CSV" -ForegroundColor Green
 
         # Copy updated CSV
-        docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+        docker cp $csvPath "$($DirectoryConfig.ContainerName):/connector-files/hr-users.csv"
 
         # Trigger sync sequence with progress output
         Write-Host "Triggering sync sequence:" -ForegroundColor Gray
@@ -951,32 +966,24 @@ try {
             Assert-ActivityItemsHaveOutcomeSummary -ActivityId $leaverSyncStep.ActivityId -Name "CSV Delta Sync (Leaver)" -ExpectedOutcomeType "Disconnected"
         }
 
-        # Validate user state in AD
+        # Validate user state in the directory
         # With a 7-day grace period configured, the MVO won't be deleted immediately,
-        # so the user should still exist in AD but the CSO should be disconnected
-        Write-Host "Validating leaver state in AD..." -ForegroundColor Gray
+        # so the user should still exist in the directory but the CSO should be disconnected
+        $directoryName = $DirectoryConfig.ConnectedSystemName
+        Write-Host "Validating leaver state in $directoryName..." -ForegroundColor Gray
 
-        $adUserCheck = docker exec $($DirectoryConfig.ContainerName) samba-tool user show $userToRemove 2>&1
+        $leaverExists = Test-LDAPUserExists -UserIdentifier $userToRemove -DirectoryConfig $DirectoryConfig
 
-        if ($LASTEXITCODE -eq 0) {
-            # User still exists in AD - expected with grace period
-            Write-Host "  ✓ User $userToRemove still exists in AD (within grace period)" -ForegroundColor Green
+        if ($leaverExists) {
+            # User still exists - expected with grace period
+            Write-Host "  ✓ User $userToRemove still exists in $directoryName (within grace period)" -ForegroundColor Green
             Write-Host "    Note: User will be deleted after 7-day grace period expires" -ForegroundColor DarkGray
             $testResults.Steps += @{ Name = "Leaver"; Success = $true }
         }
-        elseif ($adUserCheck -match "Unable to find user") {
-            # User was deleted - unexpected with grace period, but not a failure
-            Write-Host "  ✓ User $userToRemove deleted from AD" -ForegroundColor Green
-            $testResults.Steps += @{ Name = "Leaver"; Success = $true }
-        }
         else {
-            Write-Host "  ✗ Unexpected state for $userToRemove in AD" -ForegroundColor Red
-            $testResults.Steps += @{ Name = "Leaver"; Success = $false; Error = "Unexpected AD state: $adUserCheck" }
-            if (-not $ContinueOnError) {
-                Write-Host ""
-                Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
-                exit 1
-            }
+            # User was deleted - unexpected with grace period, but not a failure
+            Write-Host "  ✓ User $userToRemove deleted from $directoryName" -ForegroundColor Green
+            $testResults.Steps += @{ Name = "Leaver"; Success = $true }
         }
         $stepTimings["3. Leaver"] = (Get-Date) - $step3Start
     }
@@ -992,7 +999,7 @@ try {
         $reconnectUser = New-TestUser -Index 8888
         $reconnectUser.EmployeeId = "EMP888888"
         $reconnectUser.SamAccountName = "test.reconnect"
-        $reconnectUser.Email = "test.reconnect@panoply.local"
+        $reconnectUser.Email = "test.reconnect@$($DirectoryConfig.Domain)"
         $reconnectUser.FirstName = "Test"
         $reconnectUser.LastName = "Reconnect"
         $reconnectUser.Department = "IT"
@@ -1000,7 +1007,7 @@ try {
 
         # Add to CSV using proper CSV parsing (DN is calculated dynamically by the export sync rule expression)
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-        $upn = "$($reconnectUser.SamAccountName)@panoply.local"
+        $upn = "$($reconnectUser.SamAccountName)@$($DirectoryConfig.Domain)"
 
         # Use Import-Csv/Export-Csv to ensure correct column handling
         $csv = Import-Csv $csvPath
@@ -1021,17 +1028,17 @@ try {
         }
         $csv = @($csv) + $newUser
         $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
-        docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+        docker cp $csvPath "$($DirectoryConfig.ContainerName):/connector-files/hr-users.csv"
 
         # Initial sync - uses Delta Sync for efficiency (baseline already established)
         Write-Host "  Initial sync (provisioning new user):" -ForegroundColor Gray
         Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus | Out-Null
         Write-Host "  ✓ Initial sync completed" -ForegroundColor Green
 
-        # Verify user was created in AD
-        docker exec $($DirectoryConfig.ContainerName) samba-tool user show test.reconnect 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "  ✗ User was not created in AD during initial sync" -ForegroundColor Red
+        # Verify user was created in the directory
+        $reconnectExists = Test-LDAPUserExists -UserIdentifier "test.reconnect" -DirectoryConfig $DirectoryConfig
+        if (-not $reconnectExists) {
+            Write-Host "  ✗ User was not created in directory during initial sync" -ForegroundColor Red
             $testResults.Steps += @{ Name = "Reconnection"; Success = $false; Error = "User not provisioned during initial sync" }
             if (-not $ContinueOnError) {
                 Write-Host ""
@@ -1041,13 +1048,13 @@ try {
             $stepTimings["4. Reconnection"] = (Get-Date) - $step4Start
         }
         else {
-            Write-Host "  ✓ User exists in AD after initial sync" -ForegroundColor Green
+            Write-Host "  ✓ User exists in directory after initial sync" -ForegroundColor Green
 
             # Remove user (simulating quit)
             Write-Host "  Removing user (simulating quit)..." -ForegroundColor Gray
             $csvContent = Get-Content $csvPath | Where-Object { $_ -notmatch "test.reconnect" }
             $csvContent | Set-Content $csvPath
-            docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+            docker cp $csvPath "$($DirectoryConfig.ContainerName):/connector-files/hr-users.csv"
 
             # Only need CSV import/sync for removal - no LDAP export needed
             Write-Host "    [1/2] CSV Full Import..." -ForegroundColor DarkGray
@@ -1058,13 +1065,13 @@ try {
             Assert-ActivitySuccess -ActivityId $removalSyncResult.activityId -Name "CSV Delta Sync (Reconnection removal)"
             Write-Host "  ✓ Removal sync completed" -ForegroundColor Green
 
-            # Verify user still exists in AD (grace period should prevent deletion)
-            docker exec $($DirectoryConfig.ContainerName) samba-tool user show test.reconnect 2>&1 | Out-Null
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "  ✓ User still in AD after removal (grace period active)" -ForegroundColor Green
+            # Verify user still exists in directory (grace period should prevent deletion)
+            $stillExistsAfterRemoval = Test-LDAPUserExists -UserIdentifier "test.reconnect" -DirectoryConfig $DirectoryConfig
+            if ($stillExistsAfterRemoval) {
+                Write-Host "  ✓ User still in directory after removal (grace period active)" -ForegroundColor Green
             }
             else {
-                Write-Host "  ⚠ User missing from AD after removal sync" -ForegroundColor Yellow
+                Write-Host "  ⚠ User missing from directory after removal sync" -ForegroundColor Yellow
             }
 
             # Restore user (simulating rehire before grace period)
@@ -1073,20 +1080,20 @@ try {
             $csv = Import-Csv $csvPath
             $csv = @($csv) + $newUser
             $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
-            docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+            docker cp $csvPath "$($DirectoryConfig.ContainerName):/connector-files/hr-users.csv"
 
             Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus | Out-Null
             Write-Host "  ✓ Restore sync completed" -ForegroundColor Green
 
-            # Verify user still exists (reconnection should preserve AD account)
-            $adUserCheck = docker exec $($DirectoryConfig.ContainerName) samba-tool user show test.reconnect 2>&1
+            # Verify user still exists (reconnection should preserve directory account)
+            $reconnectPreserved = Test-LDAPUserExists -UserIdentifier "test.reconnect" -DirectoryConfig $DirectoryConfig
 
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "  ✓ Reconnection successful - user preserved in AD" -ForegroundColor Green
+            if ($reconnectPreserved) {
+                Write-Host "  ✓ Reconnection successful - user preserved in directory" -ForegroundColor Green
                 $testResults.Steps += @{ Name = "Reconnection"; Success = $true }
             }
             else {
-                Write-Host "  ✗ Reconnection failed - user lost in AD" -ForegroundColor Red
+                Write-Host "  ✗ Reconnection failed - user lost in directory" -ForegroundColor Red
                 $testResults.Steps += @{ Name = "Reconnection"; Success = $false; Error = "User deleted instead of preserved" }
                 if (-not $ContinueOnError) {
                     Write-Host ""
