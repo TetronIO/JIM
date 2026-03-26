@@ -1,7 +1,8 @@
 # OpenLDAP Integration Testing
 
-- **Status:** Planned
+- **Status:** Doing (Phase 1 complete)
 - **Created:** 2026-03-09
+- **Issue:** [#72](https://github.com/TetronIO/JIM/issues/72)
 
 ## Overview
 
@@ -39,7 +40,7 @@ Rationale:
 | **User naming** | `sAMAccountName`, `userPrincipalName`, `CN=DisplayName` | `uid`, `cn`, no UPN equivalent |
 | **Group membership** | `member` (DN-valued) / `memberOf` (back-link) | `member` on `groupOfNames`, or `uniqueMember` on `groupOfUniqueNames` |
 | **Account disable** | `userAccountControl` bitmask (0x2) | No native concept — typically `pwdAccountLockedTime` (ppolicy overlay) or custom attribute |
-| **DN format** | `CN=Name,OU=Users,DC=domain,DC=local` | `uid=username,ou=People,dc=openldap,dc=local` |
+| **DN format** | `CN=Name,OU=Users,DC=domain,DC=local` | `uid=username,ou=People,dc=yellowstone,dc=local` |
 | **Delta import** | USN-based (`uSNChanged`, tombstones) | Changelog (`cn=changelog`, `changeNumber`) — already implemented in connector |
 | **Paging** | Supported (disabled for Samba due to duplicate results) | Supported via Simple Paged Results control |
 | **Protected attributes** | `nTSecurityDescriptor`, `userAccountControl`, etc. (SAM layer) | None |
@@ -50,9 +51,9 @@ Rationale:
 
 ## Docker Image Strategy
 
-### Base Image: `bitnami/openldap`
+### Base Image: `bitnamilegacy/openldap` ✅
 
-The existing `docker-compose.integration-tests.yml` references `osixia/openldap:latest` but this image is **unmaintained** (last meaningful update 2022, Debian Stretch EOL, open CVEs). Replace with `bitnami/openldap`:
+Bitnami migrated their images off Docker Hub in August 2025. The `bitnamilegacy/openldap:latest` image (OpenLDAP 2.6.10) is the successor, replacing the unmaintained `osixia/openldap:latest`:
 
 | Criteria | `osixia/openldap` | `bitnami/openldap` |
 |----------|--------------------|--------------------|
@@ -83,84 +84,40 @@ The Dockerfile copies bootstrap LDIFs to the auto-load directory. On first start
 
 **Build script** (`Build-OpenLdapImage.ps1`) is simpler than the Samba equivalent — just wraps `docker build` with tagging and optional push to `ghcr.io/tetronio/jim-openldap:primary`.
 
-### Docker Compose Configuration
+### Docker Compose Configuration ✅
 
-Replace the existing `osixia/openldap` service in `docker-compose.integration-tests.yml`:
+The `osixia/openldap` service has been replaced in `docker-compose.integration-tests.yml`. See the actual compose file for the current configuration. Key points:
 
-```yaml
-# OpenLDAP primary instance
-openldap-primary:
-  image: ${OPENLDAP_IMAGE_PRIMARY:-ghcr.io/tetronio/jim-openldap:primary}
-  build:
-    context: ./test/integration/docker/openldap
-    dockerfile: Dockerfile
-  container_name: openldap-primary
-  environment:
-    - LDAP_ROOT=dc=openldap,dc=local
-    - LDAP_ADMIN_DN=cn=admin,dc=openldap,dc=local
-    - LDAP_ADMIN_PASSWORD=Test@123!
-    - LDAP_ENABLE_TLS=no
-    - LDAP_CUSTOM_LDIF_DIR=/ldifs
-  volumes:
-    - openldap-primary-data:/bitnami/openldap
-    - test-csv-data:/connector-files
-  networks:
-    - jim-network
-  profiles:
-    - openldap
-  healthcheck:
-    test: ["CMD", "ldapsearch", "-x", "-H", "ldap://localhost:1389",
-           "-b", "dc=openldap,dc=local",
-           "-D", "cn=admin,dc=openldap,dc=local", "-w", "Test@123!"]
-    interval: 10s
-    timeout: 5s
-    retries: 5
-    start_period: 10s
-  deploy:
-    resources:
-      limits:
-        cpus: ${OPENLDAP_PRIMARY_CPUS:-2.0}
-        memory: ${OPENLDAP_PRIMARY_MEMORY:-2G}
-      reservations:
-        cpus: ${OPENLDAP_PRIMARY_CPUS_RESERVED:-0.5}
-        memory: ${OPENLDAP_PRIMARY_MEMORY_RESERVED:-512M}
-```
-
-Key points:
 - Profile `openldap` — only started when OpenLDAP tests are requested
 - Port 1389 (bitnami non-root default) — not exposed to host, internal to `jim-network`
 - No privileged mode required
-- Remove the existing `osixia/openldap` service definition and its volumes (`openldap-data`, `openldap-config`)
+- Two suffixes: `dc=yellowstone,dc=local` (primary via `LDAP_ROOT`) and `dc=glitterband,dc=local` (added by init script)
+- Accesslog overlay enabled for future delta import testing
+- Config admin enabled for `cn=config` modifications by the init script
 
-### Bootstrap OU Structure
+### Bootstrap OU Structure ✅
 
-The bootstrap LDIF (`01-base-ous.ldif`) creates the equivalent of Samba AD's baseline OUs:
+The bootstrap LDIF (`01-base-ous-yellowstone.ldif`) creates the equivalent of Samba AD's baseline OUs for the primary suffix. The second suffix (`dc=glitterband,dc=local`) is created by the init script `01-add-second-suffix.sh`:
 
 ```ldif
 # OU=People — equivalent to OU=Users,OU=Corp in Samba AD
-dn: ou=People,dc=openldap,dc=local
+dn: ou=People,dc=yellowstone,dc=local
 objectClass: organizationalUnit
 ou: People
 
 # OU=Groups — equivalent to OU=Groups,OU=Corp in Samba AD
-dn: ou=Groups,dc=openldap,dc=local
+dn: ou=Groups,dc=yellowstone,dc=local
 objectClass: organizationalUnit
 ou: Groups
 
 # Department OUs under People (created dynamically by Populate-OpenLDAP.ps1)
 ```
 
-### OpenLDAP Changelog Overlay (for Delta Import)
+### OpenLDAP Changelog Overlay (for Delta Import) ✅
 
 The connector's changelog-based delta import queries `cn=changelog` for entries with `changeNumber > lastProcessed`. This requires the **accesslog overlay** (`slapo-accesslog`) to be enabled.
 
-The Dockerfile or bootstrap config must enable this overlay. For `bitnami/openldap`, this can be done via a custom schema/config LDIF or by setting:
-
-```
-LDAP_EXTRA_SCHEMAS=accesslog
-```
-
-If the accesslog overlay is not straightforward to configure via environment variables, it can be configured via a bootstrap LDIF that modifies `cn=config`. This needs investigation during implementation — if too complex, delta import testing can be deferred (full import is the priority).
+The `bitnamilegacy/openldap` image supports this natively via the `LDAP_ENABLE_ACCESSLOG=yes` environment variable, which is set in the Docker Compose configuration. The accesslog database is visible as `cn=accesslog` in the RootDSE naming contexts.
 
 ## Test Data Population: `Populate-OpenLDAP.ps1`
 
@@ -192,7 +149,7 @@ New script parallel to `Populate-SambaAD.ps1`. Generates LDIF and loads via `lda
 The script generates standard LDIF entries. Example user:
 
 ```ldif
-dn: uid=john.smith,ou=People,dc=openldap,dc=local
+dn: uid=john.smith,ou=People,dc=yellowstone,dc=local
 objectClass: inetOrgPerson
 objectClass: organizationalPerson
 objectClass: person
@@ -202,7 +159,7 @@ cn: John Smith
 sn: Smith
 givenName: John
 displayName: John Smith
-mail: john.smith@openldap.local
+mail: john.smith@yellowstone.local
 title: Software Engineer
 departmentNumber: Engineering
 userPassword: {SSHA}base64encodedpassword
@@ -211,16 +168,16 @@ userPassword: {SSHA}base64encodedpassword
 Example group:
 
 ```ldif
-dn: cn=Engineering,ou=Groups,dc=openldap,dc=local
+dn: cn=Engineering,ou=Groups,dc=yellowstone,dc=local
 objectClass: groupOfNames
 cn: Engineering
 description: Engineering department group
-member: uid=john.smith,ou=People,dc=openldap,dc=local
+member: uid=john.smith,ou=People,dc=yellowstone,dc=local
 ```
 
 ### Bulk Loading
 
-- Use `docker exec openldap-primary ldapadd -x -D "cn=admin,dc=openldap,dc=local" -w "Test@123!" -c -f /path/to/users.ldif`
+- Use `docker exec openldap-primary ldapadd -x -D "cn=admin,dc=yellowstone,dc=local" -w "Test@123!" -c -f /path/to/users.ldif`
 - The `-c` flag continues on errors (useful for idempotent re-runs)
 - Batch into chunks of ~10,000 entries per LDIF file for large templates
 - LDIF files can be written to the shared `test-csv-data` volume (mounted at `/connector-files`)
@@ -309,12 +266,12 @@ function Get-DirectoryConfig {
                 Port             = 1389
                 UseSSL           = $false
                 CertValidation   = $null
-                BindDN           = "cn=admin,dc=openldap,dc=local"
+                BindDN           = "cn=admin,dc=yellowstone,dc=local"
                 BindPassword     = "Test@123!"
                 AuthType         = "Simple"
-                BaseDN           = "dc=openldap,dc=local"
-                UserContainer    = "ou=People,dc=openldap,dc=local"
-                GroupContainer   = "ou=Groups,dc=openldap,dc=local"
+                BaseDN           = "dc=yellowstone,dc=local"
+                UserContainer    = "ou=People,dc=yellowstone,dc=local"
+                GroupContainer   = "ou=Groups,dc=yellowstone,dc=local"
                 UserObjectClass  = "inetOrgPerson"
                 GroupObjectClass = "groupOfNames"
                 UserRdnAttr      = "uid"
@@ -322,7 +279,7 @@ function Get-DirectoryConfig {
                 DepartmentAttr   = "departmentNumber"
                 DeleteBehaviour  = "Delete"
                 DisableAttribute = $null
-                DnTemplate       = 'uid={uid},ou=People,dc=openldap,dc=local'
+                DnTemplate       = 'uid={uid},ou=People,dc=yellowstone,dc=local'
             }
         }
     }
@@ -453,14 +410,17 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 
 ## Implementation Phases
 
-### Phase 1: Docker Infrastructure
+### Phase 1: Docker Infrastructure ✅
 
 **Deliverables:**
-- `test/integration/docker/openldap/Dockerfile`
-- `test/integration/docker/openldap/bootstrap/01-base-ous.ldif`
-- `test/integration/docker/openldap/Build-OpenLdapImage.ps1`
-- Updated `docker-compose.integration-tests.yml` (replace `osixia/openldap` with `bitnami/openldap`, `openldap` profile)
-- Manual verification: container starts, health check passes, admin can bind and search
+- `test/integration/docker/openldap/Dockerfile` — based on `bitnamilegacy/openldap` (OpenLDAP 2.6.10)
+- `test/integration/docker/openldap/bootstrap/01-base-ous-yellowstone.ldif` — root entry and OUs for primary suffix
+- `test/integration/docker/openldap/scripts/01-add-second-suffix.sh` — creates second MDB database (`dc=glitterband,dc=local`) via `cn=config` at startup
+- `test/integration/docker/openldap/Build-OpenLdapImage.ps1` — build script with content-hash labelling
+- Updated `docker-compose.integration-tests.yml` (replaced `osixia/openldap` with `bitnamilegacy/openldap`, `openldap` profile)
+- Two naming contexts verified: `dc=yellowstone,dc=local` and `dc=glitterband,dc=local`
+- Accesslog overlay enabled (`LDAP_ENABLE_ACCESSLOG=yes`) for future delta import testing
+- Health check passes, both suffixes queryable with admin bind
 
 ### Phase 2: Test Data Population
 
