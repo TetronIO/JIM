@@ -794,40 +794,69 @@ try {
         Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus | Out-Null
         Write-Host "  ✓ Sync sequence completed" -ForegroundColor Green
 
-        # Validate move in AD
-        # The user should now be in OU=Finance
-        Write-Host "Validating OU move in AD..." -ForegroundColor Gray
+        # Validate move/department change
+        $directoryName = $DirectoryConfig.ConnectedSystemName
+        $isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
+        Write-Host "Validating OU move in $directoryName..." -ForegroundColor Gray
 
-        # Query AD to find the user and check DN
-        $adUserInfo = docker exec $($DirectoryConfig.ContainerName) bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=$moverSamAccountName)' dn department 2>&1"
+        if ($isOpenLDAP) {
+            # For OpenLDAP, DN doesn't change with department (flat ou=People structure).
+            # Verify the department attribute was updated instead.
+            $deptAttr = $DirectoryConfig.DepartmentAttr  # "departmentNumber" for OpenLDAP
+            $updatedUser = Get-LDAPUser -UserIdentifier $moverSamAccountName -DirectoryConfig $DirectoryConfig
+            $updatedDept = if ($updatedUser) { $updatedUser[$deptAttr] } else { $null }
 
-        # Check if user is now in OU=Finance
-        if ($adUserInfo -match "OU=Finance") {
-            Write-Host "  ✓ User moved to OU=Finance in AD" -ForegroundColor Green
-
-            # Also verify department attribute was updated
-            if ($adUserInfo -match "department: Finance") {
-                Write-Host "  ✓ Department attribute updated to Finance" -ForegroundColor Green
+            if ($updatedDept -eq "Finance") {
+                Write-Host "  ✓ Department updated to Finance in $directoryName (DN unchanged — flat OU structure)" -ForegroundColor Green
+                $testResults.Steps += @{ Name = "Mover-Move"; Success = $true }
             }
-
-            $testResults.Steps += @{ Name = "Mover-Move"; Success = $true }
+            else {
+                Write-Host "  ✗ Department not updated in $directoryName (got: $updatedDept)" -ForegroundColor Red
+                $testResults.Steps += @{ Name = "Mover-Move"; Success = $false; Error = "Department not updated" }
+                if (-not $ContinueOnError) {
+                    Write-Host ""
+                    Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                    exit 1
+                }
+            }
         }
         else {
-            Write-Host "  ✗ User NOT moved to OU=Finance in AD" -ForegroundColor Red
-            Write-Host "    AD output: $adUserInfo" -ForegroundColor Gray
-            $testResults.Steps += @{ Name = "Mover-Move"; Success = $false; Error = "OU move did not occur" }
-            if (-not $ContinueOnError) {
-                Write-Host ""
-                Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
-                exit 1
+            # For Samba AD, verify user moved to OU=Finance in the DN
+            $adUserInfo = docker exec $($DirectoryConfig.ContainerName) bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=$moverSamAccountName)' dn department 2>&1"
+
+            if ($adUserInfo -match "OU=Finance") {
+                Write-Host "  ✓ User moved to OU=Finance in $directoryName" -ForegroundColor Green
+                if ($adUserInfo -match "department: Finance") {
+                    Write-Host "  ✓ Department attribute updated to Finance" -ForegroundColor Green
+                }
+                $testResults.Steps += @{ Name = "Mover-Move"; Success = $true }
+            }
+            else {
+                Write-Host "  ✗ User NOT moved to OU=Finance in $directoryName" -ForegroundColor Red
+                Write-Host "    Output: $adUserInfo" -ForegroundColor Gray
+                $testResults.Steps += @{ Name = "Mover-Move"; Success = $false; Error = "OU move did not occur" }
+                if (-not $ContinueOnError) {
+                    Write-Host ""
+                    Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                    exit 1
+                }
             }
         }
         $stepTimings["2c. Mover-Move"] = (Get-Date) - $step2cStart
     }
 
     # Test 2d: Disable (userAccountControl change - Protected Attribute Test)
+    # This test is AD-specific: userAccountControl doesn't exist on OpenLDAP
     if ($Step -eq "Disable" -or $Step -eq "All") {
         $step2dStart = Get-Date
+        $isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
+        if ($isOpenLDAP) {
+            Write-TestSection "Test 2d: Disable (Skipped — not applicable to OpenLDAP)"
+            Write-Host "  OpenLDAP has no userAccountControl equivalent. Skipping." -ForegroundColor Yellow
+            $testResults.Steps += @{ Name = "Disable"; Success = $true }
+            $stepTimings["2d. Disable"] = (Get-Date) - $step2dStart
+        }
+        else {
         Write-TestSection "Test 2d: Disable (userAccountControl)"
 
         # Use the second user (index 2) for disable/enable tests to preserve user 1 for other tests
@@ -888,11 +917,21 @@ try {
             }
         }
         $stepTimings["2d. Disable"] = (Get-Date) - $step2dStart
+        } # end else (non-OpenLDAP)
     }
 
     # Test 2e: Enable (userAccountControl change - Restore from Disabled)
+    # This test is AD-specific: userAccountControl doesn't exist on OpenLDAP
     if ($Step -eq "Enable" -or $Step -eq "All") {
         $step2eStart = Get-Date
+        $isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
+        if ($isOpenLDAP) {
+            Write-TestSection "Test 2e: Enable (Skipped — not applicable to OpenLDAP)"
+            Write-Host "  OpenLDAP has no userAccountControl equivalent. Skipping." -ForegroundColor Yellow
+            $testResults.Steps += @{ Name = "Enable"; Success = $true }
+            $stepTimings["2e. Enable"] = (Get-Date) - $step2eStart
+        }
+        else {
         Write-TestSection "Test 2e: Enable (userAccountControl)"
 
         # Continue using the second user (index 2) that was disabled in the previous test
@@ -951,6 +990,7 @@ try {
             }
         }
         $stepTimings["2e. Enable"] = (Get-Date) - $step2eStart
+        } # end else (non-OpenLDAP)
     }
 
     # Test 3: Leaver (Deprovisioning)
