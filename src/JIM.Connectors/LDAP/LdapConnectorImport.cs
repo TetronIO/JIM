@@ -924,6 +924,22 @@ internal class LdapConnectorImport
                 importObject.Attributes.Add(importObjectAttribute);
             }
 
+            // Synthesise distinguishedName for directories that don't return it as an attribute.
+            // OpenLDAP (and most RFC-compliant directories) expose the DN as the entry's DistinguishedName
+            // property, not as a searchable/importable attribute. The connector schema synthesises
+            // distinguishedName as an attribute (for DN-based provisioning), so we need to populate it
+            // from the entry's DN during import for export confirmation to match correctly.
+            if (!importObject.Attributes.Any(a => a.Name.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase))
+                && objectType.Attributes.Any(a => a.Name.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase) && a.Selected))
+            {
+                importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute
+                {
+                    Name = "distinguishedName",
+                    Type = AttributeDataType.Text,
+                    StringValues = { searchResult.DistinguishedName }
+                });
+            }
+
             importObjects.Add(importObject);
         }
 

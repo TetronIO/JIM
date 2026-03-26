@@ -141,13 +141,13 @@ function Invoke-SyncSequence {
     # Use Full Import for OpenLDAP (delta import via changelog not yet supported)
     # Use Delta Import for AD/Samba AD (USN-based delta)
     $confirmProfileId = if ($Config.IsOpenLDAP) { $Config.LDAPFullImportProfileId } else { $Config.LDAPDeltaImportProfileId }
-    $confirmProfileName = if ($isOpenLDAP) { "LDAP Full Import" } else { "LDAP Delta Import" }
+    $confirmProfileName = if ($Config.IsOpenLDAP) { "LDAP Full Import" } else { "LDAP Delta Import" }
     if ($ShowProgress) { Write-Host "  [4/8] $confirmProfileName (confirming)..." -ForegroundColor DarkGray }
     $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $confirmProfileId -Wait -PassThru
     $results.Steps += @{ Name = $confirmProfileName; ActivityId = $confirmImportResult.activityId }
     if ($ValidateActivityStatus) {
-        Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "LDAP Delta Import"
-        Assert-NoUnresolvedReferences -ConnectedSystemId $Config.LDAPSystemId -Name "LDAP" -Context "after Delta Import (confirming)"
+        Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "$confirmProfileName"
+        Assert-NoUnresolvedReferences -ConnectedSystemId $Config.LDAPSystemId -Name "LDAP" -Context "after $confirmProfileName (confirming)"
     }
 
     # Step 5: LDAP Delta Sync
