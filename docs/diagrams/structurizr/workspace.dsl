@@ -31,13 +31,16 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
             }
 
             appLayer = container "Application Layer" "Business logic and domain services" "JIM.Application" {
-                jimApplication = component "JimApplication Facade" "Single entry point to all domain services" "C# Facade Class"
+                jimApplication = component "JimApplication Facade" "Single entry point to all domain services for Web and Scheduler" "C# Facade Class"
+                syncEngine = component "SyncEngine" "Pure domain logic for sync decisions - projection, attribute flow, deletion rules, export confirmation. Stateless, I/O-free" "C# Service"
+                syncServer = component "SyncServer" "Orchestration facade for Worker processors - delegates to domain servers and ISyncRepository" "C# Service"
                 metaverseServer = component "MetaverseServer" "Metaverse object CRUD, querying, attribute management" "C# Service"
                 connectedSystemServer = component "ConnectedSystemServer" "Connected system lifecycle, configuration, run profiles, sync rules, and attribute mappings" "C# Service"
                 objectMatchingServer = component "ObjectMatchingServer" "Join logic between ConnectedSystemObjects and MetaverseObjects" "C# Service"
                 exportEvaluationServer = component "ExportEvaluationServer" "Determines pending exports based on attribute changes" "C# Service"
                 scopingEvaluationServer = component "ScopingEvaluationServer" "Evaluates sync rule scoping filters" "C# Service"
-                exportExecutionServer = component "ExportExecutionServer" "Executes pending exports with retry logic" "C# Service"
+                exportExecutionServer = component "ExportExecutionServer" "Executes pending exports with retry logic and parallel batching" "C# Service"
+                driftDetectionService = component "DriftDetectionService" "Detects target system drift from authoritative MVO state, creates corrective pending exports" "C# Service"
                 schedulerServer = component "SchedulerServer" "Schedule management, due time evaluation, execution advancement, crash recovery" "C# Service"
                 searchServer = component "SearchServer" "Metaverse search and query functionality" "C# Service"
                 securityServer = component "SecurityServer" "Role-based access control and user-to-role assignments" "C# Service"
@@ -46,7 +49,10 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
                 serviceSettingsServer = component "ServiceSettingsServer" "Global service configuration management" "C# Service"
                 activityServer = component "ActivityServer" "Activity logging, audit trail, execution statistics" "C# Service"
                 taskingServer = component "TaskingServer" "Worker task queue management" "C# Service"
+                fileSystemServer = component "FileSystemServer" "File system browsing for connector file path configuration" "C# Service"
+                exampleDataServer = component "ExampleDataServer" "Example and test data generation management" "C# Service"
                 repository = component "IJimRepository" "Data access abstraction - interfaces defined in JIM.Data, implemented by JIM.PostgresData (EF Core)" "Repository Interface"
+                syncRepository = component "ISyncRepository" "Dedicated data access for sync operations - bulk CSO/MVO writes, pending exports, RPEIs. Implemented by PostgresData.SyncRepository" "Repository Interface"
             }
 
             worker = container "Worker Service" "Processes queued synchronisation tasks - import, sync, export operations" ".NET 9.0 Background Service" {
@@ -70,7 +76,7 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
 
             database = container "PostgreSQL Database" "Stores configuration, metaverse objects, staging area, sync rules, activity history, task queue" "PostgreSQL 18" "Database"
 
-            pwsh = container "PowerShell Module" "Cross-platform module with 64 cmdlets for automation and scripting" "PowerShell 7" "Client Library"
+            pwsh = container "PowerShell Module" "Cross-platform module with 79 cmdlets for automation and scripting" "PowerShell 7" "Client Library"
 
             !docs docs
             !adrs adrs
@@ -120,12 +126,15 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
         jim.webApp.apiControllers -> jim.appLayer.jimApplication "Uses" "Method calls"
 
         # ===== Application Layer Component Relationships =====
+
+        # JimApplication facade delegates to domain servers (used by Web and Scheduler)
         jim.appLayer.jimApplication -> jim.appLayer.metaverseServer "Delegates to" "Method calls"
         jim.appLayer.jimApplication -> jim.appLayer.connectedSystemServer "Delegates to" "Method calls"
         jim.appLayer.jimApplication -> jim.appLayer.objectMatchingServer "Delegates to" "Method calls"
         jim.appLayer.jimApplication -> jim.appLayer.exportEvaluationServer "Delegates to" "Method calls"
         jim.appLayer.jimApplication -> jim.appLayer.scopingEvaluationServer "Delegates to" "Method calls"
         jim.appLayer.jimApplication -> jim.appLayer.exportExecutionServer "Delegates to" "Method calls"
+        jim.appLayer.jimApplication -> jim.appLayer.driftDetectionService "Delegates to" "Method calls"
         jim.appLayer.jimApplication -> jim.appLayer.schedulerServer "Delegates to" "Method calls"
         jim.appLayer.jimApplication -> jim.appLayer.searchServer "Delegates to" "Method calls"
         jim.appLayer.jimApplication -> jim.appLayer.securityServer "Delegates to" "Method calls"
@@ -134,12 +143,25 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
         jim.appLayer.jimApplication -> jim.appLayer.serviceSettingsServer "Delegates to" "Method calls"
         jim.appLayer.jimApplication -> jim.appLayer.activityServer "Delegates to" "Method calls"
         jim.appLayer.jimApplication -> jim.appLayer.taskingServer "Delegates to" "Method calls"
+        jim.appLayer.jimApplication -> jim.appLayer.fileSystemServer "Delegates to" "Method calls"
+        jim.appLayer.jimApplication -> jim.appLayer.exampleDataServer "Delegates to" "Method calls"
 
+        # SyncServer orchestration (used by Worker processors)
+        jim.appLayer.syncServer -> jim.appLayer.exportEvaluationServer "Delegates to" "Method calls"
+        jim.appLayer.syncServer -> jim.appLayer.exportExecutionServer "Delegates to" "Method calls"
+        jim.appLayer.syncServer -> jim.appLayer.scopingEvaluationServer "Delegates to" "Method calls"
+        jim.appLayer.syncServer -> jim.appLayer.driftDetectionService "Delegates to" "Method calls"
+        jim.appLayer.syncServer -> jim.appLayer.syncRepository "Uses" "ISyncRepository"
+
+        # Cross-server dependencies
         jim.appLayer.objectMatchingServer -> jim.appLayer.metaverseServer "Uses" "Method calls"
         jim.appLayer.exportEvaluationServer -> jim.appLayer.connectedSystemServer "Uses" "Method calls"
         jim.appLayer.exportExecutionServer -> jim.appLayer.metaverseServer "Uses" "Method calls"
         jim.appLayer.exportExecutionServer -> jim.appLayer.connectedSystemServer "Uses" "Method calls"
+        jim.appLayer.exportEvaluationServer -> jim.appLayer.syncRepository "Uses" "ISyncRepository"
+        jim.appLayer.exportExecutionServer -> jim.appLayer.syncRepository "Uses" "ISyncRepository"
 
+        # IJimRepository consumers (general data access)
         jim.appLayer.metaverseServer -> jim.appLayer.repository "Uses" "IJimRepository"
         jim.appLayer.connectedSystemServer -> jim.appLayer.repository "Uses" "IJimRepository"
         jim.appLayer.schedulerServer -> jim.appLayer.repository "Uses" "IJimRepository"
@@ -151,7 +173,9 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
         jim.appLayer.activityServer -> jim.appLayer.repository "Uses" "IJimRepository"
         jim.appLayer.taskingServer -> jim.appLayer.repository "Uses" "IJimRepository"
 
+        # Data access to database
         jim.appLayer.repository -> jim.database "Reads/Writes" "EF Core (JIM.PostgresData)"
+        jim.appLayer.syncRepository -> jim.database "Reads/Writes" "EF Core (JIM.PostgresData)"
 
         # ===== Worker Component Relationships =====
         jim.worker.workerHost -> jim.appLayer.jimApplication "Polls for tasks" "Method calls"
@@ -160,10 +184,16 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
         jim.worker.workerHost -> jim.worker.deltaSyncProcessor "Dispatches" "Method calls"
         jim.worker.workerHost -> jim.worker.exportProcessor "Dispatches" "Method calls"
 
-        jim.worker.importProcessor -> jim.appLayer.jimApplication "Uses" "Method calls"
-        jim.worker.fullSyncProcessor -> jim.appLayer.jimApplication "Uses" "Method calls"
-        jim.worker.deltaSyncProcessor -> jim.appLayer.jimApplication "Uses" "Method calls"
-        jim.worker.exportProcessor -> jim.appLayer.jimApplication "Uses" "Method calls"
+        jim.worker.importProcessor -> jim.appLayer.syncServer "Uses" "ISyncServer"
+        jim.worker.importProcessor -> jim.appLayer.syncRepository "Uses" "ISyncRepository"
+        jim.worker.fullSyncProcessor -> jim.appLayer.syncEngine "Uses" "ISyncEngine"
+        jim.worker.fullSyncProcessor -> jim.appLayer.syncServer "Uses" "ISyncServer"
+        jim.worker.fullSyncProcessor -> jim.appLayer.syncRepository "Uses" "ISyncRepository"
+        jim.worker.deltaSyncProcessor -> jim.appLayer.syncEngine "Uses" "ISyncEngine"
+        jim.worker.deltaSyncProcessor -> jim.appLayer.syncServer "Uses" "ISyncServer"
+        jim.worker.deltaSyncProcessor -> jim.appLayer.syncRepository "Uses" "ISyncRepository"
+        jim.worker.exportProcessor -> jim.appLayer.syncServer "Uses" "ISyncServer"
+        jim.worker.exportProcessor -> jim.appLayer.syncRepository "Uses" "ISyncRepository"
 
         # ===== Scheduler Component Relationships =====
         jim.scheduler.schedulerHost -> jim.appLayer.jimApplication "Evaluates schedules and creates tasks" "Method calls"

@@ -1,6 +1,6 @@
 # MVO Deletion and Grace Period
 
-> Generated against JIM v0.3.0 (`0d1c88e9`). If the codebase has changed significantly since then, these diagrams may be out of date.
+> Last updated: 2026-03-26 — JIM v0.7.1 (`00907431`)
 
 This diagram shows the full lifecycle of Metaverse Object (MVO) deletion, from the trigger event (CSO disconnection) through deletion rule evaluation, grace period handling, and deferred housekeeping cleanup.
 
@@ -32,14 +32,14 @@ flowchart TD
     QueueRecall --> BreakJoin[Break CSO-MVO join<br/>Set JoinType = NotJoined]
 
     BreakJoin --> CountRemaining[Count remaining CSOs<br/>before break, subtract 1]
-    CountRemaining --> EvalDeletion[ProcessMvoDeletionRuleAsync]
+    CountRemaining --> EvalDeletion[ISyncEngine.EvaluateMvoDeletionRule<br/>Pure decision on MVO fate]
 ```
 
 ## Deletion Rule Evaluation
 
 ```mermaid
 flowchart TD
-    Start([ProcessMvoDeletionRuleAsync]) --> CheckOrigin{MVO Origin?}
+    Start([ISyncEngine.EvaluateMvoDeletionRule]) --> CheckOrigin{MVO Origin?}
     CheckOrigin -->|Internal| Protected([Skip - internal MVOs<br/>protected from automatic deletion])
 
     CheckOrigin -->|Projected| GetRule{Deletion<br/>rule?}

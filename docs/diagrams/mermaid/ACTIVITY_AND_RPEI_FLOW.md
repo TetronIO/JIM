@@ -1,6 +1,6 @@
 # Activity and RPEI Flow
 
-> Generated against JIM v0.3.0 (`0d1c88e9`). If the codebase has changed significantly since then, these diagrams may be out of date.
+> Last updated: 2026-03-26 — JIM v0.7.1 (`00907431`)
 
 This diagram shows how Activities are created, how Run Profile Execution Items (RPEIs) are accumulated during operations, and how the final activity status is determined. Activities are the immutable audit record for every operation in JIM.
 

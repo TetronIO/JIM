@@ -1,6 +1,6 @@
 # Connector Lifecycle
 
-> Generated against JIM v0.3.0 (`0d1c88e9`). If the codebase has changed significantly since then, these diagrams may be out of date.
+> Last updated: 2026-03-26 — JIM v0.7.1 (`00907431`)
 
 This diagram shows how connectors are resolved, configured, opened, used, and closed across import and export operations. Connectors implement capability interfaces that determine their lifecycle shape.
 
@@ -39,10 +39,10 @@ flowchart TD
     CreateFile --> GetRunProfile
 
     GetRunProfile --> RouteByType{RunProfile<br/>RunType?}
-    RouteByType -->|FullImport<br/>DeltaImport| ImportProcessor[SyncImportTaskProcessor]
-    RouteByType -->|FullSynchronisation| FullSyncProcessor[SyncFullSyncTaskProcessor]
-    RouteByType -->|DeltaSynchronisation| DeltaSyncProcessor[SyncDeltaSyncTaskProcessor]
-    RouteByType -->|Export| ExportProcessor[SyncExportTaskProcessor]
+    RouteByType -->|FullImport<br/>DeltaImport| ImportProcessor[SyncImportTaskProcessor<br/>ISyncServer + ISyncRepository]
+    RouteByType -->|FullSynchronisation| FullSyncProcessor[SyncFullSyncTaskProcessor<br/>ISyncEngine + ISyncServer + ISyncRepository]
+    RouteByType -->|DeltaSynchronisation| DeltaSyncProcessor[SyncDeltaSyncTaskProcessor<br/>ISyncEngine + ISyncServer + ISyncRepository]
+    RouteByType -->|Export| ExportProcessor[SyncExportTaskProcessor<br/>ISyncServer + ISyncRepository]
 ```
 
 ## Import Lifecycle

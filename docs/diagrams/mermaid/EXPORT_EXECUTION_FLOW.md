@@ -1,8 +1,8 @@
 # Export Execution Flow
 
-> Generated against JIM v0.3.0 (`0d1c88e9`). If the codebase has changed significantly since then, these diagrams may be out of date.
+> Last updated: 2026-03-26 — JIM v0.7.1 (`00907431`)
 
-This diagram shows how pending exports are executed against connected systems via connectors. The export processor (`SyncExportTaskProcessor`) delegates to the `ExportExecutionServer` for the core execution logic, which supports batching, parallelism, deferred reference resolution, and retry with backoff.
+This diagram shows how pending exports are executed against connected systems via connectors. The export processor (`SyncExportTaskProcessor`) uses `ISyncServer` to delegate to `ExportExecutionServer` for the core execution logic, and `ISyncRepository` for bulk data access. Supports batching, parallelism, deferred reference resolution, and retry with backoff.
 
 ## Export Task Processing
 

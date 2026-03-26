@@ -1,8 +1,10 @@
 # Full Import Flow
 
-> Generated against JIM v0.3.0 (`0d1c88e9`). If the codebase has changed significantly since then, these diagrams may be out of date.
+> Last updated: 2026-03-26 — JIM v0.7.1 (`00907431`)
 
 This diagram shows how objects are imported from a connected system into JIM's connector space. Both Full Import and Delta Import use the same processor (`SyncImportTaskProcessor`); the connector handles delta filtering internally via watermark/persisted data.
+
+Since v0.7.1, the import processor uses `ISyncServer` for orchestration (settings, caching, reconciliation) and `ISyncRepository` for dedicated bulk data access (CSO writes, RPEIs).
 
 ## Overall Import Flow
 
@@ -46,9 +48,9 @@ flowchart TD
 
     DeletionDetection --> RefResolution[Reference Resolution<br/>Resolve unresolved reference strings<br/>into CSO links by external ID]
 
-    %% --- Persist ---
-    RefResolution --> PersistCreate[Batch create new CSOs<br/>with change objects]
-    PersistCreate --> PersistUpdate[Batch update existing CSOs<br/>with change objects]
+    %% --- Persist via ISyncRepository ---
+    RefResolution --> PersistCreate[Batch create new CSOs<br/>with change objects via ISyncRepository]
+    PersistCreate --> PersistUpdate[Batch update existing CSOs<br/>with change objects via ISyncRepository]
 
     %% --- Reconciliation ---
     PersistUpdate --> Reconcile[Reconcile Pending Exports<br/>See Confirming Import below]

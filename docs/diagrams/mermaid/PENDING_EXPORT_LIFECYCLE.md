@@ -1,6 +1,6 @@
 # Pending Export Lifecycle
 
-> Generated against JIM v0.3.0 (`0d1c88e9`). If the codebase has changed significantly since then, these diagrams may be out of date.
+> Last updated: 2026-03-26 — JIM v0.7.1 (`00907431`)
 
 This diagram shows the full lifecycle of a Pending Export from creation during synchronisation, through export execution, to confirmation during a confirming import. Pending Exports are the mechanism by which JIM propagates changes from the metaverse to target connected systems.
 
@@ -101,7 +101,7 @@ flowchart LR
 
 ## Pending Export Confirmation During Sync
 
-During Full/Delta Sync, pending exports are also checked for confirmation (separate from the confirming import path above). This happens in `ProcessPendingExport` within `SyncTaskProcessorBase`:
+During Full/Delta Sync, pending exports are also checked for confirmation (separate from the confirming import path above). This uses `ISyncEngine.EvaluatePendingExportConfirmation` for the pure comparison logic, invoked from `SyncTaskProcessorBase`:
 
 ```mermaid
 flowchart TD

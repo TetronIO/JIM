@@ -281,19 +281,20 @@ jim-diagrams() {
   # Remove any stale container
   docker rm -f "${container_name}" 2>/dev/null
 
-  # Start Structurizr Lite (adrs mount resolves the symlink inside the container)
-  echo "Starting Structurizr Lite on port ${port}..."
+  # Start Structurizr Local (adrs mount resolves the symlink inside the container)
+  # Note: structurizr/lite is deprecated; using structurizr/structurizr with 'local' command
+  echo "Starting Structurizr Local on port ${port}..."
   docker run -d --name "${container_name}" \
     -p "${port}:8080" \
     -v "${structurizr_dir}:/usr/local/structurizr" \
     -v "${repo_root}/docs/adrs:/usr/local/structurizr/adrs" \
-    structurizr/lite > /dev/null
+    structurizr/structurizr local > /dev/null
 
-  # Wait for Structurizr Lite to be ready
-  echo "Waiting for Structurizr Lite to start..."
+  # Wait for Structurizr Local to be ready
+  echo "Waiting for Structurizr Local to start..."
   local attempts=0
   while [ $attempts -lt 30 ]; do
-    if curl -sf "http://localhost:${port}/workspace/diagrams" > /dev/null 2>&1; then
+    if curl -sf "http://localhost:${port}/workspace/1/diagrams" > /dev/null 2>&1; then
       break
     fi
     attempts=$((attempts + 1))
@@ -301,12 +302,12 @@ jim-diagrams() {
   done
 
   if [ $attempts -ge 30 ]; then
-    echo "ERROR: Structurizr Lite failed to start within 60 seconds."
+    echo "ERROR: Structurizr Local failed to start within 60 seconds."
     docker rm -f "${container_name}" > /dev/null 2>&1
     return 1
   fi
 
-  echo "Structurizr Lite is ready."
+  echo "Structurizr Local is ready."
 
   # Remove old images (light, dark, and legacy root-level)
   rm -f "${repo_root}/docs/diagrams/images"/jim-structurizr-1-*.svg
@@ -315,12 +316,12 @@ jim-diagrams() {
 
   # Export diagrams (light + dark)
   node "${structurizr_dir}/export-diagrams.js" \
-    "http://localhost:${port}/workspace/diagrams" \
+    "http://localhost:${port}/workspace/1/diagrams" \
     "${repo_root}/docs/diagrams/images"
   local export_rc=$?
 
   # Cleanup
-  echo "Stopping Structurizr Lite..."
+  echo "Stopping Structurizr Local..."
   docker rm -f "${container_name}" > /dev/null 2>&1
 
   if [ $export_rc -eq 0 ]; then
