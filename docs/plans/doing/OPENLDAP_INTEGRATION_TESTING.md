@@ -1,6 +1,6 @@
 # OpenLDAP Integration Testing
 
-- **Status:** Doing (Phases 1-3 complete)
+- **Status:** Doing (Phases 1-5 complete)
 - **Created:** 2026-03-09
 - **Issue:** [#72](https://github.com/TetronIO/JIM/issues/72)
 
@@ -441,48 +441,95 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 - Parameterised `Invoke-Scenario1.ps1` — container name for docker exec calls driven by `$DirectoryConfig`
 - SambaAD remains the default — all existing behaviour preserved when `-DirectoryType` is not specified
 
-### Phase 4: Connector Fixes
+### Phase 4: Connector Fixes ✅
 
 **Deliverables:**
-- RFC 4512 schema discovery path in `LdapConnectorSchema.cs`
-- `entryUUID` external ID recommendation for non-AD directories
-- Partition discovery fix for non-AD directories
-- Export handling for directory-specific differences
-- Unit tests for all new/modified connector code
+- `LdapDirectoryType` enum with `ActiveDirectory`, `SambaAD`, `OpenLDAP`, `Generic` — all directory-specific behaviour centralised in computed properties on `LdapConnectorRootDse`
+- RFC 4512 schema discovery via `cn=Subschema` (`Rfc4512SchemaParser.cs`) with 37 unit tests — tokeniser, objectClass/attributeType parsing, SYNTAX OID mapping, writability from USAGE field
+- Partition discovery via `namingContexts` rootDSE attribute for non-AD directories
+- `entryUUID` and `distinguishedName` synthesised as attributes on all RFC schema object types (operational attributes not in any class's MUST/MAY)
+- `distinguishedName` synthesised during import from `entry.DistinguishedName` (OpenLDAP doesn't return it as an attribute)
+- Accesslog-based delta import (`GetDeltaResultsUsingAccesslog`) — queries `cn=accesslog` using `reqStart` timestamp watermarks
+- OpenLDAP detection via `structuralObjectClass: OpenLDAProotDSE` (fallback when `vendorName` not set)
+- DN-aware RDN attribute detection in export (`IsRdnAttribute` parses RDN from DN, not hardcoded `cn`)
+- Changelog query gated behind delta import only (not full import)
+- "Include Auxiliary Classes" connected system setting (both AD and RFC paths)
+- Related issues created: #433 (AD schema batch optimisation), #434 (filter internal object classes from UI)
 
-### Phase 5: End-to-End Validation
-
-**Deliverables:**
-- Scenario 1 (HR → OpenLDAP) passing at Nano scale
-- Fix issues found during E2E testing
-- Scale up through Micro → Small → Medium
-- Changelog-based delta import testing (if accesslog overlay configured)
-- Document any remaining limitations
-
-### Phase 6: Remaining Scenarios (Future)
+### Phase 5: End-to-End Validation ✅
 
 **Deliverables:**
-- Parameterise Scenarios 2, 4, 5, 8 for OpenLDAP
-- OpenLDAP-to-OpenLDAP cross-directory sync (Scenario 2 equivalent)
-- XLarge-scale performance benchmarking against OpenLDAP
+- Scenario 1 (HR → OpenLDAP) passing at Nano scale — all 8 test steps
+- Accesslog-based delta import confirmed working for export confirmation
+- Integration test parameterisation: all `samba-tool`/`ldbsearch` verifications replaced with `Get-LDAPUser`/`Test-LDAPUserExists`; all hardcoded container names, partitions, attributes, and mappings driven by `$DirectoryConfig`
+- AD-specific tests (Disable/Enable via `userAccountControl`) gracefully skipped for OpenLDAP
+- Mover Rename verifies `cn` update (not DN change) for OpenLDAP (uid-based RDN)
+- Mover Move verifies `departmentNumber` update (not OU move) for OpenLDAP (flat OU structure)
+
+**Scenario 1 test results (Nano scale):**
+
+| Step | Status | Notes |
+|------|--------|-------|
+| Joiner | ✅ Pass | Full lifecycle incl. accesslog delta import confirmation |
+| Mover (Attribute Change) | ✅ Pass | Title update exported and confirmed |
+| Mover Rename | ✅ Pass | cn/displayName updated (DN unchanged) |
+| Mover Move | ✅ Pass | departmentNumber updated (no OU move) |
+| Disable | ⏭ Skipped | No userAccountControl on OpenLDAP |
+| Enable | ⏭ Skipped | No userAccountControl on OpenLDAP |
+| Leaver | ✅ Pass | Grace period deprovisioning |
+| Reconnection | ✅ Pass | Delete → restore within grace period |
+
+### Phase 6: Remaining Scenarios
+
+**Goal:** Parameterise all remaining integration test scenarios for OpenLDAP.
+
+**Recommended order** (value vs effort):
+
+| Priority | Scenario | AD-specific refs | Effort | Notes |
+|----------|----------|-----------------|--------|-------|
+| 1 | **S9: Partition-Scoped Imports** | 5 | Low | Primary motivation for OpenLDAP's two suffixes (Yellowstone + Glitterband). Tests multi-partition import which Samba AD cannot test (single domain). |
+| 2 | **S7: Clear Connected System Objects** | 0 | Low | Likely already works — no AD-specific code. Verify and add `DirectoryConfig` parameter. |
+| 3 | **S6: Scheduler Service** | 2 | Low | Mostly infrastructure testing. Only 2 AD-specific refs to fix. |
+| 4 | **S2: Cross-Domain Sync** | 11 | Medium | Tests sync between two LDAP directories. Use Yellowstone→Glitterband as the two "domains". Needs two LDAP connected systems and cross-domain sync rules. |
+| 5 | **S5: Matching Rules** | 17 | Medium | Tests join/projection logic. Object type names (`user`→`inetOrgPerson`) and attribute names (`sAMAccountName`→`uid`) differ. |
+| 6 | **S3: GAL Sync** | 0 | Low/Medium | Check if it uses LDAP at all — may be mail/contact specific and not applicable. |
+| 7 | **S4: Deletion Rules** | 26 | High | Heavy `userAccountControl` and `ldbsearch` usage for disable/enable testing. Disable behaviour doesn't exist on OpenLDAP (delete-only). May need to test different deletion scenarios. |
+| 8 | **S8: Cross-Domain Entitlement Sync** | 50 | High | Group membership sync with `groupOfNames` (OpenLDAP) vs `group` (AD). The `groupOfNames` MUST constraint (requires at least one `member`) needs connector code changes (Gap 6). This is the most complex scenario. |
+
+**Implementation advice for each scenario:**
+
+**S9 (Partition-Scoped Imports):** Start here — this is the scenario OpenLDAP was specifically designed to support. The two suffixes (`dc=yellowstone,dc=local` and `dc=glitterband,dc=local`) are already configured. The test should verify that selecting only one partition imports only objects from that suffix. Minimal connector changes expected.
+
+**S2 (Cross-Domain Sync):** Requires two LDAP connected systems pointing at the same OpenLDAP instance but different suffixes. The `Get-DirectoryConfig` function already has `SecondSuffix` and `SecondBindDN` for this purpose. Setup script needs a second connected system creation block.
+
+**S5 (Matching Rules):** Primarily attribute name substitution (`sAMAccountName`→`uid`, `employeeID`→`employeeNumber`, etc.) and object type substitution (`user`→`inetOrgPerson`). Follow the same parameterisation pattern used in S1's `Setup-Scenario1.ps1`.
+
+**S8 (Cross-Domain Entitlement Sync):** This is the most complex. Key issue is Gap 6 (`groupOfNames` empty group constraint): OpenLDAP's `groupOfNames` requires at least one `member` value. When JIM removes the last member from a group, the LDAP modify will fail. Options: (a) add a placeholder member DN, (b) use `groupOfUniqueNames` instead, (c) handle the constraint in the export code. This needs a design decision before implementation.
+
+**S4 (Deletion Rules):** OpenLDAP has no account disable mechanism. The deletion rule tests that use `Disable` behaviour and verify `userAccountControl` will need to be skipped or adapted. The `Delete` behaviour (actual LDAP delete) should work unchanged.
+
+**Scale testing:** After all scenarios pass at Nano, scale up through Micro→Small→Medium. The connector code is scale-independent so this should be straightforward — any failures will be performance/timeout related, not logic bugs.
 
 ## Risks and Mitigations
 
-| Risk | Impact | Likelihood | Mitigation |
-|------|--------|------------|------------|
-| Schema discovery rewrite is complex | High | High | Phase 4 is the largest work item; consider starting with a minimal RFC schema parser that handles `inetOrgPerson` and `groupOfNames` only, expanding later |
-| OpenLDAP changelog overlay hard to configure | Medium | Medium | If accesslog overlay is too complex to enable in Docker, defer delta import testing — full import covers the critical path |
-| `bitnami/openldap` doesn't support `slapadd` for bulk loading | Medium | Medium | Fall back to `ldapadd` (slower but functional); consider pre-built populated images for XLarge |
-| `groupOfNames` empty group constraint breaks export | Medium | High | Needs connector code change; temporary mitigation is to always ensure groups have at least one member in test data |
-| Performance regression at XLarge if OpenLDAP population is slow | Low | Medium | Build pre-populated snapshot images (like Samba approach) for Large/XLarge templates |
+| Risk | Impact | Likelihood | Status | Mitigation |
+|------|--------|------------|--------|------------|
+| Schema discovery rewrite is complex | High | High | ✅ Resolved | RFC 4512 parser implemented with 37 unit tests. Handles all standard object classes and attribute types. |
+| OpenLDAP changelog overlay hard to configure | Medium | Medium | ✅ Resolved | Implemented accesslog-based delta import using `cn=accesslog` with `reqStart` timestamps. Works with Bitnami's `LDAP_ENABLE_ACCESSLOG=yes`. |
+| `bitnami/openldap` doesn't support `slapadd` for bulk loading | Medium | Medium | ✅ Resolved | Using `ldapadd` via stdin piping. Works at Nano/Micro/Small scales. Pre-built images needed for XLarge. |
+| `groupOfNames` empty group constraint breaks export | Medium | High | ⚠️ Open | Needs connector code change for S8 (Entitlement Sync). Options: placeholder member, `groupOfUniqueNames`, or connector-level handling. |
+| Performance regression at XLarge if OpenLDAP population is slow | Low | Medium | Open | Build pre-populated snapshot images (like Samba approach) for Large/XLarge templates |
+| Samba AD regression from connector changes | Medium | Low | ⚠️ Needs verification | All connector changes are gated behind `LdapDirectoryType` checks. Samba AD integration tests should be re-run to confirm no regressions. |
 
 ## Success Criteria
 
-- [ ] OpenLDAP container starts and is healthy in integration test environment
-- [ ] `Populate-OpenLDAP.ps1` successfully creates users and groups at Small template scale
-- [ ] `Run-IntegrationTests.ps1 -DirectoryType OpenLDAP` parameter works and selects correct infrastructure
-- [ ] JIM LDAP connector can connect to OpenLDAP, discover schema, and refresh partitions
-- [ ] Scenario 1 Joiner step passes against OpenLDAP (CSV → JIM → OpenLDAP provisioning)
-- [ ] Scenario 1 Mover and Leaver steps pass against OpenLDAP
-- [ ] Delta import works against OpenLDAP (changelog-based or full import fallback documented)
+- [x] OpenLDAP container starts and is healthy in integration test environment
+- [x] `Populate-OpenLDAP.ps1` successfully creates users and groups at Small template scale
+- [x] `Run-IntegrationTests.ps1 -DirectoryType OpenLDAP` parameter works and selects correct infrastructure
+- [x] JIM LDAP connector can connect to OpenLDAP, discover schema, and refresh partitions
+- [x] Scenario 1 Joiner step passes against OpenLDAP (CSV → JIM → OpenLDAP provisioning)
+- [x] Scenario 1 Mover and Leaver steps pass against OpenLDAP
+- [x] Delta import works against OpenLDAP (accesslog-based with reqStart timestamps)
 - [ ] All existing Samba AD tests continue to pass unchanged (no regressions)
+- [ ] All scenarios (S1-S9) parameterised for OpenLDAP
+- [ ] Scale testing through Micro → Small → Medium
