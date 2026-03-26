@@ -1,19 +1,19 @@
-# Root entry and base OUs for Region A (dc=regionA,dc=test)
+# Root entry and base OUs for Yellowstone (dc=yellowstone,dc=local)
 # Loaded automatically by Bitnami into the LDAP_ROOT database.
 #
 # IMPORTANT: When LDAP_CUSTOM_LDIF_DIR contains files, Bitnami skips
 # the default tree creation, so we must create the root entry ourselves.
 
-dn: dc=regionA,dc=test
+dn: dc=yellowstone,dc=local
 objectClass: dcObject
 objectClass: organization
-dc: regionA
-o: Region A Test Organisation
+dc: yellowstone
+o: Yellowstone Test Organisation
 
-dn: ou=People,dc=regionA,dc=test
+dn: ou=People,dc=yellowstone,dc=local
 objectClass: organizationalUnit
 ou: People
 
-dn: ou=Groups,dc=regionA,dc=test
+dn: ou=Groups,dc=yellowstone,dc=local
 objectClass: organizationalUnit
 ou: Groups

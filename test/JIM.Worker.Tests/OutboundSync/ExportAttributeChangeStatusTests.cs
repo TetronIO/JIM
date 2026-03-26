@@ -288,7 +288,7 @@ public class ExportAttributeChangeStatusTests
             AttributeId = mailAttr.Id,
             Attribute = mailAttr,
             ChangeType = PendingExportAttributeChangeType.Update,
-            StringValue = "john@example.com",
+            StringValue = "john@panoply.org",
             Status = PendingExportAttributeChangeStatus.Failed
         });
 
@@ -457,7 +457,7 @@ public class ExportAttributeChangeStatusTests
             AttributeId = mailAttr.Id,
             Attribute = mailAttr,
             ChangeType = PendingExportAttributeChangeType.Update,
-            StringValue = "john@example.com",
+            StringValue = "john@panoply.org",
             Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
             ExportAttemptCount = 1,
             LastExportedAt = DateTime.UtcNow.AddHours(-1)

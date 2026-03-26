@@ -128,9 +128,9 @@ Names are distributed using a prime-based algorithm to ensure realistic diversit
 
 ### Phase 1 (Available Now)
 
-- **Subatomic AD** - Port 389 (LDAP), 636 (LDAPS)
-- **Quantum Dynamics APAC** - Port 10389 (LDAP) - Profile: scenario2
-- **Quantum Dynamics EMEA** - Port 11389 (LDAP) - Profile: scenario2
+- **Panoply AD** - Port 389 (LDAP), 636 (LDAPS)
+- **Panoply APAC** - Port 10389 (LDAP) - Profile: scenario2
+- **Panoply EMEA** - Port 11389 (LDAP) - Profile: scenario2
 
 ### Phase 2 (Planned)
 

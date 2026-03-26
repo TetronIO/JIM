@@ -275,8 +275,8 @@ foreach ($scen in $scenariosToProcess) {
                 -SnapshotTag $tag `
                 -ContentHash $contentHash `
                 -EnvVars @{
-                    REALM = "SUBATOMIC.LOCAL"
-                    DOMAIN = "SUBATOMIC"
+                    REALM = "PANOPLY.LOCAL"
+                    DOMAIN = "PANOPLY"
                     ADMIN_PASS = "Test@123!"
                     DNS_FORWARDER = "8.8.8.8"
                 } `
@@ -313,8 +313,8 @@ foreach ($scen in $scenariosToProcess) {
                     -ContentHash $contentHash `
                     -MemoryLimit $memLimit `
                     -EnvVars @{
-                        REALM = "SOURCEDOMAIN.LOCAL"
-                        DOMAIN = "SOURCEDOMAIN"
+                        REALM = "RESURGAM.LOCAL"
+                        DOMAIN = "RESURGAM"
                         ADMIN_PASS = "Test@123!"
                         DNS_FORWARDER = "8.8.8.8"
                     } `
@@ -342,8 +342,8 @@ foreach ($scen in $scenariosToProcess) {
                     -SnapshotTag $targetTag `
                     -ContentHash $contentHash `
                     -EnvVars @{
-                        REALM = "TARGETDOMAIN.LOCAL"
-                        DOMAIN = "TARGETDOMAIN"
+                        REALM = "GENTIAN.LOCAL"
+                        DOMAIN = "GENTIAN"
                         ADMIN_PASS = "Test@123!"
                         DNS_FORWARDER = "8.8.8.8"
                     } `

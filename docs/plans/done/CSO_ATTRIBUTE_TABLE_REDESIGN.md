@@ -44,7 +44,7 @@ A clean two-column table with:
 | displayName           | Dept-Engineering                           |
 | distinguishedName     | CN=Dept-Engineering,OU=Entitlements,...    |
 | groupType             | -2147483640                                |
-| mail                  | dept-engineering@sourcedomain.local        |
+| mail                  | dept-engineering@resurgam.local        |
 | managedBy             | [User] Oliver Smith (distinguishedName:..) |
 | member                | [User] Jack Pearson (+1 more)        [v]   |
 | objectClass           | group, top                                 |

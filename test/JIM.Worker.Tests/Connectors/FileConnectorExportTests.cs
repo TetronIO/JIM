@@ -169,7 +169,7 @@ public class FileConnectorExportTests
         // Assert
         var content = File.ReadAllText(_testExportPath);
         Assert.That(content, Does.Contain("John Smith"));
-        Assert.That(content, Does.Contain("jsmith@example.com"));
+        Assert.That(content, Does.Contain("jsmith@panoply.org"));
         Assert.That(content, Does.Contain("emp001"));
     }
 
@@ -248,9 +248,9 @@ public class FileConnectorExportTests
         // Arrange
         var settingValues = CreateExportSettingValues(_testExportPath);
         var pendingExports = new List<PendingExport>();
-        pendingExports.AddRange(CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@example.com"));
-        pendingExports.AddRange(CreateSingleCreatePendingExport("emp002", "Jane Doe", "jdoe@example.com"));
-        pendingExports.AddRange(CreateSingleCreatePendingExport("emp003", "Bob Wilson", "bwilson@example.com"));
+        pendingExports.AddRange(CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@panoply.org"));
+        pendingExports.AddRange(CreateSingleCreatePendingExport("emp002", "Jane Doe", "jdoe@panoply.org"));
+        pendingExports.AddRange(CreateSingleCreatePendingExport("emp003", "Bob Wilson", "bwilson@panoply.org"));
 
         // Act
         var results = await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
@@ -277,7 +277,7 @@ public class FileConnectorExportTests
     {
         // Arrange - create initial file with one row
         var settingValues = CreateExportSettingValues(_testExportPath);
-        var createExports = CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@example.com");
+        var createExports = CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@panoply.org");
         await _connector.ExportAsync(settingValues, createExports, CancellationToken.None);
 
         // Act - update the display name
@@ -299,7 +299,7 @@ public class FileConnectorExportTests
     {
         // Arrange - create initial file with one row
         var settingValues = CreateExportSettingValues(_testExportPath);
-        var createExports = CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@example.com");
+        var createExports = CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@panoply.org");
         await _connector.ExportAsync(settingValues, createExports, CancellationToken.None);
 
         // Act - update only display name, email should be preserved
@@ -308,7 +308,7 @@ public class FileConnectorExportTests
 
         // Assert
         var content = File.ReadAllText(_testExportPath);
-        Assert.That(content, Does.Contain("jsmith@example.com")); // Preserved from original
+        Assert.That(content, Does.Contain("jsmith@panoply.org")); // Preserved from original
         Assert.That(content, Does.Contain("John Updated"));
     }
 
@@ -318,8 +318,8 @@ public class FileConnectorExportTests
         // Arrange - create initial file with two rows
         var settingValues = CreateExportSettingValues(_testExportPath);
         var createExports = new List<PendingExport>();
-        createExports.AddRange(CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@example.com"));
-        createExports.AddRange(CreateSingleCreatePendingExport("emp002", "Jane Doe", "jdoe@example.com"));
+        createExports.AddRange(CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@panoply.org"));
+        createExports.AddRange(CreateSingleCreatePendingExport("emp002", "Jane Doe", "jdoe@panoply.org"));
         await _connector.ExportAsync(settingValues, createExports, CancellationToken.None);
 
         // Act - update only emp001
@@ -343,8 +343,8 @@ public class FileConnectorExportTests
         // Arrange - create initial file with two rows
         var settingValues = CreateExportSettingValues(_testExportPath);
         var createExports = new List<PendingExport>();
-        createExports.AddRange(CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@example.com"));
-        createExports.AddRange(CreateSingleCreatePendingExport("emp002", "Jane Doe", "jdoe@example.com"));
+        createExports.AddRange(CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@panoply.org"));
+        createExports.AddRange(CreateSingleCreatePendingExport("emp002", "Jane Doe", "jdoe@panoply.org"));
         await _connector.ExportAsync(settingValues, createExports, CancellationToken.None);
 
         // Act - delete emp001
@@ -367,7 +367,7 @@ public class FileConnectorExportTests
     {
         // Arrange - create file with one row
         var settingValues = CreateExportSettingValues(_testExportPath);
-        var createExports = CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@example.com");
+        var createExports = CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@panoply.org");
         await _connector.ExportAsync(settingValues, createExports, CancellationToken.None);
 
         // Act - delete a row that doesn't exist
@@ -389,13 +389,13 @@ public class FileConnectorExportTests
         // Arrange - create initial file with two rows
         var settingValues = CreateExportSettingValues(_testExportPath);
         var createExports = new List<PendingExport>();
-        createExports.AddRange(CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@example.com"));
-        createExports.AddRange(CreateSingleCreatePendingExport("emp002", "Jane Doe", "jdoe@example.com"));
+        createExports.AddRange(CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@panoply.org"));
+        createExports.AddRange(CreateSingleCreatePendingExport("emp002", "Jane Doe", "jdoe@panoply.org"));
         await _connector.ExportAsync(settingValues, createExports, CancellationToken.None);
 
         // Act - create emp003, update emp001, delete emp002
         var mixedExports = new List<PendingExport>();
-        mixedExports.AddRange(CreateSingleCreatePendingExport("emp003", "Bob Wilson", "bwilson@example.com"));
+        mixedExports.AddRange(CreateSingleCreatePendingExport("emp003", "Bob Wilson", "bwilson@panoply.org"));
         mixedExports.AddRange(CreateSingleUpdatePendingExport("emp001", "displayName", "John Updated"));
         mixedExports.AddRange(CreateSingleDeletePendingExport("emp002"));
         var results = await _connector.ExportAsync(settingValues, mixedExports, CancellationToken.None);
@@ -458,11 +458,11 @@ public class FileConnectorExportTests
     {
         // Arrange - create initial file
         var settingValues = CreateExportSettingValues(_testExportPath);
-        var createExports = CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@example.com");
+        var createExports = CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@panoply.org");
         await _connector.ExportAsync(settingValues, createExports, CancellationToken.None);
 
         // Act - create again with same External ID (should overwrite)
-        var duplicateCreate = CreateSingleCreatePendingExport("emp001", "John Updated", "jupdated@example.com");
+        var duplicateCreate = CreateSingleCreatePendingExport("emp001", "John Updated", "jupdated@panoply.org");
         var results = await _connector.ExportAsync(settingValues, duplicateCreate, CancellationToken.None);
 
         // Assert
@@ -613,7 +613,7 @@ public class FileConnectorExportTests
     {
         // Arrange - create initial file
         var settingValues = CreateExportSettingValues(_testExportPath);
-        var createExports = CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@example.com");
+        var createExports = CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@panoply.org");
         await _connector.ExportAsync(settingValues, createExports, CancellationToken.None);
 
         // Act - remove email attribute
@@ -653,10 +653,10 @@ public class FileConnectorExportTests
         var lines = File.ReadAllLines(_testExportPath);
         Assert.That(lines, Has.Length.GreaterThan(1));
 
-        // emp001 row should not contain jsmith@example.com
+        // emp001 row should not contain jsmith@panoply.org
         var content = File.ReadAllText(_testExportPath);
         Assert.That(content, Does.Contain("emp001"));
-        Assert.That(content, Does.Not.Contain("jsmith@example.com"));
+        Assert.That(content, Does.Not.Contain("jsmith@panoply.org"));
     }
 
     #endregion
@@ -758,7 +758,7 @@ public class FileConnectorExportTests
     private static List<PendingExport> CreateSingleCreatePendingExport(
         string externalId,
         string displayName = "John Smith",
-        string email = "jsmith@example.com")
+        string email = "jsmith@panoply.org")
     {
         var objectType = new ConnectedSystemObjectType { Id = 1, Name = "User" };
         var externalIdAttr = CreateExternalIdAttribute(objectType);

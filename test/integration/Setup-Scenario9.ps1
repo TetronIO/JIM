@@ -128,7 +128,7 @@ try {
     $ldapSettings = @{}
     if ($hostSetting) { $ldapSettings[$hostSetting.id] = @{ stringValue = "samba-ad-primary" } }
     if ($portSetting) { $ldapSettings[$portSetting.id] = @{ intValue = 636 } }
-    if ($usernameSetting) { $ldapSettings[$usernameSetting.id] = @{ stringValue = "CN=Administrator,CN=Users,DC=subatomic,DC=local" } }
+    if ($usernameSetting) { $ldapSettings[$usernameSetting.id] = @{ stringValue = "CN=Administrator,CN=Users,DC=panoply,DC=local" } }
     if ($passwordSetting) { $ldapSettings[$passwordSetting.id] = @{ stringValue = "Test@123!" } }
     if ($useSSLSetting) { $ldapSettings[$useSSLSetting.id] = @{ checkboxValue = $true } }
     if ($certValidationSetting) { $ldapSettings[$certValidationSetting.id] = @{ stringValue = "Skip Validation (Not Recommended)" } }
@@ -199,7 +199,7 @@ try {
 
     # Find the main domain partition
     $domainPartition = $partitions | Where-Object {
-        $_.name -eq "DC=subatomic,DC=local" -or $_.externalId -eq "DC=subatomic,DC=local"
+        $_.name -eq "DC=panoply,DC=local" -or $_.externalId -eq "DC=panoply,DC=local"
     } | Select-Object -First 1
 
     if (-not $domainPartition -and $partitions.Count -eq 1) {
@@ -208,7 +208,7 @@ try {
     }
 
     if (-not $domainPartition) {
-        throw "Could not find domain partition DC=subatomic,DC=local"
+        throw "Could not find domain partition DC=panoply,DC=local"
     }
 
     # Select the domain partition

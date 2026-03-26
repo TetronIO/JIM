@@ -509,7 +509,7 @@ public class ExportExecutionTests
                     ChangeType = PendingExportAttributeChangeType.Add,
                     AttributeId = mailAttr.Id,
                     Attribute = mailAttr,
-                    StringValue = "john.doe@example.com"
+                    StringValue = "john.doe@panoply.org"
                 }
             }
         };
@@ -543,7 +543,7 @@ public class ExportExecutionTests
         var mailChange = pendingExport.AttributeValueChanges.Single(ac => ac.AttributeId == mailAttr.Id);
         Assert.That(mailChange.Attribute?.Name, Is.EqualTo(MockTargetSystemAttributeNames.Mail.ToString()));
         Assert.That(mailChange.ChangeType, Is.EqualTo(PendingExportAttributeChangeType.Add));
-        Assert.That(mailChange.StringValue, Is.EqualTo("john.doe@example.com"));
+        Assert.That(mailChange.StringValue, Is.EqualTo("john.doe@panoply.org"));
     }
 
     /// <summary>

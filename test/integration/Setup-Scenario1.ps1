@@ -216,14 +216,14 @@ catch {
 Write-TestStep "Step 5" "Creating LDAP Connected System"
 
 try {
-    $ldapSystem = $existingSystems | Where-Object { $_.name -eq "Subatomic AD" }
+    $ldapSystem = $existingSystems | Where-Object { $_.name -eq "Panoply AD" }
 
     if ($ldapSystem) {
-        Write-Host "  Connected System 'Subatomic AD' already exists (ID: $($ldapSystem.id))" -ForegroundColor Yellow
+        Write-Host "  Connected System 'Panoply AD' already exists (ID: $($ldapSystem.id))" -ForegroundColor Yellow
     }
     else {
         $ldapSystem = New-JIMConnectedSystem `
-            -Name "Subatomic AD" `
+            -Name "Panoply AD" `
             -Description "Samba Active Directory for integration testing" `
             -ConnectorDefinitionId $ldapConnector.id `
             -PassThru
@@ -257,7 +257,7 @@ try {
     }
     if ($usernameSetting) {
         # DN format for Simple bind
-        $ldapSettings[$usernameSetting.id] = @{ stringValue = "CN=Administrator,CN=Users,DC=subatomic,DC=local" }
+        $ldapSettings[$usernameSetting.id] = @{ stringValue = "CN=Administrator,CN=Users,DC=panoply,DC=local" }
     }
     if ($passwordSetting) {
         # Password setting uses stringValue - API stores it encrypted based on setting type
@@ -492,11 +492,11 @@ try {
             Write-Host "    - Name: '$($p.name)', ExternalId: '$($p.externalId)', Selected: $($p.selected)" -ForegroundColor Gray
         }
 
-        # Find the main domain partition (DC=subatomic,DC=local)
+        # Find the main domain partition (DC=panoply,DC=local)
         # Note: API returns 'name' (display name) and 'externalId' (distinguished name)
         # We need the exact domain partition, not ForestDnsZones or DomainDnsZones
         $domainPartition = $partitions | Where-Object {
-            $_.name -eq "DC=subatomic,DC=local" -or $_.externalId -eq "DC=subatomic,DC=local"
+            $_.name -eq "DC=panoply,DC=local" -or $_.externalId -eq "DC=panoply,DC=local"
         } | Select-Object -First 1
 
         # Fallback: if only one partition and filter didn't match, use it (it's the domain partition)
@@ -548,8 +548,8 @@ try {
                 Write-Host "  Selecting container: Corp (ID: $($corpContainer.id))" -ForegroundColor Gray
                 Set-JIMConnectedSystemContainer -ConnectedSystemId $ldapSystem.id -ContainerId $corpContainer.id -Selected $true | Out-Null
                 Write-Host "  ✓ Container selected: Corp" -ForegroundColor Green
-                Write-Host "    Users will be provisioned under: OU=Users,OU=Corp,DC=subatomic,DC=local" -ForegroundColor DarkGray
-                Write-Host "    Department OUs will be auto-created: OU={Dept},OU=Users,OU=Corp,DC=subatomic,DC=local" -ForegroundColor DarkGray
+                Write-Host "    Users will be provisioned under: OU=Users,OU=Corp,DC=panoply,DC=local" -ForegroundColor DarkGray
+                Write-Host "    Department OUs will be auto-created: OU={Dept},OU=Users,OU=Corp,DC=panoply,DC=local" -ForegroundColor DarkGray
             }
             else {
                 Write-Host "  ⚠ 'Corp' container not found in hierarchy" -ForegroundColor Yellow
@@ -564,7 +564,7 @@ try {
             }
         }
         else {
-            Write-Host "  ⚠ Could not find subatomic partition" -ForegroundColor Yellow
+            Write-Host "  ⚠ Could not find panoply partition" -ForegroundColor Yellow
             Write-Host "    Available partitions:" -ForegroundColor Gray
             $partitions | ForEach-Object { Write-Host "      - $($_.name)" -ForegroundColor Gray }
         }
@@ -653,7 +653,7 @@ try {
             'userPrincipalName',  # UPN (also mapped from Email)
             'title',              # Job Title
             'department',         # Department
-            'company',            # Company name (Subatomic or partner company)
+            'company',            # Company name (Panoply or partner company)
             'employeeID',         # Employee ID - required for LDAP matching rule (join to existing AD accounts)
             'distinguishedName',  # DN - required for LDAP provisioning
             'accountExpires',     # Account expiry (Large Integer/Int64) - populated from HR Employee End Date via ToFileTime
@@ -829,7 +829,7 @@ try {
             @{ CsAttr = "email";             MvAttr = "Email" }
             @{ CsAttr = "title";             MvAttr = "Job Title" }
             @{ CsAttr = "department";        MvAttr = "Department" }
-            @{ CsAttr = "company";           MvAttr = "Company" }  # Company name - Subatomic for employees, partner companies for contractors
+            @{ CsAttr = "company";           MvAttr = "Company" }  # Company name - Panoply for employees, partner companies for contractors
             @{ CsAttr = "pronouns";          MvAttr = "Pronouns" }  # Personal pronouns - populated for ~25% of users
             @{ CsAttr = "samAccountName";    MvAttr = "Account Name" }
             @{ CsAttr = "employeeType";      MvAttr = "Employee Type" }
@@ -856,7 +856,7 @@ try {
 
         # Expression-based mappings for computed values
         # DN uses Department to place users in department OUs under OU=Users,OU=Corp
-        # Structure: CN={Display Name},OU={Department},OU=Users,OU=Corp,DC=subatomic,DC=local
+        # Structure: CN={Display Name},OU={Department},OU=Users,OU=Corp,DC=panoply,DC=local
         # This enables:
         #   1. OU move testing when department changes
         #   2. Auto-creation of department OUs by the LDAP connector (when "Create containers as needed?" is enabled)
@@ -864,7 +864,7 @@ try {
         $expressionMappings = @(
             @{
                 LdapAttr = "distinguishedName"
-                Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",OU=Users,OU=Corp,DC=subatomic,DC=local"'
+                Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",OU=Users,OU=Corp,DC=panoply,DC=local"'
             }
             @{
                 # userAccountControl: Conditional expression based on Status

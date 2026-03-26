@@ -266,11 +266,11 @@ public class PendingExportReconciliationTests
         var cso = CreateTestCso();
         var pendingExport = CreateTestPendingExport(cso);
         var displayNameChange = CreateTestAttributeChange(pendingExport, DisplayNameAttr, "John Doe");
-        var mailChange = CreateTestAttributeChange(pendingExport, MailAttr, "john@example.com");
+        var mailChange = CreateTestAttributeChange(pendingExport, MailAttr, "john@panoply.org");
 
         // Import has matching values
         AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe");
-        AddCsoAttributeValue(cso, MailAttr, "john@example.com");
+        AddCsoAttributeValue(cso, MailAttr, "john@panoply.org");
 
         var service = new PendingExportReconciliationService(SyncRepo);
 
@@ -293,11 +293,11 @@ public class PendingExportReconciliationTests
         var cso = CreateTestCso();
         var pendingExport = CreateTestPendingExport(cso);
         var displayNameChange = CreateTestAttributeChange(pendingExport, DisplayNameAttr, "John Doe");
-        var mailChange = CreateTestAttributeChange(pendingExport, MailAttr, "john@example.com");
+        var mailChange = CreateTestAttributeChange(pendingExport, MailAttr, "john@panoply.org");
 
         // Import has one matching value and one different
         AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe"); // Matches
-        AddCsoAttributeValue(cso, MailAttr, "wrong@example.com"); // Doesn't match
+        AddCsoAttributeValue(cso, MailAttr, "wrong@panoply.org"); // Doesn't match
 
         var service = new PendingExportReconciliationService(SyncRepo);
 
@@ -324,12 +324,12 @@ public class PendingExportReconciliationTests
         var cso = CreateTestCso();
         var pendingExport = CreateTestPendingExport(cso);
         var mailChange = CreateTestAttributeChange(
-            pendingExport, MailAttr, "john@example.com",
+            pendingExport, MailAttr, "john@panoply.org",
             status: PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
             exportAttemptCount: 2);
 
         // After second export attempt, import now shows the correct value
-        AddCsoAttributeValue(cso, MailAttr, "john@example.com");
+        AddCsoAttributeValue(cso, MailAttr, "john@panoply.org");
 
         var service = new PendingExportReconciliationService(SyncRepo);
 
@@ -360,7 +360,7 @@ public class PendingExportReconciliationTests
 
         // New change that was just added (pending export)
         var newChange = CreateTestAttributeChange(
-            pendingExport, MailAttr, "john@example.com",
+            pendingExport, MailAttr, "john@panoply.org",
             status: PendingExportAttributeChangeStatus.Pending,
             exportAttemptCount: 0);
 
@@ -586,12 +586,12 @@ public class PendingExportReconciliationTests
             pendingExport, DisplayNameAttr, "John Doe",
             exportAttemptCount: PendingExportReconciliationService.DefaultMaxRetries);
         var mailChange = CreateTestAttributeChange(
-            pendingExport, MailAttr, "john@example.com",
+            pendingExport, MailAttr, "john@panoply.org",
             exportAttemptCount: PendingExportReconciliationService.DefaultMaxRetries);
 
         // Import has different values
         AddCsoAttributeValue(cso, DisplayNameAttr, "Wrong Name");
-        AddCsoAttributeValue(cso, MailAttr, "wrong@example.com");
+        AddCsoAttributeValue(cso, MailAttr, "wrong@panoply.org");
 
         var service = new PendingExportReconciliationService(SyncRepo);
 

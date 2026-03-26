@@ -561,27 +561,27 @@ function Reset-JIMForNextScenario {
     # 3. Clean Samba AD test data (delete OUs with --force-subtree-delete; much faster than container restart)
     Write-Host "${GRAY}  Cleaning Samba AD test data...${NC}"
 
-    # Primary (subatomic.local) — used by Scenarios 1, 4, 5, 6
-    foreach ($ou in @("OU=Corp,DC=subatomic,DC=local", "OU=TestUsers,DC=subatomic,DC=local", "OU=TestGroups,DC=subatomic,DC=local")) {
+    # Primary (panoply.local) — used by Scenarios 1, 4, 5, 6
+    foreach ($ou in @("OU=Corp,DC=panoply,DC=local", "OU=TestUsers,DC=panoply,DC=local", "OU=TestGroups,DC=panoply,DC=local")) {
         docker exec samba-ad-primary samba-tool ou delete $ou --force-subtree-delete 2>&1 | Out-Null
     }
     # Legacy department OUs from Populate-SambaAD.ps1
     foreach ($dept in @("Marketing", "Operations", "Finance", "Sales", "Human Resources", "Procurement", "Information Technology", "Research & Development", "Executive", "Legal", "Facilities", "Catering")) {
-        docker exec samba-ad-primary samba-tool ou delete "OU=$dept,DC=subatomic,DC=local" --force-subtree-delete 2>&1 | Out-Null
+        docker exec samba-ad-primary samba-tool ou delete "OU=$dept,DC=panoply,DC=local" --force-subtree-delete 2>&1 | Out-Null
     }
 
-    # Source (sourcedomain.local) — used by Scenarios 2, 8
+    # Source (resurgam.local) — used by Scenarios 2, 8
     $sourceRunning = docker ps --filter "name=samba-ad-source" --format '{{.Names}}' 2>$null
     if ($sourceRunning) {
-        foreach ($ou in @("OU=TestUsers,DC=sourcedomain,DC=local", "OU=Corp,DC=sourcedomain,DC=local")) {
+        foreach ($ou in @("OU=TestUsers,DC=resurgam,DC=local", "OU=Corp,DC=resurgam,DC=local")) {
             docker exec samba-ad-source samba-tool ou delete $ou --force-subtree-delete 2>&1 | Out-Null
         }
     }
 
-    # Target (targetdomain.local) — used by Scenarios 2, 8
+    # Target (gentian.local) — used by Scenarios 2, 8
     $targetRunning = docker ps --filter "name=samba-ad-target" --format '{{.Names}}' 2>$null
     if ($targetRunning) {
-        foreach ($ou in @("OU=TestUsers,DC=targetdomain,DC=local", "OU=CorpManaged,DC=targetdomain,DC=local")) {
+        foreach ($ou in @("OU=TestUsers,DC=gentian,DC=local", "OU=CorpManaged,DC=gentian,DC=local")) {
             docker exec samba-ad-target samba-tool ou delete $ou --force-subtree-delete 2>&1 | Out-Null
         }
     }
@@ -1335,7 +1335,7 @@ if ($Scenario -like "*Scenario1*" -and -not $script:UsingSnapshots) {
 
     # First, try to delete the Corp OU if it exists (to ensure clean state)
     Write-Step "Cleaning up any existing Corp OU..."
-    $result = docker exec samba-ad-primary samba-tool ou delete "OU=Corp,DC=subatomic,DC=local" --force-subtree-delete 2>&1
+    $result = docker exec samba-ad-primary samba-tool ou delete "OU=Corp,DC=panoply,DC=local" --force-subtree-delete 2>&1
     if ($LASTEXITCODE -eq 0) {
         Write-Success "Deleted existing OU: Corp"
     }
@@ -1348,7 +1348,7 @@ if ($Scenario -like "*Scenario1*" -and -not $script:UsingSnapshots) {
 
     # Create the Corp base OU and its sub-OUs (Users, Groups)
     Write-Step "Creating Corp OU structure..."
-    $result = docker exec samba-ad-primary samba-tool ou create "OU=Corp,DC=subatomic,DC=local" 2>&1
+    $result = docker exec samba-ad-primary samba-tool ou create "OU=Corp,DC=panoply,DC=local" 2>&1
     if ($LASTEXITCODE -eq 0) {
         Write-Success "Created OU: Corp"
     }
@@ -1360,7 +1360,7 @@ if ($Scenario -like "*Scenario1*" -and -not $script:UsingSnapshots) {
     }
 
     # Create Users OU under Corp
-    $result = docker exec samba-ad-primary samba-tool ou create "OU=Users,OU=Corp,DC=subatomic,DC=local" 2>&1
+    $result = docker exec samba-ad-primary samba-tool ou create "OU=Users,OU=Corp,DC=panoply,DC=local" 2>&1
     if ($LASTEXITCODE -eq 0) {
         Write-Success "Created OU: Users (under Corp)"
     }
@@ -1372,7 +1372,7 @@ if ($Scenario -like "*Scenario1*" -and -not $script:UsingSnapshots) {
     }
 
     # Create Groups OU under Corp
-    $result = docker exec samba-ad-primary samba-tool ou create "OU=Groups,OU=Corp,DC=subatomic,DC=local" 2>&1
+    $result = docker exec samba-ad-primary samba-tool ou create "OU=Groups,OU=Corp,DC=panoply,DC=local" 2>&1
     if ($LASTEXITCODE -eq 0) {
         Write-Success "Created OU: Groups (under Corp)"
     }

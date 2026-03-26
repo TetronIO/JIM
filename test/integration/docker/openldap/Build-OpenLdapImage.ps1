@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Builds a Docker image with OpenLDAP configured with two suffixes
-    (dc=regionA,dc=test and dc=regionB,dc=test) for testing partition-scoped
+    (dc=yellowstone,dc=local and dc=glitterband,dc=local) for testing partition-scoped
     import run profiles (Issue #72, Phase 1b).
 
     Unlike the Samba AD images, OpenLDAP does not require privileged mode
@@ -45,7 +45,7 @@ $fullTag = "$Registry/jim-openldap:primary"
 $filesToHash = @(
     (Join-Path $scriptDir "Dockerfile"),
     (Join-Path $scriptDir "scripts/01-add-second-suffix.sh"),
-    (Join-Path $scriptDir "bootstrap/01-base-ous-regionA.ldif")
+    (Join-Path $scriptDir "bootstrap/01-base-ous-yellowstone.ldif")
 )
 $combinedContent = ($filesToHash | ForEach-Object { Get-Content -Path $_ -Raw }) -join ""
 $buildContentHash = [System.BitConverter]::ToString(
@@ -58,7 +58,7 @@ Write-Host "Building OpenLDAP Integration Test Image" -ForegroundColor Cyan
 Write-Host "=============================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Image: $fullTag" -ForegroundColor Gray
-Write-Host "Suffixes: dc=regionA,dc=test, dc=regionB,dc=test" -ForegroundColor Gray
+Write-Host "Suffixes: dc=yellowstone,dc=local, dc=glitterband,dc=local" -ForegroundColor Gray
 Write-Host ""
 
 $startTime = Get-Date
@@ -100,9 +100,9 @@ else {
 
 Write-Host ""
 Write-Host "To test the image:" -ForegroundColor Yellow
-Write-Host "  docker run --rm -e LDAP_ROOT=dc=regionA,dc=test -e LDAP_ADMIN_USERNAME=admin -e LDAP_ADMIN_PASSWORD='Test@123!' -p 1389:1389 $fullTag" -ForegroundColor Gray
+Write-Host "  docker run --rm -e LDAP_ROOT=dc=yellowstone,dc=local -e LDAP_ADMIN_USERNAME=admin -e LDAP_ADMIN_PASSWORD='Test@123!' -p 1389:1389 $fullTag" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Then verify both suffixes:" -ForegroundColor Yellow
-Write-Host "  ldapsearch -x -H ldap://localhost:1389 -b 'dc=regionA,dc=test' -D 'cn=admin,dc=regionA,dc=test' -w 'Test@123!'" -ForegroundColor Gray
-Write-Host "  ldapsearch -x -H ldap://localhost:1389 -b 'dc=regionB,dc=test' -D 'cn=admin,dc=regionB,dc=test' -w 'Test@123!'" -ForegroundColor Gray
+Write-Host "  ldapsearch -x -H ldap://localhost:1389 -b 'dc=yellowstone,dc=local' -D 'cn=admin,dc=yellowstone,dc=local' -w 'Test@123!'" -ForegroundColor Gray
+Write-Host "  ldapsearch -x -H ldap://localhost:1389 -b 'dc=glitterband,dc=local' -D 'cn=admin,dc=glitterband,dc=local' -w 'Test@123!'" -ForegroundColor Gray
 Write-Host ""

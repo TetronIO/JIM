@@ -37,14 +37,14 @@ services:
       context: ./test/integration/docker/samba-ad-prebuilt
       dockerfile: Dockerfile
       args:
-        SAMBA_DOMAIN: SUBATOMIC.LOCAL
+        SAMBA_DOMAIN: PANOPLY.LOCAL
         SAMBA_PASSWORD: Test@123!
     container_name: samba-ad-primary
     privileged: true
     environment:
       # diegogslomp/samba-ad-dc environment variables
-      - REALM=SUBATOMIC.LOCAL
-      - DOMAIN=SUBATOMIC
+      - REALM=PANOPLY.LOCAL
+      - DOMAIN=PANOPLY
       - ADMIN_PASS=Test@123!
       - DNS_FORWARDER=8.8.8.8
       # Legacy environment variables for compatibility with existing scripts
@@ -86,14 +86,14 @@ services:
       context: ./test/integration/docker/samba-ad-prebuilt
       dockerfile: Dockerfile
       args:
-        SAMBA_DOMAIN: SOURCEDOMAIN.LOCAL
+        SAMBA_DOMAIN: RESURGAM.LOCAL
         SAMBA_PASSWORD: Test@123!
     container_name: samba-ad-source
     privileged: true
     environment:
       # diegogslomp/samba-ad-dc environment variables
-      - REALM=SOURCEDOMAIN.LOCAL
-      - DOMAIN=SOURCEDOMAIN
+      - REALM=RESURGAM.LOCAL
+      - DOMAIN=RESURGAM
       - ADMIN_PASS=Test@123!
       - DNS_FORWARDER=8.8.8.8
       # Legacy environment variables for compatibility with existing scripts
@@ -134,14 +134,14 @@ services:
       context: ./test/integration/docker/samba-ad-prebuilt
       dockerfile: Dockerfile
       args:
-        SAMBA_DOMAIN: TARGETDOMAIN.LOCAL
+        SAMBA_DOMAIN: GENTIAN.LOCAL
         SAMBA_PASSWORD: Test@123!
     container_name: samba-ad-target
     privileged: true
     environment:
       # diegogslomp/samba-ad-dc environment variables
-      - REALM=TARGETDOMAIN.LOCAL
-      - DOMAIN=TARGETDOMAIN
+      - REALM=GENTIAN.LOCAL
+      - DOMAIN=GENTIAN
       - ADMIN_PASS=Test@123!
       - DNS_FORWARDER=8.8.8.8
       # Legacy environment variables for compatibility with existing scripts
@@ -240,7 +240,7 @@ services:
       retries: 5
 
   # OpenLDAP with two suffixes for multi-partition testing (Issue #72, Phase 1b)
-  # Suffixes: dc=regionA,dc=test and dc=regionB,dc=test
+  # Suffixes: dc=yellowstone,dc=local and dc=glitterband,dc=local
   openldap-primary:
     image: ${OPENLDAP_IMAGE_PRIMARY:-ghcr.io/tetronio/jim-openldap:primary}
     build:
@@ -248,7 +248,7 @@ services:
       dockerfile: Dockerfile
     container_name: openldap-primary
     environment:
-      - LDAP_ROOT=dc=regionA,dc=test
+      - LDAP_ROOT=dc=yellowstone,dc=local
       - LDAP_ADMIN_USERNAME=admin
       - LDAP_ADMIN_PASSWORD=Test@123!
       - LDAP_CONFIG_ADMIN_ENABLED=yes
@@ -267,8 +267,8 @@ services:
       - openldap
     healthcheck:
       test: ["CMD", "ldapsearch", "-x", "-H", "ldap://localhost:1389",
-             "-b", "dc=regionA,dc=test",
-             "-D", "cn=admin,dc=regionA,dc=test", "-w", "Test@123!",
+             "-b", "dc=yellowstone,dc=local",
+             "-D", "cn=admin,dc=yellowstone,dc=local", "-w", "Test@123!",
              "-LLL", "(objectClass=organizationalUnit)"]
       interval: 10s
       timeout: 5s

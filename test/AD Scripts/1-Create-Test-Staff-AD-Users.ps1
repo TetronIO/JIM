@@ -7,11 +7,11 @@ Clear-Host
 
 # per-run specifics! set these!
 $users_to_create = 100
-$organisation_name = "SUBATOMIC"
+$organisation_name = "PANOPLY"
 $upn_prefix = "stf"
-$domain = "corp.subatomic.com"
+$domain = "corp.panoply.com"
 $domain_netbios = "CORP"
-$ou = "OU=Staff,OU=Corp,DC=corp,DC=subatomic,DC=com"
+$ou = "OU=Staff,OU=Corp,DC=corp,DC=panoply,DC=com"
 $default_password = "1Password1"
 $what_if_mode = $false
 

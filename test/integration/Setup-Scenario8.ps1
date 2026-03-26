@@ -5,8 +5,8 @@
 .DESCRIPTION
     Sets up Connected Systems and Sync Rules for cross-domain group synchronisation.
     This script is self-contained and creates:
-    - Source LDAP Connected System (Quantum Dynamics APAC)
-    - Target LDAP Connected System (Quantum Dynamics EMEA)
+    - Source LDAP Connected System (Panoply APAC)
+    - Target LDAP Connected System (Panoply EMEA)
     - User sync rules (prerequisite for group member resolution)
     - Group sync rules for entitlement management
     - Run Profiles for synchronisation
@@ -118,18 +118,18 @@ $authTypeSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Aut
 # ============================================================================
 # Step 4: Create Source LDAP Connected System
 # ============================================================================
-Write-TestStep "Step 4" "Creating Source LDAP Connected System (Quantum Dynamics APAC)"
+Write-TestStep "Step 4" "Creating Source LDAP Connected System (Panoply APAC)"
 
 $existingSystems = Get-JIMConnectedSystem
-$sourceSystem = $existingSystems | Where-Object { $_.name -eq "Quantum Dynamics APAC" }
+$sourceSystem = $existingSystems | Where-Object { $_.name -eq "Panoply APAC" }
 
 if ($sourceSystem) {
-    Write-Host "  Connected System 'Quantum Dynamics APAC' already exists (ID: $($sourceSystem.id))" -ForegroundColor Yellow
+    Write-Host "  Connected System 'Panoply APAC' already exists (ID: $($sourceSystem.id))" -ForegroundColor Yellow
 }
 else {
     $sourceSystem = New-JIMConnectedSystem `
-        -Name "Quantum Dynamics APAC" `
-        -Description "Quantum Dynamics APAC Active Directory - Source for cross-domain entitlement sync" `
+        -Name "Panoply APAC" `
+        -Description "Panoply APAC Active Directory - Source for cross-domain entitlement sync" `
         -ConnectorDefinitionId $ldapConnector.id `
         -PassThru
     Write-Host "  ✓ Created Source LDAP Connected System (ID: $($sourceSystem.id))" -ForegroundColor Green
@@ -139,7 +139,7 @@ else {
 $sourceSettings = @{}
 if ($hostSetting) { $sourceSettings[$hostSetting.id] = @{ stringValue = "samba-ad-source" } }
 if ($portSetting) { $sourceSettings[$portSetting.id] = @{ intValue = 636 } }
-if ($usernameSetting) { $sourceSettings[$usernameSetting.id] = @{ stringValue = "CN=Administrator,CN=Users,DC=sourcedomain,DC=local" } }
+if ($usernameSetting) { $sourceSettings[$usernameSetting.id] = @{ stringValue = "CN=Administrator,CN=Users,DC=resurgam,DC=local" } }
 if ($passwordSetting) { $sourceSettings[$passwordSetting.id] = @{ stringValue = "Test@123!" } }
 if ($useSSLSetting) { $sourceSettings[$useSSLSetting.id] = @{ checkboxValue = $true } }
 if ($certValidationSetting) { $sourceSettings[$certValidationSetting.id] = @{ stringValue = "Skip Validation (Not Recommended)" } }
@@ -154,17 +154,17 @@ if ($sourceSettings.Count -gt 0) {
 # ============================================================================
 # Step 5: Create Target LDAP Connected System
 # ============================================================================
-Write-TestStep "Step 5" "Creating Target LDAP Connected System (Quantum Dynamics EMEA)"
+Write-TestStep "Step 5" "Creating Target LDAP Connected System (Panoply EMEA)"
 
-$targetSystem = $existingSystems | Where-Object { $_.name -eq "Quantum Dynamics EMEA" }
+$targetSystem = $existingSystems | Where-Object { $_.name -eq "Panoply EMEA" }
 
 if ($targetSystem) {
-    Write-Host "  Connected System 'Quantum Dynamics EMEA' already exists (ID: $($targetSystem.id))" -ForegroundColor Yellow
+    Write-Host "  Connected System 'Panoply EMEA' already exists (ID: $($targetSystem.id))" -ForegroundColor Yellow
 }
 else {
     $targetSystem = New-JIMConnectedSystem `
-        -Name "Quantum Dynamics EMEA" `
-        -Description "Quantum Dynamics EMEA Active Directory - Target for cross-domain entitlement sync" `
+        -Name "Panoply EMEA" `
+        -Description "Panoply EMEA Active Directory - Target for cross-domain entitlement sync" `
         -ConnectorDefinitionId $ldapConnector.id `
         -PassThru
     Write-Host "  ✓ Created Target LDAP Connected System (ID: $($targetSystem.id))" -ForegroundColor Green
@@ -174,7 +174,7 @@ else {
 $targetSettings = @{}
 if ($hostSetting) { $targetSettings[$hostSetting.id] = @{ stringValue = "samba-ad-target" } }
 if ($portSetting) { $targetSettings[$portSetting.id] = @{ intValue = 636 } }
-if ($usernameSetting) { $targetSettings[$usernameSetting.id] = @{ stringValue = "CN=Administrator,CN=Users,DC=targetdomain,DC=local" } }
+if ($usernameSetting) { $targetSettings[$usernameSetting.id] = @{ stringValue = "CN=Administrator,CN=Users,DC=gentian,DC=local" } }
 if ($passwordSetting) { $targetSettings[$passwordSetting.id] = @{ stringValue = "Test@123!" } }
 if ($useSSLSetting) { $targetSettings[$useSSLSetting.id] = @{ checkboxValue = $true } }
 if ($certValidationSetting) { $targetSettings[$certValidationSetting.id] = @{ stringValue = "Skip Validation (Not Recommended)" } }
@@ -293,7 +293,7 @@ foreach ($p in $sourcePartitions) {
     Write-Host "      - Name: '$($p.name)', ExternalId: '$($p.externalId)'" -ForegroundColor Gray
 }
 
-$sourceDomainPartition = $sourcePartitions | Where-Object { $_.name -eq "DC=sourcedomain,DC=local" }
+$sourceDomainPartition = $sourcePartitions | Where-Object { $_.name -eq "DC=resurgam,DC=local" }
 if (-not $sourceDomainPartition -and $sourcePartitions.Count -eq 1) {
     # If only one partition exists and filter didn't match, use it (it's the domain partition)
     $sourceDomainPartition = $sourcePartitions[0]
@@ -328,7 +328,7 @@ if ($sourceDomainPartition) {
 
     # Deselect other partitions
     foreach ($partition in $sourcePartitions) {
-        if ($partition.name -ne "DC=sourcedomain,DC=local" -and $partition.name -ne $sourceDomainPartition.name) {
+        if ($partition.name -ne "DC=resurgam,DC=local" -and $partition.name -ne $sourceDomainPartition.name) {
             Set-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id -PartitionId $partition.id -Selected $false | Out-Null
         }
     }
@@ -346,7 +346,7 @@ foreach ($p in $targetPartitions) {
     Write-Host "      - Name: '$($p.name)', ExternalId: '$($p.externalId)'" -ForegroundColor Gray
 }
 
-$targetDomainPartition = $targetPartitions | Where-Object { $_.name -eq "DC=targetdomain,DC=local" }
+$targetDomainPartition = $targetPartitions | Where-Object { $_.name -eq "DC=gentian,DC=local" }
 if (-not $targetDomainPartition -and $targetPartitions.Count -eq 1) {
     # If only one partition exists and filter didn't match, use it (it's the domain partition)
     $targetDomainPartition = $targetPartitions[0]
@@ -381,7 +381,7 @@ if ($targetDomainPartition) {
 
     # Deselect other partitions
     foreach ($partition in $targetPartitions) {
-        if ($partition.name -ne "DC=targetdomain,DC=local" -and $partition.name -ne $targetDomainPartition.name) {
+        if ($partition.name -ne "DC=gentian,DC=local" -and $partition.name -ne $targetDomainPartition.name) {
             Set-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id -PartitionId $partition.id -Selected $false | Out-Null
         }
     }
@@ -722,7 +722,7 @@ if ($targetUserDnAttr) {
     if (-not $dnMappingExists) {
         New-JIMSyncRuleMapping -SyncRuleId $targetUserExportRule.id `
             -TargetConnectedSystemAttributeId $targetUserDnAttr.id `
-            -Expression '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=Users,OU=CorpManaged,DC=targetdomain,DC=local"' | Out-Null
+            -Expression '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=Users,OU=CorpManaged,DC=gentian,DC=local"' | Out-Null
         $userExportMappingsCreated++
     }
 }
@@ -860,7 +860,7 @@ if ($targetGroupDnAttr) {
     if (-not $dnMappingExists) {
         New-JIMSyncRuleMapping -SyncRuleId $targetGroupExportRule.id `
             -TargetConnectedSystemAttributeId $targetGroupDnAttr.id `
-            -Expression '"CN=" + EscapeDN(mv["Common Name"]) + ",OU=Entitlements,OU=CorpManaged,DC=targetdomain,DC=local"' | Out-Null
+            -Expression '"CN=" + EscapeDN(mv["Common Name"]) + ",OU=Entitlements,OU=CorpManaged,DC=gentian,DC=local"' | Out-Null
         $groupExportMappingsCreated++
     }
 }
@@ -1047,8 +1047,8 @@ Write-Host "Deletion Rules Configured:" -ForegroundColor Yellow
 Write-Host "  Groups: WhenAuthoritativeSourceDisconnected (Source=APAC, immediate)" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Run Profiles Created:" -ForegroundColor Yellow
-Write-Host "  Quantum Dynamics APAC: Full Import, Delta Import, Full Sync, Delta Sync, Export" -ForegroundColor Gray
-Write-Host "  Quantum Dynamics EMEA: Full Import, Delta Import, Full Sync, Delta Sync, Export" -ForegroundColor Gray
+Write-Host "  Panoply APAC: Full Import, Delta Import, Full Sync, Delta Sync, Export" -ForegroundColor Gray
+Write-Host "  Panoply EMEA: Full Import, Delta Import, Full Sync, Delta Sync, Export" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
 Write-Host "  1. Run Source Full Import to import users and groups" -ForegroundColor Gray

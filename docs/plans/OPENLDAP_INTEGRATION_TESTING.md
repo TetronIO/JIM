@@ -286,12 +286,12 @@ function Get-DirectoryConfig {
                 Port             = 636
                 UseSSL           = $true
                 CertValidation   = "Skip Validation (Not Recommended)"
-                BindDN           = "CN=Administrator,CN=Users,DC=subatomic,DC=local"
+                BindDN           = "CN=Administrator,CN=Users,DC=panoply,DC=local"
                 BindPassword     = "Test@123!"
                 AuthType         = "Simple"
-                BaseDN           = "DC=subatomic,DC=local"
-                UserContainer    = "OU=Users,OU=Corp,DC=subatomic,DC=local"
-                GroupContainer   = "OU=Groups,OU=Corp,DC=subatomic,DC=local"
+                BaseDN           = "DC=panoply,DC=local"
+                UserContainer    = "OU=Users,OU=Corp,DC=panoply,DC=local"
+                GroupContainer   = "OU=Groups,OU=Corp,DC=panoply,DC=local"
                 UserObjectClass  = "user"
                 GroupObjectClass = "group"
                 UserRdnAttr      = "CN"
@@ -299,7 +299,7 @@ function Get-DirectoryConfig {
                 DepartmentAttr   = "department"
                 DeleteBehaviour  = "Disable"
                 DisableAttribute = "userAccountControl"
-                DnTemplate       = 'CN={displayName},OU=Users,OU=Corp,DC=subatomic,DC=local'
+                DnTemplate       = 'CN={displayName},OU=Users,OU=Corp,DC=panoply,DC=local'
             }
         }
         "OpenLDAP" {

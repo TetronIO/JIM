@@ -1,5 +1,5 @@
 #!/bin/bash
-# Add a second MDB database (dc=regionB,dc=test) to the OpenLDAP instance.
+# Add a second MDB database (dc=glitterband,dc=local) to the OpenLDAP instance.
 #
 # Bitnami runs scripts in /docker-entrypoint-initdb.d/ AFTER ldap_initialize()
 # completes and stops slapd. We start slapd temporarily, use ldapadd to create
@@ -15,7 +15,7 @@ SLAPD="/opt/bitnami/openldap/sbin/slapd"
 SLAPPASSWD="/opt/bitnami/openldap/sbin/slappasswd"
 SLAPD_CONF_DIR="/opt/bitnami/openldap/etc/slapd.d"
 SLAPD_PID_FILE="/opt/bitnami/openldap/var/run/slapd.pid"
-REGION_B_DB_DIR="/bitnami/openldap/data/regionB"
+REGION_B_DB_DIR="/bitnami/openldap/data/glitterband"
 LDAP_PORT="${LDAP_PORT_NUMBER:-1389}"
 LDAP_URI="ldap://localhost:${LDAP_PORT}"
 
@@ -26,7 +26,7 @@ CONFIG_ADMIN_PW="${LDAP_CONFIG_ADMIN_PASSWORD:-configpassword}"
 # Data admin credentials for the new suffix (same as primary)
 DATA_ADMIN_PW="${LDAP_ADMIN_PASSWORD:-adminpassword}"
 
-echo "[openldap-init] Adding second suffix: dc=regionB,dc=test"
+echo "[openldap-init] Adding second suffix: dc=glitterband,dc=local"
 
 # Create the data directory for the second database
 mkdir -p "$REGION_B_DB_DIR"
@@ -59,39 +59,39 @@ dn: olcDatabase=mdb,cn=config
 objectClass: olcDatabaseConfig
 objectClass: olcMdbConfig
 olcDatabase: mdb
-olcSuffix: dc=regionB,dc=test
+olcSuffix: dc=glitterband,dc=local
 olcDbDirectory: ${REGION_B_DB_DIR}
-olcRootDN: cn=admin,dc=regionB,dc=test
+olcRootDN: cn=admin,dc=glitterband,dc=local
 olcRootPW: ${HASHED_PW}
 olcDbMaxSize: 1073741824
 olcDbIndex: objectClass eq
 olcDbIndex: uid eq
 olcDbIndex: cn eq
 olcDbIndex: entryUUID eq
-olcAccess: {0}to * by dn.exact="cn=admin,dc=regionB,dc=test" manage by * read
+olcAccess: {0}to * by dn.exact="cn=admin,dc=glitterband,dc=local" manage by * read
 LDIF
 
 echo "[openldap-init] Second MDB database added to cn=config"
 
 # Populate the second database with root entry and base OUs
-echo "[openldap-init] Loading Region B base entries..."
-ldapadd -x -H "$LDAP_URI" -D "cn=admin,dc=regionB,dc=test" -w "$DATA_ADMIN_PW" <<LDIF
-dn: dc=regionB,dc=test
+echo "[openldap-init] Loading Glitterband base entries..."
+ldapadd -x -H "$LDAP_URI" -D "cn=admin,dc=glitterband,dc=local" -w "$DATA_ADMIN_PW" <<LDIF
+dn: dc=glitterband,dc=local
 objectClass: dcObject
 objectClass: organization
-dc: regionB
-o: Region B Test Organisation
+dc: glitterband
+o: Glitterband Test Organisation
 
-dn: ou=People,dc=regionB,dc=test
+dn: ou=People,dc=glitterband,dc=local
 objectClass: organizationalUnit
 ou: People
 
-dn: ou=Groups,dc=regionB,dc=test
+dn: ou=Groups,dc=glitterband,dc=local
 objectClass: organizationalUnit
 ou: Groups
 LDIF
 
-echo "[openldap-init] Region B base entries loaded"
+echo "[openldap-init] Glitterband base entries loaded"
 
 # Stop slapd (Bitnami will restart it after all init scripts)
 echo "[openldap-init] Stopping slapd..."
@@ -99,5 +99,5 @@ kill "$SLAPD_PID" 2>/dev/null || true
 wait "$SLAPD_PID" 2>/dev/null || true
 
 echo "[openldap-init] Multi-suffix setup complete"
-echo "[openldap-init]   Suffix 1: dc=regionA,dc=test (primary)"
-echo "[openldap-init]   Suffix 2: dc=regionB,dc=test (added)"
+echo "[openldap-init]   Suffix 1: dc=yellowstone,dc=local (primary)"
+echo "[openldap-init]   Suffix 2: dc=glitterband,dc=local (added)"

@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Validates synchronisation of entitlement groups (security groups, distribution groups)
-    between two AD instances (Quantum Dynamics APAC source and EMEA target).
+    between two AD instances (Panoply APAC source and EMEA target).
     Source AD is authoritative for groups. Tests initial sync, forward sync,
     drift detection, and state reassertion.
 
@@ -137,8 +137,8 @@ try {
 
     # Get connected system and run profile IDs
     $connectedSystems = Get-JIMConnectedSystem
-    $sourceSystem = $connectedSystems | Where-Object { $_.name -eq "Quantum Dynamics APAC" }
-    $targetSystem = $connectedSystems | Where-Object { $_.name -eq "Quantum Dynamics EMEA" }
+    $sourceSystem = $connectedSystems | Where-Object { $_.name -eq "Panoply APAC" }
+    $targetSystem = $connectedSystems | Where-Object { $_.name -eq "Panoply EMEA" }
 
     if (-not $sourceSystem -or -not $targetSystem) {
         throw "Connected systems not found. Ensure Setup-Scenario8.ps1 completed successfully."
@@ -873,7 +873,7 @@ try {
 
         # Refresh the connected system to get current pending export count
         $connectedSystems = Get-JIMConnectedSystem
-        $targetSystemRefreshed = $connectedSystems | Where-Object { $_.name -eq "Quantum Dynamics EMEA" }
+        $targetSystemRefreshed = $connectedSystems | Where-Object { $_.name -eq "Panoply EMEA" }
         $pendingExportCount = $targetSystemRefreshed.pendingExportObjectsCount
 
         Write-Host "    Pending exports for Target AD: $pendingExportCount" -ForegroundColor Cyan

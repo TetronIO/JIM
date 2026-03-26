@@ -163,7 +163,7 @@ function Invoke-ProvisionUser {
     )
 
     $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-    $upn = "$SamAccountName@subatomic.local"
+    $upn = "$SamAccountName@panoply.local"
 
     # Add user to CSV
     $csv = Import-Csv $csvPath
@@ -171,10 +171,10 @@ function Invoke-ProvisionUser {
         employeeId      = $EmployeeId
         firstName        = $DisplayName.Split(' ')[0]
         lastName         = $DisplayName.Split(' ')[-1]
-        email            = "$SamAccountName@subatomic.local"
+        email            = "$SamAccountName@panoply.local"
         department       = "Information Technology"
         title            = "Engineer"
-        company          = "Subatomic"
+        company          = "Panoply"
         samAccountName   = $SamAccountName
         displayName      = $DisplayName
         status           = "Active"
@@ -607,7 +607,7 @@ try {
     Write-Host "Creating department OUs for test users..." -ForegroundColor Gray
     $testDepartments = @("Information Technology", "Operations")
     foreach ($dept in $testDepartments) {
-        docker exec samba-ad-primary samba-tool ou create "OU=$dept,OU=Users,OU=Corp,DC=subatomic,DC=local" 2>&1 | Out-Null
+        docker exec samba-ad-primary samba-tool ou create "OU=$dept,OU=Users,OU=Corp,DC=panoply,DC=local" 2>&1 | Out-Null
         if ($LASTEXITCODE -eq 0) {
             Write-Host "  Created OU: $dept" -ForegroundColor Gray
         }

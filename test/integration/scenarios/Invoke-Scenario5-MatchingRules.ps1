@@ -160,11 +160,11 @@ try {
 
     # Create department OUs needed for test users AFTER Setup-Scenario1
     # (Setup may recreate base Corp OU structure, so department OUs must come after)
-    # The DN expression uses: OU=<Department>,OU=Users,OU=Corp,DC=subatomic,DC=local
+    # The DN expression uses: OU=<Department>,OU=Users,OU=Corp,DC=panoply,DC=local
     Write-Host "Creating department OUs for test users..." -ForegroundColor Gray
     $testDepartments = @("Information Technology", "Operations", "Finance", "Sales", "Marketing")
     foreach ($dept in $testDepartments) {
-        $result = docker exec samba-ad-primary samba-tool ou create "OU=$dept,OU=Users,OU=Corp,DC=subatomic,DC=local" 2>&1
+        $result = docker exec samba-ad-primary samba-tool ou create "OU=$dept,OU=Users,OU=Corp,DC=panoply,DC=local" 2>&1
         if ($LASTEXITCODE -eq 0) {
             Write-Host "  ✓ Created OU: $dept" -ForegroundColor Gray
         } elseif ($result -match "already exists") {
@@ -186,12 +186,12 @@ try {
         $testUser.HrId = "00009001-0000-0000-0000-000000000000"
         $testUser.EmployeeId = "EMP900001"
         $testUser.SamAccountName = "test.projection"
-        $testUser.Email = "test.projection@subatomic.local"
+        $testUser.Email = "test.projection@panoply.local"
         $testUser.DisplayName = "Test Projection User"
 
         # Add user to CSV using proper CSV parsing (DN is calculated dynamically by the export sync rule expression)
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-        $upn = "$($testUser.SamAccountName)@subatomic.local"
+        $upn = "$($testUser.SamAccountName)@panoply.local"
 
         # Use Import-Csv/Export-Csv to ensure correct column handling
         $csv = Import-Csv $csvPath
@@ -255,12 +255,12 @@ try {
         $testUser.HrId = "00009002-0000-0000-0000-000000000000"
         $testUser.EmployeeId = "EMP900002"
         $testUser.SamAccountName = "test.join"
-        $testUser.Email = "test.join@subatomic.local"
+        $testUser.Email = "test.join@panoply.local"
         $testUser.DisplayName = "Test Join User"
 
         # DN is calculated dynamically by the export sync rule expression
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-        $upn = "$($testUser.SamAccountName)@subatomic.local"
+        $upn = "$($testUser.SamAccountName)@panoply.local"
 
         # Use Import-Csv/Export-Csv to ensure correct column handling
         $csv = Import-Csv $csvPath
@@ -355,10 +355,10 @@ try {
         $testUser1.HrId = "00009003-0000-0000-0000-000000000000"
         $testUser1.EmployeeId = "EMP900003"
         $testUser1.SamAccountName = "test.importdup1"
-        $testUser1.Email = "test.importdup1@subatomic.local"
+        $testUser1.Email = "test.importdup1@panoply.local"
         $testUser1.DisplayName = "Test Import Dup One"
 
-        $upn1 = "$($testUser1.SamAccountName)@subatomic.local"
+        $upn1 = "$($testUser1.SamAccountName)@panoply.local"
         $csv = Import-Csv $csvPath
         $dupUser1 = [PSCustomObject]@{
             hrId = $testUser1.HrId
@@ -382,10 +382,10 @@ try {
         $testUser2.HrId = "00009003-0000-0000-0000-000000000000"  # SAME hrId - duplicate external ID
         $testUser2.EmployeeId = "EMP900004"  # Different employeeId
         $testUser2.SamAccountName = "test.importdup2"
-        $testUser2.Email = "test.importdup2@subatomic.local"
+        $testUser2.Email = "test.importdup2@panoply.local"
         $testUser2.DisplayName = "Test Import Dup Two"
 
-        $upn2 = "$($testUser2.SamAccountName)@subatomic.local"
+        $upn2 = "$($testUser2.SamAccountName)@panoply.local"
         $dupUser2 = [PSCustomObject]@{
             hrId = $testUser2.HrId
             employeeId = $testUser2.EmployeeId
@@ -530,12 +530,12 @@ try {
                 $testUser1.HrId = "00009010-0000-0000-0000-000000000000"
                 $testUser1.EmployeeId = "EMP901000"
                 $testUser1.SamAccountName = "test.multirule.first"
-                $testUser1.Email = "test.multirule@subatomic.local"  # This email will be shared
+                $testUser1.Email = "test.multirule@panoply.local"  # This email will be shared
                 $testUser1.DisplayName = "Test MultiRule First"
 
                 # DN is calculated dynamically by the export sync rule expression
                 $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-                $upn1 = "$($testUser1.SamAccountName)@subatomic.local"
+                $upn1 = "$($testUser1.SamAccountName)@panoply.local"
 
                 # Use Import-Csv/Export-Csv to ensure correct column handling
                 $csv = Import-Csv $csvPath
@@ -595,11 +595,11 @@ try {
                     $testUser2.HrId = "00009011-0000-0000-0000-000000000000"
                     $testUser2.EmployeeId = "EMP901001"  # Different employeeId (rule 1 won't match)
                     $testUser2.SamAccountName = "test.multirule.second"
-                    $testUser2.Email = "test.multirule@subatomic.local"  # SAME email (rule 2 should match)
+                    $testUser2.Email = "test.multirule@panoply.local"  # SAME email (rule 2 should match)
                     $testUser2.DisplayName = "Test MultiRule Second"
 
                     # DN is calculated dynamically by the export sync rule expression
-                    $upn2 = "$($testUser2.SamAccountName)@subatomic.local"
+                    $upn2 = "$($testUser2.SamAccountName)@panoply.local"
 
                     # Use Import-Csv/Export-Csv to ensure correct column handling
                     $csv = Import-Csv $csvPath
@@ -685,10 +685,10 @@ try {
         $testUser1.HrId = "00009020-0000-0000-0000-000000000000"
         $testUser1.EmployeeId = "EMP900020"  # Same employeeId for both
         $testUser1.SamAccountName = "test.joinconflict1"
-        $testUser1.Email = "test.joinconflict1@subatomic.local"
+        $testUser1.Email = "test.joinconflict1@panoply.local"
         $testUser1.DisplayName = "Test Join Conflict One"
 
-        $upn1 = "$($testUser1.SamAccountName)@subatomic.local"
+        $upn1 = "$($testUser1.SamAccountName)@panoply.local"
         $csv = Import-Csv $csvPath
         $conflictUser1 = [PSCustomObject]@{
             hrId = $testUser1.HrId
@@ -722,10 +722,10 @@ try {
         $testUser2.HrId = "00009021-0000-0000-0000-000000000000"  # DIFFERENT hrId (different CSO)
         $testUser2.EmployeeId = "EMP900020"  # SAME employeeId (will match the MVO)
         $testUser2.SamAccountName = "test.joinconflict2"
-        $testUser2.Email = "test.joinconflict2@subatomic.local"
+        $testUser2.Email = "test.joinconflict2@panoply.local"
         $testUser2.DisplayName = "Test Join Conflict Two"
 
-        $upn2 = "$($testUser2.SamAccountName)@subatomic.local"
+        $upn2 = "$($testUser2.SamAccountName)@panoply.local"
         $csv = Import-Csv $csvPath
         $conflictUser2 = [PSCustomObject]@{
             hrId = $testUser2.HrId
@@ -842,11 +842,11 @@ try {
                 $testUser1.HrId = "00009030-0000-0000-0000-000000000000"
                 $testUser1.EmployeeId = "CASETEST123"  # UPPERCASE
                 $testUser1.SamAccountName = "test.casesens.upper"
-                $testUser1.Email = "test.casesens.upper@subatomic.local"
+                $testUser1.Email = "test.casesens.upper@panoply.local"
                 $testUser1.DisplayName = "Test Case Upper"
 
                 $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-                $upn1 = "$($testUser1.SamAccountName)@subatomic.local"
+                $upn1 = "$($testUser1.SamAccountName)@panoply.local"
 
                 $csv = Import-Csv $csvPath
                 $caseUser1 = [PSCustomObject]@{
@@ -900,10 +900,10 @@ try {
                     $testUser2.HrId = "00009031-0000-0000-0000-000000000000"
                     $testUser2.EmployeeId = "casetest123"  # lowercase - should match CASETEST123
                     $testUser2.SamAccountName = "test.casesens.lower"
-                    $testUser2.Email = "test.casesens.lower@subatomic.local"
+                    $testUser2.Email = "test.casesens.lower@panoply.local"
                     $testUser2.DisplayName = "Test Case Lower"
 
-                    $upn2 = "$($testUser2.SamAccountName)@subatomic.local"
+                    $upn2 = "$($testUser2.SamAccountName)@panoply.local"
 
                     $csv = Import-Csv $csvPath
                     $caseUser2 = [PSCustomObject]@{

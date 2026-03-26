@@ -240,7 +240,7 @@ public class ExportConfirmationWorkflowTests
             AttributeId = MailAttr.Id,
             Attribute = MailAttr,
             ChangeType = PendingExportAttributeChangeType.Update,
-            StringValue = "john@example.com",
+            StringValue = "john@panoply.org",
             Status = PendingExportAttributeChangeStatus.Pending
         };
         pendingExport.AttributeValueChanges.Add(mailChange);
@@ -254,7 +254,7 @@ public class ExportConfirmationWorkflowTests
 
         // Act Step 2: Import with matching values
         AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe");
-        AddCsoAttributeValue(cso, MailAttr, "john@example.com");
+        AddCsoAttributeValue(cso, MailAttr, "john@panoply.org");
         var result = await SimulateImportAndReconcileAsync(cso);
 
         // Assert Step 2: Both should be confirmed
@@ -346,7 +346,7 @@ public class ExportConfirmationWorkflowTests
             AttributeId = MailAttr.Id,
             Attribute = MailAttr,
             ChangeType = PendingExportAttributeChangeType.Update,
-            StringValue = "john@example.com",
+            StringValue = "john@panoply.org",
             Status = PendingExportAttributeChangeStatus.Pending
         };
         pendingExport.AttributeValueChanges.Add(mailChange);
@@ -356,7 +356,7 @@ public class ExportConfirmationWorkflowTests
 
         // Act Step 2: Import with one matching value
         AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe"); // Matches
-        AddCsoAttributeValue(cso, MailAttr, "wrong@example.com"); // Doesn't match
+        AddCsoAttributeValue(cso, MailAttr, "wrong@panoply.org"); // Doesn't match
         var result1 = await SimulateImportAndReconcileAsync(cso);
 
         // Assert Step 2: One confirmed, one retry
@@ -371,7 +371,7 @@ public class ExportConfirmationWorkflowTests
 
         // Act Step 4: Import with correct mail value
         cso.AttributeValues.RemoveAll(av => av.AttributeId == MailAttr.Id);
-        AddCsoAttributeValue(cso, MailAttr, "john@example.com");
+        AddCsoAttributeValue(cso, MailAttr, "john@panoply.org");
         var result2 = await SimulateImportAndReconcileAsync(cso);
 
         // Assert Step 4: Remaining change confirmed, PendingExport deleted
@@ -469,7 +469,7 @@ public class ExportConfirmationWorkflowTests
             AttributeId = MailAttr.Id,
             Attribute = MailAttr,
             ChangeType = PendingExportAttributeChangeType.Update,
-            StringValue = "john@example.com",
+            StringValue = "john@panoply.org",
             Status = PendingExportAttributeChangeStatus.Pending
         };
         pendingExport.AttributeValueChanges.Add(mailChange);
@@ -484,7 +484,7 @@ public class ExportConfirmationWorkflowTests
         // Act Step 5: Import confirms both
         cso.AttributeValues.Clear();
         AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe");
-        AddCsoAttributeValue(cso, MailAttr, "john@example.com");
+        AddCsoAttributeValue(cso, MailAttr, "john@panoply.org");
         var finalResult = await SimulateImportAndReconcileAsync(cso);
 
         // Assert: Both confirmed
@@ -527,7 +527,7 @@ public class ExportConfirmationWorkflowTests
             AttributeId = MailAttr.Id,
             Attribute = MailAttr,
             ChangeType = PendingExportAttributeChangeType.Update,
-            StringValue = "john@example.com",
+            StringValue = "john@panoply.org",
             Status = PendingExportAttributeChangeStatus.Pending
         };
         pendingExport.AttributeValueChanges.Add(mailChange);
@@ -538,7 +538,7 @@ public class ExportConfirmationWorkflowTests
         // Import - first one confirms, second one fails
         cso.AttributeValues.Clear();
         AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe"); // Now correct
-        AddCsoAttributeValue(cso, MailAttr, "wrong@example.com"); // Still wrong
+        AddCsoAttributeValue(cso, MailAttr, "wrong@panoply.org"); // Still wrong
         var result = await SimulateImportAndReconcileAsync(cso);
 
         // Assert

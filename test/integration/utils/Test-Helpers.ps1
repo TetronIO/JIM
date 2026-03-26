@@ -306,7 +306,7 @@ function New-TestUser {
 
         Also generates realistic employment data:
         - EmployeeType: ~20% Contractors, ~80% Employees
-        - Company: Subatomic for employees, one of five partner companies for contractors
+        - Company: Panoply for employees, one of five partner companies for contractors
         - AccountExpires: All contractors get expiry dates (1 week to 12 months)
                          ~15% of employees get expiry dates (resignations, 1 week to 3 months)
         - Pronouns: ~25% of users have pronouns populated (he/him, she/her, they/them, etc.)
@@ -316,7 +316,7 @@ function New-TestUser {
         [int]$Index,
 
         [Parameter(Mandatory=$false)]
-        [string]$Domain = "subatomic.local"
+        [string]$Domain = "panoply.local"
     )
 
     $nameData = Get-TestNameData
@@ -332,13 +332,13 @@ function New-TestUser {
     # Distribution reflects realistic workplace adoption rates
     $pronounOptions = @("he/him", "she/her", "they/them", "he/they", "she/they")
 
-    # Companies: Subatomic is the main company (employees), partner companies for contractors
+    # Companies: Panoply is the main company (employees), partner companies for contractors
     # These are used for company-specific entitlement groups in Scenario 4
-    $mainCompany = "Subatomic"
+    $mainCompany = "Panoply"
     $partnerCompanies = @(
         "Nexus Dynamics",      # Technology consulting partner
-        "Orbital Systems",     # Cloud infrastructure provider
-        "Quantum Bridge",      # Integration services partner
+        "Akinya",     # Cloud infrastructure provider
+        "Rockhopper",      # Integration services partner
         "Stellar Logistics",   # Supply chain partner
         "Vertex Solutions"     # Professional services firm
     )
@@ -387,7 +387,7 @@ function New-TestUser {
     $isContractor = ($Index % 5) -eq 0
     $employeeType = if ($isContractor) { "Contractor" } else { "Employee" }
 
-    # Assign company: Employees work for Subatomic, contractors come from partner companies
+    # Assign company: Employees work for Panoply, contractors come from partner companies
     # Contractors are distributed across the 5 partner companies deterministically
     $company = if ($isContractor) {
         $partnerIndex = ($Index / 5) % $partnerCompanies.Count

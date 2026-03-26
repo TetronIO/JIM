@@ -5,8 +5,8 @@
 .DESCRIPTION
     Sets up Connected Systems and Sync Rules for bidirectional LDAP synchronisation.
     This script creates:
-    - LDAP Connected System (Quantum Dynamics APAC)
-    - LDAP Connected System (Quantum Dynamics EMEA)
+    - LDAP Connected System (Panoply APAC)
+    - LDAP Connected System (Panoply EMEA)
     - Sync Rules for bidirectional attribute flow
     - Run Profiles for synchronisation
 
@@ -29,7 +29,7 @@
     This script requires:
     - JIM PowerShell module
     - JIM running and accessible
-    - Quantum Dynamics APAC and EMEA containers running (docker compose --profile scenario2)
+    - Panoply APAC and EMEA containers running (docker compose --profile scenario2)
 #>
 
 param(
@@ -114,21 +114,21 @@ catch {
     throw
 }
 
-# Step 4: Create Source LDAP Connected System (Quantum Dynamics APAC)
+# Step 4: Create Source LDAP Connected System (Panoply APAC)
 Write-TestStep "Step 4" "Creating Source LDAP Connected System"
 
 $existingSystems = Get-JIMConnectedSystem
 
 try {
-    $sourceSystem = $existingSystems | Where-Object { $_.name -eq "Quantum Dynamics APAC" }
+    $sourceSystem = $existingSystems | Where-Object { $_.name -eq "Panoply APAC" }
 
     if ($sourceSystem) {
-        Write-Host "  Connected System 'Quantum Dynamics APAC' already exists (ID: $($sourceSystem.id))" -ForegroundColor Yellow
+        Write-Host "  Connected System 'Panoply APAC' already exists (ID: $($sourceSystem.id))" -ForegroundColor Yellow
     }
     else {
         $sourceSystem = New-JIMConnectedSystem `
-            -Name "Quantum Dynamics APAC" `
-            -Description "Quantum Dynamics APAC Active Directory for cross-domain sync" `
+            -Name "Panoply APAC" `
+            -Description "Panoply APAC Active Directory for cross-domain sync" `
             -ConnectorDefinitionId $ldapConnector.id `
             -PassThru
 
@@ -155,7 +155,7 @@ try {
         $sourceSettings[$portSetting.id] = @{ intValue = 636 }
     }
     if ($usernameSetting) {
-        $sourceSettings[$usernameSetting.id] = @{ stringValue = "CN=Administrator,CN=Users,DC=sourcedomain,DC=local" }
+        $sourceSettings[$usernameSetting.id] = @{ stringValue = "CN=Administrator,CN=Users,DC=resurgam,DC=local" }
     }
     if ($passwordSetting) {
         $sourceSettings[$passwordSetting.id] = @{ stringValue = "Test@123!" }
@@ -183,19 +183,19 @@ catch {
     throw
 }
 
-# Step 5: Create Target LDAP Connected System (Quantum Dynamics EMEA)
+# Step 5: Create Target LDAP Connected System (Panoply EMEA)
 Write-TestStep "Step 5" "Creating Target LDAP Connected System"
 
 try {
-    $targetSystem = $existingSystems | Where-Object { $_.name -eq "Quantum Dynamics EMEA" }
+    $targetSystem = $existingSystems | Where-Object { $_.name -eq "Panoply EMEA" }
 
     if ($targetSystem) {
-        Write-Host "  Connected System 'Quantum Dynamics EMEA' already exists (ID: $($targetSystem.id))" -ForegroundColor Yellow
+        Write-Host "  Connected System 'Panoply EMEA' already exists (ID: $($targetSystem.id))" -ForegroundColor Yellow
     }
     else {
         $targetSystem = New-JIMConnectedSystem `
-            -Name "Quantum Dynamics EMEA" `
-            -Description "Quantum Dynamics EMEA Active Directory for cross-domain sync" `
+            -Name "Panoply EMEA" `
+            -Description "Panoply EMEA Active Directory for cross-domain sync" `
             -ConnectorDefinitionId $ldapConnector.id `
             -PassThru
 
@@ -211,7 +211,7 @@ try {
         $targetSettings[$portSetting.id] = @{ intValue = 636 }
     }
     if ($usernameSetting) {
-        $targetSettings[$usernameSetting.id] = @{ stringValue = "CN=Administrator,CN=Users,DC=targetdomain,DC=local" }
+        $targetSettings[$usernameSetting.id] = @{ stringValue = "CN=Administrator,CN=Users,DC=gentian,DC=local" }
     }
     if ($passwordSetting) {
         $targetSettings[$passwordSetting.id] = @{ stringValue = "Test@123!" }
@@ -342,7 +342,7 @@ try {
     # Create TestUsers OU in both AD instances (required for proper scoping)
     # This filters out built-in accounts like Administrator, Guest, krbtgt
     Write-Host "  Creating TestUsers OU in Source AD..." -ForegroundColor Gray
-    $result = docker exec samba-ad-source samba-tool ou create "OU=TestUsers,DC=sourcedomain,DC=local" 2>&1
+    $result = docker exec samba-ad-source samba-tool ou create "OU=TestUsers,DC=resurgam,DC=local" 2>&1
     if ($LASTEXITCODE -eq 0) {
         Write-Host "    ✓ Created OU=TestUsers in Source AD" -ForegroundColor Green
     }
@@ -354,7 +354,7 @@ try {
     }
 
     Write-Host "  Creating TestUsers OU in Target AD..." -ForegroundColor Gray
-    $result = docker exec samba-ad-target samba-tool ou create "OU=TestUsers,DC=targetdomain,DC=local" 2>&1
+    $result = docker exec samba-ad-target samba-tool ou create "OU=TestUsers,DC=gentian,DC=local" 2>&1
     if ($LASTEXITCODE -eq 0) {
         Write-Host "    ✓ Created OU=TestUsers in Target AD" -ForegroundColor Green
     }
@@ -400,9 +400,9 @@ try {
     }
 
     if ($sourcePartitions -and $sourcePartitions.Count -gt 0) {
-        # Find the main domain partition (DC=sourcedomain,DC=local)
+        # Find the main domain partition (DC=resurgam,DC=local)
         $sourceDomainPartition = $sourcePartitions | Where-Object {
-            $_.name -eq "DC=sourcedomain,DC=local"
+            $_.name -eq "DC=resurgam,DC=local"
         }
         # Fallback: if only one partition and filter didn't match, use it
         if (-not $sourceDomainPartition -and $sourcePartitions.Count -eq 1) {
@@ -431,7 +431,7 @@ try {
 
         # Deselect other partitions (DNS zones, Configuration, Schema)
         foreach ($partition in $sourcePartitions) {
-            if ($partition.name -ne "DC=sourcedomain,DC=local" -and $partition.name -ne $sourceDomainPartition.name) {
+            if ($partition.name -ne "DC=resurgam,DC=local" -and $partition.name -ne $sourceDomainPartition.name) {
                 Set-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id -PartitionId $partition.id -Selected $false | Out-Null
             }
         }
@@ -449,9 +449,9 @@ try {
     }
 
     if ($targetPartitions -and $targetPartitions.Count -gt 0) {
-        # Find the main domain partition (DC=targetdomain,DC=local)
+        # Find the main domain partition (DC=gentian,DC=local)
         $targetDomainPartition = $targetPartitions | Where-Object {
-            $_.name -eq "DC=targetdomain,DC=local"
+            $_.name -eq "DC=gentian,DC=local"
         }
         # Fallback: if only one partition and filter didn't match, use it
         if (-not $targetDomainPartition -and $targetPartitions.Count -eq 1) {
@@ -480,7 +480,7 @@ try {
 
         # Deselect other partitions (DNS zones, Configuration, Schema)
         foreach ($partition in $targetPartitions) {
-            if ($partition.name -ne "DC=targetdomain,DC=local" -and $partition.name -ne $targetDomainPartition.name) {
+            if ($partition.name -ne "DC=gentian,DC=local" -and $partition.name -ne $targetDomainPartition.name) {
                 Set-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id -PartitionId $partition.id -Selected $false | Out-Null
             }
         }
@@ -688,7 +688,7 @@ try {
         $targetExpressionMappings = @(
             @{
                 LdapAttr = "distinguishedName"
-                Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=TestUsers,DC=targetdomain,DC=local"'
+                Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=TestUsers,DC=gentian,DC=local"'
             }
         )
 
@@ -696,7 +696,7 @@ try {
         $sourceExpressionMappings = @(
             @{
                 LdapAttr = "distinguishedName"
-                Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=TestUsers,DC=sourcedomain,DC=local"'
+                Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=TestUsers,DC=resurgam,DC=local"'
             }
         )
 
@@ -1079,8 +1079,8 @@ Write-Host "  Forward Flow: APAC AD -> Metaverse -> EMEA AD" -ForegroundColor Gr
 Write-Host "  Reverse Flow: EMEA AD -> Metaverse -> APAC AD" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Run Profiles Created:" -ForegroundColor Yellow
-Write-Host "  Quantum Dynamics APAC: Full Import, Full Sync, Export" -ForegroundColor Gray
-Write-Host "  Quantum Dynamics EMEA: Full Import, Full Sync, Export" -ForegroundColor Gray
+Write-Host "  Panoply APAC: Full Import, Full Sync, Export" -ForegroundColor Gray
+Write-Host "  Panoply EMEA: Full Import, Full Sync, Export" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
 Write-Host "  1. Populate APAC AD with test users:" -ForegroundColor Gray

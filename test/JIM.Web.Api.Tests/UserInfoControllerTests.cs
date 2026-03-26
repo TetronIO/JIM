@@ -57,7 +57,7 @@ public class UserInfoControllerTests
         // Arrange
         var mvoId = Guid.NewGuid();
         SetUserClaims(
-            new Claim("sub", "user@example.com"),
+            new Claim("sub", "user@panoply.org"),
             new Claim("name", "Test User"),
             new Claim(Constants.BuiltInClaims.MetaverseObjectId, mvoId.ToString()),
             new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.Administrator),
@@ -77,7 +77,7 @@ public class UserInfoControllerTests
         // Arrange
         var mvoId = Guid.NewGuid();
         SetUserClaims(
-            new Claim("sub", "user@example.com"),
+            new Claim("sub", "user@panoply.org"),
             new Claim("name", "Test User"),
             new Claim(Constants.BuiltInClaims.MetaverseObjectId, mvoId.ToString()),
             new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.User)
@@ -99,7 +99,7 @@ public class UserInfoControllerTests
         // Arrange
         var mvoId = Guid.NewGuid();
         SetUserClaims(
-            new Claim("sub", "user@example.com"),
+            new Claim("sub", "user@panoply.org"),
             new Claim("name", "Test User"),
             new Claim(Constants.BuiltInClaims.MetaverseObjectId, mvoId.ToString()),
             new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.Administrator),
@@ -125,7 +125,7 @@ public class UserInfoControllerTests
         // Arrange
         var mvoId = Guid.NewGuid();
         SetUserClaims(
-            new Claim("sub", "user@example.com"),
+            new Claim("sub", "user@panoply.org"),
             new Claim("name", "Test User"),
             new Claim(Constants.BuiltInClaims.MetaverseObjectId, mvoId.ToString()),
             new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.User)
@@ -147,7 +147,7 @@ public class UserInfoControllerTests
         // Arrange
         var mvoId = Guid.NewGuid();
         SetUserClaims(
-            new Claim("sub", "user@example.com"),
+            new Claim("sub", "user@panoply.org"),
             new Claim("name", "Test User"),
             new Claim(Constants.BuiltInClaims.MetaverseObjectId, mvoId.ToString()),
             new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.User)
@@ -169,7 +169,7 @@ public class UserInfoControllerTests
         // Arrange
         var mvoId = Guid.NewGuid();
         SetUserClaims(
-            new Claim("sub", "user@example.com"),
+            new Claim("sub", "user@panoply.org"),
             new Claim("name", "Test User"),
             new Claim(Constants.BuiltInClaims.MetaverseObjectId, mvoId.ToString()),
             new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.Administrator),
@@ -192,7 +192,7 @@ public class UserInfoControllerTests
         // Arrange
         var mvoId = Guid.NewGuid();
         SetUserClaims(
-            new Claim("sub", "user@example.com"),
+            new Claim("sub", "user@panoply.org"),
             new Claim("name", "Test User"),
             new Claim(Constants.BuiltInClaims.MetaverseObjectId, mvoId.ToString()),
             new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.User)
@@ -217,7 +217,7 @@ public class UserInfoControllerTests
     {
         // Arrange - authenticated user but no JIM identity (no MetaverseObjectId claim)
         SetUserClaims(
-            new Claim("sub", "user@example.com"),
+            new Claim("sub", "user@panoply.org"),
             new Claim("name", "New User")
         );
 
@@ -233,7 +233,7 @@ public class UserInfoControllerTests
     {
         // Arrange
         SetUserClaims(
-            new Claim("sub", "user@example.com"),
+            new Claim("sub", "user@panoply.org"),
             new Claim("name", "New User")
         );
 
@@ -252,7 +252,7 @@ public class UserInfoControllerTests
     {
         // Arrange
         SetUserClaims(
-            new Claim("sub", "user@example.com"),
+            new Claim("sub", "user@panoply.org"),
             new Claim("name", "New User")
         );
 
@@ -273,7 +273,7 @@ public class UserInfoControllerTests
     {
         // Arrange
         SetUserClaims(
-            new Claim("sub", "user@example.com"),
+            new Claim("sub", "user@panoply.org"),
             new Claim("name", "New User")
         );
 
@@ -292,7 +292,7 @@ public class UserInfoControllerTests
     {
         // Arrange
         SetUserClaims(
-            new Claim("sub", "user@example.com"),
+            new Claim("sub", "user@panoply.org"),
             new Claim("name", "New User")
         );
 
@@ -311,7 +311,7 @@ public class UserInfoControllerTests
     {
         // Arrange
         SetUserClaims(
-            new Claim("sub", "user@example.com"),
+            new Claim("sub", "user@panoply.org"),
             new Claim("name", "New User")
         );
 
@@ -361,7 +361,7 @@ public class UserInfoControllerTests
         // Arrange - OAuth users don't have an explicit auth_method claim
         var mvoId = Guid.NewGuid();
         SetUserClaims(
-            new Claim("sub", "user@example.com"),
+            new Claim("sub", "user@panoply.org"),
             new Claim("name", "Test User"),
             new Claim(Constants.BuiltInClaims.MetaverseObjectId, mvoId.ToString()),
             new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.User)

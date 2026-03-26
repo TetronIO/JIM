@@ -3,7 +3,7 @@
     Test Scenario 2: Person Entity - Cross-domain Synchronisation
 
 .DESCRIPTION
-    Validates unidirectional synchronisation of person entities between two AD instances (Quantum Dynamics APAC and EMEA).
+    Validates unidirectional synchronisation of person entities between two AD instances (Panoply APAC and EMEA).
     Source AD is authoritative. Tests forward sync (Source -> Target), drift detection,
     and state reassertion when changes are made directly in Target AD.
 
@@ -82,7 +82,7 @@ $testUserFirstName = "CrossDomain"
 $testUserLastName = "TestUser"
 $testUserDisplayName = "CrossDomain TestUser"
 $testUserDepartment = "Engineering"
-$testUserEmail = "crossdomain.test1@sourcedomain.local"
+$testUserEmail = "crossdomain.test1@resurgam.local"
 
 # OU paths for creating test users (scoped imports only look at TestUsers OU)
 $sourceTestUsersOU = "OU=TestUsers"
@@ -152,8 +152,8 @@ try {
 
     # Get connected system and run profile IDs
     $connectedSystems = Get-JIMConnectedSystem
-    $sourceSystem = $connectedSystems | Where-Object { $_.name -eq "Quantum Dynamics APAC" }
-    $targetSystem = $connectedSystems | Where-Object { $_.name -eq "Quantum Dynamics EMEA" }
+    $sourceSystem = $connectedSystems | Where-Object { $_.name -eq "Panoply APAC" }
+    $targetSystem = $connectedSystems | Where-Object { $_.name -eq "Panoply EMEA" }
 
     if (-not $sourceSystem -or -not $targetSystem) {
         throw "Connected systems not found. Ensure Setup-Scenario2.ps1 completed successfully."
@@ -340,12 +340,12 @@ try {
 
         # Update department in Source AD (note: user is in OU=TestUsers, not CN=Users)
         $modifyResult = docker exec samba-ad-source bash -c "cat > /tmp/modify.ldif << 'EOF'
-dn: CN=$testUserDisplayName,$sourceTestUsersOU,DC=sourcedomain,DC=local
+dn: CN=$testUserDisplayName,$sourceTestUsersOU,DC=resurgam,DC=local
 changetype: modify
 replace: department
 department: Sales
 EOF
-ldapmodify -x -H ldap://localhost -D 'CN=Administrator,CN=Users,DC=sourcedomain,DC=local' -w 'Test@123!' -f /tmp/modify.ldif" 2>&1
+ldapmodify -x -H ldap://localhost -D 'CN=Administrator,CN=Users,DC=resurgam,DC=local' -w 'Test@123!' -f /tmp/modify.ldif" 2>&1
 
         if ($LASTEXITCODE -eq 0 -or $modifyResult -match "modifying entry") {
             Write-Host "  ✓ Updated department to 'Sales' in Source AD" -ForegroundColor Green

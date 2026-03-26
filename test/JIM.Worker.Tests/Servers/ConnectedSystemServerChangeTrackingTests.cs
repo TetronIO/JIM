@@ -103,7 +103,7 @@ public class ConnectedSystemServerChangeTrackingTests
             TypeId = 1
         };
 
-        var memberDn = "CN=Alice Adams,OU=Users,OU=Corp,DC=sourcedomain,DC=local";
+        var memberDn = "CN=Alice Adams,OU=Users,OU=Corp,DC=resurgam,DC=local";
 
         var groupCso = new ConnectedSystemObject
         {
@@ -188,7 +188,7 @@ public class ConnectedSystemServerChangeTrackingTests
             TypeId = 1
         };
 
-        var memberDn = "CN=Bob Brown,OU=Users,OU=Corp,DC=sourcedomain,DC=local";
+        var memberDn = "CN=Bob Brown,OU=Users,OU=Corp,DC=resurgam,DC=local";
 
         var groupCso = new ConnectedSystemObject
         {

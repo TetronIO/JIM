@@ -51,9 +51,9 @@ $csvPath = Join-Path $OutputPath "hr-users.csv"
 $users = @()
 
 for ($i = 1; $i -lt $scale.Users + 1; $i++) {
-    $user = New-TestUser -Index $i -Domain "subatomic.local"
+    $user = New-TestUser -Index $i -Domain "panoply.local"
 
-    $upn = "$($user.SamAccountName)@subatomic.local"
+    $upn = "$($user.SamAccountName)@panoply.local"
 
     # Format employeeEndDate as ISO 8601 for CSV compatibility
     # This represents the employee's contract/employment end date from HR
@@ -150,7 +150,7 @@ $courses = @(
 $usersWithTraining = [int]($scale.Users * 0.85)
 
 for ($i = 1; $i -le $usersWithTraining; $i++) {
-    $user = New-TestUser -Index $i -Domain "subatomic.local"
+    $user = New-TestUser -Index $i -Domain "panoply.local"
 
     # Each user has 1-5 completed courses (deterministic based on index)
     $numCourses = 1 + ($i % 5)

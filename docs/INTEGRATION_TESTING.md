@@ -83,8 +83,8 @@ This single script handles everything:
 
 | Scenario | Description | Containers Used |
 |----------|-------------|-----------------|
-| `Scenario1-HRToIdentityDirectory` | HR + Training CSV -> Subatomic AD + Cross-Domain provisioning (Joiner/Mover/Leaver) | samba-ad-primary |
-| `Scenario2-CrossDomainSync` | Quantum Dynamics APAC -> EMEA directory sync | samba-ad-source, samba-ad-target |
+| `Scenario1-HRToIdentityDirectory` | HR + Training CSV -> Panoply AD + Cross-Domain provisioning (Joiner/Mover/Leaver) | samba-ad-primary |
+| `Scenario2-CrossDomainSync` | Panoply APAC -> EMEA directory sync | samba-ad-source, samba-ad-target |
 | `Scenario4-DeletionRules` | Deletion rules and grace period testing | samba-ad-primary |
 | `Scenario5-MatchingRules` | Object matching rules testing | samba-ad-primary |
 | `Scenario6-SchedulerService` | Scheduler service end-to-end testing (parallel steps require 4 systems) | samba-ad-primary (requires Scenario1 setup) |
@@ -338,7 +338,7 @@ All external systems run as Docker containers defined in `docker-compose.integra
 │                                                                │
 │  Phase 1 (MVP):                                                │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────┐  │
-│  │ Subatomic AD     │  │ Quantum Dynamics │  │ Quantum      │  │
+│  │ Panoply AD     │  │ Panoply │  │ Quantum      │  │
 │  │ (Scenarios 1&3)  │  │ APAC (Scen. 2)   │  │ Dynamics     │  │
 │  │ Port: 389/636    │  │ Port: 10389/636  │  │ EMEA: 11389  │  │
 │  └──────────────────┘  └──────────────────┘  └──────────────┘  │
@@ -437,11 +437,11 @@ All templates generate realistic enterprise data following normal distribution p
 
 **Systems**:
 - Source: CSV (HR system)
-- Target: Subatomic AD
+- Target: Panoply AD
 
 **Test Data**:
-- HR CSV includes Company attribute: "Subatomic" for employees, partner companies for contractors
-- Partner companies: Nexus Dynamics, Orbital Systems, Quantum Bridge, Stellar Logistics, Vertex Solutions
+- HR CSV includes Company attribute: "Panoply" for employees, partner companies for contractors
+- Partner companies: Nexus Dynamics, Akinya, Rockhopper, Stellar Logistics, Vertex Solutions
 
 **Test Steps** (executed sequentially):
 
@@ -521,8 +521,8 @@ Repository-level tests for the dual-path stats derivation logic (outcome-based v
 **Purpose**: Validate unidirectional synchronisation of person entities between two directory services.
 
 **Systems**:
-- Source: Quantum Dynamics APAC (authoritative)
-- Target: Quantum Dynamics EMEA
+- Source: Panoply APAC (authoritative)
+- Target: Panoply EMEA
 
 **Test Steps** (executed sequentially):
 
@@ -555,7 +555,7 @@ Repository-level tests for the dual-path stats derivation logic (outcome-based v
 **Purpose**: Validate exporting directory users to CSV for distribution/reporting.
 
 **Systems**:
-- Source: Subatomic AD
+- Source: Panoply AD
 - Target: CSV (GAL export)
 
 **Test Steps** (executed sequentially):
@@ -588,7 +588,7 @@ Repository-level tests for the dual-path stats derivation logic (outcome-based v
 
 **Systems**:
 - Source: CSV (HR system)
-- Target: Subatomic AD
+- Target: Panoply AD
 
 **Test Steps** (executed sequentially):
 
@@ -637,7 +637,7 @@ Repository-level tests for the dual-path stats derivation logic (outcome-based v
 
 **Systems**:
 - Source: CSV (HR system) with `hrId` (GUID) as external ID
-- Target: Subatomic AD
+- Target: Panoply AD
 
 **Test Steps** (executed sequentially):
 
@@ -765,11 +765,11 @@ These scenarios test group management capabilities - a core ILM function where t
 
 **Systems**:
 - Source: JIM Metaverse (groups created via JIM API, not imported from a Connected System)
-- Target: Subatomic AD (OU=Entitlements,OU=Groups,OU=Corp,DC=subatomic,DC=local)
+- Target: Panoply AD (OU=Entitlements,OU=Groups,OU=Corp,DC=panoply,DC=local)
 
 **Group Types Created**:
 - **Department Groups**: `Dept-{Department}` (e.g., `Dept-Finance`, `Dept-Information Technology`)
-- **Company Groups**: `Company-{Company}` (e.g., `Company-Subatomic`, `Company-Nexus Dynamics`)
+- **Company Groups**: `Company-{Company}` (e.g., `Company-Panoply`, `Company-Nexus Dynamics`)
 - **Job Title Groups**: `Role-{Title}` (e.g., `Role-Manager`, `Role-Analyst`)
 
 **Test Steps** (executed sequentially):
@@ -794,9 +794,9 @@ These scenarios test group management capabilities - a core ILM function where t
 **Concept**: Organisations often have existing groups in AD that were created manually or by other tools. This scenario tests bringing those groups under JIM management, making JIM authoritative for their membership.
 
 **Systems**:
-- Source: Subatomic AD (existing groups in OU=Legacy Groups,OU=Groups,OU=Corp)
+- Source: Panoply AD (existing groups in OU=Legacy Groups,OU=Groups,OU=Corp)
 - Target: JIM Metaverse (becomes authoritative after import)
-- Export Target: Subatomic AD (same groups, now JIM-managed)
+- Export Target: Panoply AD (same groups, now JIM-managed)
 
 **Test Steps** (executed sequentially):
 
@@ -817,8 +817,8 @@ These scenarios test group management capabilities - a core ILM function where t
 **Concept**: In multi-domain environments, groups may need to be replicated across domains. This scenario tests importing groups from AD1 (authoritative) and exporting them to AD2, ensuring AD2 groups mirror AD1.
 
 **Systems**:
-- Source: Quantum Dynamics APAC (OU=Entitlements,OU=SourceCorp - authoritative for groups)
-- Target: Quantum Dynamics EMEA (OU=Entitlements,OU=TargetCorp - replica of source groups)
+- Source: Panoply APAC (OU=Entitlements,OU=SourceCorp - authoritative for groups)
+- Target: Panoply EMEA (OU=Entitlements,OU=TargetCorp - replica of source groups)
 
 **Important**: Each domain uses dedicated OUs to avoid conflicts with other scenarios.
 
@@ -861,7 +861,7 @@ These scenarios test group management capabilities - a core ILM function where t
 **Systems**:
 - Source 1: SQL Server (HRIS System A - Business Unit A)
 - Source 2: Oracle Database (HRIS System B - Business Unit B)
-- Target 1: Subatomic AD
+- Target 1: Panoply AD
 - Target 2: CSV (Reporting)
 
 **Test Steps** (executed sequentially):
@@ -1016,15 +1016,15 @@ $hrSystem = New-JIMConnectedSystem -Name "HR CSV" `
     }
 
 # Create Samba AD Connected System (Target)
-$adSystem = New-JIMConnectedSystem -Name "Subatomic AD" `
+$adSystem = New-JIMConnectedSystem -Name "Panoply AD" `
     -ConnectorType "LDAP" `
     -Configuration @{
         Server = "samba-ad-primary"
         Port = 389
-        BaseDN = "DC=subatomic,DC=local"
-        BindDN = "CN=Administrator,CN=Users,DC=subatomic,DC=local"
+        BaseDN = "DC=panoply,DC=local"
+        BindDN = "CN=Administrator,CN=Users,DC=panoply,DC=local"
         BindPassword = "Test@123!"
-        UserContainer = "OU=Users,OU=Corp,DC=subatomic,DC=local"
+        UserContainer = "OU=Users,OU=Corp,DC=panoply,DC=local"
     }
 
 # Create Inbound Sync Rule (HR -> Metaverse)
@@ -1762,12 +1762,12 @@ JIM/
 
 | Service              | Container Port | Host Port | Protocol |
 |----------------------|----------------|-----------|----------|
-| Subatomic AD     | 389            | 389       | LDAP     |
-| Subatomic AD     | 636            | 636       | LDAPS    |
-| Quantum Dynamics APAC | 389            | 10389     | LDAP     |
-| Quantum Dynamics APAC | 636            | 10636     | LDAPS    |
-| Quantum Dynamics EMEA | 389            | 11389     | LDAP     |
-| Quantum Dynamics EMEA | 636            | 11636     | LDAPS    |
+| Panoply AD     | 389            | 389       | LDAP     |
+| Panoply AD     | 636            | 636       | LDAPS    |
+| Panoply APAC | 389            | 10389     | LDAP     |
+| Panoply APAC | 636            | 10636     | LDAPS    |
+| Panoply EMEA | 389            | 11389     | LDAP     |
+| Panoply EMEA | 636            | 11636     | LDAPS    |
 | SQL Server           | 1433           | 1433      | TCP      |
 | Oracle XE            | 1521           | 1521      | TCP      |
 | PostgreSQL (Test)    | 5432           | 5433      | TCP      |

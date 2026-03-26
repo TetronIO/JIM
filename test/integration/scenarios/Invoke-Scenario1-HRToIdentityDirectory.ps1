@@ -6,8 +6,8 @@
     Validates provisioning users from HR system (CSV) to identity directory (Samba AD).
     Tests the complete ILM lifecycle: Joiner, Mover, Leaver, and Reconnection patterns.
 
-    HR CSV includes Company attribute: "Subatomic" for employees, partner companies for contractors.
-    Partner companies: Nexus Dynamics, Orbital Systems, Quantum Bridge, Stellar Logistics, Vertex Solutions.
+    HR CSV includes Company attribute: "Panoply" for employees, partner companies for contractors.
+    Partner companies: Nexus Dynamics, Akinya, Rockhopper, Stellar Logistics, Vertex Solutions.
 
 .PARAMETER Step
     Which test step to execute (Joiner, Leaver, Mover, Reconnection, All)
@@ -720,7 +720,7 @@ try {
 
         Write-Host "Updating user department to trigger OU move..." -ForegroundColor Gray
 
-        # The DN is computed from Department: "CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",DC=subatomic,DC=local"
+        # The DN is computed from Department: "CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",DC=panoply,DC=local"
         # User at index 1 is assigned to Marketing department (1 % 12 = 1)
         # This should trigger an LDAP move to OU=Finance
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
@@ -981,7 +981,7 @@ try {
         $reconnectUser = New-TestUser -Index 8888
         $reconnectUser.EmployeeId = "EMP888888"
         $reconnectUser.SamAccountName = "test.reconnect"
-        $reconnectUser.Email = "test.reconnect@subatomic.local"
+        $reconnectUser.Email = "test.reconnect@panoply.local"
         $reconnectUser.FirstName = "Test"
         $reconnectUser.LastName = "Reconnect"
         $reconnectUser.Department = "IT"
@@ -989,7 +989,7 @@ try {
 
         # Add to CSV using proper CSV parsing (DN is calculated dynamically by the export sync rule expression)
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-        $upn = "$($reconnectUser.SamAccountName)@subatomic.local"
+        $upn = "$($reconnectUser.SamAccountName)@panoply.local"
 
         # Use Import-Csv/Export-Csv to ensure correct column handling
         $csv = Import-Csv $csvPath

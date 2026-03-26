@@ -587,17 +587,17 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
     # The extended Scenario1 setup creates:
     # - HR CSV Source
     # - Training Records Source
-    # - Samba AD (Subatomic AD)
+    # - Samba AD (Panoply AD)
     # - Cross-Domain Export
     $hrSystem = $connectedSystems | Where-Object { $_.name -eq "HR CSV Source" }
     $trainingSystem = $connectedSystems | Where-Object { $_.name -eq "Training Records Source" }
-    $ldapSystem = $connectedSystems | Where-Object { $_.name -eq "Subatomic AD" }
+    $ldapSystem = $connectedSystems | Where-Object { $_.name -eq "Panoply AD" }
     $crossDomainSystem = $connectedSystems | Where-Object { $_.name -eq "Cross-Domain Export" }
 
     $missingCount = 0
     if (-not $hrSystem) { $missingCount++; Write-Host "  Missing: HR CSV Source" -ForegroundColor Yellow }
     if (-not $trainingSystem) { $missingCount++; Write-Host "  Missing: Training Records Source" -ForegroundColor Yellow }
-    if (-not $ldapSystem) { $missingCount++; Write-Host "  Missing: Subatomic AD" -ForegroundColor Yellow }
+    if (-not $ldapSystem) { $missingCount++; Write-Host "  Missing: Panoply AD" -ForegroundColor Yellow }
     if (-not $crossDomainSystem) { $missingCount++; Write-Host "  Missing: Cross-Domain Export" -ForegroundColor Yellow }
 
     if ($missingCount -gt 0) {

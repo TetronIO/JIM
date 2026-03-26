@@ -164,7 +164,7 @@ public class ConnectedSystemActivityTests
         var connectedSystem = new ConnectedSystem
         {
             Id = 1,
-            Name = "Subatomic AD"
+            Name = "Panoply AD"
         };
 
         var objectType = new ConnectedSystemObjectType
@@ -190,7 +190,7 @@ public class ConnectedSystemActivityTests
 
         // Assert
         Assert.That(_capturedActivity, Is.Not.Null);
-        Assert.That(_capturedActivity!.TargetName, Is.EqualTo("Subatomic AD"),
+        Assert.That(_capturedActivity!.TargetName, Is.EqualTo("Panoply AD"),
             "TargetName should be the Connected System name, not the attribute or object type name");
         Assert.That(_capturedActivity.TargetType, Is.EqualTo(ActivityTargetType.ConnectedSystem));
         Assert.That(_capturedActivity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Update));
