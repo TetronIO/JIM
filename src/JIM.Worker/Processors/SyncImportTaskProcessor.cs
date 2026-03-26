@@ -22,6 +22,7 @@ public class SyncImportTaskProcessor
     private readonly JimApplication _jim;
     private readonly ISyncRepository _syncRepo;
     private readonly ISyncServer _syncServer;
+    private readonly ISyncEngine _syncEngine;
     private readonly IConnector _connector;
     private readonly ConnectedSystem _connectedSystem;
     private readonly ConnectedSystemRunProfile _connectedSystemRunProfile;
@@ -60,6 +61,7 @@ public class SyncImportTaskProcessor
         JimApplication jimApplication,
         ISyncRepository syncRepository,
         ISyncServer syncServer,
+        ISyncEngine syncEngine,
         IConnector connector,
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile connectedSystemRunProfile,
@@ -69,6 +71,7 @@ public class SyncImportTaskProcessor
         _jim = jimApplication;
         _syncRepo = syncRepository;
         _syncServer = syncServer;
+        _syncEngine = syncEngine;
         _connector = connector;
         _connectedSystem = connectedSystem;
         _cancellationTokenSource = cancellationTokenSource;
@@ -2377,7 +2380,6 @@ public class SyncImportTaskProcessor
         Log.Debug("ReconcilePendingExportsAsync: {FilteredCount} of {TotalCount} CSOs have pending exports",
             csoList.Count, updatedCsos.Count);
 
-        var reconciliationService = new PendingExportReconciliationService(_syncRepo);
         var totalConfirmed = 0;
         var totalRetry = 0;
         var totalFailed = 0;
@@ -2424,7 +2426,7 @@ public class SyncImportTaskProcessor
             // - pendingExportsByCsoId: read-only dictionary (concurrent reads are safe)
             // - Each CSO gets its own PendingExportReconciliationResult (no sharing)
             // - Each pending export is unique per CSO (no cross-CSO contention)
-            // - reconciliationService.ReconcileCsoAgainstPendingExport uses only static helper methods
+            // - SyncEngine reconciliation methods are stateless (pure logic, no instance state)
             // - Shared collections use ConcurrentBag, counters use Interlocked
             using (Diagnostics.Sync.StartSpan("ProcessReconciliation").SetTag("csoCount", pageCsos.Count))
             {
@@ -2437,7 +2439,7 @@ public class SyncImportTaskProcessor
 
                         // Perform in-memory reconciliation (no database operations)
                         var result = new PendingExportReconciliationResult();
-                        reconciliationService.ReconcileCsoAgainstPendingExport(cso, pendingExport, result);
+                        _syncEngine.ReconcileCsoAgainstPendingExport(cso, pendingExport, result);
 
                         if (result.HasChanges)
                         {

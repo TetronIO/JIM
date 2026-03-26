@@ -513,12 +513,6 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Checks if a CSO attribute value matches a pending export attribute change.
-    /// </summary>
-    protected bool AttributeValuesMatch(ConnectedSystemObjectAttributeValue csoValue, JIM.Models.Transactional.PendingExportAttributeValueChange pendingChange)
-        => _syncEngine.AttributeValuesMatch(csoValue, pendingChange);
-
-    /// <summary>
     /// Check if a CSO has been obsoleted and delete it, applying any joined Metaverse Object changes as necessary.
     /// Respects the InboundOutOfScopeAction setting on import sync rules to determine whether to disconnect.
     /// Deleting a Metaverse Object can have downstream impacts on other Connected System objects.

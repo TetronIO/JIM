@@ -165,7 +165,8 @@ public class ExportConfirmationWorkflowTests
 
     private async Task<PendingExportReconciliationResult> SimulateImportAndReconcileAsync(ConnectedSystemObject cso)
     {
-        var reconciliationService = new PendingExportReconciliationService(SyncRepo);
+        var syncEngine = new JIM.Application.Servers.SyncEngine();
+        var reconciliationService = new PendingExportReconciliationService(SyncRepo, syncEngine);
         return await reconciliationService.ReconcileAsync(cso);
     }
 
@@ -404,7 +405,7 @@ public class ExportConfirmationWorkflowTests
         pendingExport.AttributeValueChanges.Add(attrChange);
 
         // Simulate max retries of exports
-        for (int attempt = 1; attempt <= PendingExportReconciliationService.DefaultMaxRetries; attempt++)
+        for (int attempt = 1; attempt <= JIM.Application.Servers.SyncEngine.DefaultMaxRetries; attempt++)
         {
             await SimulateExportAsync(pendingExport);
 
@@ -413,7 +414,7 @@ public class ExportConfirmationWorkflowTests
             AddCsoAttributeValue(cso, DisplayNameAttr, $"Wrong Name {attempt}");
             var result = await SimulateImportAndReconcileAsync(cso);
 
-            if (attempt < PendingExportReconciliationService.DefaultMaxRetries)
+            if (attempt < JIM.Application.Servers.SyncEngine.DefaultMaxRetries)
             {
                 // Should be marked for retry
                 Assert.That(result.RetryChanges.Count, Is.EqualTo(1),
