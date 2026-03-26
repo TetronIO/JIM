@@ -56,6 +56,9 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     private readonly string _settingMaxRetries = "Maximum Retries";
     private readonly string _settingRetryDelay = "Retry Delay (ms)";
 
+    // Schema settings
+    private readonly string _settingIncludeAuxiliaryClasses = "Include Auxiliary Classes";
+
     // Hierarchy settings
     private readonly string _settingSkipHiddenPartitions = "Skip Hidden Partitions";
 
@@ -90,6 +93,9 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             new() { Name = "Retry Settings", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
             new() { Name = _settingMaxRetries, Required = false, Description = "Maximum number of retry attempts for transient failures. Default is 3.", DefaultIntValue = LdapConnectorConstants.DEFAULT_MAX_RETRIES, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Integer },
             new() { Name = _settingRetryDelay, Required = false, Description = "Initial delay between retries in milliseconds. Uses exponential backoff. Default is 1000ms.", DefaultIntValue = LdapConnectorConstants.DEFAULT_RETRY_DELAY_MS, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Integer },
+
+            new() { Name = "Schema Discovery", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
+            new() { Name = _settingIncludeAuxiliaryClasses, Description = "When enabled, auxiliary object classes are included in schema discovery alongside structural classes. Enable this if you need to import or export objects whose primary class is declared as auxiliary in the directory schema.", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox },
 
             new() { Name = "Container Provisioning", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
             new() { Name = _settingCreateContainersAsNeeded, Description = "i.e. create OUs as needed when provisioning new objects.", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox },
@@ -144,8 +150,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         if (_connection == null)
             throw new Exception("No connection available to get schema with");
 
+        var includeAuxiliaryClasses = settingValues.SingleOrDefault(q => q.Setting.Name == _settingIncludeAuxiliaryClasses)?.CheckboxValue ?? false;
+
         var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
-        var ldapConnectorSchema = new LdapConnectorSchema(_connection, logger, rootDse);
+        var ldapConnectorSchema = new LdapConnectorSchema(_connection, logger, rootDse, includeAuxiliaryClasses);
         var schema = await ldapConnectorSchema.GetSchemaAsync();
         CloseImportConnection();
         return schema;
@@ -161,7 +169,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
         var skipHiddenPartitions = settingValues.SingleOrDefault(q => q.Setting.Name == _settingSkipHiddenPartitions)?.CheckboxValue ?? true;
 
-        var ldapConnectorPartitions = new LdapConnectorPartitions(_connection, logger);
+        // Detect directory type so partition discovery can use the appropriate mechanism
+        var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
+
+        var ldapConnectorPartitions = new LdapConnectorPartitions(_connection, logger, rootDse.DirectoryType);
         var partitions = await ldapConnectorPartitions.GetPartitionsAsync(skipHiddenPartitions);
         CloseImportConnection();
         return partitions;
