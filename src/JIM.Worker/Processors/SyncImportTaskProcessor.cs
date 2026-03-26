@@ -146,6 +146,7 @@ public class SyncImportTaskProcessor
                     credentialAwareConnector.SetCredentialProtection(credentialProtection);
                 }
 
+                await _syncRepo.UpdateActivityMessageAsync(_activity, "Connecting to connected system");
                 using (Diagnostics.Connector.StartSpan("OpenImportConnection"))
                 {
                     callBasedImportConnector.OpenImportConnection(_connectedSystem.SettingValues, Log.Logger);
@@ -169,6 +170,10 @@ public class SyncImportTaskProcessor
                     // IMPORTANT: Always pass the ORIGINAL persisted data to ensure consistent
                     // watermark queries across all pages of a delta import.
                     ConnectedSystemImportResult result;
+                    var fetchMessage = pageNumber > 0
+                        ? $"Importing objects from connected system (page {pageNumber + 1})"
+                        : "Importing objects from connected system";
+                    await _syncRepo.UpdateActivityMessageAsync(_activity, fetchMessage);
                     using (Diagnostics.Connector.StartSpan("ImportPage").SetTag("pageNumber", pageNumber))
                     {
                         result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, originalPersistedData, Log.Logger, _cancellationTokenSource.Token);
@@ -229,6 +234,7 @@ public class SyncImportTaskProcessor
                 using var connectorSpan = Diagnostics.Connector.StartSpan("FileBasedImport");
 
                 // file based connectors return all the results from the connected system in one go. no paging.
+                await _syncRepo.UpdateActivityMessageAsync(_activity, "Importing objects from file");
                 ConnectedSystemImportResult result;
                 using (Diagnostics.Connector.StartSpan("ReadFile"))
                 {
