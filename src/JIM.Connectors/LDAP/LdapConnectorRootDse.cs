@@ -20,10 +20,17 @@ internal class LdapConnectorRootDse
     public long? HighestCommittedUsn { get; set; }
 
     /// <summary>
-    /// For changelog-based directories (e.g., OpenLDAP, Oracle Directory): The last change number processed.
-    /// Used for delta imports - we query the changelog for entries > this value.
+    /// For changelog-based directories (e.g., Oracle Directory): The last change number processed.
+    /// Used for delta imports — we query cn=changelog for entries with changeNumber > this value.
     /// </summary>
     public int? LastChangeNumber { get; set; }
+
+    /// <summary>
+    /// For OpenLDAP with accesslog overlay: The reqStart timestamp of the last processed entry.
+    /// Used for delta imports — we query cn=accesslog for entries with reqStart > this value.
+    /// Format: Generalised time (e.g., "20260326183000.000000Z").
+    /// </summary>
+    public string? LastAccesslogTimestamp { get; set; }
 
     /// <summary>
     /// The detected directory server type, determined from rootDSE capabilities during connection.
@@ -68,9 +75,15 @@ internal class LdapConnectorRootDse
     };
 
     /// <summary>
-    /// Whether delta imports should use USN-based change tracking (AD/Samba AD) or changelog-based (OpenLDAP/generic).
+    /// Whether delta imports should use USN-based change tracking (AD/Samba AD).
     /// </summary>
     public bool UseUsnDeltaImport => DirectoryType is LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD;
+
+    /// <summary>
+    /// Whether delta imports should use the OpenLDAP accesslog overlay (cn=accesslog with reqStart timestamps).
+    /// Falls back to standard changelog (cn=changelog with changeNumber) for Generic directories.
+    /// </summary>
+    public bool UseAccesslogDeltaImport => DirectoryType is LdapDirectoryType.OpenLDAP;
 
     /// <summary>
     /// Whether the directory's SAM layer enforces single-valued semantics on certain multi-valued schema attributes

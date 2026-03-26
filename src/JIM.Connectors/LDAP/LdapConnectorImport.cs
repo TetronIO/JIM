@@ -210,9 +210,22 @@ internal class LdapConnectorImport
                 GetDeletedObjectsUsingUsn(result, selectedPartition, _previousRootDse.HighestCommittedUsn.Value);
             }
         }
+        else if (_previousRootDse.UseAccesslogDeltaImport)
+        {
+            // For OpenLDAP with accesslog overlay
+            if (string.IsNullOrEmpty(_previousRootDse.LastAccesslogTimestamp))
+            {
+                throw new CannotPerformDeltaImportException("Previous accesslog timestamp not available. Run a full import first.");
+            }
+
+            _logger.Debug("GetDeltaImportObjects: Using accesslog-based delta import. Previous timestamp: {PreviousTimestamp}",
+                _previousRootDse.LastAccesslogTimestamp);
+
+            GetDeltaResultsUsingAccesslog(result, _previousRootDse.LastAccesslogTimestamp);
+        }
         else
         {
-            // For changelog-based directories
+            // For generic changelog-based directories (Oracle, 389DS, etc.)
             if (!_previousRootDse.LastChangeNumber.HasValue)
             {
                 throw new CannotPerformDeltaImportException("Previous changelog number not available. Run a full import first.");
@@ -286,6 +299,52 @@ internal class LdapConnectorImport
         }
     }
 
+    /// <summary>
+    /// Queries the OpenLDAP accesslog overlay (cn=accesslog) for the latest reqStart timestamp.
+    /// This establishes the watermark for the next delta import.
+    /// </summary>
+    private string? QueryAccesslogForLatestTimestamp()
+    {
+        try
+        {
+            // Query cn=accesslog for successful write operations.
+            // reqResult=0 ensures we only consider successful operations.
+            // We request only reqStart to minimise data transfer, then find the latest in code.
+            var request = new SearchRequest("cn=accesslog",
+                "(&(objectClass=auditWriteObject)(reqResult=0))",
+                SearchScope.OneLevel,
+                "reqStart");
+
+            var response = (SearchResponse)_connection.SendRequest(request, _searchTimeout);
+
+            if (response == null || response.Entries.Count == 0)
+            {
+                _logger.Debug("QueryAccesslogForLatestTimestamp: No accesslog entries found");
+                return null;
+            }
+
+            // Find the latest reqStart by comparing strings lexicographically
+            // (generalised time format YYYYMMDDHHmmss.ffffffZ is naturally sortable)
+            string? latestTimestamp = null;
+            foreach (SearchResultEntry entry in response.Entries)
+            {
+                var reqStart = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "reqStart");
+                if (reqStart != null && (latestTimestamp == null || string.Compare(reqStart, latestTimestamp, StringComparison.Ordinal) > 0))
+                    latestTimestamp = reqStart;
+            }
+
+            _logger.Debug("QueryAccesslogForLatestTimestamp: Latest accesslog timestamp: {Timestamp} (from {Count} entries)",
+                latestTimestamp, response.Entries.Count);
+            return latestTimestamp;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "QueryAccesslogForLatestTimestamp: Failed to query accesslog. " +
+                "The directory may not have the accesslog overlay enabled.");
+            return null;
+        }
+    }
+
     private LdapConnectorRootDse GetRootDseInformation()
     {
         var request = new SearchRequest()
@@ -297,7 +356,8 @@ internal class LdapConnectorImport
             "DNSHostName",
             "HighestCommittedUSN",
             "supportedCapabilities",
-            "vendorName"
+            "vendorName",
+            "structuralObjectClass"
         });
 
         var response = (SearchResponse)_connection.SendRequest(request);
@@ -316,7 +376,8 @@ internal class LdapConnectorImport
         // Detect directory type from rootDSE capabilities
         var capabilities = LdapConnectorUtilities.GetEntryAttributeStringValues(rootDseEntry, "supportedCapabilities");
         var vendorName = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "vendorName");
-        var directoryType = LdapConnectorUtilities.DetectDirectoryType(capabilities, vendorName);
+        var structuralObjectClass = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "structuralObjectClass");
+        var directoryType = LdapConnectorUtilities.DetectDirectoryType(capabilities, vendorName, structuralObjectClass);
 
         var rootDse = new LdapConnectorRootDse
         {
@@ -326,18 +387,26 @@ internal class LdapConnectorImport
             VendorName = vendorName
         };
 
-        // For non-AD directories, try to get the last change number from the changelog.
-        // Only attempt this during delta imports — full imports don't need it, and querying
-        // cn=changelog will fail on directories that don't support it (e.g., OpenLDAP without
-        // the retcode/accesslog-to-changelog overlay).
-        if (!rootDse.UseUsnDeltaImport &&
-            _connectedSystemRunProfile.RunType == ConnectedSystemRunType.DeltaImport)
+        // For non-AD directories, capture the current delta watermark.
+        // This must run during BOTH full and delta imports:
+        // - Full import: establishes the baseline watermark for the first delta import
+        // - Delta import: captures the current position so the next delta starts from here
+        if (!rootDse.UseUsnDeltaImport)
         {
-            rootDse.LastChangeNumber = QueryDirectoryForLastChangeNumber(0);
+            if (rootDse.UseAccesslogDeltaImport)
+            {
+                // OpenLDAP: query cn=accesslog for the latest reqStart timestamp
+                rootDse.LastAccesslogTimestamp = QueryAccesslogForLatestTimestamp();
+            }
+            else
+            {
+                // Generic/Oracle: query cn=changelog for the latest changeNumber
+                rootDse.LastChangeNumber = QueryDirectoryForLastChangeNumber(0);
+            }
         }
 
-        _logger.Information("GetRootDseInformation: Directory capabilities detected. DirectoryType={DirectoryType}, VendorName={VendorName}, SupportsPaging={SupportsPaging}, HighestUSN={Usn}, LastChangeNumber={ChangeNum}",
-            rootDse.DirectoryType, rootDse.VendorName ?? "(not set)", rootDse.SupportsPaging, rootDse.HighestCommittedUsn, rootDse.LastChangeNumber);
+        _logger.Information("GetRootDseInformation: Directory capabilities detected. DirectoryType={DirectoryType}, VendorName={VendorName}, SupportsPaging={SupportsPaging}, HighestUSN={Usn}, LastChangeNumber={ChangeNum}, LastAccesslogTimestamp={AccesslogTs}",
+            rootDse.DirectoryType, rootDse.VendorName ?? "(not set)", rootDse.SupportsPaging, rootDse.HighestCommittedUsn, rootDse.LastChangeNumber, rootDse.LastAccesslogTimestamp ?? "(not set)");
         return rootDse;
     }
 
@@ -755,7 +824,93 @@ internal class LdapConnectorImport
     }
 
     /// <summary>
-    /// Fetches a single object by its DN for changelog-based delta imports.
+    /// Gets delta results using OpenLDAP's accesslog overlay (slapo-accesslog).
+    /// Queries cn=accesslog for write operations that occurred after the previous watermark timestamp.
+    /// For each change, fetches the current state of the affected object.
+    /// </summary>
+    private void GetDeltaResultsUsingAccesslog(ConnectedSystemImportResult result, string previousTimestamp)
+    {
+        _logger.Debug("GetDeltaResultsUsingAccesslog: Querying for changes since {PreviousTimestamp}", previousTimestamp);
+
+        // Query accesslog for successful write operations at or after the previous timestamp.
+        // LDAP only supports >= (not >), so we use >= and skip the exact match in code.
+        // reqResult=0 = successful operations only (skip failed writes).
+        // auditWriteObject covers add, modify, delete, and modrdn operations.
+        var ldapFilter = $"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={previousTimestamp}))";
+        var request = new SearchRequest("cn=accesslog", ldapFilter, SearchScope.OneLevel,
+            "reqStart", "reqType", "reqDN");
+
+        try
+        {
+            var response = (SearchResponse)_connection.SendRequest(request, _searchTimeout);
+
+            if (response == null || response.ResultCode != ResultCode.Success)
+            {
+                _logger.Warning("GetDeltaResultsUsingAccesslog: Failed to query accesslog. ResultCode: {ResultCode}",
+                    response?.ResultCode);
+                return;
+            }
+
+            _logger.Debug("GetDeltaResultsUsingAccesslog: Found {Count} accesslog entries since {Timestamp}",
+                response.Entries.Count, previousTimestamp);
+
+            foreach (SearchResultEntry entry in response.Entries)
+            {
+                if (_cancellationToken.IsCancellationRequested)
+                {
+                    _logger.Debug("GetDeltaResultsUsingAccesslog: Cancellation requested. Stopping");
+                    return;
+                }
+
+                var reqStart = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "reqStart");
+                var reqType = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "reqType");
+                var reqDn = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "reqDN");
+
+                if (string.IsNullOrEmpty(reqDn))
+                    continue;
+
+                // Skip the exact timestamp match (we used >= in the filter because LDAP has no >)
+                if (reqStart == previousTimestamp)
+                    continue;
+
+                // Map accesslog reqType to ObjectChangeType
+                var objectChangeType = reqType?.ToLowerInvariant() switch
+                {
+                    "add" => ObjectChangeType.Added,
+                    "modify" => ObjectChangeType.Updated,
+                    "delete" => ObjectChangeType.Deleted,
+                    "modrdn" => ObjectChangeType.Updated,
+                    _ => ObjectChangeType.NotSet
+                };
+
+                if (objectChangeType == ObjectChangeType.Deleted)
+                {
+                    // For deletes, create a minimal import object — the object no longer exists in the directory
+                    var deleteObject = new ConnectedSystemImportObject
+                    {
+                        ChangeType = ObjectChangeType.Deleted,
+                    };
+                    result.ImportObjects.Add(deleteObject);
+                }
+                else
+                {
+                    // For add/modify/modrdn, fetch the current state of the object
+                    var currentObject = GetObjectByDn(reqDn, objectChangeType);
+                    if (currentObject != null)
+                    {
+                        result.ImportObjects.Add(currentObject);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "GetDeltaResultsUsingAccesslog: Error querying accesslog");
+        }
+    }
+
+    /// <summary>
+    /// Fetches a single object by its DN for changelog/accesslog-based delta imports.
     /// </summary>
     private ConnectedSystemImportObject? GetObjectByDn(string dn, ObjectChangeType changeType)
     {

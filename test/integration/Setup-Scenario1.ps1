@@ -1678,7 +1678,6 @@ return @{
     TrainingDeltaSyncProfileId = $trainingDeltaSyncProfile.id
 
     # LDAP target directory
-    IsOpenLDAP = ($DirectoryConfig.UserObjectClass -eq "inetOrgPerson")
     LDAPSystemId = $ldapSystem.id
     LDAPFullImportProfileId = $ldapFullImportProfile.id
     LDAPDeltaImportProfileId = $ldapDeltaImportProfile.id

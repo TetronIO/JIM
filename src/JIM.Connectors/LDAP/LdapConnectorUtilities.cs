@@ -410,7 +410,8 @@ internal static class LdapConnectorUtilities
     /// </summary>
     /// <param name="supportedCapabilities">OIDs from the rootDSE supportedCapabilities attribute.</param>
     /// <param name="vendorName">The vendorName attribute from rootDSE (may be null).</param>
-    internal static LdapDirectoryType DetectDirectoryType(IEnumerable<string>? supportedCapabilities, string? vendorName)
+    /// <param name="structuralObjectClass">The structuralObjectClass from rootDSE (may be null). OpenLDAP uses "OpenLDAProotDSE".</param>
+    internal static LdapDirectoryType DetectDirectoryType(IEnumerable<string>? supportedCapabilities, string? vendorName, string? structuralObjectClass = null)
     {
         var hasAdCapability = supportedCapabilities != null &&
             (supportedCapabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_OID) ||
@@ -424,8 +425,16 @@ internal static class LdapConnectorUtilities
             return isSamba ? LdapDirectoryType.SambaAD : LdapDirectoryType.ActiveDirectory;
         }
 
+        // Check vendorName first (set by some OpenLDAP configurations)
         if (vendorName != null &&
             vendorName.Contains("OpenLDAP", StringComparison.OrdinalIgnoreCase))
+        {
+            return LdapDirectoryType.OpenLDAP;
+        }
+
+        // Fallback: check structuralObjectClass on rootDSE — OpenLDAP uses "OpenLDAProotDSE"
+        if (structuralObjectClass != null &&
+            structuralObjectClass.Contains("OpenLDAP", StringComparison.OrdinalIgnoreCase))
         {
             return LdapDirectoryType.OpenLDAP;
         }
@@ -440,7 +449,7 @@ internal static class LdapConnectorUtilities
     internal static LdapConnectorRootDse GetBasicRootDseInformation(LdapConnection connection, ILogger logger)
     {
         var request = new SearchRequest { Scope = SearchScope.Base };
-        request.Attributes.AddRange(["supportedCapabilities", "vendorName"]);
+        request.Attributes.AddRange(["supportedCapabilities", "vendorName", "structuralObjectClass"]);
 
         var response = (SearchResponse)connection.SendRequest(request);
 
@@ -454,8 +463,9 @@ internal static class LdapConnectorUtilities
 
         var capabilities = GetEntryAttributeStringValues(rootDseEntry, "supportedCapabilities");
         var vendorName = GetEntryAttributeStringValue(rootDseEntry, "vendorName");
+        var structuralObjectClass = GetEntryAttributeStringValue(rootDseEntry, "structuralObjectClass");
 
-        var directoryType = DetectDirectoryType(capabilities, vendorName);
+        var directoryType = DetectDirectoryType(capabilities, vendorName, structuralObjectClass);
 
         var rootDse = new LdapConnectorRootDse
         {

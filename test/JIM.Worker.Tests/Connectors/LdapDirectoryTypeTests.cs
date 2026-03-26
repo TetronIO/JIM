@@ -209,6 +209,22 @@ public class LdapDirectoryTypeTests
         Assert.That(result, Is.EqualTo(LdapDirectoryType.SambaAD));
     }
 
+    [Test]
+    public void DetectDirectoryType_OpenLDAPRootDseObjectClass_ReturnsOpenLDAP()
+    {
+        // OpenLDAP may not set vendorName but always uses OpenLDAProotDSE as the rootDSE structural object class
+        var result = LdapConnectorUtilities.DetectDirectoryType(null, null, "OpenLDAProotDSE");
+        Assert.That(result, Is.EqualTo(LdapDirectoryType.OpenLDAP));
+    }
+
+    [Test]
+    public void DetectDirectoryType_VendorNameTakesPrecedenceOverObjectClass_ReturnsOpenLDAP()
+    {
+        // When both vendorName and structuralObjectClass indicate OpenLDAP, vendorName is checked first
+        var result = LdapConnectorUtilities.DetectDirectoryType(null, "OpenLDAP", "OpenLDAProotDSE");
+        Assert.That(result, Is.EqualTo(LdapDirectoryType.OpenLDAP));
+    }
+
     #endregion
 
     #region SambaAD computed properties
