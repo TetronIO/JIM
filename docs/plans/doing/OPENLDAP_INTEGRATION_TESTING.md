@@ -1,6 +1,6 @@
 # OpenLDAP Integration Testing
 
-- **Status:** Doing (Phases 1-5 complete, Phase 6 in progress — S9, S7, S6 done)
+- **Status:** Doing (Phases 1-5 complete, Phase 6 in progress — S9, S7, S6, S2 done)
 - **Created:** 2026-03-09
 - **Issue:** [#72](https://github.com/TetronIO/JIM/issues/72)
 
@@ -490,7 +490,7 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 | 1 | **S9: Partition-Scoped Imports** | 5 | Low | ✅ Done | True multi-partition filtering with Yellowstone + Glitterband suffixes |
 | 2 | **S7: Clear Connected System Objects** | 0 | Low | ✅ Done | DirectoryConfig threading only — scenario is entirely CSV-based |
 | 3 | **S6: Scheduler Service** | 2 | Low | ✅ Done | DirectoryConfig, system name parameterised, docker cp replaced with bind mount |
-| 4 | **S2: Cross-Domain Sync** | 11 | Medium | | Two LDAP connected systems (Yellowstone→Glitterband). Needs object type/attribute/DN substitution. |
+| 4 | **S2: Cross-Domain Sync** | 11 | Medium | ⚠️ Blocked | Parameterised but end-to-end blocked by #435 (MVA→SVA import). Export works, confirming import fails. |
 | 5 | **S5: Matching Rules** | 17 | Medium | Tests join/projection logic. Object type names (`user`→`inetOrgPerson`) and attribute names (`sAMAccountName`→`uid`) differ. |
 | 6 | **S3: GAL Sync** | 0 | Low/Medium | Check if it uses LDAP at all — may be mail/contact specific and not applicable. |
 | 7 | **S4: Deletion Rules** | 26 | High | Heavy `userAccountControl` and `ldbsearch` usage for disable/enable testing. Disable behaviour doesn't exist on OpenLDAP (delete-only). May need to test different deletion scenarios. |
