@@ -698,9 +698,8 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
                     $hrCsv | Export-Csv -Path $hrCsvPath -NoTypeInformation -Encoding UTF8
                     Write-Host "    HR CSV: Changed $($hrUser.samAccountName) title from '$oldTitle' to 'Scheduler Test - Parallel Flow'" -ForegroundColor DarkGray
 
-                    # Copy to container
-                    docker cp $hrCsvPath jim.web:/connector-files/hr-users.csv 2>$null
-                    Write-Host "    HR CSV: Copied to container" -ForegroundColor DarkGray
+                    # No docker cp needed — test-data directory is bind-mounted into JIM containers
+                    Write-Host "    HR CSV: Updated on host (bind-mounted into containers)" -ForegroundColor DarkGray
                 }
             }
 
@@ -714,9 +713,8 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
                     $trainingCsv | Export-Csv -Path $trainingCsvPath -NoTypeInformation -Encoding UTF8
                     Write-Host "    Training CSV: Changed $($trainingUser.samAccountName) training status from '$oldStatus' to 'Pass'" -ForegroundColor DarkGray
 
-                    # Copy to container
-                    docker cp $trainingCsvPath jim.web:/connector-files/training-records.csv 2>$null
-                    Write-Host "    Training CSV: Copied to container" -ForegroundColor DarkGray
+                    # No docker cp needed — test-data directory is bind-mounted into JIM containers
+                    Write-Host "    Training CSV: Updated on host (bind-mounted into containers)" -ForegroundColor DarkGray
                 }
             }
 
