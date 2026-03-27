@@ -1,6 +1,6 @@
 # OpenLDAP Integration Testing
 
-- **Status:** Doing (Phases 1-5 complete, Phase 6 in progress — S9, S7, S6, S2 done)
+- **Status:** Doing (Phases 1-5 complete, Phase 6 in progress — S9, S7, S6, S2, S5 done; S3 stub; S4, S8 remain)
 - **Created:** 2026-03-09
 - **Issue:** [#72](https://github.com/TetronIO/JIM/issues/72)
 
@@ -492,7 +492,7 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 | 3 | **S6: Scheduler Service** | 2 | Low | ✅ Done | DirectoryConfig, system name parameterised, docker cp replaced with bind mount |
 | 4 | **S2: Cross-Domain Sync** | 11 | Medium | ✅ Done | Two LDAP connected systems (Yellowstone→Glitterband), all 4 tests passing. Unblocked by #435. |
 | 5 | **S5: Matching Rules** | 17 | Medium | ✅ Done | DirectoryConfig threading, docker cp removed, user cleanup parameterised |
-| 6 | **S3: GAL Sync** | 0 | Low/Medium | Check if it uses LDAP at all — may be mail/contact specific and not applicable. |
+| 6 | **S3: GAL Sync** | 0 | N/A | ⏭ Stub | Not yet implemented — placeholder script only |
 | 7 | **S4: Deletion Rules** | 26 | High | Heavy `userAccountControl` and `ldbsearch` usage for disable/enable testing. Disable behaviour doesn't exist on OpenLDAP (delete-only). May need to test different deletion scenarios. |
 | 8 | **S8: Cross-Domain Entitlement Sync** | 50 | High | Group membership sync with `groupOfNames` (OpenLDAP) vs `group` (AD). The `groupOfNames` MUST constraint (requires at least one `member`) needs connector code changes (Gap 6). This is the most complex scenario. |
 
