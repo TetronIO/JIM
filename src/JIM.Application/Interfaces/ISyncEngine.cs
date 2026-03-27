@@ -37,6 +37,7 @@ public interface ISyncEngine
     /// <summary>
     /// Flows inbound attribute values from a CSO to its joined MVO using a sync rule's attribute flow mappings.
     /// Mutates the MVO's PendingAttributeValueAdditions and PendingAttributeValueRemovals collections.
+    /// Returns any warnings generated during attribute flow (e.g. multi-valued to single-valued truncation).
     /// </summary>
     /// <param name="cso">The source CSO (must have MetaverseObject set).</param>
     /// <param name="syncRule">The sync rule defining attribute flow mappings.</param>
@@ -45,7 +46,8 @@ public interface ISyncEngine
     /// <param name="skipReferenceAttributes">If true, skip reference attributes (deferred to second pass).</param>
     /// <param name="onlyReferenceAttributes">If true, process only reference attributes.</param>
     /// <param name="isFinalReferencePass">If true, this is the final cross-page resolution pass.</param>
-    void FlowInboundAttributes(
+    /// <returns>A list of warnings generated during attribute flow, empty if none.</returns>
+    List<AttributeFlowWarning> FlowInboundAttributes(
         ConnectedSystemObject cso,
         SyncRule syncRule,
         IReadOnlyList<ConnectedSystemObjectType> objectTypes,

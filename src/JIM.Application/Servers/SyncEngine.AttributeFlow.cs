@@ -3,6 +3,7 @@ using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Utility;
 using Serilog;
 
@@ -25,7 +26,8 @@ public partial class SyncEngine
         bool skipReferenceAttributes = false,
         bool onlyReferenceAttributes = false,
         bool isFinalReferencePass = false,
-        int? contributingSystemId = null)
+        int? contributingSystemId = null,
+        List<AttributeFlowWarning>? warnings = null)
     {
         if (cso.MetaverseObject == null)
         {
@@ -55,6 +57,45 @@ public partial class SyncEngine
                         var sourceAttributeId = source.ConnectedSystemAttributeId!.Value;
                         if (onlyReferenceAttributes && csotAttribute.Type != AttributeDataType.Reference)
                             continue;
+
+                        // MVA -> SVA truncation: when multiple source values target a single-valued
+                        // MV attribute, take only the first value and record a warning (#435)
+                        var isMvaToSva = csoAttributeValues.Count > 1 &&
+                            syncRuleMapping.TargetMetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued;
+
+                        if (isMvaToSva)
+                        {
+                            var firstValue = csoAttributeValues.First();
+                            var selectedValueDescription = csotAttribute.Type switch
+                            {
+                                AttributeDataType.Text => firstValue.StringValue ?? "(null)",
+                                AttributeDataType.Number => firstValue.IntValue?.ToString() ?? "(null)",
+                                AttributeDataType.LongNumber => firstValue.LongValue?.ToString() ?? "(null)",
+                                AttributeDataType.DateTime => firstValue.DateTimeValue?.ToString("O") ?? "(null)",
+                                AttributeDataType.Boolean => firstValue.BoolValue?.ToString() ?? "(null)",
+                                AttributeDataType.Guid => firstValue.GuidValue?.ToString() ?? "(null)",
+                                AttributeDataType.Binary => firstValue.ByteValue != null
+                                    ? $"[{firstValue.ByteValue.Length} bytes]" : "(null)",
+                                _ => "(unknown)"
+                            };
+
+                            Log.Warning(
+                                "ProcessMapping: Multi-valued source attribute '{SourceAttr}' has {ValueCount} values but target " +
+                                "attribute '{TargetAttr}' is single-valued. Using first value: '{SelectedValue}'. CSO {CsoId}",
+                                csotAttribute.Name, csoAttributeValues.Count,
+                                syncRuleMapping.TargetMetaverseAttribute.Name, selectedValueDescription, cso.Id);
+
+                            warnings?.Add(new AttributeFlowWarning
+                            {
+                                SourceAttributeName = csotAttribute.Name,
+                                TargetAttributeName = syncRuleMapping.TargetMetaverseAttribute.Name,
+                                ValueCount = csoAttributeValues.Count,
+                                SelectedValue = selectedValueDescription
+                            });
+
+                            // Truncate to the first value only
+                            csoAttributeValues = new List<ConnectedSystemObjectAttributeValue> { firstValue };
+                        }
 
                         switch (csotAttribute.Type)
                         {
@@ -211,8 +252,9 @@ public partial class SyncEngine
             !csoAttributeValues.Any(csoav => csoav.StringValue != null && csoav.StringValue.Equals(mvoav.StringValue)));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
-        var csoNewAttributeValues = cso.AttributeValues.Where(csoav =>
-            csoav.AttributeId == sourceAttributeId &&
+        // Use the (possibly truncated) csoAttributeValues list rather than cso.AttributeValues
+        // to respect MVA->SVA first-value selection (#435)
+        var csoNewAttributeValues = csoAttributeValues.Where(csoav =>
             !mvo.AttributeValues.Any(mvoav =>
                 mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id &&
                 mvoav.StringValue != null && mvoav.StringValue.Equals(csoav.StringValue)));
@@ -249,8 +291,9 @@ public partial class SyncEngine
             !csoAttributeValues.Any(csoav => csoav.IntValue != null && csoav.IntValue.Equals(mvoav.IntValue)));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
-        var csoNewAttributeValues = cso.AttributeValues.Where(csoav =>
-            csoav.AttributeId == sourceAttributeId &&
+        // Use the (possibly truncated) csoAttributeValues list rather than cso.AttributeValues
+        // to respect MVA->SVA first-value selection (#435)
+        var csoNewAttributeValues = csoAttributeValues.Where(csoav =>
             !mvo.AttributeValues.Any(mvoav =>
                 mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id &&
                 mvoav.IntValue != null && mvoav.IntValue.Equals(csoav.IntValue)));
@@ -320,8 +363,9 @@ public partial class SyncEngine
                 csoav.ByteValue != null && JIM.Utilities.Utilities.AreByteArraysTheSame(csoav.ByteValue, mvoav.ByteValue)));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
-        var csoNewAttributeValues = cso.AttributeValues.Where(csoav =>
-            csoav.AttributeId == sourceAttributeId &&
+        // Use the (possibly truncated) csoAttributeValues list rather than cso.AttributeValues
+        // to respect MVA->SVA first-value selection (#435)
+        var csoNewAttributeValues = csoAttributeValues.Where(csoav =>
             !mvo.AttributeValues.Any(mvoav =>
                 mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id &&
                 JIM.Utilities.Utilities.AreByteArraysTheSame(mvoav.ByteValue, csoav.ByteValue)));
@@ -463,8 +507,9 @@ public partial class SyncEngine
             !csoAttributeValues.Any(csoav => csoav.GuidValue.HasValue && csoav.GuidValue.Equals(mvoav.GuidValue)));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
-        var csoNewAttributeValues = cso.AttributeValues.Where(csoav =>
-            csoav.AttributeId == sourceAttributeId &&
+        // Use the (possibly truncated) csoAttributeValues list rather than cso.AttributeValues
+        // to respect MVA->SVA first-value selection (#435)
+        var csoNewAttributeValues = csoAttributeValues.Where(csoav =>
             !mvo.AttributeValues.Any(mvoav =>
                 mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id &&
                 mvoav.GuidValue.HasValue && mvoav.GuidValue.Equals(csoav.GuidValue)));

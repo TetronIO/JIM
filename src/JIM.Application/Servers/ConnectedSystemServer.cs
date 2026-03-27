@@ -3618,10 +3618,8 @@ public class ConnectedSystemServer
                 throw new ArgumentException(
                     $"Type mismatch: source attribute '{sourceAttrName}' ({sourceType}) is not compatible with target attribute '{targetAttrName}' ({targetType}). Source and target attributes must have the same type.");
 
-            // Validate plurality compatibility - cannot flow multi-valued to single-valued
-            if (sourcePlurality == AttributePlurality.MultiValued && targetPlurality == AttributePlurality.SingleValued)
-                throw new ArgumentException(
-                    $"Plurality mismatch: cannot flow multi-valued source attribute '{sourceAttrName}' to single-valued target attribute '{targetAttrName}'. A single-valued attribute cannot hold multiple values.");
+            // Multi-valued to single-valued is permitted (#435). The runtime selects
+            // the first value and generates a MultiValuedAttributeTruncated RPEI warning.
         }
     }
 

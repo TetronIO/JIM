@@ -231,20 +231,19 @@ public class ConnectedSystemServerMappingValidationTests
     }
 
     [Test]
-    public void CreateSyncRuleMappingAsync_ImportDirectMapping_MultiValuedToSingleValued_ThrowsArgumentException()
+    public async Task CreateSyncRuleMappingAsync_ImportDirectMapping_MultiValuedToSingleValued_SucceedsAsync()
     {
-        // Arrange
+        // Arrange — MVA to SVA is now allowed; the runtime selects the first value and warns (#435)
         var syncRule = CreateImportSyncRule();
         var sourceAttr = CreateCsAttribute("csGroups", AttributeDataType.Text, AttributePlurality.MultiValued);
         var targetAttr = CreateMetaverseAttribute("Group", AttributeDataType.Text, AttributePlurality.SingleValued);
         var mapping = CreateImportMapping(syncRule, sourceAttr, targetAttr);
 
-        // Act & Assert
-        var ex = Assert.ThrowsAsync<ArgumentException>(
-            async () => await _application.ConnectedSystems.CreateSyncRuleMappingAsync(mapping, _testInitiator));
+        // Act & Assert — should not throw
+        await _application.ConnectedSystems.CreateSyncRuleMappingAsync(mapping, _testInitiator);
 
-        Assert.That(ex!.Message, Does.Contain("multi-valued"));
-        Assert.That(ex.Message, Does.Contain("single-valued"));
+        _mockConnectedSystemRepo.Verify(
+            r => r.CreateSyncRuleMappingAsync(mapping), Times.Once);
     }
 
     [Test]
@@ -316,20 +315,19 @@ public class ConnectedSystemServerMappingValidationTests
     }
 
     [Test]
-    public void CreateSyncRuleMappingAsync_ExportDirectMapping_MultiValuedToSingleValued_ThrowsArgumentException()
+    public async Task CreateSyncRuleMappingAsync_ExportDirectMapping_MultiValuedToSingleValued_SucceedsAsync()
     {
-        // Arrange
+        // Arrange — MVA to SVA is now allowed; the runtime selects the first value and warns (#435)
         var syncRule = CreateExportSyncRule();
         var sourceAttr = CreateMetaverseAttribute("Groups", AttributeDataType.Reference, AttributePlurality.MultiValued);
         var targetAttr = CreateCsAttribute("csGroup", AttributeDataType.Reference, AttributePlurality.SingleValued);
         var mapping = CreateExportMapping(syncRule, sourceAttr, targetAttr);
 
-        // Act & Assert
-        var ex = Assert.ThrowsAsync<ArgumentException>(
-            async () => await _application.ConnectedSystems.CreateSyncRuleMappingAsync(mapping, _testInitiator));
+        // Act & Assert — should not throw
+        await _application.ConnectedSystems.CreateSyncRuleMappingAsync(mapping, _testInitiator);
 
-        Assert.That(ex!.Message, Does.Contain("multi-valued"));
-        Assert.That(ex.Message, Does.Contain("single-valued"));
+        _mockConnectedSystemRepo.Verify(
+            r => r.CreateSyncRuleMappingAsync(mapping), Times.Once);
     }
 
     [Test]
@@ -492,22 +490,19 @@ public class ConnectedSystemServerMappingValidationTests
     }
 
     [Test]
-    public void CreateSyncRuleMappingAsync_PluralityMismatch_ErrorMessageIncludesAttributeNames()
+    public async Task CreateSyncRuleMappingAsync_PluralityMismatch_MultiValuedToSingleValued_SucceedsAsync()
     {
-        // Arrange
+        // Arrange — MVA to SVA is now allowed (#435). The runtime handles truncation with a warning.
         var syncRule = CreateImportSyncRule();
         var sourceAttr = CreateCsAttribute("csMembers", AttributeDataType.Reference, AttributePlurality.MultiValued);
         var targetAttr = CreateMetaverseAttribute("Manager", AttributeDataType.Reference, AttributePlurality.SingleValued);
         var mapping = CreateImportMapping(syncRule, sourceAttr, targetAttr);
 
-        // Act & Assert
-        var ex = Assert.ThrowsAsync<ArgumentException>(
-            async () => await _application.ConnectedSystems.CreateSyncRuleMappingAsync(mapping, _testInitiator));
+        // Act & Assert — should not throw
+        await _application.ConnectedSystems.CreateSyncRuleMappingAsync(mapping, _testInitiator);
 
-        Assert.That(ex!.Message, Does.Contain("csMembers"));
-        Assert.That(ex.Message, Does.Contain("Manager"));
-        Assert.That(ex.Message, Does.Contain("multi-valued"));
-        Assert.That(ex.Message, Does.Contain("single-valued"));
+        _mockConnectedSystemRepo.Verify(
+            r => r.CreateSyncRuleMappingAsync(mapping), Times.Once);
     }
 
     #endregion

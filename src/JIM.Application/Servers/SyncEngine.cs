@@ -32,7 +32,7 @@ public partial class SyncEngine : ISyncEngine
     }
 
     /// <inheritdoc />
-    public void FlowInboundAttributes(
+    public List<AttributeFlowWarning> FlowInboundAttributes(
         ConnectedSystemObject cso,
         SyncRule syncRule,
         IReadOnlyList<ConnectedSystemObjectType> objectTypes,
@@ -41,10 +41,12 @@ public partial class SyncEngine : ISyncEngine
         bool onlyReferenceAttributes = false,
         bool isFinalReferencePass = false)
     {
+        var warnings = new List<AttributeFlowWarning>();
+
         if (cso.MetaverseObject == null)
         {
             Log.Error("FlowInboundAttributes: CSO ({Cso}) has no MVO!", cso);
-            return;
+            return warnings;
         }
 
         foreach (var syncRuleMapping in syncRule.AttributeFlowRules)
@@ -54,8 +56,10 @@ public partial class SyncEngine : ISyncEngine
 
             ProcessMapping(cso, syncRuleMapping, objectTypes, expressionEvaluator,
                 skipReferenceAttributes, onlyReferenceAttributes, isFinalReferencePass,
-                cso.ConnectedSystemId);
+                cso.ConnectedSystemId, warnings);
         }
+
+        return warnings;
     }
 
     /// <inheritdoc />
