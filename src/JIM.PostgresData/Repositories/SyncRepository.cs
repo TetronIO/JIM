@@ -167,7 +167,7 @@ public partial class SyncRepository : ISyncRepository
     #region Metaverse Object — Writes
 
     public Task CreateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
-        => _repo.Metaverse.CreateMetaverseObjectsAsync(metaverseObjects);
+        => CreateMetaverseObjectsBulkAsync(metaverseObjects as List<MetaverseObject> ?? metaverseObjects.ToList());
 
     public Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
         => _repo.Metaverse.UpdateMetaverseObjectsAsync(metaverseObjects);
