@@ -99,14 +99,43 @@ The caller at `SyncTaskProcessorBase` relies on `cso.MetaverseObject.Id` being p
 
 ## MVO Updates (deferred)
 
-`UpdateMetaverseObjectsAsync` remains on EF Core. This is significantly more complex than creates:
+`UpdateMetaverseObjectsAsync` remains on EF Core. Tracked under [#436](https://github.com/TetronIO/JIM/issues/436) — tackle only when profiling shows MVO updates are a significant bottleneck in delta sync.
 
-- Current implementation uses careful per-entity `Entry().State` management to handle added/modified/deleted attribute values
-- This was the subject of 11 debugging attempts documented in `docs/notes/done/CROSS_PAGE_REFERENCE_IDENTITY_CONFLICT.md`
-- Raw SQL would need to replicate: INSERT new AVs, UPDATE modified AVs, DELETE removed AVs — all without EF change tracking
-- Creates are the larger volume during initial sync; updates dominate during delta sync of established environments
+### Why updates are fundamentally harder than creates
 
-Tracked under [#436](https://github.com/TetronIO/JIM/issues/436). Should be tackled when profiling shows MVO updates are a significant bottleneck.
+Creates are a single operation (INSERT rows). Updates involve **four distinct operations in one flush**:
+
+| Operation | What | Raw SQL approach |
+|-----------|------|-----------------|
+| UPDATE parent MVO rows | Scalar property changes (Status, LastUpdated, deletion fields) | `UPDATE ... FROM (VALUES ...)` batch — straightforward |
+| INSERT new attribute values | AVs added during inbound attribute flow | COPY binary — proven pattern from creates |
+| UPDATE existing attribute values | AVs modified during inbound attribute flow | `UPDATE ... FROM (VALUES ...)` — 13 nullable columns |
+| DELETE removed attribute values | AVs recalled during disconnect/out-of-scope | `DELETE ... WHERE "Id" IN (...)` — need to identify which |
+
+The crux is **knowing which attribute values are new vs modified vs deleted** without EF's change tracker. Currently:
+
+1. `ProcessInboundAttributeFlow` accumulates changes in `PendingAttributeValueAdditions` / `PendingAttributeValueRemovals` (both `[NotMapped]`)
+2. `ApplyPendingMetaverseObjectAttributeChanges` moves pending items into/out of `mvo.AttributeValues`, then clears the pending collections
+3. `UpdateMetaverseObjectsAsync` receives MVOs with the final `AttributeValues` list and uses EF's `IsKeySet` to classify: `Id == Guid.Empty` → Added, otherwise → Modified
+
+A raw SQL conversion would need the caller to **preserve the classification** (e.g., keep `PendingAttributeValueAdditions`/`Removals` intact for the repository to consume) or the repository to diff against the database. Both approaches are invasive.
+
+### Entity state complexity
+
+MVOs arrive at `UpdateMetaverseObjectsAsync` in mixed states depending on the call context:
+
+| Context | MVO state | AV state | `AutoDetectChanges` |
+|---------|-----------|----------|---------------------|
+| Per-page flush | Tracked (in-memory from join/project/flow) | Mixed: tracked originals + new additions | Enabled |
+| Cross-page reference resolution | Detached (post-`ClearChangeTracker` reload) | Mixed: reloaded from DB + new additions | **Disabled** |
+| Singular update (deletion marking) | Tracked | No AV changes | Enabled |
+| Singular update (out-of-scope disconnect) | Tracked | Removals applied | Enabled |
+
+The cross-page path is the dangerous one — `AutoDetectChangesEnabled = false` prevents `SaveChangesAsync` from walking navigation properties into shared `MetaverseAttribute`/`MetaverseObjectType` instances (which would cause identity conflicts). The current `UpdateDetachedSafe` + per-entity `Entry().State =` pattern was the result of 11 debugging attempts documented in `docs/notes/done/CROSS_PAGE_REFERENCE_IDENTITY_CONFLICT.md`.
+
+### Recommendation
+
+**Wait for profiling data.** Creates are the high-volume operation during initial sync (hundreds/thousands of MVOs per page). Updates are smaller per-page during delta sync, and the EF overhead is proportionally less significant. The complexity and regression risk of converting updates is not justified without evidence that it's a bottleneck.
 
 ---
 
