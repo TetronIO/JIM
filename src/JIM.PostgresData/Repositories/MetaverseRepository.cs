@@ -1256,9 +1256,9 @@ public class MetaverseRepository : IMetaverseRepository
             attrChange.Id = attrChangeId;
 
             await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"INSERT INTO ""MetaverseObjectChangeAttributes"" (""Id"", ""MetaverseObjectChangeId"", ""AttributeId"")
-                  VALUES ({0}, {1}, {2})",
-                attrChangeId, changeId, attrChange.Attribute.Id);
+                @"INSERT INTO ""MetaverseObjectChangeAttributes"" (""Id"", ""MetaverseObjectChangeId"", ""AttributeId"", ""AttributeName"", ""AttributeType"")
+                  VALUES ({0}, {1}, {2}, {3}, {4})",
+                attrChangeId, changeId, attrChange.Attribute!.Id, attrChange.AttributeName, (int)attrChange.AttributeType);
 
             foreach (var valueChange in attrChange.ValueChanges)
             {

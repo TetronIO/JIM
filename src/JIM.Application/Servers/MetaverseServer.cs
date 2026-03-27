@@ -396,6 +396,8 @@ public class MetaverseServer
             attributeChange = new MetaverseObjectChangeAttribute
             {
                 Attribute = metaverseObjectAttributeValue.Attribute,
+                AttributeName = metaverseObjectAttributeValue.Attribute.Name,
+                AttributeType = metaverseObjectAttributeValue.Attribute.Type,
                 MetaverseObjectChange = metaverseObjectChange
             };
             metaverseObjectChange.AttributeChanges.Add(attributeChange);

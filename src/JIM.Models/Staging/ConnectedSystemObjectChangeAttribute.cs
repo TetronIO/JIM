@@ -1,4 +1,6 @@
-﻿namespace JIM.Models.Staging;
+﻿using JIM.Models.Core;
+
+namespace JIM.Models.Staging;
 
 public class ConnectedSystemObjectChangeAttribute
 {
@@ -11,9 +13,22 @@ public class ConnectedSystemObjectChangeAttribute
     public ConnectedSystemObjectChange ConnectedSystemChange { get; set; } = null!;
 
     /// <summary>
-    /// The connected system attribute these value changes relates to.
+    /// The connected system attribute definition. Nullable because the attribute may be deleted after
+    /// the change was recorded. When null, use <see cref="AttributeName"/> and <see cref="AttributeType"/>.
     /// </summary>
-    public ConnectedSystemObjectTypeAttribute Attribute { get; set; } = null!;
+    public ConnectedSystemObjectTypeAttribute? Attribute { get; set; }
+
+    /// <summary>
+    /// Snapshot of the attribute name at the time of the change.
+    /// Preserved even if the attribute definition is later deleted.
+    /// </summary>
+    public string AttributeName { get; set; } = null!;
+
+    /// <summary>
+    /// Snapshot of the attribute data type at the time of the change.
+    /// Preserved even if the attribute definition is later deleted.
+    /// </summary>
+    public AttributeDataType AttributeType { get; set; }
 
     /// <summary>
     /// A list of what values were added to or removed from this attribute.
@@ -22,6 +37,6 @@ public class ConnectedSystemObjectChangeAttribute
 
     public override string ToString()
     {
-        return Attribute.Name;
+        return AttributeName;
     }
 }

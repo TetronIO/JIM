@@ -3370,6 +3370,8 @@ public class ConnectedSystemServer
             attributeChange = new ConnectedSystemObjectChangeAttribute
             {
                 Attribute = connectedSystemObjectAttributeValue.Attribute,
+                AttributeName = connectedSystemObjectAttributeValue.Attribute.Name,
+                AttributeType = connectedSystemObjectAttributeValue.Attribute.Type,
                 ConnectedSystemChange = connectedSystemObjectChange
             };
             connectedSystemObjectChange.AttributeChanges.Add(attributeChange);

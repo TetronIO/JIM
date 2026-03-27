@@ -220,6 +220,14 @@ public class JimDbContext : DbContext
             .WithOne(av => av.ConnectedSystemObjectChangeAttribute)
             .OnDelete(DeleteBehavior.Cascade); // let the db delete all dependent ConnectedSystemObjectChangeAttributeValue objects when the parent is deleted.
 
+        // When a connected system attribute definition is deleted, preserve the change history record
+        // by setting the FK to null. The AttributeName and AttributeType sibling properties retain
+        // the attribute metadata even after the definition is removed.
+        modelBuilder.Entity<ConnectedSystemObjectChangeAttribute>()
+            .HasOne(ca => ca.Attribute)
+            .WithMany()
+            .OnDelete(DeleteBehavior.SetNull);
+
         // When a CSO is deleted, set the ReferenceValueId to null in any change attribute values that reference it.
         // This prevents FK violations when deleting CSOs that are referenced in historical change records.
         modelBuilder.Entity<ConnectedSystemObjectChangeAttributeValue>()
@@ -243,6 +251,14 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<MetaverseObject>()
             .HasMany(mvo => mvo.Changes)
             .WithOne(mvoc => mvoc.MetaverseObject);
+
+        // When a metaverse attribute definition is deleted, preserve the change history record
+        // by setting the FK to null. The AttributeName and AttributeType sibling properties retain
+        // the attribute metadata even after the definition is removed.
+        modelBuilder.Entity<MetaverseObjectChangeAttribute>()
+            .HasOne(ca => ca.Attribute)
+            .WithMany()
+            .OnDelete(DeleteBehavior.SetNull);
 
         modelBuilder.Entity<MetaverseObjectAttributeValue>()
             .HasOne(moav => moav.MetaverseObject)

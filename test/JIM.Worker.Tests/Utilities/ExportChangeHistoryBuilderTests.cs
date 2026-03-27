@@ -794,4 +794,65 @@ public class ExportChangeHistoryBuilderTests
     }
 
     #endregion
+
+    #region Attribute name/type snapshot (Issue #58)
+
+    [Test]
+    public void MapAttributeValueChanges_PopulatesAttributeNameAndType()
+    {
+        // Arrange
+        var change = new ConnectedSystemObjectChange();
+        var attributeValueChanges = new List<PendingExportAttributeValueChange>
+        {
+            new()
+            {
+                Attribute = _textAttribute,
+                ChangeType = PendingExportAttributeChangeType.Add,
+                StringValue = "Test User"
+            }
+        };
+
+        // Act
+        ExportChangeHistoryBuilder.MapAttributeValueChanges(change, attributeValueChanges);
+
+        // Assert - sibling properties populated from the attribute definition
+        var attrChange = change.AttributeChanges.Single();
+        Assert.That(attrChange.AttributeName, Is.EqualTo("displayName"));
+        Assert.That(attrChange.AttributeType, Is.EqualTo(AttributeDataType.Text));
+    }
+
+    [Test]
+    public void MapAttributeValueChanges_MultipleAttributes_EachGetsCorrectNameAndType()
+    {
+        // Arrange
+        var change = new ConnectedSystemObjectChange();
+        var attributeValueChanges = new List<PendingExportAttributeValueChange>
+        {
+            new()
+            {
+                Attribute = _textAttribute,
+                ChangeType = PendingExportAttributeChangeType.Add,
+                StringValue = "Test User"
+            },
+            new()
+            {
+                Attribute = _numberAttribute,
+                ChangeType = PendingExportAttributeChangeType.Add,
+                IntValue = 42
+            }
+        };
+
+        // Act
+        ExportChangeHistoryBuilder.MapAttributeValueChanges(change, attributeValueChanges);
+
+        // Assert
+        Assert.That(change.AttributeChanges, Has.Count.EqualTo(2));
+        var textChange = change.AttributeChanges.Single(ac => ac.AttributeName == "displayName");
+        Assert.That(textChange.AttributeType, Is.EqualTo(AttributeDataType.Text));
+
+        var numberChange = change.AttributeChanges.Single(ac => ac.AttributeName == "employeeId");
+        Assert.That(numberChange.AttributeType, Is.EqualTo(AttributeDataType.Number));
+    }
+
+    #endregion
 }
