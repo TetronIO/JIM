@@ -367,14 +367,14 @@ try {
         Write-Host "  OK Created sync rule (ID: $($importRule.id))" -ForegroundColor Green
 
         # Add attribute mappings — varies by directory type
-        # OpenLDAP: many standard attributes (uid, givenName, sn, mail, departmentNumber) are
-        # multi-valued per RFC 4512/4519 — they lack the SINGLE-VALUE keyword. JIM correctly
-        # rejects multi-valued→single-valued import flows. Only map attributes that are
-        # explicitly SINGLE-VALUE in the OpenLDAP schema (displayName, employeeNumber).
-        # This is sufficient for the partition filtering test — we just need projections.
+        # With #435, MVA→SVA import is allowed (first-value selection with RPEI warning)
         $mappings = if ($isOpenLDAP) {
             @(
+                @{ CSAttr = "uid"; MVAttr = "Account Name" },
+                @{ CSAttr = "givenName"; MVAttr = "First Name" },
+                @{ CSAttr = "sn"; MVAttr = "Last Name" },
                 @{ CSAttr = "displayName"; MVAttr = "Display Name" },
+                @{ CSAttr = "departmentNumber"; MVAttr = "Department" },
                 @{ CSAttr = "employeeNumber"; MVAttr = "Employee ID" }
             )
         } else {

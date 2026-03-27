@@ -533,13 +533,16 @@ try {
     Write-Host "  ✓ Selected '$userObjectClass' object types for Source and Target" -ForegroundColor Green
 
     # Select only the LDAP attributes needed for bidirectional sync flows
+    # With #435, MVA→SVA import is now allowed (first-value selection with RPEI warning)
     $requiredLdapAttributes = if ($isOpenLDAP) {
         @(
             'entryUUID',          # Immutable object identifier - External ID (anchor)
-            'uid',                # Account Name - used for matching/joining
+            'uid',                # Account Name - used for matching/joining (MVA, first-value via #435)
+            'givenName',          # First Name (MVA, first-value via #435)
+            'sn',                 # Last Name (MVA, first-value via #435)
             'displayName',        # Display Name (SINGLE-VALUE)
             'cn',                 # Common Name
-            'sn',                 # Surname - MUST attribute for inetOrgPerson, needed for export confirmation
+            'mail',               # Email (MVA, first-value via #435)
             'employeeNumber',     # Employee ID (SINGLE-VALUE)
             'distinguishedName'   # DN - required for LDAP provisioning (Secondary External ID)
         )
@@ -670,10 +673,14 @@ try {
         Write-Host "  Configuring attribute mappings..." -ForegroundColor Gray
 
         # Define attribute mappings for forward sync (Source -> Metaverse -> Target)
-        # OpenLDAP: only use SINGLE-VALUE attributes for import (see #435 for MVA→SVA handling)
+        # With #435, MVA→SVA import is allowed — first value is selected with RPEI warning
         $importMappings = if ($isOpenLDAP) {
             @(
+                @{ LdapAttr = "uid";                MvAttr = "Account Name" }
+                @{ LdapAttr = "givenName";          MvAttr = "First Name" }
+                @{ LdapAttr = "sn";                 MvAttr = "Last Name" }
                 @{ LdapAttr = "displayName";        MvAttr = "Display Name" }
+                @{ LdapAttr = "mail";               MvAttr = "Email" }
                 @{ LdapAttr = "employeeNumber";     MvAttr = "Employee ID" }
             )
         } else {
@@ -689,16 +696,16 @@ try {
             )
         }
 
-        # Target exports these attributes from Metaverse
-        # Export direction (SVA→MVA) is always allowed — no plurality issue
-        # OpenLDAP inetOrgPerson requires 'sn' and 'cn' (MUST attributes), so we map them
+        # Target exports these attributes from Metaverse (SVA→MVA always allowed)
         $exportMappings = if ($isOpenLDAP) {
             @(
+                @{ MvAttr = "Account Name";   LdapAttr = "uid" }
+                @{ MvAttr = "First Name";     LdapAttr = "givenName" }
+                @{ MvAttr = "Last Name";      LdapAttr = "sn" }
                 @{ MvAttr = "Display Name";   LdapAttr = "displayName" }
                 @{ MvAttr = "Display Name";   LdapAttr = "cn" }
+                @{ MvAttr = "Email";          LdapAttr = "mail" }
                 @{ MvAttr = "Employee ID";    LdapAttr = "employeeNumber" }
-                @{ MvAttr = "Display Name";   LdapAttr = "sn" }
-                @{ MvAttr = "Display Name";   LdapAttr = "uid" }
             )
         } else {
             @(
@@ -718,12 +725,11 @@ try {
         # Expression-based mappings for computed values
         # distinguishedName is required for LDAP provisioning — tells the connector where to create the object
         # DN expression: OpenLDAP uses uid-based RDN, AD uses CN-based
-        # For OpenLDAP, we use Display Name as uid (replacing spaces with dots for valid uid)
         $targetExpressionMappings = if ($isOpenLDAP) {
             @(
                 @{
                     LdapAttr = "distinguishedName"
-                    Expression = '"uid=" + Replace(mv["Display Name"], " ", ".") + ",' + $TargetConfig.UserContainer + '"'
+                    Expression = '"uid=" + mv["Account Name"] + ",' + $TargetConfig.UserContainer + '"'
                 }
             )
         } else {
@@ -740,7 +746,7 @@ try {
             @(
                 @{
                     LdapAttr = "distinguishedName"
-                    Expression = '"uid=" + Replace(mv["Display Name"], " ", ".") + ",' + $SourceConfig.UserContainer + '"'
+                    Expression = '"uid=" + mv["Account Name"] + ",' + $SourceConfig.UserContainer + '"'
                 }
             )
         } else {
@@ -956,8 +962,8 @@ try {
         # Add object matching rule for Source (match by account name attribute)
         Write-Host "  Configuring object matching rules..." -ForegroundColor Gray
 
-        $matchingCsAttrName = if ($isOpenLDAP) { 'employeeNumber' } else { 'sAMAccountName' }
-        $matchingMvAttrName = if ($isOpenLDAP) { 'Employee ID' } else { 'Account Name' }
+        $matchingCsAttrName = if ($isOpenLDAP) { 'uid' } else { 'sAMAccountName' }
+        $matchingMvAttrName = 'Account Name'
         $sourceSamAttr = $sourceUserType.attributes | Where-Object { $_.name -eq $matchingCsAttrName }
         $mvAccountNameAttr = $mvAttributes | Where-Object { $_.name -eq $matchingMvAttrName }
 
