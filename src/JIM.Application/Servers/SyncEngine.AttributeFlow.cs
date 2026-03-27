@@ -524,7 +524,7 @@ public partial class SyncEngine
         ConnectedSystemObject cso,
         ConnectedSystemObjectType csoType)
     {
-        var attributes = new Dictionary<string, object?>();
+        var attributes = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var attributeValue in cso.AttributeValues)
         {

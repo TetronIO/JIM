@@ -1407,4 +1407,56 @@ public class DynamicExpressoEvaluatorTests
     }
 
     #endregion
+
+    #region Case-Insensitive Attribute Name Lookup Tests
+
+    [Test]
+    public void Evaluate_MvAttributeLookup_CaseInsensitiveDictionary_ResolvesRegardlessOfCase()
+    {
+        // Attribute stored as "Department" but expression uses "department" (lowercase)
+        var mvAttributes = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "Department", "Engineering" }
+        };
+
+        var context = new ExpressionContext(mvAttributes, new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("mv[\"department\"]", context);
+
+        Assert.That(result, Is.EqualTo("Engineering"));
+    }
+
+    [Test]
+    public void Evaluate_CsAttributeLookup_CaseInsensitiveDictionary_ResolvesRegardlessOfCase()
+    {
+        // Attribute stored as "sAMAccountName" but expression uses "samaccountname" (all lowercase)
+        var csAttributes = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "sAMAccountName", "jdoe" }
+        };
+
+        var context = new ExpressionContext(new Dictionary<string, object?>(), csAttributes);
+
+        var result = _evaluator.Evaluate("cs[\"samaccountname\"]", context);
+
+        Assert.That(result, Is.EqualTo("jdoe"));
+    }
+
+    [Test]
+    public void Evaluate_MvAttributeLookup_CaseSensitiveDictionary_ReturnsNullForMismatchedCase()
+    {
+        // Without case-insensitive comparer, mismatched case returns null
+        var mvAttributes = new Dictionary<string, object?>
+        {
+            { "Department", "Engineering" }
+        };
+
+        var context = new ExpressionContext(mvAttributes, new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("mv[\"department\"]", context);
+
+        Assert.That(result, Is.Null);
+    }
+
+    #endregion
 }

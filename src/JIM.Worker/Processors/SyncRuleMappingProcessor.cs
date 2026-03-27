@@ -639,7 +639,7 @@ public static class SyncRuleMappingProcessor
         ConnectedSystemObject connectedSystemObject,
         ConnectedSystemObjectType csoType)
     {
-        var attributes = new Dictionary<string, object?>();
+        var attributes = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var attributeValue in connectedSystemObject.AttributeValues)
         {

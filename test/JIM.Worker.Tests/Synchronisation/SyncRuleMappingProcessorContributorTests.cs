@@ -1,3 +1,4 @@
+using JIM.Application.Expressions;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -247,6 +248,34 @@ public class SyncRuleMappingProcessorContributorTests
 
         Assert.That(mvo.PendingAttributeValueAdditions, Has.Count.EqualTo(1));
         Assert.That(mvo.PendingAttributeValueAdditions[0].ContributedBySystemId, Is.Null);
+    }
+
+    [Test]
+    public void Process_ExpressionWithMismatchedAttributeCase_ResolvesAttributeValue()
+    {
+        // CSO attribute is named "displayName" (camelCase) but expression references "DISPLAYNAME" (uppercase)
+        var (cso, mvo) = CreateCsoAndMvo();
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            AttributeId = _csTextAttribute.Id,
+            Attribute = _csTextAttribute, // Name is "displayName"
+            StringValue = "Joe Bloggs"
+        });
+
+        // Create expression-based mapping that references the attribute with different casing
+        var mapping = new SyncRuleMapping { TargetMetaverseAttribute = _textAttribute };
+        mapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Order = 1,
+            Expression = "cs[\"DISPLAYNAME\"]" // Uppercase — different from "displayName"
+        });
+
+        SyncRuleMappingProcessor.Process(cso, mapping, new List<ConnectedSystemObjectType> { _csoType },
+            expressionEvaluator: new DynamicExpressoEvaluator(),
+            contributingSystemId: ConnectedSystemId);
+
+        Assert.That(mvo.PendingAttributeValueAdditions, Has.Count.EqualTo(1));
+        Assert.That(mvo.PendingAttributeValueAdditions[0].StringValue, Is.EqualTo("Joe Bloggs"));
     }
 
     [Test]
