@@ -154,8 +154,15 @@ foreach ($suffixName in @("Yellowstone", "Glitterband")) {
     $config = $suffixes[$suffixName]
     $userCount = if ($suffixName -eq "Yellowstone") { $yellowstoneUserCount } else { $glitterbandUserCount }
     $groupCount = if ($suffixName -eq "Yellowstone") { $yellowstoneGroupCount } else { $glitterbandGroupCount }
-    # Offset indices so users are unique across suffixes
-    $indexStart = if ($suffixName -eq "Yellowstone") { 1 } else { $yellowstoneUserCount + 1 }
+    # Offset indices by 500,000 to avoid uid collisions with CSV-generated users.
+    # The CSV generator uses indices 0..N, so seeded OpenLDAP users at index 500,001+
+    # will never produce the same uid (e.g., alice.smith1 vs alice.smith500001).
+    # This matches the Samba AD approach in Populate-SambaAD.ps1 ($adIndexOffset = 500000)
+    # and scales across all templates (XXLarge = 200K users).
+    # Within the offset range, Yellowstone and Glitterband get distinct index ranges
+    # so users are unique across suffixes.
+    $ldapIndexOffset = 500000
+    $indexStart = if ($suffixName -eq "Yellowstone") { $ldapIndexOffset + 1 } else { $ldapIndexOffset + $yellowstoneUserCount + 1 }
 
     Write-TestSection "Populating $suffixName ($($config.Suffix))"
     Write-Host "  Users: $userCount, Groups: $groupCount" -ForegroundColor Gray
