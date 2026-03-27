@@ -76,7 +76,10 @@ param(
     [int]$MaxExportParallelism,
 
     [Parameter(Mandatory=$false)]
-    [switch]$SkipPopulate
+    [switch]$SkipPopulate,
+
+    [Parameter(Mandatory=$false)]
+    [hashtable]$DirectoryConfig
 )
 
 Set-StrictMode -Version Latest
@@ -85,6 +88,11 @@ $ConfirmPreference = 'None'
 
 # Import helpers
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
+
+# Default to SambaAD Primary if no config provided
+if (-not $DirectoryConfig) {
+    $DirectoryConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Primary
+}
 
 # Import JIM PowerShell module
 $modulePath = "$PSScriptRoot/../../../src/JIM.PowerShell/JIM.psd1"
@@ -143,6 +151,7 @@ if ($connectedSystems.Count -eq 0) {
         JIMUrl = $JIMUrl
         ApiKey = $ApiKey
         Template = "Micro"
+        DirectoryConfig = $DirectoryConfig
     }
     if ($PSBoundParameters.ContainsKey('ExportConcurrency')) {
         $setupParams.ExportConcurrency = $ExportConcurrency
@@ -587,17 +596,18 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
     # The extended Scenario1 setup creates:
     # - HR CSV Source
     # - Training Records Source
-    # - Samba AD (Panoply AD)
+    # - LDAP directory (name from DirectoryConfig.ConnectedSystemName)
     # - Cross-Domain Export
+    $ldapSystemName = $DirectoryConfig.ConnectedSystemName
     $hrSystem = $connectedSystems | Where-Object { $_.name -eq "HR CSV Source" }
     $trainingSystem = $connectedSystems | Where-Object { $_.name -eq "Training Records Source" }
-    $ldapSystem = $connectedSystems | Where-Object { $_.name -eq "Panoply AD" }
+    $ldapSystem = $connectedSystems | Where-Object { $_.name -eq $ldapSystemName }
     $crossDomainSystem = $connectedSystems | Where-Object { $_.name -eq "Cross-Domain Export" }
 
     $missingCount = 0
     if (-not $hrSystem) { $missingCount++; Write-Host "  Missing: HR CSV Source" -ForegroundColor Yellow }
     if (-not $trainingSystem) { $missingCount++; Write-Host "  Missing: Training Records Source" -ForegroundColor Yellow }
-    if (-not $ldapSystem) { $missingCount++; Write-Host "  Missing: Panoply AD" -ForegroundColor Yellow }
+    if (-not $ldapSystem) { $missingCount++; Write-Host "  Missing: $ldapSystemName" -ForegroundColor Yellow }
     if (-not $crossDomainSystem) { $missingCount++; Write-Host "  Missing: Cross-Domain Export" -ForegroundColor Yellow }
 
     if ($missingCount -gt 0) {
@@ -614,7 +624,7 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
     else {
         Write-Host "  Found all 4 required connected systems:" -ForegroundColor Green
         Write-Host "    Sources: HR CSV ($($hrSystem.id)), Training ($($trainingSystem.id))" -ForegroundColor DarkGray
-        Write-Host "    Targets: Samba AD ($($ldapSystem.id)), Cross-Domain ($($crossDomainSystem.id))" -ForegroundColor DarkGray
+        Write-Host "    Targets: $ldapSystemName ($($ldapSystem.id)), Cross-Domain ($($crossDomainSystem.id))" -ForegroundColor DarkGray
 
         # Get run profiles for each system
         $hrProfiles = @(Get-JIMRunProfile -ConnectedSystemId $hrSystem.id)
@@ -689,7 +699,7 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
                     Write-Host "    HR CSV: Changed $($hrUser.samAccountName) title from '$oldTitle' to 'Scheduler Test - Parallel Flow'" -ForegroundColor DarkGray
 
                     # Copy to container
-                    docker cp $hrCsvPath samba-ad-primary:/connector-files/hr-users.csv 2>$null
+                    docker cp $hrCsvPath jim.web:/connector-files/hr-users.csv 2>$null
                     Write-Host "    HR CSV: Copied to container" -ForegroundColor DarkGray
                 }
             }
@@ -705,7 +715,7 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
                     Write-Host "    Training CSV: Changed $($trainingUser.samAccountName) training status from '$oldStatus' to 'Pass'" -ForegroundColor DarkGray
 
                     # Copy to container
-                    docker cp $trainingCsvPath samba-ad-primary:/connector-files/training-records.csv 2>$null
+                    docker cp $trainingCsvPath jim.web:/connector-files/training-records.csv 2>$null
                     Write-Host "    Training CSV: Copied to container" -ForegroundColor DarkGray
                 }
             }

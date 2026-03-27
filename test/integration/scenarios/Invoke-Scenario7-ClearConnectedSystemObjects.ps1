@@ -64,7 +64,10 @@ param(
     [int]$WaitSeconds = 30,
 
     [Parameter(Mandatory=$false)]
-    [switch]$SkipPopulate
+    [switch]$SkipPopulate,
+
+    [Parameter(Mandatory=$false)]
+    [hashtable]$DirectoryConfig
 )
 
 Set-StrictMode -Version Latest
@@ -124,7 +127,9 @@ try {
     }
 
     # Setup scenario configuration (reuse Scenario 1 setup for CSV connected system)
-    $config = & "$PSScriptRoot/../Setup-Scenario1.ps1" -JIMUrl $JIMUrl -ApiKey $ApiKey -Template $Template
+    $setupParams = @{ JIMUrl = $JIMUrl; ApiKey = $ApiKey; Template = $Template }
+    if ($DirectoryConfig) { $setupParams.DirectoryConfig = $DirectoryConfig }
+    $config = & "$PSScriptRoot/../Setup-Scenario1.ps1" @setupParams
 
     if (-not $config) {
         throw "Failed to setup Scenario configuration"
