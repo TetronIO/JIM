@@ -356,38 +356,106 @@ function Get-DirectoryConfig {
             return $instanceConfigs[$Instance]
         }
         "OpenLDAP" {
-            return @{
-                ContainerName    = "openldap-primary"
-                Host             = "openldap-primary"
-                Port             = 1389
-                UseSSL           = $false
-                CertValidation   = $null
-                BindDN           = "cn=admin,dc=yellowstone,dc=local"
-                BindPassword     = "Test@123!"
-                AuthType         = "Simple"
-                BaseDN           = "dc=yellowstone,dc=local"
-                UserContainer    = "ou=People,dc=yellowstone,dc=local"
-                GroupContainer   = "ou=Groups,dc=yellowstone,dc=local"
-                UserObjectClass  = "inetOrgPerson"
-                GroupObjectClass = "groupOfNames"
-                UserRdnAttr      = "uid"
-                UserNameAttr     = "uid"
-                ExternalIdAttr   = "entryUUID"
-                DepartmentAttr   = "departmentNumber"
-                DeleteBehaviour  = "Delete"
-                DisableAttribute = $null
-                DnTemplate       = 'uid={uid},ou=People,dc=yellowstone,dc=local'
-                Domain           = "yellowstone.local"
-                ShortDomain      = $null
-                LdapSearchPort   = 1389
-                LdapSearchScheme = "ldap"
-                ComposeProfiles  = @("openldap")
-                PopulateScript   = "Populate-OpenLDAP.ps1"
-                ConnectedSystemName = "Yellowstone OpenLDAP"
-                # Second suffix for multi-partition testing
-                SecondSuffix     = "dc=glitterband,dc=local"
-                SecondBindDN     = "cn=admin,dc=glitterband,dc=local"
+            $instanceConfigs = @{
+                Primary = @{
+                    ContainerName    = "openldap-primary"
+                    Host             = "openldap-primary"
+                    Port             = 1389
+                    UseSSL           = $false
+                    CertValidation   = $null
+                    BindDN           = "cn=admin,dc=yellowstone,dc=local"
+                    BindPassword     = "Test@123!"
+                    AuthType         = "Simple"
+                    BaseDN           = "dc=yellowstone,dc=local"
+                    UserContainer    = "ou=People,dc=yellowstone,dc=local"
+                    GroupContainer   = "ou=Groups,dc=yellowstone,dc=local"
+                    UserObjectClass  = "inetOrgPerson"
+                    GroupObjectClass = "groupOfNames"
+                    UserRdnAttr      = "uid"
+                    UserNameAttr     = "uid"
+                    ExternalIdAttr   = "entryUUID"
+                    DepartmentAttr   = "departmentNumber"
+                    DeleteBehaviour  = "Delete"
+                    DisableAttribute = $null
+                    DnTemplate       = 'uid={uid},ou=People,dc=yellowstone,dc=local'
+                    Domain           = "yellowstone.local"
+                    ShortDomain      = $null
+                    LdapSearchPort   = 1389
+                    LdapSearchScheme = "ldap"
+                    ComposeProfiles  = @("openldap")
+                    PopulateScript   = "Populate-OpenLDAP.ps1"
+                    ConnectedSystemName = "Yellowstone OpenLDAP"
+                    # Second suffix for multi-partition testing
+                    SecondSuffix     = "dc=glitterband,dc=local"
+                    SecondBindDN     = "cn=admin,dc=glitterband,dc=local"
+                }
+                # Source and Target use the same OpenLDAP container but different suffixes
+                # for cross-domain sync testing (Scenario 2)
+                Source = @{
+                    ContainerName    = "openldap-primary"
+                    Host             = "openldap-primary"
+                    Port             = 1389
+                    UseSSL           = $false
+                    CertValidation   = $null
+                    BindDN           = "cn=admin,dc=yellowstone,dc=local"
+                    BindPassword     = "Test@123!"
+                    AuthType         = "Simple"
+                    BaseDN           = "dc=yellowstone,dc=local"
+                    UserContainer    = "ou=People,dc=yellowstone,dc=local"
+                    GroupContainer   = "ou=Groups,dc=yellowstone,dc=local"
+                    UserObjectClass  = "inetOrgPerson"
+                    GroupObjectClass = "groupOfNames"
+                    UserRdnAttr      = "uid"
+                    UserNameAttr     = "uid"
+                    ExternalIdAttr   = "entryUUID"
+                    DepartmentAttr   = "departmentNumber"
+                    DeleteBehaviour  = "Delete"
+                    DisableAttribute = $null
+                    DnTemplate       = 'uid={uid},ou=People,dc=yellowstone,dc=local'
+                    Domain           = "yellowstone.local"
+                    ShortDomain      = $null
+                    LdapSearchPort   = 1389
+                    LdapSearchScheme = "ldap"
+                    ComposeProfiles  = @("openldap")
+                    PopulateScript   = "Populate-OpenLDAP.ps1"
+                    ConnectedSystemName = "Yellowstone APAC"
+                }
+                Target = @{
+                    ContainerName    = "openldap-primary"
+                    Host             = "openldap-primary"
+                    Port             = 1389
+                    UseSSL           = $false
+                    CertValidation   = $null
+                    BindDN           = "cn=admin,dc=glitterband,dc=local"
+                    BindPassword     = "Test@123!"
+                    AuthType         = "Simple"
+                    BaseDN           = "dc=glitterband,dc=local"
+                    UserContainer    = "ou=People,dc=glitterband,dc=local"
+                    GroupContainer   = "ou=Groups,dc=glitterband,dc=local"
+                    UserObjectClass  = "inetOrgPerson"
+                    GroupObjectClass = "groupOfNames"
+                    UserRdnAttr      = "uid"
+                    UserNameAttr     = "uid"
+                    ExternalIdAttr   = "entryUUID"
+                    DepartmentAttr   = "departmentNumber"
+                    DeleteBehaviour  = "Delete"
+                    DisableAttribute = $null
+                    DnTemplate       = 'uid={uid},ou=People,dc=glitterband,dc=local'
+                    Domain           = "glitterband.local"
+                    ShortDomain      = $null
+                    LdapSearchPort   = 1389
+                    LdapSearchScheme = "ldap"
+                    ComposeProfiles  = @("openldap")
+                    PopulateScript   = "Populate-OpenLDAP.ps1"
+                    ConnectedSystemName = "Glitterband EMEA"
+                }
             }
+
+            if (-not $instanceConfigs.ContainsKey($Instance)) {
+                throw "Unknown OpenLDAP instance: $Instance. Valid values: Primary, Source, Target"
+            }
+
+            return $instanceConfigs[$Instance]
         }
     }
 }
