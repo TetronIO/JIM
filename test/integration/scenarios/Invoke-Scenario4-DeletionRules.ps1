@@ -118,7 +118,10 @@ param(
     [int]$WaitSeconds = 30,
 
     [Parameter(Mandatory=$false)]
-    [switch]$SkipPopulate
+    [switch]$SkipPopulate,
+
+    [Parameter(Mandatory=$false)]
+    [hashtable]$DirectoryConfig
 )
 
 Set-StrictMode -Version Latest
@@ -127,6 +130,12 @@ $ErrorActionPreference = "Stop"
 # Import helpers
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
 . "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
+
+# Default to SambaAD Primary if no config provided
+if (-not $DirectoryConfig) {
+    $DirectoryConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Primary
+}
+$isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
 
 Write-TestSection "Scenario 4: MVO Deletion Rules - Comprehensive Coverage"
 Write-Host "Step:     $Step" -ForegroundColor Gray
@@ -184,7 +193,7 @@ function Invoke-ProvisionUser {
     }
     $csv = @($csv) + $newUser
     $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
-    docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv | Out-Null
+        # No docker cp needed — test-data is bind-mounted into JIM containers
     Write-Host "  Added $SamAccountName to CSV" -ForegroundColor Gray
 
     # Import + Sync + Export + Confirm
@@ -203,12 +212,12 @@ function Invoke-ProvisionUser {
     Assert-ActivitySuccess -ActivityId $ldapImportResult.activityId -Name "LDAP Import ($TestName confirm)"
     Start-Sleep -Seconds 2
 
-    # Verify user exists in AD
-    docker exec samba-ad-primary samba-tool user show $SamAccountName 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw "User $SamAccountName was not provisioned to AD during $TestName"
+    # Verify user exists in directory
+    $userExists = Test-LDAPUserExists -UserIdentifier $SamAccountName -DirectoryConfig $DirectoryConfig
+    if (-not $userExists) {
+        throw "User $SamAccountName was not provisioned to directory during $TestName"
     }
-    Write-Host "  User $SamAccountName provisioned to AD" -ForegroundColor Green
+    Write-Host "  User $SamAccountName provisioned to directory" -ForegroundColor Green
 
     # Return the MVO for the user
     # Note: Get-JIMMetaverseObject outputs objects directly to the pipeline (not wrapped in .items)
@@ -252,7 +261,7 @@ function Invoke-RemoveUserFromSource {
     $csv = Import-Csv $csvPath
     $csv = @($csv | Where-Object { $_.samAccountName -ne $SamAccountName })
     $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
-    docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv | Out-Null
+        # No docker cp needed — test-data is bind-mounted into JIM containers
     Write-Host "  Removed $SamAccountName from CSV" -ForegroundColor Gray
 
     if ($FullCycle) {
@@ -327,7 +336,7 @@ function Invoke-ProvisionTrainingData {
     }
     $csv = @($csv) + $newRecord
     $csv | Export-Csv -Path $trainingCsvPath -NoTypeInformation -Encoding UTF8
-    docker cp $trainingCsvPath samba-ad-primary:/connector-files/training-records.csv | Out-Null
+        # No docker cp needed — test-data is bind-mounted into JIM containers
     Write-Host "  Added training record for $SamAccountName to Training CSV" -ForegroundColor Gray
 
     # Training Import + Sync (joins Training CSO to existing MVO)
@@ -350,12 +359,13 @@ function Invoke-ProvisionTrainingData {
 
     Start-Sleep -Seconds 2
 
-    # Verify Training attributes reached AD
-    $adOutput = & docker exec samba-ad-primary bash -c "samba-tool user show '$SamAccountName' 2>&1"
-    if ($adOutput -match "description:\s*(.+)") {
-        Write-Host "  Training attributes exported to AD (description: $($Matches[1]))" -ForegroundColor Green
+    # Verify Training attributes reached directory
+    $ldapUser = Get-LDAPUser -UserIdentifier $SamAccountName -DirectoryConfig $DirectoryConfig
+    $descValue = if ($ldapUser -and $ldapUser.ContainsKey('description')) { $ldapUser['description'] } else { $null }
+    if ($descValue) {
+        Write-Host "  Training attributes exported to directory (description: $descValue)" -ForegroundColor Green
     } else {
-        Write-Host "  WARNING: Training attribute 'description' not found on AD user" -ForegroundColor Yellow
+        Write-Host "  WARNING: Training attribute 'description' not found on directory user" -ForegroundColor Yellow
     }
 }
 
@@ -381,7 +391,7 @@ function Invoke-RemoveTrainingData {
     $csv = Import-Csv $trainingCsvPath
     $csv = @($csv | Where-Object { $_.employeeId -ne $EmployeeId })
     $csv | Export-Csv -Path $trainingCsvPath -NoTypeInformation -Encoding UTF8
-    docker cp $trainingCsvPath samba-ad-primary:/connector-files/training-records.csv | Out-Null
+        # No docker cp needed — test-data is bind-mounted into JIM containers
     Write-Host "  Removed training record for $EmployeeId from Training CSV" -ForegroundColor Gray
 
     # Training Import + Sync (obsoletes Training CSO, triggers recall if configured)
@@ -572,12 +582,12 @@ try {
     # Copy to container volume
     $csvPath = "$testDataPath/hr-users.csv"
     $trainingCsvPath = "$testDataPath/training-records.csv"
-    docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
-    docker cp $trainingCsvPath samba-ad-primary:/connector-files/training-records.csv
+        # No docker cp needed — test-data is bind-mounted into JIM containers
+        # No docker cp needed — test-data is bind-mounted into JIM containers
     Write-Host "  CSVs initialised (HR + Training, 1 baseline user each)" -ForegroundColor Green
 
-    # Clean up test-specific AD users from previous test runs
-    Write-Host "Cleaning up test-specific AD users from previous runs..." -ForegroundColor Gray
+    # Clean up test-specific directory users from previous test runs
+    Write-Host "Cleaning up test-specific directory users from previous runs..." -ForegroundColor Gray
     $testUsers = @(
         "test.wlcd.recall", "test.wlcd.norecall",
         "test.auth.immediate", "test.auth.grace",
@@ -586,16 +596,28 @@ try {
     )
     $deletedCount = 0
     foreach ($user in $testUsers) {
-        $output = & docker exec samba-ad-primary bash -c "samba-tool user delete '$user' 2>&1; echo EXIT_CODE:\$?"
-        if ($output -match "Deleted user") {
-            Write-Host "  Deleted $user from AD" -ForegroundColor Gray
-            $deletedCount++
+        if ($isOpenLDAP) {
+            $userDN = "$($DirectoryConfig.UserRdnAttr)=$user,$($DirectoryConfig.UserContainer)"
+            $output = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H "ldap://localhost:$($DirectoryConfig.Port)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$userDN" 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "  Deleted $user from directory" -ForegroundColor Gray
+                $deletedCount++
+            }
+        }
+        else {
+            $output = & docker exec $DirectoryConfig.ContainerName bash -c "samba-tool user delete '$user' 2>&1; echo EXIT_CODE:\$?"
+            if ($output -match "Deleted user") {
+                Write-Host "  Deleted $user from directory" -ForegroundColor Gray
+                $deletedCount++
+            }
         }
     }
-    Write-Host "  AD cleanup complete ($deletedCount test users deleted)" -ForegroundColor Green
+    Write-Host "  Directory cleanup complete ($deletedCount test users deleted)" -ForegroundColor Green
 
     # Setup scenario configuration (reuse Scenario 1 setup)
-    $config = & "$PSScriptRoot/../Setup-Scenario1.ps1" -JIMUrl $JIMUrl -ApiKey $ApiKey -Template $Template
+    $setupParams = @{ JIMUrl = $JIMUrl; ApiKey = $ApiKey; Template = $Template }
+    if ($DirectoryConfig) { $setupParams.DirectoryConfig = $DirectoryConfig }
+    $config = & "$PSScriptRoot/../Setup-Scenario1.ps1" @setupParams
 
     if (-not $config) {
         throw "Failed to setup Scenario configuration"
@@ -603,16 +625,18 @@ try {
 
     Write-Host "JIM configured for Scenario 4" -ForegroundColor Green
 
-    # Create department OUs needed for test users
-    Write-Host "Creating department OUs for test users..." -ForegroundColor Gray
-    $testDepartments = @("Information Technology", "Operations")
-    foreach ($dept in $testDepartments) {
-        docker exec samba-ad-primary samba-tool ou create "OU=$dept,OU=Users,OU=Corp,DC=panoply,DC=local" 2>&1 | Out-Null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  Created OU: $dept" -ForegroundColor Gray
+    # Create department OUs needed for test users (Samba AD only — OpenLDAP uses flat OU)
+    if (-not $isOpenLDAP) {
+        Write-Host "Creating department OUs for test users..." -ForegroundColor Gray
+        $testDepartments = @("Information Technology", "Operations")
+        foreach ($dept in $testDepartments) {
+            docker exec $DirectoryConfig.ContainerName samba-tool ou create "OU=$dept,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)" 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "  Created OU: $dept" -ForegroundColor Gray
+            }
         }
+        Write-Host "  Department OUs ready" -ForegroundColor Green
     }
-    Write-Host "  Department OUs ready" -ForegroundColor Green
 
     Write-Host "  CSV System ID: $($config.CSVSystemId)" -ForegroundColor Gray
     Write-Host "  Training System ID: $($config.TrainingSystemId)" -ForegroundColor Gray
@@ -758,21 +782,22 @@ try {
 
         Start-Sleep -Seconds 3
 
-        # Verify AD user still exists and identity is intact
-        $adOutput = & docker exec samba-ad-primary bash -c "samba-tool user show 'test.wlcd.recall' 2>&1"
-        if ($adOutput -match "sAMAccountName:\s*test\.wlcd\.recall") {
-            Write-Host "  PASSED: AD user still exists with sAMAccountName intact" -ForegroundColor Green
+        # Verify directory user still exists and identity is intact
+        $ldapUser = Get-LDAPUser -UserIdentifier 'test.wlcd.recall' -DirectoryConfig $DirectoryConfig
+        if ($ldapUser) {
+            Write-Host "  PASSED: Directory user still exists after recall export" -ForegroundColor Green
         } else {
-            $testResults.Steps += @{ Name = "WhenLastConnectorRecall"; Success = $false; Error = "AD user not found or sAMAccountName missing after recall export" }
-            throw "Test 1 Assert 5 failed: AD user not found or sAMAccountName missing after recall export"
+            $testResults.Steps += @{ Name = "WhenLastConnectorRecall"; Success = $false; Error = "Directory user not found after recall export" }
+            throw "Test 1 Assert 5 failed: Directory user not found after recall export"
         }
 
-        # Verify Training attributes cleared from AD (description should be absent/empty)
-        if ($adOutput -match "description:\s*(.+)") {
-            $testResults.Steps += @{ Name = "WhenLastConnectorRecall"; Success = $false; Error = "AD 'description' still has value after recall: $($Matches[1])" }
-            throw "Test 1 Assert 5 failed: AD 'description' attribute still has value after recall export: $($Matches[1])"
+        # Verify Training attributes cleared from directory (description should be absent/empty)
+        $descValue = if ($ldapUser -and $ldapUser.ContainsKey('description')) { $ldapUser['description'] } else { $null }
+        if ($descValue) {
+            $testResults.Steps += @{ Name = "WhenLastConnectorRecall"; Success = $false; Error = "Directory 'description' still has value after recall: $descValue" }
+            throw "Test 1 Assert 5 failed: Directory 'description' attribute still has value after recall export: $descValue"
         } else {
-            Write-Host "  PASSED: Training attribute 'description' cleared from AD after recall export" -ForegroundColor Green
+            Write-Host "  PASSED: Training attribute 'description' cleared from directory after recall export" -ForegroundColor Green
         }
 
         $testResults.Steps += @{ Name = "WhenLastConnectorRecall"; Success = $true }
@@ -950,13 +975,13 @@ try {
             $confirmImport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
             Assert-ActivitySuccess -ActivityId $confirmImport.activityId -Name "LDAP Import (Test3 confirm deprovisioning)"
 
-            # Verify user is removed from AD
+            # Verify user is removed from directory
             Start-Sleep -Seconds 3
-            $adUserExists = & docker exec samba-ad-primary bash -c "samba-tool user show 'test.auth.immediate' 2>&1; echo EXIT_CODE:\$?"
-            if ($adUserExists -match "Unable to find" -or $adUserExists -match "ERROR") {
-                Write-Host "  PASSED: User deprovisioned from AD (no longer exists in directory)" -ForegroundColor Green
+            $userStillExists = Test-LDAPUserExists -UserIdentifier 'test.auth.immediate' -DirectoryConfig $DirectoryConfig
+            if (-not $userStillExists) {
+                Write-Host "  PASSED: User deprovisioned from directory (no longer exists)" -ForegroundColor Green
             } else {
-                Write-Host "  WARNING: User may still exist in AD after export" -ForegroundColor Yellow
+                Write-Host "  WARNING: User may still exist in directory after export" -ForegroundColor Yellow
             }
 
             $testResults.Steps += @{ Name = "AuthoritativeImmediate"; Success = $true }
@@ -1179,21 +1204,22 @@ try {
 
         Start-Sleep -Seconds 3
 
-        # Verify AD user still exists and identity is intact
-        $adOutput = & docker exec samba-ad-primary bash -c "samba-tool user show 'test.manual.recall' 2>&1"
-        if ($adOutput -match "sAMAccountName:\s*test\.manual\.recall") {
-            Write-Host "  PASSED: AD user still exists with sAMAccountName intact" -ForegroundColor Green
+        # Verify directory user still exists and identity is intact
+        $ldapUser = Get-LDAPUser -UserIdentifier 'test.manual.recall' -DirectoryConfig $DirectoryConfig
+        if ($ldapUser) {
+            Write-Host "  PASSED: Directory user still exists after recall export" -ForegroundColor Green
         } else {
-            $testResults.Steps += @{ Name = "ManualRecall"; Success = $false; Error = "AD user not found or sAMAccountName missing after recall export" }
-            throw "Test 5 Assert 5 failed: AD user not found or sAMAccountName missing after recall export"
+            $testResults.Steps += @{ Name = "ManualRecall"; Success = $false; Error = "Directory user not found after recall export" }
+            throw "Test 5 Assert 5 failed: Directory user not found after recall export"
         }
 
-        # Verify Training attributes cleared from AD
-        if ($adOutput -match "description:\s*(.+)") {
-            $testResults.Steps += @{ Name = "ManualRecall"; Success = $false; Error = "AD 'description' still has value after recall: $($Matches[1])" }
-            throw "Test 5 Assert 5 failed: AD 'description' attribute still has value after recall export: $($Matches[1])"
+        # Verify Training attributes cleared from directory
+        $descValue = if ($ldapUser -and $ldapUser.ContainsKey('description')) { $ldapUser['description'] } else { $null }
+        if ($descValue) {
+            $testResults.Steps += @{ Name = "ManualRecall"; Success = $false; Error = "Directory 'description' still has value after recall: $descValue" }
+            throw "Test 5 Assert 5 failed: Directory 'description' attribute still has value after recall export: $descValue"
         } else {
-            Write-Host "  PASSED: Training attribute 'description' cleared from AD after recall export" -ForegroundColor Green
+            Write-Host "  PASSED: Training attribute 'description' cleared from directory after recall export" -ForegroundColor Green
         }
 
         # Assert 6: MVO should NOT be marked as pending deletion (Manual rule)
