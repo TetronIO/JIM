@@ -67,6 +67,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     private readonly string _settingDisableAttribute = "Disable Attribute";
     private readonly string _settingExportConcurrency = "Export Concurrency";
     private readonly string _settingModifyBatchSize = "Modify Batch Size";
+    private readonly string _settingGroupPlaceholderMemberDn = LdapConnectorConstants.SETTING_GROUP_PLACEHOLDER_MEMBER_DN;
 
     public List<ConnectorSetting> GetSettings()
     {
@@ -108,7 +109,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             new() { Name = _settingDeleteBehaviour, Required = false, Description = "How to handle object deletions.", Type = ConnectedSystemSettingType.DropDown, DropDownValues = new() { LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE, LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE }, Category = ConnectedSystemSettingCategory.Export },
             new() { Name = _settingDisableAttribute, Required = false, Description = "Attribute to set when disabling objects (e.g., userAccountControl for AD). Only used when Delete Behaviour is 'Disable'.", DefaultStringValue = "userAccountControl", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.String },
             new() { Name = _settingExportConcurrency, Required = false, Description = "Maximum number of concurrent LDAP operations during export. Higher values improve throughput but increase load on the target directory. Default is 4. Recommended range: 2-8. Values above 8 show diminishing returns and may overwhelm the directory server.", DefaultIntValue = LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Integer },
-            new() { Name = _settingModifyBatchSize, Required = false, Description = "Maximum number of values per multi-valued attribute modification in a single LDAP request. When adding or removing many values from a multi-valued attribute (e.g., group members), changes are split into batches of this size. Lower values improve compatibility with constrained LDAP servers; higher values improve throughput. Default is 100. Recommended range: 50-500.", DefaultIntValue = LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Integer }
+            new() { Name = _settingModifyBatchSize, Required = false, Description = "Maximum number of values per multi-valued attribute modification in a single LDAP request. When adding or removing many values from a multi-valued attribute (e.g., group members), changes are split into batches of this size. Lower values improve compatibility with constrained LDAP servers; higher values improve throughput. Default is 100. Recommended range: 50-500.", DefaultIntValue = LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Integer },
+
+            new() { Name = "Group Membership", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Heading },
+            new() { Name = _settingGroupPlaceholderMemberDn, Required = false, Description = "Placeholder member DN used for group object classes that require at least one member (e.g. groupOfNames). When a group has no real members, this value is added to satisfy the schema constraint. It is automatically filtered out during import. Only applies to non-AD directories. Default: cn=placeholder. If your directory has referential integrity enabled, set this to an existing entry's DN.", DefaultStringValue = LdapConnectorConstants.DEFAULT_GROUP_PLACEHOLDER_MEMBER_DN, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.String }
         };
     }
 
@@ -385,8 +389,12 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             .FirstOrDefault(s => s.Setting.Name == _settingModifyBatchSize)?.IntValue
             ?? LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE;
 
+        var placeholderMemberDn = _exportSettings
+            .FirstOrDefault(s => s.Setting.Name == _settingGroupPlaceholderMemberDn)?.StringValue
+            ?? LdapConnectorConstants.DEFAULT_GROUP_PLACEHOLDER_MEMBER_DN;
+
         var executor = new LdapOperationExecutor(_connection);
-        _currentExport = new LdapConnectorExport(executor, _exportSettings, Log.Logger, concurrency, modifyBatchSize, _directoryType);
+        _currentExport = new LdapConnectorExport(executor, _exportSettings, Log.Logger, concurrency, modifyBatchSize, _directoryType, placeholderMemberDn);
         return _currentExport.ExecuteAsync(pendingExports, cancellationToken);
     }
 

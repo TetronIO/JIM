@@ -22,6 +22,7 @@ internal class LdapConnectorImport
     private readonly List<ConnectedSystemPaginationToken> _paginationTokens;
     private readonly string? _persistedConnectorData;
     private readonly TimeSpan _searchTimeout;
+    private readonly string _placeholderMemberDn;
     private LdapConnectorRootDse? _previousRootDse;
     private LdapConnectorRootDse? _currentRootDse;
 
@@ -47,6 +48,11 @@ internal class LdapConnectorImport
             .SingleOrDefault(s => s.Setting.Name == SearchTimeoutSettingName);
         var searchTimeoutSeconds = searchTimeoutSetting?.IntValue ?? DefaultSearchTimeoutSeconds;
         _searchTimeout = TimeSpan.FromSeconds(searchTimeoutSeconds);
+
+        // Get placeholder member DN for filtering during import
+        var placeholderSetting = connectedSystem.SettingValues
+            .SingleOrDefault(s => s.Setting.Name == LdapConnectorConstants.SETTING_GROUP_PLACEHOLDER_MEMBER_DN);
+        _placeholderMemberDn = placeholderSetting?.StringValue ?? LdapConnectorConstants.DEFAULT_GROUP_PLACEHOLDER_MEMBER_DN;
 
         // If we have persisted connector data from a previous page, deserialise it to get capabilities
         // This allows subsequent pages to know the directory capabilities without re-querying
@@ -1069,7 +1075,18 @@ internal class LdapConnectorImport
                     case AttributeDataType.Reference:
                         var referenceValues = LdapConnectorUtilities.GetEntryAttributeStringValues(searchResult, attributeName);
                         if (referenceValues is { Count: > 0 })
-                            importObjectAttribute.ReferenceValues.AddRange(referenceValues);
+                        {
+                            // Filter out the placeholder member DN so it never enters the metaverse.
+                            // The placeholder is injected by the connector during export to satisfy the
+                            // groupOfNames MUST member constraint — it should be invisible to JIM.
+                            var filteredValues = referenceValues.Where(v =>
+                                !_placeholderMemberDn.Equals(v, StringComparison.OrdinalIgnoreCase)).ToList();
+                            if (filteredValues.Count > 0)
+                                importObjectAttribute.ReferenceValues.AddRange(filteredValues);
+                            else if (referenceValues.Count > filteredValues.Count)
+                                _logger.Debug("LdapConnectorImport: Filtered placeholder member '{Placeholder}' from attribute '{Attr}' on '{Dn}'",
+                                    _placeholderMemberDn, attributeName, searchResult.DistinguishedName);
+                        }
                         break;
                     case AttributeDataType.NotSet:
                     default:

@@ -111,4 +111,22 @@ internal static class LdapConnectorConstants
         "samDomain",
         "samServer"
     };
+
+    // Group placeholder member settings
+    // The groupOfNames object class (RFC 4519) requires at least one member value (MUST constraint).
+    // When a group has no real members, a placeholder DN is used to satisfy this constraint.
+    // This applies to OpenLDAP and Generic directories — AD/Samba AD use the 'group' class which has no such constraint.
+    internal const string DEFAULT_GROUP_PLACEHOLDER_MEMBER_DN = "cn=placeholder";
+    internal const string SETTING_GROUP_PLACEHOLDER_MEMBER_DN = "Group Placeholder Member DN";
+
+    /// <summary>
+    /// LDAP object classes that require at least one member value (MUST constraint on the member attribute).
+    /// When exporting to directories using these classes, a placeholder member is injected
+    /// to satisfy the schema constraint when the group would otherwise be empty.
+    /// </summary>
+    internal static readonly HashSet<string> MUST_MEMBER_OBJECT_CLASSES = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "groupOfNames",
+        "groupOfUniqueNames"
+    };
 }
