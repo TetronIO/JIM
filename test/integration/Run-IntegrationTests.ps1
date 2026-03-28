@@ -188,7 +188,10 @@ function Get-PopulateScriptHash {
     )
     switch ($ScenarioName) {
         "Scenario1" { $filesToHash += "$scriptRoot/Populate-SambaAD.ps1" }
-        "Scenario8" { $filesToHash += "$scriptRoot/Populate-SambaAD-Scenario8.ps1" }
+        "Scenario8" {
+            $filesToHash += "$scriptRoot/Populate-SambaAD-Scenario8.ps1"
+            $filesToHash += "$scriptRoot/Populate-OpenLDAP-Scenario8.ps1"
+        }
     }
     $combinedContent = ""
     foreach ($file in $filesToHash) {
@@ -1045,8 +1048,8 @@ else {
     Write-Success "Samba AD Primary image found and up to date: $sambaImageTag"
 }
 
-# For Scenario 2 and Scenario 8, also check for Source and Target images
-if ($Scenario -like "*Scenario2*" -or $Scenario -like "*Scenario8*") {
+# For Scenario 2 and Scenario 8 with Samba AD, also check for Source and Target images
+if (($Scenario -like "*Scenario2*" -or $Scenario -like "*Scenario8*") -and $DirectoryType -ne "OpenLDAP") {
     # Check Source image
     $sourceImageTag = "ghcr.io/tetronio/jim-samba-ad:source"
     $sourceCheck = Test-SambaImageNeedsRebuild -ImageTag $sourceImageTag
@@ -1281,8 +1284,9 @@ if ($Scenario -like "*Scenario2*") {
     Write-Success "Samba AD Source and Target started"
 }
 
-# Start Scenario 8 containers if running Scenario 8
-if ($Scenario -like "*Scenario8*") {
+# Start Scenario 8 containers if running Scenario 8 with Samba AD
+# For OpenLDAP, S8 uses the same openldap-primary container (already started above)
+if ($Scenario -like "*Scenario8*" -and $DirectoryType -ne "OpenLDAP") {
     # Check for pre-populated snapshot images
     if (-not $IgnoreSnapshots) {
         $s8Hash = Get-PopulateScriptHash -ScenarioName "Scenario8"
@@ -1372,8 +1376,9 @@ else {
     }
 }
 
-# Wait for Scenario 2 or Scenario 8 containers if applicable
-if ($Scenario -like "*Scenario2*" -or $Scenario -like "*Scenario8*") {
+# Wait for Scenario 2 or Scenario 8 Samba AD containers if applicable
+# For OpenLDAP, the openldap-primary container wait is handled above
+if (($Scenario -like "*Scenario2*" -or $Scenario -like "*Scenario8*") -and $DirectoryType -ne "OpenLDAP") {
     Write-Step "Waiting for Samba AD Source to be ready..."
     $sourceReady = $false
     $elapsed = 0
