@@ -1,6 +1,6 @@
 # OpenLDAP Integration Testing
 
-- **Status:** Doing (Phases 1-5 complete, Phase 6 in progress — S1-S2, S4-S7, S9 done; S3 stub; S8 remains)
+- **Status:** Doing (Phases 1-5 complete, Phase 6 in progress — S1-S2, S4-S9 done; S3 stub; S8 needs clean-env validation)
 - **Created:** 2026-03-09
 - **Issue:** [#72](https://github.com/TetronIO/JIM/issues/72)
 
@@ -494,7 +494,7 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 | 5 | **S5: Matching Rules** | 17 | Medium | ✅ Done | DirectoryConfig threading, docker cp removed, user cleanup parameterised |
 | 6 | **S3: GAL Sync** | 0 | N/A | ⏭ Stub | Not yet implemented — placeholder script only |
 | 7 | **S4: Deletion Rules** | 26 | High | ✅ Done | All 7 tests passing — LDAP-Helpers replace samba-tool, .ContainsKey() for missing attrs |
-| 8 | **S8: Cross-Domain Entitlement Sync** | 50 | High | Group membership sync with `groupOfNames` (OpenLDAP) vs `group` (AD). The `groupOfNames` MUST constraint (requires at least one `member`) needs connector code changes (Gap 6). This is the most complex scenario. |
+| 8 | **S8: Cross-Domain Entitlement Sync** | 50 | High | 🔧 Parameterised | Gap 6 resolved (placeholder member connector code). Setup verified, population verified. Needs clean-env validation run. |
 
 **Implementation advice for each scenario:**
 
@@ -504,7 +504,7 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 
 **S5 (Matching Rules):** Primarily attribute name substitution (`sAMAccountName`→`uid`, `employeeID`→`employeeNumber`, etc.) and object type substitution (`user`→`inetOrgPerson`). Follow the same parameterisation pattern used in S1's `Setup-Scenario1.ps1`.
 
-**S8 (Cross-Domain Entitlement Sync):** This is the most complex. Key issue is Gap 6 (`groupOfNames` empty group constraint): OpenLDAP's `groupOfNames` requires at least one `member` value. When JIM removes the last member from a group, the LDAP modify will fail. Options: (a) add a placeholder member DN, (b) use `groupOfUniqueNames` instead, (c) handle the constraint in the export code. This needs a design decision before implementation.
+**S8 (Cross-Domain Entitlement Sync):** ✅ Parameterised. Gap 6 resolved — LDAP connector now transparently manages placeholder members for `groupOfNames` (configurable DN, default `cn=placeholder`). Connector handles: inject on empty group create, inject on last member removal, remove when first real member added, filter on import. Refint error handling returns descriptive error if directory rejects placeholder. 21 unit tests cover all scenarios. Integration test scripts fully parameterised: `Populate-OpenLDAP-Scenario8.ps1` creates company/dept/location/project groups with `groupOfNames`; `Setup-Scenario8.ps1` derives all config from `DirectoryConfig`; `Invoke-Scenario8` uses abstracted helper functions for all directory operations. Needs clean-environment validation run to confirm end-to-end flow.
 
 **S4 (Deletion Rules):** OpenLDAP has no account disable mechanism. The deletion rule tests that use `Disable` behaviour and verify `userAccountControl` will need to be skipped or adapted. The `Delete` behaviour (actual LDAP delete) should work unchanged.
 
@@ -517,7 +517,7 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 | Schema discovery rewrite is complex | High | High | ✅ Resolved | RFC 4512 parser implemented with 37 unit tests. Handles all standard object classes and attribute types. |
 | OpenLDAP changelog overlay hard to configure | Medium | Medium | ✅ Resolved | Implemented accesslog-based delta import using `cn=accesslog` with `reqStart` timestamps. Works with Bitnami's `LDAP_ENABLE_ACCESSLOG=yes`. |
 | `bitnami/openldap` doesn't support `slapadd` for bulk loading | Medium | Medium | ✅ Resolved | Using `ldapadd` via stdin piping. Works at Nano/Micro/Small scales. Pre-built images needed for XLarge. |
-| `groupOfNames` empty group constraint breaks export | Medium | High | ⚠️ Open | Needs connector code change for S8 (Entitlement Sync). Options: placeholder member, `groupOfUniqueNames`, or connector-level handling. |
+| `groupOfNames` empty group constraint breaks export | Medium | High | ✅ Resolved | Connector handles placeholder member transparently (configurable DN, default `cn=placeholder`). 21 unit tests. Refint error handling for directories with referential integrity overlay. |
 | Performance regression at XLarge if OpenLDAP population is slow | Low | Medium | Open | Build pre-populated snapshot images (like Samba approach) for Large/XLarge templates |
 | Samba AD regression from connector changes | Medium | Low | ⚠️ Needs verification | All connector changes are gated behind `LdapDirectoryType` checks. Samba AD integration tests should be re-run to confirm no regressions. |
 
