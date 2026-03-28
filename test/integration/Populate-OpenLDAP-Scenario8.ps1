@@ -63,7 +63,7 @@ $configMap = @{
         AdminDN      = "cn=admin,dc=yellowstone,dc=local"
         Password     = "Test@123!"
         PeopleOU     = "ou=People,dc=yellowstone,dc=local"
-        EntitlementsOU = "ou=Entitlements,dc=yellowstone,dc=local"
+        GroupsOU     = "ou=Groups,dc=yellowstone,dc=local"
         Domain       = "yellowstone.local"
     }
     Target = @{
@@ -71,7 +71,7 @@ $configMap = @{
         AdminDN      = "cn=admin,dc=glitterband,dc=local"
         Password     = "Test@123!"
         PeopleOU     = "ou=People,dc=glitterband,dc=local"
-        EntitlementsOU = "ou=Entitlements,dc=glitterband,dc=local"
+        GroupsOU     = "ou=Groups,dc=glitterband,dc=local"
         Domain       = "glitterband.local"
     }
 }
@@ -106,41 +106,19 @@ $scenario8DepartmentNames = @{
 }
 
 # ============================================================================
-# Step 1: Create Organisational Units
+# Step 1: Verify Organisational Units
 # ============================================================================
-Write-TestStep "Step 1" "Creating organisational units"
+Write-TestStep "Step 1" "Verifying organisational units"
 
-# People OU should already exist from base OpenLDAP setup.
-# Create Entitlements OU for group provisioning.
-$entitlementsLdif = @"
-dn: $($config.EntitlementsOU)
-objectClass: organizationalUnit
-ou: Entitlements
+# People and Groups OUs already exist from base OpenLDAP setup.
+# S8 uses ou=Groups for entitlement groups (matching the existing OpenLDAP hierarchy).
+Write-Host "  ou=People and ou=Groups already exist from base setup" -ForegroundColor Green
 
-"@
-
-$entOuPath = [System.IO.Path]::GetTempFileName()
-Set-Content -Path $entOuPath -Value $entitlementsLdif -NoNewline
-try {
-    docker cp $entOuPath "${containerName}:/tmp/s8-entitlements-ou.ldif"
-    $result = docker exec $containerName ldapadd -x -H $ldapUri -D $config.AdminDN -w $config.Password -f /tmp/s8-entitlements-ou.ldif 2>&1
-    if ($LASTEXITCODE -ne 0 -and "$result" -notmatch "already exists") {
-        Write-Host "  Warning: Failed to create Entitlements OU: $result" -ForegroundColor Yellow
-    }
-    else {
-        Write-Host "  OU created: Entitlements" -ForegroundColor Green
-    }
-    docker exec $containerName rm -f /tmp/s8-entitlements-ou.ldif 2>$null
-}
-finally {
-    Remove-Item -Path $entOuPath -Force -ErrorAction SilentlyContinue
-}
-
-# For Target instance, we only create the OU structure (JIM will provision the rest)
+# For Target instance, no additional setup needed (JIM will provision the rest)
 if ($Instance -eq "Target") {
     Write-TestSection "Target Population Complete"
     Write-Host "Template:       $Template" -ForegroundColor Cyan
-    Write-Host "OU structure created - JIM will provision users and groups" -ForegroundColor Gray
+    Write-Host "OU structure ready - JIM will provision users and groups" -ForegroundColor Gray
     Write-Host ""
     Write-Host "Target OpenLDAP population complete (OU structure only)" -ForegroundColor Green
     exit 0
@@ -208,19 +186,16 @@ for ($i = 0; $i -lt $groupScale.Users; $i++) {
     }
 }
 
-# Import users in chunks
-$chunkSize = 5000
+# Import users via stdin piping
 $userLdifContent = $userLdifBuilder.ToString()
 $ldifPath = [System.IO.Path]::GetTempFileName()
 Set-Content -Path $ldifPath -Value $userLdifContent -NoNewline
 
 try {
-    docker cp $ldifPath "${containerName}:/tmp/s8-users.ldif"
-    $result = docker exec $containerName ldapadd -x -H $ldapUri -D $config.AdminDN -w $config.Password -c -f /tmp/s8-users.ldif 2>&1
+    $result = bash -c "cat '$ldifPath' | docker exec -i $containerName ldapadd -x -H $ldapUri -D '$($config.AdminDN)' -w '$($config.Password)' -c" 2>&1
     if ($LASTEXITCODE -ne 0 -and "$result" -notmatch "already exists") {
         Write-Host "  Warning during user import: $result" -ForegroundColor Yellow
     }
-    docker exec $containerName rm -f /tmp/s8-users.ldif 2>$null
 }
 finally {
     Remove-Item -Path $ldifPath -Force -ErrorAction SilentlyContinue
@@ -241,7 +216,7 @@ $companyCount = [Math]::Min($groupScale.Companies, $sortedCompanyKeys.Length)
 for ($g = 0; $g -lt $companyCount; $g++) {
     $companyKey = $sortedCompanyKeys[$g]
     $groupName = "Company-$companyKey"
-    $dn = "cn=$groupName,$($config.EntitlementsOU)"
+    $dn = "cn=$groupName,$($config.GroupsOU)"
 
     # Find first user in this company for initial member (groupOfNames MUST constraint)
     $companyUsers = @($createdUsers | Where-Object { $_.CompanyKey -eq $companyKey })
@@ -269,7 +244,7 @@ $deptCount = [Math]::Min($groupScale.Departments, $sortedDepartmentKeys.Length)
 for ($g = 0; $g -lt $deptCount; $g++) {
     $deptKey = $sortedDepartmentKeys[$g]
     $groupName = "Dept-$deptKey"
-    $dn = "cn=$groupName,$($config.EntitlementsOU)"
+    $dn = "cn=$groupName,$($config.GroupsOU)"
 
     $deptUsers = @($createdUsers | Where-Object { $_.DeptKey -eq $deptKey })
     $initialMember = if ($deptUsers.Count -gt 0) { $deptUsers[0].DN } else { $createdUsers[0].DN }
@@ -298,7 +273,7 @@ $locCount = [Math]::Min($groupScale.Locations, $locationNames.Length)
 for ($g = 0; $g -lt $locCount; $g++) {
     $locName = $locationNames[$g]
     $groupName = "Location-$locName"
-    $dn = "cn=$groupName,$($config.EntitlementsOU)"
+    $dn = "cn=$groupName,$($config.GroupsOU)"
 
     # Assign a subset of users to location groups
     $initialMember = $createdUsers[$g % $createdUsers.Count].DN
@@ -325,7 +300,7 @@ $projectNames = Get-ProjectNames -Count $groupScale.Projects
 for ($g = 0; $g -lt $groupScale.Projects; $g++) {
     $projectName = $projectNames[$g]
     $groupName = "Project-$projectName"
-    $dn = "cn=$groupName,$($config.EntitlementsOU)"
+    $dn = "cn=$groupName,$($config.GroupsOU)"
 
     $initialMember = $createdUsers[$g % $createdUsers.Count].DN
 
@@ -346,18 +321,16 @@ for ($g = 0; $g -lt $groupScale.Projects; $g++) {
     }
 }
 
-# Import groups
+# Import groups via stdin piping
 $groupLdifContent = $groupLdifBuilder.ToString()
 $groupLdifPath = [System.IO.Path]::GetTempFileName()
 Set-Content -Path $groupLdifPath -Value $groupLdifContent -NoNewline
 
 try {
-    docker cp $groupLdifPath "${containerName}:/tmp/s8-groups.ldif"
-    $result = docker exec $containerName ldapadd -x -H $ldapUri -D $config.AdminDN -w $config.Password -c -f /tmp/s8-groups.ldif 2>&1
+    $result = bash -c "cat '$groupLdifPath' | docker exec -i $containerName ldapadd -x -H $ldapUri -D '$($config.AdminDN)' -w '$($config.Password)' -c" 2>&1
     if ($LASTEXITCODE -ne 0 -and "$result" -notmatch "already exists") {
         Write-Host "  Warning during group import: $result" -ForegroundColor Yellow
     }
-    docker exec $containerName rm -f /tmp/s8-groups.ldif 2>$null
 }
 finally {
     Remove-Item -Path $groupLdifPath -Force -ErrorAction SilentlyContinue
@@ -420,12 +393,10 @@ foreach ($group in $createdGroups) {
         Set-Content -Path $modLdifPath -Value $modifyLdif.ToString() -NoNewline
 
         try {
-            docker cp $modLdifPath "${containerName}:/tmp/s8-members.ldif"
-            $result = docker exec $containerName ldapmodify -x -H $ldapUri -D $config.AdminDN -w $config.Password -c -f /tmp/s8-members.ldif 2>&1
+            $result = bash -c "cat '$modLdifPath' | docker exec -i $containerName ldapmodify -x -H $ldapUri -D '$($config.AdminDN)' -w '$($config.Password)' -c" 2>&1
             if ($LASTEXITCODE -ne 0 -and "$result" -notmatch "already exists" -and "$result" -notmatch "Type or value exists") {
                 Write-Verbose "  Warning adding members to $($group.Name): $result"
             }
-            docker exec $containerName rm -f /tmp/s8-members.ldif 2>$null
         }
         finally {
             Remove-Item -Path $modLdifPath -Force -ErrorAction SilentlyContinue

@@ -283,9 +283,7 @@ try {
             $ldifPath = [System.IO.Path]::GetTempFileName()
             Set-Content -Path $ldifPath -Value $ldif -NoNewline
             try {
-                docker cp $ldifPath "$($Config.ContainerName):/tmp/s8-addmember.ldif"
-                $result = docker exec $Config.ContainerName ldapmodify -x -H "ldap://localhost:$($Config.LdapSearchPort)" -D $Config.BindDN -w $Config.BindPassword -f /tmp/s8-addmember.ldif 2>&1
-                docker exec $Config.ContainerName rm -f /tmp/s8-addmember.ldif 2>$null
+                $result = bash -c "cat '$ldifPath' | docker exec -i $($Config.ContainerName) ldapmodify -x -H 'ldap://localhost:$($Config.LdapSearchPort)' -D '$($Config.BindDN)' -w '$($Config.BindPassword)' -c" 2>&1
                 return $result
             }
             finally {
@@ -312,9 +310,7 @@ try {
             $ldifPath = [System.IO.Path]::GetTempFileName()
             Set-Content -Path $ldifPath -Value $ldif -NoNewline
             try {
-                docker cp $ldifPath "$($Config.ContainerName):/tmp/s8-rmmember.ldif"
-                $result = docker exec $Config.ContainerName ldapmodify -x -H "ldap://localhost:$($Config.LdapSearchPort)" -D $Config.BindDN -w $Config.BindPassword -f /tmp/s8-rmmember.ldif 2>&1
-                docker exec $Config.ContainerName rm -f /tmp/s8-rmmember.ldif 2>$null
+                $result = bash -c "cat '$ldifPath' | docker exec -i $($Config.ContainerName) ldapmodify -x -H 'ldap://localhost:$($Config.LdapSearchPort)' -D '$($Config.BindDN)' -w '$($Config.BindPassword)' -c" 2>&1
                 return $result
             }
             finally {
@@ -340,9 +336,7 @@ try {
             $ldifPath = [System.IO.Path]::GetTempFileName()
             Set-Content -Path $ldifPath -Value $ldif -NoNewline
             try {
-                docker cp $ldifPath "$($Config.ContainerName):/tmp/s8-newgroup.ldif"
-                $result = docker exec $Config.ContainerName ldapadd -x -H "ldap://localhost:$($Config.LdapSearchPort)" -D $Config.BindDN -w $Config.BindPassword -f /tmp/s8-newgroup.ldif 2>&1
-                docker exec $Config.ContainerName rm -f /tmp/s8-newgroup.ldif 2>$null
+                $result = bash -c "cat '$ldifPath' | docker exec -i $($Config.ContainerName) ldapadd -x -H 'ldap://localhost:$($Config.LdapSearchPort)' -D '$($Config.BindDN)' -w '$($Config.BindPassword)' -c" 2>&1
                 return $result
             }
             finally {
