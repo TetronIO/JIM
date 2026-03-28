@@ -109,12 +109,12 @@ if ($isOpenLDAP) {
         'entryUUID', 'cn', 'description', 'member', 'distinguishedName'
     )
 
-    # Source container layout: ou=People, ou=Entitlements under suffix
+    # Source container layout: ou=People, ou=Groups under suffix
     $sourceUserContainerName    = "People"
-    $sourceGroupContainerName   = "Entitlements"
-    # Target container layout: ou=People, ou=Entitlements under suffix
+    $sourceGroupContainerName   = "Groups"
+    # Target container layout: ou=People, ou=Groups under suffix
     $targetUserContainerName    = "People"
-    $targetGroupContainerName   = "Entitlements"
+    $targetGroupContainerName   = "Groups"
     # No parent OU nesting for OpenLDAP (flat under suffix)
     $sourceUserContainerParent  = $null
     $sourceGroupContainerParent = $null
@@ -464,7 +464,8 @@ function Find-ContainerByName {
         [string]$Name
     )
     foreach ($container in $Containers) {
-        if ($container.name -eq $Name) {
+        # Match by exact name (AD: "Users", "Corp") or by OU-prefixed DN (OpenLDAP: "ou=People,dc=...")
+        if ($container.name -eq $Name -or $container.name -match "^ou=$Name,") {
             return $container
         }
         if ($container.childContainers -and $container.childContainers.Count -gt 0) {

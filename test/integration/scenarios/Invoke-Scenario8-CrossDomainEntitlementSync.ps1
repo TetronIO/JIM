@@ -895,8 +895,8 @@ try {
             Write-Host "    Unauthorised removal: Removed '$userToRemoveFromDrift' from '$driftGroup2'" -ForegroundColor Yellow
             $driftRemoveSucceeded = $true
         }
-        else {
-            Write-Host "    ⚠ Failed to remove user from group: $removeResult" -ForegroundColor Yellow
+        catch {
+            Write-Host "    Failed to remove user from group: $_" -ForegroundColor Yellow
         }
 
         if (-not $driftAddSucceeded -and -not $driftRemoveSucceeded) {
