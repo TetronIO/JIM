@@ -345,5 +345,198 @@ function Get-LDAPUserCount {
     return $count
 }
 
+function Get-LDAPGroup {
+    <#
+    .SYNOPSIS
+        Get a group from LDAP by cn
+
+    .DESCRIPTION
+        Searches for a group by cn in the configured group container.
+        Returns a hashtable with parsed LDIF attributes, including multi-valued
+        member attributes as arrays.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$GroupName,
+
+        [Parameter(Mandatory=$true)]
+        [hashtable]$DirectoryConfig
+    )
+
+    $result = Invoke-LDAPSearch `
+        -ContainerName $DirectoryConfig.ContainerName `
+        -Server "localhost" `
+        -Port $DirectoryConfig.LdapSearchPort `
+        -Scheme $DirectoryConfig.LdapSearchScheme `
+        -BaseDN $DirectoryConfig.GroupContainer `
+        -BindDN $DirectoryConfig.BindDN `
+        -BindPassword $DirectoryConfig.BindPassword `
+        -Filter "(cn=$GroupName)"
+
+    if ($null -eq $result -or $result.Length -eq 0) {
+        return $null
+    }
+
+    # Parse LDIF output — handle multi-valued attributes (e.g. member)
+    $group = @{}
+    $lines = $result -split "`n"
+
+    foreach ($line in $lines) {
+        if ($line -match "^([^:]+):\s*(.+)$") {
+            $key = $matches[1]
+            $value = $matches[2]
+
+            if ($group.ContainsKey($key)) {
+                if ($group[$key] -is [array]) {
+                    $group[$key] += $value
+                }
+                else {
+                    $group[$key] = @($group[$key], $value)
+                }
+            }
+            else {
+                $group[$key] = $value
+            }
+        }
+    }
+
+    return $group
+}
+
+function Test-LDAPGroupExists {
+    <#
+    .SYNOPSIS
+        Check if a group exists in LDAP
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$GroupName,
+
+        [Parameter(Mandatory=$true)]
+        [hashtable]$DirectoryConfig
+    )
+
+    $group = Get-LDAPGroup -GroupName $GroupName -DirectoryConfig $DirectoryConfig
+    return $null -ne $group
+}
+
+function Get-LDAPGroupMembers {
+    <#
+    .SYNOPSIS
+        Get the member DNs of a group from LDAP
+
+    .DESCRIPTION
+        Returns an array of member DNs for the specified group.
+        Filters out placeholder members (e.g. cn=placeholder) used to satisfy
+        the groupOfNames MUST member constraint.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$GroupName,
+
+        [Parameter(Mandatory=$true)]
+        [hashtable]$DirectoryConfig,
+
+        [Parameter(Mandatory=$false)]
+        [string]$PlaceholderDn = "cn=placeholder"
+    )
+
+    $group = Get-LDAPGroup -GroupName $GroupName -DirectoryConfig $DirectoryConfig
+    if ($null -eq $group -or -not $group.ContainsKey('member')) {
+        return @()
+    }
+
+    $members = $group['member']
+    if ($members -isnot [array]) {
+        $members = @($members)
+    }
+
+    # Filter out placeholder member
+    $realMembers = @($members | Where-Object {
+        -not $_.Equals($PlaceholderDn, [System.StringComparison]::OrdinalIgnoreCase)
+    })
+
+    return $realMembers
+}
+
+function Get-LDAPGroupCount {
+    <#
+    .SYNOPSIS
+        Get count of groups in LDAP
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$DirectoryConfig,
+
+        [Parameter(Mandatory=$false)]
+        [string]$Filter
+    )
+
+    $groupObjectClass = $DirectoryConfig.GroupObjectClass
+    if (-not $groupObjectClass) { $groupObjectClass = "groupOfNames" }
+    if (-not $Filter) { $Filter = "(objectClass=$groupObjectClass)" }
+
+    $result = Invoke-LDAPSearch `
+        -ContainerName $DirectoryConfig.ContainerName `
+        -Server "localhost" `
+        -Port $DirectoryConfig.LdapSearchPort `
+        -Scheme $DirectoryConfig.LdapSearchScheme `
+        -BaseDN $DirectoryConfig.GroupContainer `
+        -BindDN $DirectoryConfig.BindDN `
+        -BindPassword $DirectoryConfig.BindPassword `
+        -Filter $Filter `
+        -Attributes @("dn")
+
+    if ($null -eq $result) {
+        return 0
+    }
+
+    $count = ($result -split "`n" | Where-Object { $_ -match "^dn:" }).Count
+    return $count
+}
+
+function Get-LDAPGroupList {
+    <#
+    .SYNOPSIS
+        List all group names (cn values) in LDAP
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$DirectoryConfig,
+
+        [Parameter(Mandatory=$false)]
+        [string]$Filter
+    )
+
+    $groupObjectClass = $DirectoryConfig.GroupObjectClass
+    if (-not $groupObjectClass) { $groupObjectClass = "groupOfNames" }
+    if (-not $Filter) { $Filter = "(objectClass=$groupObjectClass)" }
+
+    $result = Invoke-LDAPSearch `
+        -ContainerName $DirectoryConfig.ContainerName `
+        -Server "localhost" `
+        -Port $DirectoryConfig.LdapSearchPort `
+        -Scheme $DirectoryConfig.LdapSearchScheme `
+        -BaseDN $DirectoryConfig.GroupContainer `
+        -BindDN $DirectoryConfig.BindDN `
+        -BindPassword $DirectoryConfig.BindPassword `
+        -Filter $Filter `
+        -Attributes @("cn")
+
+    if ($null -eq $result) {
+        return @()
+    }
+
+    $groups = @()
+    $lines = $result -split "`n"
+    foreach ($line in $lines) {
+        if ($line -match "^cn:\s*(.+)$") {
+            $groups += $matches[1].Trim()
+        }
+    }
+
+    return $groups
+}
+
 # Functions are automatically available when dot-sourced
 # No need for Export-ModuleMember
