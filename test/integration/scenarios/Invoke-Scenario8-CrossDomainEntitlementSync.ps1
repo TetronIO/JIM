@@ -61,7 +61,10 @@ param(
     [int]$MaxExportParallelism = 1,
 
     [Parameter(Mandatory=$false)]
-    [switch]$SkipPopulate
+    [switch]$SkipPopulate,
+
+    [Parameter(Mandatory=$false)]
+    [hashtable]$DirectoryConfig
 )
 
 Set-StrictMode -Version Latest
@@ -71,6 +74,27 @@ $ErrorActionPreference = "Stop"
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
 . "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
 . "$PSScriptRoot/../utils/Test-GroupHelpers.ps1"
+
+# Derive directory-specific configuration
+if (-not $DirectoryConfig) {
+    $DirectoryConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Source
+}
+
+$isOpenLDAP = ($DirectoryConfig.UserObjectClass -eq "inetOrgPerson")
+
+if ($isOpenLDAP) {
+    $sourceConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Source
+    $targetConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Target
+}
+else {
+    $sourceConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Source
+    $targetConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Target
+}
+
+$sourceContainerName = $sourceConfig.ContainerName
+$targetContainerName = $targetConfig.ContainerName
+$sourceSystemName    = $sourceConfig.ConnectedSystemName
+$targetSystemName    = $targetConfig.ConnectedSystemName
 
 Write-TestSection "Scenario 8: Cross-domain Entitlement Synchronisation"
 Write-Host "Step:     $Step" -ForegroundColor Gray
@@ -97,38 +121,52 @@ try {
     # Verify Scenario 8 containers are running
     Write-Host "Verifying Scenario 8 infrastructure..." -ForegroundColor Gray
 
-    $sourceStatus = docker inspect --format='{{.State.Health.Status}}' samba-ad-source 2>&1
-    $targetStatus = docker inspect --format='{{.State.Health.Status}}' samba-ad-target 2>&1
-
-    if ($sourceStatus -ne "healthy") {
-        throw "samba-ad-source container is not healthy (status: $sourceStatus). Run: docker compose -f docker-compose.integration-tests.yml --profile scenario8 up -d"
+    if ($isOpenLDAP) {
+        # OpenLDAP uses a single container for both Source and Target suffixes
+        $sourceStatus = docker inspect --format='{{.State.Health.Status}}' $sourceContainerName 2>&1
+        if ($sourceStatus -ne "healthy") {
+            throw "$sourceContainerName container is not healthy (status: $sourceStatus)"
+        }
+        Write-Host "  Source OpenLDAP ($sourceContainerName) healthy" -ForegroundColor Green
+        Write-Host "  Target OpenLDAP (same container, different suffix) healthy" -ForegroundColor Green
     }
-    if ($targetStatus -ne "healthy") {
-        throw "samba-ad-target container is not healthy (status: $targetStatus). Run: docker compose -f docker-compose.integration-tests.yml --profile scenario8 up -d"
+    else {
+        $sourceStatus = docker inspect --format='{{.State.Health.Status}}' $sourceContainerName 2>&1
+        $targetStatus = docker inspect --format='{{.State.Health.Status}}' $targetContainerName 2>&1
+        if ($sourceStatus -ne "healthy") {
+            throw "$sourceContainerName container is not healthy (status: $sourceStatus)"
+        }
+        if ($targetStatus -ne "healthy") {
+            throw "$targetContainerName container is not healthy (status: $targetStatus)"
+        }
+        Write-Host "  Source AD ($sourceContainerName) healthy" -ForegroundColor Green
+        Write-Host "  Target AD ($targetContainerName) healthy" -ForegroundColor Green
     }
 
-    Write-Host "  ✓ Source AD (APAC) healthy" -ForegroundColor Green
-    Write-Host "  ✓ Target AD (EMEA) healthy" -ForegroundColor Green
-
-    # Populate test data in Source AD, then Target AD
-    # Note: Target population is very fast (OU structure only, no data)
+    # Populate test data
     if (-not $SkipPopulate) {
-        Write-Host "Populating test data in Source AD..." -ForegroundColor Gray
-        & "$PSScriptRoot/../Populate-SambaAD-Scenario8.ps1" -Template $Template -Instance Source
-
-        Write-Host "Creating OU structure in Target AD..." -ForegroundColor Gray
-        & "$PSScriptRoot/../Populate-SambaAD-Scenario8.ps1" -Template $Template -Instance Target
-
-        Write-Host "✓ Test data populated" -ForegroundColor Green
+        if ($isOpenLDAP) {
+            Write-Host "Populating test data in Source OpenLDAP..." -ForegroundColor Gray
+            & "$PSScriptRoot/../Populate-OpenLDAP-Scenario8.ps1" -Template $Template -Instance Source
+            Write-Host "Creating OU structure in Target OpenLDAP..." -ForegroundColor Gray
+            & "$PSScriptRoot/../Populate-OpenLDAP-Scenario8.ps1" -Template $Template -Instance Target
+        }
+        else {
+            Write-Host "Populating test data in Source AD..." -ForegroundColor Gray
+            & "$PSScriptRoot/../Populate-SambaAD-Scenario8.ps1" -Template $Template -Instance Source
+            Write-Host "Creating OU structure in Target AD..." -ForegroundColor Gray
+            & "$PSScriptRoot/../Populate-SambaAD-Scenario8.ps1" -Template $Template -Instance Target
+        }
+        Write-Host "Test data populated" -ForegroundColor Green
     } else {
-        Write-Host "✓ Using pre-populated snapshot — skipping population" -ForegroundColor Green
+        Write-Host "Using pre-populated snapshot - skipping population" -ForegroundColor Green
     }
 
     # Run Setup-Scenario8 to configure JIM
     Write-Host "Running Scenario 8 setup..." -ForegroundColor Gray
-    & "$PSScriptRoot/../Setup-Scenario8.ps1" -JIMUrl $JIMUrl -ApiKey $ApiKey -Template $Template -ExportConcurrency $ExportConcurrency -MaxExportParallelism $MaxExportParallelism
+    & "$PSScriptRoot/../Setup-Scenario8.ps1" -JIMUrl $JIMUrl -ApiKey $ApiKey -Template $Template -ExportConcurrency $ExportConcurrency -MaxExportParallelism $MaxExportParallelism -DirectoryConfig $DirectoryConfig
 
-    Write-Host "✓ JIM configured for Scenario 8" -ForegroundColor Green
+    Write-Host "JIM configured for Scenario 8" -ForegroundColor Green
 
     # Re-import module to ensure we have connection
     $modulePath = "$PSScriptRoot/../../../src/JIM.PowerShell/JIM.psd1"
@@ -137,8 +175,8 @@ try {
 
     # Get connected system and run profile IDs
     $connectedSystems = Get-JIMConnectedSystem
-    $sourceSystem = $connectedSystems | Where-Object { $_.name -eq "Panoply APAC" }
-    $targetSystem = $connectedSystems | Where-Object { $_.name -eq "Panoply EMEA" }
+    $sourceSystem = $connectedSystems | Where-Object { $_.name -eq $sourceSystemName }
+    $targetSystem = $connectedSystems | Where-Object { $_.name -eq $targetSystemName }
 
     if (-not $sourceSystem -or -not $targetSystem) {
         throw "Connected systems not found. Ensure Setup-Scenario8.ps1 completed successfully."
@@ -162,27 +200,175 @@ try {
     $targetDeltaImportProfile = $targetProfiles | Where-Object { $_.name -eq "Delta Import" }
     $targetDeltaSyncProfile = $targetProfiles | Where-Object { $_.name -eq "Delta Sync" }
 
-    # Helper function to check if a group exists in AD with retry.
-    # Samba AD can have brief consistency delays after LDAP writes, so samba-tool
-    # may not immediately see newly exported groups.
-    function Test-ADGroupExists {
+    # Helper function to check if a group exists in the directory with retry.
+    # Directory servers can have brief consistency delays after LDAP writes.
+    function Test-DirectoryGroupExists {
         param(
-            [Parameter(Mandatory)][string]$Container,
             [Parameter(Mandatory)][string]$GroupName,
+            [Parameter(Mandatory)][hashtable]$Config,
             [int]$MaxRetries = 3,
             [int]$RetryDelaySeconds = 2
         )
         for ($attempt = 1; $attempt -le ($MaxRetries + 1); $attempt++) {
-            docker exec $Container samba-tool group show $GroupName 2>&1 | Out-Null
-            if ($LASTEXITCODE -eq 0) {
+            $exists = Test-LDAPGroupExists -GroupName $GroupName -DirectoryConfig $Config
+            if ($exists) {
                 return $true
             }
             if ($attempt -le $MaxRetries) {
-                Write-Host "    Group '$GroupName' not yet visible in AD (attempt $attempt/$($MaxRetries + 1)), retrying in ${RetryDelaySeconds}s..." -ForegroundColor Yellow
+                Write-Host "    Group '$GroupName' not yet visible (attempt $attempt/$($MaxRetries + 1)), retrying in ${RetryDelaySeconds}s..." -ForegroundColor Yellow
                 Start-Sleep -Seconds $RetryDelaySeconds
             }
         }
         return $false
+    }
+
+    # Helper functions for directory-specific group operations
+    function Get-DirectoryGroupList {
+        param([Parameter(Mandatory)][hashtable]$Config)
+        return Get-LDAPGroupList -DirectoryConfig $Config
+    }
+
+    function Get-DirectoryGroupMembers {
+        param(
+            [Parameter(Mandatory)][string]$GroupName,
+            [Parameter(Mandatory)][hashtable]$Config
+        )
+        return Get-LDAPGroupMembers -GroupName $GroupName -DirectoryConfig $Config
+    }
+
+    function Get-DirectoryUserList {
+        param([Parameter(Mandatory)][hashtable]$Config)
+        # Return user names (uid for OpenLDAP, sAMAccountName for AD)
+        $userNameAttr = $Config.UserNameAttr
+        $userObjectClass = $Config.UserObjectClass
+        $filter = if ($userObjectClass -eq "user") {
+            "(&(objectClass=user)(!(objectClass=computer)))"
+        } else {
+            "(objectClass=$userObjectClass)"
+        }
+        $result = Invoke-LDAPSearch `
+            -ContainerName $Config.ContainerName `
+            -Server "localhost" `
+            -Port $Config.LdapSearchPort `
+            -Scheme $Config.LdapSearchScheme `
+            -BaseDN $Config.UserContainer `
+            -BindDN $Config.BindDN `
+            -BindPassword $Config.BindPassword `
+            -Filter $filter `
+            -Attributes @($userNameAttr)
+        if ($null -eq $result) { return @() }
+        $users = @()
+        $lines = $result -split "`n"
+        foreach ($line in $lines) {
+            if ($line -match "^${userNameAttr}:\s*(.+)$") {
+                $users += $matches[1].Trim()
+            }
+        }
+        return $users
+    }
+
+    function Add-DirectoryGroupMember {
+        param(
+            [Parameter(Mandatory)][string]$GroupName,
+            [Parameter(Mandatory)][string]$MemberName,
+            [Parameter(Mandatory)][hashtable]$Config
+        )
+        if ($isOpenLDAP) {
+            # Need to find the member's DN first
+            $user = Get-LDAPUser -UserIdentifier $MemberName -DirectoryConfig $Config
+            if (-not $user) { throw "User '$MemberName' not found" }
+            $memberDn = $user['dn']
+            $groupDn = "cn=$GroupName,$($Config.GroupContainer)"
+            $ldif = "dn: $groupDn`nchangetype: modify`nadd: member`nmember: $memberDn`n"
+            $ldifPath = [System.IO.Path]::GetTempFileName()
+            Set-Content -Path $ldifPath -Value $ldif -NoNewline
+            try {
+                docker cp $ldifPath "$($Config.ContainerName):/tmp/s8-addmember.ldif"
+                $result = docker exec $Config.ContainerName ldapmodify -x -H "ldap://localhost:$($Config.LdapSearchPort)" -D $Config.BindDN -w $Config.BindPassword -f /tmp/s8-addmember.ldif 2>&1
+                docker exec $Config.ContainerName rm -f /tmp/s8-addmember.ldif 2>$null
+                return $result
+            }
+            finally {
+                Remove-Item -Path $ldifPath -Force -ErrorAction SilentlyContinue
+            }
+        }
+        else {
+            return docker exec $Config.ContainerName samba-tool group addmembers $GroupName $MemberName 2>&1
+        }
+    }
+
+    function Remove-DirectoryGroupMember {
+        param(
+            [Parameter(Mandatory)][string]$GroupName,
+            [Parameter(Mandatory)][string]$MemberName,
+            [Parameter(Mandatory)][hashtable]$Config
+        )
+        if ($isOpenLDAP) {
+            $user = Get-LDAPUser -UserIdentifier $MemberName -DirectoryConfig $Config
+            if (-not $user) { throw "User '$MemberName' not found" }
+            $memberDn = $user['dn']
+            $groupDn = "cn=$GroupName,$($Config.GroupContainer)"
+            $ldif = "dn: $groupDn`nchangetype: modify`ndelete: member`nmember: $memberDn`n"
+            $ldifPath = [System.IO.Path]::GetTempFileName()
+            Set-Content -Path $ldifPath -Value $ldif -NoNewline
+            try {
+                docker cp $ldifPath "$($Config.ContainerName):/tmp/s8-rmmember.ldif"
+                $result = docker exec $Config.ContainerName ldapmodify -x -H "ldap://localhost:$($Config.LdapSearchPort)" -D $Config.BindDN -w $Config.BindPassword -f /tmp/s8-rmmember.ldif 2>&1
+                docker exec $Config.ContainerName rm -f /tmp/s8-rmmember.ldif 2>$null
+                return $result
+            }
+            finally {
+                Remove-Item -Path $ldifPath -Force -ErrorAction SilentlyContinue
+            }
+        }
+        else {
+            return docker exec $Config.ContainerName samba-tool group removemembers $GroupName $MemberName 2>&1
+        }
+    }
+
+    function New-DirectoryGroup {
+        param(
+            [Parameter(Mandatory)][string]$GroupName,
+            [Parameter(Mandatory)][string]$Description,
+            [Parameter(Mandatory)][hashtable]$Config,
+            [string]$InitialMemberDn  # Required for groupOfNames
+        )
+        if ($isOpenLDAP) {
+            $groupDn = "cn=$GroupName,$($Config.GroupContainer)"
+            $memberDn = if ($InitialMemberDn) { $InitialMemberDn } else { "cn=placeholder" }
+            $ldif = "dn: $groupDn`nobjectClass: groupOfNames`ncn: $GroupName`ndescription: $Description`nmember: $memberDn`n"
+            $ldifPath = [System.IO.Path]::GetTempFileName()
+            Set-Content -Path $ldifPath -Value $ldif -NoNewline
+            try {
+                docker cp $ldifPath "$($Config.ContainerName):/tmp/s8-newgroup.ldif"
+                $result = docker exec $Config.ContainerName ldapadd -x -H "ldap://localhost:$($Config.LdapSearchPort)" -D $Config.BindDN -w $Config.BindPassword -f /tmp/s8-newgroup.ldif 2>&1
+                docker exec $Config.ContainerName rm -f /tmp/s8-newgroup.ldif 2>$null
+                return $result
+            }
+            finally {
+                Remove-Item -Path $ldifPath -Force -ErrorAction SilentlyContinue
+            }
+        }
+        else {
+            return docker exec $Config.ContainerName samba-tool group add $GroupName `
+                --groupou="OU=Entitlements,OU=Corp" `
+                --description="$Description" 2>&1
+        }
+    }
+
+    function Remove-DirectoryGroup {
+        param(
+            [Parameter(Mandatory)][string]$GroupName,
+            [Parameter(Mandatory)][hashtable]$Config
+        )
+        if ($isOpenLDAP) {
+            $groupDn = "cn=$GroupName,$($Config.GroupContainer)"
+            $result = docker exec $Config.ContainerName ldapdelete -x -H "ldap://localhost:$($Config.LdapSearchPort)" -D $Config.BindDN -w $Config.BindPassword "$groupDn" 2>&1
+            return $result
+        }
+        else {
+            return docker exec $Config.ContainerName samba-tool group delete $GroupName 2>&1
+        }
     }
 
     # Helper function to run FULL forward sync (Source -> Metaverse -> Target)
@@ -360,15 +546,11 @@ try {
 
         Write-Host "Validating groups in Target AD..." -ForegroundColor Gray
 
-        # Find groups with members in Source AD
-        $sourceContainer = "samba-ad-source"
-        $targetContainer = "samba-ad-target"
-
-        $groupListOutput = docker exec $sourceContainer samba-tool group list 2>&1
-        $testGroups = @($groupListOutput -split "`n" | Where-Object { $_ -match "^(Company-|Dept-|Location-|Project-)" })
+        # Find groups with members in Source directory
+        $testGroups = @(Get-DirectoryGroupList -Config $sourceConfig | Where-Object { $_ -match "^(Company-|Dept-|Location-|Project-)" })
 
         if ($testGroups.Count -eq 0) {
-            throw "No test groups found in Source AD — ensure Populate-SambaAD-Scenario8.ps1 ran successfully"
+            throw "No test groups found in Source directory - ensure population script ran successfully"
         }
         else {
             # Find a group with members for validation
@@ -437,8 +619,9 @@ try {
         Write-Host "This test validates that membership changes in Source AD flow to Target AD" -ForegroundColor Gray
 
         # Container names for Source and Target AD
-        $sourceContainer = "samba-ad-source"
-        $targetContainer = "samba-ad-target"
+        # Container names from config (set at script top)
+        $sourceContainer = $sourceContainerName
+        $targetContainer = $targetContainerName
 
         # Step 2.1: Find a group and users to test with
         Write-Host "  Finding test group and users..." -ForegroundColor Gray
@@ -630,8 +813,9 @@ try {
         Write-Host "This test validates that JIM detects unauthorised changes made directly in Target AD" -ForegroundColor Gray
 
         # Container names for Source and Target AD
-        $sourceContainer = "samba-ad-source"
-        $targetContainer = "samba-ad-target"
+        # Container names from config (set at script top)
+        $sourceContainer = $sourceContainerName
+        $targetContainer = $targetContainerName
 
         # Step 3.1: Find groups with members in Target AD for testing
         Write-Host "  Finding test groups in Target AD..." -ForegroundColor Gray
@@ -915,8 +1099,9 @@ try {
         Write-Host "This test validates that JIM reasserts Source AD membership to Target AD after drift" -ForegroundColor Gray
 
         # Container names for Source and Target AD
-        $sourceContainer = "samba-ad-source"
-        $targetContainer = "samba-ad-target"
+        # Container names from config (set at script top)
+        $sourceContainer = $sourceContainerName
+        $targetContainer = $targetContainerName
 
         # Step 4.1: Get drift context from DetectDrift step (or discover groups if run independently)
         if (-not $script:driftContext) {
@@ -1119,8 +1304,9 @@ try {
         Write-Host "This test validates that new groups created in Source AD are provisioned to Target AD" -ForegroundColor Gray
 
         # Container names for Source and Target AD
-        $sourceContainer = "samba-ad-source"
-        $targetContainer = "samba-ad-target"
+        # Container names from config (set at script top)
+        $sourceContainer = $sourceContainerName
+        $targetContainer = $targetContainerName
 
         # Test group details
         $newGroupName = "Project-Scenario8Test"
@@ -1264,8 +1450,9 @@ try {
         Write-Host ""
 
         # Container names for Source and Target AD
-        $sourceContainer = "samba-ad-source"
-        $targetContainer = "samba-ad-target"
+        # Container names from config (set at script top)
+        $sourceContainer = $sourceContainerName
+        $targetContainer = $targetContainerName
 
         # Step 6.1: Determine which group to delete
         $groupToDelete = $null
