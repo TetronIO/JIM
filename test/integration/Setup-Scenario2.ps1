@@ -1037,7 +1037,7 @@ try {
     $sourceProfiles = Get-JIMRunProfile -ConnectedSystemId $sourceSystem.id
     $targetProfiles = Get-JIMRunProfile -ConnectedSystemId $targetSystem.id
 
-    # Source (APAC) - Full Import
+    # Source (APAC) - Full Import (unscoped — all selected partitions)
     $sourceImportProfile = $sourceProfiles | Where-Object { $_.name -eq "Full Import" }
     if (-not $sourceImportProfile) {
         $sourceImportProfile = New-JIMRunProfile `
@@ -1049,6 +1049,23 @@ try {
     }
     else {
         Write-Host "  Run profile 'Full Import' already exists for Source" -ForegroundColor Gray
+    }
+
+    # Source (APAC) - Full Import (Scoped) — targets domain partition only
+    if ($sourceDomainPartition) {
+        $sourceScopedImportProfile = $sourceProfiles | Where-Object { $_.name -eq "Full Import (Scoped)" }
+        if (-not $sourceScopedImportProfile) {
+            $sourceScopedImportProfile = New-JIMRunProfile `
+                -Name "Full Import (Scoped)" `
+                -ConnectedSystemId $sourceSystem.id `
+                -RunType "FullImport" `
+                -PartitionId $sourceDomainPartition.id `
+                -PassThru
+            Write-Host "  ✓ Created 'Full Import (Scoped)' run profile for Source (PartitionId: $($sourceDomainPartition.id))" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  Run profile 'Full Import (Scoped)' already exists for Source" -ForegroundColor Gray
+        }
     }
 
     # Source (APAC) - Full Sync
@@ -1079,7 +1096,7 @@ try {
         Write-Host "  Run profile 'Export' already exists for Source" -ForegroundColor Gray
     }
 
-    # Target (EMEA) - Full Import
+    # Target (EMEA) - Full Import (unscoped — all selected partitions)
     $targetImportProfile = $targetProfiles | Where-Object { $_.name -eq "Full Import" }
     if (-not $targetImportProfile) {
         $targetImportProfile = New-JIMRunProfile `
@@ -1091,6 +1108,23 @@ try {
     }
     else {
         Write-Host "  Run profile 'Full Import' already exists for Target" -ForegroundColor Gray
+    }
+
+    # Target (EMEA) - Full Import (Scoped) — targets domain partition only
+    if ($targetDomainPartition) {
+        $targetScopedImportProfile = $targetProfiles | Where-Object { $_.name -eq "Full Import (Scoped)" }
+        if (-not $targetScopedImportProfile) {
+            $targetScopedImportProfile = New-JIMRunProfile `
+                -Name "Full Import (Scoped)" `
+                -ConnectedSystemId $targetSystem.id `
+                -RunType "FullImport" `
+                -PartitionId $targetDomainPartition.id `
+                -PassThru
+            Write-Host "  ✓ Created 'Full Import (Scoped)' run profile for Target (PartitionId: $($targetDomainPartition.id))" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  Run profile 'Full Import (Scoped)' already exists for Target" -ForegroundColor Gray
+        }
     }
 
     # Target (EMEA) - Full Sync
@@ -1139,5 +1173,5 @@ Write-Host "  Forward Flow: $sourceLabel -> Metaverse -> $targetLabel" -Foregrou
 Write-Host "  Reverse Flow: $targetLabel -> Metaverse -> $sourceLabel" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Run Profiles Created:" -ForegroundColor Yellow
-Write-Host "  $sourceSystemName : Full Import, Full Sync, Export" -ForegroundColor Gray
-Write-Host "  $targetSystemName : Full Import, Full Sync, Export" -ForegroundColor Gray
+Write-Host "  $sourceSystemName : Full Import, Full Import (Scoped), Full Sync, Export" -ForegroundColor Gray
+Write-Host "  $targetSystemName : Full Import, Full Import (Scoped), Full Sync, Export" -ForegroundColor Gray

@@ -1087,6 +1087,12 @@ if ($targetGroupMatchAttr -and $mvGroupMatchingAttr) {
 # ============================================================================
 Write-TestStep "Step 12" "Creating Run Profiles"
 
+# Look up selected domain partitions for partition-scoped run profiles
+$sourcePartitions = @(Get-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id)
+$sourceDomainPartition = $sourcePartitions | Where-Object { $_.selected -eq $true } | Select-Object -First 1
+$targetPartitions = @(Get-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id)
+$targetDomainPartition = $targetPartitions | Where-Object { $_.selected -eq $true } | Select-Object -First 1
+
 $sourceProfiles = Get-JIMRunProfile -ConnectedSystemId $sourceSystem.id
 $targetProfiles = Get-JIMRunProfile -ConnectedSystemId $targetSystem.id
 
@@ -1109,6 +1115,18 @@ foreach ($profileName in @("Full Import", "Delta Import", "Full Sync", "Delta Sy
     }
 }
 
+# Source - Full Import (Scoped) — targets domain partition only
+if ($sourceDomainPartition) {
+    $profile = $sourceProfiles | Where-Object { $_.name -eq "Full Import (Scoped)" }
+    if (-not $profile) {
+        New-JIMRunProfile -Name "Full Import (Scoped)" -ConnectedSystemId $sourceSystem.id -RunType "FullImport" -PartitionId $sourceDomainPartition.id -PassThru | Out-Null
+        Write-Host "  ✓ Created 'Full Import (Scoped)' for Source (APAC) (PartitionId: $($sourceDomainPartition.id))" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Run profile 'Full Import (Scoped)' already exists for Source (APAC)" -ForegroundColor Gray
+    }
+}
+
 # Target run profiles (Full + Delta)
 foreach ($profileName in @("Full Import", "Delta Import", "Full Sync", "Delta Sync", "Export")) {
     $runType = switch ($profileName) {
@@ -1125,6 +1143,18 @@ foreach ($profileName in @("Full Import", "Delta Import", "Full Sync", "Delta Sy
     }
     else {
         Write-Host "  Run profile '$profileName' already exists for Target (EMEA)" -ForegroundColor Gray
+    }
+}
+
+# Target - Full Import (Scoped) — targets domain partition only
+if ($targetDomainPartition) {
+    $profile = $targetProfiles | Where-Object { $_.name -eq "Full Import (Scoped)" }
+    if (-not $profile) {
+        New-JIMRunProfile -Name "Full Import (Scoped)" -ConnectedSystemId $targetSystem.id -RunType "FullImport" -PartitionId $targetDomainPartition.id -PassThru | Out-Null
+        Write-Host "  ✓ Created 'Full Import (Scoped)' for Target (EMEA) (PartitionId: $($targetDomainPartition.id))" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Run profile 'Full Import (Scoped)' already exists for Target (EMEA)" -ForegroundColor Gray
     }
 }
 

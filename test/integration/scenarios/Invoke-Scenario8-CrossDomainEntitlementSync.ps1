@@ -187,10 +187,12 @@ try {
 
     # Full profiles (for initial sync)
     $sourceFullImportProfile = $sourceProfiles | Where-Object { $_.name -eq "Full Import" }
+    $sourceScopedImportProfile = $sourceProfiles | Where-Object { $_.name -eq "Full Import (Scoped)" }
     $sourceFullSyncProfile = $sourceProfiles | Where-Object { $_.name -eq "Full Sync" }
     $sourceExportProfile = $sourceProfiles | Where-Object { $_.name -eq "Export" }
 
     $targetFullImportProfile = $targetProfiles | Where-Object { $_.name -eq "Full Import" }
+    $targetScopedImportProfile = $targetProfiles | Where-Object { $_.name -eq "Full Import (Scoped)" }
     $targetFullSyncProfile = $targetProfiles | Where-Object { $_.name -eq "Full Sync" }
     $targetExportProfile = $targetProfiles | Where-Object { $_.name -eq "Export" }
 
@@ -387,7 +389,8 @@ try {
     # Used for initial synchronisation when objects already exist in both systems
     function Invoke-FullForwardSync {
         param(
-            [string]$Context = ""
+            [string]$Context = "",
+            [switch]$UseScopedImport
         )
         $contextSuffix = if ($Context) { " ($Context)" } else { "" }
         Write-Host "  Running FULL forward sync (Source → Metaverse → Target)..." -ForegroundColor Gray
@@ -399,10 +402,12 @@ try {
         # 3. Sync Target (join Target CSOs to MVOs BEFORE export evaluation creates provisioning CSOs)
         # 4. Sync Source again (now exports will see existing Target CSOs and generate Updates, not Creates)
 
-        # Step 1: Full Import from Source
-        Write-Host "    Full importing from Source AD..." -ForegroundColor Gray
-        $importResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceFullImportProfile.id -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Source Full Import$contextSuffix"
+        # Step 1: Full Import from Source (scoped to partition when requested, #353)
+        $sourceImportToUse = if ($UseScopedImport -and $sourceScopedImportProfile) { $sourceScopedImportProfile } else { $sourceFullImportProfile }
+        $sourceImportLabel = if ($UseScopedImport -and $sourceScopedImportProfile) { "Source Full Import (Scoped)" } else { "Source Full Import" }
+        Write-Host "    $sourceImportLabel from Source AD..." -ForegroundColor Gray
+        $importResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceImportToUse.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "$sourceImportLabel$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
         # Fail-fast: check for unresolved references after source import.
@@ -412,9 +417,11 @@ try {
 
         # Step 2: Full Import from Target (BEFORE any sync)
         # Import Target CSOs early so they can join to MVOs before export rules create provisioning CSOs
-        Write-Host "    Full importing from Target AD (discover existing objects)..." -ForegroundColor Gray
-        $targetImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetFullImportProfile.id -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $targetImportResult.activityId -Name "Target Full Import$contextSuffix"
+        $targetImportToUse = if ($UseScopedImport -and $targetScopedImportProfile) { $targetScopedImportProfile } else { $targetFullImportProfile }
+        $targetImportLabel = if ($UseScopedImport -and $targetScopedImportProfile) { "Target Full Import (Scoped)" } else { "Target Full Import" }
+        Write-Host "    $targetImportLabel from Target AD (discover existing objects)..." -ForegroundColor Gray
+        $targetImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetImportToUse.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $targetImportResult.activityId -Name "$targetImportLabel$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
         # Step 3: Full Sync Source to Metaverse (projection)
@@ -509,12 +516,12 @@ try {
         Start-Sleep -Seconds $WaitSeconds
     }
 
-    # Backward-compatible alias for InitialSync (uses Full)
+    # Backward-compatible alias for InitialSync (uses Full with scoped import)
     function Invoke-ForwardSync {
         param(
             [string]$Context = ""
         )
-        Invoke-FullForwardSync -Context $Context
+        Invoke-FullForwardSync -Context $Context -UseScopedImport
     }
 
     # Test 0: ImportToMV (Import from Source and sync to Metaverse ONLY - no export)

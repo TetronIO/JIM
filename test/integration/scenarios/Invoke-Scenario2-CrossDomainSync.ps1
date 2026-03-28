@@ -206,10 +206,12 @@ try {
     $targetProfiles = Get-JIMRunProfile -ConnectedSystemId $targetSystem.id
 
     $sourceImportProfile = $sourceProfiles | Where-Object { $_.name -eq "Full Import" }
+    $sourceScopedImportProfile = $sourceProfiles | Where-Object { $_.name -eq "Full Import (Scoped)" }
     $sourceSyncProfile = $sourceProfiles | Where-Object { $_.name -eq "Full Sync" }
     $sourceExportProfile = $sourceProfiles | Where-Object { $_.name -eq "Export" }
 
     $targetImportProfile = $targetProfiles | Where-Object { $_.name -eq "Full Import" }
+    $targetScopedImportProfile = $targetProfiles | Where-Object { $_.name -eq "Full Import (Scoped)" }
     $targetSyncProfile = $targetProfiles | Where-Object { $_.name -eq "Full Sync" }
     $targetExportProfile = $targetProfiles | Where-Object { $_.name -eq "Export" }
 
@@ -248,14 +250,17 @@ try {
     # Includes confirming import from Target to establish the CSO-MVO link
     function Invoke-ForwardSync {
         param(
-            [string]$Context = ""
+            [string]$Context = "",
+            [switch]$UseScopedImport
         )
         $contextSuffix = if ($Context) { " ($Context)" } else { "" }
         Write-Host "  Running forward sync (Source → Metaverse → Target)..." -ForegroundColor Gray
 
-        # Step 1: Import from Source
-        $importResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceImportProfile.id -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Source Full Import$contextSuffix"
+        # Step 1: Import from Source (scoped to partition when requested)
+        $importProfileToUse = if ($UseScopedImport -and $sourceScopedImportProfile) { $sourceScopedImportProfile } else { $sourceImportProfile }
+        $importLabel = if ($UseScopedImport -and $sourceScopedImportProfile) { "Source Full Import (Scoped)" } else { "Source Full Import" }
+        $importResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $importProfileToUse.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "$importLabel$contextSuffix"
         Assert-NoUnresolvedReferences -ConnectedSystemId $sourceSystem.id -Name "Source AD" -Context "after Full Import$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
@@ -285,14 +290,17 @@ try {
     # Includes confirming import from Source to establish the CSO-MVO link
     function Invoke-ReverseSync {
         param(
-            [string]$Context = ""
+            [string]$Context = "",
+            [switch]$UseScopedImport
         )
         $contextSuffix = if ($Context) { " ($Context)" } else { "" }
         Write-Host "  Running reverse sync (Target → Metaverse → Source)..." -ForegroundColor Gray
 
-        # Step 1: Import from Target
-        $importResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetImportProfile.id -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Target Full Import$contextSuffix"
+        # Step 1: Import from Target (scoped to partition when requested)
+        $importProfileToUse = if ($UseScopedImport -and $targetScopedImportProfile) { $targetScopedImportProfile } else { $targetImportProfile }
+        $importLabel = if ($UseScopedImport -and $targetScopedImportProfile) { "Target Full Import (Scoped)" } else { "Target Full Import" }
+        $importResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $importProfileToUse.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "$importLabel$contextSuffix"
         Assert-NoUnresolvedReferences -ConnectedSystemId $targetSystem.id -Name "Target AD" -Context "after Full Import$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
@@ -376,8 +384,8 @@ userPassword: Password123!
             }
         }
 
-        # Run forward sync
-        Invoke-ForwardSync -Context "Provision"
+        # Run forward sync (use scoped import to exercise partition-scoped code path, #353)
+        Invoke-ForwardSync -Context "Provision" -UseScopedImport
 
         # Validate user exists in Target directory
         Write-Host "Validating user in Target directory..." -ForegroundColor Gray
@@ -549,9 +557,11 @@ userPassword: Password123!
         # Run Target import and sync (not full reverse sync to Source)
         Write-Host "  Running Target import and sync..." -ForegroundColor Gray
 
-        # Import from Target
-        $importResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetImportProfile.id -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Target Full Import (TargetImport test)"
+        # Import from Target (use scoped import to exercise partition-scoped code path, #353)
+        $targetImportProfileToUse = if ($targetScopedImportProfile) { $targetScopedImportProfile } else { $targetImportProfile }
+        $targetImportLabel = if ($targetScopedImportProfile) { "Target Full Import (Scoped)" } else { "Target Full Import" }
+        $importResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetImportProfileToUse.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "$targetImportLabel (TargetImport test)"
         Start-Sleep -Seconds $WaitSeconds
 
         # Sync to Metaverse
