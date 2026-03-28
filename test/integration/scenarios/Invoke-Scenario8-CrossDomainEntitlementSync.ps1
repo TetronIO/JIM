@@ -435,23 +435,9 @@ try {
         # Step 4: Full Sync Target (join Target CSOs to MVOs)
         # Target CSOs join to MVOs via matching rules. This links real Target CSOs to MVOs.
         # If provisioning CSOs were created in step 3, they should be replaced/updated.
-        # CouldNotJoinDueToExistingJoin errors are EXPECTED here when pre-existing objects
-        # in Target can't join because Source sync already created provisioning CSOs.
-        # This is a known limitation of the provisioning model with pre-existing objects.
         Write-Host "    Full syncing Target (join Target CSOs to MVOs)..." -ForegroundColor Gray
         $targetSyncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetFullSyncProfile.id -Wait -PassThru
-        $targetSyncActivity = Get-JIMActivity -Id $targetSyncResult.activityId
-        if ($targetSyncActivity.status -eq "Complete") {
-            Write-Host "  ✓ Target Full Sync (join)$contextSuffix completed successfully" -ForegroundColor Green
-        }
-        elseif ($targetSyncActivity.status -in @("CompleteWithWarning", "FailedWithError")) {
-            # CouldNotJoinDueToExistingJoin is expected during initial sync with pre-existing objects
-            Write-Host "  ⚠ Target Full Sync (join)$contextSuffix completed with status: $($targetSyncActivity.status)" -ForegroundColor Yellow
-            Write-Host "    (CouldNotJoinDueToExistingJoin errors are expected during initial sync)" -ForegroundColor Yellow
-        }
-        else {
-            throw "Target Full Sync (join)$contextSuffix failed with unexpected status: $($targetSyncActivity.status)"
-        }
+        Assert-ActivitySuccess -ActivityId $targetSyncResult.activityId -Name "Target Full Sync (join)$contextSuffix" -AllowWarnings
         Start-Sleep -Seconds $WaitSeconds
 
         # Step 5: Export to Target

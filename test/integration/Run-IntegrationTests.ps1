@@ -1515,7 +1515,10 @@ if ($Scenario -like "*Scenario1*" -and -not $script:UsingSnapshots -and $Directo
 # Step 4c: Populate OpenLDAP with test data
 # OpenLDAP starts empty (only base OUs from bootstrap). Unlike Samba AD which uses snapshot
 # images with pre-populated data, OpenLDAP needs live population via Populate-OpenLDAP.ps1.
-if ($DirectoryType -eq "OpenLDAP") {
+# Skip for S8 — it has its own population script (Populate-OpenLDAP-Scenario8.ps1) that only
+# populates Source. The base script populates both suffixes, which would create pre-existing
+# objects in Target and cause CouldNotJoinDueToExistingJoin errors during initial sync.
+if ($DirectoryType -eq "OpenLDAP" -and $Scenario -notlike "*Scenario8*") {
     Write-Section "Step 4c: Populating OpenLDAP with Test Data"
     Write-Step "Running Populate-OpenLDAP.ps1 -Template $Template..."
     $populateScript = Join-Path $scriptRoot "Populate-OpenLDAP.ps1"
