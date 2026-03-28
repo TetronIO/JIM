@@ -518,6 +518,7 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 | OpenLDAP changelog overlay hard to configure | Medium | Medium | ✅ Resolved | Implemented accesslog-based delta import using `cn=accesslog` with `reqStart` timestamps. Works with Bitnami's `LDAP_ENABLE_ACCESSLOG=yes`. |
 | `bitnami/openldap` doesn't support `slapadd` for bulk loading | Medium | Medium | ✅ Resolved | Using `ldapadd` via stdin piping. Works at Nano/Micro/Small scales. Pre-built images needed for XLarge. |
 | `groupOfNames` empty group constraint breaks export | Medium | High | ✅ Resolved | Connector handles placeholder member transparently (configurable DN, default `cn=placeholder`). 21 unit tests. Refint error handling for directories with referential integrity overlay. |
+| Paged results cookie invalid on multi-type imports | Medium | High | ✅ Resolved | OpenLDAP's RFC 2696 cursor is connection-scoped — unrelated searches between paged calls invalidate it. Fix: skip completed container+objectType combos on subsequent pages. |
 | Performance regression at XLarge if OpenLDAP population is slow | Low | Medium | Open | Build pre-populated snapshot images (like Samba approach) for Large/XLarge templates |
 | Samba AD regression from connector changes | Medium | Low | ⚠️ Needs verification | All connector changes are gated behind `LdapDirectoryType` checks. Samba AD integration tests should be re-run to confirm no regressions. |
 
