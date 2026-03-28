@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Validates synchronisation of entitlement groups (security groups, distribution groups)
-    between two AD instances (Panoply APAC source and EMEA target).
+    between two directory instances (source and target).
     Source AD is authoritative for groups. Tests initial sync, forward sync,
     drift detection, and state reassertion.
 
@@ -371,6 +371,24 @@ try {
         }
     }
 
+    # Helper to check if a user name appears in a member list.
+    # For Samba AD, members are returned as sAMAccountName (plain names).
+    # For OpenLDAP, members are returned as full DNs (e.g. uid=alice.smith0,ou=People,...).
+    # This function handles both formats.
+    function Test-MemberInList {
+        param(
+            [Parameter(Mandatory)][string]$UserName,
+            [Parameter(Mandatory)][array]$MemberList
+        )
+        foreach ($member in $MemberList) {
+            # Exact match (Samba AD returns plain names)
+            if ($member -eq $UserName) { return $true }
+            # DN match: check if the DN starts with uid=<name> or CN=<name>
+            if ($member -match "^(uid|cn|CN)=$([regex]::Escape($UserName)),") { return $true }
+        }
+        return $false
+    }
+
     # Helper function to run FULL forward sync (Source -> Metaverse -> Target)
     # Used for initial synchronisation when objects already exist in both systems
     function Invoke-FullForwardSync {
@@ -558,31 +576,24 @@ try {
             $sourceMemberCount = 0
             foreach ($grp in $testGroups) {
                 $grpName = $grp.Trim()
-                $members = docker exec $sourceContainer samba-tool group listmembers $grpName 2>&1
-                if ($LASTEXITCODE -eq 0 -and $members) {
-                    $memberList = @($members -split "`n" | Where-Object { $_.Trim() -ne "" })
-                    if ($memberList.Count -gt 0) {
-                        $validationGroup = $grpName
-                        $sourceMemberCount = $memberList.Count
-                        break
-                    }
+                $memberList = @(Get-DirectoryGroupMembers -GroupName $grpName -Config $sourceConfig)
+                if ($memberList.Count -gt 0) {
+                    $validationGroup = $grpName
+                    $sourceMemberCount = $memberList.Count
+                    break
                 }
             }
 
             if ($validationGroup) {
                 Write-Host "  Validation group: $validationGroup (Source members: $sourceMemberCount)" -ForegroundColor Cyan
 
-                # Check if group exists in Target (with retry for Samba AD consistency)
-                if (Test-ADGroupExists -Container $targetContainer -GroupName $validationGroup) {
-                    Write-Host "  ✓ Group '$validationGroup' exists in Target AD" -ForegroundColor Green
+                # Check if group exists in Target (with retry for consistency)
+                if (Test-DirectoryGroupExists -GroupName $validationGroup -Config $targetConfig) {
+                    Write-Host "  Group '$validationGroup' exists in Target" -ForegroundColor Green
 
                     # Check if members were synced
-                    $targetMembers = docker exec $targetContainer samba-tool group listmembers $validationGroup 2>&1
-                    $targetMemberCount = 0
-                    if ($LASTEXITCODE -eq 0 -and $targetMembers) {
-                        $targetMemberList = @($targetMembers -split "`n" | Where-Object { $_.Trim() -ne "" })
-                        $targetMemberCount = $targetMemberList.Count
-                    }
+                    $targetMemberList = @(Get-DirectoryGroupMembers -GroupName $validationGroup -Config $targetConfig)
+                    $targetMemberCount = $targetMemberList.Count
 
                     if ($targetMemberCount -eq $sourceMemberCount) {
                         Write-Host "  ✓ Member count matches: Source=$sourceMemberCount, Target=$targetMemberCount" -ForegroundColor Green
@@ -626,32 +637,24 @@ try {
         # Step 2.1: Find a group and users to test with
         Write-Host "  Finding test group and users..." -ForegroundColor Gray
 
-        # Get a group from Source AD (use first group from Entitlements OU)
-        $groupListOutput = docker exec $sourceContainer samba-tool group list 2>&1
-        $allGroups = $groupListOutput -split "`n" | Where-Object { $_ -match "^(Company-|Dept-|Location-|Project-)" }
+        # Get a group from Source (use first group from Entitlements)
+        $allGroups = @(Get-DirectoryGroupList -Config $sourceConfig | Where-Object { $_ -match "^(Company-|Dept-|Location-|Project-)" })
 
         if ($allGroups.Count -eq 0) {
-            throw "No test groups found in Source AD. Ensure InitialSync has been run."
+            throw "No test groups found in Source. Ensure InitialSync has been run."
         }
 
         $testGroupName = $allGroups[0].Trim()
         Write-Host "    Test group: $testGroupName" -ForegroundColor Cyan
 
-        # Get current members of the test group in Source AD
-        $sourceMembersOutput = docker exec $sourceContainer samba-tool group listmembers $testGroupName 2>&1
-        $sourceMembers = @()
-        if ($LASTEXITCODE -eq 0 -and $sourceMembersOutput) {
-            $sourceMembers = @($sourceMembersOutput -split "`n" | Where-Object { $_.Trim() -ne "" })
-        }
+        # Get current members of the test group in Source
+        $sourceMembers = @(Get-DirectoryGroupMembers -GroupName $testGroupName -Config $sourceConfig)
         $initialMemberCount = $sourceMembers.Count
         Write-Host "    Current members in Source: $initialMemberCount" -ForegroundColor Gray
 
-        # Get current members of the test group in Target AD (before changes)
-        $targetMembersBefore = docker exec $targetContainer samba-tool group listmembers $testGroupName 2>&1
-        $targetMemberCountBefore = 0
-        if ($LASTEXITCODE -eq 0 -and $targetMembersBefore) {
-            $targetMemberCountBefore = @($targetMembersBefore -split "`n" | Where-Object { $_.Trim() -ne "" }).Count
-        }
+        # Get current members of the test group in Target (before changes)
+        $targetMembersBefore = @(Get-DirectoryGroupMembers -GroupName $testGroupName -Config $targetConfig)
+        $targetMemberCountBefore = $targetMembersBefore.Count
         Write-Host "    Current members in Target: $targetMemberCountBefore" -ForegroundColor Gray
 
         # Baseline check: Source and Target should match before making changes
@@ -662,22 +665,20 @@ try {
         # Step 2.2: Find users to add and remove
         Write-Host "  Preparing membership changes..." -ForegroundColor Gray
 
-        # Get all users from Source AD
-        $allUsersOutput = docker exec $sourceContainer samba-tool user list 2>&1
-        $allUsers = @($allUsersOutput -split "`n" | Where-Object {
-            $_.Trim() -ne "" -and
+        # Get all users from Source
+        $allUsers = @(Get-DirectoryUserList -Config $sourceConfig | Where-Object {
             $_ -notmatch "^(Administrator|Guest|krbtgt)" -and
             $_ -notmatch "DNS"
         })
 
         if ($allUsers.Count -lt 2) {
-            throw "Not enough users in Source AD for membership testing. Need at least 2 users."
+            throw "Not enough users in Source for membership testing. Need at least 2 users."
         }
 
-        # Find users NOT in the group (to add)
-        $usersNotInGroup = @($allUsers | Where-Object { $_ -notin $sourceMembers })
-        # Find users IN the group (to remove)
-        $usersInGroup = @($sourceMembers | Where-Object { $_ -in $allUsers })
+        # Find users NOT in the group (to add) and users IN the group (to remove)
+        # sourceMembers contains DNs for OpenLDAP, names for Samba AD
+        $usersNotInGroup = @($allUsers | Where-Object { -not (Test-MemberInList -UserName $_ -MemberList $sourceMembers) })
+        $usersInGroup = @($allUsers | Where-Object { Test-MemberInList -UserName $_ -MemberList $sourceMembers })
 
         # Select users to add (up to 2)
         $usersToAdd = @()
@@ -697,39 +698,26 @@ try {
         Write-Host "    Users to add: $($usersToAdd -join ', ')" -ForegroundColor Yellow
         Write-Host "    User to remove: $userToRemove" -ForegroundColor Yellow
 
-        # Step 2.3: Make membership changes in Source AD
-        Write-Host "  Making membership changes in Source AD..." -ForegroundColor Gray
+        # Step 2.3: Make membership changes in Source
+        Write-Host "  Making membership changes in Source..." -ForegroundColor Gray
 
         $addedCount = 0
         foreach ($userToAdd in $usersToAdd) {
-            $result = docker exec $sourceContainer samba-tool group addmembers $testGroupName $userToAdd 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "    ✓ Added '$userToAdd' to '$testGroupName'" -ForegroundColor Green
-                $addedCount++
-            }
-            else {
-                throw "Failed to add '$userToAdd' to '$testGroupName' in Source AD: $result"
-            }
+            $result = Add-DirectoryGroupMember -GroupName $testGroupName -MemberName $userToAdd -Config $sourceConfig
+            Write-Host "    Added '$userToAdd' to '$testGroupName'" -ForegroundColor Green
+            $addedCount++
         }
 
         $removedCount = 0
         if ($userToRemove) {
-            $result = docker exec $sourceContainer samba-tool group removemembers $testGroupName $userToRemove 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "    ✓ Removed '$userToRemove' from '$testGroupName'" -ForegroundColor Green
-                $removedCount++
-            }
-            else {
-                throw "Failed to remove '$userToRemove' from '$testGroupName' in Source AD: $result"
-            }
+            $result = Remove-DirectoryGroupMember -GroupName $testGroupName -MemberName $userToRemove -Config $sourceConfig
+            Write-Host "    Removed '$userToRemove' from '$testGroupName'" -ForegroundColor Green
+            $removedCount++
         }
 
-        # Verify changes in Source AD
-        $sourceMembersAfterChange = docker exec $sourceContainer samba-tool group listmembers $testGroupName 2>&1
-        $sourceMemberCountAfterChange = 0
-        if ($LASTEXITCODE -eq 0 -and $sourceMembersAfterChange) {
-            $sourceMemberCountAfterChange = @($sourceMembersAfterChange -split "`n" | Where-Object { $_.Trim() -ne "" }).Count
-        }
+        # Verify changes in Source
+        $sourceMembersAfterChange = @(Get-DirectoryGroupMembers -GroupName $testGroupName -Config $sourceConfig)
+        $sourceMemberCountAfterChange = $sourceMembersAfterChange.Count
         $expectedSourceCount = $initialMemberCount + $addedCount - $removedCount
         Write-Host "    Source members after change: $sourceMemberCountAfterChange (expected: $expectedSourceCount)" -ForegroundColor Gray
 
@@ -740,17 +728,13 @@ try {
         # Step 2.5: Validate changes in Target AD
         Write-Host "  Validating changes in Target AD..." -ForegroundColor Gray
 
-        # Check if the group exists in Target AD (with retry for Samba AD consistency)
-        if (-not (Test-ADGroupExists -Container $targetContainer -GroupName $testGroupName)) {
-            throw "Test group '$testGroupName' not found in Target AD after sync"
+        # Check if the group exists in Target (with retry for consistency)
+        if (-not (Test-DirectoryGroupExists -GroupName $testGroupName -Config $targetConfig)) {
+            throw "Test group '$testGroupName' not found in Target after sync"
         }
 
-        # Get members in Target AD after sync
-        $targetMembersAfter = docker exec $targetContainer samba-tool group listmembers $testGroupName 2>&1
-        $targetMembersList = @()
-        if ($LASTEXITCODE -eq 0 -and $targetMembersAfter) {
-            $targetMembersList = @($targetMembersAfter -split "`n" | Where-Object { $_.Trim() -ne "" })
-        }
+        # Get members in Target after sync
+        $targetMembersList = @(Get-DirectoryGroupMembers -GroupName $testGroupName -Config $targetConfig)
         $targetMemberCountAfter = $targetMembersList.Count
 
         Write-Host "    Target members after sync: $targetMemberCountAfter" -ForegroundColor Gray
@@ -758,11 +742,11 @@ try {
         # Validate: Added users should be in Target
         $addValidationPassed = $true
         foreach ($addedUser in $usersToAdd) {
-            if ($addedUser -in $targetMembersList) {
-                Write-Host "    ✓ Added user '$addedUser' found in Target group" -ForegroundColor Green
+            if (Test-MemberInList -UserName $addedUser -MemberList $targetMembersList) {
+                Write-Host "    Added user '$addedUser' found in Target group" -ForegroundColor Green
             }
             else {
-                Write-Host "    ✗ Added user '$addedUser' NOT found in Target group" -ForegroundColor Red
+                Write-Host "    Added user '$addedUser' NOT found in Target group" -ForegroundColor Red
                 $addValidationPassed = $false
             }
         }
@@ -770,11 +754,11 @@ try {
         # Validate: Removed user should NOT be in Target
         $removeValidationPassed = $true
         if ($userToRemove) {
-            if ($userToRemove -notin $targetMembersList) {
-                Write-Host "    ✓ Removed user '$userToRemove' is not in Target group" -ForegroundColor Green
+            if (-not (Test-MemberInList -UserName $userToRemove -MemberList $targetMembersList)) {
+                Write-Host "    Removed user '$userToRemove' is not in Target group" -ForegroundColor Green
             }
             else {
-                Write-Host "    ✗ Removed user '$userToRemove' still in Target group" -ForegroundColor Red
+                Write-Host "    Removed user '$userToRemove' still in Target group" -ForegroundColor Red
                 $removeValidationPassed = $false
             }
         }
@@ -820,8 +804,7 @@ try {
         # Step 3.1: Find groups with members in Target AD for testing
         Write-Host "  Finding test groups in Target AD..." -ForegroundColor Gray
 
-        $groupListOutput = docker exec $targetContainer samba-tool group list 2>&1
-        $testGroups = @($groupListOutput -split "`n" | Where-Object { $_ -match "^(Company-|Dept-|Location-|Project-)" })
+        $testGroups = @(Get-DirectoryGroupList -Config $targetConfig | Where-Object { $_ -match "^(Company-|Dept-|Location-|Project-)" })
 
         if ($testGroups.Count -lt 2) {
             throw "Not enough test groups in Target AD. Need at least 2 groups. Ensure InitialSync has been run."
@@ -835,25 +818,22 @@ try {
 
         foreach ($grp in $testGroups) {
             $grpName = $grp.Trim()
-            $members = docker exec $targetContainer samba-tool group listmembers $grpName 2>&1
-            if ($LASTEXITCODE -eq 0 -and $members) {
-                $memberList = @($members -split "`n" | Where-Object { $_.Trim() -ne "" })
-                if ($memberList.Count -gt 0) {
-                    if (-not $driftGroup1) {
-                        $driftGroup1 = $grpName
-                        $driftGroup1Members = $memberList
-                    }
-                    elseif (-not $driftGroup2 -and $grpName -ne $driftGroup1) {
-                        $driftGroup2 = $grpName
-                        $driftGroup2Members = $memberList
-                        break
-                    }
+            $memberList = @(Get-DirectoryGroupMembers -GroupName $grpName -Config $targetConfig)
+            if ($memberList.Count -gt 0) {
+                if (-not $driftGroup1) {
+                    $driftGroup1 = $grpName
+                    $driftGroup1Members = $memberList
+                }
+                elseif (-not $driftGroup2 -and $grpName -ne $driftGroup1) {
+                    $driftGroup2 = $grpName
+                    $driftGroup2Members = $memberList
+                    break
                 }
             }
         }
 
         if (-not $driftGroup1 -or -not $driftGroup2) {
-            throw "Could not find two groups with members in Target AD for drift testing."
+            throw "Could not find two groups with members in Target for drift testing."
         }
 
         Write-Host "    Drift test group 1: $driftGroup1 (members: $($driftGroup1Members.Count))" -ForegroundColor Cyan
@@ -862,9 +842,7 @@ try {
         # Step 3.2: Get all users in Target AD (to find a user NOT in driftGroup1)
         Write-Host "  Finding user to add to group (unauthorised addition)..." -ForegroundColor Gray
 
-        $allUsersOutput = docker exec $targetContainer samba-tool user list 2>&1
-        $allUsers = @($allUsersOutput -split "`n" | Where-Object {
-            $_.Trim() -ne "" -and
+        $allUsers = @(Get-DirectoryUserList -Config $targetConfig | Where-Object {
             $_ -notmatch "^(Administrator|Guest|krbtgt)" -and
             $_ -notmatch "DNS"
         })
@@ -872,7 +850,7 @@ try {
         # Find a user NOT in driftGroup1 to add (simulating unauthorised addition)
         $userToAddToDrift = $null
         foreach ($user in $allUsers) {
-            if ($user -notin $driftGroup1Members) {
+            if (-not (Test-MemberInList -UserName $user -MemberList $driftGroup1Members)) {
                 $userToAddToDrift = $user.Trim()
                 break
             }
@@ -892,41 +870,35 @@ try {
         # Step 3.3: Record the EXPECTED state (from Source AD - the authoritative source)
         Write-Host "  Recording expected state from Source AD (authoritative)..." -ForegroundColor Gray
 
-        $sourceGroup1Members = docker exec $sourceContainer samba-tool group listmembers $driftGroup1 2>&1
-        $sourceGroup1MemberCount = 0
-        if ($LASTEXITCODE -eq 0 -and $sourceGroup1Members) {
-            $sourceGroup1MemberCount = @($sourceGroup1Members -split "`n" | Where-Object { $_.Trim() -ne "" }).Count
-        }
+        $sourceGroup1MemberList = @(Get-DirectoryGroupMembers -GroupName $driftGroup1 -Config $sourceConfig)
+        $sourceGroup1MemberCount = $sourceGroup1MemberList.Count
 
-        $sourceGroup2Members = docker exec $sourceContainer samba-tool group listmembers $driftGroup2 2>&1
-        $sourceGroup2MemberCount = 0
-        if ($LASTEXITCODE -eq 0 -and $sourceGroup2Members) {
-            $sourceGroup2MemberCount = @($sourceGroup2Members -split "`n" | Where-Object { $_.Trim() -ne "" }).Count
-        }
+        $sourceGroup2MemberList = @(Get-DirectoryGroupMembers -GroupName $driftGroup2 -Config $sourceConfig)
+        $sourceGroup2MemberCount = $sourceGroup2MemberList.Count
 
         Write-Host "    Source $driftGroup1 members (expected): $sourceGroup1MemberCount" -ForegroundColor Gray
         Write-Host "    Source $driftGroup2 members (expected): $sourceGroup2MemberCount" -ForegroundColor Gray
 
-        # Step 3.4: Make UNAUTHORISED changes directly in Target AD (bypassing JIM)
-        Write-Host "  Making unauthorised changes directly in Target AD..." -ForegroundColor Gray
+        # Step 3.4: Make UNAUTHORISED changes directly in Target (bypassing JIM)
+        Write-Host "  Making unauthorised changes directly in Target..." -ForegroundColor Gray
 
         $driftAddSucceeded = $false
         $driftRemoveSucceeded = $false
 
         if ($userToAddToDrift) {
-            $addResult = docker exec $targetContainer samba-tool group addmembers $driftGroup1 $userToAddToDrift 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "    ✓ Unauthorised addition: Added '$userToAddToDrift' to '$driftGroup1'" -ForegroundColor Yellow
+            try {
+                Add-DirectoryGroupMember -GroupName $driftGroup1 -MemberName $userToAddToDrift -Config $targetConfig
+                Write-Host "    Unauthorised addition: Added '$userToAddToDrift' to '$driftGroup1'" -ForegroundColor Yellow
                 $driftAddSucceeded = $true
             }
-            else {
-                Write-Host "    ⚠ Failed to add user to group: $addResult" -ForegroundColor Yellow
+            catch {
+                Write-Host "    Failed to add user to group: $_" -ForegroundColor Yellow
             }
         }
 
-        $removeResult = docker exec $targetContainer samba-tool group removemembers $driftGroup2 $userToRemoveFromDrift 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "    ✓ Unauthorised removal: Removed '$userToRemoveFromDrift' from '$driftGroup2'" -ForegroundColor Yellow
+        try {
+            Remove-DirectoryGroupMember -GroupName $driftGroup2 -MemberName $userToRemoveFromDrift -Config $targetConfig
+            Write-Host "    Unauthorised removal: Removed '$userToRemoveFromDrift' from '$driftGroup2'" -ForegroundColor Yellow
             $driftRemoveSucceeded = $true
         }
         else {
@@ -940,17 +912,8 @@ try {
         # Step 3.5: Verify the changes are visible in Target AD
         Write-Host "  Verifying unauthorised changes in Target AD..." -ForegroundColor Gray
 
-        $targetGroup1MembersAfterDrift = docker exec $targetContainer samba-tool group listmembers $driftGroup1 2>&1
-        $targetGroup1MemberCountAfterDrift = 0
-        if ($LASTEXITCODE -eq 0 -and $targetGroup1MembersAfterDrift) {
-            $targetGroup1MemberCountAfterDrift = @($targetGroup1MembersAfterDrift -split "`n" | Where-Object { $_.Trim() -ne "" }).Count
-        }
-
-        $targetGroup2MembersAfterDrift = docker exec $targetContainer samba-tool group listmembers $driftGroup2 2>&1
-        $targetGroup2MemberCountAfterDrift = 0
-        if ($LASTEXITCODE -eq 0 -and $targetGroup2MembersAfterDrift) {
-            $targetGroup2MemberCountAfterDrift = @($targetGroup2MembersAfterDrift -split "`n" | Where-Object { $_.Trim() -ne "" }).Count
-        }
+        $targetGroup1MemberCountAfterDrift = @(Get-DirectoryGroupMembers -GroupName $driftGroup1 -Config $targetConfig).Count
+        $targetGroup2MemberCountAfterDrift = @(Get-DirectoryGroupMembers -GroupName $driftGroup2 -Config $targetConfig).Count
 
         Write-Host "    Target $driftGroup1 members (after drift): $targetGroup1MemberCountAfterDrift (expected: $sourceGroup1MemberCount)" -ForegroundColor Gray
         Write-Host "    Target $driftGroup2 members (after drift): $targetGroup2MemberCountAfterDrift (expected: $sourceGroup2MemberCount)" -ForegroundColor Gray
@@ -1057,7 +1020,7 @@ try {
 
         # Refresh the connected system to get current pending export count
         $connectedSystems = Get-JIMConnectedSystem
-        $targetSystemRefreshed = $connectedSystems | Where-Object { $_.name -eq "Panoply EMEA" }
+        $targetSystemRefreshed = $connectedSystems | Where-Object { $_.name -eq $targetSystemName }
         $pendingExportCount = $targetSystemRefreshed.pendingExportObjectsCount
 
         Write-Host "    Pending exports for Target AD: $pendingExportCount" -ForegroundColor Cyan
@@ -1108,11 +1071,10 @@ try {
             Write-Host "  DetectDrift context not available, discovering groups..." -ForegroundColor Yellow
 
             # Find groups to validate (same logic as DetectDrift)
-            $groupListOutput = docker exec $targetContainer samba-tool group list 2>&1
-            $testGroups = @($groupListOutput -split "`n" | Where-Object { $_ -match "^(Company-|Dept-|Location-|Project-)" })
+            $testGroups = @(Get-DirectoryGroupList -Config $targetConfig | Where-Object { $_ -match "^(Company-|Dept-|Location-|Project-)" })
 
             if ($testGroups.Count -lt 2) {
-                throw "Not enough test groups in Target AD. Ensure InitialSync has been run."
+                throw "Not enough test groups in Target. Ensure InitialSync has been run."
             }
 
             # Use first two groups with members
@@ -1121,37 +1083,25 @@ try {
 
             foreach ($grp in $testGroups) {
                 $grpName = $grp.Trim()
-                $members = docker exec $targetContainer samba-tool group listmembers $grpName 2>&1
-                if ($LASTEXITCODE -eq 0 -and $members) {
-                    $memberList = @($members -split "`n" | Where-Object { $_.Trim() -ne "" })
-                    if ($memberList.Count -gt 0) {
-                        if (-not $driftGroup1) {
-                            $driftGroup1 = $grpName
-                        }
-                        elseif (-not $driftGroup2 -and $grpName -ne $driftGroup1) {
-                            $driftGroup2 = $grpName
-                            break
-                        }
+                $memberList = @(Get-DirectoryGroupMembers -GroupName $grpName -Config $targetConfig)
+                if ($memberList.Count -gt 0) {
+                    if (-not $driftGroup1) {
+                        $driftGroup1 = $grpName
+                    }
+                    elseif (-not $driftGroup2 -and $grpName -ne $driftGroup1) {
+                        $driftGroup2 = $grpName
+                        break
                     }
                 }
             }
 
             if (-not $driftGroup1 -or -not $driftGroup2) {
-                throw "Could not find two groups with members in Target AD."
+                throw "Could not find two groups with members in Target."
             }
 
-            # Get expected member counts from Source AD
-            $sourceGroup1Members = docker exec $sourceContainer samba-tool group listmembers $driftGroup1 2>&1
-            $sourceGroup1MemberCount = 0
-            if ($LASTEXITCODE -eq 0 -and $sourceGroup1Members) {
-                $sourceGroup1MemberCount = @($sourceGroup1Members -split "`n" | Where-Object { $_.Trim() -ne "" }).Count
-            }
-
-            $sourceGroup2Members = docker exec $sourceContainer samba-tool group listmembers $driftGroup2 2>&1
-            $sourceGroup2MemberCount = 0
-            if ($LASTEXITCODE -eq 0 -and $sourceGroup2Members) {
-                $sourceGroup2MemberCount = @($sourceGroup2Members -split "`n" | Where-Object { $_.Trim() -ne "" }).Count
-            }
+            # Get expected member counts from Source
+            $sourceGroup1MemberCount = @(Get-DirectoryGroupMembers -GroupName $driftGroup1 -Config $sourceConfig).Count
+            $sourceGroup2MemberCount = @(Get-DirectoryGroupMembers -GroupName $driftGroup2 -Config $sourceConfig).Count
 
             $script:driftContext = @{
                 DriftGroup1 = $driftGroup1
@@ -1173,17 +1123,8 @@ try {
         # Step 4.2: Record Target AD state BEFORE reassertion
         Write-Host "  Recording Target AD state before reassertion..." -ForegroundColor Gray
 
-        $targetGroup1MembersBefore = docker exec $targetContainer samba-tool group listmembers $driftGroup1 2>&1
-        $targetGroup1MemberCountBefore = 0
-        if ($LASTEXITCODE -eq 0 -and $targetGroup1MembersBefore) {
-            $targetGroup1MemberCountBefore = @($targetGroup1MembersBefore -split "`n" | Where-Object { $_.Trim() -ne "" }).Count
-        }
-
-        $targetGroup2MembersBefore = docker exec $targetContainer samba-tool group listmembers $driftGroup2 2>&1
-        $targetGroup2MemberCountBefore = 0
-        if ($LASTEXITCODE -eq 0 -and $targetGroup2MembersBefore) {
-            $targetGroup2MemberCountBefore = @($targetGroup2MembersBefore -split "`n" | Where-Object { $_.Trim() -ne "" }).Count
-        }
+        $targetGroup1MemberCountBefore = @(Get-DirectoryGroupMembers -GroupName $driftGroup1 -Config $targetConfig).Count
+        $targetGroup2MemberCountBefore = @(Get-DirectoryGroupMembers -GroupName $driftGroup2 -Config $targetConfig).Count
 
         Write-Host "    Target $driftGroup1 members (before): $targetGroup1MemberCountBefore" -ForegroundColor Gray
         Write-Host "    Target $driftGroup2 members (before): $targetGroup2MemberCountBefore" -ForegroundColor Gray
@@ -1217,21 +1158,11 @@ try {
         # Step 4.4: Validate state reassertion
         Write-Host "  Validating state reassertion..." -ForegroundColor Gray
 
-        $targetGroup1MembersAfter = docker exec $targetContainer samba-tool group listmembers $driftGroup1 2>&1
-        $targetGroup1MemberCountAfter = 0
-        $targetGroup1MemberList = @()
-        if ($LASTEXITCODE -eq 0 -and $targetGroup1MembersAfter) {
-            $targetGroup1MemberList = @($targetGroup1MembersAfter -split "`n" | Where-Object { $_.Trim() -ne "" })
-            $targetGroup1MemberCountAfter = $targetGroup1MemberList.Count
-        }
+        $targetGroup1MemberList = @(Get-DirectoryGroupMembers -GroupName $driftGroup1 -Config $targetConfig)
+        $targetGroup1MemberCountAfter = $targetGroup1MemberList.Count
 
-        $targetGroup2MembersAfter = docker exec $targetContainer samba-tool group listmembers $driftGroup2 2>&1
-        $targetGroup2MemberCountAfter = 0
-        $targetGroup2MemberList = @()
-        if ($LASTEXITCODE -eq 0 -and $targetGroup2MembersAfter) {
-            $targetGroup2MemberList = @($targetGroup2MembersAfter -split "`n" | Where-Object { $_.Trim() -ne "" })
-            $targetGroup2MemberCountAfter = $targetGroup2MemberList.Count
-        }
+        $targetGroup2MemberList = @(Get-DirectoryGroupMembers -GroupName $driftGroup2 -Config $targetConfig)
+        $targetGroup2MemberCountAfter = $targetGroup2MemberList.Count
 
         Write-Host "    Target $driftGroup1 members (after): $targetGroup1MemberCountAfter (expected: $expectedGroup1MemberCount)" -ForegroundColor Gray
         Write-Host "    Target $driftGroup2 members (after): $targetGroup2MemberCountAfter (expected: $expectedGroup2MemberCount)" -ForegroundColor Gray
@@ -1260,7 +1191,7 @@ try {
         # Validate that unauthorised additions were removed and removals were restored
         if ($script:driftContext.UserAddedToDriftGroup1) {
             $userAddedToDrift = $script:driftContext.UserAddedToDriftGroup1
-            if ($userAddedToDrift -notin $targetGroup1MemberList) {
+            if (-not (Test-MemberInList -UserName $userAddedToDrift -MemberList $targetGroup1MemberList)) {
                 $validations += @{ Name = "Unauthorised addition removed from $driftGroup1"; Success = $true }
                 Write-Host "    ✓ Unauthorised member '$userAddedToDrift' removed from $driftGroup1" -ForegroundColor Green
             }
@@ -1316,34 +1247,25 @@ try {
         Write-Host "  Creating new group '$newGroupName' in Source AD..." -ForegroundColor Gray
 
         # First, delete the group if it exists from a previous run
-        docker exec $sourceContainer samba-tool group delete $newGroupName 2>&1 | Out-Null
-        docker exec $targetContainer samba-tool group delete $newGroupName 2>&1 | Out-Null
+        Remove-DirectoryGroup -GroupName $newGroupName -Config $sourceConfig 2>$null | Out-Null
+        Remove-DirectoryGroup -GroupName $newGroupName -Config $targetConfig 2>$null | Out-Null
 
-        # Create the group in Source AD (OU=Entitlements,OU=Corp)
-        $createResult = docker exec $sourceContainer samba-tool group add $newGroupName `
-            --groupou="OU=Entitlements,OU=Corp" `
-            --description="$newGroupDescription" 2>&1
+        # Create the group in Source
+        # For OpenLDAP: need an initial member DN for groupOfNames MUST constraint
+        $allUsers = @(Get-DirectoryUserList -Config $sourceConfig | Where-Object {
+            $_ -notmatch "^(Administrator|Guest|krbtgt)" -and $_ -notmatch "DNS"
+        })
+        $initialMemberDn = $null
+        if ($isOpenLDAP -and $allUsers.Count -gt 0) {
+            $firstUser = Get-LDAPUser -UserIdentifier $allUsers[0] -DirectoryConfig $sourceConfig
+            if ($firstUser) { $initialMemberDn = $firstUser['dn'] }
+        }
 
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "    ✓ Created group '$newGroupName' in Source AD" -ForegroundColor Green
-        }
-        elseif ($createResult -match "already exists") {
-            Write-Host "    Group '$newGroupName' already exists in Source AD" -ForegroundColor Yellow
-        }
-        else {
-            throw "Failed to create group in Source AD: $createResult"
-        }
+        $createResult = New-DirectoryGroup -GroupName $newGroupName -Description $newGroupDescription -Config $sourceConfig -InitialMemberDn $initialMemberDn
+        Write-Host "    Created group '$newGroupName' in Source" -ForegroundColor Green
 
         # Step 5.2: Add members to the new group
         Write-Host "  Adding members to new group..." -ForegroundColor Gray
-
-        # Get users from Source AD to add as members
-        $allUsersOutput = docker exec $sourceContainer samba-tool user list 2>&1
-        $allUsers = @($allUsersOutput -split "`n" | Where-Object {
-            $_.Trim() -ne "" -and
-            $_ -notmatch "^(Administrator|Guest|krbtgt)" -and
-            $_ -notmatch "DNS"
-        })
 
         # Add up to 3 members to the new group
         $membersToAdd = @()
@@ -1351,10 +1273,19 @@ try {
         foreach ($user in $allUsers) {
             if ($addedCount -ge 3) { break }
             $userName = $user.Trim()
-            $addResult = docker exec $sourceContainer samba-tool group addmembers $newGroupName $userName 2>&1
-            if ($LASTEXITCODE -eq 0) {
+            # For OpenLDAP, skip the initial member (already in the group)
+            if ($isOpenLDAP -and $addedCount -eq 0 -and $userName -eq $allUsers[0]) {
                 $membersToAdd += $userName
                 $addedCount++
+                continue
+            }
+            try {
+                Add-DirectoryGroupMember -GroupName $newGroupName -MemberName $userName -Config $sourceConfig
+                $membersToAdd += $userName
+                $addedCount++
+            }
+            catch {
+                Write-Verbose "    Could not add $userName`: $_"
             }
         }
 
@@ -1369,40 +1300,35 @@ try {
 
         $validations = @()
 
-        # Check if group exists in Target AD (with retry for Samba AD consistency)
-        if (Test-ADGroupExists -Container $targetContainer -GroupName $newGroupName) {
-            $targetGroupInfo = docker exec $targetContainer samba-tool group show $newGroupName 2>&1
+        # Check if group exists in Target (with retry for consistency)
+        if (Test-DirectoryGroupExists -GroupName $newGroupName -Config $targetConfig) {
+            $targetGroupInfo = Get-LDAPGroup -GroupName $newGroupName -DirectoryConfig $targetConfig
         }
-        if ($LASTEXITCODE -eq 0 -and $targetGroupInfo) {
-            $validations += @{ Name = "Group exists in Target AD"; Success = $true }
-            Write-Host "    ✓ Group '$newGroupName' exists in Target AD" -ForegroundColor Green
+        if ($targetGroupInfo) {
+            $validations += @{ Name = "Group exists in Target"; Success = $true }
+            Write-Host "    Group '$newGroupName' exists in Target" -ForegroundColor Green
 
-            # Verify description attribute — should be synced now that the LDAP connector
-            # correctly reports 'description' as single-valued on AD SAM-managed object classes
-            if ($targetGroupInfo -match "description:\s*$([regex]::Escape($newGroupDescription))") {
+            # Verify description attribute
+            $targetDesc = if ($targetGroupInfo.ContainsKey('description')) { $targetGroupInfo['description'] } else { "" }
+            if ($targetDesc -eq $newGroupDescription) {
                 $validations += @{ Name = "Group description correct"; Success = $true }
-                Write-Host "    ✓ Group description is correct" -ForegroundColor Green
+                Write-Host "    Group description is correct" -ForegroundColor Green
             }
             else {
                 $validations += @{ Name = "Group description correct"; Success = $false }
-                Write-Host "    ✗ Group description not found or incorrect in Target AD" -ForegroundColor Red
+                Write-Host "    Group description not found or incorrect in Target" -ForegroundColor Red
                 Write-Host "      Expected: '$newGroupDescription'" -ForegroundColor Red
-                Write-Host "      Actual: $($targetGroupInfo | Select-String 'description:')" -ForegroundColor Red
+                Write-Host "      Actual: '$targetDesc'" -ForegroundColor Red
             }
         }
         else {
-            $validations += @{ Name = "Group exists in Target AD"; Success = $false }
-            Write-Host "    ✗ Group '$newGroupName' NOT found in Target AD" -ForegroundColor Red
+            $validations += @{ Name = "Group exists in Target"; Success = $false }
+            Write-Host "    Group '$newGroupName' NOT found in Target" -ForegroundColor Red
         }
 
-        # Check members in Target AD
-        $targetMembers = docker exec $targetContainer samba-tool group listmembers $newGroupName 2>&1
-        $targetMemberCount = 0
-        $targetMemberList = @()
-        if ($LASTEXITCODE -eq 0 -and $targetMembers) {
-            $targetMemberList = @($targetMembers -split "`n" | Where-Object { $_.Trim() -ne "" })
-            $targetMemberCount = $targetMemberList.Count
-        }
+        # Check members in Target
+        $targetMemberList = @(Get-DirectoryGroupMembers -GroupName $newGroupName -Config $targetConfig)
+        $targetMemberCount = $targetMemberList.Count
 
         if ($targetMemberCount -eq $addedCount) {
             $validations += @{ Name = "Group member count matches"; Success = $true }
@@ -1466,15 +1392,15 @@ try {
             # Find a project group to delete (least impactful)
             Write-Host "  NewGroup context not available, finding a project group to delete..." -ForegroundColor Yellow
 
-            $groupListOutput = docker exec $sourceContainer samba-tool group list 2>&1
-            $projectGroups = @($groupListOutput -split "`n" | Where-Object { $_ -match "^Project-" })
+            $allSourceGroups = @(Get-DirectoryGroupList -Config $sourceConfig)
+            $projectGroups = @($allSourceGroups | Where-Object { $_ -match "^Project-" })
 
             if ($projectGroups.Count -gt 0) {
                 $groupToDelete = $projectGroups[0].Trim()
             }
             else {
                 # If no project groups, find any test group
-                $testGroups = @($groupListOutput -split "`n" | Where-Object { $_ -match "^(Company-|Dept-|Location-)" })
+                $testGroups = @($allSourceGroups | Where-Object { $_ -match "^(Company-|Dept-|Location-)" })
                 if ($testGroups.Count -gt 0) {
                     $groupToDelete = $testGroups[0].Trim()
                 }
@@ -1490,37 +1416,30 @@ try {
         # Step 6.2: Verify group exists in both Source and Target before deletion
         Write-Host "  Verifying group exists in both Source and Target AD..." -ForegroundColor Gray
 
-        docker exec $sourceContainer samba-tool group show $groupToDelete 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            throw "Group '$groupToDelete' does not exist in Source AD"
+        if (-not (Test-LDAPGroupExists -GroupName $groupToDelete -DirectoryConfig $sourceConfig)) {
+            throw "Group '$groupToDelete' does not exist in Source"
         }
-        Write-Host "    ✓ Group exists in Source AD" -ForegroundColor Green
+        Write-Host "    Group exists in Source" -ForegroundColor Green
 
-        docker exec $targetContainer samba-tool group show $groupToDelete 2>&1 | Out-Null
-        $groupExistsInTarget = ($LASTEXITCODE -eq 0)
+        $groupExistsInTarget = Test-LDAPGroupExists -GroupName $groupToDelete -DirectoryConfig $targetConfig
         if ($groupExistsInTarget) {
-            Write-Host "    ✓ Group exists in Target AD" -ForegroundColor Green
+            Write-Host "    Group exists in Target" -ForegroundColor Green
         }
         else {
-            Write-Host "    ⚠ Group does not exist in Target AD (may not have synced yet)" -ForegroundColor Yellow
+            Write-Host "    Group does not exist in Target (may not have synced yet)" -ForegroundColor Yellow
         }
 
-        # Step 6.3: Delete the group from Source AD
-        Write-Host "  Deleting group '$groupToDelete' from Source AD..." -ForegroundColor Gray
+        # Step 6.3: Delete the group from Source
+        Write-Host "  Deleting group '$groupToDelete' from Source..." -ForegroundColor Gray
 
-        $deleteResult = docker exec $sourceContainer samba-tool group delete $groupToDelete 2>&1
-        if ($LASTEXITCODE -eq 0 -or $deleteResult -match "Deleted") {
-            Write-Host "    ✓ Group deleted from Source AD" -ForegroundColor Green
-        }
-        else {
-            throw "Failed to delete group from Source AD: $deleteResult"
-        }
+        Remove-DirectoryGroup -GroupName $groupToDelete -Config $sourceConfig
+        Write-Host "    Group deleted from Source" -ForegroundColor Green
 
         # Step 6.4: Get MVO info BEFORE deletion sync (to verify it exists and get its ID)
         Write-Host "  Looking up Group MVO before deletion..." -ForegroundColor Gray
 
         # Search for the group MVO by Account Name (sAMAccountName) using the new attribute filter
-        # NOTE: We can't search by Display Name because groups created via samba-tool group add
+        # NOTE: We can't search by Display Name because groups created via samba-tool/ldapadd
         # don't have the displayName LDAP attribute set - only sAMAccountName and cn are populated.
         # We also request Account Name to be included in the response for display purposes
         $groupMvo = Get-JIMMetaverseObject -ObjectTypeName "Group" -AttributeName "Account Name" -AttributeValue $groupToDelete -Attributes "Account Name" | Select-Object -First 1
@@ -1613,8 +1532,8 @@ try {
         # synchronous MVO deletion is executed as part of the forward sync cycle.
 
         # Check if group is deleted from Target AD
-        docker exec $targetContainer samba-tool group show $groupToDelete 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) {
+        $groupStillExists = Test-LDAPGroupExists -GroupName $groupToDelete -DirectoryConfig $targetConfig
+        if (-not $groupStillExists) {
             $targetGroupDeleted = $true
             Write-Host "    ✓ Group '$groupToDelete' deleted from Target AD" -ForegroundColor Green
         }
@@ -1627,10 +1546,10 @@ try {
                 Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetExportProfile.id -Wait
                 Start-Sleep -Seconds 2
 
-                docker exec $targetContainer samba-tool group show $groupToDelete 2>&1 | Out-Null
-                if ($LASTEXITCODE -ne 0) {
+                $retryGroupExists = Test-LDAPGroupExists -GroupName $groupToDelete -DirectoryConfig $targetConfig
+                if (-not $retryGroupExists) {
                     $targetGroupDeleted = $true
-                    Write-Host "    ✓ Group '$groupToDelete' deleted from Target AD after retry" -ForegroundColor Green
+                    Write-Host "    Group '$groupToDelete' deleted from Target after retry" -ForegroundColor Green
                 }
             }
         }
@@ -1647,8 +1566,8 @@ try {
                 Start-Sleep -Seconds 2
 
                 # Check one more time
-                docker exec $targetContainer samba-tool group show $groupToDelete 2>&1 | Out-Null
-                if ($LASTEXITCODE -ne 0) {
+                $finalCheckExists = Test-LDAPGroupExists -GroupName $groupToDelete -DirectoryConfig $targetConfig
+                if (-not $finalCheckExists) {
                     $targetGroupDeleted = $true
                     $validations += @{ Name = "Group deleted from Target AD"; Success = $true }
                     Write-Host "    ✓ Group '$groupToDelete' deleted from Target AD after export" -ForegroundColor Green
@@ -1665,8 +1584,8 @@ try {
         }
 
         # Verify group is no longer in Source AD (double-check)
-        docker exec $sourceContainer samba-tool group show $groupToDelete 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) {
+        $sourceGroupStillExists = Test-LDAPGroupExists -GroupName $groupToDelete -DirectoryConfig $sourceConfig
+        if (-not $sourceGroupStillExists) {
             $validations += @{ Name = "Group confirmed deleted from Source AD"; Success = $true }
             Write-Host "    ✓ Group confirmed deleted from Source AD" -ForegroundColor Green
         }
