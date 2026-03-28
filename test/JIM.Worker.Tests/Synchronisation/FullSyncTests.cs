@@ -1170,6 +1170,10 @@ public class FullSyncTests
         // get a stub import sync rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
         var mvo = MetaverseObjectsData[0];
+
+        // Set DeletionRule to Manual so the MVO is not deleted immediately when the CSO is obsoleted.
+        // This test is specifically testing attribute recall behaviour, not deletion.
+        mvo.Type!.DeletionRule = MetaverseObjectDeletionRule.Manual;
         cso.MetaverseObject = mvo;
         cso.MetaverseObjectId = mvo.Id;
         cso.JoinType = ConnectedSystemObjectJoinType.Joined;
@@ -1295,6 +1299,11 @@ public class FullSyncTests
         sourceCso.Type.RemoveContributedAttributesOnObsoletion = true;
 
         var mvo = MetaverseObjectsData[0];
+
+        // Set DeletionRule to Manual so the MVO is not deleted immediately when the source CSO
+        // is obsoleted. This test is specifically testing attribute recall pending export behaviour.
+        mvo.Type!.DeletionRule = MetaverseObjectDeletionRule.Manual;
+
         sourceCso.MetaverseObject = mvo;
         sourceCso.MetaverseObjectId = mvo.Id;
         sourceCso.JoinType = ConnectedSystemObjectJoinType.Joined;

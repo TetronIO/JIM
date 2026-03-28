@@ -437,8 +437,6 @@ public abstract class SyncTaskProcessorBase
                             detailCount: rootDetailCount);
 
                         // In Detailed mode, add AttributeFlow child under DisconnectedOutOfScope when attributes were recalled.
-                        // Note: when MVO is deleted immediately, the recall is nugatory work (see #390) but we still
-                        // show the outcome so the inefficiency is visible until the optimisation is implemented.
                         if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
                             && changeResult.ChangeType == ObjectChangeType.DisconnectedOutOfScope
                             && changeResult.AttributeFlowCount is > 0)
@@ -605,14 +603,23 @@ public abstract class SyncTaskProcessorBase
             _preRecallAttributeSnapshots[mvoId] = mvo.AttributeValues.ToList();
         }
 
+        // Evaluate the MVO deletion rule BEFORE attribute recall (#390 optimisation).
+        // If the MVO will be deleted immediately, attribute recall is nugatory work —
+        // the attributes, MVO update, and export evaluations would all be discarded
+        // when the MVO is deleted moments later in FlushPendingMvoDeletionsAsync.
+        var mvoDeletionFate = await ProcessMvoDeletionRuleAsync(mvo, connectedSystemId, remainingCsoCount);
+
         // Check if we should remove contributed attributes based on the object type setting.
         // When a grace period is configured, skip attribute recall to preserve identity-critical
         // attribute values (e.g., display name, department) that feed expression-based exports
         // (e.g., LDAP Distinguished Name). Recalling these attributes during the grace period
         // would produce invalid export values. The attributes will be cleaned up when the MVO
         // is deleted after the grace period expires, or preserved if the object reappears.
+        // Also skip recall when the MVO will be deleted immediately — the recall work (MVO update,
+        // export evaluation queueing) would be discarded when the MVO is deleted (#390).
         var hasGracePeriod = mvo.Type?.DeletionGracePeriod is { } gp && gp > TimeSpan.Zero;
-        if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !hasGracePeriod)
+        var skipRecallForImmediateDeletion = mvoDeletionFate == MvoDeletionFate.DeletedImmediately;
+        if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !hasGracePeriod && !skipRecallForImmediateDeletion)
         {
             // Find all MVO attribute values contributed by this connected system and mark them for removal
             var contributedAttributes = mvo.AttributeValues
@@ -655,6 +662,12 @@ public abstract class SyncTaskProcessorBase
                 _pendingExportEvaluations.Add((mvo, changedAttributes, removedAttributes));
             }
         }
+        else if (skipRecallForImmediateDeletion)
+        {
+            Log.Debug("ProcessObsoleteConnectedSystemObjectAsync: Skipping attribute recall for CSO {CsoId} " +
+                "because MVO {MvoId} will be deleted immediately (#390 optimisation).",
+                connectedSystemObject.Id, mvo.Id);
+        }
         else if (hasGracePeriod)
         {
             Log.Debug("ProcessObsoleteConnectedSystemObjectAsync: Skipping attribute recall for CSO {CsoId} " +
@@ -678,9 +691,6 @@ public abstract class SyncTaskProcessorBase
         // The same RPEI is used for both the disconnection record and the deletion tracking.
         _obsoleteCsosToDelete.Add((connectedSystemObject, deletionExecutionItem));
 
-        // Evaluate MVO deletion rule based on type configuration
-        var mvoDeletionFate = await ProcessMvoDeletionRuleAsync(mvo, connectedSystemId, remainingCsoCount);
-
         // Build sync outcomes: Disconnected as root, CsoDeleted as child (causal chain).
         // The disconnection is the primary event; CSO deletion is a consequential outcome.
         if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
@@ -692,8 +702,6 @@ public abstract class SyncTaskProcessorBase
                 detailCount: deletionExecutionItem.AttributeFlowCount);
 
             // In Detailed mode, add AttributeFlow child under Disconnected when attributes were recalled.
-            // Note: when MVO is deleted immediately, the recall is nugatory work (see #390) but we still
-            // show the outcome so the inefficiency is visible until the optimisation is implemented.
             if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
                 && deletionExecutionItem.AttributeFlowCount is > 0)
             {
@@ -2769,12 +2777,21 @@ public abstract class SyncTaskProcessorBase
                 var totalCsoCount = await _syncRepo.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
                 var remainingCsoCount = Math.Max(0, totalCsoCount - 1);
 
+                // Evaluate the MVO deletion rule BEFORE attribute recall (#390 optimisation).
+                // If the MVO will be deleted immediately, attribute recall is nugatory work —
+                // the attributes, MVO update, and export evaluations would all be discarded
+                // when the MVO is deleted moments later in FlushPendingMvoDeletionsAsync.
+                var mvoDeletionFate = await ProcessMvoDeletionRuleAsync(mvo, _connectedSystem.Id, remainingCsoCount);
+
                 // Check if we should remove contributed attributes based on the object type setting.
                 // Skip recall when a grace period is configured (see ProcessObsoleteConnectedSystemObjectAsync).
+                // Also skip recall when the MVO will be deleted immediately — the recall work (MVO update,
+                // export evaluation queueing) would be discarded when the MVO is deleted (#390).
                 int attributeRemovalCount = 0;
                 List<MetaverseObjectAttributeValue>? recalledAttributeValues = null;
                 var hasGracePeriod = mvo.Type?.DeletionGracePeriod is { } gracePeriod && gracePeriod > TimeSpan.Zero;
-                if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !hasGracePeriod)
+                var skipRecallForImmediateDeletion = mvoDeletionFate == MvoDeletionFate.DeletedImmediately;
+                if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !hasGracePeriod && !skipRecallForImmediateDeletion)
                 {
                     var contributedAttributes = mvo.AttributeValues
                         .Where(av => av.ContributedBySystemId == _connectedSystem.Id)
@@ -2797,6 +2814,12 @@ public abstract class SyncTaskProcessorBase
                         recalledAttributeValues = mvo.PendingAttributeValueRemovals.ToList();
                     }
                 }
+                else if (skipRecallForImmediateDeletion)
+                {
+                    Log.Debug("HandleCsoOutOfScopeAsync: Skipping attribute recall for CSO {CsoId} " +
+                        "because MVO {MvoId} will be deleted immediately (#390 optimisation).",
+                        connectedSystemObject.Id, mvo.Id);
+                }
 
                 // Break the CSO-MVO join
                 mvo.ConnectedSystemObjects.Remove(connectedSystemObject);
@@ -2806,12 +2829,13 @@ public abstract class SyncTaskProcessorBase
                 connectedSystemObject.DateJoined = null;
                 Log.Verbose("HandleCsoOutOfScopeAsync: Broke join between CSO {CsoId} and MVO {MvoId}", connectedSystemObject.Id, mvoId);
 
-                // Apply pending attribute changes and update MVO
-                ApplyPendingMetaverseObjectAttributeChanges(mvo);
-                await _syncRepo.UpdateMetaverseObjectAsync(mvo);
-
-                // Evaluate MVO deletion rule based on type configuration
-                var mvoDeletionFate = await ProcessMvoDeletionRuleAsync(mvo, _connectedSystem.Id, remainingCsoCount);
+                // Apply pending attribute changes and update MVO (skip when MVO is about to be
+                // deleted immediately — the update would be a wasted database round trip).
+                if (!skipRecallForImmediateDeletion)
+                {
+                    ApplyPendingMetaverseObjectAttributeChanges(mvo);
+                    await _syncRepo.UpdateMetaverseObjectAsync(mvo);
+                }
 
                 return MetaverseObjectChangeResult.DisconnectedOutOfScope(
                     attributeFlowCount: attributeRemovalCount > 0 ? attributeRemovalCount : null,
