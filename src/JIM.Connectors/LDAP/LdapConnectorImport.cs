@@ -114,6 +114,17 @@ internal class LdapConnectorImport
                     var paginationToken = _paginationTokens.SingleOrDefault(pt => pt.Name == paginationTokenName);
                     var lastRunsCookie = paginationToken?.ByteValue;
 
+                    // On subsequent pages, skip container+objectType combos that have no pagination token.
+                    // All results for that combo were already returned on a previous page.
+                    // Sending unrelated search requests between paged result calls invalidates the
+                    // server-side paging cursor on OpenLDAP (RFC 2696 cookies are connection-scoped).
+                    if (_paginationTokens.Count > 0 && paginationToken == null)
+                    {
+                        _logger.Debug("GetFullImportObjects: Skipping {ObjectType} in {Container} — no pagination token (all results returned on previous page)",
+                            selectedObjectType.Name, selectedContainer.ExternalId);
+                        continue;
+                    }
+
                     if (_cancellationToken.IsCancellationRequested)
                     {
                         _logger.Debug("GetFullImportObjects: O2 Cancellation requested. Stopping");
@@ -199,6 +210,10 @@ internal class LdapConnectorImport
                         var paginationTokenName = LdapConnectorUtilities.GetPaginationTokenName(selectedContainer, selectedObjectType);
                         var paginationToken = _paginationTokens.SingleOrDefault(pt => pt.Name == paginationTokenName);
                         var lastRunsCookie = paginationToken?.ByteValue;
+
+                        // On subsequent pages, skip combos with no pagination token (see full import comment)
+                        if (_paginationTokens.Count > 0 && paginationToken == null)
+                            continue;
 
                         GetDeltaResultsUsingUsn(result, selectedContainer, selectedObjectType, _previousRootDse.HighestCommittedUsn.Value, lastRunsCookie);
                     }
