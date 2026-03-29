@@ -99,36 +99,90 @@ internal class LdapConnectorImport
             result.PersistedConnectorData = JsonSerializer.Serialize(_currentRootDse);
         }
 
-        // enumerate target partitions (scoped to run profile partition if set, otherwise all selected)
+        // OpenLDAP's RFC 2696 paging cookies are connection-scoped: any search request on the
+        // same connection invalidates all outstanding paging cursors. To prevent this, we must
+        // fully complete one container+objectType combo (all pages) before starting the next.
+        //
+        // Strategy: flatten all container+objectType combos into an ordered list. Use a sentinel
+        // pagination token (__comboIndex) to track which combo to start from. On each page call,
+        // process one combo. If it needs paging, return its cookie (and the combo index). If not,
+        // move to the next combo. When all combos are done, return with no pagination tokens.
+        //
+        // For directories without this limitation (e.g., AD), all combos are queried per page.
+        var isConnectionScopedPaging = _currentRootDse?.DirectoryType is LdapDirectoryType.OpenLDAP or LdapDirectoryType.Generic;
+
+        if (isConnectionScopedPaging)
+        {
+            // Build the ordered list of all container+objectType combos
+            var combos = new List<(ConnectedSystemContainer Container, ConnectedSystemObjectType ObjectType)>();
+            foreach (var selectedPartition in GetTargetPartitions())
+            {
+                foreach (var selectedContainer in ConnectedSystemUtilities.GetTopLevelSelectedContainers(selectedPartition))
+                {
+                    foreach (var selectedObjectType in _connectedSystem.ObjectTypes.Where(ot => ot.Selected))
+                    {
+                        combos.Add((selectedContainer, selectedObjectType));
+                    }
+                }
+            }
+
+            // Determine where to start and whether we're resuming mid-combo
+            const string comboIndexTokenName = "__comboIndex";
+            var comboIndexToken = _paginationTokens.SingleOrDefault(pt => pt.Name == comboIndexTokenName);
+            var startIndex = comboIndexToken != null ? BitConverter.ToInt32(comboIndexToken.ByteValue) : 0;
+
+            // Check for a real LDAP paging cookie from the previous page (resume mid-combo)
+            var pagingCookieToken = _paginationTokens.FirstOrDefault(pt => pt.Name != comboIndexTokenName);
+            byte[]? pagingCookie = pagingCookieToken?.ByteValue;
+
+            for (var i = startIndex; i < combos.Count; i++)
+            {
+                if (_cancellationToken.IsCancellationRequested)
+                {
+                    _logger.Debug("GetFullImportObjects: Cancellation requested. Stopping");
+                    return result;
+                }
+
+                var (container, objectType) = combos[i];
+                GetFisoResults(result, container, objectType, pagingCookie);
+                pagingCookie = null; // Only use the cookie for the first combo in this call
+
+                // Check if this combo returned a paging token (more pages to fetch for THIS combo)
+                if (result.PaginationTokens.Count > 0)
+                {
+                    // Add the combo index so we know which combo to resume
+                    result.PaginationTokens.Add(new ConnectedSystemPaginationToken(
+                        comboIndexTokenName, BitConverter.GetBytes(i)));
+                    return result;
+                }
+
+                // This combo is complete (all results fit in one page or last page reached).
+                // Continue to the next combo within this same call — non-paginated combos
+                // (0 results or all results in one page) don't interfere with paging cookies
+                // because they don't create any cursors.
+            }
+
+            // All combos complete — no pagination tokens means we're done
+            return result;
+        }
+
+        // Non-OpenLDAP: original behaviour — query all combos on every page
         foreach (var selectedPartition in GetTargetPartitions())
         {
-            // enumerate top-level selected containers in this partition
-            // Use GetTopLevelSelectedContainers to avoid duplicates when both parent and child containers are selected
-            // (subtree search on parent already includes children)
             foreach (var selectedContainer in ConnectedSystemUtilities.GetTopLevelSelectedContainers(selectedPartition))
             {
-                // we need to perform a query per object type, so that we can have distinct attribute lists per LDAP request
                 foreach (var selectedObjectType in _connectedSystem.ObjectTypes.Where(ot => ot.Selected))
                 {
-                    // if this is the subsequent page for this container, use this when getting the results for the next page
                     var paginationTokenName = LdapConnectorUtilities.GetPaginationTokenName(selectedContainer, selectedObjectType);
                     var paginationToken = _paginationTokens.SingleOrDefault(pt => pt.Name == paginationTokenName);
                     var lastRunsCookie = paginationToken?.ByteValue;
 
-                    // On subsequent pages, skip container+objectType combos that have no pagination token.
-                    // All results for that combo were already returned on a previous page.
-                    // Sending unrelated search requests between paged result calls invalidates the
-                    // server-side paging cursor on OpenLDAP (RFC 2696 cookies are connection-scoped).
                     if (_paginationTokens.Count > 0 && paginationToken == null)
-                    {
-                        _logger.Debug("GetFullImportObjects: Skipping {ObjectType} in {Container} — no pagination token (all results returned on previous page)",
-                            selectedObjectType.Name, selectedContainer.ExternalId);
                         continue;
-                    }
 
                     if (_cancellationToken.IsCancellationRequested)
                     {
-                        _logger.Debug("GetFullImportObjects: O2 Cancellation requested. Stopping");
+                        _logger.Debug("GetFullImportObjects: Cancellation requested. Stopping");
                         return result;
                     }
 
