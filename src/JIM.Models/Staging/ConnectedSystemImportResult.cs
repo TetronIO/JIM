@@ -1,4 +1,6 @@
-﻿namespace JIM.Models.Staging;
+﻿using JIM.Models.Activities;
+
+namespace JIM.Models.Staging;
 
 public class ConnectedSystemImportResult
 {
@@ -21,4 +23,17 @@ public class ConnectedSystemImportResult
     /// JIM will pass this data to Connectors on each synchronisation run.
     /// </summary>
     public string? PersistedConnectorData { get; set; }
+
+    /// <summary>
+    /// Optional warning message from the connector. When set, the import will complete with a warning
+    /// status and the message will be recorded as an RPEI. Use this to communicate non-fatal operational
+    /// issues to the administrator (e.g., a delta import that fell back to a full import).
+    /// </summary>
+    public string? WarningMessage { get; set; }
+
+    /// <summary>
+    /// Optional error type classification for the warning. When <see cref="WarningMessage"/> is set,
+    /// this categorises the warning for filtering and integration test assertions.
+    /// </summary>
+    public ActivityRunProfileExecutionItemErrorType? WarningErrorType { get; set; }
 }

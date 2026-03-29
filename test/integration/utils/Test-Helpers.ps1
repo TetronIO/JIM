@@ -976,7 +976,14 @@ function Assert-ActivitySuccess {
     .EXAMPLE
         Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Delta Sync" -AllowWarnings
 
-        Validates that Delta Sync completed, allowing warnings (but not errors).
+        Validates that Delta Sync completed, allowing any warnings (but not errors).
+
+    .EXAMPLE
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Delta Import" `
+            -AllowWarnings -AllowedWarningTypes @('DeltaImportFallbackToFullImport')
+
+        Validates that the Delta Import completed, allowing CompleteWithWarning ONLY if
+        all warning RPEIs have the DeltaImportFallbackToFullImport error type.
     #>
     param(
         [Parameter(Mandatory=$true)]
@@ -986,7 +993,10 @@ function Assert-ActivitySuccess {
         [string]$Name,
 
         [Parameter(Mandatory=$false)]
-        [switch]$AllowWarnings
+        [switch]$AllowWarnings,
+
+        [Parameter(Mandatory=$false)]
+        [string[]]$AllowedWarningTypes
     )
 
     # Fetch the Activity details
@@ -1006,6 +1016,21 @@ function Assert-ActivitySuccess {
 
     # Check if status is acceptable
     if ($status -in $acceptableStatuses) {
+        # If CompleteWithWarning and AllowedWarningTypes specified, verify all warnings are of allowed types
+        if ($status -eq 'CompleteWithWarning' -and $AllowedWarningTypes) {
+            $errorItems = Get-JIMActivity -Id $ActivityId -ExecutionItems |
+                Where-Object { $_.errorType -and $_.errorType -ne 'NotSet' }
+
+            $unexpectedWarnings = $errorItems | Where-Object { $_.errorType -notin $AllowedWarningTypes }
+            if ($unexpectedWarnings) {
+                $unexpectedTypes = ($unexpectedWarnings | ForEach-Object { $_.errorType } | Select-Object -Unique) -join ', '
+                throw "Activity '$Name' completed with unexpected warning types: $unexpectedTypes. " +
+                    "Only these warning types are allowed: $($AllowedWarningTypes -join ', ') (ActivityId: $ActivityId)"
+            }
+            Write-Host "  ✓ $Name completed with expected warning (Status: $status, Warning: $($AllowedWarningTypes -join ', '))" -ForegroundColor Green
+            return
+        }
+
         Write-Host "  ✓ $Name completed successfully (Status: $status)" -ForegroundColor Green
         return  # Success - no output (callers don't use return value)
     }

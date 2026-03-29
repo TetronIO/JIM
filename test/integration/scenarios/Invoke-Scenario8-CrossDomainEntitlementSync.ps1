@@ -484,9 +484,17 @@ try {
         Write-Host "  Running DELTA forward sync (Source → Metaverse → Target)..." -ForegroundColor Gray
 
         # Step 1: Delta Import from Source
+        # OpenLDAP: allow DeltaImportFallbackToFullImport warning — the accesslog watermark may not
+        # be available if the accesslog exceeded the server's size limit during the preceding full import.
+        # The connector automatically falls back to a full import and establishes the watermark.
         Write-Host "    Delta importing from Source AD..." -ForegroundColor Gray
         $importResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceDeltaImportProfile.id -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Source Delta Import$contextSuffix"
+        if ($isOpenLDAP) {
+            Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Source Delta Import$contextSuffix" `
+                -AllowWarnings -AllowedWarningTypes @('DeltaImportFallbackToFullImport')
+        } else {
+            Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Source Delta Import$contextSuffix"
+        }
         Assert-NoUnresolvedReferences -ConnectedSystemId $sourceSystem.id -Name "Source AD" -Context "after Delta Import$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
@@ -505,7 +513,12 @@ try {
         # Step 4: Delta Confirming Import from Target
         Write-Host "    Delta confirming import in Target AD..." -ForegroundColor Gray
         $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaImportProfile.id -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "Target Delta Confirming Import$contextSuffix"
+        if ($isOpenLDAP) {
+            Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "Target Delta Confirming Import$contextSuffix" `
+                -AllowWarnings -AllowedWarningTypes @('DeltaImportFallbackToFullImport')
+        } else {
+            Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "Target Delta Confirming Import$contextSuffix"
+        }
         Assert-NoUnresolvedReferences -ConnectedSystemId $targetSystem.id -Name "Target AD" -Context "after Delta Confirming Import$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
@@ -939,7 +952,12 @@ try {
         Write-Host "  Running Delta Import on Target AD (to import drifted state)..." -ForegroundColor Gray
 
         $targetImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaImportProfile.id -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $targetImportResult.activityId -Name "Target Delta Import (detect drift)"
+        if ($isOpenLDAP) {
+            Assert-ActivitySuccess -ActivityId $targetImportResult.activityId -Name "Target Delta Import (detect drift)" `
+                -AllowWarnings -AllowedWarningTypes @('DeltaImportFallbackToFullImport')
+        } else {
+            Assert-ActivitySuccess -ActivityId $targetImportResult.activityId -Name "Target Delta Import (detect drift)"
+        }
         Start-Sleep -Seconds $WaitSeconds
 
         # Step 3.7: Delta Sync on Target AD to evaluate the drift against sync rules

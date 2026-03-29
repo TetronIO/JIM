@@ -166,6 +166,8 @@ public class SyncImportTaskProcessor
                 // AFTER all pages are processed.
                 var originalPersistedData = _connectedSystem.PersistedConnectorData;
                 string? newPersistedData = null;
+                string? connectorWarningMessage = null;
+                ActivityRunProfileExecutionItemErrorType? connectorWarningErrorType = null;
 
                 while (initialPage || paginationTokens.Count > 0)
                 {
@@ -207,6 +209,13 @@ public class SyncImportTaskProcessor
                         newPersistedData = result.PersistedConnectorData;
                     }
 
+                    // Capture connector warning from the first page that reports one
+                    if (result.WarningMessage != null && connectorWarningMessage == null)
+                    {
+                        connectorWarningMessage = result.WarningMessage;
+                        connectorWarningErrorType = result.WarningErrorType;
+                    }
+
                     // process the results from this page
                     using (Diagnostics.Sync.StartSpan("ProcessImportObjects").SetTag("objectCount", result.ImportObjects.Count))
                     {
@@ -224,6 +233,16 @@ public class SyncImportTaskProcessor
                     Log.Debug($"ExecuteAsync: updating persisted connector data after all pages. old value: '{originalPersistedData}', new value: '{newPersistedData}'");
                     _connectedSystem.PersistedConnectorData = newPersistedData;
                     await UpdateConnectedSystemWithInitiatorAsync();
+                }
+
+                // Record any connector-level warnings as RPEIs so they surface in the activity
+                if (connectorWarningMessage != null)
+                {
+                    var warningRpei = _activity.PrepareRunProfileExecutionItem();
+                    warningRpei.ErrorType = connectorWarningErrorType ?? ActivityRunProfileExecutionItemErrorType.UnhandledError;
+                    warningRpei.ErrorMessage = connectorWarningMessage;
+                    _activity.RunProfileExecutionItems.Add(warningRpei);
+                    Log.Warning("PerformFullImportAsync: Connector reported warning: {WarningMessage}", connectorWarningMessage);
                 }
 
                 using (Diagnostics.Connector.StartSpan("CloseImportConnection"))

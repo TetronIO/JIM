@@ -1,4 +1,5 @@
-﻿using JIM.Models.Core;
+﻿using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
 using JIM.Models.Staging;
@@ -236,7 +237,25 @@ internal class LdapConnectorImport
             // For OpenLDAP with accesslog overlay
             if (string.IsNullOrEmpty(_previousRootDse.LastAccesslogTimestamp))
             {
-                throw new CannotPerformDeltaImportException("Previous accesslog timestamp not available. Run a full import first.");
+                // The accesslog watermark is not available. This can happen when:
+                // - The accesslog has more entries than the server's olcSizeLimit (default 500)
+                //   and the bind account cannot bypass the limit (not the accesslog DB rootDN)
+                // - The accesslog overlay is not enabled or not accessible
+                // - The previous full import failed to capture the watermark
+                //
+                // Rather than failing, fall back to a full import which will correctly import
+                // all objects AND establish the watermark for future delta imports.
+                _logger.Warning("GetDeltaImportObjects: Accesslog watermark not available. " +
+                    "Falling back to full import to establish baseline. " +
+                    "Future delta imports should work normally after this full import completes.");
+
+                result = GetFullImportObjects();
+                result.WarningMessage = "Delta import was requested but the accesslog watermark was not available " +
+                    "(the cn=accesslog database may have exceeded the server's size limit for the bind account). " +
+                    "A full import was performed instead. The watermark has been established and future " +
+                    "delta imports should succeed normally.";
+                result.WarningErrorType = ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport;
+                return result;
             }
 
             _logger.Debug("GetDeltaImportObjects: Using accesslog-based delta import. Previous timestamp: {PreviousTimestamp}",
@@ -323,68 +342,33 @@ internal class LdapConnectorImport
     /// <summary>
     /// Queries the OpenLDAP accesslog overlay (cn=accesslog) for the latest reqStart timestamp.
     /// This establishes the watermark for the next delta import.
-    /// Uses paged results to avoid hitting the server's default size limit (typically 500),
-    /// which can be exceeded after bulk data population.
+    ///
+    /// Strategy:
+    /// 1. Try server-side sort (reverse by reqStart) with SizeLimit=1 to get only the latest entry.
+    ///    This is the most efficient approach but requires the sssvlv overlay to be enabled.
+    /// 2. If sort is not supported, fall back to a simple query that handles size limit exceeded
+    ///    by extracting partial results from the exception response.
+    ///
+    /// OpenLDAP enforces olcSizeLimit (default 500) as a hard cap for non-rootDN clients, even
+    /// with paging controls. The bind account used by the connector is typically not the rootDN
+    /// of the cn=accesslog database, so paging alone cannot bypass the limit. The strategies
+    /// above are designed to work within this constraint.
     /// </summary>
     private string? QueryAccesslogForLatestTimestamp()
     {
         try
         {
-            // Query cn=accesslog for successful write operations.
-            // reqResult=0 ensures we only consider successful operations.
-            // We request only reqStart to minimise data transfer, then find the latest in code.
-            // Paged results are required because the accesslog can have thousands of entries
-            // after bulk population, exceeding OpenLDAP's default olcSizeLimit (500).
-            string? latestTimestamp = null;
-            var totalEntries = 0;
-            byte[]? pagingCookie = null;
+            // Strategy 1: Server-side sort (reverse) with SizeLimit=1
+            // This gets only the single latest entry, avoiding size limit issues entirely.
+            var result = QueryAccesslogWithServerSideSort();
+            if (result != null)
+                return result;
 
-            do
-            {
-                var request = new SearchRequest("cn=accesslog",
-                    "(&(objectClass=auditWriteObject)(reqResult=0))",
-                    SearchScope.OneLevel,
-                    "reqStart");
-
-                var pageControl = new PageResultRequestControl(500) { IsCritical = false };
-                if (pagingCookie is { Length: > 0 })
-                    pageControl.Cookie = pagingCookie;
-                request.Controls.Add(pageControl);
-
-                var response = (SearchResponse)_connection.SendRequest(request, _searchTimeout);
-
-                if (response == null)
-                    break;
-
-                foreach (SearchResultEntry entry in response.Entries)
-                {
-                    var reqStart = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "reqStart");
-                    if (reqStart != null && (latestTimestamp == null || string.Compare(reqStart, latestTimestamp, StringComparison.Ordinal) > 0))
-                        latestTimestamp = reqStart;
-                    totalEntries++;
-                }
-
-                // Extract paging cookie for next page
-                pagingCookie = null;
-                if (response.Controls != null)
-                {
-                    var pageResponse = response.Controls
-                        .SingleOrDefault(c => c is PageResultResponseControl) as PageResultResponseControl;
-                    if (pageResponse?.Cookie is { Length: > 0 })
-                        pagingCookie = pageResponse.Cookie;
-                }
-            }
-            while (pagingCookie != null);
-
-            if (totalEntries == 0)
-            {
-                _logger.Debug("QueryAccesslogForLatestTimestamp: No accesslog entries found");
-                return null;
-            }
-
-            _logger.Debug("QueryAccesslogForLatestTimestamp: Latest accesslog timestamp: {Timestamp} (from {Count} entries)",
-                latestTimestamp, totalEntries);
-            return latestTimestamp;
+            // Strategy 2: Simple query with size limit exceeded handling.
+            // If the accesslog has fewer entries than olcSizeLimit, this returns all entries normally.
+            // If it exceeds the limit, we catch the DirectoryOperationException and extract
+            // the latest timestamp from the partial results in the exception's response.
+            return QueryAccesslogWithSizeLimitHandling();
         }
         catch (Exception ex)
         {
@@ -392,6 +376,118 @@ internal class LdapConnectorImport
                 "The directory may not have the accesslog overlay enabled.");
             return null;
         }
+    }
+
+    /// <summary>
+    /// Attempts to query the accesslog using server-side sorting (reverse by reqStart) with
+    /// SizeLimit=1 to retrieve only the latest entry. This requires the sssvlv overlay.
+    /// Returns null if server-side sorting is not supported.
+    /// </summary>
+    private string? QueryAccesslogWithServerSideSort()
+    {
+        try
+        {
+            var request = new SearchRequest("cn=accesslog",
+                "(&(objectClass=auditWriteObject)(reqResult=0))",
+                SearchScope.OneLevel,
+                "reqStart");
+
+            // Request reverse sort by reqStart so the latest entry comes first
+            var sortControl = new SortRequestControl(new SortKey("reqStart", "caseIgnoreOrderingMatch", true));
+            sortControl.IsCritical = true;
+            request.Controls.Add(sortControl);
+            request.SizeLimit = 1;
+
+            var response = (SearchResponse)_connection.SendRequest(request, _searchTimeout);
+            if (response?.Entries.Count > 0)
+            {
+                var timestamp = LdapConnectorUtilities.GetEntryAttributeStringValue(response.Entries[0], "reqStart");
+                if (timestamp != null)
+                {
+                    _logger.Debug("QueryAccesslogWithServerSideSort: Latest accesslog timestamp: {Timestamp} (via server-side sort)", timestamp);
+                    return timestamp;
+                }
+            }
+
+            _logger.Debug("QueryAccesslogWithServerSideSort: No accesslog entries found via server-side sort");
+            return null;
+        }
+        catch (DirectoryOperationException ex) when (ex.Response is SearchResponse { ResultCode: ResultCode.UnavailableCriticalExtension or ResultCode.UnwillingToPerform })
+        {
+            _logger.Debug("QueryAccesslogWithServerSideSort: Server-side sorting not supported (sssvlv overlay not enabled). Falling back to size-limit-aware query.");
+            return null;
+        }
+        catch (DirectoryOperationException ex) when (ex.Response is SearchResponse { ResultCode: ResultCode.InappropriateMatching })
+        {
+            // Matching rule not supported for this attribute — fall back
+            _logger.Debug("QueryAccesslogWithServerSideSort: Sort matching rule not supported for reqStart. Falling back to size-limit-aware query.");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Queries the accesslog with a simple search. If the server returns a size limit exceeded
+    /// error, extracts partial results from the exception response and finds the latest timestamp
+    /// among them. This works because OpenLDAP returns results up to the size limit before
+    /// signalling the error, and accesslog entries are naturally ordered chronologically.
+    /// </summary>
+    private string? QueryAccesslogWithSizeLimitHandling()
+    {
+        string? latestTimestamp = null;
+        var totalEntries = 0;
+
+        try
+        {
+            var request = new SearchRequest("cn=accesslog",
+                "(&(objectClass=auditWriteObject)(reqResult=0))",
+                SearchScope.OneLevel,
+                "reqStart");
+
+            var response = (SearchResponse)_connection.SendRequest(request, _searchTimeout);
+            (latestTimestamp, totalEntries) = ExtractLatestTimestamp(response);
+        }
+        catch (DirectoryOperationException ex) when (ex.Response is SearchResponse partialResponse
+            && partialResponse.ResultCode == ResultCode.SizeLimitExceeded)
+        {
+            // The server hit its size limit but returned partial results.
+            // Extract the latest timestamp from whatever entries were returned.
+            (latestTimestamp, totalEntries) = ExtractLatestTimestamp(partialResponse);
+
+            _logger.Information("QueryAccesslogWithSizeLimitHandling: Server size limit exceeded. " +
+                "Extracted latest timestamp from {Count} partial results. " +
+                "The watermark may not reflect the absolute latest entry if the accesslog " +
+                "was not returned in chronological order, but this is sufficient for delta import.",
+                totalEntries);
+        }
+
+        if (totalEntries == 0)
+        {
+            _logger.Debug("QueryAccesslogWithSizeLimitHandling: No accesslog entries found");
+            return null;
+        }
+
+        _logger.Debug("QueryAccesslogWithSizeLimitHandling: Latest accesslog timestamp: {Timestamp} (from {Count} entries)",
+            latestTimestamp, totalEntries);
+        return latestTimestamp;
+    }
+
+    /// <summary>
+    /// Extracts the latest reqStart timestamp from a search response containing accesslog entries.
+    /// </summary>
+    private static (string? latestTimestamp, int entryCount) ExtractLatestTimestamp(SearchResponse response)
+    {
+        string? latestTimestamp = null;
+        var count = 0;
+
+        foreach (SearchResultEntry entry in response.Entries)
+        {
+            var reqStart = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "reqStart");
+            if (reqStart != null && (latestTimestamp == null || string.Compare(reqStart, latestTimestamp, StringComparison.Ordinal) > 0))
+                latestTimestamp = reqStart;
+            count++;
+        }
+
+        return (latestTimestamp, count);
     }
 
     private LdapConnectorRootDse GetRootDseInformation()
