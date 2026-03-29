@@ -510,22 +510,33 @@ try {
         Assert-ActivitySuccess -ActivityId $exportResult.activityId -Name "Target Export$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
-        # Step 4: Delta Confirming Import from Target
-        Write-Host "    Delta confirming import in Target AD..." -ForegroundColor Gray
-        $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaImportProfile.id -Wait -PassThru
+        # Step 4: Confirming Import from Target
+        # OpenLDAP: use full confirming import instead of delta. Delta confirming import on OpenLDAP
+        # only imports changed objects (via accesslog), but group member references point to user CSOs
+        # that were imported in a previous full import. Without those users in the delta batch, the
+        # references are unresolved, causing FailedWithError. Full confirming import imports all objects
+        # so all references are resolvable.
         if ($isOpenLDAP) {
-            Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "Target Delta Confirming Import$contextSuffix" `
-                -AllowWarnings -AllowedWarningTypes @('DeltaImportFallbackToFullImport')
+            Write-Host "    Full confirming import in Target AD..." -ForegroundColor Gray
+            $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetScopedImportProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "Target Full Confirming Import$contextSuffix"
         } else {
+            Write-Host "    Delta confirming import in Target AD..." -ForegroundColor Gray
+            $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaImportProfile.id -Wait -PassThru
             Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "Target Delta Confirming Import$contextSuffix"
         }
-        Assert-NoUnresolvedReferences -ConnectedSystemId $targetSystem.id -Name "Target AD" -Context "after Delta Confirming Import$contextSuffix"
+        Assert-NoUnresolvedReferences -ConnectedSystemId $targetSystem.id -Name "Target AD" -Context "after Confirming Import$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
-        # Step 5: Delta Confirming Sync
-        Write-Host "    Delta confirming sync..." -ForegroundColor Gray
-        $confirmSyncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaSyncProfile.id -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $confirmSyncResult.activityId -Name "Target Delta Confirming Sync$contextSuffix"
+        # Step 5: Confirming Sync
+        Write-Host "    Confirming sync..." -ForegroundColor Gray
+        if ($isOpenLDAP) {
+            $confirmSyncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetFullSyncProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $confirmSyncResult.activityId -Name "Target Full Confirming Sync$contextSuffix" -AllowWarnings
+        } else {
+            $confirmSyncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaSyncProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $confirmSyncResult.activityId -Name "Target Delta Confirming Sync$contextSuffix"
+        }
         Start-Sleep -Seconds $WaitSeconds
     }
 
