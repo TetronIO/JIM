@@ -261,7 +261,11 @@ internal class LdapConnectorImport
             _logger.Debug("GetDeltaImportObjects: Using accesslog-based delta import. Previous timestamp: {PreviousTimestamp}",
                 _previousRootDse.LastAccesslogTimestamp);
 
-            GetDeltaResultsUsingAccesslog(result, _previousRootDse.LastAccesslogTimestamp);
+            // Pass the target partitions so the method can filter accesslog entries by DN suffix.
+            // OpenLDAP uses a shared cn=accesslog for all databases, so entries from other suffixes
+            // (e.g., Target) must be excluded when importing from Source.
+            var targetPartitions = GetTargetPartitions().ToList();
+            GetDeltaResultsUsingAccesslog(result, _previousRootDse.LastAccesslogTimestamp, targetPartitions);
         }
         else
         {
@@ -1005,12 +1009,14 @@ internal class LdapConnectorImport
     /// when the size limit is exceeded, the latest timestamp from partial results is used to narrow
     /// the next query, effectively walking forward through the accesslog until all changes are found.
     /// </summary>
-    private void GetDeltaResultsUsingAccesslog(ConnectedSystemImportResult result, string previousTimestamp)
+    private void GetDeltaResultsUsingAccesslog(ConnectedSystemImportResult result, string previousTimestamp,
+        List<ConnectedSystemPartition> targetPartitions)
     {
         _logger.Debug("GetDeltaResultsUsingAccesslog: Querying for changes since {PreviousTimestamp}", previousTimestamp);
 
         var currentTimestamp = previousTimestamp;
         var totalEntries = 0;
+        var skippedOutOfScope = 0;
         var iterations = 0;
         const int maxIterations = 100; // Safety limit
         // Track processed DNs+timestamps to avoid duplicates when iterating with >= filters
@@ -1020,6 +1026,12 @@ internal class LdapConnectorImport
         // the same group). Since we fetch current state rather than replaying individual
         // changes, only the first occurrence needs to be processed.
         var processedDns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // Build partition suffix list for filtering — OpenLDAP shares cn=accesslog across
+        // all databases, so we must exclude entries from other suffixes.
+        var partitionSuffixes = targetPartitions
+            .Select(p => p.ExternalId)
+            .Where(id => !string.IsNullOrEmpty(id))
+            .ToList();
 
         while (iterations < maxIterations)
         {
@@ -1090,6 +1102,17 @@ internal class LdapConnectorImport
                 if (string.IsNullOrEmpty(reqDn) || string.IsNullOrEmpty(reqStart))
                     continue;
 
+                // Filter by partition scope — only process entries whose DN falls within
+                // the connected system's selected partitions. OpenLDAP's shared cn=accesslog
+                // records changes from ALL databases (suffixes), so we must exclude entries
+                // from other suffixes to avoid importing objects from the wrong partition.
+                if (partitionSuffixes.Count > 0 &&
+                    !partitionSuffixes.Any(suffix => reqDn.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
+                {
+                    skippedOutOfScope++;
+                    continue;
+                }
+
                 // Track the latest timestamp in this batch for the next iteration
                 if (batchLatestTimestamp == null || string.Compare(reqStart, batchLatestTimestamp, StringComparison.Ordinal) > 0)
                     batchLatestTimestamp = reqStart;
@@ -1159,8 +1182,9 @@ internal class LdapConnectorImport
             currentTimestamp = batchLatestTimestamp;
         }
 
-        _logger.Debug("GetDeltaResultsUsingAccesslog: Processed {TotalEntries} change entries in {Iterations} iterations",
-            totalEntries, iterations);
+        _logger.Debug("GetDeltaResultsUsingAccesslog: Processed {TotalEntries} change entries in {Iterations} iterations. " +
+            "Skipped {SkippedOutOfScope} entries outside partition scope.",
+            totalEntries, iterations, skippedOutOfScope);
     }
 
     /// <summary>
