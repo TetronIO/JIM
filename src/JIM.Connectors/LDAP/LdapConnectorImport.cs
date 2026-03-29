@@ -426,38 +426,65 @@ internal class LdapConnectorImport
     }
 
     /// <summary>
-    /// Queries the accesslog with a simple search. If the server returns a size limit exceeded
-    /// error, extracts partial results from the exception response and finds the latest timestamp
-    /// among them. This works because OpenLDAP returns results up to the size limit before
-    /// signalling the error, and accesslog entries are naturally ordered chronologically.
+    /// Queries the accesslog using an iterative approach that works within the server's size limit.
+    /// When the size limit is exceeded, extracts the latest timestamp from partial results and
+    /// re-queries with a narrower filter (reqStart >= latest_seen) to walk forward through the
+    /// accesslog until all entries have been scanned. This effectively implements manual paging
+    /// without requiring paging controls to bypass the size limit.
     /// </summary>
     private string? QueryAccesslogWithSizeLimitHandling()
     {
         string? latestTimestamp = null;
         var totalEntries = 0;
+        var iterations = 0;
+        const int maxIterations = 100; // Safety limit to prevent infinite loops
 
-        try
+        // Start with an unfiltered query to get the first batch
+        var currentFilter = "(&(objectClass=auditWriteObject)(reqResult=0))";
+
+        while (iterations < maxIterations)
         {
-            var request = new SearchRequest("cn=accesslog",
-                "(&(objectClass=auditWriteObject)(reqResult=0))",
-                SearchScope.OneLevel,
-                "reqStart");
+            iterations++;
+            string? batchLatest;
+            int batchCount;
+            var hitSizeLimit = false;
 
-            var response = (SearchResponse)_connection.SendRequest(request, _searchTimeout);
-            (latestTimestamp, totalEntries) = ExtractLatestTimestamp(response);
-        }
-        catch (DirectoryOperationException ex) when (ex.Response is SearchResponse partialResponse
-            && partialResponse.ResultCode == ResultCode.SizeLimitExceeded)
-        {
-            // The server hit its size limit but returned partial results.
-            // Extract the latest timestamp from whatever entries were returned.
-            (latestTimestamp, totalEntries) = ExtractLatestTimestamp(partialResponse);
+            try
+            {
+                var request = new SearchRequest("cn=accesslog", currentFilter,
+                    SearchScope.OneLevel, "reqStart");
 
-            _logger.Information("QueryAccesslogWithSizeLimitHandling: Server size limit exceeded. " +
-                "Extracted latest timestamp from {Count} partial results. " +
-                "The watermark may not reflect the absolute latest entry if the accesslog " +
-                "was not returned in chronological order, but this is sufficient for delta import.",
-                totalEntries);
+                var response = (SearchResponse)_connection.SendRequest(request, _searchTimeout);
+                (batchLatest, batchCount) = ExtractLatestTimestamp(response);
+            }
+            catch (DirectoryOperationException ex) when (ex.Response is SearchResponse partialResponse
+                && partialResponse.ResultCode == ResultCode.SizeLimitExceeded)
+            {
+                // The server hit its size limit but returned partial results.
+                (batchLatest, batchCount) = ExtractLatestTimestamp(partialResponse);
+                hitSizeLimit = true;
+            }
+
+            totalEntries += batchCount;
+
+            if (batchCount == 0 || batchLatest == null)
+                break;
+
+            // Update the overall latest timestamp
+            if (latestTimestamp == null || string.Compare(batchLatest, latestTimestamp, StringComparison.Ordinal) > 0)
+                latestTimestamp = batchLatest;
+
+            if (!hitSizeLimit)
+                break; // Got all results without hitting the limit — done
+
+            // Size limit was hit. The partial results contain the earliest entries (OpenLDAP
+            // returns in insertion order). Re-query starting after the latest timestamp we've
+            // seen to walk forward through the remaining entries.
+            _logger.Debug("QueryAccesslogWithSizeLimitHandling: Size limit exceeded on iteration {Iteration}. " +
+                "Latest timestamp so far: {Timestamp}. Re-querying from that point.",
+                iterations, latestTimestamp);
+
+            currentFilter = $"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={latestTimestamp}))";
         }
 
         if (totalEntries == 0)
@@ -466,8 +493,9 @@ internal class LdapConnectorImport
             return null;
         }
 
-        _logger.Debug("QueryAccesslogWithSizeLimitHandling: Latest accesslog timestamp: {Timestamp} (from {Count} entries)",
-            latestTimestamp, totalEntries);
+        _logger.Debug("QueryAccesslogWithSizeLimitHandling: Latest accesslog timestamp: {Timestamp} " +
+            "(scanned {Count} entries in {Iterations} iterations)",
+            latestTimestamp, totalEntries, iterations);
         return latestTimestamp;
     }
 
@@ -972,32 +1000,73 @@ internal class LdapConnectorImport
     /// Gets delta results using OpenLDAP's accesslog overlay (slapo-accesslog).
     /// Queries cn=accesslog for write operations that occurred after the previous watermark timestamp.
     /// For each change, fetches the current state of the affected object.
+    ///
+    /// Handles the server-side size limit (olcSizeLimit, default 500) by iterating through batches:
+    /// when the size limit is exceeded, the latest timestamp from partial results is used to narrow
+    /// the next query, effectively walking forward through the accesslog until all changes are found.
     /// </summary>
     private void GetDeltaResultsUsingAccesslog(ConnectedSystemImportResult result, string previousTimestamp)
     {
         _logger.Debug("GetDeltaResultsUsingAccesslog: Querying for changes since {PreviousTimestamp}", previousTimestamp);
 
-        // Query accesslog for successful write operations at or after the previous timestamp.
-        // LDAP only supports >= (not >), so we use >= and skip the exact match in code.
-        // reqResult=0 = successful operations only (skip failed writes).
-        // auditWriteObject covers add, modify, delete, and modrdn operations.
-        var ldapFilter = $"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={previousTimestamp}))";
-        var request = new SearchRequest("cn=accesslog", ldapFilter, SearchScope.OneLevel,
-            "reqStart", "reqType", "reqDN");
+        var currentTimestamp = previousTimestamp;
+        var totalEntries = 0;
+        var iterations = 0;
+        const int maxIterations = 100; // Safety limit
+        // Track processed DNs+timestamps to avoid duplicates when iterating with >= filters
+        var processedEntries = new HashSet<string>(StringComparer.Ordinal);
 
-        try
+        while (iterations < maxIterations)
         {
-            var response = (SearchResponse)_connection.SendRequest(request, _searchTimeout);
+            iterations++;
 
-            if (response == null || response.ResultCode != ResultCode.Success)
+            if (_cancellationToken.IsCancellationRequested)
             {
-                _logger.Warning("GetDeltaResultsUsingAccesslog: Failed to query accesslog. ResultCode: {ResultCode}",
-                    response?.ResultCode);
+                _logger.Debug("GetDeltaResultsUsingAccesslog: Cancellation requested. Stopping");
                 return;
             }
 
-            _logger.Debug("GetDeltaResultsUsingAccesslog: Found {Count} accesslog entries since {Timestamp}",
-                response.Entries.Count, previousTimestamp);
+            // LDAP only supports >= (not >), so we use >= and skip already-processed entries in code.
+            var ldapFilter = $"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={currentTimestamp}))";
+            var request = new SearchRequest("cn=accesslog", ldapFilter, SearchScope.OneLevel,
+                "reqStart", "reqType", "reqDN");
+
+            SearchResponse response;
+            var hitSizeLimit = false;
+
+            try
+            {
+                response = (SearchResponse)_connection.SendRequest(request, _searchTimeout);
+
+                if (response == null || response.ResultCode != ResultCode.Success)
+                {
+                    _logger.Warning("GetDeltaResultsUsingAccesslog: Failed to query accesslog. ResultCode: {ResultCode}",
+                        response?.ResultCode);
+                    return;
+                }
+            }
+            catch (DirectoryOperationException ex) when (ex.Response is SearchResponse partialResponse
+                && partialResponse.ResultCode == ResultCode.SizeLimitExceeded)
+            {
+                // Size limit exceeded — process the partial results we got
+                response = partialResponse;
+                hitSizeLimit = true;
+                _logger.Debug("GetDeltaResultsUsingAccesslog: Size limit exceeded on iteration {Iteration}. " +
+                    "Processing {Count} partial results.", iterations, response.Entries.Count);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "GetDeltaResultsUsingAccesslog: Error querying accesslog");
+                return;
+            }
+
+            if (response.Entries.Count == 0)
+                break;
+
+            _logger.Debug("GetDeltaResultsUsingAccesslog: Processing {Count} accesslog entries (iteration {Iteration})",
+                response.Entries.Count, iterations);
+
+            string? batchLatestTimestamp = null;
 
             foreach (SearchResultEntry entry in response.Entries)
             {
@@ -1011,12 +1080,23 @@ internal class LdapConnectorImport
                 var reqType = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "reqType");
                 var reqDn = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "reqDN");
 
-                if (string.IsNullOrEmpty(reqDn))
+                if (string.IsNullOrEmpty(reqDn) || string.IsNullOrEmpty(reqStart))
                     continue;
 
-                // Skip the exact timestamp match (we used >= in the filter because LDAP has no >)
+                // Track the latest timestamp in this batch for the next iteration
+                if (batchLatestTimestamp == null || string.Compare(reqStart, batchLatestTimestamp, StringComparison.Ordinal) > 0)
+                    batchLatestTimestamp = reqStart;
+
+                // Skip the exact timestamp match from the previous watermark
                 if (reqStart == previousTimestamp)
                     continue;
+
+                // Skip entries we've already processed (from overlapping >= queries)
+                var entryKey = $"{reqStart}|{reqDn}";
+                if (!processedEntries.Add(entryKey))
+                    continue;
+
+                totalEntries++;
 
                 // Map accesslog reqType to ObjectChangeType
                 var objectChangeType = reqType?.ToLowerInvariant() switch
@@ -1047,11 +1127,26 @@ internal class LdapConnectorImport
                     }
                 }
             }
+
+            if (!hitSizeLimit)
+                break; // Got all results without hitting the limit — done
+
+            // Size limit was hit. Narrow the query to start from the latest timestamp we've seen
+            // to walk forward through the remaining entries.
+            if (batchLatestTimestamp == null || batchLatestTimestamp == currentTimestamp)
+            {
+                // No progress made — all entries have the same timestamp. Cannot narrow further.
+                _logger.Warning("GetDeltaResultsUsingAccesslog: Cannot narrow accesslog query further. " +
+                    "All {Count} entries in this batch have timestamp {Timestamp}. Some changes may be missed.",
+                    response.Entries.Count, currentTimestamp);
+                break;
+            }
+
+            currentTimestamp = batchLatestTimestamp;
         }
-        catch (Exception ex)
-        {
-            _logger.Error(ex, "GetDeltaResultsUsingAccesslog: Error querying accesslog");
-        }
+
+        _logger.Debug("GetDeltaResultsUsingAccesslog: Processed {TotalEntries} change entries in {Iterations} iterations",
+            totalEntries, iterations);
     }
 
     /// <summary>
