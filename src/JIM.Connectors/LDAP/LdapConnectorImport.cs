@@ -323,6 +323,8 @@ internal class LdapConnectorImport
     /// <summary>
     /// Queries the OpenLDAP accesslog overlay (cn=accesslog) for the latest reqStart timestamp.
     /// This establishes the watermark for the next delta import.
+    /// Uses paged results to avoid hitting the server's default size limit (typically 500),
+    /// which can be exceeded after bulk data population.
     /// </summary>
     private string? QueryAccesslogForLatestTimestamp()
     {
@@ -331,31 +333,57 @@ internal class LdapConnectorImport
             // Query cn=accesslog for successful write operations.
             // reqResult=0 ensures we only consider successful operations.
             // We request only reqStart to minimise data transfer, then find the latest in code.
-            var request = new SearchRequest("cn=accesslog",
-                "(&(objectClass=auditWriteObject)(reqResult=0))",
-                SearchScope.OneLevel,
-                "reqStart");
+            // Paged results are required because the accesslog can have thousands of entries
+            // after bulk population, exceeding OpenLDAP's default olcSizeLimit (500).
+            string? latestTimestamp = null;
+            var totalEntries = 0;
+            byte[]? pagingCookie = null;
 
-            var response = (SearchResponse)_connection.SendRequest(request, _searchTimeout);
+            do
+            {
+                var request = new SearchRequest("cn=accesslog",
+                    "(&(objectClass=auditWriteObject)(reqResult=0))",
+                    SearchScope.OneLevel,
+                    "reqStart");
 
-            if (response == null || response.Entries.Count == 0)
+                var pageControl = new PageResultRequestControl(500) { IsCritical = false };
+                if (pagingCookie is { Length: > 0 })
+                    pageControl.Cookie = pagingCookie;
+                request.Controls.Add(pageControl);
+
+                var response = (SearchResponse)_connection.SendRequest(request, _searchTimeout);
+
+                if (response == null)
+                    break;
+
+                foreach (SearchResultEntry entry in response.Entries)
+                {
+                    var reqStart = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "reqStart");
+                    if (reqStart != null && (latestTimestamp == null || string.Compare(reqStart, latestTimestamp, StringComparison.Ordinal) > 0))
+                        latestTimestamp = reqStart;
+                    totalEntries++;
+                }
+
+                // Extract paging cookie for next page
+                pagingCookie = null;
+                if (response.Controls != null)
+                {
+                    var pageResponse = response.Controls
+                        .SingleOrDefault(c => c is PageResultResponseControl) as PageResultResponseControl;
+                    if (pageResponse?.Cookie is { Length: > 0 })
+                        pagingCookie = pageResponse.Cookie;
+                }
+            }
+            while (pagingCookie != null);
+
+            if (totalEntries == 0)
             {
                 _logger.Debug("QueryAccesslogForLatestTimestamp: No accesslog entries found");
                 return null;
             }
 
-            // Find the latest reqStart by comparing strings lexicographically
-            // (generalised time format YYYYMMDDHHmmss.ffffffZ is naturally sortable)
-            string? latestTimestamp = null;
-            foreach (SearchResultEntry entry in response.Entries)
-            {
-                var reqStart = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "reqStart");
-                if (reqStart != null && (latestTimestamp == null || string.Compare(reqStart, latestTimestamp, StringComparison.Ordinal) > 0))
-                    latestTimestamp = reqStart;
-            }
-
             _logger.Debug("QueryAccesslogForLatestTimestamp: Latest accesslog timestamp: {Timestamp} (from {Count} entries)",
-                latestTimestamp, response.Entries.Count);
+                latestTimestamp, totalEntries);
             return latestTimestamp;
         }
         catch (Exception ex)
