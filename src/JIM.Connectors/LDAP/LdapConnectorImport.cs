@@ -1128,13 +1128,6 @@ internal class LdapConnectorImport
 
                 totalEntries++;
 
-                // Deduplicate by DN — if we've already processed a change for this DN, skip it.
-                // Since we fetch current state (not replay individual changes), multiple accesslog
-                // entries for the same DN would produce identical import objects and trigger
-                // duplicate detection errors in the import processor.
-                if (!processedDns.Add(reqDn))
-                    continue;
-
                 // Map accesslog reqType to ObjectChangeType
                 var objectChangeType = reqType?.ToLowerInvariant() switch
                 {
@@ -1144,6 +1137,14 @@ internal class LdapConnectorImport
                     "modrdn" => ObjectChangeType.Updated,
                     _ => ObjectChangeType.NotSet
                 };
+
+                // Deduplicate by DN for non-delete operations. Multiple add/modify entries for
+                // the same DN would produce identical import objects (since we fetch current state),
+                // triggering duplicate detection errors. However, delete entries must ALWAYS be
+                // processed even if the DN was already seen — a group that was added then deleted
+                // in the same delta window must be processed as a delete (the final state).
+                if (objectChangeType != ObjectChangeType.Deleted && !processedDns.Add(reqDn))
+                    continue;
 
                 if (objectChangeType == ObjectChangeType.Deleted)
                 {
