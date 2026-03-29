@@ -1015,6 +1015,11 @@ internal class LdapConnectorImport
         const int maxIterations = 100; // Safety limit
         // Track processed DNs+timestamps to avoid duplicates when iterating with >= filters
         var processedEntries = new HashSet<string>(StringComparer.Ordinal);
+        // Track processed DNs to avoid importing the same object multiple times when the
+        // accesslog has multiple changes for the same DN (e.g., 3 member modifications to
+        // the same group). Since we fetch current state rather than replaying individual
+        // changes, only the first occurrence needs to be processed.
+        var processedDns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         while (iterations < maxIterations)
         {
@@ -1097,6 +1102,13 @@ internal class LdapConnectorImport
                     continue;
 
                 totalEntries++;
+
+                // Deduplicate by DN — if we've already processed a change for this DN, skip it.
+                // Since we fetch current state (not replay individual changes), multiple accesslog
+                // entries for the same DN would produce identical import objects and trigger
+                // duplicate detection errors in the import processor.
+                if (!processedDns.Add(reqDn))
+                    continue;
 
                 // Map accesslog reqType to ObjectChangeType
                 var objectChangeType = reqType?.ToLowerInvariant() switch
