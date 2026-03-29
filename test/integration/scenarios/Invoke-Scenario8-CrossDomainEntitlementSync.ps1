@@ -510,33 +510,22 @@ try {
         Assert-ActivitySuccess -ActivityId $exportResult.activityId -Name "Target Export$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
-        # Step 4: Confirming Import from Target
-        # OpenLDAP: use full confirming import instead of delta. Delta confirming import on OpenLDAP
-        # only imports changed objects (via accesslog), but group member references point to user CSOs
-        # that were imported in a previous full import. Without those users in the delta batch, the
-        # references are unresolved, causing FailedWithError. Full confirming import imports all objects
-        # so all references are resolvable.
+        # Step 4: Delta Confirming Import from Target
+        Write-Host "    Delta confirming import in Target AD..." -ForegroundColor Gray
+        $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaImportProfile.id -Wait -PassThru
         if ($isOpenLDAP) {
-            Write-Host "    Full confirming import in Target AD..." -ForegroundColor Gray
-            $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetScopedImportProfile.id -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "Target Full Confirming Import$contextSuffix"
+            Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "Target Delta Confirming Import$contextSuffix" `
+                -AllowWarnings -AllowedWarningTypes @('DeltaImportFallbackToFullImport')
         } else {
-            Write-Host "    Delta confirming import in Target AD..." -ForegroundColor Gray
-            $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaImportProfile.id -Wait -PassThru
             Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "Target Delta Confirming Import$contextSuffix"
         }
-        Assert-NoUnresolvedReferences -ConnectedSystemId $targetSystem.id -Name "Target AD" -Context "after Confirming Import$contextSuffix"
+        Assert-NoUnresolvedReferences -ConnectedSystemId $targetSystem.id -Name "Target AD" -Context "after Delta Confirming Import$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
-        # Step 5: Confirming Sync
-        Write-Host "    Confirming sync..." -ForegroundColor Gray
-        if ($isOpenLDAP) {
-            $confirmSyncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetFullSyncProfile.id -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $confirmSyncResult.activityId -Name "Target Full Confirming Sync$contextSuffix" -AllowWarnings
-        } else {
-            $confirmSyncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaSyncProfile.id -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $confirmSyncResult.activityId -Name "Target Delta Confirming Sync$contextSuffix"
-        }
+        # Step 5: Delta Confirming Sync
+        Write-Host "    Delta confirming sync..." -ForegroundColor Gray
+        $confirmSyncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaSyncProfile.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $confirmSyncResult.activityId -Name "Target Delta Confirming Sync$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
     }
 
@@ -958,18 +947,15 @@ try {
             throw "DetectDrift failed: drift changes not visible in Target AD after direct modification. Cannot proceed with drift detection test."
         }
 
-        # Step 3.6: Import from Target AD to detect the drift
-        # OpenLDAP: use full scoped import because the accesslog overlay is only configured on the
-        # Source (Yellowstone) database — changes to the Target (Glitterband) database are not recorded
-        # in cn=accesslog, so delta import would find no changes.
-        # Samba AD: use delta import as normal.
+        # Step 3.6: Delta Import from Target AD to detect the drift
+        # Delta Import picks up the unauthorised changes made directly in Target AD
+        Write-Host "  Running Delta Import on Target AD (to import drifted state)..." -ForegroundColor Gray
+
+        $targetImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaImportProfile.id -Wait -PassThru
         if ($isOpenLDAP) {
-            Write-Host "  Running Full Import on Target AD (to import drifted state)..." -ForegroundColor Gray
-            $targetImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetScopedImportProfile.id -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $targetImportResult.activityId -Name "Target Full Import (detect drift)"
+            Assert-ActivitySuccess -ActivityId $targetImportResult.activityId -Name "Target Delta Import (detect drift)" `
+                -AllowWarnings -AllowedWarningTypes @('DeltaImportFallbackToFullImport')
         } else {
-            Write-Host "  Running Delta Import on Target AD (to import drifted state)..." -ForegroundColor Gray
-            $targetImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaImportProfile.id -Wait -PassThru
             Assert-ActivitySuccess -ActivityId $targetImportResult.activityId -Name "Target Delta Import (detect drift)"
         }
         Start-Sleep -Seconds $WaitSeconds
@@ -981,17 +967,10 @@ try {
         # 3. Stage pending exports to correct the drift (re-assert the desired state)
         # Note: This is how MIM 2016 works - the sync engine evaluates inbound changes and determines
         # if corrective exports are needed based on the configured sync rules.
-        # OpenLDAP: use full sync after full import for consistent drift evaluation.
-        # Samba AD: use delta sync as normal.
-        if ($isOpenLDAP) {
-            Write-Host "  Running Full Sync on Target AD (to evaluate drift against sync rules)..." -ForegroundColor Gray
-            $targetSyncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetFullSyncProfile.id -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $targetSyncResult.activityId -Name "Target Full Sync (evaluate drift)" -AllowWarnings
-        } else {
-            Write-Host "  Running Delta Sync on Target AD (to evaluate drift against sync rules)..." -ForegroundColor Gray
-            $targetSyncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaSyncProfile.id -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $targetSyncResult.activityId -Name "Target Delta Sync (evaluate drift)" -AllowWarnings
-        }
+        Write-Host "  Running Delta Sync on Target AD (to evaluate drift against sync rules)..." -ForegroundColor Gray
+
+        $targetSyncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaSyncProfile.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $targetSyncResult.activityId -Name "Target Delta Sync (evaluate drift)" -AllowWarnings
         Start-Sleep -Seconds $WaitSeconds
 
         # Step 3.8: Validate drift detection and pending exports

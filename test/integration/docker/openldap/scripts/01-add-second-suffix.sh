@@ -73,6 +73,36 @@ LDIF
 
 echo "[openldap-init] Second MDB database added to cn=config"
 
+# Add accesslog overlay to the Glitterband database
+# This mirrors the accesslog overlay that Bitnami auto-configures on the primary
+# (Yellowstone) database, logging writes to the shared cn=accesslog database.
+# Without this, delta imports on the Target system cannot detect changes.
+echo "[openldap-init] Adding accesslog overlay to Glitterband database..."
+
+# Determine the Glitterband database number in cn=config.
+# It's the database we just added — query cn=config to find it.
+GLITTERBAND_DB_DN=$(ldapsearch -x -H "$LDAP_URI" -D "$CONFIG_ADMIN_DN" -w "$CONFIG_ADMIN_PW" \
+    -b "cn=config" "(olcSuffix=dc=glitterband,dc=local)" dn -LLL 2>/dev/null | grep "^dn:" | head -1 | sed 's/^dn: //')
+
+if [ -z "$GLITTERBAND_DB_DN" ]; then
+    echo "[openldap-init] WARNING: Could not find Glitterband database DN in cn=config. Skipping accesslog overlay."
+else
+    echo "[openldap-init] Glitterband database DN: $GLITTERBAND_DB_DN"
+    ldapadd -x -H "$LDAP_URI" -D "$CONFIG_ADMIN_DN" -w "$CONFIG_ADMIN_PW" <<ALDIF
+dn: olcOverlay=accesslog,$GLITTERBAND_DB_DN
+objectClass: olcOverlayConfig
+objectClass: olcAccessLogConfig
+olcOverlay: accesslog
+olcAccessLogDB: cn=accesslog
+olcAccessLogOps: writes
+olcAccessLogPurge: 07+00:00 01+00:00
+olcAccessLogSuccess: TRUE
+olcAccessLogOld: (objectClass=*)
+olcAccessLogOldAttr: objectClass
+ALDIF
+    echo "[openldap-init] Accesslog overlay added to Glitterband database"
+fi
+
 # Populate the second database with root entry and base OUs
 echo "[openldap-init] Loading Glitterband base entries..."
 ldapadd -x -H "$LDAP_URI" -D "cn=admin,dc=glitterband,dc=local" -w "$DATA_ADMIN_PW" <<LDIF
