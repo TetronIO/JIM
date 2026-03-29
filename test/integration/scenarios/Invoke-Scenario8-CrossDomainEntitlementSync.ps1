@@ -958,15 +958,18 @@ try {
             throw "DetectDrift failed: drift changes not visible in Target AD after direct modification. Cannot proceed with drift detection test."
         }
 
-        # Step 3.6: Delta Import from Target AD to detect the drift
-        # Delta Import picks up the unauthorised changes made directly in Target AD
-        Write-Host "  Running Delta Import on Target AD (to import drifted state)..." -ForegroundColor Gray
-
-        $targetImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaImportProfile.id -Wait -PassThru
+        # Step 3.6: Import from Target AD to detect the drift
+        # OpenLDAP: use full scoped import because the accesslog overlay is only configured on the
+        # Source (Yellowstone) database — changes to the Target (Glitterband) database are not recorded
+        # in cn=accesslog, so delta import would find no changes.
+        # Samba AD: use delta import as normal.
         if ($isOpenLDAP) {
-            Assert-ActivitySuccess -ActivityId $targetImportResult.activityId -Name "Target Delta Import (detect drift)" `
-                -AllowWarnings -AllowedWarningTypes @('DeltaImportFallbackToFullImport')
+            Write-Host "  Running Full Import on Target AD (to import drifted state)..." -ForegroundColor Gray
+            $targetImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetScopedImportProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $targetImportResult.activityId -Name "Target Full Import (detect drift)"
         } else {
+            Write-Host "  Running Delta Import on Target AD (to import drifted state)..." -ForegroundColor Gray
+            $targetImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaImportProfile.id -Wait -PassThru
             Assert-ActivitySuccess -ActivityId $targetImportResult.activityId -Name "Target Delta Import (detect drift)"
         }
         Start-Sleep -Seconds $WaitSeconds
@@ -978,10 +981,17 @@ try {
         # 3. Stage pending exports to correct the drift (re-assert the desired state)
         # Note: This is how MIM 2016 works - the sync engine evaluates inbound changes and determines
         # if corrective exports are needed based on the configured sync rules.
-        Write-Host "  Running Delta Sync on Target AD (to evaluate drift against sync rules)..." -ForegroundColor Gray
-
-        $targetSyncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaSyncProfile.id -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $targetSyncResult.activityId -Name "Target Delta Sync (evaluate drift)" -AllowWarnings
+        # OpenLDAP: use full sync after full import for consistent drift evaluation.
+        # Samba AD: use delta sync as normal.
+        if ($isOpenLDAP) {
+            Write-Host "  Running Full Sync on Target AD (to evaluate drift against sync rules)..." -ForegroundColor Gray
+            $targetSyncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetFullSyncProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $targetSyncResult.activityId -Name "Target Full Sync (evaluate drift)" -AllowWarnings
+        } else {
+            Write-Host "  Running Delta Sync on Target AD (to evaluate drift against sync rules)..." -ForegroundColor Gray
+            $targetSyncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaSyncProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $targetSyncResult.activityId -Name "Target Delta Sync (evaluate drift)" -AllowWarnings
+        }
         Start-Sleep -Seconds $WaitSeconds
 
         # Step 3.8: Validate drift detection and pending exports
