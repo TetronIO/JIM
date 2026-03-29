@@ -1033,8 +1033,10 @@ internal class LdapConnectorImport
 
             // LDAP only supports >= (not >), so we use >= and skip already-processed entries in code.
             var ldapFilter = $"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={currentTimestamp}))";
+            // Request reqOld for delete entries — contains the old objectClass and entryUUID
+            // which are needed to construct proper delete import objects.
             var request = new SearchRequest("cn=accesslog", ldapFilter, SearchScope.OneLevel,
-                "reqStart", "reqType", "reqDN");
+                "reqStart", "reqType", "reqDN", "reqOld", "reqEntryUUID");
 
             SearchResponse response;
             var hitSizeLimit = false;
@@ -1122,12 +1124,12 @@ internal class LdapConnectorImport
 
                 if (objectChangeType == ObjectChangeType.Deleted)
                 {
-                    // For deletes, create a minimal import object — the object no longer exists in the directory
-                    var deleteObject = new ConnectedSystemImportObject
-                    {
-                        ChangeType = ObjectChangeType.Deleted,
-                    };
-                    result.ImportObjects.Add(deleteObject);
+                    // For deletes, extract object type and external ID from the accesslog entry.
+                    // The reqOld attribute contains the old attribute values (key: value format),
+                    // and reqEntryUUID contains the entryUUID of the deleted object.
+                    var deleteObject = BuildDeleteImportObjectFromAccesslog(entry);
+                    if (deleteObject != null)
+                        result.ImportObjects.Add(deleteObject);
                 }
                 else
                 {
@@ -1164,6 +1166,98 @@ internal class LdapConnectorImport
     /// <summary>
     /// Fetches a single object by its DN for changelog/accesslog-based delta imports.
     /// </summary>
+    /// <summary>
+    /// Builds a delete import object from an accesslog auditDelete entry.
+    /// Extracts the objectClass and entryUUID from reqOld attributes to construct
+    /// a proper import object with ObjectType and external ID, matching what the
+    /// USN-based delete detection produces.
+    /// </summary>
+    private ConnectedSystemImportObject? BuildDeleteImportObjectFromAccesslog(SearchResultEntry accesslogEntry)
+    {
+        if (_connectedSystem.ObjectTypes == null)
+            return null;
+
+        // Extract entryUUID — try reqEntryUUID first (direct attribute), then reqOld
+        var entryUuid = LdapConnectorUtilities.GetEntryAttributeStringValue(accesslogEntry, "reqEntryUUID");
+
+        // Extract objectClass from reqOld values (format: "attributeName: value")
+        var reqOldValues = LdapConnectorUtilities.GetEntryAttributeStringValues(accesslogEntry, "reqOld");
+        string? objectClassName = null;
+
+        if (reqOldValues != null)
+        {
+            foreach (var oldValue in reqOldValues)
+            {
+                if (oldValue.StartsWith("objectClass: ", StringComparison.OrdinalIgnoreCase))
+                {
+                    var className = oldValue["objectClass: ".Length..].Trim();
+                    // Find the most specific matching object type (skip generic ones like 'top')
+                    var matchedType = _connectedSystem.ObjectTypes
+                        .FirstOrDefault(ot => ot.Selected && ot.Name.Equals(className, StringComparison.OrdinalIgnoreCase));
+                    if (matchedType != null)
+                        objectClassName = matchedType.Name;
+                }
+
+                // Also try to get entryUUID from reqOld if not found via reqEntryUUID
+                if (entryUuid == null && oldValue.StartsWith("entryUUID: ", StringComparison.OrdinalIgnoreCase))
+                {
+                    entryUuid = oldValue["entryUUID: ".Length..].Trim();
+                }
+            }
+        }
+
+        if (string.IsNullOrEmpty(objectClassName))
+        {
+            var reqDn = LdapConnectorUtilities.GetEntryAttributeStringValue(accesslogEntry, "reqDN");
+            _logger.Warning("BuildDeleteImportObjectFromAccesslog: Could not determine object type for deleted object. " +
+                "DN: {Dn}. The accesslog entry may not contain reqOld attributes.", reqDn);
+            return null;
+        }
+
+        if (string.IsNullOrEmpty(entryUuid))
+        {
+            var reqDn = LdapConnectorUtilities.GetEntryAttributeStringValue(accesslogEntry, "reqDN");
+            _logger.Warning("BuildDeleteImportObjectFromAccesslog: Could not determine entryUUID for deleted object. " +
+                "DN: {Dn}. The accesslog entry may not contain reqEntryUUID or reqOld entryUUID.", reqDn);
+            return null;
+        }
+
+        var importObject = new ConnectedSystemImportObject
+        {
+            ObjectType = objectClassName,
+            ChangeType = ObjectChangeType.Deleted,
+        };
+
+        // Add entryUUID as an attribute so the import processor can match to the existing CSO
+        var externalIdAttribute = _connectedSystem.ObjectTypes
+            .First(ot => ot.Name.Equals(objectClassName, StringComparison.OrdinalIgnoreCase))
+            .Attributes.FirstOrDefault(a => a.IsExternalId);
+
+        if (externalIdAttribute != null)
+        {
+            importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute
+            {
+                Name = externalIdAttribute.Name,
+                StringValues = [entryUuid]
+            });
+        }
+
+        // Add the DN as the secondary external ID (distinguishedName)
+        var reqDnValue = LdapConnectorUtilities.GetEntryAttributeStringValue(accesslogEntry, "reqDN");
+        if (!string.IsNullOrEmpty(reqDnValue))
+        {
+            importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute
+            {
+                Name = "distinguishedName",
+                StringValues = [reqDnValue]
+            });
+        }
+
+        _logger.Debug("BuildDeleteImportObjectFromAccesslog: Built delete import for {ObjectType} with entryUUID {Uuid}, DN: {Dn}",
+            objectClassName, entryUuid, reqDnValue);
+        return importObject;
+    }
+
     private ConnectedSystemImportObject? GetObjectByDn(string dn, ObjectChangeType changeType)
     {
         if (_connectedSystem.ObjectTypes == null)
