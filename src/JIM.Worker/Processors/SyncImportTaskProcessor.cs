@@ -894,6 +894,12 @@ public class SyncImportTaskProcessor
         // add the external ids from the results to our external id collection
         foreach (var importedObject in importResult.ImportObjects)
         {
+            // Skip delete objects — they have no ObjectType or external ID attributes.
+            // Deletion detection uses the *absence* of an external ID from this collection
+            // rather than its presence.
+            if (importedObject.ChangeType == ObjectChangeType.Deleted || string.IsNullOrEmpty(importedObject.ObjectType))
+                continue;
+
             // find the object type for the imported object in our schema
             var connectedSystemObjectType = _connectedSystem.ObjectTypes.Single(q => q.Name.Equals(importedObject.ObjectType, StringComparison.OrdinalIgnoreCase));
 
