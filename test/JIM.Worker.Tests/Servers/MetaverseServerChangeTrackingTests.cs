@@ -654,5 +654,77 @@ public class MetaverseServerChangeTrackingTests
         Assert.That(attrChange.Attribute, Is.Null);
     }
 
+    [Test]
+    public void AddMvoChangeAttributeValueObject_ReferenceWithLoadedNavigation_RecordsReferenceAsync()
+    {
+        // Arrange
+        var change = new MetaverseObjectChange();
+        var referencedMvo = new MetaverseObject { Id = Guid.NewGuid() };
+        var refAttr = new MetaverseAttribute { Id = 10, Name = "Manager", Type = AttributeDataType.Reference };
+        var attrValue = new MetaverseObjectAttributeValue
+        {
+            Attribute = refAttr,
+            ReferenceValue = referencedMvo,
+            ReferenceValueId = referencedMvo.Id
+        };
+
+        // Act
+        JIM.Application.Servers.MetaverseServer.AddMvoChangeAttributeValueObject(change, attrValue, ValueChangeType.Add);
+
+        // Assert
+        var attrChange = change.AttributeChanges.Single();
+        Assert.That(attrChange.AttributeName, Is.EqualTo("Manager"));
+        var valueChange = attrChange.ValueChanges.Single();
+        Assert.That(valueChange.ReferenceValue, Is.EqualTo(referencedMvo));
+    }
+
+    [Test]
+    public void AddMvoChangeAttributeValueObject_ReferenceWithFkOnly_RecordsGuidAsync()
+    {
+        // Arrange — navigation property not loaded but FK is set (common during MVO deletion
+        // when referenced MVOs are not in the EF change tracker)
+        var change = new MetaverseObjectChange();
+        var referencedMvoId = Guid.NewGuid();
+        var refAttr = new MetaverseAttribute { Id = 10, Name = "Manager", Type = AttributeDataType.Reference };
+        var attrValue = new MetaverseObjectAttributeValue
+        {
+            Attribute = refAttr,
+            ReferenceValue = null,
+            ReferenceValueId = referencedMvoId
+        };
+
+        // Act
+        JIM.Application.Servers.MetaverseServer.AddMvoChangeAttributeValueObject(change, attrValue, ValueChangeType.Remove);
+
+        // Assert — recorded as a GUID since the navigation property isn't available
+        var attrChange = change.AttributeChanges.Single();
+        Assert.That(attrChange.AttributeName, Is.EqualTo("Manager"));
+        var valueChange = attrChange.ValueChanges.Single();
+        Assert.That(valueChange.GuidValue, Is.EqualTo(referencedMvoId));
+        Assert.That(valueChange.ValueChangeType, Is.EqualTo(ValueChangeType.Remove));
+    }
+
+    [Test]
+    public void AddMvoChangeAttributeValueObject_ReferenceWithNoValue_DoesNotThrowAsync()
+    {
+        // Arrange — reference attribute with no resolved, unresolved, or FK value
+        var change = new MetaverseObjectChange();
+        var refAttr = new MetaverseAttribute { Id = 10, Name = "Manager", Type = AttributeDataType.Reference };
+        var attrValue = new MetaverseObjectAttributeValue
+        {
+            Attribute = refAttr,
+            ReferenceValue = null,
+            ReferenceValueId = null,
+            UnresolvedReferenceValue = null
+        };
+
+        // Act & Assert — should not throw
+        Assert.DoesNotThrow(() =>
+            JIM.Application.Servers.MetaverseServer.AddMvoChangeAttributeValueObject(change, attrValue, ValueChangeType.Remove));
+
+        // No value change recorded (nothing to track)
+        Assert.That(change.AttributeChanges.Single().ValueChanges, Is.Empty);
+    }
+
     #endregion
 }
