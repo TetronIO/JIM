@@ -109,7 +109,15 @@ internal class LdapConnectorImport
         // move to the next combo. When all combos are done, return with no pagination tokens.
         //
         // For directories without this limitation (e.g., AD), all combos are queried per page.
-        var isConnectionScopedPaging = _currentRootDse?.DirectoryType is LdapDirectoryType.OpenLDAP or LdapDirectoryType.Generic;
+        //
+        // Detection: check _currentRootDse (set on page 1 via GetRootDseInformation, or on page 2+
+        // from persisted connector data). Also check for __comboIndex pagination token — its presence
+        // means a previous page used serialised processing. This fallback is needed because the
+        // import processor passes the ORIGINAL persisted data (from before the import) on all pages,
+        // which is empty for first-ever imports, leaving _currentRootDse null on page 2+.
+        const string comboIndexTokenName = "__comboIndex";
+        var isConnectionScopedPaging = _currentRootDse?.DirectoryType is LdapDirectoryType.OpenLDAP or LdapDirectoryType.Generic
+            || _paginationTokens.Any(pt => pt.Name == comboIndexTokenName);
 
         if (isConnectionScopedPaging)
         {
@@ -127,16 +135,12 @@ internal class LdapConnectorImport
             }
 
             // Determine where to start and whether we're resuming mid-combo
-            const string comboIndexTokenName = "__comboIndex";
             var comboIndexToken = _paginationTokens.SingleOrDefault(pt => pt.Name == comboIndexTokenName);
             var startIndex = comboIndexToken != null ? BitConverter.ToInt32(comboIndexToken.ByteValue) : 0;
 
             // Check for a real LDAP paging cookie from the previous page (resume mid-combo)
             var pagingCookieToken = _paginationTokens.FirstOrDefault(pt => pt.Name != comboIndexTokenName);
             byte[]? pagingCookie = pagingCookieToken?.ByteValue;
-
-            _logger.Debug("GetFullImportObjects: Serialised paging — {ComboCount} combos, starting at index {StartIndex}, pagingCookie: {HasCookie}",
-                combos.Count, startIndex, pagingCookie != null);
 
             for (var i = startIndex; i < combos.Count; i++)
             {
@@ -147,8 +151,6 @@ internal class LdapConnectorImport
                 }
 
                 var (container, objectType) = combos[i];
-                _logger.Debug("GetFullImportObjects: Processing combo {Index}/{Total}: {ObjectType} in {Container}",
-                    i, combos.Count, objectType.Name, container.ExternalId);
                 GetFisoResults(result, container, objectType, pagingCookie);
                 pagingCookie = null; // Only use the cookie for the first combo in this call
 
@@ -158,8 +160,6 @@ internal class LdapConnectorImport
                     // Add the combo index so we know which combo to resume
                     result.PaginationTokens.Add(new ConnectedSystemPaginationToken(
                         comboIndexTokenName, BitConverter.GetBytes(i)));
-                    _logger.Debug("GetFullImportObjects: Combo {Index} needs more pages. Returning with {TokenCount} pagination tokens.",
-                        i, result.PaginationTokens.Count);
                     return result;
                 }
 
