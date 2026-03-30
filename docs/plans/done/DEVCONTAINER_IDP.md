@@ -1,6 +1,6 @@
 # Devcontainer Identity Provider (Keycloak)
 
-- **Status:** Doing (Phases 1-3 complete)
+- **Status:** Done
 - **Issue:** [#197](https://github.com/TetronIO/JIM/issues/197)
 - **Last Updated:** 2026-03-30
 - **Milestone:** v0.9-STABILISATION
@@ -190,12 +190,12 @@ When running JIM via F5, it reads `.env` directly where `JIM_SSO_AUTHORITY=http:
 3. socat bridge auto-starts from `jim-stack`, `jim-build`, `jim-restart`, `jim-keycloak`
 4. Test: `jim-db && jim-keycloak` → F5 → sign in with `admin` / `admin`
 
-### Phase 4: Documentation
+### Phase 4: Documentation ✅
 
-1. Update `docs/SSO_SETUP_GUIDE.md` with a "Development SSO (Bundled Keycloak)" section
-2. Update `docs/DEVELOPER_GUIDE.md` workflow sections to mention SSO just works
-3. Update `README.md` if the getting-started section references SSO setup
-4. Add changelog entry
+1. Updated `docs/SSO_SETUP_GUIDE.md` with "Development (Bundled Keycloak)" section at the top
+2. Updated `docs/DEVELOPER_GUIDE.md` — removed SSO prerequisite, added "works out of the box" notes
+3. Updated `README.md` — developer prerequisites no longer require external SSO setup
+4. Added changelog entry under [Unreleased]
 
 ---
 
