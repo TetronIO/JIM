@@ -187,6 +187,13 @@ try
             // .NET looks for the legacy XML URI by default. Point it at the standard OIDC claim.
             options.TokenValidationParameters.NameClaimType = "name";
 
+            // Accept tokens from any configured valid issuer (supports Docker DNS + localhost dual-path)
+            if (validIssuers.Length > 0)
+            {
+                options.TokenValidationParameters.ValidIssuers = validIssuers;
+                options.TokenValidationParameters.ValidateIssuer = true;
+            }
+
             // intercept the user login when a token is received and validate we can map them to a JIM user
             options.Events.OnTicketReceived = async ctx =>
             {
