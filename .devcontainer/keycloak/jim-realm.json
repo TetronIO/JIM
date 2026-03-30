@@ -1,0 +1,175 @@
+{
+  "id": "jim",
+  "realm": "jim",
+  "enabled": true,
+  "displayName": "JIM Development",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": false,
+  "defaultSignatureAlgorithm": "RS256",
+  "revokeRefreshToken": false,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "offlineSessionIdleTimeout": 2592000,
+  "accessCodeLifespan": 60,
+  "accessCodeLifespanUserAction": 300,
+  "accessCodeLifespanLogin": 1800,
+  "roles": {
+    "realm": [
+      {
+        "name": "default-roles-jim",
+        "description": "Default realm roles",
+        "composite": true,
+        "composites": {
+          "realm": [],
+          "client": {
+            "account": [
+              "view-profile",
+              "manage-account"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "defaultOptionalClientScopes": [
+    "jim-api"
+  ],
+  "clientScopes": [
+    {
+      "name": "jim-api",
+      "description": "JIM API access scope",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Access JIM API"
+      },
+      "protocolMappers": [
+        {
+          "name": "jim-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "jim-web",
+            "id.token.claim": "false",
+            "lightweight.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "jim-web",
+      "name": "JIM Web Application",
+      "description": "JIM web UI and API — confidential client with PKCE",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "jim-dev-secret",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "authorizationServicesEnabled": false,
+      "redirectUris": [
+        "http://localhost:5200/*",
+        "https://localhost:7000/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5200",
+        "https://localhost:7000"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:5200/*##https://localhost:7000/*"
+      },
+      "optionalClientScopes": [
+        "jim-api"
+      ]
+    },
+    {
+      "clientId": "jim-powershell",
+      "name": "JIM PowerShell Module",
+      "description": "Public client for JIM PowerShell module — uses PKCE with loopback redirect",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "authorizationServicesEnabled": false,
+      "redirectUris": [
+        "http://localhost:8400/*",
+        "http://localhost:8401/*",
+        "http://localhost:8402/*",
+        "http://localhost:8403/*",
+        "http://localhost:8404/*",
+        "http://localhost:8405/*",
+        "http://localhost:8406/*",
+        "http://localhost:8407/*",
+        "http://localhost:8408/*",
+        "http://localhost:8409/*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "optionalClientScopes": [
+        "jim-api"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "username": "admin",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Admin",
+      "lastName": "User",
+      "email": "admin@jim.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-jim"
+      ]
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "username": "user",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Test",
+      "lastName": "User",
+      "email": "user@jim.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "user",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-jim"
+      ]
+    }
+  ]
+}

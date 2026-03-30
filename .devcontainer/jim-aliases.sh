@@ -26,6 +26,11 @@ Database Management:
   jim-db-logs        - View database logs
   jim-postgres-tune  - Auto-tune PostgreSQL for current devcontainer specs
 
+Identity Provider (Keycloak):
+  jim-keycloak       - Start Keycloak IdP (for local F5 debugging)
+  jim-keycloak-stop  - Stop Keycloak IdP
+  jim-keycloak-logs  - View Keycloak logs
+
 Docker Stack Management (auto-kills local JIM processes):
   jim-stack          - Start Docker stack
   jim-stack-logs     - View Docker stack logs
@@ -168,6 +173,19 @@ jim-db-logs() {
   docker compose $(_jim_db_compose) logs -f
 }
 
+# Standalone Keycloak IdP (local debugging workflow - use with jim-db + F5)
+# Starts the bundled Keycloak from docker-compose.override.yml without the full stack.
+jim-keycloak() {
+  docker compose -f docker-compose.yml -f docker-compose.override.yml up -d jim.keycloak
+}
+jim-keycloak-stop() {
+  docker compose -f docker-compose.yml -f docker-compose.override.yml stop jim.keycloak
+  docker compose -f docker-compose.yml -f docker-compose.override.yml rm -f jim.keycloak
+}
+jim-keycloak-logs() {
+  docker compose -f docker-compose.yml -f docker-compose.override.yml logs -f jim.keycloak
+}
+
 # Kill any locally-running JIM .NET processes (jim-web, jim-worker, jim-scheduler)
 # so they don't hold ports that Docker containers need to bind
 _jim_kill_local() {
@@ -181,7 +199,7 @@ _jim_kill_local() {
 }
 
 # Clear any previous aliases before defining functions (zsh cannot redefine alias as function)
-unalias jim-stack jim-stack-logs jim-stack-down jim-restart jim-build jim-build-web jim-build-worker jim-build-scheduler jim-cleanup jim-reset jim-db jim-db-stop jim-db-logs 2>/dev/null || true
+unalias jim-stack jim-stack-logs jim-stack-down jim-restart jim-build jim-build-web jim-build-worker jim-build-scheduler jim-cleanup jim-reset jim-db jim-db-stop jim-db-logs jim-keycloak jim-keycloak-stop jim-keycloak-logs 2>/dev/null || true
 
 # Docker stack management
 jim-stack() {

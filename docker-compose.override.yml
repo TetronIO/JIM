@@ -6,6 +6,10 @@ services:
       # Override JIM_DB_HOSTNAME from .env to use bundled database container
       - JIM_DB_HOSTNAME=jim.database
       - JIM_INFRASTRUCTURE_API_KEY=${JIM_INFRASTRUCTURE_API_KEY:-}
+      # Override SSO authority to use Docker DNS for back-channel OIDC discovery.
+      # KC_HOSTNAME_URL on Keycloak ensures tokens claim localhost:8080 as issuer,
+      # so JIM_SSO_VALID_ISSUERS in .env validates correctly.
+      - JIM_SSO_AUTHORITY=http://jim.keycloak:8080/realms/jim
       # OpenLDAP TLS configuration for LDAPS connections
       - LDAPTLS_REQCERT=never
     ports:
@@ -13,6 +17,9 @@ services:
     volumes:
       # Map repo test data to connector-files/test-data for development
       - ./test/test-data:/var/connector-files/test-data
+    depends_on:
+      jim.keycloak:
+        condition: service_healthy
   jim.worker:
     environment:
       # Override JIM_DB_HOSTNAME from .env to use bundled database container
@@ -44,3 +51,32 @@ services:
     # Expose PostgreSQL port for local database tools (VS Code extensions, etc.)
     ports:
       - "5432:5432"
+
+  # Bundled Keycloak IdP for zero-config SSO in development.
+  # Pre-configured with a 'jim' realm, test users (admin/admin, user/user),
+  # and clients for the web UI (jim-web) and PowerShell module (jim-powershell).
+  # Admin console: http://localhost:8080 (admin/admin)
+  jim.keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: jim.keycloak
+    restart: unless-stopped
+    command: start-dev --import-realm --health-enabled=true
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      # Set the public hostname so tokens always claim localhost:8080 as issuer,
+      # even when JIM reaches Keycloak via Docker DNS (jim.keycloak:8080).
+      KC_HOSTNAME_URL: http://localhost:8080
+      KC_HOSTNAME_ADMIN_URL: http://localhost:8080
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./.devcontainer/keycloak/jim-realm.json:/opt/keycloak/data/import/jim-realm.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000; echo -e 'GET /health/ready HTTP/1.1\\r\\nhost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3; timeout 1 cat <&3 | grep -q '200 OK'"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+    networks:
+      - jim-network
