@@ -21,7 +21,10 @@
 param(
     [Parameter(Mandatory=$false)]
     [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "XLarge", "XXLarge")]
-    [string]$Template = "Small"
+    [string]$Template = "Small",
+
+    [Parameter(Mandatory=$false)]
+    [string]$Container = "openldap-primary"
 )
 
 Set-StrictMode -Version Latest
@@ -36,7 +39,7 @@ Write-TestSection "Populating OpenLDAP with $Template template"
 $scale = Get-TemplateScale -Template $Template
 
 # OpenLDAP configuration
-$container = "openldap-primary"
+$container = $Container
 $ldapPort = 1389
 $ldapUri = "ldap://localhost:$ldapPort"
 $adminPassword = "Test@123!"

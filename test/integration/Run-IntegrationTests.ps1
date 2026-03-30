@@ -190,7 +190,6 @@ function Get-PopulateScriptHash {
         "Scenario1" { $filesToHash += "$scriptRoot/Populate-SambaAD.ps1" }
         "Scenario8" {
             $filesToHash += "$scriptRoot/Populate-SambaAD-Scenario8.ps1"
-            $filesToHash += "$scriptRoot/Populate-OpenLDAP-Scenario8.ps1"
         }
     }
     $combinedContent = ""
@@ -215,8 +214,50 @@ function Test-SnapshotAvailable {
     return "$inspect" -eq $ExpectedHash
 }
 
-# Track whether snapshots are being used (set during Samba container startup)
+# Track whether snapshots are being used (set during container startup)
 $script:UsingSnapshots = $false
+$script:UsingOpenLDAPSnapshots = $false
+
+# ============================================================================
+# OpenLDAP snapshot detection utilities
+# ============================================================================
+
+function Get-OpenLDAPPopulateScriptHash {
+    param([string]$ScenarioName)
+    $filesToHash = @(
+        "$scriptRoot/utils/Test-Helpers.ps1",
+        "$scriptRoot/utils/Test-GroupHelpers.ps1",
+        "$scriptRoot/Build-OpenLDAPSnapshots.ps1",
+        "$scriptRoot/docker/openldap/Dockerfile",
+        "$scriptRoot/docker/openldap/scripts/01-add-second-suffix.sh",
+        "$scriptRoot/docker/openldap/bootstrap/01-base-ous-yellowstone.ldif",
+        "$scriptRoot/docker/openldap/start-openldap.sh"
+    )
+    switch ($ScenarioName) {
+        "General" { $filesToHash += "$scriptRoot/Populate-OpenLDAP.ps1" }
+        "Scenario8" { $filesToHash += "$scriptRoot/Populate-OpenLDAP-Scenario8.ps1" }
+    }
+    $combinedContent = ""
+    foreach ($file in $filesToHash) {
+        if (Test-Path $file) { $combinedContent += Get-Content -Path $file -Raw }
+    }
+    $hashBytes = [System.Security.Cryptography.SHA256]::HashData(
+        [System.Text.Encoding]::UTF8.GetBytes($combinedContent)
+    )
+    return [System.BitConverter]::ToString($hashBytes).Replace("-", "").Substring(0, 16).ToLower()
+}
+
+function Get-OpenLDAPSnapshotImageTag {
+    param([string]$Role, [string]$Size)
+    return "jim-openldap:${Role}-$($Size.ToLower())"
+}
+
+function Test-OpenLDAPSnapshotAvailable {
+    param([string]$ImageTag, [string]$ExpectedHash)
+    $inspect = docker image inspect $ImageTag --format '{{index .Config.Labels "jim.openldap.snapshot-hash"}}' 2>&1
+    if ($LASTEXITCODE -ne 0) { return $false }
+    return "$inspect" -eq $ExpectedHash
+}
 
 # Interactive scenario selection function
 function Show-ScenarioMenu {
@@ -1252,6 +1293,29 @@ if (-not $IgnoreSnapshots -and $Scenario -like "*Scenario1*") {
 }
 
 if ($DirectoryType -eq "OpenLDAP") {
+    # Check for pre-populated OpenLDAP snapshot images
+    if (-not $IgnoreSnapshots) {
+        $olSnapshotScenario = if ($Scenario -like "*Scenario8*") { "Scenario8" } else { "General" }
+        $olSnapshotRole = if ($Scenario -like "*Scenario8*") { "s8" } else { "general" }
+        $olHash = Get-OpenLDAPPopulateScriptHash -ScenarioName $olSnapshotScenario
+        $olTag = Get-OpenLDAPSnapshotImageTag -Role $olSnapshotRole -Size $Template
+        if (Test-OpenLDAPSnapshotAvailable -ImageTag $olTag -ExpectedHash $olHash) {
+            $env:OPENLDAP_IMAGE_PRIMARY = $olTag
+            $script:UsingOpenLDAPSnapshots = $true
+            Write-Host "  ${GREEN}Using OpenLDAP snapshot: $olTag${NC}"
+        } else {
+            Write-Host "  ${YELLOW}No OpenLDAP snapshot found for $olTag — building (first run only)...${NC}"
+            & "$scriptRoot/Build-OpenLDAPSnapshots.ps1" -Scenario $olSnapshotScenario -Template $Template
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning "OpenLDAP snapshot build failed — falling back to live population"
+            } elseif (Test-OpenLDAPSnapshotAvailable -ImageTag $olTag -ExpectedHash $olHash) {
+                $env:OPENLDAP_IMAGE_PRIMARY = $olTag
+                $script:UsingOpenLDAPSnapshots = $true
+                Write-Host "  ${GREEN}OpenLDAP snapshot built and ready: $olTag${NC}"
+            }
+        }
+    }
+
     Write-Step "Starting OpenLDAP (Primary)..."
     $openldapResult = docker compose -f docker-compose.integration-tests.yml --profile openldap up -d 2>&1
     if ($LASTEXITCODE -ne 0) {
@@ -1518,7 +1582,7 @@ if ($Scenario -like "*Scenario1*" -and -not $script:UsingSnapshots -and $Directo
 # Skip for S8 — it has its own population script (Populate-OpenLDAP-Scenario8.ps1) that only
 # populates Source. The base script populates both suffixes, which would create pre-existing
 # objects in Target and cause CouldNotJoinDueToExistingJoin errors during initial sync.
-if ($DirectoryType -eq "OpenLDAP" -and $Scenario -notlike "*Scenario8*") {
+if ($DirectoryType -eq "OpenLDAP" -and $Scenario -notlike "*Scenario8*" -and -not $script:UsingOpenLDAPSnapshots) {
     Write-Section "Step 4c: Populating OpenLDAP with Test Data"
     Write-Step "Running Populate-OpenLDAP.ps1 -Template $Template..."
     $populateScript = Join-Path $scriptRoot "Populate-OpenLDAP.ps1"
@@ -1618,7 +1682,7 @@ if ($SetupOnly) {
 
     # Docker Cleanup (prune unused images and build cache to prevent disk space accumulation)
     Write-Step "Pruning unused images and build cache (preserving snapshots)..."
-    $imagePrune = docker image prune -af --filter "label!=jim.samba.snapshot-hash" 2>&1
+    $imagePrune = docker image prune -af --filter "label!=jim.samba.snapshot-hash" --filter "label!=jim.openldap.snapshot-hash" 2>&1
     $builderPrune = docker builder prune -af 2>&1
     $imageReclaimed = $imagePrune | Select-String "Total reclaimed space:\s*(.+)"
     $builderReclaimed = $builderPrune | Select-String "Total reclaimed space:\s*(.+)"
@@ -1706,8 +1770,8 @@ $scenarioParams = @{
     DirectoryConfig = $script:DirectoryConfig
 }
 
-# Skip population if using snapshot images
-if ($script:UsingSnapshots) {
+# Skip population if using snapshot images (Samba AD or OpenLDAP)
+if ($script:UsingSnapshots -or $script:UsingOpenLDAPSnapshots) {
     $scenarioParams.SkipPopulate = $true
 }
 
@@ -2016,7 +2080,7 @@ Write-Section "Step 7: Docker Cleanup"
 
 Write-Step "Pruning unused images and build cache (preserving snapshots)..."
 # Use --filter to exclude snapshot images from pruning (they take hours to build)
-$imagePrune = docker image prune -af --filter "label!=jim.samba.snapshot-hash" 2>&1
+$imagePrune = docker image prune -af --filter "label!=jim.samba.snapshot-hash" --filter "label!=jim.openldap.snapshot-hash" 2>&1
 $builderPrune = docker builder prune -af 2>&1
 $imageReclaimed = $imagePrune | Select-String "Total reclaimed space:\s*(.+)"
 $builderReclaimed = $builderPrune | Select-String "Total reclaimed space:\s*(.+)"

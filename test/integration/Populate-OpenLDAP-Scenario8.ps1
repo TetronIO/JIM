@@ -38,7 +38,10 @@ param(
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("Source", "Target")]
-    [string]$Instance = "Source"
+    [string]$Instance = "Source",
+
+    [Parameter(Mandatory=$false)]
+    [string]$Container = "openldap-primary"
 )
 
 Set-StrictMode -Version Latest
@@ -54,7 +57,7 @@ Write-TestSection "Scenario 8: Populating OpenLDAP ($Instance) with $Template te
 $groupScale = Get-Scenario8GroupScale -Template $Template
 
 # Directory configuration
-$containerName = "openldap-primary"
+$containerName = $Container
 $ldapUri = "ldap://localhost:1389"
 
 $configMap = @{
