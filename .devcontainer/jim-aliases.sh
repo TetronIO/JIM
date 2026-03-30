@@ -177,13 +177,26 @@ jim-db-logs() {
 # Starts the bundled Keycloak from docker-compose.override.yml without the full stack.
 jim-keycloak() {
   docker compose -f docker-compose.yml -f docker-compose.override.yml up -d jim.keycloak
+  _jim_keycloak_bridge
 }
 jim-keycloak-stop() {
+  pkill -f 'socat.*TCP:127.0.0.1:8180' 2>/dev/null || true
   docker compose -f docker-compose.yml -f docker-compose.override.yml stop jim.keycloak
   docker compose -f docker-compose.yml -f docker-compose.override.yml rm -f jim.keycloak
 }
 jim-keycloak-logs() {
   docker compose -f docker-compose.yml -f docker-compose.override.yml logs -f jim.keycloak
+}
+
+# Start a userspace port forwarder for Keycloak so VS Code can forward it.
+# Docker-in-Docker proxy ports aren't forwarded by VS Code Dev Containers
+# unless they were present at devcontainer build time. This socat bridge
+# runs as the vscode user, which VS Code detects and forwards to the host.
+_jim_keycloak_bridge() {
+  pkill -f 'socat.*TCP:127.0.0.1:8180' 2>/dev/null || true
+  if command -v socat &>/dev/null; then
+    socat TCP-LISTEN:8181,fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:8180 &
+  fi
 }
 
 # Kill any locally-running JIM .NET processes (jim-web, jim-worker, jim-scheduler)
@@ -205,6 +218,7 @@ unalias jim-stack jim-stack-logs jim-stack-down jim-restart jim-build jim-build-
 jim-stack() {
   _jim_kill_local
   docker compose $(_jim_compose) up -d
+  _jim_keycloak_bridge
 }
 jim-stack-logs() {
   docker compose $(_jim_compose) logs -f
@@ -217,6 +231,7 @@ jim-stack-down() {
 jim-restart() {
   _jim_kill_local
   docker compose $(_jim_compose) down && docker compose $(_jim_compose) up -d --force-recreate
+  _jim_keycloak_bridge
 }
 
 # Docker builds (rebuild and start services)
@@ -227,6 +242,7 @@ _jim_version_suffix() {
 jim-build() {
   _jim_kill_local
   VERSION_SUFFIX="$(_jim_version_suffix)" docker compose $(_jim_compose) up -d --build
+  _jim_keycloak_bridge
 }
 jim-build-web() {
   _jim_kill_local

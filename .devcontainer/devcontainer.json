@@ -104,7 +104,7 @@
     5432, // PostgreSQL
     5200, // JIM.Web (HTTP) - also serves API at /api/
     5201, // JIM.Web (HTTPS) - also serves API at /api/
-    8080 // Keycloak IdP (admin console + OIDC)
+    8181 // Keycloak IdP (OIDC + admin console)
   ],
   // Port labels and auto-forward behaviour
   "portsAttributes": {
@@ -120,7 +120,7 @@
       "label": "JIM Web + API (HTTPS)",
       "onAutoForward": "silent"
     },
-    "8080": {
+    "8181": {
       "label": "Keycloak IdP",
       "onAutoForward": "silent"
     }

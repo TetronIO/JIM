@@ -64,7 +64,7 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
     ports:
-      - "8080:8080"
+      - "8180:8080"
     volumes:
       - ./.devcontainer/keycloak/jim-realm.json:/opt/keycloak/data/import/jim-realm.json:ro
     healthcheck:
