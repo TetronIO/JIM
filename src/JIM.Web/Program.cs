@@ -197,6 +197,31 @@ try
             // Exception: endpoints marked with [AllowAnonymous] should not trigger authentication
             options.Events.OnRedirectToIdentityProvider = async ctx =>
             {
+                // When the authority uses Docker DNS (e.g. jim.keycloak:8080), rewrite the
+                // browser redirect to use the public-facing issuer URL from JIM_SSO_VALID_ISSUERS.
+                // This ensures the browser goes to localhost:8080 (reachable) instead of
+                // jim.keycloak:8080 (Docker-internal, unreachable from the browser).
+                if (validIssuers.Length > 0 && authority != null)
+                {
+                    var authorityUri = new Uri(authority);
+                    var redirectUri = new Uri(ctx.ProtocolMessage.IssuerAddress);
+                    if (redirectUri.Host != "localhost" && redirectUri.Host == authorityUri.Host)
+                    {
+                        var publicIssuer = validIssuers.FirstOrDefault(i =>
+                            i.Contains("localhost", StringComparison.OrdinalIgnoreCase));
+                        if (publicIssuer != null)
+                        {
+                            var publicUri = new Uri(publicIssuer);
+                            var rewritten = new UriBuilder(redirectUri)
+                            {
+                                Host = publicUri.Host,
+                                Port = publicUri.Port
+                            };
+                            ctx.ProtocolMessage.IssuerAddress = rewritten.Uri.ToString();
+                        }
+                    }
+                }
+
                 if (ctx.Request.Path.StartsWithSegments("/api"))
                 {
                     // Check if the endpoint allows anonymous access
