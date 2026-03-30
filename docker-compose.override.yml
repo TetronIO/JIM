@@ -66,8 +66,9 @@ services:
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
       # Set the public hostname so tokens always claim localhost:8080 as issuer,
       # even when JIM reaches Keycloak via Docker DNS (jim.keycloak:8080).
-      KC_HOSTNAME_URL: http://localhost:8080
-      KC_HOSTNAME_ADMIN_URL: http://localhost:8080
+      KC_HOSTNAME: http://localhost:8080
+      KC_HOSTNAME_ADMIN: http://localhost:8080
+      KC_FEATURES: hostname:v2
     ports:
       - "8080:8080"
     volumes:
