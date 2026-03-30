@@ -169,6 +169,10 @@ try
             options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
             options.UseTokenLifetime = true; // respect the IdP token lifetime and use our session lifetime
             options.Authority = authority;
+
+            // Allow HTTP authority for local development (e.g. bundled Keycloak at http://localhost:8080)
+            if (authority != null && authority.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+                options.RequireHttpsMetadata = false;
             options.ClientId = clientId;
             options.ClientSecret = clientSecret;
             options.ResponseType = "code";
@@ -219,6 +223,9 @@ try
         {
             options.Authority = authority;
             options.Audience = apiAudience;
+
+            if (authority != null && authority.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+                options.RequireHttpsMetadata = false;
             options.TokenValidationParameters = new TokenValidationParameters
             {
                 ValidateIssuer = true,
