@@ -135,6 +135,9 @@ internal class LdapConnectorImport
             var pagingCookieToken = _paginationTokens.FirstOrDefault(pt => pt.Name != comboIndexTokenName);
             byte[]? pagingCookie = pagingCookieToken?.ByteValue;
 
+            _logger.Debug("GetFullImportObjects: Serialised paging — {ComboCount} combos, starting at index {StartIndex}, pagingCookie: {HasCookie}",
+                combos.Count, startIndex, pagingCookie != null);
+
             for (var i = startIndex; i < combos.Count; i++)
             {
                 if (_cancellationToken.IsCancellationRequested)
@@ -144,6 +147,8 @@ internal class LdapConnectorImport
                 }
 
                 var (container, objectType) = combos[i];
+                _logger.Debug("GetFullImportObjects: Processing combo {Index}/{Total}: {ObjectType} in {Container}",
+                    i, combos.Count, objectType.Name, container.ExternalId);
                 GetFisoResults(result, container, objectType, pagingCookie);
                 pagingCookie = null; // Only use the cookie for the first combo in this call
 
@@ -153,6 +158,8 @@ internal class LdapConnectorImport
                     // Add the combo index so we know which combo to resume
                     result.PaginationTokens.Add(new ConnectedSystemPaginationToken(
                         comboIndexTokenName, BitConverter.GetBytes(i)));
+                    _logger.Debug("GetFullImportObjects: Combo {Index} needs more pages. Returning with {TokenCount} pagination tokens.",
+                        i, result.PaginationTokens.Count);
                     return result;
                 }
 
