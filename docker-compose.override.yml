@@ -7,7 +7,7 @@ services:
       - JIM_DB_HOSTNAME=jim.database
       - JIM_INFRASTRUCTURE_API_KEY=${JIM_INFRASTRUCTURE_API_KEY:-}
       # Override SSO authority to use Docker DNS for back-channel OIDC discovery.
-      # The browser-facing redirect is rewritten to localhost:8080 by JIM.Web.
+      # The browser-facing redirect is rewritten to localhost:8181 by JIM.Web.
       - JIM_SSO_AUTHORITY=http://jim.keycloak:8080/realms/jim
       # OpenLDAP TLS configuration for LDAPS connections
       - LDAPTLS_REQCERT=never
@@ -54,7 +54,7 @@ services:
   # Bundled Keycloak IdP for zero-config SSO in development.
   # Pre-configured with a 'jim' realm, test users (admin/admin, user/user),
   # and clients for the web UI (jim-web) and PowerShell module (jim-powershell).
-  # Admin console: http://localhost:8080 (admin/admin)
+  # Admin console: http://localhost:8181 (admin/admin)
   jim.keycloak:
     image: quay.io/keycloak/keycloak:26.0
     container_name: jim.keycloak

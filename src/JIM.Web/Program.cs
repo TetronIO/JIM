@@ -170,7 +170,7 @@ try
             options.UseTokenLifetime = true; // respect the IdP token lifetime and use our session lifetime
             options.Authority = authority;
 
-            // Allow HTTP authority for local development (e.g. bundled Keycloak at http://localhost:8080)
+            // Allow HTTP authority for local development (e.g. bundled Keycloak at http://localhost:8181)
             if (authority != null && authority.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
                 options.RequireHttpsMetadata = false;
             options.ClientId = clientId;
@@ -204,10 +204,9 @@ try
             // Exception: endpoints marked with [AllowAnonymous] should not trigger authentication
             options.Events.OnRedirectToIdentityProvider = async ctx =>
             {
-                // When the authority uses Docker DNS (e.g. jim.keycloak:8080), rewrite the
-                // browser redirect to use the public-facing issuer URL from JIM_SSO_VALID_ISSUERS.
-                // This ensures the browser goes to localhost:8080 (reachable) instead of
-                // jim.keycloak:8080 (Docker-internal, unreachable from the browser).
+                // When the authority uses a Docker DNS hostname (e.g. jim.keycloak), rewrite
+                // the browser redirect to use the localhost issuer from JIM_SSO_VALID_ISSUERS.
+                // Docker-internal hostnames are unreachable from the user's browser.
                 if (validIssuers.Length > 0 && authority != null)
                 {
                     var authorityUri = new Uri(authority);

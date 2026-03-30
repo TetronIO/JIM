@@ -644,10 +644,9 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 1. Open repository in GitHub
 2. Click **Code** > **Codespaces** > **Create codespace on main**
 3. Wait for provisioning (automatic setup via `.devcontainer/setup.sh`)
-4. Update the auto-generated `.env` file with your SSO configuration
-5. Use shell aliases: `jim-db`, `jim-web`, `jim-stack`, etc.
+4. Use shell aliases: `jim-db`, `jim-web`, `jim-stack`, etc.
 
-> **Note**: The setup script automatically creates a `.env` file with development defaults. You can also set a `DOTENV_BASE64` GitHub Codespaces secret to restore your own `.env` file automatically.
+> **Note**: The setup script automatically creates a `.env` file with development defaults. SSO is pre-configured for the bundled Keycloak — sign in with `admin` / `admin`. You can also set a `DOTENV_BASE64` GitHub Codespaces secret to restore your own `.env` file automatically.
 
 **Available Shell Aliases**:
 - `jim` - List all available jim aliases
@@ -727,7 +726,9 @@ Configuration via environment variables (defined in `.env`). See `.env.example` 
 ### SSO/Authentication (IDP-Agnostic)
 JIM works with any OIDC-compliant Identity Provider (Entra ID, Okta, Auth0, Keycloak, AD FS, etc.).
 
-For detailed setup instructions, see the [SSO Setup Guide](SSO_SETUP_GUIDE.md).
+**Development**: The devcontainer ships a bundled Keycloak — SSO works out of the box with `admin` / `admin`. No configuration needed.
+
+**Production**: Override the `JIM_SSO_*` variables with your provider's settings. See the [SSO Setup Guide](SSO_SETUP_GUIDE.md).
 
 - `JIM_SSO_AUTHORITY`: OIDC authority URL (e.g., `https://login.microsoftonline.com/{tenant-id}/v2.0`)
 - `JIM_SSO_CLIENT_ID`: OIDC client/application ID

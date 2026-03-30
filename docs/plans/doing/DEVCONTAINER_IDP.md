@@ -119,48 +119,48 @@ Both users: `enabled: true`, `emailVerified: true`, `temporary: false` (no force
 
 ### Environment Configuration
 
-**`.env.example` updates:**
-
-Add a development defaults block in the SSO section pointing to the bundled Keycloak:
+**`.env.example` defaults** point to the bundled Keycloak — works out of the box:
 
 ```bash
-# Development defaults (bundled Keycloak — override for external IdP)
-JIM_SSO_AUTHORITY=http://localhost:8080/realms/jim
+JIM_SSO_AUTHORITY=http://localhost:8181/realms/jim
 JIM_SSO_CLIENT_ID=jim-web
 JIM_SSO_SECRET=jim-dev-secret
 JIM_SSO_API_SCOPE=jim-api
 JIM_SSO_CLAIM_TYPE=sub
 JIM_SSO_MV_ATTRIBUTE=Subject Identifier
-JIM_SSO_INITIAL_ADMIN=<admin user's sub claim>
+JIM_SSO_INITIAL_ADMIN=00000000-0000-0000-0000-000000000001
+JIM_SSO_VALID_ISSUERS=http://localhost:8181/realms/jim,http://jim.keycloak:8080/realms/jim
 ```
 
-**`setup.sh` updates:**
+The admin user has a fixed UUID (`00000000-0000-0000-0000-000000000001`) set in the realm export, so the `sub` claim is predictable.
 
-When creating `.env` from `.env.example` (and no Codespaces secrets override the SSO values), the file already contains working Keycloak defaults. No additional logic needed — the `.env.example` values just need to work out of the box.
+### Port Architecture ✅
 
-The `JIM_SSO_INITIAL_ADMIN` value requires the `sub` claim of the `admin` user. This is a Keycloak-generated UUID that must match between the realm export and `.env.example`. Two approaches:
+Docker-in-Docker proxy ports are not auto-forwarded by VS Code Dev Containers unless present at devcontainer build time. The solution uses a three-hop path:
 
-1. **Fixed user ID in realm export** — set `"id": "00000000-0000-0000-0000-000000000001"` on the admin user in the realm JSON. Keycloak respects the `id` field on import.
-2. **Use a predictable claim** — use `preferred_username` as the claim type instead of `sub`, with value `admin`.
+```
+Browser (Mac)          VS Code port forward       socat bridge         Docker port mapping     Keycloak container
+localhost:8181    -->  devcontainer:8181     -->  devcontainer:8180  -->  jim.keycloak:8080
+```
 
-Option 1 is cleaner (keeps `sub` as the claim type, consistent with production guidance).
+- **Port 8181**: socat userspace listener (VS Code detects and forwards to host)
+- **Port 8180**: Docker host port mapping (`8180:8080` in compose)
+- **Port 8080**: Keycloak's internal container port
 
-### Devcontainer Updates
-
-**`devcontainer.json`:**
-- Add port `8080` to `forwardPorts` (Keycloak admin console)
+The `socat` bridge is started automatically by `jim-stack`, `jim-build`, `jim-restart`, and `jim-keycloak` aliases. `socat` is installed by `setup.sh`.
 
 ### Issuer / Dual-Network Resolution ✅
 
-The `jim.web` container reaches Keycloak via Docker DNS (`jim.keycloak:8080`) for back-channel OIDC discovery, but the browser redirects go to `localhost:8080`. Solved with:
+The `jim.web` container reaches Keycloak via Docker DNS (`jim.keycloak:8080`) for back-channel OIDC discovery, but browser redirects must go to `localhost:8181`. Solved with:
 
-1. **`KC_HOSTNAME_URL=http://localhost:8080`** on the Keycloak container — tokens always claim `http://localhost:8080/realms/jim` as issuer, regardless of how the back-channel reaches Keycloak.
-2. **`JIM_SSO_AUTHORITY=http://jim.keycloak:8080/realms/jim`** overridden in `docker-compose.override.yml` for the `jim.web` service — ensures Docker DNS resolution for back-channel.
-3. **`JIM_SSO_VALID_ISSUERS=http://localhost:8080/realms/jim`** in `.env.example` — JIM validates the `localhost` issuer claim in tokens.
+1. **`JIM_SSO_AUTHORITY=http://jim.keycloak:8080/realms/jim`** overridden in `docker-compose.override.yml` — back-channel uses Docker DNS.
+2. **`OnRedirectToIdentityProvider` rewrite** in `Program.cs` — rewrites browser redirects from `jim.keycloak:8080` to the `localhost` issuer found in `JIM_SSO_VALID_ISSUERS`.
+3. **`JIM_SSO_VALID_ISSUERS`** accepts both `http://localhost:8181/realms/jim` and `http://jim.keycloak:8080/realms/jim` — tokens may be issued by either hostname.
+4. **`ValidIssuers`** set on both OIDC and JWT Bearer `TokenValidationParameters`.
 
 **For local debugging (Workflow 1):**
 
-When running JIM via F5, it reads `.env` directly where `JIM_SSO_AUTHORITY=http://localhost:8080/realms/jim` — no Docker DNS involved. Start Keycloak standalone with `jim-keycloak`.
+When running JIM via F5, it reads `.env` directly where `JIM_SSO_AUTHORITY=http://localhost:8181/realms/jim` — no Docker DNS involved. Start Keycloak standalone with `jim-keycloak`.
 
 ---
 
@@ -168,30 +168,34 @@ When running JIM via F5, it reads `.env` directly where `JIM_SSO_AUTHORITY=http:
 
 ### Phase 1: Realm Export and Keycloak Service ✅
 
-1. Created `.devcontainer/keycloak/jim-realm.json` — `jim` realm with `jim-web` (confidential + PKCE), `jim-powershell` (public + PKCE), `jim-api` scope with audience mapper, and two test users with fixed UUIDs
-2. Added `jim.keycloak` service to `docker-compose.override.yml` — Keycloak 26.0, `start-dev` mode, `--import-realm`, health check, `KC_HOSTNAME_URL` for issuer resolution
-3. Added port `8080` to `devcontainer.json` `forwardPorts`
-4. Resolved issuer/hostname dual-network issue via `KC_HOSTNAME_URL` + `JIM_SSO_VALID_ISSUERS` (see above)
-5. Added `JIM_SSO_AUTHORITY` override in `docker-compose.override.yml` for `jim.web` to use Docker DNS
-6. Added `jim.web` `depends_on` Keycloak health check
+1. Created `.devcontainer/keycloak/jim-realm.json` — `jim` realm with `jim-web` (confidential + PKCE), `jim-powershell` (public + PKCE), `jim-api` scope with audience mapper, built-in OIDC client scopes, and two test users with fixed UUIDs
+2. Added `jim.keycloak` service to `docker-compose.override.yml` — Keycloak 26.0, `start-dev` mode, `--import-realm`, health check on port 9000
+3. Added port `8181` to `devcontainer.json` `forwardPorts`
+4. Added socat bridge (`8181->8180`) to work around VS Code Dev Containers not forwarding Docker-in-Docker proxy ports
+5. Resolved issuer/hostname dual-network issue via `OnRedirectToIdentityProvider` rewrite + dual `ValidIssuers`
+6. Added `JIM_SSO_AUTHORITY` override in `docker-compose.override.yml` for `jim.web` to use Docker DNS
+7. Added `jim.web` `depends_on` Keycloak health check
+8. Set `RequireHttpsMetadata=false` conditionally for HTTP authorities
 
 ### Phase 2: Environment Integration ✅
 
-1. Updated `.env.example` with working Keycloak defaults (authority, client, secret, scope, initial admin UUID)
-2. Updated `setup.sh` — replaced SSO warning with confirmation message, updated startup instructions
+1. Updated `.env.example` with working Keycloak defaults (authority, client, secret, scope, initial admin UUID, dual valid issuers)
+2. Updated `setup.sh` — replaced SSO warning with confirmation message, updated startup instructions, added socat installation
 3. Test: fresh devcontainer creation → `jim-stack` → sign in with `admin` / `admin`
 
 ### Phase 3: Local Debugging Support ✅
 
 1. Added `jim-keycloak`, `jim-keycloak-stop`, `jim-keycloak-logs` aliases to `jim-aliases.sh`
-2. `.env` defaults point to `localhost:8080` — works for both Docker stack and F5 workflows
-3. Test: `jim-db && jim-keycloak` → F5 → sign in with `admin` / `admin`
+2. `.env` defaults point to `localhost:8181` — works for both Docker stack and F5 workflows
+3. socat bridge auto-starts from `jim-stack`, `jim-build`, `jim-restart`, `jim-keycloak`
+4. Test: `jim-db && jim-keycloak` → F5 → sign in with `admin` / `admin`
 
 ### Phase 4: Documentation
 
 1. Update `docs/SSO_SETUP_GUIDE.md` with a "Development SSO (Bundled Keycloak)" section
 2. Update `docs/DEVELOPER_GUIDE.md` workflow sections to mention SSO just works
 3. Update `README.md` if the getting-started section references SSO setup
+4. Add changelog entry
 
 ---
 
@@ -201,7 +205,7 @@ When running JIM via F5, it reads `.env` directly where `JIM_SSO_AUTHORITY=http:
 2. `Connect-JIM` PowerShell module works against bundled Keycloak
 3. Overriding `.env` SSO variables switches to an external IdP (bundled Keycloak ignored)
 4. Production `docker-compose.yml` is unaffected (no Keycloak service)
-5. Keycloak admin console accessible at `http://localhost:8080` for debugging
+5. Keycloak admin console accessible at `http://localhost:8181` for debugging
 6. Both development workflows work (Docker stack and F5 local debugging)
 
 ---
@@ -210,13 +214,14 @@ When running JIM via F5, it reads `.env` directly where `JIM_SSO_AUTHORITY=http:
 
 - **Keycloak Docker image**: `quay.io/keycloak/keycloak:26.0` (or latest stable at implementation time)
 - No new NuGet packages required
-- No changes to JIM's OIDC implementation
+- `socat` package (installed by `setup.sh`)
+- Minor OIDC changes in `Program.cs` (HTTP authority support, browser redirect rewrite, dual issuer validation)
 
 ## Risks and Mitigations
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| Issuer mismatch (Docker DNS vs localhost) | Token validation fails | Investigate `KC_HOSTNAME` setting; use `JIM_SSO_VALID_ISSUERS` as fallback |
+| Issuer mismatch (Docker DNS vs localhost) | Token validation fails | `OnRedirectToIdentityProvider` rewrite + dual `ValidIssuers` on both OIDC and JWT Bearer |
 | Keycloak startup time (30-60s) | `jim.web` starts before Keycloak is ready | Health check + `depends_on` with `condition: service_healthy` |
 | Image size (~400MB) | Slower first pull | One-time cost; cached after first pull |
 | Keycloak version drift | Breaking changes in realm format | Pin to specific version tag; update as part of Dependabot cycle |
