@@ -6,10 +6,9 @@ services:
       # Override JIM_DB_HOSTNAME from .env to use bundled database container
       - JIM_DB_HOSTNAME=jim.database
       - JIM_INFRASTRUCTURE_API_KEY=${JIM_INFRASTRUCTURE_API_KEY:-}
-      # Override SSO authority to use Docker DNS for back-channel OIDC discovery.
-      # KC_HOSTNAME_URL on Keycloak ensures tokens claim localhost:8080 as issuer,
-      # so JIM_SSO_VALID_ISSUERS in .env validates correctly.
-      - JIM_SSO_AUTHORITY=http://jim.keycloak:8080/realms/jim
+      # SSO authority comes from .env (http://localhost:8080/realms/jim).
+      # In Docker-in-Docker devcontainers, localhost port mappings are reachable
+      # from inside containers, so no Docker DNS override is needed.
       # OpenLDAP TLS configuration for LDAPS connections
       - LDAPTLS_REQCERT=never
     ports:
