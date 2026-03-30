@@ -37,6 +37,9 @@ public partial class SyncRepository
         // Fixup ReferenceValueId FKs from navigation properties within this batch.
         // Cross-batch references (referenced CSO in a later batch) are left null and
         // resolved after all batches via FixupCrossBatchReferenceIdsAsync.
+        // Also null out ReferenceValueId for references to CSOs NOT in this batch — these
+        // may have been set by ResolveReferencesAsync before the persist phase, pointing
+        // to pre-generated IDs for CSOs that haven't been persisted yet.
         var batchCsoIds = new HashSet<Guid>(connectedSystemObjects.Select(c => c.Id));
         foreach (var cso in connectedSystemObjects)
         {
@@ -45,6 +48,14 @@ public partial class SyncRepository
                 if (av.ReferenceValue != null && av.ReferenceValue.Id != Guid.Empty && !av.ReferenceValueId.HasValue
                     && batchCsoIds.Contains(av.ReferenceValue.Id))
                     av.ReferenceValueId = av.ReferenceValue.Id;
+
+                // Null out ReferenceValueId for cross-batch references. ResolveReferencesAsync may
+                // have set this to a pre-generated ID for a CSO in a future batch. Writing this FK
+                // would cause an FK constraint violation. FixupCrossBatchReferenceIdsAsync resolves
+                // these after all batches are persisted.
+                if (av.ReferenceValueId.HasValue && av.ReferenceValueId.Value != Guid.Empty
+                    && !batchCsoIds.Contains(av.ReferenceValueId.Value))
+                    av.ReferenceValueId = null;
             }
         }
 
@@ -77,7 +88,10 @@ public partial class SyncRepository
                     .ToList();
 
                 if (attributeValues.Count > 0)
-                    await BulkInsertCsoAttributeValuesOnConnectionAsync(connection, transaction, attributeValues);
+                {
+                    var partitionCsoIds = new HashSet<Guid>(partition.Select(cso => cso.Id));
+                    await BulkInsertCsoAttributeValuesOnConnectionAsync(connection, transaction, attributeValues, partitionCsoIds);
+                }
 
                 await transaction.CommitAsync();
             });
@@ -159,10 +173,15 @@ public partial class SyncRepository
     /// <summary>
     /// Inserts CSO attribute value rows on an independent NpgsqlConnection using COPY binary import.
     /// </summary>
+    /// <param name="partitionCsoIds">CSO IDs being written on THIS connection. ReferenceValueId FKs
+    /// pointing to CSOs outside this partition are written as null to avoid FK violations — the
+    /// referenced CSO may be on a different parallel connection and not yet committed.
+    /// FixupCrossBatchReferenceIdsAsync resolves these after all batches complete.</param>
     private static async Task BulkInsertCsoAttributeValuesOnConnectionAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
-        List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)> attributeValues)
+        List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)> attributeValues,
+        HashSet<Guid>? partitionCsoIds = null)
     {
         await using var writer = await connection.BeginBinaryImportAsync(
             """
@@ -207,7 +226,11 @@ public partial class SyncRepository
                 await writer.WriteAsync(av.BoolValue.Value, NpgsqlTypes.NpgsqlDbType.Boolean);
             else
                 await writer.WriteNullAsync();
-            if (av.ReferenceValueId.HasValue)
+            // Only write ReferenceValueId if the referenced CSO is in this partition (or no
+            // partition filtering is needed). Cross-partition references would violate the FK
+            // because the referenced CSO is being written on a different parallel connection.
+            if (av.ReferenceValueId.HasValue
+                && (partitionCsoIds == null || partitionCsoIds.Contains(av.ReferenceValueId.Value)))
                 await writer.WriteAsync(av.ReferenceValueId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
             else
                 await writer.WriteNullAsync();
