@@ -283,8 +283,8 @@ function Get-DirectoryConfig {
                     DnTemplate       = 'CN={displayName},OU=Users,OU=Corp,DC=panoply,DC=local'
                     Domain           = "panoply.local"
                     ShortDomain      = "PANOPLY"
-                    LdapSearchPort   = 636
-                    LdapSearchScheme = "ldaps"
+                    LdapSearchPort   = 389
+                    LdapSearchScheme = "ldap"
                     ComposeProfiles  = @()
                     PopulateScript   = "Populate-SambaAD.ps1"
                     ConnectedSystemName = "Panoply AD"
@@ -312,8 +312,8 @@ function Get-DirectoryConfig {
                     DnTemplate       = 'CN={displayName},OU=Users,OU=Corp,DC=resurgam,DC=local'
                     Domain           = "resurgam.local"
                     ShortDomain      = "RESURGAM"
-                    LdapSearchPort   = 636
-                    LdapSearchScheme = "ldaps"
+                    LdapSearchPort   = 389
+                    LdapSearchScheme = "ldap"
                     ComposeProfiles  = @("scenario2")
                     PopulateScript   = "Populate-SambaAD.ps1"
                     ConnectedSystemName = "Resurgam AD"
@@ -341,8 +341,8 @@ function Get-DirectoryConfig {
                     DnTemplate       = 'CN={displayName},OU=Users,OU=CorpManaged,DC=gentian,DC=local'
                     Domain           = "gentian.local"
                     ShortDomain      = "GENTIAN"
-                    LdapSearchPort   = 636
-                    LdapSearchScheme = "ldaps"
+                    LdapSearchPort   = 389
+                    LdapSearchScheme = "ldap"
                     ComposeProfiles  = @("scenario2")
                     PopulateScript   = "Populate-SambaAD.ps1"
                     ConnectedSystemName = "Gentian AD"
