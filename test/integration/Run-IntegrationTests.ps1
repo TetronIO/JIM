@@ -1269,6 +1269,13 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Success "JIM stack started"
 
+# Start socat bridge so Keycloak is accessible at localhost:8181 for browser access
+# Docker-in-Docker proxy ports aren't forwarded by VS Code Dev Containers automatically
+if (Get-Command socat -ErrorAction SilentlyContinue) {
+    & bash -c "pkill -f 'socat.*TCP:127.0.0.1:8180' 2>/dev/null; socat TCP-LISTEN:8181,fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:8180 &"
+    Write-Success "Keycloak bridge started (localhost:8181)"
+}
+
 Start-Sleep -Seconds 2
 
 # Check for pre-populated snapshot images (Scenario 1 / primary)
