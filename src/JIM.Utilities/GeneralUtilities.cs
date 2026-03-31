@@ -32,11 +32,17 @@ public static class Utilities
         if (string.IsNullOrEmpty(inputString))
             return inputString;
 
-        var words = Regex.Matches(inputString, @"([A-Z][a-z]+)").Cast<Match>().Select(m => m.Value).ToList();
+        // Match: a leading lowercase segment OR an uppercase letter followed by lowercase letters.
+        // This handles both PascalCase ("PersonObject") and camelCase ("groupOfNames").
+        var words = Regex.Matches(inputString, @"(^[a-z]+(?=[A-Z])|[A-Z][a-z]+)").Cast<Match>().Select(m => m.Value).ToList();
 
-        // If no matches (e.g., all lowercase like "person"), return the original string
+        // If no matches (e.g., all lowercase like "person" or all caps like "PERSON"), return the original string
         if (words.Count == 0)
             return inputString;
+
+        // Title-case the first word (for camelCase inputs like "groupOfNames" → "Group Of Names")
+        if (char.IsLower(words[0][0]))
+            words[0] = char.ToUpperInvariant(words[0][0]) + words[0][1..];
 
         return string.Join(" ", words);
     }

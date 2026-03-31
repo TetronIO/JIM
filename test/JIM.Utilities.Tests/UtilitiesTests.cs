@@ -112,6 +112,45 @@ public class UtilitiesTests
         Assert.That(result, Is.EqualTo("Person Object"));
     }
 
+    [Test]
+    public void SplitOnCapitalLetters_WithCamelCase_IncludesLeadingLowercaseSegment()
+    {
+        // Arrange — LDAP object classes use camelCase (e.g., groupOfNames, inetOrgPerson)
+        var input = "groupOfNames";
+
+        // Act
+        var result = input.SplitOnCapitalLetters();
+
+        // Assert
+        Assert.That(result, Is.EqualTo("Group Of Names"));
+    }
+
+    [Test]
+    public void SplitOnCapitalLetters_WithCamelCase_InetOrgPerson()
+    {
+        // Arrange
+        var input = "inetOrgPerson";
+
+        // Act
+        var result = input.SplitOnCapitalLetters();
+
+        // Assert
+        Assert.That(result, Is.EqualTo("Inet Org Person"));
+    }
+
+    [Test]
+    public void SplitOnCapitalLetters_WithCamelCase_OrganizationalUnit()
+    {
+        // Arrange
+        var input = "organizationalUnit";
+
+        // Act
+        var result = input.SplitOnCapitalLetters();
+
+        // Assert
+        Assert.That(result, Is.EqualTo("Organizational Unit"));
+    }
+
     #endregion
 
     #region AreByteArraysTheSame Tests - ReadOnlySpan overload
