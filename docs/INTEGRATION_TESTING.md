@@ -81,15 +81,16 @@ This single script handles everything:
 
 **Available Scenarios (`-Scenario` parameter):**
 
-| Scenario | Description | Containers Used |
-|----------|-------------|-----------------|
-| `Scenario1-HRToIdentityDirectory` | HR + Training CSV -> Panoply AD + Cross-Domain provisioning (Joiner/Mover/Leaver) | samba-ad-primary |
-| `Scenario2-CrossDomainSync` | Panoply APAC -> EMEA directory sync | samba-ad-source, samba-ad-target |
-| `Scenario4-DeletionRules` | Deletion rules and grace period testing | samba-ad-primary |
-| `Scenario5-MatchingRules` | Object matching rules testing | samba-ad-primary |
-| `Scenario6-SchedulerService` | Scheduler service end-to-end testing (parallel steps require 4 systems) | samba-ad-primary (requires Scenario1 setup) |
-| `Scenario7-ClearConnectedSystemObjects` | Clear connector space testing (deleteChangeHistory true/false, edge cases) | samba-ad-primary (requires Scenario1 setup) |
-| `Scenario8-CrossDomainEntitlementSync` | Group synchronisation between APAC and EMEA domains | samba-ad-source, samba-ad-target |
+| Scenario | Description | Containers Used | OpenLDAP |
+|----------|-------------|-----------------|----------|
+| `Scenario1-HRToIdentityDirectory` | HR + Training CSV -> AD provisioning (Joiner/Mover/Leaver) | samba-ad-primary / openldap-primary | ✅ |
+| `Scenario2-CrossDomainSync` | APAC -> EMEA directory sync | samba-ad-source, samba-ad-target / openldap-primary | ✅ |
+| `Scenario4-DeletionRules` | Deletion rules and grace period testing | samba-ad-primary / openldap-primary | ✅ |
+| `Scenario5-MatchingRules` | Object matching rules testing | samba-ad-primary / openldap-primary | ✅ |
+| `Scenario6-SchedulerService` | Scheduler service end-to-end testing | samba-ad-primary / openldap-primary | ✅ |
+| `Scenario7-ClearConnectedSystemObjects` | Clear connector space testing | samba-ad-primary / openldap-primary | ✅ |
+| `Scenario8-CrossDomainEntitlementSync` | Group sync between APAC and EMEA domains | samba-ad-source, samba-ad-target / openldap-primary | ✅ |
+| `Scenario9-PartitionScopedImports` | Partition-scoped import run profiles | samba-ad-primary / openldap-primary | ✅ |
 
 **Available Templates (`-Template` parameter):**
 
@@ -107,6 +108,27 @@ Choose a template based on your testing goals:
 > **Memory requirements for large templates:** The XLarge and XXLarge templates require significantly more memory than smaller templates. The worker loads all imported objects into memory during processing — a 100K object import produces a worker peak working set of approximately 2.3 GB, plus 1–2 GB for the database during bulk inserts. **A 16 GB machine is not sufficient for XLarge** — the worker will be OOM-killed during the save phase even without IDE overhead. In a GitHub Codespace (16 GB total), the problem is worse because the IDE and dev tools consume additional memory. Run XLarge tests on a machine with at least 20–24 GB total RAM. See the [Deployment Guide — Memory Scaling](../DEPLOYMENT_GUIDE.md#memory-scaling-by-identity-object-count) for detailed requirements.
 
 See [Data Scale Templates](#data-scale-templates) for detailed template specifications.
+
+**Available Directory Types (`-DirectoryType` parameter):**
+
+| Directory Type | Description | Backend |
+|----------------|-------------|---------|
+| `SambaAD` (default) | Samba Active Directory | LDAPS on port 636, `objectGUID`, AD schema discovery |
+| `OpenLDAP` | OpenLDAP with multi-suffix partitions | LDAP on port 1389, `entryUUID`, RFC 4512 schema, accesslog delta import |
+| `All` | Both directory types (full regression) | Runs all scenarios against SambaAD first, then OpenLDAP |
+
+```powershell
+# Run against OpenLDAP
+./test/integration/Run-IntegrationTests.ps1 -Scenario All -Template Small -DirectoryType OpenLDAP
+
+# Run against both directory types (full cross-directory regression)
+./test/integration/Run-IntegrationTests.ps1 -Scenario All -Template Small -DirectoryType All
+
+# Run a specific scenario against both directory types
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory -DirectoryType All
+```
+
+> **Note:** OpenLDAP uses a single container (`openldap-primary`) with two naming contexts (suffixes) for multi-partition scenarios, while Samba AD uses separate containers (`samba-ad-source`, `samba-ad-target`). The test framework abstracts these differences via `Get-DirectoryConfig`.
 
 **Alternative: Manual step-by-step (for debugging or more control)**
 
