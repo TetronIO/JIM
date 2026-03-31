@@ -1274,14 +1274,9 @@ Write-Success "JIM stack started"
 # Uses setsid + disown to fully detach socat from the PowerShell process tree,
 # so the bridge survives after this script exits (e.g. -SetupOnly mode).
 if (Get-Command socat -ErrorAction SilentlyContinue) {
-    $bridgeScript = @'
-#!/bin/bash
-pkill -f 'socat.*TCP:127.0.0.1:8180' 2>/dev/null || true
-setsid socat TCP-LISTEN:8181,fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:8180 </dev/null >/dev/null 2>&1 &
-disown
-'@
+    $bridgeScript = "#!/bin/bash`npkill -f 'socat.*TCP:127.0.0.1:8180' 2>/dev/null || true`nsetsid socat TCP-LISTEN:8181,fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:8180 </dev/null >/dev/null 2>&1 &`ndisown`n"
     $bridgePath = [System.IO.Path]::GetTempPath() + "jim-keycloak-bridge.sh"
-    $bridgeScript | Set-Content -Path $bridgePath -NoNewline
+    [System.IO.File]::WriteAllText($bridgePath, $bridgeScript)
     & bash $bridgePath
     Write-Success "Keycloak bridge started (localhost:8181)"
 }
