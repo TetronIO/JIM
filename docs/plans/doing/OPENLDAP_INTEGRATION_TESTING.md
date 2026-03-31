@@ -1,6 +1,6 @@
 # OpenLDAP Integration Testing
 
-- **Status:** Doing (Phases 1-5 complete, Phase 6 in progress — S1-S2, S4-S9 done; S3 stub; S8 needs clean-env validation)
+- **Status:** Doing (Phases 1-5 complete, Phase 6 in progress — S1-S2, S4-S9 done; S3 deferred; snapshotting done; Samba AD regression + scale testing remaining)
 - **Created:** 2026-03-09
 - **Issue:** [#72](https://github.com/TetronIO/JIM/issues/72)
 
@@ -492,9 +492,9 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 | 3 | **S6: Scheduler Service** | 2 | Low | ✅ Done | DirectoryConfig, system name parameterised, docker cp replaced with bind mount |
 | 4 | **S2: Cross-Domain Sync** | 11 | Medium | ✅ Done | Two LDAP connected systems (Yellowstone→Glitterband), all 4 tests passing. Unblocked by #435. |
 | 5 | **S5: Matching Rules** | 17 | Medium | ✅ Done | DirectoryConfig threading, docker cp removed, user cleanup parameterised |
-| 6 | **S3: GAL Sync** | 0 | N/A | ⏭ Stub | Not yet implemented — placeholder script only |
+| 6 | **S3: GAL Sync** | 0 | N/A | ⏭ Deferred | Not yet implemented — placeholder script only. Out of scope for this phase. |
 | 7 | **S4: Deletion Rules** | 26 | High | ✅ Done | All 7 tests passing — LDAP-Helpers replace samba-tool, .ContainsKey() for missing attrs |
-| 8 | **S8: Cross-Domain Entitlement Sync** | 50 | High | 🔧 Parameterised | Gap 6 resolved (placeholder member connector code). Setup verified, population verified. Needs clean-env validation run. |
+| 8 | **S8: Cross-Domain Entitlement Sync** | 50 | High | ✅ Done | All 6 tests passing at MediumLarge. Accesslog mapsize/sizelimit configured. Delta import fallback prevented (null watermark fix). Connector warnings moved to Activity.WarningMessage. |
 
 **Implementation advice for each scenario:**
 
@@ -504,7 +504,7 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 
 **S5 (Matching Rules):** Primarily attribute name substitution (`sAMAccountName`→`uid`, `employeeID`→`employeeNumber`, etc.) and object type substitution (`user`→`inetOrgPerson`). Follow the same parameterisation pattern used in S1's `Setup-Scenario1.ps1`.
 
-**S8 (Cross-Domain Entitlement Sync):** ✅ Parameterised. Gap 6 resolved — LDAP connector now transparently manages placeholder members for `groupOfNames` (configurable DN, default `cn=placeholder`). Connector handles: inject on empty group create, inject on last member removal, remove when first real member added, filter on import. Refint error handling returns descriptive error if directory rejects placeholder. 21 unit tests cover all scenarios. Integration test scripts fully parameterised: `Populate-OpenLDAP-Scenario8.ps1` creates company/dept/location/project groups with `groupOfNames`; `Setup-Scenario8.ps1` derives all config from `DirectoryConfig`; `Invoke-Scenario8` uses abstracted helper functions for all directory operations. Needs clean-environment validation run to confirm end-to-end flow.
+**S8 (Cross-Domain Entitlement Sync):** ✅ Complete. All 6 tests passing at MediumLarge scale (InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup). Key fixes applied: (1) OpenLDAP accesslog database configured with 1GB mapsize and unlimited sizelimit to prevent `MDB_MAP_FULL` at scale. (2) Delta import null watermark prevention — when accesslog is empty (e.g., after snapshot restore), full import generates a fallback timestamp so the next delta import doesn't fall back unnecessarily. (3) Connector-level warnings (e.g., `DeltaImportFallbackToFullImport`) moved from phantom RPEIs to `Activity.WarningMessage` — eliminates misleading RPEI rows with no CSO association. (4) `SplitOnCapitalLetters` fixed for camelCase LDAP object types (`groupOfNames` → `Group Of Names`). (5) External Object Type displayed as-is on Activity detail page (no word splitting).
 
 **S4 (Deletion Rules):** OpenLDAP has no account disable mechanism. The deletion rule tests that use `Disable` behaviour and verify `userAccountControl` will need to be skipped or adapted. The `Delete` behaviour (actual LDAP delete) should work unchanged.
 
@@ -519,7 +519,7 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 | `bitnami/openldap` doesn't support `slapadd` for bulk loading | Medium | Medium | ✅ Resolved | Using `ldapadd` via stdin piping. Works at Nano/Micro/Small scales. Pre-built images needed for XLarge. |
 | `groupOfNames` empty group constraint breaks export | Medium | High | ✅ Resolved | Connector handles placeholder member transparently (configurable DN, default `cn=placeholder`). 21 unit tests. Refint error handling for directories with referential integrity overlay. |
 | Paged results cookie invalid on multi-type imports | Medium | High | ✅ Resolved | OpenLDAP's RFC 2696 cursor is connection-scoped — unrelated searches between paged calls invalidate it. Fix: skip completed container+objectType combos on subsequent pages. |
-| Performance regression at XLarge if OpenLDAP population is slow | Low | Medium | Open | Build pre-populated snapshot images (like Samba approach) for Large/XLarge templates |
+| Performance regression at XLarge if OpenLDAP population is slow | Low | Medium | ✅ Resolved | Pre-populated snapshot images implemented (`Build-OpenLDAPSnapshots.ps1`) with content-hash staleness detection, matching Samba AD pattern |
 | Samba AD regression from connector changes | Medium | Low | ⚠️ Needs verification | All connector changes are gated behind `LdapDirectoryType` checks. Samba AD integration tests should be re-run to confirm no regressions. |
 
 ## Success Criteria
@@ -532,5 +532,5 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 - [x] Scenario 1 Mover and Leaver steps pass against OpenLDAP
 - [x] Delta import works against OpenLDAP (accesslog-based with reqStart timestamps)
 - [ ] All existing Samba AD tests continue to pass unchanged (no regressions)
-- [ ] All scenarios (S1-S9) parameterised for OpenLDAP
+- [x] All scenarios (S1-S9, excluding S3 deferred) parameterised for OpenLDAP
 - [ ] Scale testing through Micro → Small → Medium
