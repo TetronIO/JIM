@@ -109,6 +109,22 @@
     Runs all implemented (non-stub) scenarios sequentially with the Small template.
     Docker images are built once; the environment is reset between each scenario.
     A pass/fail summary is printed at the end.
+
+.EXAMPLE
+    ./Run-IntegrationTests.ps1 -Scenario All -Template Small -DirectoryType All
+
+    Runs all scenarios against Samba AD first, then all scenarios against OpenLDAP.
+    Full environment teardown and rebuild between directory types.
+
+.EXAMPLE
+    ./Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory -DirectoryType All
+
+    Runs Scenario 1 against Samba AD, then against OpenLDAP.
+
+.EXAMPLE
+    ./Run-IntegrationTests.ps1 -Scenario All -DirectoryType OpenLDAP -Template Small
+
+    Runs all scenarios against OpenLDAP only with the Small template.
 #>
 
 param(
@@ -147,7 +163,7 @@ param(
     [switch]$IgnoreSnapshots,
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("SambaAD", "OpenLDAP")]
+    [ValidateSet("SambaAD", "OpenLDAP", "All")]
     [string]$DirectoryType = "SambaAD"
 )
 
@@ -173,7 +189,10 @@ $repoRoot = (Get-Item $scriptRoot).Parent.Parent.FullName
 . "$scriptRoot/utils/Test-Helpers.ps1"
 
 # Resolve directory configuration (used throughout for Docker profiles, population, setup)
-$script:DirectoryConfig = Get-DirectoryConfig -DirectoryType $DirectoryType
+# Skip for "All" — the DirectoryType All handler orchestrates multiple runs with specific types.
+if ($DirectoryType -ne "All") {
+    $script:DirectoryConfig = Get-DirectoryConfig -DirectoryType $DirectoryType
+}
 
 # ============================================================================
 # Snapshot detection utilities
@@ -564,6 +583,11 @@ function Show-DirectoryTypeMenu {
             Description = "OpenLDAP with multi-suffix partitions"
             Details = "LDAP on port 1389, entryUUID, RFC 4512 schema"
         }
+        @{
+            Name = "All"
+            Description = "Both directory types (full regression)"
+            Details = "Runs all scenarios against SambaAD first, then OpenLDAP"
+        }
     )
 
     $selectedIndex = 0
@@ -660,8 +684,102 @@ if (-not $Scenario) {
     # Show directory type menu only if not explicitly provided
     if (-not $DirectoryTypeWasExplicitlySet) {
         $DirectoryType = Show-DirectoryTypeMenu
-        # Re-resolve directory config with the selected type
-        $script:DirectoryConfig = Get-DirectoryConfig -DirectoryType $DirectoryType
+        # Re-resolve directory config with the selected type (skip for "All" — handled below)
+        if ($DirectoryType -ne "All") {
+            $script:DirectoryConfig = Get-DirectoryConfig -DirectoryType $DirectoryType
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Handle "-DirectoryType All": run the suite for each directory type
+# ---------------------------------------------------------------------------
+
+if ($DirectoryType -eq "All") {
+    $selfScript = Join-Path $PSScriptRoot "Run-IntegrationTests.ps1"
+    $directoryTypesToRun = @("SambaAD", "OpenLDAP")
+
+    # Build common parameters to pass through (excluding DirectoryType)
+    $passThruParams = @{}
+    if ($Scenario)   { $passThruParams.Scenario = $Scenario }
+    if ($Template)   { $passThruParams.Template = $Template }
+    if ($Step -ne "All") { $passThruParams.Step = $Step }
+    if ($PSBoundParameters.ContainsKey('ExportConcurrency'))    { $passThruParams.ExportConcurrency = $ExportConcurrency }
+    if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) { $passThruParams.MaxExportParallelism = $MaxExportParallelism }
+    if ($TimeoutSeconds -ne 180)                                { $passThruParams.TimeoutSeconds = $TimeoutSeconds }
+    if ($CaptureMetrics)                                        { $passThruParams.CaptureMetrics = $true }
+    if ($IgnoreSnapshots)                                       { $passThruParams.IgnoreSnapshots = $true }
+
+    $allStart = Get-Date
+    $allResults = @()
+    $anyFailed = $false
+
+    Write-Host ""
+    Write-Host "${CYAN}$("=" * 65)${NC}"
+    Write-Host "${CYAN}  JIM Integration Tests — All Directory Types${NC}"
+    Write-Host "${CYAN}$("=" * 65)${NC}"
+    Write-Host ""
+    Write-Host "${GRAY}Scenario:  ${CYAN}$($Scenario ?? 'All')${NC}"
+    Write-Host "${GRAY}Template:  ${CYAN}$Template${NC}"
+    Write-Host "${GRAY}Directory: ${CYAN}SambaAD → OpenLDAP${NC}"
+    Write-Host ""
+
+    foreach ($dt in $directoryTypesToRun) {
+        $dtStart = Get-Date
+
+        Write-Host ""
+        Write-Host "${CYAN}$("=" * 65)${NC}"
+        Write-Host "${CYAN}  Directory Type: $dt${NC}"
+        Write-Host "${CYAN}$("=" * 65)${NC}"
+        Write-Host ""
+
+        & $selfScript @passThruParams -DirectoryType $dt
+        $dtExitCode = $LASTEXITCODE
+        $dtDuration = (Get-Date) - $dtStart
+
+        $dtPassed = ($dtExitCode -eq 0)
+        $dtStatus = if ($dtPassed) { "${GREEN}PASSED${NC}" } else { "${RED}FAILED (exit code $dtExitCode)${NC}" }
+
+        Write-Host ""
+        Write-Host "  $dt Result: $dtStatus  Duration: $($dtDuration.ToString('hh\:mm\:ss'))"
+
+        $allResults += @{
+            DirectoryType   = $dt
+            Success         = $dtPassed
+            ExitCode        = $dtExitCode
+            Duration        = $dtDuration.ToString('hh\:mm\:ss')
+            DurationSeconds = $dtDuration.TotalSeconds
+        }
+        if (-not $dtPassed) { $anyFailed = $true }
+    }
+
+    # Print summary
+    $allDuration = (Get-Date) - $allStart
+    $passCount = ($allResults | Where-Object { $_.Success }).Count
+
+    Write-Host ""
+    Write-Host "${CYAN}$("=" * 65)${NC}"
+    Write-Host "${CYAN}  All Directory Types — Summary${NC}"
+    Write-Host "${CYAN}$("=" * 65)${NC}"
+    Write-Host ""
+
+    foreach ($r in $allResults) {
+        $icon = if ($r.Success) { "${GREEN}PASS${NC}" } else { "${RED}FAIL${NC}" }
+        Write-Host ("  [{0}]  {1,-20} {2}" -f $icon, $r.DirectoryType, $r.Duration)
+    }
+
+    Write-Host ""
+    Write-Host "${CYAN}Total Duration: ${NC}$($allDuration.ToString('hh\:mm\:ss'))"
+    Write-Host "${CYAN}Passed: ${NC}$passCount / $($allResults.Count)    ${CYAN}Failed: ${NC}$($allResults.Count - $passCount) / $($allResults.Count)"
+    Write-Host ""
+
+    if ($anyFailed) {
+        Write-Host "${RED}One or more directory types failed.${NC}"
+        exit 1
+    }
+    else {
+        Write-Host "${GREEN}All directory types passed.${NC}"
+        exit 0
     }
 }
 
@@ -802,7 +920,8 @@ if ($Scenario -eq "All") {
     Write-Host "${CYAN}  JIM Integration Test Runner — Full Regression${NC}"
     Write-Host "${CYAN}$("=" * 65)${NC}"
     Write-Host ""
-    Write-Host "${GRAY}Template: ${CYAN}$Template${NC}  ${GRAY}(used by template-relevant scenarios; others use Nano)${NC}"
+    Write-Host "${GRAY}Template:  ${CYAN}$Template${NC}  ${GRAY}(used by template-relevant scenarios; others use Nano)${NC}"
+    Write-Host "${GRAY}Directory: ${CYAN}$DirectoryType${NC}"
     Write-Host ""
     Write-Host "${GRAY}Scenarios to run ($($implementedScenarios.Count)):${NC}"
     foreach ($s in $implementedScenarios) {
@@ -812,7 +931,7 @@ if ($Scenario -eq "All") {
     Write-Host ""
 
     # Build common parameters — Template is overridden per-scenario inside Invoke-SingleScenario
-    $commonParams = @{}
+    $commonParams = @{ DirectoryType = $DirectoryType }
     if ($Template)   { $commonParams.Template = $Template }
     if ($Step)       { $commonParams.Step = $Step }
     if ($PSBoundParameters.ContainsKey('ExportConcurrency'))    { $commonParams.ExportConcurrency = $ExportConcurrency }
@@ -919,6 +1038,7 @@ if ($Scenario -eq "All") {
 
     $regressionResults = @{
         Mode           = "FullRegression"
+        DirectoryType  = $DirectoryType
         Template       = $Template
         StartTime      = $allStart.ToString("yyyy-MM-dd HH:mm:ss")
         Duration       = $allDuration.ToString('hh\:mm\:ss')
