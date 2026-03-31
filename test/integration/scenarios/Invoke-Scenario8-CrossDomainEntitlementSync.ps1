@@ -89,6 +89,9 @@ if ($isOpenLDAP) {
 else {
     $sourceConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Source
     $targetConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Target
+    # Scenario 8 places groups in OU=Entitlements, not the default OU=Groups
+    $sourceConfig.GroupContainer = "OU=Entitlements,OU=Corp,DC=resurgam,DC=local"
+    $targetConfig.GroupContainer = "OU=Entitlements,OU=CorpManaged,DC=gentian,DC=local"
 }
 
 $sourceContainerName = $sourceConfig.ContainerName
