@@ -1,7 +1,7 @@
 {
   "name": "JIM Development Environment",
   "build": {
-      "dockerfile": "Dockerfile"
+    "dockerfile": "Dockerfile"
   },
   // Features - pre-built development tools
   "features": {
@@ -145,10 +145,10 @@
   "capAdd": [
     "SYS_PTRACE"
   ],
-  // Improved build performance
+  // Improved build performance and integration test directory snapshot storage
   "hostRequirements": {
     "cpus": 8,
     "memory": "32gb",
-    "storage": "64gb"
+    "storage": "120gb"
   }
 }
