@@ -413,7 +413,7 @@
                                          Color="Color.Default"
                                          Variant="@(IsObjectTypeSelected(objectType.Key) ? Variant.Outlined : Variant.Text)"
                                          SelectedColor="Color.Default">
-                                    @objectType.Key.SplitOnCapitalLetters()
+                                    @objectType.Key
                                     <MudText Typo="Typo.caption" Class="ml-1">(@objectType.Value.ToString("N0"))</MudText>
                                 </MudChip>
                             }
@@ -502,7 +502,7 @@
                 </MudTd>
                 <MudTd DataLabel="External Id" Class="jim-text-code mud-text-secondary">@(!string.IsNullOrEmpty(context.ExternalIdValue) ? context.ExternalIdValue : "-")</MudTd>
                 <MudTd DataLabel="Display Name">@(!string.IsNullOrEmpty(context.DisplayName) ? context.DisplayName : "-")</MudTd>
-                <MudTd DataLabel="External Object Type">@(context.ConnectedSystemObjectType != null ? context.ConnectedSystemObjectType.ToString().SplitOnCapitalLetters() : "-")</MudTd>
+                <MudTd DataLabel="External Object Type">@(context.ConnectedSystemObjectType != null ? context.ConnectedSystemObjectType.ToString() : "-")</MudTd>
                 <MudTd DataLabel="Outcomes">
                     @{
                         var outcomes = Helpers.ParseOutcomeSummary(context.OutcomeSummary);
