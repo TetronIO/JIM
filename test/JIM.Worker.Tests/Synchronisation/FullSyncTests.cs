@@ -2870,8 +2870,8 @@ public class FullSyncTests
             .FirstOrDefault(av => av.AttributeId == (int)MockMetaverseAttributeName.Manager);
         Assert.That(managerValue, Is.Not.Null,
             "CSO-A's MVO should have a Manager reference attribute (resolved via cross-page reference resolution).");
-        Assert.That(managerValue!.ReferenceValue, Is.EqualTo(csoBMvo),
-            "The Manager reference should point to CSO-B's MVO.");
+        Assert.That(managerValue!.ReferenceValueId, Is.EqualTo(csoBMvo!.Id),
+            "The Manager reference FK should point to CSO-B's MVO.");
 
         // Verify scalar attributes also flowed correctly (basic sanity check)
         var csoADisplayName = csoAMvo.AttributeValues

@@ -1311,8 +1311,29 @@ public abstract class SyncTaskProcessorBase
         // Batch update existing MVOs
         if (_pendingMvoUpdates.Count > 0)
         {
+            // Tactical fixup: capture reference FK data from in-memory navigations BEFORE
+            // persistence, because EF clears navigations during SaveChangesAsync when using
+            // explicit Entry().State management. After persist, issue a targeted SQL UPDATE
+            // for any attribute values where EF failed to infer the FK.
+            // We capture (MvoId, AttributeId, TargetMvoId) since av.Id may be Guid.Empty
+            // (assigned by EF during SaveChangesAsync).
+            // RETIRE: when MVO persistence is converted to direct SQL.
+            var refFixups = new List<(Guid MvoId, int AttributeId, Guid TargetMvoId)>();
+            foreach (var mvo in _pendingMvoUpdates)
+            {
+                foreach (var av in mvo.AttributeValues)
+                {
+                    if (!av.ReferenceValueId.HasValue && av.ReferenceValue != null && av.ReferenceValue.Id != Guid.Empty)
+                        refFixups.Add((mvo.Id, av.AttributeId, av.ReferenceValue.Id));
+                }
+            }
+
             await _syncRepo.UpdateMetaverseObjectsAsync(_pendingMvoUpdates);
             Log.Verbose("PersistPendingMetaverseObjectsAsync: Updated {Count} MVOs in batch", _pendingMvoUpdates.Count);
+
+            if (refFixups.Count > 0)
+                await _syncRepo.FixupMvoReferenceValueIdsAsync(refFixups);
+
             _pendingMvoUpdates.Clear();
         }
 

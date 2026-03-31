@@ -140,7 +140,8 @@ public class SyncRuleMappingProcessorReferenceTests
         Assert.That(groupMvo.PendingAttributeValueAdditions, Has.Count.EqualTo(1));
         var addedValue = groupMvo.PendingAttributeValueAdditions.First();
         Assert.That(addedValue.Attribute, Is.EqualTo(_staticMembersAttribute));
-        Assert.That(addedValue.ReferenceValue, Is.EqualTo(userMvo), "The MVO reference should point to the user's MVO");
+        var refMvoId = addedValue.ReferenceValueId ?? addedValue.ReferenceValue?.Id;
+        Assert.That(refMvoId, Is.EqualTo(userMvo.Id), "The MVO reference should point to the user's MVO");
     }
 
     [Test]
@@ -333,7 +334,7 @@ public class SyncRuleMappingProcessorReferenceTests
         // Assert
         Assert.That(groupMvo.PendingAttributeValueAdditions, Has.Count.EqualTo(2),
             "Should have exactly 2 pending additions (one per CSO reference value)");
-        var addedMvoIds = groupMvo.PendingAttributeValueAdditions.Select(av => av.ReferenceValue?.Id).ToList();
+        var addedMvoIds = groupMvo.PendingAttributeValueAdditions.Select(av => av.ReferenceValueId ?? av.ReferenceValue?.Id).ToList();
         Assert.That(addedMvoIds, Does.Contain(userMvo1.Id));
         Assert.That(addedMvoIds, Does.Contain(userMvo2.Id));
     }
@@ -416,7 +417,8 @@ public class SyncRuleMappingProcessorReferenceTests
         // The resolved reference (user1) should be added
         Assert.That(groupMvo.PendingAttributeValueAdditions, Has.Count.EqualTo(1),
             "Resolved reference should still be added");
-        Assert.That(groupMvo.PendingAttributeValueAdditions[0].ReferenceValue, Is.EqualTo(userMvo1));
+        var refId = groupMvo.PendingAttributeValueAdditions[0].ReferenceValueId ?? groupMvo.PendingAttributeValueAdditions[0].ReferenceValue?.Id;
+        Assert.That(refId, Is.EqualTo(userMvo1.Id));
 
         // CRITICAL: The existing MVO references (user2, user3) should NOT be removed
         // because some CSO references are unresolved (cross-page). Removal is deferred

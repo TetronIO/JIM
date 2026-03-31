@@ -526,16 +526,14 @@ public static class SyncRuleMappingProcessor
                 ContributedBySystemId = contributingSystemId
             };
 
-            // Prefer setting the navigation property when available (EF can track the relationship).
-            // Fall back to scalar FK when only MetaverseObjectId is available.
+            // When the referenced MVO is available as a tracked navigation (same-page reference),
+            // set the navigation so EF handles insert ordering (the MVO may not be persisted yet).
+            // For cross-page references (navigation unavailable), set the scalar FK directly —
+            // the referenced MVO already exists in the database.
             if (newCsoNewAttributeValue.ReferenceValue?.MetaverseObject != null)
-            {
                 newMvoAv.ReferenceValue = newCsoNewAttributeValue.ReferenceValue.MetaverseObject;
-            }
             else
-            {
                 newMvoAv.ReferenceValueId = targetMvoId.Value;
-            }
 
             mvo.PendingAttributeValueAdditions.Add(newMvoAv);
         }

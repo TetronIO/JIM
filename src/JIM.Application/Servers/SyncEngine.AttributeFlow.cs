@@ -486,6 +486,10 @@ public partial class SyncEngine
                 ContributedBySystemId = contributingSystemId
             };
 
+            // When the referenced MVO is available as a tracked navigation (same-page reference),
+            // set the navigation so EF handles insert ordering (the MVO may not be persisted yet).
+            // For cross-page references (navigation unavailable), set the scalar FK directly —
+            // the referenced MVO already exists in the database.
             if (newCsoNewAttributeValue.ReferenceValue?.MetaverseObject != null)
                 newMvoAv.ReferenceValue = newCsoNewAttributeValue.ReferenceValue.MetaverseObject;
             else

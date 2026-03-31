@@ -46,16 +46,15 @@ public partial class SyncRepository
             }
         }
 
-        // Fixup ReferenceValueId FKs from navigation properties within this batch.
-        // MVO attribute values can reference other MVOs (e.g., Manager → Person MVO).
-        // Cross-batch references are resolved later via cross-page reference resolution.
-        var batchMvoIds = new HashSet<Guid>(metaverseObjects.Select(m => m.Id));
+        // Fixup ReferenceValueId FKs from navigation properties.
+        // MVO attribute values can reference other MVOs (e.g., StaticMembers → Person MVO).
+        // The referenced MVO may be in this batch (same-page) or already persisted from a
+        // previous page — either way the navigation has a valid Id we can use as the FK.
         foreach (var mvo in metaverseObjects)
         {
             foreach (var av in mvo.AttributeValues)
             {
-                if (av.ReferenceValue != null && av.ReferenceValue.Id != Guid.Empty && !av.ReferenceValueId.HasValue
-                    && batchMvoIds.Contains(av.ReferenceValue.Id))
+                if (av.ReferenceValue != null && av.ReferenceValue.Id != Guid.Empty && !av.ReferenceValueId.HasValue)
                     av.ReferenceValueId = av.ReferenceValue.Id;
             }
         }
@@ -359,6 +358,70 @@ public partial class SyncRepository
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }
+    }
+
+    #endregion
+
+    #region Metaverse Object — Reference FK Fixup
+
+    /// <summary>
+    /// Tactical fixup: populates ReferenceValueId on MetaverseObjectAttributeValues where the FK is
+    /// null but the ReferenceValue navigation is set in-memory.
+    ///
+    /// Background: ProcessReferenceAttribute sets the ReferenceValue navigation property for same-page
+    /// references (so EF handles insert ordering for not-yet-persisted MVOs). EF is supposed to infer
+    /// the scalar FK from the navigation at SaveChanges time, but this silently fails when entities are
+    /// managed via explicit Entry().State (as in UpdateMetaverseObjectsAsync). The result is MVO attribute
+    /// values with ReferenceValue navigation set in-memory but ReferenceValueId NULL in the database.
+    ///
+    /// This method iterates the in-memory MVOs after persistence, collects attribute values where the
+    /// navigation is set but the FK is null, and issues a targeted SQL UPDATE for those specific rows.
+    ///
+    /// TACTICAL: This will be retired when MVO persistence is converted to direct SQL, which will
+    /// always set scalar FKs explicitly without relying on EF navigation inference.
+    /// </summary>
+    public async Task<int> FixupMvoReferenceValueIdsAsync(IReadOnlyList<(Guid MvoId, int AttributeId, Guid TargetMvoId)> fixups)
+    {
+        if (fixups.Count == 0)
+            return 0;
+
+        // Batch UPDATE using a VALUES list. Match by (MvoId, AttributeId, TargetMvoId) since
+        // the attribute value's primary key may not be assigned yet when fixups are collected
+        // (EF assigns it during SaveChangesAsync).
+        const int chunkSize = 500;
+        var totalFixed = 0;
+
+        foreach (var chunk in fixups.Chunk(chunkSize))
+        {
+            var sb = new StringBuilder();
+            sb.Append("""
+                UPDATE "MetaverseObjectAttributeValues" mav
+                SET "ReferenceValueId" = v."TargetMvoId"
+                FROM (VALUES
+                """);
+
+            var parameters = new List<object>();
+            for (var i = 0; i < chunk.Length; i++)
+            {
+                if (i > 0) sb.Append(',');
+                sb.Append($"({{{i * 3}}}::uuid, {{{i * 3 + 1}}}::int, {{{i * 3 + 2}}}::uuid)");
+                parameters.Add(chunk[i].MvoId);
+                parameters.Add(chunk[i].AttributeId);
+                parameters.Add(chunk[i].TargetMvoId);
+            }
+
+            sb.Append("""
+                ) AS v("MvoId", "AttrId", "TargetMvoId")
+                WHERE mav."MetaverseObjectId" = v."MvoId"
+                  AND mav."AttributeId" = v."AttrId"
+                  AND mav."ReferenceValueId" IS NULL
+                """);
+
+            totalFixed += await _context.Database.ExecuteSqlRawAsync(sb.ToString(), parameters.ToArray());
+        }
+
+        Log.Information("FixupMvoReferenceValueIdsAsync: Fixed {Count} MVO attribute value reference FKs", totalFixed);
+        return totalFixed;
     }
 
     #endregion

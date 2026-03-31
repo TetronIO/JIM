@@ -572,6 +572,12 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(resolved);
     }
 
+    public Task<int> FixupMvoReferenceValueIdsAsync(IReadOnlyList<(Guid MvoId, int AttributeId, Guid TargetMvoId)> fixups)
+    {
+        // In-memory repo handles this via FixupMvoAttributeValues on read.
+        return Task.FromResult(0);
+    }
+
     #endregion
 
     #region Metaverse Object — Reads
@@ -1497,6 +1503,7 @@ public class SyncRepository : ISyncRepository
     /// <summary>
     /// Fixes up MVO attribute value FK/nav prop mismatches.
     /// Production code sets Attribute nav prop but not AttributeId; EF resolves on SaveChanges.
+    /// Similarly, ReferenceValue nav prop may be set without ReferenceValueId.
     /// </summary>
     private static void FixupMvoAttributeValues(MetaverseObject mvo)
     {
@@ -1504,6 +1511,9 @@ public class SyncRepository : ISyncRepository
         {
             if (av.AttributeId == 0 && av.Attribute != null)
                 av.AttributeId = av.Attribute.Id;
+            if (av.ReferenceValue != null && av.ReferenceValue.Id != Guid.Empty
+                && (!av.ReferenceValueId.HasValue || av.ReferenceValueId == Guid.Empty))
+                av.ReferenceValueId = av.ReferenceValue.Id;
         }
     }
 
