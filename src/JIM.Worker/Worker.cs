@@ -698,6 +698,13 @@ public class Worker : BackgroundService
                 await jim.Activities.CompleteActivityWithWarningAsync(activity);
                 Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed with warnings", activity.Id);
             }
+            else if (!string.IsNullOrEmpty(activity.WarningMessage))
+            {
+                // Connector-level warnings (e.g., DeltaImportFallbackToFullImport) are stored on the
+                // Activity, not as RPEIs. The activity should still complete with warning status.
+                await jim.Activities.CompleteActivityWithWarningAsync(activity);
+                Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed with warning (connector warning: {WarningMessage})", activity.Id, activity.WarningMessage);
+            }
             else
             {
                 await jim.Activities.CompleteActivityAsync(activity);

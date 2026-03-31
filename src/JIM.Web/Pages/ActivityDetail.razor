@@ -148,6 +148,13 @@
         </MudGrid>
     </MudPaper>
 
+    @if (!string.IsNullOrEmpty(_activity.WarningMessage))
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-4">
+            <MudText Typo="Typo.body1" Style="font-weight: 500;">@_activity.WarningMessage</MudText>
+        </MudAlert>
+    }
+
     @if (!string.IsNullOrEmpty(_activity.ErrorMessage) || !string.IsNullOrEmpty(_activity.ErrorStackTrace))
     {
         <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-4 jim-alert-error jim-exception-text">

@@ -635,6 +635,16 @@ internal class LdapConnectorImport
             {
                 // OpenLDAP: query cn=accesslog for the latest reqStart timestamp
                 rootDse.LastAccesslogTimestamp = QueryAccesslogForLatestTimestamp();
+
+                // If the accesslog is empty (e.g., after snapshot restore clears stale data),
+                // generate a fallback timestamp so the watermark is never null. This prevents
+                // the next delta import from falling back to a full import unnecessarily.
+                if (string.IsNullOrEmpty(rootDse.LastAccesslogTimestamp))
+                {
+                    rootDse.LastAccesslogTimestamp = LdapConnectorUtilities.GenerateAccesslogFallbackTimestamp();
+                    _logger.Information("GetRootDseInformation: Accesslog is empty — using fallback timestamp {Timestamp} as watermark",
+                        rootDse.LastAccesslogTimestamp);
+                }
             }
             else
             {

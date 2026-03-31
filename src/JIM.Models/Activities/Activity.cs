@@ -57,6 +57,14 @@ public class Activity
     public string? ErrorStackTrace { get; set; }
 
     /// <summary>
+    /// Connector-level warning message describing a non-fatal operational note about the activity.
+    /// For example, when a delta import falls back to a full import because the watermark was unavailable.
+    /// This is displayed on the activity detail page and causes the activity to complete with warning status.
+    /// Unlike ErrorMessage, this does not indicate a failure — the activity still succeeded, just with caveats.
+    /// </summary>
+    public string? WarningMessage { get; set; }
+
+    /// <summary>
     /// When the activity is complete, a value for how long the activity took to complete should be stored here.
     /// This may be a noticeably smaller value than the total activity time, as some activities take a while before
     /// they are executed, i.e. those processed by JIM.Service which

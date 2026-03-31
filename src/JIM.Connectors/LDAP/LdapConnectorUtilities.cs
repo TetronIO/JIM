@@ -623,4 +623,15 @@ internal static class LdapConnectorUtilities
             return false;
         }
     }
+
+    /// <summary>
+    /// Generates a fallback accesslog timestamp for when the cn=accesslog database is empty
+    /// (e.g., after snapshot restore clears stale accesslog data). Returns the current UTC time
+    /// formatted as LDAP generalised time (YYYYMMDDHHmmSS.ffffffZ), which serves as the
+    /// watermark for the next delta import: "no changes happened before this point."
+    /// </summary>
+    internal static string GenerateAccesslogFallbackTimestamp()
+    {
+        return DateTime.UtcNow.ToString("yyyyMMddHHmmss.ffffffZ");
+    }
 }

@@ -117,30 +117,93 @@ public class LdapConnectorImportDeltaFallbackTests
 
     #endregion
 
-    #region RPEI creation pattern tests
+    #region Accesslog fallback timestamp tests
 
     [Test]
-    public void ActivityRpei_WithFallbackWarning_HasCorrectPropertiesAsync()
+    public void GenerateAccesslogFallbackTimestamp_ReturnsValidLdapGeneralisedTime()
     {
-        // Verify that an RPEI created for the fallback warning has the correct structure
+        // When the accesslog is empty (e.g., after snapshot restore), the connector should
+        // generate a fallback timestamp so the watermark is never null for OpenLDAP directories.
+        var timestamp = LdapConnectorUtilities.GenerateAccesslogFallbackTimestamp();
+
+        Assert.That(timestamp, Is.Not.Null);
+        Assert.That(timestamp, Is.Not.Empty);
+        // LDAP generalised time format: YYYYMMDDHHmmSS.ffffffZ
+        Assert.That(timestamp, Does.Match(@"^\d{14}\.\d{6}Z$"),
+            "Timestamp must be in LDAP generalised time format (YYYYMMDDHHmmSS.ffffffZ)");
+    }
+
+    [Test]
+    public void GenerateAccesslogFallbackTimestamp_IsRecentUtcTime()
+    {
+        // The fallback timestamp should represent approximately "now" so that a subsequent
+        // delta import queries from this point forward and finds no spurious changes.
+        var before = DateTime.UtcNow;
+        var timestamp = LdapConnectorUtilities.GenerateAccesslogFallbackTimestamp();
+        var after = DateTime.UtcNow;
+
+        // Parse the timestamp back to DateTime for comparison
+        var parsed = DateTime.ParseExact(timestamp, "yyyyMMddHHmmss.ffffffZ",
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal);
+
+        Assert.That(parsed, Is.GreaterThanOrEqualTo(before.AddSeconds(-1)),
+            "Fallback timestamp should be approximately current UTC time");
+        Assert.That(parsed, Is.LessThanOrEqualTo(after.AddSeconds(1)),
+            "Fallback timestamp should be approximately current UTC time");
+    }
+
+    [Test]
+    public void GenerateAccesslogFallbackTimestamp_WorksAsAccesslogFilter()
+    {
+        // The timestamp must be usable in an LDAP filter like (reqStart>=timestamp)
+        // This means it must sort correctly with real accesslog timestamps via string comparison.
+        var fallback = LdapConnectorUtilities.GenerateAccesslogFallbackTimestamp();
+        var realTimestamp = "20260329094128.000033Z"; // A real accesslog timestamp
+
+        // The fallback (generated ~now, 2026-03-31) should be AFTER a timestamp from 2026-03-29
+        Assert.That(string.Compare(fallback, realTimestamp, StringComparison.Ordinal), Is.GreaterThan(0),
+            "Fallback timestamp (now) should sort after an older real timestamp");
+    }
+
+    #endregion
+
+    #region Activity warning message tests (connector-level warnings go on Activity, not phantom RPEIs)
+
+    [Test]
+    public void Activity_WarningMessage_DefaultsToNull()
+    {
+        var activity = new Activity();
+        Assert.That(activity.WarningMessage, Is.Null);
+    }
+
+    [Test]
+    public void Activity_WarningMessage_CanBeSet()
+    {
+        var activity = new Activity
+        {
+            WarningMessage = "Delta import fell back to full import"
+        };
+
+        Assert.That(activity.WarningMessage, Is.EqualTo("Delta import fell back to full import"));
+    }
+
+    [Test]
+    public void Activity_ConnectorWarning_ShouldNotCreatePhantomRpei()
+    {
+        // Connector-level warnings (like DeltaImportFallbackToFullImport) should be stored
+        // on the Activity itself, NOT as a separate RPEI with no CSO association.
+        // A phantom RPEI inflates error counts, pollutes the RPEI list, and misleads users.
         var activity = new Activity
         {
             Id = Guid.NewGuid(),
+            WarningMessage = "Delta import was requested but the accesslog watermark was not available.",
             RunProfileExecutionItems = new List<ActivityRunProfileExecutionItem>()
         };
 
-        var warningRpei = activity.PrepareRunProfileExecutionItem();
-        warningRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport;
-        warningRpei.ErrorMessage = "Delta import fell back to full import due to accesslog size limit.";
-        activity.RunProfileExecutionItems.Add(warningRpei);
-
-        Assert.That(activity.RunProfileExecutionItems, Has.Count.EqualTo(1));
-        var rpei = activity.RunProfileExecutionItems.First();
-        Assert.That(rpei.ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport));
-        Assert.That(rpei.ErrorMessage, Does.Contain("accesslog"));
-        Assert.That(rpei.ActivityId, Is.EqualTo(activity.Id));
-        // No CSO associated — this is a connector-level warning, not an object-level error
-        Assert.That(rpei.ConnectedSystemObjectId, Is.Null);
+        // The activity should have zero RPEIs — the warning is on the activity, not an RPEI
+        Assert.That(activity.RunProfileExecutionItems, Has.Count.EqualTo(0));
+        Assert.That(activity.WarningMessage, Is.Not.Null);
     }
 
     #endregion

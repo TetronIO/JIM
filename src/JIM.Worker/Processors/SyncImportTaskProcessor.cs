@@ -167,7 +167,6 @@ public class SyncImportTaskProcessor
                 var originalPersistedData = _connectedSystem.PersistedConnectorData;
                 string? newPersistedData = null;
                 string? connectorWarningMessage = null;
-                ActivityRunProfileExecutionItemErrorType? connectorWarningErrorType = null;
 
                 while (initialPage || paginationTokens.Count > 0)
                 {
@@ -213,7 +212,6 @@ public class SyncImportTaskProcessor
                     if (result.WarningMessage != null && connectorWarningMessage == null)
                     {
                         connectorWarningMessage = result.WarningMessage;
-                        connectorWarningErrorType = result.WarningErrorType;
                     }
 
                     // process the results from this page
@@ -235,13 +233,13 @@ public class SyncImportTaskProcessor
                     await UpdateConnectedSystemWithInitiatorAsync();
                 }
 
-                // Record any connector-level warnings as RPEIs so they surface in the activity
+                // Record connector-level warnings on the Activity itself (not as phantom RPEIs).
+                // Connector warnings (e.g., DeltaImportFallbackToFullImport) are operational notes about
+                // HOW the import was performed, not errors with specific objects. Creating a phantom RPEI
+                // with no CSO association inflates error counts and pollutes the RPEI list.
                 if (connectorWarningMessage != null)
                 {
-                    var warningRpei = _activity.PrepareRunProfileExecutionItem();
-                    warningRpei.ErrorType = connectorWarningErrorType ?? ActivityRunProfileExecutionItemErrorType.UnhandledError;
-                    warningRpei.ErrorMessage = connectorWarningMessage;
-                    _activity.RunProfileExecutionItems.Add(warningRpei);
+                    _activity.WarningMessage = connectorWarningMessage;
                     Log.Warning("PerformFullImportAsync: Connector reported warning: {WarningMessage}", connectorWarningMessage);
                 }
 
