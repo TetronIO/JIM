@@ -1269,10 +1269,20 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Success "JIM stack started"
 
-# Start socat bridge so Keycloak is accessible at localhost:8181 for browser access
-# Docker-in-Docker proxy ports aren't forwarded by VS Code Dev Containers automatically
+# Start socat bridge so Keycloak is accessible at localhost:8181 for browser access.
+# Docker-in-Docker proxy ports aren't forwarded by VS Code Dev Containers automatically.
+# Uses setsid + disown to fully detach socat from the PowerShell process tree,
+# so the bridge survives after this script exits (e.g. -SetupOnly mode).
 if (Get-Command socat -ErrorAction SilentlyContinue) {
-    & bash -c "pkill -f 'socat.*TCP:127.0.0.1:8180' 2>/dev/null; nohup socat TCP-LISTEN:8181,fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:8180 > /dev/null 2>&1 &"
+    $bridgeScript = @'
+#!/bin/bash
+pkill -f 'socat.*TCP:127.0.0.1:8180' 2>/dev/null || true
+setsid socat TCP-LISTEN:8181,fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:8180 </dev/null >/dev/null 2>&1 &
+disown
+'@
+    $bridgePath = [System.IO.Path]::GetTempPath() + "jim-keycloak-bridge.sh"
+    $bridgeScript | Set-Content -Path $bridgePath -NoNewline
+    & bash $bridgePath
     Write-Success "Keycloak bridge started (localhost:8181)"
 }
 
