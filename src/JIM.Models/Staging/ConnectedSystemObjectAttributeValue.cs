@@ -5,6 +5,14 @@ namespace JIM.Models.Staging;
 
 public class ConnectedSystemObjectAttributeValue
 {
+    /// <summary>
+    /// The MetaverseObjectId of the referenced CSO (the CSO pointed to by ReferenceValueId).
+    /// Populated via direct SQL in the repository to avoid the deep EF Include chain
+    /// (AttributeValues → ReferenceValue → MetaverseObject) that fails at scale.
+    /// </summary>
+    [NotMapped]
+    public Guid? ResolvedReferenceMetaverseObjectId { get; set; }
+
     [Key]
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public Guid Id { get; set; }

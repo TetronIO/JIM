@@ -654,21 +654,19 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (pageSize > 500)
             pageSize = 500;
 
-        // Load CSOs and their related data using two separate queries within a repeatable-read
-        // transaction to ensure a consistent snapshot. This replaces the previous AsSplitQuery()
-        // approach which suffered from a materialisation bug (dotnet/efcore#33826) where concurrent
-        // writes between split query executions caused navigation properties to fail to materialise.
+        // Load CSOs with a shallow Include chain (CSO → Type, CSO → AttributeValues → Attribute).
+        // The deep Include chain (→ ReferenceValue → MetaverseObject) is deliberately excluded:
+        // at scale (5000+ CSOs, 80K+ member references), it produces a cartesian explosion that
+        // causes EF Core to intermittently fail to materialise ReferenceValue navigations —
+        // different ones each run, leading to false drift corrections that remove group members.
         //
-        // Query 1: CSOs with their own attribute values and reference navigations
-        // Query 2: MVOs (loaded separately) — EF Core relationship fixup automatically populates
-        //          cso.MetaverseObject navigations for entities tracked in the same DbContext
+        // Instead, referenced CSOs are loaded via direct SQL (PopulateReferenceValuesAsync) which
+        // reliably provides the two values the sync engine needs: ReferenceValueId (the referenced
+        // CSO's ID) and ReferenceValue.MetaverseObjectId (which MVO the referenced CSO is joined to).
         var csoQuery = Repository.Database.ConnectedSystemObjects
             .Include(cso => cso.Type)
             .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.Attribute)
-            .Include(cso => cso.AttributeValues)
-                .ThenInclude(av => av.ReferenceValue)
-                .ThenInclude(rv => rv!.MetaverseObject)
             .Where(q => q.ConnectedSystemId == connectedSystemId)
             .OrderBy(cso => cso.Id);
 
@@ -684,8 +682,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         var results = await pagedCsoQuery.ToListAsync();
 
+        // Populate ReferenceValue navigations via direct SQL — bypasses EF Include materialisation.
+        await PopulateReferenceValuesAsync(results);
+
         // Load MVOs separately — EF relationship fixup populates cso.MetaverseObject automatically.
-        // This avoids the deep Include chain that caused AsSplitQuery materialisation failures.
         await LoadMetaverseObjectsForCsosAsync(results);
 
         await transaction.CommitAsync();
@@ -787,9 +787,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (pageSize > 500)
             pageSize = 500;
 
-        // Load CSOs modified since the given timestamp using two separate queries within a
-        // repeatable-read transaction (same approach as GetConnectedSystemObjectsAsync — see that
-        // method for the rationale on avoiding AsSplitQuery).
+        // Shallow Include chain — same approach as GetConnectedSystemObjectsAsync.
+        // ReferenceValue navigations populated via direct SQL (PopulateReferenceValuesAsync).
         //
         // We check BOTH Created AND LastUpdated because:
         // - Created > watermark: Captures newly created CSOs that haven't been modified yet
@@ -799,9 +798,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(cso => cso.Type)
             .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.Attribute)
-            .Include(cso => cso.AttributeValues)
-                .ThenInclude(av => av.ReferenceValue)
-                .ThenInclude(rv => rv!.MetaverseObject)
             .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
                          (cso.Created > modifiedSince ||
                           (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)))
@@ -821,6 +817,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .BeginTransactionAsync(IsolationLevel.RepeatableRead);
 
         var results = await pagedCsoQuery.ToListAsync();
+        await PopulateReferenceValuesAsync(results);
         await LoadMetaverseObjectsForCsosAsync(results);
 
         await transaction.CommitAsync();
@@ -856,26 +853,78 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (csoIds.Count == 0)
             return [];
 
-        // Load CSOs by ID using two separate queries within a repeatable-read transaction
-        // (same approach as GetConnectedSystemObjectsAsync — see that method for the rationale).
+        // Shallow Include chain — same approach as GetConnectedSystemObjectsAsync.
+        // ReferenceValue navigations populated via direct SQL (PopulateReferenceValuesAsync).
         var csoQuery = Repository.Database.ConnectedSystemObjects
             .Include(cso => cso.Type)
             .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.Attribute)
-            .Include(cso => cso.AttributeValues)
-                .ThenInclude(av => av.ReferenceValue)
-                .ThenInclude(rv => rv!.MetaverseObject)
             .Where(cso => csoIds.Contains(cso.Id));
 
         await using var transaction = await Repository.Database.Database
             .BeginTransactionAsync(IsolationLevel.RepeatableRead);
 
         var results = await csoQuery.ToListAsync();
+        await PopulateReferenceValuesAsync(results);
         await LoadMetaverseObjectsForCsosAsync(results);
 
         await transaction.CommitAsync();
 
         return results;
+    }
+
+    /// <summary>
+    /// DTO for the reference value lookup SQL query.
+    /// </summary>
+    private record ReferencedCsoRow(Guid CsoId, Guid? MetaverseObjectId);
+
+    /// <summary>
+    /// Populates ReferenceValue navigations on CSO attribute values using direct SQL.
+    ///
+    /// This replaces the deep EF Include chain (AttributeValues → ReferenceValue → MetaverseObject)
+    /// which at scale (5000+ CSOs, 80K+ member references) produces a cartesian explosion that
+    /// causes EF Core to intermittently fail to materialise some ReferenceValue navigations.
+    ///
+    /// The direct SQL query returns (CsoId, MetaverseObjectId) for every referenced CSO. We then
+    /// create minimal ConnectedSystemObject shells with just Id and MetaverseObjectId set, and
+    /// assign them to the attribute values. The sync engine and drift detection only need these
+    /// two values from referenced CSOs.
+    /// </summary>
+    private async Task PopulateReferenceValuesAsync(List<ConnectedSystemObject> csos)
+    {
+        var allAttributeValues = csos.SelectMany(cso => cso.AttributeValues).ToList();
+        var referencedCsoIds = allAttributeValues
+            .Where(av => av.ReferenceValueId.HasValue)
+            .Select(av => av.ReferenceValueId!.Value)
+            .Distinct()
+            .ToList();
+
+        if (referencedCsoIds.Count == 0)
+            return;
+
+        // Direct SQL: get Id and MetaverseObjectId for every referenced CSO.
+        // This bypasses the deep EF Include chain entirely — no navigation properties, no
+        // change tracker conflicts, no cartesian explosions.
+        var rows = await Repository.Database.Database
+            .SqlQueryRaw<ReferencedCsoRow>(
+                """
+                SELECT "Id" AS "CsoId", "MetaverseObjectId"
+                FROM "ConnectedSystemObjects"
+                WHERE "Id" = ANY({0})
+                """,
+                referencedCsoIds.ToArray())
+            .ToListAsync();
+
+        var mvoIdLookup = rows.ToDictionary(r => r.CsoId, r => r.MetaverseObjectId);
+
+        // Populate ResolvedReferenceMetaverseObjectId on each attribute value.
+        // This [NotMapped] property provides the same data that consumers previously got
+        // from av.ReferenceValue.MetaverseObjectId, without touching EF navigations.
+        foreach (var av in allAttributeValues)
+        {
+            if (av.ReferenceValueId.HasValue && mvoIdLookup.TryGetValue(av.ReferenceValueId.Value, out var mvoId))
+                av.ResolvedReferenceMetaverseObjectId = mvoId;
+        }
     }
 
     /// <summary>

@@ -560,32 +560,11 @@ public class DriftDetectionService
             AttributeDataType.Guid => av.GuidValue,
             AttributeDataType.Binary => av.ByteValue,
             // For references, return the MVO ID that the referenced CSO is joined to.
-            // This enables comparison with the expected MVO reference ID from GetExpectedValue.
-            AttributeDataType.Reference => GetCsoReferenceMetaverseObjectId(av),
+            // ResolvedReferenceMetaverseObjectId (direct SQL) is the primary source;
+            // fall back to ReferenceValue navigation for in-memory test compatibility.
+            AttributeDataType.Reference => av.ResolvedReferenceMetaverseObjectId ?? av.ReferenceValue?.MetaverseObjectId,
             _ => null
         };
-    }
-
-    /// <summary>
-    /// Gets the MetaverseObjectId for a CSO reference attribute value.
-    /// Uses the ReferenceValue navigation if loaded; logs a warning if the navigation
-    /// is null despite ReferenceValueId being set (indicates a missing Include in the
-    /// repository query).
-    /// </summary>
-    private static Guid? GetCsoReferenceMetaverseObjectId(ConnectedSystemObjectAttributeValue av)
-    {
-        if (av.ReferenceValue != null)
-            return av.ReferenceValue.MetaverseObjectId;
-
-        if (av.ReferenceValueId.HasValue)
-        {
-            Log.Warning("GetCsoReferenceMetaverseObjectId: ReferenceValueId {RefId} is set but " +
-                "ReferenceValue navigation is null on attribute value {AvId}. " +
-                "This indicates a missing .Include(av => av.ReferenceValue) in the repository query",
-                av.ReferenceValueId.Value, av.Id);
-        }
-
-        return null;
     }
 
     /// <summary>

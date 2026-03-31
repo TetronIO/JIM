@@ -1399,10 +1399,14 @@ public abstract class SyncTaskProcessorBase
                 .Select(s => s.ConnectedSystemAttributeId!.Value)
                 .ToHashSet();
 
+            // A cross-page reference is unresolved if the referenced CSO has no MetaverseObjectId
+            // (it hasn't been joined/projected yet). ResolvedReferenceMetaverseObjectId (direct SQL)
+            // is the primary source; fall back to navigation for in-memory test compatibility.
             var hasUnresolvedCrossPageRefs = mappedRefAttributeIds.Count > 0 &&
                 cso.AttributeValues.Any(av =>
                     mappedRefAttributeIds.Contains(av.AttributeId) &&
                     av.ReferenceValueId.HasValue &&
+                    !av.ResolvedReferenceMetaverseObjectId.HasValue &&
                     (av.ReferenceValue == null || av.ReferenceValue.MetaverseObject == null));
 
             if (hasUnresolvedCrossPageRefs)
@@ -2271,8 +2275,17 @@ public abstract class SyncTaskProcessorBase
             case AttributeDataType.Reference when metaverseObjectAttributeValue.ReferenceValue != null:
                 attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, metaverseObjectAttributeValue.ReferenceValue));
                 break;
+            case AttributeDataType.Reference when metaverseObjectAttributeValue.ReferenceValueId.HasValue:
+                // Navigation property not loaded but FK is set — record the referenced MVO ID as a GUID.
+                // This happens when ReferenceValue navigations are not loaded via EF Include
+                // (replaced by direct SQL PopulateReferenceValuesAsync on the CSO side).
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, metaverseObjectAttributeValue.ReferenceValueId.Value));
+                break;
             case AttributeDataType.Reference when metaverseObjectAttributeValue.UnresolvedReferenceValue != null:
                 // We do not log changes for unresolved references. Only resolved references get change tracked.
+                break;
+            case AttributeDataType.Reference:
+                // Reference attribute with no resolved or unresolved value — nothing to track
                 break;
             default:
                 throw new NotImplementedException($"Attribute data type {metaverseObjectAttributeValue.Attribute.Type} is not yet supported for MVO change tracking.");

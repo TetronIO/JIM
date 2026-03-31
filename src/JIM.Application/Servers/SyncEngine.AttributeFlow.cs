@@ -392,15 +392,21 @@ public partial class SyncEngine
         bool isFinalReferencePass,
         int? contributingSystemId)
     {
+        // Use ResolvedReferenceMetaverseObjectId (populated via direct SQL) as the primary
+        // source, falling back to navigation properties for compatibility with in-memory tests.
         static Guid? GetReferencedMvoId(ConnectedSystemObjectAttributeValue csoav)
         {
+            if (csoav.ResolvedReferenceMetaverseObjectId.HasValue)
+                return csoav.ResolvedReferenceMetaverseObjectId;
             if (csoav.ReferenceValue == null)
                 return null;
             return csoav.ReferenceValue.MetaverseObjectId ?? csoav.ReferenceValue.MetaverseObject?.Id;
         }
 
+        // A reference is resolved if we can determine the MVO it points to — either via
+        // ResolvedReferenceMetaverseObjectId (direct SQL) or ReferenceValue navigation (in-memory tests).
         static bool IsResolved(ConnectedSystemObjectAttributeValue csoav)
-            => csoav.ReferenceValue != null && GetReferencedMvoId(csoav).HasValue;
+            => (csoav.ReferenceValueId.HasValue || csoav.ReferenceValue != null) && GetReferencedMvoId(csoav).HasValue;
 
         var unresolvedReferenceValues = csoAttributeValues.Where(csoav =>
             !IsResolved(csoav) &&
@@ -410,25 +416,20 @@ public partial class SyncEngine
         {
             foreach (var unresolved in unresolvedReferenceValues)
             {
-                if (unresolved.ReferenceValue == null && unresolved.ReferenceValueId != null)
+                if (unresolved.ReferenceValueId.HasValue && !unresolved.ResolvedReferenceMetaverseObjectId.HasValue)
                 {
-                    Log.Warning("SyncEngine: CSO {CsoId} has reference attribute {AttrName} with ReferenceValueId {RefId} but ReferenceValue navigation is null. " +
-                        "This indicates the EF Core query is missing .Include(av => av.ReferenceValue). The reference will not flow to the MVO.",
-                        cso.Id, source.ConnectedSystemAttribute?.Name ?? "unknown", unresolved.ReferenceValueId);
-                }
-                else if (unresolved.ReferenceValue != null && !unresolved.ReferenceValue.MetaverseObjectId.HasValue)
-                {
+                    // Referenced CSO exists but isn't joined to an MVO yet.
                     if (isFinalReferencePass)
                     {
                         Log.Warning("SyncEngine: CSO {CsoId} has reference attribute {AttrName} pointing to CSO {RefCsoId} which is not joined to an MVO. " +
                             "Ensure referenced objects are synced before referencing objects. The reference will not flow to the MVO.",
-                            cso.Id, source.ConnectedSystemAttribute?.Name ?? "unknown", unresolved.ReferenceValue.Id);
+                            cso.Id, source.ConnectedSystemAttribute?.Name ?? "unknown", unresolved.ReferenceValueId);
                     }
                     else
                     {
                         Log.Debug("SyncEngine: CSO {CsoId} has reference attribute {AttrName} pointing to CSO {RefCsoId} which is not yet joined to an MVO. " +
                             "This will be retried during cross-page reference resolution.",
-                            cso.Id, source.ConnectedSystemAttribute?.Name ?? "unknown", unresolved.ReferenceValue.Id);
+                            cso.Id, source.ConnectedSystemAttribute?.Name ?? "unknown", unresolved.ReferenceValueId);
                     }
                 }
             }
