@@ -1224,6 +1224,12 @@ internal class LdapConnectorImport
                     {
                         result.ImportObjects.Add(currentObject);
                     }
+                    else
+                    {
+                        _logger.Warning("GetDeltaResultsUsingAccesslog: GetObjectByDn returned null for DN '{ReqDn}' " +
+                            "(change type: {ChangeType}). The object may have been deleted or moved since the accesslog " +
+                            "entry was recorded. Entry skipped.", reqDn, objectChangeType);
+                    }
                 }
             }
 

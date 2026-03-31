@@ -123,6 +123,35 @@ LDIF
 
 echo "[openldap-init] Glitterband base entries loaded"
 
+# Configure the accesslog database for production-like usage:
+# 1. Increase MDB mapsize from default (~10MB) to 1GB. Without this, the
+#    accesslog silently stops logging once the MDB map is full (MDB_MAP_FULL),
+#    causing delta imports to miss changes. At MediumLarge scale (5000+ objects),
+#    the export alone generates enough accesslog entries to exhaust the default.
+# 2. Set unlimited size limit so delta import queries are not truncated by the
+#    default olcSizeLimit (500). OpenLDAP enforces olcSizeLimit as a hard cap
+#    even with paging controls for non-rootDN clients.
+echo "[openldap-init] Configuring accesslog database (mapsize + size limit)..."
+
+ACCESSLOG_DB_DN=$(ldapsearch -x -H "$LDAP_URI" -D "$CONFIG_ADMIN_DN" -w "$CONFIG_ADMIN_PW" \
+    -b "cn=config" "(olcSuffix=cn=accesslog)" dn -LLL 2>/dev/null | grep "^dn:" | head -1 | sed 's/^dn: //')
+
+if [ -z "$ACCESSLOG_DB_DN" ]; then
+    echo "[openldap-init] WARNING: Could not find accesslog database DN in cn=config. Skipping accesslog configuration."
+else
+    echo "[openldap-init] Accesslog database DN: $ACCESSLOG_DB_DN"
+    ldapmodify -x -H "$LDAP_URI" -D "$CONFIG_ADMIN_DN" -w "$CONFIG_ADMIN_PW" <<ALMODIFY
+dn: $ACCESSLOG_DB_DN
+changetype: modify
+replace: olcDbMaxSize
+olcDbMaxSize: 1073741824
+-
+add: olcSizeLimit
+olcSizeLimit: unlimited
+ALMODIFY
+    echo "[openldap-init] Accesslog database configured (mapsize=1GB, sizeLimit=unlimited)"
+fi
+
 # Stop slapd (Bitnami will restart it after all init scripts)
 echo "[openldap-init] Stopping slapd..."
 kill "$SLAPD_PID" 2>/dev/null || true
