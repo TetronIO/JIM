@@ -276,10 +276,15 @@ try {
             [Parameter(Mandatory)][hashtable]$Config
         )
         if ($isOpenLDAP) {
-            # Need to find the member's DN first
-            $user = Get-LDAPUser -UserIdentifier $MemberName -DirectoryConfig $Config
-            if (-not $user) { throw "User '$MemberName' not found" }
-            $memberDn = $user['dn']
+            # If MemberName is already a full DN (contains = and ,), use it directly.
+            # Otherwise look up the user's DN by username attribute.
+            if ($MemberName -match '=.*,') {
+                $memberDn = $MemberName
+            } else {
+                $user = Get-LDAPUser -UserIdentifier $MemberName -DirectoryConfig $Config
+                if (-not $user) { throw "User '$MemberName' not found" }
+                $memberDn = $user['dn']
+            }
             $groupDn = "cn=$GroupName,$($Config.GroupContainer)"
             $ldif = "dn: $groupDn`nchangetype: modify`nadd: member`nmember: $memberDn`n"
             $ldifPath = [System.IO.Path]::GetTempFileName()
@@ -304,9 +309,15 @@ try {
             [Parameter(Mandatory)][hashtable]$Config
         )
         if ($isOpenLDAP) {
-            $user = Get-LDAPUser -UserIdentifier $MemberName -DirectoryConfig $Config
-            if (-not $user) { throw "User '$MemberName' not found" }
-            $memberDn = $user['dn']
+            # If MemberName is already a full DN (contains = and ,), use it directly.
+            # Otherwise look up the user's DN by username attribute.
+            if ($MemberName -match '=.*,') {
+                $memberDn = $MemberName
+            } else {
+                $user = Get-LDAPUser -UserIdentifier $MemberName -DirectoryConfig $Config
+                if (-not $user) { throw "User '$MemberName' not found" }
+                $memberDn = $user['dn']
+            }
             $groupDn = "cn=$GroupName,$($Config.GroupContainer)"
             $ldif = "dn: $groupDn`nchangetype: modify`ndelete: member`nmember: $memberDn`n"
             $ldifPath = [System.IO.Path]::GetTempFileName()
@@ -965,8 +976,6 @@ try {
         # 1. Compare the imported CSO attribute values against what the sync rules say they should be
         # 2. Determine that the Target AD group memberships don't match the authoritative Source state
         # 3. Stage pending exports to correct the drift (re-assert the desired state)
-        # Note: This is how MIM 2016 works - the sync engine evaluates inbound changes and determines
-        # if corrective exports are needed based on the configured sync rules.
         Write-Host "  Running Delta Sync on Target AD (to evaluate drift against sync rules)..." -ForegroundColor Gray
 
         $targetSyncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaSyncProfile.id -Wait -PassThru
