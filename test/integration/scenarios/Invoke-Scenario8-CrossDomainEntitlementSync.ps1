@@ -238,7 +238,18 @@ try {
             [Parameter(Mandatory)][string]$GroupName,
             [Parameter(Mandatory)][hashtable]$Config
         )
-        return Get-LDAPGroupMembers -GroupName $GroupName -DirectoryConfig $Config
+        if ($isOpenLDAP) {
+            # OpenLDAP: return member DNs (uid=username format, matched by Test-MemberInList)
+            return Get-LDAPGroupMembers -GroupName $GroupName -DirectoryConfig $Config
+        }
+        else {
+            # Samba AD: use samba-tool which returns sAMAccountNames directly.
+            # Get-LDAPGroupMembers returns DNs with CN=DisplayName which don't match
+            # sAMAccountName values from Get-DirectoryUserList.
+            $output = docker exec $Config.ContainerName samba-tool group listmembers $GroupName 2>&1
+            if ($LASTEXITCODE -ne 0 -or -not $output) { return @() }
+            return @($output -split "`n" | Where-Object { $_.Trim() -ne "" } | ForEach-Object { $_.Trim() })
+        }
     }
 
     function Get-DirectoryUserList {
