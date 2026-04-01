@@ -1147,6 +1147,14 @@ Set-Location $repoRoot
 $step0Start = Get-Date
 Write-Section "Step 0: Checking Samba AD Images"
 
+# OpenLDAP scenarios never use Samba AD containers — skip the image build entirely.
+# Building Samba AD images takes 30-600+ seconds and can time out under disk pressure,
+# causing false failures for OpenLDAP runs.
+if ($DirectoryType -eq "OpenLDAP") {
+    Write-Step "Skipping Samba AD image check (DirectoryType=OpenLDAP)"
+}
+else {
+
 $buildScript = Join-Path $scriptRoot "docker" "samba-ad-prebuilt" "Build-SambaImages.ps1"
 
 # Compute current build content hash from source scripts
@@ -1275,6 +1283,8 @@ if (($Scenario -like "*Scenario2*" -or $Scenario -like "*Scenario8*") -and $Dire
         Write-Success "Samba AD Target image found and up to date: $targetImageTag"
     }
 }
+
+} # end: DirectoryType -ne OpenLDAP (Samba AD image check)
 
 $timings["0. Check Samba Image"] = (Get-Date) - $step0Start
 
