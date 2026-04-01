@@ -1,4 +1,5 @@
 using System.Text;
+using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using Microsoft.EntityFrameworkCore;
@@ -435,12 +436,13 @@ public partial class SyncRepository
                     AND target_attr."IsSecondaryExternalId" = true
                 WHERE cc."ConnectedSystemId" = {0}
                   AND cav."ConnectedSystemObjectChangeAttributeId" = ca."Id"
+                  AND ca."AttributeType" = {1}
                   AND cav."StringValue" IS NOT NULL
                   AND cav."ReferenceValueId" IS NULL
                   AND target_av."StringValue" IS NOT NULL
                   AND LOWER(cav."StringValue") = LOWER(target_av."StringValue")
                 """,
-                connectedSystemId);
+                connectedSystemId, (int)AttributeDataType.Reference);
         }
         finally
         {
