@@ -88,17 +88,7 @@ else
     print_warning "postgres-tune.sh not found - skipping auto-tuning"
 fi
 
-# 5. Install socat for Keycloak port forwarding bridge
-# Docker-in-Docker proxy ports aren't auto-forwarded by VS Code Dev Containers;
-# socat provides a userspace bridge that VS Code detects and forwards to the host.
-print_step "Installing socat (Keycloak port bridge)..."
-if sudo apt-get install -y -qq socat > /dev/null 2>&1; then
-    print_success "socat installed"
-else
-    print_warning "socat installation failed - Keycloak port forwarding may not work"
-fi
-
-# 6. Install PowerShell Pester module for testing
+# 5. Install PowerShell Pester module for testing (socat is in the Dockerfile)
 print_step "Installing PowerShell Pester module..."
 if pwsh -NoProfile -Command 'Set-PSRepository PSGallery -InstallationPolicy Trusted; Install-Module -Name Pester -MinimumVersion 5.0 -Force -Scope CurrentUser' 2>/dev/null; then
     print_success "Pester module installed"
@@ -106,7 +96,7 @@ else
     print_warning "Pester installation failed - you can install manually: Install-Module -Name Pester -MinimumVersion 5.0 -Force"
 fi
 
-# 7. Build the solution
+# 6. Build the solution
 print_step "Building JIM solution..."
 if dotnet build JIM.sln --verbosity quiet --no-restore; then
     print_success "Solution built successfully"
@@ -114,7 +104,7 @@ else
     print_warning "Build had warnings or errors. Run 'dotnet build JIM.sln' to see details."
 fi
 
-# 8. Create connector-files directory with symlink to test data
+# 7. Create connector-files directory with symlink to test data
 print_step "Setting up connector-files directory..."
 mkdir -p connector-files
 
@@ -130,7 +120,7 @@ else
     print_success "Symlink already exists: connector-files/test-data"
 fi
 
-# 9. Configure Git SSH commit signing
+# 8. Configure Git SSH commit signing
 print_step "Configuring Git SSH commit signing..."
 
 # Check if SSH agent has keys forwarded
@@ -160,7 +150,7 @@ else
     print_warning "To enable signing, ensure SSH agent forwarding is working"
 fi
 
-# 10. Create useful shell aliases
+# 9. Create useful shell aliases
 print_step "Creating shell aliases..."
 
 # Add source line to .zshrc if not already present
@@ -188,7 +178,7 @@ if ! grep -q "source.*jim-aliases.sh" ~/.bashrc; then
     echo "fi" >> ~/.bashrc
 fi
 
-# 11. Display useful information
+# 10. Display useful information
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${GREEN}✓ JIM Development Environment Ready!${NC}"
