@@ -1828,7 +1828,7 @@ if ($SetupOnly) {
 
     # Docker Cleanup (prune unused images and build cache to prevent disk space accumulation)
     Write-Step "Pruning unused images and build cache (preserving snapshots)..."
-    $imagePrune = docker image prune -af --filter "label!=jim.samba.snapshot-hash" --filter "label!=jim.openldap.snapshot-hash" 2>&1
+    $imagePrune = docker image prune -af --filter "label!=jim.samba.snapshot-hash" --filter "label!=jim.samba.build-hash" --filter "label!=jim.openldap.snapshot-hash" --filter "label!=jim.openldap.build-hash" 2>&1
     $builderPrune = docker builder prune -af 2>&1
     $imageReclaimed = $imagePrune | Select-String "Total reclaimed space:\s*(.+)"
     $builderReclaimed = $builderPrune | Select-String "Total reclaimed space:\s*(.+)"
@@ -2226,7 +2226,7 @@ Write-Section "Step 7: Docker Cleanup"
 
 Write-Step "Pruning unused images and build cache (preserving snapshots)..."
 # Use --filter to exclude snapshot images from pruning (they take hours to build)
-$imagePrune = docker image prune -af --filter "label!=jim.samba.snapshot-hash" --filter "label!=jim.openldap.snapshot-hash" 2>&1
+$imagePrune = docker image prune -af --filter "label!=jim.samba.snapshot-hash" --filter "label!=jim.samba.build-hash" --filter "label!=jim.openldap.snapshot-hash" --filter "label!=jim.openldap.build-hash" 2>&1
 $builderPrune = docker builder prune -af 2>&1
 $imageReclaimed = $imagePrune | Select-String "Total reclaimed space:\s*(.+)"
 $builderReclaimed = $builderPrune | Select-String "Total reclaimed space:\s*(.+)"
