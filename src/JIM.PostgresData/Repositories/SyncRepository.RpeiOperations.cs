@@ -360,33 +360,6 @@ public partial class SyncRepository
         if (npgsqlConn.State != System.Data.ConnectionState.Open)
             await npgsqlConn.OpenAsync();
 
-        // Collect distinct non-null, non-empty ReferenceValue IDs from this batch and verify
-        // which ones actually exist in the database. References to CSOs in future import batches
-        // (pre-generated IDs not yet persisted) would violate the FK constraint on ReferenceValueId.
-        // Only write the FK for CSOs confirmed to exist; write null for the rest.
-        // The DN/identifier is preserved in StringValue (set by AddChangeAttributeValueObject) so
-        // the UI can still display meaningful text for references that couldn't be linked via FK.
-        var candidateRefIds = valueChanges
-            .Select(vc => vc.Value.ReferenceValue?.Id)
-            .Where(id => id.HasValue && id.Value != Guid.Empty)
-            .Select(id => id!.Value)
-            .Distinct()
-            .ToList();
-
-        HashSet<Guid> persistedCsoIds;
-        if (candidateRefIds.Count > 0)
-        {
-            var existingIds = await _context.ConnectedSystemObjects
-                .Where(cso => candidateRefIds.Contains(cso.Id))
-                .Select(cso => cso.Id)
-                .ToListAsync();
-            persistedCsoIds = new HashSet<Guid>(existingIds);
-        }
-        else
-        {
-            persistedCsoIds = [];
-        }
-
         await using var writer = await npgsqlConn.BeginBinaryImportAsync(
             """
             COPY "ConnectedSystemObjectChangeAttributeValues" (
@@ -431,12 +404,14 @@ public partial class SyncRepository
                 await writer.WriteAsync(v.BoolValue.Value, NpgsqlTypes.NpgsqlDbType.Boolean);
             else
                 await writer.WriteNullAsync();
-            // Only write the ReferenceValueId FK if the referenced CSO exists in the database.
-            // Pre-generated IDs mean cross-batch references have real GUIDs but the referenced CSO
-            // may not be persisted yet (it's in a future batch). Writing the FK would cause an FK
-            // violation. The DN/identifier is preserved in StringValue for UI display.
+            // Write the ReferenceValueId FK if the referenced CSO has a known ID.
+            // With the two-phase parallel writer (Part C), CSO rows from the current batch are
+            // committed before change records are persisted, so the FK constraint will succeed
+            // for within-batch references. Cross-batch references (future batches) still have
+            // ReferenceValue == null and are written as null — FixupCrossBatchChangeRecordReferenceIdsAsync
+            // resolves these after all batches complete.
             var refId = v.ReferenceValue?.Id;
-            if (refId.HasValue && refId.Value != Guid.Empty && persistedCsoIds.Contains(refId.Value))
+            if (refId.HasValue && refId.Value != Guid.Empty)
                 await writer.WriteAsync(refId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
             else
                 await writer.WriteNullAsync();

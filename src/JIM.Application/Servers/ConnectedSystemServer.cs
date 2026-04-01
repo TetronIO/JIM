@@ -3410,6 +3410,16 @@ public class ConnectedSystemServer
                     changeValue.StringValue = connectedSystemObjectAttributeValue.UnresolvedReferenceValue;
                 attributeChange.ValueChanges.Add(changeValue);
                 break;
+            case AttributeDataType.Reference when connectedSystemObjectAttributeValue.ReferenceValueId.HasValue && connectedSystemObjectAttributeValue.ReferenceValueId.Value != Guid.Empty:
+                // ReferenceValueId is set but the navigation property was cleared (e.g., by EF Core
+                // change tracking during bulk COPY persistence). Create a stub CSO with just the ID
+                // so the change record can carry the FK through to persistence.
+                var stubCso = new ConnectedSystemObject { Id = connectedSystemObjectAttributeValue.ReferenceValueId.Value };
+                var changeValueFromFk = new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, stubCso);
+                if (!string.IsNullOrEmpty(connectedSystemObjectAttributeValue.UnresolvedReferenceValue))
+                    changeValueFromFk.StringValue = connectedSystemObjectAttributeValue.UnresolvedReferenceValue;
+                attributeChange.ValueChanges.Add(changeValueFromFk);
+                break;
             case AttributeDataType.Reference when connectedSystemObjectAttributeValue.UnresolvedReferenceValue != null:
                 // Store the raw DN/identifier for display in the UI. The reference could not be resolved
                 // to a CSO (referenced object may be out of container scope).
