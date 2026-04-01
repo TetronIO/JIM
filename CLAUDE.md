@@ -10,7 +10,7 @@ Always use Context7 MCP when you need library/API documentation, code generation
 
 **YOU MUST BUILD AND TEST BEFORE EVERY COMMIT AND PR (for .NET code):**
 
-1. **ALWAYS** build and test before committing - zero errors required
+1. **ALWAYS** build and test before committing - zero errors and warnings required
 2. **Prefer targeted builds**: Build only affected projects and their dependents, not the full solution. For example, if you changed `JIM.Connectors` and `JIM.Worker.Tests`, run `dotnet build test/JIM.Worker.Tests/` (which transitively builds its dependencies). Only use `dotnet build JIM.sln` for the **final pre-PR check** or when changes span many projects.
 3. **Prefer targeted tests**: Run only the test projects that cover your changes. For example, `dotnet test test/JIM.Worker.Tests/` instead of `dotnet test JIM.sln`. Only run `dotnet test JIM.sln` for the **final pre-PR check**.
 4. **NEVER** commit code that hasn't been built and tested locally
@@ -69,6 +69,23 @@ JIM uses TDD as the standard development workflow. Tests are written **before** 
 2. When work is complete and tests pass, commit automatically if the user has indicated approval
 3. Don't ask "Would you like me to commit?" - if the context is clear, just do it
 
+**YOU MUST PLAN BEFORE BUILDING:**
+
+1. **ALWAYS** enter plan mode for any non-trivial task (3+ steps or architectural decisions)
+2. Use plan mode for verification steps, not just building — plan how you will prove it works
+3. **If you've spent more than 2–3 attempts fixing an issue without progress, STOP.** Do not keep pushing down the same path. Step back, re-enter plan mode, review the problem from scratch, and consider whether you are missing something or there is a better approach. If still stuck, ask the user — they have deep developer experience and can often see what you are missing.
+4. **NEVER** mark a task complete without proving it works (build passes, tests pass, behaviour verified)
+5. When relevant, diff behaviour between `main` and your changes to confirm correctness
+
+**YOU MUST DEMAND QUALITY:**
+
+1. **Simplicity First**: Make every change as simple as possible. Impact minimal code.
+2. **Find Root Causes**: No temporary fixes, no workarounds, no band-aids. Diagnose the actual problem and fix it properly. Senior developer standards.
+3. For non-trivial changes, pause and ask: "Is there a more elegant way to do this?"
+4. If a fix feels hacky, step back and implement the clean solution — knowing everything you now know
+5. Skip this for simple, obvious fixes — don't over-engineer
+6. Before presenting work, ask yourself: "Would a staff engineer approve this?"
+
 **Test project locations:**
 - API tests: `test/JIM.Web.Api.Tests/`
 - Model tests: `test/JIM.Models.Tests/`
@@ -80,6 +97,13 @@ If you cannot build/test locally due to environment constraints, you MUST:
 - Clearly state this limitation in the PR description
 - Mark the PR as draft
 - Request manual review and testing before merge
+
+## Subagent Strategy
+
+- Use subagents liberally to keep the main context window clean
+- Offload research, exploration, and parallel analysis to subagents
+- For complex problems, throw more compute at it — use multiple subagents in parallel
+- One task per subagent for focused execution
 
 ## Synchronisation Integrity
 
@@ -334,7 +358,7 @@ When creating ASCII diagrams in documentation or code comments, use only reliabl
 
 ## Security
 
-JIM is deployed in government, defence, healthcare, financial services, and critical national infrastructure environments. All code MUST meet the security expectations of these sectors.
+JIM is deployed in high-trust/assurance customer environments, i.e. healthcare, financial services, government, etc. All code MUST meet the security expectations of these sectors.
 
 **Key security rules (always apply):**
 - Use `[Authorize]` on all API controllers - deny by default
@@ -537,7 +561,7 @@ Use `./test/integration/Run-IntegrationTests.ps1` (PowerShell) - never invoke sc
 **Git:**
 - **ALWAYS** work on a feature branch - NEVER commit directly to `main`
 - **NEVER** automatically create a PR or merge to `main` - the user must explicitly instruct you to do so
-- Branch naming: `feature/description` or `claude/description-sessionId`
+- Branch naming: `feature/description`
 - Commit messages: Descriptive, include issue reference if applicable
 - Build and test before every commit of .NET code (see **Exceptions** under Critical Requirements)
 - Push to feature branches, create PRs to main
@@ -617,13 +641,7 @@ The `VERSION` file is the single source of truth for JIM's version number. It fe
 - Development tooling changes
 - Refactoring without user-facing changes
 
-**Release checklist (all steps require user approval):**
-1. Update `VERSION` file with new version
-2. Move `[Unreleased]` items in `CHANGELOG.md` to a new version section
-3. Update `src/JIM.PowerShell/JIM.psd1` — `ModuleVersion` field
-4. Commit: `git commit -m "Release vX.Y.Z"`
-5. Tag: `git tag vX.Y.Z`
-6. Push: `git push origin main --tags`
+**To create a release:** Use `/release <version>` — the skill handles VERSION, CHANGELOG, PowerShell manifest, documentation review, commit, tag, and push.
 
 > **Full release process, air-gapped deployment, and Docker image details:** See `docs/RELEASE_PROCESS.md`
 
