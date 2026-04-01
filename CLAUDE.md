@@ -134,115 +134,14 @@ Sync operations are the core of JIM. Customers depend on JIM to synchronise thei
 - Exception: `.devcontainer/setup.sh` is acceptable as it runs during container creation
 - Never create bash/shell scripts for project automation or testing
 
-## Commands
+## Commands & Environment
 
-**Build & Test:**
-- `dotnet build JIM.sln` - Build entire solution (use for final pre-PR check)
-- `dotnet build test/JIM.Worker.Tests/` - Build a specific project and its dependencies (preferred during development)
-- `dotnet test JIM.sln` - Run all tests (use for final pre-PR check)
-- `dotnet test test/JIM.Worker.Tests/` - Run a specific test project (preferred during development)
-- `dotnet test --filter "FullyQualifiedName~TestName"` - Run specific test
-- `dotnet clean && dotnet build` - Clean build
+> **Full command reference, shell aliases, Docker workflows, dependency policy, environment setup, and troubleshooting:** See `.devcontainer/CLAUDE.md`
 
-**Database:**
-- `dotnet ef migrations add [Name] --project src/JIM.PostgresData` - Add migration
-- `dotnet ef database update --project src/JIM.PostgresData` - Apply migrations
-- `docker compose exec jim.web dotnet ef database update` - Apply migrations in Docker
-
-**Shell Aliases (Recommended):**
-- Aliases are automatically configured from `.devcontainer/jim-aliases.sh`
-- If aliases don't work, run: `source ~/.zshrc` (or restart terminal)
-- `jim` - List all available jim aliases
-- `jim-compile` - Build entire solution (dotnet build)
-- `jim-test` - Run unit + workflow tests (excludes Explicit)
-- `jim-test-all` - Run ALL tests (incl. Explicit + Pester)
-- `jim-db` - Start PostgreSQL (for local debugging)
-- `jim-db-stop` - Stop PostgreSQL
-- `jim-migrate` - Apply migrations
-- `jim-postgres-tune` - Re-tune PostgreSQL for current CPU/RAM
-
-**Docker Stack Management:**
-- `jim-stack` - Start Docker stack
-- `jim-stack-logs` - View Docker stack logs
-- `jim-stack-down` - Stop Docker stack
-- `jim-restart` - Restart stack (re-reads .env, no rebuild)
-
-**Docker Builds (rebuild and start services):**
-- `jim-build` - Build all services + start
-- `jim-build-web` - Build jim.web + start
-- `jim-build-worker` - Build jim.worker + start
-- `jim-build-scheduler` - Build jim.scheduler + start
-
-**Reset:**
-- `jim-reset` - Reset JIM (delete database & logs volumes)
-
-**Diagrams:**
-- `jim-diagrams` - Export Structurizr C4 diagrams as SVG (requires Docker)
-
-**Planning:**
-- `jim-prd` - Create a new PRD from template (prompts for feature name)
-
-**Docker (Manual Commands):**
-- `docker compose -f db.yml up -d` - Start database (same as jim-db)
-- `docker compose -f db.yml down` - Stop database
-- `docker compose logs [service]` - View service logs
-
-**IMPORTANT - Rebuilding Containers After Code Changes:**
-When running the Docker stack and you make code changes to JIM.Web, JIM.Worker, or JIM.Scheduler, you MUST rebuild the affected container(s) for changes to take effect:
-- `jim-build-web` - Rebuild and restart jim.web service
-- `jim-build-worker` - Rebuild and restart jim.worker service
-- `jim-build-scheduler` - Rebuild and restart jim.scheduler service
-- `jim-build` - Rebuild and restart all services
-
-Blazor pages, API controllers, and other compiled code require container rebuilds. Simply refreshing the browser will not show changes.
-
-**PostgreSQL Auto-Tuning:**
-PostgreSQL is automatically tuned during devcontainer setup (`.devcontainer/postgres-tune.sh`). The script:
-- Auto-detects CPU cores and available RAM
-- Calculates optimal pgtune settings for OLTP workloads
-- Generates two gitignored overlay files: `docker-compose.local.yml` and `db.local.yml`
-- The `jim-*` aliases automatically include these overlays when present (later files win)
-
-If you later increase devcontainer resources (e.g., scale from 4c/8GB to 8c/32GB), re-tune and restart:
-- `jim-postgres-tune` then `jim-db-stop && jim-db` (local dev)
-- `jim-postgres-tune` then `jim-restart` (Docker stack)
-
-**IMPORTANT - Dependency Update Policy:**
-All dependency updates from Dependabot require human review before merging - there is no auto-merge. This applies to all ecosystems: NuGet packages, Docker base images, and GitHub Actions. A maintainer must review each PR, verify the changes are appropriate, and merge manually.
-
-**NuGet Packages:**
-- Pin dependency versions in `.csproj` files (avoid floating versions)
-- Dependabot proposes weekly PRs for patch and minor updates
-- Review each update for compatibility, changelog notes, and known issues before merging
-- Run `dotnet list package --vulnerable` to check for known vulnerabilities
-
-**Docker Base Images:**
-- Production Dockerfiles pin base image digests (`@sha256:...`) and functional apt package versions for reproducible builds
-- **NEVER** remove the `@sha256:` digest from `FROM` lines
-- **NEVER** remove version pins from functional apt packages (libldap, cifs-utils)
-- Diagnostic utilities (curl, iputils-ping) are intentionally unpinned
-- If updating a base image digest, check and update pinned apt versions to match (see `docs/DEVELOPER_GUIDE.md` "Dependency Pinning" section)
-
-**GitHub Actions:**
-- Pin action versions by major version tag (e.g., `@v4`) in workflow files
-- Dependabot proposes weekly PRs for patch and minor updates
-- Review each update before merging
-
-## Key Project Locations
-
-**Where to add:**
-- API endpoints: `src/JIM.Web/Controllers/Api/`
-- API models/DTOs: `src/JIM.Web/Models/Api/`
-- API extensions: `src/JIM.Web/Extensions/Api/`
-- API middleware: `src/JIM.Web/Middleware/Api/`
-- UI pages: `src/JIM.Web/Pages/`
-- Blazor components: `src/JIM.Web/Shared/`
-- Business logic: `src/JIM.Application/Servers/`
-- Performance diagnostics: `src/JIM.Application/Diagnostics/`
-- Domain models: `src/JIM.Models/` (see subdirectories: `Core/`, `Staging/`, `Transactional/`, `Utility/`)
-- Database repositories: `src/JIM.PostgresData/`
-- Connectors: `src/JIM.Connectors/` or new connector project
-- Tests: `test/JIM.Web.Api.Tests/`, `test/JIM.Models.Tests/`, `test/JIM.Worker.Tests/`
+**Quick reference:**
+- `jim-compile` / `jim-test` / `jim-test-all` - Build and test
+- `jim-db` / `jim-stack` - Start database / full Docker stack
+- `jim-build-web` / `jim-build-worker` / `jim-build-scheduler` - Rebuild containers after code changes
 
 ## ASCII Diagrams
 
@@ -259,60 +158,15 @@ When creating ASCII diagrams in documentation or code comments, use only reliabl
 
 ## Code Style & Conventions
 
-**IMPORTANT Rules:**
-- YOU MUST use async/await for all I/O operations (method suffix: `Async`)
-- YOU MUST use constructor injection for all dependencies
-- YOU MUST test method signature: `[Test] public async Task TestNameAsync()`
-- **CRITICAL: Use British English (en-GB) for ALL text:**
-  - Code: "authorisation" not "authorization", "synchronisation" not "synchronization", "colour" not "color"
-  - Comments: "behaviour" not "behavior", "centre" not "center", "licence" not "license" (noun)
-  - Documentation: "organise" not "organize", "analyse" not "analyze", "programme" not "program" (unless referring to computer programs)
-  - UI text: "minimise" not "minimize", "optimise" not "optimize", "cancelled" not "canceled"
-  - Units: Metric only (metres, litres, kilograms, kilometres) - never use imperial units
-  - Date/Time: Always use UTC for storage and internal operations; display in user's local time zone where appropriate
-  - Exceptions: Technical terms, proper nouns, third-party library names, URLs
+**Key rules (always apply):**
+- Use async/await for all I/O operations (method suffix: `Async`)
+- Use constructor injection for all dependencies
+- **CRITICAL: Use British English (en-GB) for ALL text** — "authorisation", "synchronisation", "behaviour", "colour", etc.
+- Use `DateTime.UtcNow` — NEVER `DateTime.Now`
+- One class per file, file names match class names exactly
+- All models/POCOs live in `src/JIM.Models/` — never inline in service files
 
-**DateTime Handling (IMPORTANT):**
-- Always use `DateTime` type (not `DateTimeOffset`) in models
-- Always use `DateTime.UtcNow` for current time - NEVER use `DateTime.Now`
-- PostgreSQL stores DateTime as `timestamp with time zone` (internally UTC)
-- **Runtime quirk**: Npgsql returns `DateTimeOffset` when reading from database, even though model properties are `DateTime`
-- Code that processes DateTime values from the database must handle BOTH `DateTime` and `DateTimeOffset` types
-- See `DynamicExpressoEvaluator.ToFileTime()` for an example of handling both types
-- This design choice maintains database portability (MySQL, SQL Server, etc. handle DateTimeOffset differently)
-
-**Raw SQL Nullable Parameters (CRITICAL):**
-- NEVER use `(object?)value ?? DBNull.Value` as a parameter to `ExecuteSqlRawAsync` or `ExecuteSqlInterpolatedAsync`
-- EF Core cannot infer the PostgreSQL type from bare `DBNull.Value`, causing: `InvalidOperationException: The current provider doesn't have a store type mapping for properties of type 'DBNull'`
-- ALWAYS wrap nullable parameters with a typed `NpgsqlParameter`: `NullableParam(value, NpgsqlTypes.NpgsqlDbType.Text)` (see helper method in `ConnectedSystemRepository`, `ActivitiesRepository`, `MetaverseRepository`)
-- This applies to ALL nullable columns in raw SQL INSERT/UPDATE statements — string, int, Guid, DateTime, bool, etc.
-
-**File Organisation:**
-- One class per file - each class should have its own `.cs` file named after the class
-- Exception: Enums are grouped into a single file per area/folder (e.g., `ConnectedSystemEnums.cs`, `PendingExportEnums.cs`)
-- File names must match the class/interface name exactly (e.g., `MetaverseObject.cs` for `class MetaverseObject`)
-- **Model placement**: All model/POCO/result classes MUST live in `src/JIM.Models/` — NEVER define them inline in service or server files in `JIM.Application` or other projects
-  - Exceptions: UI-specific models may live in `src/JIM.Web/Models/`, and API DTOs in `src/JIM.Web/Models/Api/`
-  - If a service method needs a result type, create it as its own file in the appropriate `JIM.Models/` subdirectory
-
-**Naming Patterns:**
-- Methods: `GetObjectAsync`, `CreateMetaverseObjectAsync`
-- Classes: Full descriptive names (avoid abbreviations)
-- Properties: PascalCase with nullable reference types enabled
-
-**Tabs:**
-- Use `<NavigableMudTabs>` instead of `<MudTabs>` for all top-level page tabs — it syncs the active tab with a `?t=slug` query string, enabling browser back/forward navigation
-- Use plain `<MudTabs>` only for tabs inside dialogs or nested sub-tabs where URL navigation is not needed
-
-**UI Element Sizing:**
-- ALWAYS use normal/default sizes for ALL UI elements when adding new components
-- Text: Use `Typo.body1` (default readable size)
-- Chips: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium)
-- Buttons: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium)
-- Icons: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium)
-- Other MudBlazor components: Omit Size parameter to use default sizing
-- Only use smaller sizes (`Typo.body2`, `Size.Small`, etc.) when explicitly requested by the user
-- Users prefer readable, appropriately-sized UI elements by default
+> **Full conventions (DateTime handling, raw SQL parameters, file organisation, naming patterns, UI sizing, MudBlazor tabs):** See `src/CLAUDE.md`
 
 ## Testing
 
@@ -396,165 +250,17 @@ Prefer: Microsoft-maintained packages > established corporate-backed packages > 
 
 ## Architecture Quick Reference
 
-**Metaverse Pattern:**
-- MetaverseObject = Central identity entity
-- ConnectedSystemObject = External system identity
-- SyncRule = Bidirectional mapping between systems
-- All operations flow through the metaverse (never direct system-to-system)
+**Layer Dependencies:** JIM.Web -> JIM.Application -> JIM.Models -> JIM.Data/JIM.PostgresData. **NEVER bypass layers** — UI/API must only call `JimApplication`, never `Jim.Repository.*` directly.
 
-**Layer Dependencies (top to bottom):**
-1. JIM.Web (Presentation - includes both Blazor UI and REST API at `/api/`)
-2. JIM.Application (Business Logic)
-3. JIM.Models (Domain)
-4. JIM.Data, JIM.PostgresData (Data Access)
+**Metaverse Pattern:** All operations flow through the metaverse (MetaverseObject <-> SyncRule <-> ConnectedSystemObject). Never direct system-to-system.
 
-**CRITICAL: Respect N-Tier Architecture - NEVER Bypass Layers:**
-
-JIM follows strict n-tier architecture. Each layer may ONLY call the layer directly below it:
-
-```
-+------------------+
-|     JIM.Web      |  Blazor pages, API controllers
-+--------+---------+
-         | ONLY calls JimApplication (never Repository directly)
-         v
-+------------------+
-| JIM.Application  |  Business logic, orchestration (Servers/)
-+--------+---------+
-         | ONLY calls Repository interfaces
-         v
-+------------------+
-|    JIM.Data      |  Repository interfaces
-+------------------+
-         |
-         v
-+------------------+
-| JIM.PostgresData |  EF Core implementations
-+------------------+
-```
-
-**Rules:**
-- **JIM.Web** (UI/API) must ONLY access data through `JimApplication` facade (e.g., `Jim.Metaverse`, `Jim.Scheduler`, `Jim.ConnectedSystems`)
-- **NEVER** call `Jim.Repository.*` directly from Blazor pages or API controllers
-- If a method doesn't exist on the Application layer, ADD IT there - don't bypass to the repository
-- This separation ensures business logic stays in one place and can be tested independently
-
-**Bad - Bypassing layers:**
-```csharp
-// In a Blazor page - WRONG!
-var schedule = await Jim.Repository.Scheduling.GetScheduleAsync(id);
-```
-
-**Good - Respecting layers:**
-```csharp
-// In a Blazor page - CORRECT!
-var schedule = await Jim.Scheduler.GetScheduleAsync(id);
-```
-
-## Common Development Tasks
-
-**Adding a Connector:**
-1. Implement `IConnector` and capability interfaces
-2. Add to `src/JIM.Connectors/` or create new project
-3. Register in DI container
-4. Add tests
-
-**Adding API Endpoint:**
-1. Add method to controller in `src/JIM.Web/Controllers/Api/`
-2. Use DTOs for request/response (in `src/JIM.Web/Models/Api/`)
-3. Add XML comments for Swagger
-4. Test via Swagger UI at `/api/swagger`
-
-**Modifying Database Schema:**
-1. Update entity in `src/JIM.Models/`
-2. Create migration: `dotnet ef migrations add [Name] --project src/JIM.PostgresData`
-3. Review generated migration
-4. Test: `dotnet ef database update --project src/JIM.PostgresData`
-5. Commit migration files
-
-**CRITICAL: NEVER flatten, squash, delete, or reset EF Core migrations.** Migrations are append-only. Deployed instances track applied migrations by name in `__EFMigrationsHistory` — removing old migrations and replacing them with a combined migration will break every existing deployment.
-
-**Updating Architecture Diagrams:**
-
-When making architectural changes (new containers, components, connectors, or significant restructuring):
-1. Update `docs/diagrams/structurizr/workspace.dsl` to reflect the change
-2. Regenerate SVGs: `jim-diagrams` (requires Docker)
-3. Commit both the DSL changes and regenerated SVG files together
-
-> **DSL syntax and diagram details:** See `docs/diagrams/structurizr/README.md`
-
-## Development Workflows
-
-**Choose one of two workflows:**
-
-**Workflow 1 - Local Debugging (Recommended):**
-1. Start database: `jim-db`
-2. Press F5 in VS Code or run: `jim-web`
-3. Debug with breakpoints and hot reload
-4. Services: Web + API (https://localhost:7000), Swagger at `/api/swagger`
-
-**Workflow 2 - Full Docker Stack:**
-1. Start all services: `jim-stack`
-2. Access containerized services
-3. Services: Web + API (http://localhost:5200), Swagger at `/api/swagger`
-
-**Use Workflow 1** for active development and debugging.
-**Use Workflow 2** for integration testing or production-like environment.
+> **Full N-tier rules, layer diagram, common development tasks (adding connectors, endpoints, migrations), and project locations:** See `src/CLAUDE.md`
 
 ## Integration Testing
 
 Use `./test/integration/Run-IntegrationTests.ps1` (PowerShell) - never invoke scenario scripts directly. The runner handles setup, environment management, and teardown automatically.
 
 > **Full commands, templates, and runner details:** See `test/CLAUDE.md`
-
-## Environment Setup
-
-**Required:**
-- .NET 9.0 SDK
-- PostgreSQL 18 (via Docker)
-- Docker & Docker Compose
-
-**Configuration:**
-- Copy `.env.example` to `.env`
-- Set database credentials
-- Configure SSO/OIDC settings (required)
-
-**Optional Environment Variables:**
-- `JIM_ENCRYPTION_KEY_PATH` - Custom path for encryption key storage (default: `/data/keys` for Docker, or app data directory)
-
-**GitHub Codespaces:**
-- PostgreSQL memory settings automatically optimized
-- Use `jim-db` or `jim-stack` aliases (already configured)
-
-## Troubleshooting
-
-**Build fails:**
-- Check .NET 9.0 SDK installed: `dotnet --version`
-- Restore packages: `dotnet restore JIM.sln`
-
-**Tests fail:**
-- Verify test method signature: `public async Task TestNameAsync()`
-- Check `Assert.ThrowsAsync` is awaited: `await Assert.ThrowsAsync<Exception>(...)`
-
-**Database connection:**
-- Verify PostgreSQL running: `docker compose ps`
-- Check `.env` connection string
-- Apply migrations if needed
-
-**Sync Activities Failing with UnhandledError:**
-- UnhandledError items in Activities indicate code/logic bugs, not data problems
-- Check worker logs for the full exception stack trace using: `docker compose logs jim.worker --tail=1000 | grep -A 5 "Unhandled.*sync error"`
-- Common causes:
-  - Query returning unexpected number of results (e.g., `SingleOrDefaultAsync` with duplicates)
-  - Missing or null data where code expected values
-  - Type casting errors or invalid data states
-- DO NOT silently ignore UnhandledErrors - they indicate data integrity risk
-
-**Sync Statistics Not What Expected:**
-- Check log for summary statistics at end of import/sync/export (look for "SUMMARY - Total objects")
-- Verify Run Profile is selecting correct partition/container
-- Verify sync rules are correctly scoped to object types
-- Check for DuplicateObject errors - indicates deduplication is working
 
 ## Workflow Best Practices
 
