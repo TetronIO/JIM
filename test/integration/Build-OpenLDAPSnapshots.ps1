@@ -8,8 +8,10 @@
     reducing startup from minutes to seconds.
 
     Snapshot images are tagged per-scenario and per-size:
-      - jim-openldap:general-{size}    (Scenarios 1, 5, 9 — both suffixes populated)
+      - jim-openldap:general-{size}    (Scenarios 5, 9 — both suffixes populated)
       - jim-openldap:s8-{size}         (Scenario 8 — Source populated, Target OUs only)
+
+    Scenario 1 does not use OpenLDAP snapshots — the target directory starts empty.
 
     A content hash label is stored on each image, computed from the populate scripts.
     The test runner compares this hash to detect stale snapshots that need rebuilding.

@@ -8,7 +8,7 @@
     reducing startup from minutes to seconds.
 
     Snapshot images are tagged per-scenario and per-size:
-      - jim-samba-ad:primary-{size}      (Scenarios 1, 5)
+      - jim-samba-ad:primary-{size}      (Scenario 1 — OUs only, no test users)
       - jim-samba-ad:source-s8-{size}    (Scenario 8 source)
       - jim-samba-ad:target-s8-{size}    (Scenario 8 target)
 
@@ -81,7 +81,8 @@ function Get-PopulateScriptHash {
 
     switch ($ScenarioName) {
         "Scenario1" {
-            $filesToHash += "$scriptRoot/Populate-SambaAD.ps1"
+            # S1 no longer populates test users — the target directory starts empty
+            # so HR-driven provisioning is tested against a clean directory.
         }
         "Scenario8" {
             $filesToHash += "$scriptRoot/Populate-SambaAD-Scenario8.ps1"
@@ -269,6 +270,8 @@ foreach ($scen in $scenariosToProcess) {
                 & "$scriptRoot/docker/samba-ad-prebuilt/Build-SambaImages.ps1" -Images Primary
             }
 
+            # S1 target directory starts empty — no test user population.
+            # Only OUs are created (by the base image's post-provision.sh).
             Build-Snapshot `
                 -BaseImage $baseImage `
                 -ContainerName "samba-snapshot-primary" `
@@ -281,8 +284,8 @@ foreach ($scen in $scenariosToProcess) {
                     DNS_FORWARDER = "8.8.8.8"
                 } `
                 -PopulateAction {
-                    & "$scriptRoot/Populate-SambaAD.ps1" -Template $Template -Instance Primary -Container "samba-snapshot-primary"
-                    if ($LASTEXITCODE -ne 0) { throw "Populate-SambaAD.ps1 failed" }
+                    # No population — S1 tests HR-driven provisioning into a clean directory
+                    Write-Host "  Skipping population (S1 starts with empty directory)" -ForegroundColor Gray
                 }
 
             Write-Host ""

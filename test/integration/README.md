@@ -54,8 +54,7 @@ If you prefer more control:
 # 2. Set up infrastructure API key
 pwsh test/integration/Setup-InfrastructureApiKey.ps1
 
-# 3. Populate test data
-pwsh test/integration/Populate-SambaAD.ps1 -Template Small -Instance Primary
+# 3. Generate test data (S1 target directory starts empty — no Populate-SambaAD.ps1 needed)
 pwsh test/integration/Generate-TestCSV.ps1 -Template Small
 
 # 4. Run scenarios only (skips setup)

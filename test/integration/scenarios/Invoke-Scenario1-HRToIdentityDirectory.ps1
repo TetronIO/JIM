@@ -225,14 +225,10 @@ try {
     & "$PSScriptRoot/../Generate-TestCSV.ps1" -Template $Template -OutputPath "$PSScriptRoot/../../test-data"
     Write-Host "  ✓ CSV test data reset to baseline" -ForegroundColor Green
 
-    # Clean up test-specific AD users from previous test runs
-    # NOTE: This is necessary because:
-    # 1. Samba AD persists in a Docker volume (not reset by database volume deletion)
-    # 2. Populate-SambaAD.ps1 creates baseline users before database reset occurs
-    # 3. The test.reconnect user is created by the Reconnection test (Test 4)
-    #
-    # We only delete test-specific users - NOT baseline users (populated by Populate-SambaAD.ps1)
-    # Baseline users are needed for validation and re-runs.
+    # Clean up test-specific directory users from previous test runs
+    # NOTE: This is necessary because the directory persists in a Docker volume
+    # (not reset by database volume deletion) and the test.reconnect user is
+    # created by the Reconnection test (Test 4).
     Write-Host "Cleaning up test-specific directory users from previous runs..." -ForegroundColor Gray
     $testUsers = @("test.reconnect")
     $deletedCount = 0
@@ -281,12 +277,12 @@ try {
 
     Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
 
-    # Establish baseline state: Import existing AD structure (OUs, users, groups)
-    # This is critical so JIM knows what already exists in AD before applying business rules
-    # NOTE: Full Import is required first to establish the USN watermark (persisted connector data)
-    # that Delta Import needs. Without this, Delta Import fails with "No persisted connector data available".
+    # Establish baseline state: Import existing directory structure (OUs)
+    # The target directory starts empty (no pre-populated users) — this imports the OU structure
+    # and establishes the USN/changelog watermark (persisted connector data) that Delta Import needs.
+    # Without this, Delta Import fails with "No persisted connector data available".
     Write-Host ""
-    Write-Host "Establishing baseline state from Active Directory..." -ForegroundColor Gray
+    Write-Host "Establishing baseline state from directory..." -ForegroundColor Gray
     Write-Host "  Running Full Import to establish connector baseline..." -ForegroundColor DarkGray
     $baselineImportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
     Assert-ActivitySuccess -ActivityId $baselineImportResult.activityId -Name "LDAP Full Import (baseline)"
@@ -504,7 +500,6 @@ try {
 
             # Assert that Training data joined correctly
             # Validate based on expected count, not percentage of all MVOs
-            # (Percentage can be skewed by baseline LDAP users imported from AD)
             $minExpectedTraining = [int]($expectedWithTraining * 0.9)  # Allow 10% variance
             $maxExpectedTraining = [int]($expectedWithTraining * 1.1)  # Allow 10% variance
 
