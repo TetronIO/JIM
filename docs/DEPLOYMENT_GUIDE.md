@@ -164,6 +164,14 @@ All configuration is done through the `.env` file. The setup script configures t
 | `JIM_SSO_MV_ATTRIBUTE` | Metaverse attribute to match | `Subject Identifier` |
 | `JIM_SSO_INITIAL_ADMIN` | Claim value of initial admin | (your admin's sub claim) |
 
+### Performance Tuning
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `JIM_WRITE_PARALLELISM` | Maximum concurrent PostgreSQL connections used by the parallel batch writer during bulk write operations. Higher values speed up large imports but consume more database connections. | CPU core count |
+
+The worker uses a 300-second command timeout for bulk database operations (PostgreSQL default is 30 seconds). This accommodates large imports where individual batch writes may take longer than the default timeout. No configuration is required — it is set automatically.
+
 For the full list of variables with descriptions and examples, see [.env.example](../.env.example).
 
 ### SSO/OIDC Configuration
@@ -278,6 +286,8 @@ Download the new release bundle, load updated images, update `.env`, and restart
 | `/api/v1/health/ready` | Readiness check (includes DB connectivity) |
 
 The `jim.web` container includes a Docker healthcheck using the readiness endpoint.
+
+The `jim.worker` and `jim.scheduler` containers use file-based healthcheck monitoring (#185). Each service writes a heartbeat file periodically during normal operation, and the Docker healthcheck verifies the file is recent. This means `docker compose ps` and orchestrators like Docker Swarm or Kubernetes can detect when a worker or scheduler has stalled, even if the process itself has not exited.
 
 ### Logging
 

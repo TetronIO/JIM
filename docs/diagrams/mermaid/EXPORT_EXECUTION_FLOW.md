@@ -1,6 +1,6 @@
 # Export Execution Flow
 
-> Last updated: 2026-03-26 — JIM v0.7.1 (`00907431`)
+> Last updated: 2026-04-01 — JIM v0.8.0
 
 This diagram shows how pending exports are executed against connected systems via connectors. The export processor (`SyncExportTaskProcessor`) uses `ISyncServer` to delegate to `ExportExecutionServer` for the core execution logic, and `ISyncRepository` for bulk data access. Supports batching, parallelism, deferred reference resolution, and retry with backoff.
 
@@ -105,7 +105,7 @@ flowchart TD
     MarkFailed --> Persist
     SetRetry --> Persist
 
-    Persist[Batch persist<br/>all export status updates]
+    Persist[Batch persist via ParallelBatchWriter<br/>CSO updates, RPEIs, pending export status<br/>split across N concurrent PostgreSQL connections]
     Persist --> CaptureItems[Capture ProcessedExportItems<br/>for RPEI creation by caller]
     CaptureItems --> Done([Batch complete])
 ```
@@ -171,6 +171,8 @@ flowchart TD
 - **Preview mode**: `SyncRunMode.PreviewOnly` returns the list of exports that would be processed without executing them, enabling dry-run functionality.
 
 - **Per-batch isolation**: Each parallel batch gets its own `DbContext` and connector instance. EF Core is not thread-safe, so sharing a context across batches would cause data corruption.
+
+- **ParallelBatchWriter (#394)**: The persistence phase of each batch (CSO updates, RPEI persistence, pending export status updates) is split across N concurrent PostgreSQL connections via `ParallelBatchWriter`. This parallelises the bulk database writes that were previously sequential, significantly reducing batch persistence time.
 
 - **LDAP consolidation**: Multiple changes to the same attribute with the same operation type (e.g., 200 individual "member Add" operations) are consolidated into a single `DirectoryAttributeModification` before sending to the directory server. This is the correct RFC 4511 pattern and dramatically reduces the number of LDAP modify requests.
 

@@ -1,11 +1,11 @@
 # Full Synchronisation - CSO Processing Flow
 
-> Last updated: 2026-03-26 — JIM v0.7.1 (`00907431`)
+> Last updated: 2026-04-01 — JIM v0.8.0
 
 This diagram shows the core decision tree for processing a single Connected System Object (CSO) during Full or Delta Synchronisation. This is the central flow of JIM's identity management engine.
 
 Both Full Sync and Delta Sync use identical processing logic per-CSO. The only difference is CSO selection:
-- **Full Sync**: processes ALL CSOs in the Connected System
+- **Full Sync**: processes ALL CSOs in the Connected System (or only those in the target partition, if the run profile specifies a `TargetPartitionId` — see below)
 - **Delta Sync**: processes only CSOs modified since `LastDeltaSyncCompletedAt`
 
 Since v0.7.1, sync decisions are split across three layers:
@@ -17,7 +17,7 @@ Since v0.7.1, sync decisions are split across three layers:
 
 ```mermaid
 flowchart TD
-    Start([Start Sync]) --> Prepare[Prepare: count CSOs + pending exports<br/>Load sync rules, object types via ISyncRepository<br/>Build drift detection cache<br/>Build export evaluation cache<br/>Pre-load pending exports into dictionary]
+    Start([Start Sync]) --> Prepare[Prepare: count CSOs + pending exports<br/>If TargetPartitionId set, scope to that partition<br/>Load sync rules, object types via ISyncRepository<br/>Build drift detection cache<br/>Build export evaluation cache<br/>Pre-load pending exports into dictionary]
     Prepare --> PageLoop{More CSO<br/>pages?}
 
     PageLoop -->|Yes| LoadPage[Load page of CSOs<br/>without attributes for performance]
@@ -140,5 +140,7 @@ flowchart TD
 - **Attribute recall via ContributedBySystemId**: Every MVO attribute value tracks which connected system contributed it. When a CSO is obsoleted and `RemoveContributedAttributesOnObsoletion` is enabled on the object type, all attributes contributed by that system are recalled (removed from the MVO). The `removedAttributes` set is passed to export evaluation, where pure recall operations (all changes are removals) skip export evaluation entirely to avoid expression mapping errors against incomplete data.
 
 - **Cross-page reference resolution**: After all pages are processed, CSOs with unresolved reference attributes are reloaded from the database. At this point, all MVOs exist, so cross-page references can be resolved. The standard flush pipeline (persist MVOs, evaluate exports, flush PEs) runs again for the resolved references.
+
+- **Partition-scoped imports (v0.8.0, #353)**: When a run profile specifies a `TargetPartitionId`, CSO counting and page loading are filtered to only that partition's scope. This allows large connected systems to be synchronised in targeted slices rather than processing the entire CSO population every time.
 
 - **Error isolation**: Each CSO is processed within its own try/catch. Errors create RPEIs but do not halt processing of remaining CSOs.

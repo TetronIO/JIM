@@ -6,7 +6,7 @@
 
 ## Overview
 
-JIM is a .NET-based Identity Management (IDM) system implementing the metaverse pattern for centralised identity governance. It synchronises identities across heterogeneous systems (Active Directory, LDAP, files, databases, etc.) with bi-directional attribute flows, provisioning rules, and compliance tracking.
+JIM is a .NET-based Identity Management (IDM) system implementing the metaverse pattern for centralised identity governance. It synchronises identities across heterogeneous systems (Active Directory, OpenLDAP, 389 DS, and other RFC 4512-compliant directories, files, databases, etc.) with bi-directional attribute flows, provisioning rules, and compliance tracking.
 
 ## Architecture Principles
 
@@ -283,7 +283,20 @@ public class MetaverseController : ControllerBase
 
 ### 7. Background Processing
 
-**Worker Services**:
+**Worker Architecture** (redesigned in #394):
+
+The Worker separates pure domain logic from I/O via two core interfaces:
+
+- **`ISyncEngine`** — stateless domain engine with 7 methods (join resolution, projection, attribute flow, scoping, etc.). Zero I/O dependencies; receives all data as parameters and returns results. Unit-testable without mocks.
+- **`ISyncRepository`** — ~80-method data access boundary. Production implementation: `JIM.PostgresData.Repositories.SyncRepository`. Test implementation: `JIM.InMemoryData.SyncRepository`.
+
+**Dependency Injection**: The Worker and Scheduler use `IJimApplicationFactory` and `IConnectorFactory` for per-task context isolation. Each dispatched task gets its own DI scope with independent `DbContext` and connector instances.
+
+**Bulk Write Performance**:
+- **`ParallelBatchWriter`** — splits bulk writes across N concurrent PostgreSQL connections
+- **COPY binary protocol** — used for high-volume inserts (CSO creates, MVO creates, RPEIs, sync outcomes) via Npgsql's binary COPY API
+
+**Task Processing**:
 - Poll task queue from database
 - Process tasks via specific processors (SyncImportTaskProcessor, SyncExportTaskProcessor, etc.)
 - Update task status and activity log
@@ -655,9 +668,12 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 - `jim-db` - Start PostgreSQL (local debugging workflow)
 - `jim-db-stop` - Stop PostgreSQL
 - `jim-migrate` - Apply EF Core migrations
-- `jim-stack` - Start Docker stack
+- `jim-stack` - Start Docker stack (includes bundled Keycloak)
 - `jim-stack-logs` - View Docker stack logs
 - `jim-stack-down` - Stop Docker stack
+- `jim-keycloak` - Start Keycloak only (for local debugging workflow)
+- `jim-keycloak-stop` - Stop Keycloak
+- `jim-keycloak-logs` - View Keycloak logs
 
 **Docker Builds** (rebuild and start services):
 - `jim-build` - Build all services + start
@@ -682,6 +698,7 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 | `http://localhost:5200` | JIM Web UI |
 | `http://localhost:5200/api/swagger` | Swagger API documentation |
 | `http://localhost:5200/dev/error-pages` | Error page preview (Development only) |
+| `http://localhost:8181` | Keycloak admin console (`admin` / `admin`) |
 
 **Git Configuration**:
 
@@ -726,7 +743,7 @@ Configuration via environment variables (defined in `.env`). See `.env.example` 
 ### SSO/Authentication (IDP-Agnostic)
 JIM works with any OIDC-compliant Identity Provider (Entra ID, Okta, Auth0, Keycloak, AD FS, etc.).
 
-**Development**: The devcontainer ships a bundled Keycloak — SSO works out of the box with `admin` / `admin`. No configuration needed.
+**Development**: The devcontainer ships a bundled Keycloak instance, pre-configured with a `jim` realm and client. SSO works out of the box — sign in with `admin` / `admin`. The Keycloak admin console is available at `http://localhost:8181`. Use `jim-keycloak`, `jim-keycloak-stop`, and `jim-keycloak-logs` to manage it independently of the full stack.
 
 **Production**: Override the `JIM_SSO_*` variables with your provider's settings. See the [SSO Setup Guide](SSO_SETUP_GUIDE.md).
 
@@ -755,9 +772,10 @@ JIM uses standard OIDC claims (`sub`, `name`, `given_name`, `family_name`, `pref
 
 ### Service Architecture
 - **jim.web**: Blazor Server UI with integrated REST API at `/api/` (port 5200 HTTP / 5201 HTTPS). Swagger available at `/api/swagger` in development.
-- **jim.worker**: Background task processor. Supports parallel execution of schedule steps targeting different Connected Systems (dispatched concurrently via `Task.WhenAll`). Export tasks support configurable LDAP pipelining and parallel batch processing.
+- **jim.worker**: Background task processor built on `ISyncEngine` / `ISyncRepository` separation (see [Background Processing](#7-background-processing)). Per-task DI isolation, `ParallelBatchWriter` for concurrent writes, and COPY binary protocol for bulk inserts. Supports parallel schedule step execution and configurable LDAP pipelining.
 - **jim.scheduler**: Schedule management service with 30-second polling cycle. Detects parallel step groups (steps sharing the same `StepIndex`) and queues them with `ExecutionMode = Parallel` for concurrent worker dispatch.
 - **jim.database**: PostgreSQL 18
+- **jim.keycloak**: Bundled Keycloak IdP for development SSO (port 8181). Pre-configured with a `jim` realm and client. Not included in production deployments.
 
 **Database Access**:
 - Use VS Code database extensions (e.g., PostgreSQL) to connect to the database on port 5432

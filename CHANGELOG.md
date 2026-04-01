@@ -7,7 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-04-01
+
 ### Added
+
+#### OpenLDAP Connector Support (#72)
+
+- ✨ Full OpenLDAP and RFC 4512-compliant LDAP directory support — connect to OpenLDAP, 389 Directory Server, and other standards-based LDAP directories alongside Active Directory
+- ✨ Automatic directory type detection from rootDSE (Active Directory, OpenLDAP, Generic LDAP) with per-type external ID handling (objectGUID vs entryUUID)
+- ✨ RFC 4512 schema discovery — object classes and attribute types parsed from the subschemaSubentry with OID-based data type mapping and superclass hierarchy walking
+- ✨ Multi-suffix partition discovery via rootDSE namingContexts for non-AD directories
+- ✨ Accesslog-based delta import for OpenLDAP — queries `cn=accesslog` for incremental changes with automatic fallback to full import
+- ✨ Parallel import with configurable concurrency — each container/objectType combination runs on its own LDAP connection, working around RFC 2696 paging cookie limitations
+- ✨ Transparent `groupOfNames` placeholder member handling — automatically manages the RFC 4519 MUST constraint so administrators never see placeholder entries in the metaverse
+- ✨ DN-aware RDN attribute detection for correct export naming
+- ✨ Partition-scoped imports — run profiles can target a specific partition instead of importing all selected partitions (#353)
+
+#### Worker Redesign (#394)
+
+- ✨ Pure domain engine (`ISyncEngine`) — 7 stateless methods with zero I/O dependencies, making core sync logic independently testable with plain objects
+- ✨ Formal data access boundary (`ISyncRepository`) — ~80-method interface separating Worker data access from shared EF Core repositories, with purpose-built in-memory implementation for tests
+- ✨ Dependency injection throughout Worker and Scheduler — `IJimApplicationFactory`, `IConnectorFactory`, per-task context isolation
 
 #### Bundled Keycloak IdP for Development (#197)
 
@@ -18,37 +38,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Keycloak admin console accessible at `http://localhost:8181`
 - 🔒 HTTP OIDC authority support for development (RequireHttpsMetadata conditionally disabled)
 
+#### Object Type Icons (#92)
+
+- 🖥️ Configurable icons for metaverse object types — assign icons to object types, displayed across the homepage, navigation menu, schema pages, and object detail views
+
+#### Pending Export Management
+
+- 🖥️ Pending export detail page with grouped attribute changes, capped multi-valued attribute loading, and server-side paginated drill-down for large change sets
+- 🖥️ `Get-JIMPendingExport` and `Get-JIMConnectedSystemObject` PowerShell cmdlets with corresponding API endpoints
+- 🖥️ Pending exports list now shows display names instead of raw GUIDs
+
+#### Activity Monitoring
+
+- 🖥️ Auto-refresh polling on the activity list page — data updates automatically without manual refresh
+- 🖥️ Pause/resume toggle for auto-refresh polling
+- 🖥️ Compact determinate progress bar on the History tab for in-progress activities
+- 🖥️ Phase-specific activity messages during imports — "Connecting to connected system" and "Importing objects from connected system" show the current phase before object processing begins (#342)
+
+#### Run Profile Editing
+
+- 🖥️ Run profile editing UI — edit name, file path, partition, and page size for existing run profiles
+- ✨ `SupportsFilePaths` connector capability — File Path fields only appear for connectors that use file-based import/export
+- ✨ `SupportsPaging` connector capability — Page Size controls only appear for connectors that support paged queries
+
+#### Navigation and Layout
+
+- 🖥️ Browser back/forward navigation support for all tabbed pages via URL query parameters
+- 🖥️ Tabs view mode for metaverse object details — attribute categories displayed as horizontal tabs alongside existing form and table views
+- 🖥️ Expanded Target section in the Operations sidebar with type-specific links
+- 🖥️ Connector capabilities grouped by category on the detail page
+
+#### Infrastructure
+
+- 📦 Docker healthchecks for Worker and Scheduler — file-based heartbeat monitoring detects stalled service loops (#185)
+- ✨ Multi-valued to single-valued import attribute flow — when a multi-valued source attribute flows to a single-valued target, JIM automatically selects the first value and records a warning (#435)
+
 ### Performance
+
+#### Worker Redesign (#394)
+
+- ⚡ Parallel multi-connection writes — `ParallelBatchWriter` splits bulk database writes across N concurrent PostgreSQL connections, utilising multiple CPU cores during save phases. Configurable via `JIM_WRITE_PARALLELISM` environment variable
+- ⚡ COPY binary protocol for bulk inserts — CSO creates, RPEIs, MVO creates, and sync outcomes now use PostgreSQL's COPY binary import, eliminating SQL parsing overhead and parameter limits (#338)
+- ⚡ Worker-exclusive bulk SQL in `SyncRepository` — hot-path operations (RPEI persistence, CSO bulk create, pending export operations) moved from shared repositories into dedicated partial classes, reducing shared repo surface by 1,200+ lines
+
+#### Import Pipeline (#427, #440)
 
 - ⚡ Import CSO matching now uses a pre-fetched dictionary for O(1) external ID lookups, replacing N per-object database queries with a single bulk query at import start — eliminates the dominant bottleneck in full imports (#440)
 - ⚡ Import reference resolution is now case-insensitive (matching RFC 4514 DN semantics) and batches sort non-referencing objects first with committed ID tracking — eliminates the expensive post-import LOWER() fixup SQL query (#427)
+- ⚡ Two-phase parallel write commits CSO rows before attribute values, giving cross-partition references full FK visibility and eliminating post-import fixup queries (#427)
+
+#### Sync and Export
+
+- ⚡ Immediate MVO deletion (zero grace period) skips unnecessary attribute recall and export evaluation, eliminating wasted database round-trips (#390)
+- ⚡ Deferred export resolution progress reporting throttled to every 50 items instead of per-item, eliminating ~540 unnecessary database round-trips for typical batches (#426)
+- ⚡ Bulk RPEI and CSO change persistence timeouts increased to 300 seconds for large imports (#426)
+- ⚡ Log file rolling size reduced from 500 MB to 50 MB per file (100 files retained, ~5 GB max per service)
 
 ### Fixed
 
 - 🔒 Attribute change history is no longer cascade-deleted when a metaverse or connected system attribute definition is removed — the FK is set to null and snapshot `AttributeName`/`AttributeType` properties preserve the audit trail indefinitely (#58)
-
-### Added
-
-#### Worker Redesign Option A (#394)
-
-- ✨ Pure domain engine (`ISyncEngine`) — 7 stateless methods with zero I/O dependencies, making core sync logic independently testable with plain objects
-- ✨ Formal data access boundary (`ISyncRepository`) — ~80-method interface separating Worker data access from shared EF Core repositories, with purpose-built in-memory implementation for tests
-- ✨ Dependency injection throughout Worker and Scheduler — `IJimApplicationFactory`, `IConnectorFactory`, per-task context isolation
-
-### Performance
-
-#### Worker Redesign Option A (#394)
-
-- ⚡ Parallel multi-connection writes — `ParallelBatchWriter` splits bulk database writes across N concurrent PostgreSQL connections, utilising multiple CPU cores during save phases. Configurable via `JIM_WRITE_PARALLELISM` environment variable
-- ⚡ COPY binary protocol for bulk inserts — CSO creates, RPEIs, and sync outcomes now use PostgreSQL's COPY binary import, eliminating SQL parsing overhead and parameter limits
-- ⚡ Worker-exclusive bulk SQL in `SyncRepository` — hot-path operations (RPEI persistence, CSO bulk create, pending export operations) moved from shared repositories into dedicated partial classes, reducing shared repo surface by 1,200+ lines
+- 🐛 Expression attribute lookups (e.g. `mv["Department"]`) are now case-insensitive, preventing silent failures when attribute name casing in expressions did not exactly match stored names (#341)
+- 🐛 Pending export reconciliation now correctly matches all 8 attribute data types — Boolean, Guid, and LongNumber exports previously failed to reconcile and appeared permanently stuck (#263)
+- 🐛 Deferred export progress bar no longer shows values exceeding 100%
+- 🐛 Progress bars on the History tab now update in real-time instead of freezing after initial page load
+- 🐛 Worker database operations no longer time out during large imports — command timeout increased from 30s default to 300s (#426)
+- 🐛 Connector-level warnings (e.g. delta import fallback) now appear as activity banners instead of phantom RPEIs with no CSO association
+- 🐛 MVO reference attribute foreign keys are now reliably persisted across cross-page and cross-batch scenarios
+- 🐛 MVO change tracking no longer crashes when recording deletion changes for objects with unloaded reference navigation properties
 
 ### Changed
 
-#### Worker Redesign Option A (#394)
+#### Worker Redesign (#394)
 
 - 🔄 All Worker and Workflow tests (~1,300) migrated from mocked `DbContext` to purpose-built `InMemoryData.SyncRepository`, eliminating three-way code path divergence between production, workflow tests, and unit tests
 - 🔄 Removed ~32 try/catch EF fallback blocks from repository files (-642 lines) — production and test code paths are now identical
+
+- 🔄 Object type names from camelCase LDAP schemas (e.g. `groupOfNames`) now display correctly as "Group Of Names"
+- 🔄 Error type column merged inline with outcome chips on the activity detail page
 
 ## [0.7.1] - 2026-03-19
 
@@ -446,7 +512,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Air-gapped deployment bundle support
 - PowerShell Gallery publishing
 
-[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/TetronIO/JIM/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/TetronIO/JIM/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/TetronIO/JIM/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/TetronIO/JIM/compare/v0.6.0...v0.6.1

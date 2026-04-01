@@ -1,6 +1,6 @@
 # Worker Task Lifecycle
 
-> Last updated: 2026-03-26 — JIM v0.7.1 (`00907431`)
+> Last updated: 2026-04-01 — JIM v0.8.0
 
 This diagram shows how the JIM Worker service picks up, executes, and completes tasks. It covers the main polling loop, task dispatch, heartbeat management, cancellation handling, and housekeeping.
 
@@ -18,7 +18,8 @@ flowchart TD
     MainLoop -->|Yes| ShutdownCancel[Cancel all current tasks<br/>via CancellationTokenSource]
     ShutdownCancel --> End([Worker Stopped])
 
-    MainLoop -->|No| HasTasks{CurrentTasks<br/>count > 0?}
+    MainLoop -->|No| TouchHealth[Write UTC timestamp to<br/>/tmp/healthcheck file<br/>Docker healthcheck monitors file age]
+    TouchHealth --> HasTasks{CurrentTasks<br/>count > 0?}
 
     %% --- Active tasks: heartbeat + cancellation ---
     HasTasks -->|Yes| Heartbeat[Update heartbeats for<br/>all active task IDs]
@@ -45,7 +46,7 @@ Each task runs in its own `Task.Run` with an isolated `JimApplication`, `JimDbCo
 
 ```mermaid
 flowchart TD
-    Spawned([Task.Run starts]) --> CreateJim[Create dedicated JimApplication<br/>with fresh JimDbContext<br/>Create ISyncRepository + ISyncServer<br/>for this task's DbContext]
+    Spawned([Task.Run starts]) --> CreateJim[Create dedicated JimApplication<br/>with fresh JimDbContext<br/>Create ISyncRepository + ISyncServer +<br/>ISyncEngine scoped to this task]
     CreateJim --> ReRetrieve[Re-retrieve WorkerTask<br/>using task-specific JimApplication<br/>Avoid cross-instance issues]
     ReRetrieve --> SetExecuted[Set Activity.Executed = UtcNow]
 
@@ -56,8 +57,8 @@ flowchart TD
     ResolveConnector --> ResolveRP[Get RunProfile from<br/>ConnectedSystem.RunProfiles]
     ResolveRP --> RunType{RunProfile<br/>RunType?}
 
-    RunType -->|FullImport| FI[SyncImportTaskProcessor<br/>PerformFullImportAsync<br/>Uses ISyncServer + ISyncRepository]
-    RunType -->|DeltaImport| DI[SyncImportTaskProcessor<br/>PerformFullImportAsync<br/>Connector handles delta filtering]
+    RunType -->|FullImport| FI[SyncImportTaskProcessor<br/>PerformFullImportAsync<br/>Uses ISyncEngine + ISyncServer + ISyncRepository]
+    RunType -->|DeltaImport| DI[SyncImportTaskProcessor<br/>PerformFullImportAsync<br/>Connector handles delta filtering<br/>Uses ISyncEngine + ISyncServer + ISyncRepository]
     RunType -->|FullSynchronisation| FS[SyncFullSyncTaskProcessor<br/>PerformFullSyncAsync<br/>Uses ISyncEngine + ISyncServer + ISyncRepository]
     RunType -->|DeltaSynchronisation| DS[SyncDeltaSyncTaskProcessor<br/>PerformDeltaSyncAsync<br/>Uses ISyncEngine + ISyncServer + ISyncRepository]
     RunType -->|Export| EX[SyncExportTaskProcessor<br/>PerformExportAsync<br/>Uses ISyncServer + ISyncRepository]
@@ -134,16 +135,38 @@ flowchart TD
     HistoryCleanup --> Done
 ```
 
+## Docker Healthcheck (#185)
+
+Both Worker and Scheduler write a heartbeat file each main-loop iteration. Docker's `HEALTHCHECK` instruction compares the file's modification timestamp against a staleness threshold.
+
+```mermaid
+flowchart LR
+    Loop([Main loop iteration]) --> WriteFile["Write DateTime.UtcNow to<br/>/tmp/healthcheck"]
+    WriteFile --> NextIteration([Continue loop])
+
+    Docker([Docker HEALTHCHECK<br/>every 30s]) --> StatFile["stat -c %Y /tmp/healthcheck"]
+    StatFile --> Compare{"(now - mtime)<br/>< threshold?"}
+    Compare -->|Yes| Healthy([Container healthy])
+    Compare -->|No| Unhealthy([Container unhealthy<br/>Docker restarts after retries])
+```
+
+| Service   | Staleness threshold | Start period | Rationale                                  |
+|-----------|--------------------:|-----------:|----------------------------------------------|
+| Worker    | 60 s                | 60 s       | 2 s polling cycle; 60 s tolerates brief stalls |
+| Scheduler | 120 s               | 120 s      | Longer cycle; waits for application readiness  |
+
 ## Key Design Decisions
 
-- **Three-layer sync architecture**: Worker processors use three collaborating interfaces injected at task spawn time:
-  - **ISyncEngine** — Pure domain logic (projection decisions, attribute flow, deletion rules, export confirmation). Stateless, I/O-free, fully unit-testable. Used by full sync and delta sync processors.
+- **Three-layer sync DI architecture (#394)**: Worker processors use three collaborating interfaces injected at task spawn time:
+  - **ISyncEngine** — Pure domain logic (projection decisions, attribute flow, deletion rules, export confirmation). Stateless, synchronous, zero-dependency, I/O-free, fully unit-testable. 8 methods covering projection, attribute flow, export confirmation, deletion rules, and reconciliation. Used by import, full sync, and delta sync processors.
   - **ISyncServer** — Orchestration facade that delegates to existing application-layer servers (ExportEvaluationServer, ExportExecutionServer, ScopingEvaluationServer, DriftDetectionService) and ISyncRepository. All processors use this.
   - **ISyncRepository** — Dedicated data access boundary for sync operations (bulk CSO/MVO writes, pending exports, RPEIs). Replaces scattered access through multiple server properties.
 
-- **Isolated DbContext per task**: Each task gets its own `JimApplication`, `JimDbContext`, `ISyncRepository`, and `ISyncServer` to avoid EF Core connection sharing issues. The main loop has its own instance for polling and heartbeats.
+- **Per-task DI scope (#394)**: Each spawned task gets its own `JimApplication` (via `IJimApplicationFactory.Create()`), `JimDbContext`, `ISyncRepository`, `ISyncServer`, and `ISyncEngine` — fully isolated from the main loop and other tasks. This avoids EF Core connection sharing issues and ensures each task can be disposed independently. The main loop has its own instance for polling and heartbeats.
 
-- **Heartbeat-based liveness**: Active tasks have their heartbeats updated every polling cycle (2 seconds). The scheduler uses heartbeat timestamps to detect crashed workers and recover stale tasks.
+- **Heartbeat-based liveness (two levels)**:
+  - **Task-level**: Active tasks have their database heartbeats updated every polling cycle (2 seconds). The scheduler uses heartbeat timestamps to detect crashed workers and recover stale tasks.
+  - **Container-level (#185)**: The main loop writes a UTC timestamp to `/tmp/healthcheck` each iteration. Docker's `HEALTHCHECK` instruction compares file age against a staleness threshold (60 s for Worker, 120 s for Scheduler) to detect stalled service loops and trigger container restarts.
 
 - **Startup recovery**: On startup, ALL `Processing` tasks are immediately recovered (re-queued) since the worker just started and nothing can genuinely be processing.
 

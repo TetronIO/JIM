@@ -16,6 +16,7 @@ JIM uses a tag-based release workflow. When we push a tag like `v0.2.0`, the Git
 
 | Version | Date | Notes |
 |---------|------|-------|
+| `0.8.0` | 2026-04-01 | OpenLDAP/RFC 4512 LDAP connector support, Worker redesign (ISyncEngine/ISyncRepository/ParallelBatchWriter), bundled Keycloak IdP for development, O(1) import matching, COPY binary bulk inserts, cross-batch fixup elimination, object type icons, pending export management, activity auto-refresh, run profile editing, Docker healthchecks, MVA→SVA attribute flow, partition-scoped imports, 9 bug fixes. |
 | `0.7.1` | 2026-03-19 | Navy O6 theme sidebar background fix for visual consistency. |
 | `0.7.0` | 2026-03-19 | New default theme with refined colour palette and Inter font, MVO Properties tab and form/table view toggle, userinfo API endpoint, Staging page rename, Example Data rename, migration flattening, DbContext concurrency fix, deleted object change history fixes, pending export reference display, database resilience hardening, MVO MVA pagination performance. |
 | `0.6.1` | 2026-03-15 | Child activity tracking, Clear-JIMConnectedSystem cmdlet, global error boundary, CWE-117 log injection sanitisation, Trivy CI scanning, cross-batch reference resolution fixes, PostgreSQL COPY binary import performance. |

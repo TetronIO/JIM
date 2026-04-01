@@ -22,9 +22,13 @@ JIM is a modern Identity Management system designed for organisations with compl
 
 - Hub-and-spoke architecture using a central metaverse for identity correlation
 - Bidirectional synchronisation of Users, Groups, and custom object types (e.g., Departments, Roles, Computers)
+- Multi-directory LDAP support — Active Directory, OpenLDAP, 389 Directory Server, and other RFC 4512-compliant directories
 - Transform data using expressions with built-in functions for common identity operations
 - Extensible with custom connectors (fully unit-testable)
 - Modern Web Portal and REST API with OpenAPI documentation
+- Activity monitoring with auto-refresh and run profile editing
+- Object type icons for visual clarity across the portal
+- Docker healthchecks on Worker and Scheduler for reliable orchestration
 - Single Sign-On (SSO) using OpenID Connect
 
 ![A screenshot of JIM running](https://tetron.io/images/jim/0.7.1/homepage-dark.png "JIM Screenshot")
@@ -103,7 +107,7 @@ Each release includes a downloadable bundle containing pre-built Docker images, 
 ## Connectors
 
 **Available Now:**
-- LDAP (incl. Active Directory, AD-LDS & Samba AD)
+- LDAP directories (Active Directory, OpenLDAP, 389 Directory Server, and other RFC 4512-compliant directories)
 - CSV/Text files
 
 **Planned:**
@@ -175,7 +179,7 @@ For production hardening (TLS, reverse proxy, upgrades, monitoring), see the [De
 
 ### For Developers (Contribute)
 
-**Prerequisites:** None — the devcontainer ships a bundled Keycloak for SSO. Sign in with `admin` / `admin`. To use an external IdP, see the [SSO Setup Guide](docs/SSO_SETUP_GUIDE.md).
+**Prerequisites:** None — the devcontainer includes a bundled Keycloak IdP with pre-configured test users, so no external identity provider is needed for development. Sign in with `admin` / `admin`. To use an external IdP instead, see the [SSO Setup Guide](docs/SSO_SETUP_GUIDE.md).
 
 **Option 1 — GitHub Codespaces (one click):**
 

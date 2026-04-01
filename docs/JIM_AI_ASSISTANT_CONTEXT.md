@@ -4,9 +4,9 @@
 >
 > **Repository**: https://github.com/TetronIO/JIM
 >
-> **Document Version**: 1.2
+> **Document Version**: 1.3
 >
-> **Last Updated**: 2026-03-13
+> **Last Updated**: 2026-04-01
 >
 > **Note**: This is a snapshot. For current implementation details, check the repository or ask the user to provide updated code/docs.
 
@@ -187,6 +187,7 @@ Grace periods allow time before actual deletion (e.g., 30 days).
 | Connector | Import | Export | Notes |
 |-----------|--------|--------|-------|
 | **LDAP/Active Directory** | ✓ | ✓ | Full CRUD, includes Samba AD, SSL/TLS, container creation |
+| **OpenLDAP/RFC 4512** | ✓ | ✓ | OpenLDAP, 389 Directory Server, RFC 4512-compliant directories; parallel imports, accesslog delta import, partition-scoped imports |
 | **File (CSV/Text)** | ✓ | ✓ | Configurable delimiters, auto-confirm export |
 
 ### Planned Connectors (Post-MVP)
@@ -344,7 +345,7 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 
 ### Core Platform (Complete)
 
-- ✅ Connector framework with LDAP and File connectors (import and export)
+- ✅ Connector framework with LDAP, OpenLDAP, and File connectors (import and export)
 - ✅ Full inbound sync (join, project, attribute flow)
 - ✅ Full outbound sync (provisioning, export)
 - ✅ LDAP/AD export (create, update, delete, container creation)
@@ -363,7 +364,25 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 - ✅ Real-time progress indication on Operations page
 - ✅ Unified log viewer (application + PostgreSQL logs)
 
-### Recent Enhancements
+### Recent Enhancements (v0.8.0)
+
+- ✅ **OpenLDAP Connector Support** (#72) - Full OpenLDAP/RFC 4512 LDAP directory support with parallel imports, accesslog delta import, and partition-scoped imports; also supports 389 Directory Server and other RFC 4512-compliant directories
+- ✅ **Worker Redesign** (#394) - ISyncEngine (pure domain engine) and ISyncRepository (data access boundary) with full DI throughout Worker/Scheduler, ParallelBatchWriter, and COPY binary protocol for bulk persistence
+- ✅ **Bundled Keycloak IdP** (#197) - Zero-config SSO for development environments with pre-configured identity provider
+- ✅ **O(1) Import Matching** (#440) - Constant-time import matching eliminates linear scans for large connector spaces
+- ✅ **Cross-Batch Fixup Elimination** (#427) - Removes redundant cross-batch CSO reference fixup passes during synchronisation
+- ✅ **MVO COPY Binary Protocol** (#338) - Binary COPY protocol for bulk MVO persistence, dramatically reducing database round-trips
+- ✅ **Object Type Icons** (#92) - Visual object type icons throughout the UI for improved navigation
+- ✅ **Pending Export Detail** - Drill into pending export changes before they are sent to target systems
+- ✅ **Activity Auto-Refresh** - Activities page automatically refreshes to show real-time operation progress
+- ✅ **Run Profile Editing** - Edit existing run profile configurations without recreating them
+- ✅ **Tabs View** - Tabbed navigation for connected system and metaverse object views
+- ✅ **Healthchecks** (#185) - Container health probes for orchestration readiness and liveness monitoring
+- ✅ **MVA to SVA Flow** (#435) - Attribute flow support for multi-valued to single-valued attribute mappings
+- ✅ **Case-Insensitive Expression Lookups** (#341) - Expression attribute lookups are now case-insensitive, matching expected behaviour
+- ✅ **PE Reconciliation for All Data Types** (#263) - Pending export reconciliation extended to cover all attribute data types
+
+### Previous Enhancements
 
 - ✅ **Disconnection Causality Tracking** (#392) - Causality tree traces MVO attribute changes and deletion fate during disconnection and recall
 - ✅ **Self-Contained Object Matching Rules** (#386) - Sync rules carry their own matching logic for import and export, enabling portable rule definitions

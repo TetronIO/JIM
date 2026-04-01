@@ -2,9 +2,9 @@
 
 > Copy the content below into the "Instructions" or "System Prompt" field when creating an AI assistant project for JIM.
 >
-> **Document Version**: 1.2
+> **Document Version**: 1.3
 >
-> **Last Updated**: 2026-03-13
+> **Last Updated**: 2026-04-01
 
 ---
 
@@ -66,7 +66,7 @@ I've uploaded a context document with detailed architecture, concepts, and curre
 
 ## Current Status
 
-JIM's core platform is complete and in active development approaching v0.9 stabilisation. Core sync (import, sync, export), scheduling, change history, dashboard, and admin UI are all functional. Recent enhancements include sync outcome graph with full causal tracing (#363), disconnection causality tracking (#392), self-contained object matching rules (#386), one-command deployment, large-scale import optimisation (100K+ objects), CSO large MVA pagination (#320), hardened release pipeline with SBOM attestation, and export change history with before/after values. The roadmap progresses through v0.9-STABILISATION, v1.0-ILM-COMPLETE, v1.x-CONNECTORS, and v2.0-IGA-FOUNDATION milestones — see GitHub milestones for details.
+JIM's core platform is complete and in active development approaching v0.9 stabilisation. Core sync (import, sync, export), scheduling, change history, dashboard, and admin UI are all functional. v0.8.0 introduces OpenLDAP connector support (#72) for RFC 4512-compliant directories with parallel imports and delta import, a redesigned Worker with ISyncEngine/ISyncRepository separation and full DI (#394), bundled Keycloak IdP for zero-config development SSO (#197), O(1) import matching (#440), cross-batch fixup elimination (#427), MVO COPY binary protocol (#338), UI improvements including object type icons (#92), pending export detail, activity auto-refresh, run profile editing, tabs view, healthchecks (#185), MVA-to-SVA flow (#435), case-insensitive expression lookups (#341), and PE reconciliation for all data types (#263). The roadmap progresses through v0.9-STABILISATION, v1.0-ILM-COMPLETE, v1.x-CONNECTORS, and v2.0-IGA-FOUNDATION milestones — see GitHub milestones for details.
 ```
 
 ---

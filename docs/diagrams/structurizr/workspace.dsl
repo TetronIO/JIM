@@ -64,7 +64,7 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
             }
 
             connectors = container "Connectors" "External system integration adapters" "JIM.Connectors" {
-                ldapConnector = component "LDAP Connector" "Active Directory, OpenLDAP, AD-LDS - schema discovery, LDAPS, partitions, delta import" "IConnector Implementation"
+                ldapConnector = component "LDAP Connector" "Active Directory, OpenLDAP, 389 DS, and RFC 4512-compliant directories - schema discovery, LDAPS, partitions, delta import, parallel imports" "IConnector Implementation"
                 fileConnector = component "File Connector" "CSV import/export, configurable delimiters, schema discovery" "IConnector Implementation"
                 databaseConnector = component "Database Connector" "PostgreSQL, MySQL, Oracle, SQL Server - SQL queries, stored procedures" "IConnector Implementation" "Planned"
                 scimConnector = component "SCIM 2.0 Connector" "Cloud application provisioning via SCIM protocol" "IConnector Implementation" "Planned"
