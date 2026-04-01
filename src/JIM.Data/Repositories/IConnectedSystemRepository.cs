@@ -76,6 +76,15 @@ public interface IConnectedSystemRepository
     /// <param name="connectedSystemId">The connected system to load mappings for.</param>
     /// <returns>A dictionary of cache key → CSO GUID mappings.</returns>
     public Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Batch-loads full CSO entity graphs by their IDs.
+    /// Returns CSOs with the same Include chain as GetConnectedSystemObjectByAttributeAsync
+    /// (Type.Attributes, AttributeValues.Attribute, AttributeValues.ReferenceValue.Type).
+    /// Used as the hydration phase of the batch pre-fetch import pipeline (#440).
+    /// </summary>
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
+
     public Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem);
 
     /// <summary>

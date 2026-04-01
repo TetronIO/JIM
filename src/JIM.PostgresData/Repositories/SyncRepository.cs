@@ -91,6 +91,12 @@ public partial class SyncRepository : ISyncRepository
         int connectedSystemId, string secondaryExternalIdValue)
         => _repo.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(connectedSystemId, secondaryExternalIdValue);
 
+    public Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId)
+        => _repo.ConnectedSystems.GetAllCsoExternalIdMappingsAsync(connectedSystemId);
+
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds);
+
     public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(
         int connectedSystemId, int attributeId, IEnumerable<string> attributeValues)
         => _repo.ConnectedSystems.GetConnectedSystemObjectsByAttributeValuesAsync(connectedSystemId, attributeId, attributeValues);

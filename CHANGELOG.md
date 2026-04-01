@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Keycloak admin console accessible at `http://localhost:8181`
 - 🔒 HTTP OIDC authority support for development (RequireHttpsMetadata conditionally disabled)
 
+### Performance
+
+- ⚡ Import CSO matching now uses a pre-fetched dictionary for O(1) external ID lookups, replacing N per-object database queries with a single bulk query at import start — eliminates the dominant bottleneck in full imports (#440)
+
 ### Fixed
 
 - 🔒 Attribute change history is no longer cascade-deleted when a metaverse or connected system attribute definition is removed — the FK is set to null and snapshot `AttributeName`/`AttributeType` properties preserve the audit trail indefinitely (#58)
