@@ -73,6 +73,19 @@ public partial class SyncRepository
             Log.Information("CreateMetaverseObjectsBulkAsync: Writing {Count} MVOs across {Parallelism} parallel connections",
                 metaverseObjects.Count, parallelism);
 
+            // Two-phase write: MVO rows first, then attribute value rows.
+            //
+            // MVO attribute values can contain ReferenceValueId FKs pointing to other MVOs
+            // in the same batch (e.g., a group MVO referencing a user MVO via a member attribute).
+            // When partitioned across parallel connections, a group in partition A may reference
+            // a user in partition B. If both are inserted in a single transaction per partition,
+            // partition A's FK check fails because partition B hasn't committed yet.
+            //
+            // Phase 1 commits all MVO rows across all partitions, guaranteeing every MVO exists
+            // in the database. Phase 2 then inserts attribute values — all ReferenceValueId FKs
+            // are satisfied regardless of which partition the referenced MVO was in.
+
+            // Phase 1: Insert all MVO rows across parallel connections.
             await ParallelBatchWriter.ExecuteAsync(
                 metaverseObjects,
                 parallelism,
@@ -80,18 +93,30 @@ public partial class SyncRepository
                 async (connection, partition) =>
                 {
                     await using var transaction = await connection!.BeginTransactionAsync();
-
                     await BulkInsertMvosOnConnectionAsync(connection, transaction, partition);
-
-                    var attributeValues = partition
-                        .SelectMany(mvo => mvo.AttributeValues.Select(av => (MvoId: mvo.Id, Value: av)))
-                        .ToList();
-
-                    if (attributeValues.Count > 0)
-                        await BulkInsertMvoAttributeValuesOnConnectionAsync(connection, transaction, attributeValues);
-
                     await transaction.CommitAsync();
                 });
+
+            // Phase 2: Insert all attribute value rows across parallel connections.
+            // Re-partition by attribute values (not by MVO) for balanced distribution,
+            // especially when one MVO has disproportionately many values (e.g., large groups).
+            var allAttributeValues = metaverseObjects
+                .SelectMany(mvo => mvo.AttributeValues.Select(av => (MvoId: mvo.Id, Value: av)))
+                .ToList();
+
+            if (allAttributeValues.Count > 0)
+            {
+                await ParallelBatchWriter.ExecuteAsync(
+                    allAttributeValues,
+                    parallelism,
+                    connectionString,
+                    async (connection, partition) =>
+                    {
+                        await using var transaction = await connection!.BeginTransactionAsync();
+                        await BulkInsertMvoAttributeValuesOnConnectionAsync(connection, transaction, partition.ToList());
+                        await transaction.CommitAsync();
+                    });
+            }
         }
 
         // Bridge: attach persisted MVOs to the EF change tracker as Unchanged.
