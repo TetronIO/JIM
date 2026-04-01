@@ -27,7 +27,7 @@ JIM is a modern Identity Management system designed for organisations with compl
 - Modern Web Portal and REST API with OpenAPI documentation
 - Single Sign-On (SSO) using OpenID Connect
 
-![A screenshot of JIM running](https://tetron.io/images/jim/0.6.0/homepage-dark.webp "JIM Screenshot")
+![A screenshot of JIM running](https://tetron.io/images/jim/0.7.1/homepage-dark.png "JIM Screenshot")
 
 ## What Makes JIM Different
 
