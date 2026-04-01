@@ -54,6 +54,15 @@ internal static class LdapConnectorConstants
     internal const int DEFAULT_MAX_RETRIES = 3;
     internal const int DEFAULT_RETRY_DELAY_MS = 1000;
 
+    // Import concurrency settings
+    // Controls the number of parallel LDAP connections used during OpenLDAP/Generic directory imports.
+    // Each connection handles one container+objectType combo independently, bypassing the RFC 2696
+    // connection-scoped paging cookie limitation. Not used for AD directories (which multiplex on
+    // a single connection). Typical deployments have 2-6 combos, so even low concurrency values
+    // eliminate the serialisation bottleneck. Higher values add connection overhead with diminishing returns.
+    internal const int DEFAULT_IMPORT_CONCURRENCY = 4;
+    internal const int MAX_IMPORT_CONCURRENCY = 8;
+
     // Export concurrency settings
     internal const int DEFAULT_EXPORT_CONCURRENCY = 4;
     internal const int MAX_EXPORT_CONCURRENCY = 8;

@@ -20,6 +20,8 @@ internal class LdapConnectorImport
     private readonly ConnectedSystemRunProfile _connectedSystemRunProfile;
     private readonly ILogger _logger;
     private readonly LdapConnection _connection;
+    private readonly Func<LdapConnection>? _connectionFactory;
+    private readonly int _importConcurrency;
     private readonly List<ConnectedSystemPaginationToken> _paginationTokens;
     private readonly string? _persistedConnectorData;
     private readonly TimeSpan _searchTimeout;
@@ -31,6 +33,8 @@ internal class LdapConnectorImport
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile runProfile,
         LdapConnection connection,
+        Func<LdapConnection>? connectionFactory,
+        int importConcurrency,
         List<ConnectedSystemPaginationToken> paginationTokens,
         string? persistedConnectorData,
         ILogger logger,
@@ -39,6 +43,8 @@ internal class LdapConnectorImport
         _connectedSystem = connectedSystem;
         _connectedSystemRunProfile = runProfile;
         _connection = connection;
+        _connectionFactory = connectionFactory;
+        _importConcurrency = Math.Clamp(importConcurrency, 1, LdapConnectorConstants.MAX_IMPORT_CONCURRENCY);
         _paginationTokens = paginationTokens;
         _persistedConnectorData = persistedConnectorData;
         _logger = logger;
@@ -99,25 +105,20 @@ internal class LdapConnectorImport
             result.PersistedConnectorData = JsonSerializer.Serialize(_currentRootDse);
         }
 
-        // OpenLDAP's RFC 2696 paging cookies are connection-scoped: any search request on the
-        // same connection invalidates all outstanding paging cursors. To prevent this, we must
-        // fully complete one container+objectType combo (all pages) before starting the next.
+        // OpenLDAP's RFC 2696 paging cookies are connection-scoped: any new search on the same
+        // connection invalidates all outstanding paging cursors. To work around this, we give each
+        // container+objectType combo its own dedicated LdapConnection and run combos in parallel,
+        // capped by the Import Concurrency setting. Each connection fully drains its paged search
+        // before being disposed, so there are no cross-call pagination tokens for this path — all
+        // data is fetched within this single call.
         //
-        // Strategy: flatten all container+objectType combos into an ordered list. Use a sentinel
-        // pagination token (__comboIndex) to track which combo to start from. On each page call,
-        // process one combo. If it needs paging, return its cookie (and the combo index). If not,
-        // move to the next combo. When all combos are done, return with no pagination tokens.
+        // When the connection factory is unavailable or concurrency is 1, we fall back to the
+        // original serialised approach using the primary connection (one combo at a time).
         //
-        // For directories without this limitation (e.g., AD), all combos are queried per page.
-        //
-        // Detection: check _currentRootDse (set on page 1 via GetRootDseInformation, or on page 2+
-        // from persisted connector data). Also check for __comboIndex pagination token — its presence
-        // means a previous page used serialised processing. This fallback is needed because the
-        // import processor passes the ORIGINAL persisted data (from before the import) on all pages,
-        // which is empty for first-ever imports, leaving _currentRootDse null on page 2+.
-        const string comboIndexTokenName = "__comboIndex";
-        var isConnectionScopedPaging = _currentRootDse?.DirectoryType is LdapDirectoryType.OpenLDAP or LdapDirectoryType.Generic
-            || _paginationTokens.Any(pt => pt.Name == comboIndexTokenName);
+        // For AD directories, this block is skipped entirely — AD supports multiple concurrent
+        // paged searches on a single connection, so the original multi-combo-per-page logic below
+        // is used instead.
+        var isConnectionScopedPaging = _currentRootDse?.DirectoryType is LdapDirectoryType.OpenLDAP or LdapDirectoryType.Generic;
 
         if (isConnectionScopedPaging)
         {
@@ -134,42 +135,26 @@ internal class LdapConnectorImport
                 }
             }
 
-            // Determine where to start and whether we're resuming mid-combo
-            var comboIndexToken = _paginationTokens.SingleOrDefault(pt => pt.Name == comboIndexTokenName);
-            var startIndex = comboIndexToken != null ? BitConverter.ToInt32(comboIndexToken.ByteValue) : 0;
+            if (combos.Count == 0)
+                return result;
 
-            // Check for a real LDAP paging cookie from the previous page (resume mid-combo)
-            var pagingCookieToken = _paginationTokens.FirstOrDefault(pt => pt.Name != comboIndexTokenName);
-            byte[]? pagingCookie = pagingCookieToken?.ByteValue;
+            _logger.Debug("GetFullImportObjects: OpenLDAP/Generic directory detected. Processing {ComboCount} container+objectType combos with concurrency {Concurrency}",
+                combos.Count, _connectionFactory != null ? _importConcurrency : 1);
 
-            for (var i = startIndex; i < combos.Count; i++)
+            if (_connectionFactory != null && _importConcurrency > 1)
             {
-                if (_cancellationToken.IsCancellationRequested)
-                {
-                    _logger.Debug("GetFullImportObjects: Cancellation requested. Stopping");
-                    return result;
-                }
-
-                var (container, objectType) = combos[i];
-                GetFisoResults(result, container, objectType, pagingCookie);
-                pagingCookie = null; // Only use the cookie for the first combo in this call
-
-                // Check if this combo returned a paging token (more pages to fetch for THIS combo)
-                if (result.PaginationTokens.Count > 0)
-                {
-                    // Add the combo index so we know which combo to resume
-                    result.PaginationTokens.Add(new ConnectedSystemPaginationToken(
-                        comboIndexTokenName, BitConverter.GetBytes(i)));
-                    return result;
-                }
-
-                // This combo is complete (all results fit in one page or last page reached).
-                // Continue to the next combo within this same call — non-paginated combos
-                // (0 results or all results in one page) don't interfere with paging cookies
-                // because they don't create any cursors.
+                // Parallel path: one dedicated connection per combo, capped by semaphore.
+                // Each combo fully drains all pages on its own connection, so no pagination
+                // tokens are returned — the import processor sees this as a single-page result.
+                GetFullImportObjectsParallel(result, combos);
+            }
+            else
+            {
+                // Sequential fallback: use the primary connection, one combo at a time.
+                // Each combo is fully drained before moving to the next.
+                GetFullImportObjectsSequential(result, combos);
             }
 
-            // All combos complete — no pagination tokens means we're done
             return result;
         }
 
@@ -360,6 +345,149 @@ internal class LdapConnectorImport
 
         _logger.Debug("GetTargetPartitions: No partition specified on run profile, importing from all selected partitions");
         return _connectedSystem.Partitions!.Where(p => p.Selected);
+    }
+
+    /// <summary>
+    /// Processes all container+objectType combos in parallel using a dedicated LdapConnection per combo.
+    /// Each combo fully drains all pages on its own connection, avoiding the RFC 2696 connection-scoped
+    /// paging cookie limitation. Concurrency is capped by <see cref="_importConcurrency"/>.
+    /// </summary>
+    private void GetFullImportObjectsParallel(
+        ConnectedSystemImportResult result,
+        List<(ConnectedSystemContainer Container, ConnectedSystemObjectType ObjectType)> combos)
+    {
+        var stopwatch = Stopwatch.StartNew();
+
+        // Each combo gets its own result to avoid contention on shared collections.
+        // Results are merged after all combos complete.
+        var comboResults = new ConnectedSystemImportResult[combos.Count];
+        for (var i = 0; i < comboResults.Length; i++)
+            comboResults[i] = new ConnectedSystemImportResult();
+
+        using var semaphore = new SemaphoreSlim(_importConcurrency);
+        var tasks = new Task[combos.Count];
+
+        for (var i = 0; i < combos.Count; i++)
+        {
+            _cancellationToken.ThrowIfCancellationRequested();
+
+            var index = i;
+            var (container, objectType) = combos[i];
+
+            tasks[i] = Task.Run(async () =>
+            {
+                await semaphore.WaitAsync(_cancellationToken);
+                LdapConnection? comboConnection = null;
+                try
+                {
+                    comboConnection = _connectionFactory!();
+                    _logger.Debug("GetFullImportObjectsParallel: Started combo {Index}/{Total} — container={Container}, objectType={ObjectType}",
+                        index + 1, combos.Count, container.Name, objectType.Name);
+
+                    // Fully drain all pages for this combo on its dedicated connection
+                    DrainAllPages(comboResults[index], comboConnection, container, objectType);
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger.Debug("GetFullImportObjectsParallel: Combo {Index} cancelled", index + 1);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "GetFullImportObjectsParallel: Combo {Index} failed — container={Container}, objectType={ObjectType}",
+                        index + 1, container.Name, objectType.Name);
+                    throw;
+                }
+                finally
+                {
+                    comboConnection?.Dispose();
+                    semaphore.Release();
+                }
+            }, _cancellationToken);
+        }
+
+        try
+        {
+            Task.WaitAll(tasks, _cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.Debug("GetFullImportObjectsParallel: Cancelled while waiting for combos to complete");
+            return;
+        }
+        catch (AggregateException ae)
+        {
+            // Unwrap and rethrow the first real exception so the import processor sees it
+            var inner = ae.Flatten().InnerExceptions.FirstOrDefault(e => e is not OperationCanceledException);
+            if (inner != null)
+                throw inner;
+            return;
+        }
+
+        // Merge results from all combos
+        foreach (var comboResult in comboResults)
+        {
+            result.ImportObjects.AddRange(comboResult.ImportObjects);
+        }
+
+        stopwatch.Stop();
+        _logger.Information("GetFullImportObjectsParallel: Completed {ComboCount} combos in {Elapsed}. Total objects: {ObjectCount}",
+            combos.Count, stopwatch.Elapsed, result.ImportObjects.Count);
+    }
+
+    /// <summary>
+    /// Processes all container+objectType combos sequentially on the primary connection.
+    /// Each combo is fully drained (all pages) before moving to the next.
+    /// Used as a fallback when the connection factory is unavailable or concurrency is 1.
+    /// </summary>
+    private void GetFullImportObjectsSequential(
+        ConnectedSystemImportResult result,
+        List<(ConnectedSystemContainer Container, ConnectedSystemObjectType ObjectType)> combos)
+    {
+        foreach (var (container, objectType) in combos)
+        {
+            if (_cancellationToken.IsCancellationRequested)
+            {
+                _logger.Debug("GetFullImportObjectsSequential: Cancellation requested. Stopping");
+                return;
+            }
+
+            DrainAllPages(result, _connection, container, objectType);
+        }
+    }
+
+    /// <summary>
+    /// Fully drains all pages for a single container+objectType combination on the given connection.
+    /// Keeps issuing paged search requests until the server returns an empty paging cookie.
+    /// </summary>
+    private void DrainAllPages(
+        ConnectedSystemImportResult result,
+        LdapConnection connection,
+        ConnectedSystemContainer container,
+        ConnectedSystemObjectType objectType)
+    {
+        byte[]? pagingCookie = null;
+
+        while (true)
+        {
+            if (_cancellationToken.IsCancellationRequested)
+                return;
+
+            var comboResult = new ConnectedSystemImportResult();
+            GetFisoResults(comboResult, connection, container, objectType, pagingCookie);
+
+            result.ImportObjects.AddRange(comboResult.ImportObjects);
+
+            // Check if there are more pages
+            if (comboResult.PaginationTokens.Count > 0)
+            {
+                pagingCookie = comboResult.PaginationTokens[0].ByteValue;
+            }
+            else
+            {
+                // No more pages — this combo is fully drained
+                break;
+            }
+        }
     }
 
     #region private methods
@@ -658,7 +786,13 @@ internal class LdapConnectorImport
         return rootDse;
     }
 
+    /// <summary>
+    /// Overload that uses the primary connection. Called by the AD (non-connection-scoped) path and delta imports.
+    /// </summary>
     private void GetFisoResults(ConnectedSystemImportResult connectedSystemImportResult, ConnectedSystemContainer connectedSystemContainer, ConnectedSystemObjectType connectedSystemObjectType, byte[]? lastRunsCookie)
+        => GetFisoResults(connectedSystemImportResult, _connection, connectedSystemContainer, connectedSystemObjectType, lastRunsCookie);
+
+    private void GetFisoResults(ConnectedSystemImportResult connectedSystemImportResult, LdapConnection connection, ConnectedSystemContainer connectedSystemContainer, ConnectedSystemObjectType connectedSystemObjectType, byte[]? lastRunsCookie)
     {
         if (_cancellationToken.IsCancellationRequested)
         {
@@ -711,7 +845,7 @@ internal class LdapConnectorImport
         SearchResponse searchResponse;
         try
         {
-            searchResponse = (SearchResponse)_connection.SendRequest(searchRequest, _searchTimeout);
+            searchResponse = (SearchResponse)connection.SendRequest(searchRequest, _searchTimeout);
         }
         catch (DirectoryOperationException ex) when (lastRunsCookie is { Length: > 0 } &&
             ex.Message.Contains("does not support the control", StringComparison.OrdinalIgnoreCase))
