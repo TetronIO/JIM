@@ -212,7 +212,6 @@ function Build-OpenLDAPSnapshot {
         $startOpenLDAPPath = "$scriptRoot/docker/openldap/start-openldap.sh"
         if (Test-Path $startOpenLDAPPath) {
             docker cp $startOpenLDAPPath "${ContainerName}:/start-openldap.sh"
-            docker exec $ContainerName chmod +x /start-openldap.sh
         }
         else {
             Write-Warning "start-openldap.sh not found at $startOpenLDAPPath — snapshot may not start correctly"
