@@ -1,6 +1,6 @@
 # OpenLDAP Integration Testing
 
-- **Status:** Doing (Phases 1-5 complete, Phase 6 near-complete — all scenarios pass on both SambaAD and OpenLDAP at Small; S3 deferred; scale testing remaining)
+- **Status:** Done (Phases 1-6 complete — all scenarios pass on both SambaAD and OpenLDAP at Medium; S3 deferred)
 - **Created:** 2026-03-09
 - **Issue:** [#72](https://github.com/TetronIO/JIM/issues/72)
 
@@ -534,4 +534,4 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 - [x] All existing Samba AD tests continue to pass unchanged (8/8 scenarios, Small template — 2026-04-01)
 - [x] All scenarios (S1-S9, excluding S3 deferred) parameterised for OpenLDAP
 - [x] All OpenLDAP scenarios pass (8/8 scenarios, Small template — 2026-04-01)
-- [ ] Scale testing through Micro → Small → Medium
+- [x] Scale testing through Micro → Small → Medium (full regression at Medium on both SambaAD and OpenLDAP — 2026-04-01)
