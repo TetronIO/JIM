@@ -165,9 +165,10 @@ public class SyncServer : ISyncServer
     public async Task CreateConnectedSystemObjectsAsync(
         List<ConnectedSystemObject> connectedSystemObjects,
         List<ActivityRunProfileExecutionItem> rpeis,
+        HashSet<Guid>? previouslyCommittedCsoIds = null,
         Func<int, Task>? onBatchPersisted = null)
     {
-        await _syncRepo.CreateConnectedSystemObjectsAsync(connectedSystemObjects);
+        await _syncRepo.CreateConnectedSystemObjectsAsync(connectedSystemObjects, previouslyCommittedCsoIds);
         if (onBatchPersisted != null)
             await onBatchPersisted(connectedSystemObjects.Count);
 
