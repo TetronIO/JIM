@@ -421,8 +421,10 @@ public class SyncRepository : ISyncRepository
 
     #region Connected System Object — Writes
 
-    public Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
+    public Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, HashSet<Guid>? previouslyCommittedCsoIds = null)
     {
+        // InMemory implementation does not need previouslyCommittedCsoIds — there are no FK
+        // constraints or batch isolation. The parameter is accepted for interface compatibility.
         foreach (var cso in connectedSystemObjects)
         {
             if (cso.Id == Guid.Empty)

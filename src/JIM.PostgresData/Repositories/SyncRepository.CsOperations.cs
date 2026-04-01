@@ -16,7 +16,7 @@ public partial class SyncRepository
     /// Each partition of CSOs is written on its own <see cref="NpgsqlConnection"/>, allowing
     /// PostgreSQL to utilise multiple CPU cores during the INSERT phase.
     /// </summary>
-    public async Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
+    public async Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, HashSet<Guid>? previouslyCommittedCsoIds = null)
     {
         if (connectedSystemObjects.Count == 0)
             return;
@@ -40,21 +40,28 @@ public partial class SyncRepository
         // Also null out ReferenceValueId for references to CSOs NOT in this batch — these
         // may have been set by ResolveReferencesAsync before the persist phase, pointing
         // to pre-generated IDs for CSOs that haven't been persisted yet.
-        var batchCsoIds = new HashSet<Guid>(connectedSystemObjects.Select(c => c.Id));
+        //
+        // When previouslyCommittedCsoIds is provided, FKs pointing to already-committed CSOs
+        // are preserved. Combined with sorting CSOs so referenced objects come first, this
+        // eliminates most cross-batch FK violations and reduces FixupCrossBatchReferenceIdsAsync work.
+        var allowedCsoIds = new HashSet<Guid>(connectedSystemObjects.Select(c => c.Id));
+        if (previouslyCommittedCsoIds != null)
+            allowedCsoIds.UnionWith(previouslyCommittedCsoIds);
+
         foreach (var cso in connectedSystemObjects)
         {
             foreach (var av in cso.AttributeValues)
             {
                 if (av.ReferenceValue != null && av.ReferenceValue.Id != Guid.Empty && !av.ReferenceValueId.HasValue
-                    && batchCsoIds.Contains(av.ReferenceValue.Id))
+                    && allowedCsoIds.Contains(av.ReferenceValue.Id))
                     av.ReferenceValueId = av.ReferenceValue.Id;
 
-                // Null out ReferenceValueId for cross-batch references. ResolveReferencesAsync may
-                // have set this to a pre-generated ID for a CSO in a future batch. Writing this FK
-                // would cause an FK constraint violation. FixupCrossBatchReferenceIdsAsync resolves
-                // these after all batches are persisted.
+                // Null out ReferenceValueId for references to CSOs not yet committed.
+                // ResolveReferencesAsync may have set this to a pre-generated ID for a CSO
+                // in a future batch. Writing this FK would cause an FK constraint violation.
+                // FixupCrossBatchReferenceIdsAsync resolves these after all batches are persisted.
                 if (av.ReferenceValueId.HasValue && av.ReferenceValueId.Value != Guid.Empty
-                    && !batchCsoIds.Contains(av.ReferenceValueId.Value))
+                    && !allowedCsoIds.Contains(av.ReferenceValueId.Value))
                     av.ReferenceValueId = null;
             }
         }
@@ -73,6 +80,17 @@ public partial class SyncRepository
         Log.Information("CreateConnectedSystemObjectsAsync: Writing {Count} CSOs across {Parallelism} parallel connections",
             connectedSystemObjects.Count, parallelism);
 
+        // Two-phase parallel write: CSO rows first (committed), then attribute values.
+        // Phase 1 commits all CSO rows across all parallel connections, making them visible
+        // to all subsequent transactions. Phase 2 then writes attribute values with full FK
+        // resolution — ReferenceValueId can point to any CSO in this batch or prior batches
+        // without cross-partition FK violations.
+        //
+        // This eliminates the need for FixupCrossBatchReferenceIdsAsync to resolve references
+        // that were nulled due to cross-partition isolation.
+
+        // Phase 1: Write CSO rows across parallel connections and commit
+        var partitions = ParallelBatchWriter.Partition(connectedSystemObjects, parallelism);
         await ParallelBatchWriter.ExecuteAsync(
             connectedSystemObjects,
             parallelism,
@@ -80,20 +98,33 @@ public partial class SyncRepository
             async (connection, partition) =>
             {
                 await using var transaction = await connection!.BeginTransactionAsync();
-
                 await BulkInsertCsosOnConnectionAsync(connection, transaction, partition);
+                await transaction.CommitAsync();
+            });
 
+        // Phase 2: Write attribute values across parallel connections
+        // All CSO rows are now committed and visible, so cross-partition FK references succeed.
+        // Build the full set of allowed CSO IDs: this batch + previously committed batches.
+        var allBatchCsoIds = new HashSet<Guid>(connectedSystemObjects.Select(c => c.Id));
+        if (previouslyCommittedCsoIds != null)
+            allBatchCsoIds.UnionWith(previouslyCommittedCsoIds);
+
+        await ParallelBatchWriter.ExecuteAsync(
+            connectedSystemObjects,
+            parallelism,
+            connectionString,
+            async (connection, partition) =>
+            {
                 var attributeValues = partition
                     .SelectMany(cso => cso.AttributeValues.Select(av => (CsoId: cso.Id, Value: av)))
                     .ToList();
 
                 if (attributeValues.Count > 0)
                 {
-                    var partitionCsoIds = new HashSet<Guid>(partition.Select(cso => cso.Id));
-                    await BulkInsertCsoAttributeValuesOnConnectionAsync(connection, transaction, attributeValues, partitionCsoIds);
+                    await using var transaction = await connection!.BeginTransactionAsync();
+                    await BulkInsertCsoAttributeValuesOnConnectionAsync(connection, transaction, attributeValues, allBatchCsoIds);
+                    await transaction.CommitAsync();
                 }
-
-                await transaction.CommitAsync();
             });
     }
 

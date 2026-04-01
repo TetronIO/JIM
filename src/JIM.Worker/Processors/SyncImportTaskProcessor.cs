@@ -392,6 +392,17 @@ public class SyncImportTaskProcessor
                 }
             }
 
+            // Sort CSOs so non-referencing objects (e.g., users) come before referencing objects
+            // (e.g., groups with member DNs). Combined with committed ID tracking below, this
+            // ensures referenced CSOs are already committed when referencing CSOs are persisted,
+            // eliminating most cross-batch FK violations and reducing FixupCrossBatchReferenceIdsAsync work.
+            connectedSystemObjectsToBeCreated.Sort((a, b) =>
+            {
+                var aHasRefs = a.AttributeValues.Any(av => av.ReferenceValueId.HasValue || av.ReferenceValue != null || !string.IsNullOrEmpty(av.UnresolvedReferenceValue));
+                var bHasRefs = b.AttributeValues.Any(av => av.ReferenceValueId.HasValue || av.ReferenceValue != null || !string.IsNullOrEmpty(av.UnresolvedReferenceValue));
+                return aHasRefs.CompareTo(bHasRefs); // false (0) before true (1)
+            });
+
             // Process CSO creates in batches to bound memory. CreateConnectedSystemObjectsAsync
             // creates ConnectedSystemObjectChange graphs (~20 ChangeAttribute + ChangeAttributeValue
             // objects per CSO). At 100K CSOs this creates ~2-6M objects consuming 3-7GB if done at once.
@@ -400,6 +411,10 @@ public class SyncImportTaskProcessor
             // (~400MB at 100K objects) become GC-eligible immediately.
             var totalCreatedSoFar = 0;
             var totalToCreate = connectedSystemObjectsToBeCreated.Count;
+
+            // Track CSO IDs committed in previous batches. Passed to CreateConnectedSystemObjectsAsync
+            // so that FKs pointing to already-committed CSOs are preserved instead of being nulled.
+            var committedCsoIds = new HashSet<Guid>();
 
             while (connectedSystemObjectsToBeCreated.Count > 0)
             {
@@ -415,7 +430,7 @@ public class SyncImportTaskProcessor
                     .ToList();
 
                 var batchSw = System.Diagnostics.Stopwatch.StartNew();
-                await _syncServer.CreateConnectedSystemObjectsAsync(csoBatch, batchRpeis);
+                await _syncServer.CreateConnectedSystemObjectsAsync(csoBatch, batchRpeis, committedCsoIds);
                 Log.Debug("PerformFullImportAsync: CreateConnectedSystemObjectsAsync took {ElapsedMs}ms for {Count} CSOs",
                     batchSw.ElapsedMilliseconds, batchSize);
 
@@ -439,6 +454,10 @@ public class SyncImportTaskProcessor
                     else if (extIdValue?.GuidValue != null)
                         _syncServer.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), newCso.Id);
                 }
+
+                // Track committed CSO IDs so future batches can preserve FK references to them
+                foreach (var cso in csoBatch)
+                    committedCsoIds.Add(cso.Id);
 
                 // Remove batch RPEIs from the main list and flush them
                 _activityRunProfileExecutionItems.RemoveAll(r => r.ConnectedSystemObject != null && batchCsoSet.Contains(r.ConnectedSystemObject));
@@ -2365,7 +2384,11 @@ public class SyncImportTaskProcessor
                             switch (attrType2)
                             {
                                 case AttributeDataType.Text when !string.IsNullOrEmpty(secondaryIdAttrValue.StringValue):
-                                    lookups.SecondaryTextLookup ??= new Dictionary<string, ConnectedSystemObject>(StringComparer.Ordinal);
+                                    // OrdinalIgnoreCase: LDAP Distinguished Names are case-insensitive per RFC 4514.
+                                    // The SQL fixup (FixupCrossBatchReferenceIdsAsync) uses LOWER() for this reason.
+                                    // Matching that behaviour here means in-memory resolution succeeds for LDAP references,
+                                    // avoiding the expensive post-import SQL fixup entirely.
+                                    lookups.SecondaryTextLookup ??= new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
                                     if (!lookups.SecondaryTextLookup.TryAdd(secondaryIdAttrValue.StringValue, cso))
                                         throw new InvalidOperationException($"Duplicate secondary external ID text value '{secondaryIdAttrValue.StringValue}' found for CSO {cso.Id}. Another CSO already has the same secondary external ID value.");
                                     break;

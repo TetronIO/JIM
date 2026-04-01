@@ -7,7 +7,7 @@ services:
     shm_size: '512mb'
     # Align max_connections with the full Docker stack (docker-compose.yml) so that
     # native development (jim-db + jim-web) and integration tests have the same limits.
-    command: postgres -c max_connections=200
+    command: postgres -c shared_preload_libraries=pg_stat_statements -c pg_stat_statements.track=all -c max_connections=200
     volumes:
       - jim-db-volume:/var/lib/postgresql
     environment:

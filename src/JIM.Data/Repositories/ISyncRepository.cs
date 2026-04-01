@@ -182,7 +182,11 @@ public interface ISyncRepository
     /// Bulk creates CSOs with their attribute values.
     /// Uses raw SQL bulk operations in production for performance.
     /// </summary>
-    Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
+    /// <param name="connectedSystemObjects">CSOs to create.</param>
+    /// <param name="previouslyCommittedCsoIds">IDs of CSOs already committed in prior batches.
+    /// When set, ReferenceValueId FKs pointing to these IDs are preserved (not nulled) during
+    /// bulk insert, eliminating the need for post-hoc FixupCrossBatchReferenceIdsAsync.</param>
+    Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, HashSet<Guid>? previouslyCommittedCsoIds = null);
 
     /// <summary>
     /// Bulk updates CSOs with their attribute values.

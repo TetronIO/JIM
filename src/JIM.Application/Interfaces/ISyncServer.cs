@@ -140,9 +140,12 @@ public interface ISyncServer
     /// Bulk creates CSOs with associated RPEIs. Persists the CSOs via the data layer,
     /// then links change tracking records to the corresponding RPEIs.
     /// </summary>
+    /// <param name="previouslyCommittedCsoIds">IDs of CSOs committed in prior batches, allowing
+    /// cross-batch FK references to be preserved during bulk insert instead of requiring post-hoc fixup.</param>
     Task CreateConnectedSystemObjectsAsync(
         List<ConnectedSystemObject> connectedSystemObjects,
         List<ActivityRunProfileExecutionItem> rpeis,
+        HashSet<Guid>? previouslyCommittedCsoIds = null,
         Func<int, Task>? onBatchPersisted = null);
 
     /// <summary>
