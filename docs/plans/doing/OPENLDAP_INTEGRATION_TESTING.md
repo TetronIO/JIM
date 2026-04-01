@@ -1,6 +1,6 @@
 # OpenLDAP Integration Testing
 
-- **Status:** Doing (Phases 1-5 complete, Phase 6 in progress — S1-S2, S4-S9 done; S3 deferred; snapshotting done; Samba AD regression + scale testing remaining)
+- **Status:** Doing (Phases 1-5 complete, Phase 6 near-complete — all scenarios pass on both SambaAD and OpenLDAP at Small; S3 deferred; scale testing remaining)
 - **Created:** 2026-03-09
 - **Issue:** [#72](https://github.com/TetronIO/JIM/issues/72)
 
@@ -520,7 +520,7 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 | `groupOfNames` empty group constraint breaks export | Medium | High | ✅ Resolved | Connector handles placeholder member transparently (configurable DN, default `cn=placeholder`). 21 unit tests. Refint error handling for directories with referential integrity overlay. |
 | Paged results cookie invalid on multi-type imports | Medium | High | ✅ Resolved | OpenLDAP's RFC 2696 cursor is connection-scoped — unrelated searches between paged calls invalidate it. Fix: skip completed container+objectType combos on subsequent pages. |
 | Performance regression at XLarge if OpenLDAP population is slow | Low | Medium | ✅ Resolved | Pre-populated snapshot images implemented (`Build-OpenLDAPSnapshots.ps1`) with content-hash staleness detection, matching Samba AD pattern |
-| Samba AD regression from connector changes | Medium | Low | ⚠️ Needs verification | All connector changes are gated behind `LdapDirectoryType` checks. Samba AD integration tests should be re-run to confirm no regressions. |
+| Samba AD regression from connector changes | Medium | Low | ✅ Verified | Full regression (8/8 scenarios, Small template) passed on Samba AD. All connector changes gated behind `LdapDirectoryType` checks. |
 
 ## Success Criteria
 
@@ -531,6 +531,7 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 - [x] Scenario 1 Joiner step passes against OpenLDAP (CSV → JIM → OpenLDAP provisioning)
 - [x] Scenario 1 Mover and Leaver steps pass against OpenLDAP
 - [x] Delta import works against OpenLDAP (accesslog-based with reqStart timestamps)
-- [ ] All existing Samba AD tests continue to pass unchanged (no regressions)
+- [x] All existing Samba AD tests continue to pass unchanged (8/8 scenarios, Small template — 2026-04-01)
 - [x] All scenarios (S1-S9, excluding S3 deferred) parameterised for OpenLDAP
+- [x] All OpenLDAP scenarios pass (8/8 scenarios, Small template — 2026-04-01)
 - [ ] Scale testing through Micro → Small → Medium
