@@ -98,7 +98,7 @@ public class HasRelevantChangedAttributesTests
         // Changed attribute is Email which matches the direct mapping
         var changedAttributes = new List<MetaverseObjectAttributeValue>
         {
-            new() { AttributeId = _emailAttr.Id, Attribute = _emailAttr, StringValue = "test@example.com" }
+            new() { AttributeId = _emailAttr.Id, Attribute = _emailAttr, StringValue = "test@panoply.org" }
         };
 
         var result = ExportEvaluationServer.HasRelevantChangedAttributes(changedAttributes, exportRule);

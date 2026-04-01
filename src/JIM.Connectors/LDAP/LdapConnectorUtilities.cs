@@ -406,13 +406,50 @@ internal static class LdapConnectorUtilities
     }
 
     /// <summary>
-    /// Queries the rootDSE to detect directory type (Active Directory, Samba AD, or generic LDAP).
+    /// Determines the <see cref="LdapDirectoryType"/> from rootDSE capabilities and vendor information.
+    /// </summary>
+    /// <param name="supportedCapabilities">OIDs from the rootDSE supportedCapabilities attribute.</param>
+    /// <param name="vendorName">The vendorName attribute from rootDSE (may be null).</param>
+    /// <param name="structuralObjectClass">The structuralObjectClass from rootDSE (may be null). OpenLDAP uses "OpenLDAProotDSE".</param>
+    internal static LdapDirectoryType DetectDirectoryType(IEnumerable<string>? supportedCapabilities, string? vendorName, string? structuralObjectClass = null)
+    {
+        var hasAdCapability = supportedCapabilities != null &&
+            (supportedCapabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_OID) ||
+             supportedCapabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_ADAM_OID));
+
+        if (hasAdCapability)
+        {
+            // Samba AD advertises the AD capability OID but has different behaviour
+            var isSamba = vendorName != null &&
+                vendorName.Contains("Samba", StringComparison.OrdinalIgnoreCase);
+            return isSamba ? LdapDirectoryType.SambaAD : LdapDirectoryType.ActiveDirectory;
+        }
+
+        // Check vendorName first (set by some OpenLDAP configurations)
+        if (vendorName != null &&
+            vendorName.Contains("OpenLDAP", StringComparison.OrdinalIgnoreCase))
+        {
+            return LdapDirectoryType.OpenLDAP;
+        }
+
+        // Fallback: check structuralObjectClass on rootDSE — OpenLDAP uses "OpenLDAProotDSE"
+        if (structuralObjectClass != null &&
+            structuralObjectClass.Contains("OpenLDAP", StringComparison.OrdinalIgnoreCase))
+        {
+            return LdapDirectoryType.OpenLDAP;
+        }
+
+        return LdapDirectoryType.Generic;
+    }
+
+    /// <summary>
+    /// Queries the rootDSE to detect directory type and basic capabilities.
     /// Used by schema discovery to apply directory-specific attribute overrides.
     /// </summary>
     internal static LdapConnectorRootDse GetBasicRootDseInformation(LdapConnection connection, ILogger logger)
     {
         var request = new SearchRequest { Scope = SearchScope.Base };
-        request.Attributes.AddRange(["supportedCapabilities", "vendorName"]);
+        request.Attributes.AddRange(["supportedCapabilities", "vendorName", "structuralObjectClass"]);
 
         var response = (SearchResponse)connection.SendRequest(request);
 
@@ -425,25 +462,19 @@ internal static class LdapConnectorUtilities
         var rootDseEntry = response.Entries[0];
 
         var capabilities = GetEntryAttributeStringValues(rootDseEntry, "supportedCapabilities");
-        var isActiveDirectory = capabilities != null &&
-            (capabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_OID) ||
-             capabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_ADAM_OID));
-
         var vendorName = GetEntryAttributeStringValue(rootDseEntry, "vendorName");
+        var structuralObjectClass = GetEntryAttributeStringValue(rootDseEntry, "structuralObjectClass");
 
-        var isSambaAd = vendorName != null &&
-            vendorName.Contains("Samba", StringComparison.OrdinalIgnoreCase);
-        var supportsPaging = isActiveDirectory && !isSambaAd;
+        var directoryType = DetectDirectoryType(capabilities, vendorName, structuralObjectClass);
 
         var rootDse = new LdapConnectorRootDse
         {
-            IsActiveDirectory = isActiveDirectory,
-            VendorName = vendorName,
-            SupportsPaging = supportsPaging
+            DirectoryType = directoryType,
+            VendorName = vendorName
         };
 
-        logger.Debug("GetBasicRootDseInformation: IsActiveDirectory={IsAd}, VendorName={VendorName}",
-            rootDse.IsActiveDirectory, rootDse.VendorName ?? "(not set)");
+        logger.Debug("GetBasicRootDseInformation: DirectoryType={DirectoryType}, VendorName={VendorName}",
+            rootDse.DirectoryType, rootDse.VendorName ?? "(not set)");
 
         return rootDse;
     }
@@ -466,11 +497,11 @@ internal static class LdapConnectorUtilities
     /// </summary>
     /// <param name="attributeName">The LDAP attribute name (e.g., "description").</param>
     /// <param name="objectTypeName">The structural object class name (e.g., "user", "group").</param>
-    /// <param name="isActiveDirectory">Whether the directory is Active Directory (AD-DS, AD-LDS, or Samba AD).</param>
+    /// <param name="directoryType">The detected directory type.</param>
     /// <returns>True if the attribute should be treated as single-valued despite the LDAP schema declaring it as multi-valued.</returns>
-    internal static bool ShouldOverridePluralityToSingleValued(string attributeName, string objectTypeName, bool isActiveDirectory)
+    internal static bool ShouldOverridePluralityToSingleValued(string attributeName, string objectTypeName, LdapDirectoryType directoryType)
     {
-        return isActiveDirectory &&
+        return directoryType is LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD &&
                LdapConnectorConstants.SAM_ENFORCED_SINGLE_VALUED_ATTRIBUTES.Contains(attributeName) &&
                LdapConnectorConstants.SAM_MANAGED_OBJECT_CLASSES.Contains(objectTypeName);
     }
@@ -591,5 +622,16 @@ internal static class LdapConnectorUtilities
             // If DNParser cannot parse the DN, it's malformed
             return false;
         }
+    }
+
+    /// <summary>
+    /// Generates a fallback accesslog timestamp for when the cn=accesslog database is empty
+    /// (e.g., after snapshot restore clears stale accesslog data). Returns the current UTC time
+    /// formatted as LDAP generalised time (YYYYMMDDHHmmSS.ffffffZ), which serves as the
+    /// watermark for the next delta import: "no changes happened before this point."
+    /// </summary>
+    internal static string GenerateAccesslogFallbackTimestamp()
+    {
+        return DateTime.UtcNow.ToString("yyyyMMddHHmmss.ffffffZ");
     }
 }

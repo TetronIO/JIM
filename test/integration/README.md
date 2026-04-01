@@ -54,8 +54,7 @@ If you prefer more control:
 # 2. Set up infrastructure API key
 pwsh test/integration/Setup-InfrastructureApiKey.ps1
 
-# 3. Populate test data
-pwsh test/integration/Populate-SambaAD.ps1 -Template Small -Instance Primary
+# 3. Generate test data (S1 target directory starts empty — no Populate-SambaAD.ps1 needed)
 pwsh test/integration/Generate-TestCSV.ps1 -Template Small
 
 # 4. Run scenarios only (skips setup)
@@ -128,9 +127,9 @@ Names are distributed using a prime-based algorithm to ensure realistic diversit
 
 ### Phase 1 (Available Now)
 
-- **Subatomic AD** - Port 389 (LDAP), 636 (LDAPS)
-- **Quantum Dynamics APAC** - Port 10389 (LDAP) - Profile: scenario2
-- **Quantum Dynamics EMEA** - Port 11389 (LDAP) - Profile: scenario2
+- **Panoply AD** - Port 389 (LDAP), 636 (LDAPS)
+- **Panoply APAC** - Port 10389 (LDAP) - Profile: scenario2
+- **Panoply EMEA** - Port 11389 (LDAP) - Profile: scenario2
 
 ### Phase 2 (Planned)
 

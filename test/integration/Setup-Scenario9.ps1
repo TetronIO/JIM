@@ -3,12 +3,15 @@
     Configure JIM for Scenario 9: Partition-Scoped Imports
 
 .DESCRIPTION
-    Sets up a single LDAP Connected System against Samba AD Primary to test partition-scoped
-    import run profiles. Creates:
-    - LDAP Connected System pointing to samba-ad-primary
+    Sets up a single LDAP Connected System to test partition-scoped import run profiles.
+    Creates:
+    - LDAP Connected System pointing to the configured directory (Samba AD or OpenLDAP)
     - Two Full Import run profiles: one scoped to a specific partition, one unscoped
     - A Full Sync run profile (no partition, as sync is partition-agnostic)
     - A simple sync rule to project imported users to the Metaverse
+
+    For OpenLDAP, both partitions (Yellowstone + Glitterband) are selected so that
+    scoped vs unscoped imports produce different results — proving true partition filtering.
 
 .PARAMETER JIMUrl
     The URL of the JIM instance (default: http://localhost:5200)
@@ -17,10 +20,16 @@
     API key for authentication
 
 .PARAMETER Template
-    Data scale template (not used by this scenario - fixed test data)
+    Data scale template (not used by this scenario - fixed test data for SambaAD)
+
+.PARAMETER DirectoryConfig
+    Directory-specific configuration hashtable from Get-DirectoryConfig
 
 .EXAMPLE
     ./Setup-Scenario9.ps1 -JIMUrl "http://localhost:5200" -ApiKey "jim_abc123..."
+
+.EXAMPLE
+    ./Setup-Scenario9.ps1 -ApiKey "jim_abc123..." -DirectoryConfig (Get-DirectoryConfig -DirectoryType OpenLDAP)
 #>
 
 param(
@@ -37,7 +46,10 @@ param(
     [int]$ExportConcurrency = 1,
 
     [Parameter(Mandatory=$false)]
-    [int]$MaxExportParallelism = 1
+    [int]$MaxExportParallelism = 1,
+
+    [Parameter(Mandatory=$false)]
+    [hashtable]$DirectoryConfig
 )
 
 Set-StrictMode -Version Latest
@@ -47,7 +59,15 @@ $ConfirmPreference = 'None'
 # Import helpers
 . "$PSScriptRoot/utils/Test-Helpers.ps1"
 
-Write-TestSection "Scenario 9 Setup: Partition-Scoped Imports"
+# Default to SambaAD Primary if no config provided
+if (-not $DirectoryConfig) {
+    $DirectoryConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Primary
+}
+
+$isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
+$systemName = if ($isOpenLDAP) { "Partition Test OpenLDAP" } else { "Partition Test AD" }
+
+Write-TestSection "Scenario 9 Setup: Partition-Scoped Imports ($systemName)"
 
 # Step 1: Import JIM PowerShell module
 Write-TestStep "Step 1" "Importing JIM PowerShell module"
@@ -81,10 +101,10 @@ catch {
 Write-TestStep "Step 2b" "Cleaning up existing configuration"
 
 $existingSystems = @(Get-JIMConnectedSystem)
-$partitionTestSystem = $existingSystems | Where-Object { $_.name -eq "Partition Test AD" }
+$partitionTestSystem = $existingSystems | Where-Object { $_.name -eq $systemName }
 
 if ($partitionTestSystem) {
-    Write-Host "  Removing existing 'Partition Test AD' Connected System..." -ForegroundColor Gray
+    Write-Host "  Removing existing '$systemName' Connected System..." -ForegroundColor Gray
     Remove-JIMConnectedSystem -Id $partitionTestSystem.id | Out-Null
     Write-Host "  OK Removed existing Connected System" -ForegroundColor Green
 }
@@ -102,18 +122,18 @@ if (-not $ldapConnector) {
 Write-Host "  OK Found LDAP connector (ID: $($ldapConnector.id))" -ForegroundColor Green
 
 # Step 4: Create LDAP Connected System
-Write-TestStep "Step 4" "Creating LDAP Connected System"
+Write-TestStep "Step 4" "Creating LDAP Connected System ($systemName)"
 
 try {
     $ldapSystem = New-JIMConnectedSystem `
-        -Name "Partition Test AD" `
-        -Description "Samba AD for partition-scoped import testing" `
+        -Name $systemName `
+        -Description "LDAP directory for partition-scoped import testing ($($DirectoryConfig.Host))" `
         -ConnectorDefinitionId $ldapConnector.id `
         -PassThru
 
     Write-Host "  OK Created LDAP Connected System (ID: $($ldapSystem.id))" -ForegroundColor Green
 
-    # Configure LDAP settings
+    # Configure LDAP settings from DirectoryConfig
     $ldapConnectorFull = Get-JIMConnectorDefinition -Id $ldapConnector.id
 
     $hostSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Host" }
@@ -126,14 +146,16 @@ try {
     $authTypeSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Authentication Type" }
 
     $ldapSettings = @{}
-    if ($hostSetting) { $ldapSettings[$hostSetting.id] = @{ stringValue = "samba-ad-primary" } }
-    if ($portSetting) { $ldapSettings[$portSetting.id] = @{ intValue = 636 } }
-    if ($usernameSetting) { $ldapSettings[$usernameSetting.id] = @{ stringValue = "CN=Administrator,CN=Users,DC=subatomic,DC=local" } }
-    if ($passwordSetting) { $ldapSettings[$passwordSetting.id] = @{ stringValue = "Test@123!" } }
-    if ($useSSLSetting) { $ldapSettings[$useSSLSetting.id] = @{ checkboxValue = $true } }
-    if ($certValidationSetting) { $ldapSettings[$certValidationSetting.id] = @{ stringValue = "Skip Validation (Not Recommended)" } }
+    if ($hostSetting) { $ldapSettings[$hostSetting.id] = @{ stringValue = $DirectoryConfig.Host } }
+    if ($portSetting) { $ldapSettings[$portSetting.id] = @{ intValue = $DirectoryConfig.Port } }
+    if ($usernameSetting) { $ldapSettings[$usernameSetting.id] = @{ stringValue = $DirectoryConfig.BindDN } }
+    if ($passwordSetting) { $ldapSettings[$passwordSetting.id] = @{ stringValue = $DirectoryConfig.BindPassword } }
+    if ($useSSLSetting) { $ldapSettings[$useSSLSetting.id] = @{ checkboxValue = $DirectoryConfig.UseSSL } }
+    if ($certValidationSetting -and $DirectoryConfig.CertValidation) {
+        $ldapSettings[$certValidationSetting.id] = @{ stringValue = $DirectoryConfig.CertValidation }
+    }
     if ($connectionTimeoutSetting) { $ldapSettings[$connectionTimeoutSetting.id] = @{ intValue = 30 } }
-    if ($authTypeSetting) { $ldapSettings[$authTypeSetting.id] = @{ stringValue = "Simple" } }
+    if ($authTypeSetting) { $ldapSettings[$authTypeSetting.id] = @{ stringValue = $DirectoryConfig.AuthType } }
 
     if ($ldapSettings.Count -gt 0) {
         Set-JIMConnectedSystem -Id $ldapSystem.id -SettingValues $ldapSettings | Out-Null
@@ -152,16 +174,22 @@ try {
     Import-JIMConnectedSystemSchema -Id $ldapSystem.id | Out-Null
     Write-Host "  OK Schema imported" -ForegroundColor Green
 
-    # Get object types and find 'user'
+    # Get object types and find the user type (varies by directory)
     $ldapObjectTypes = Get-JIMConnectedSystem -Id $ldapSystem.id -ObjectTypes
-    $userObjectType = $ldapObjectTypes | Where-Object { $_.name -eq "user" }
+    $userObjectClassName = $DirectoryConfig.UserObjectClass
+    $userObjectType = $ldapObjectTypes | Where-Object { $_.name -eq $userObjectClassName }
 
     if ($userObjectType) {
         Set-JIMConnectedSystemObjectType -ConnectedSystemId $ldapSystem.id -ObjectTypeId $userObjectType.id -Selected $true | Out-Null
-        Write-Host "  OK Selected 'user' object type" -ForegroundColor Green
+        Write-Host "  OK Selected '$userObjectClassName' object type" -ForegroundColor Green
 
-        # Select key attributes using the bulk update pattern from Scenario 1
-        $requiredAttributes = @("sAMAccountName", "givenName", "sn", "displayName", "mail", "department", "employeeID", "distinguishedName", "userAccountControl")
+        # Select key attributes — varies by directory type
+        $requiredAttributes = if ($isOpenLDAP) {
+            @("uid", "givenName", "sn", "displayName", "mail", "departmentNumber", "employeeNumber", "distinguishedName", "cn")
+        } else {
+            @("sAMAccountName", "givenName", "sn", "displayName", "mail", "department", "employeeID", "distinguishedName", "userAccountControl")
+        }
+
         $attrUpdates = @{}
         foreach ($attr in $userObjectType.attributes) {
             if ($attr.name -in $requiredAttributes) {
@@ -172,7 +200,7 @@ try {
         Write-Host "  OK Selected $($attrResult.updatedCount) attributes" -ForegroundColor Green
     }
     else {
-        throw "Could not find 'user' object type in schema"
+        throw "Could not find '$userObjectClassName' object type in schema"
     }
 }
 catch {
@@ -197,9 +225,10 @@ try {
         Write-Host "    - Name: '$($p.name)', ExternalId: '$($p.externalId)', Selected: $($p.selected)" -ForegroundColor Gray
     }
 
-    # Find the main domain partition
+    # Find the primary domain partition
+    $primaryBaseDN = $DirectoryConfig.BaseDN
     $domainPartition = $partitions | Where-Object {
-        $_.name -eq "DC=subatomic,DC=local" -or $_.externalId -eq "DC=subatomic,DC=local"
+        $_.name -eq $primaryBaseDN -or $_.externalId -eq $primaryBaseDN
     } | Select-Object -First 1
 
     if (-not $domainPartition -and $partitions.Count -eq 1) {
@@ -208,14 +237,32 @@ try {
     }
 
     if (-not $domainPartition) {
-        throw "Could not find domain partition DC=subatomic,DC=local"
+        throw "Could not find primary partition $primaryBaseDN"
     }
 
-    # Select the domain partition
+    # Select the primary partition
     Set-JIMConnectedSystemPartition -ConnectedSystemId $ldapSystem.id -PartitionId $domainPartition.id -Selected $true | Out-Null
-    Write-Host "  OK Selected partition: $($domainPartition.name) (ID: $($domainPartition.id))" -ForegroundColor Green
+    Write-Host "  OK Selected primary partition: $($domainPartition.name) (ID: $($domainPartition.id))" -ForegroundColor Green
 
-    # Find and select the TestUsers container
+    # For OpenLDAP: also select the second partition (Glitterband) — essential for multi-partition testing
+    $secondPartition = $null
+    if ($isOpenLDAP -and $DirectoryConfig.SecondSuffix) {
+        $secondSuffix = $DirectoryConfig.SecondSuffix
+        $secondPartition = $partitions | Where-Object {
+            $_.name -eq $secondSuffix -or $_.externalId -eq $secondSuffix
+        } | Select-Object -First 1
+
+        if ($secondPartition) {
+            Set-JIMConnectedSystemPartition -ConnectedSystemId $ldapSystem.id -PartitionId $secondPartition.id -Selected $true | Out-Null
+            Write-Host "  OK Selected second partition: $($secondPartition.name) (ID: $($secondPartition.id))" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  WARNING: Second partition '$secondSuffix' not found — multi-partition assertions will be limited" -ForegroundColor Yellow
+        }
+    }
+
+    # Select containers within partitions
+    # Helper function to search containers recursively
     function Find-Container {
         param($Containers, [string]$Name)
         foreach ($c in $Containers) {
@@ -228,17 +275,44 @@ try {
         return $null
     }
 
-    $testUsersContainer = Find-Container -Containers $domainPartition.containers -Name "TestUsers"
-    if ($testUsersContainer) {
-        Set-JIMConnectedSystemContainer -ConnectedSystemId $ldapSystem.id -ContainerId $testUsersContainer.id -Selected $true | Out-Null
-        Write-Host "  OK Selected container: TestUsers (ID: $($testUsersContainer.id))" -ForegroundColor Green
+    if ($isOpenLDAP) {
+        # For OpenLDAP: select People container in each partition
+        $userContainerDN = $DirectoryConfig.UserContainer
+        $targetContainerName = if ($userContainerDN -match "^[Oo][Uu]=([^,]+)") { $matches[1] } else { "People" }
+
+        foreach ($part in @($domainPartition, $secondPartition)) {
+            if (-not $part) { continue }
+            $container = Find-Container -Containers $part.containers -Name $targetContainerName
+            if (-not $container) {
+                # Try matching by full DN
+                foreach ($c in $part.containers) {
+                    if ($c.name -match $targetContainerName) { $container = $c; break }
+                }
+            }
+            if ($container) {
+                Set-JIMConnectedSystemContainer -ConnectedSystemId $ldapSystem.id -ContainerId $container.id -Selected $true | Out-Null
+                Write-Host "  OK Selected container '$targetContainerName' in $($part.name)" -ForegroundColor Green
+            }
+            else {
+                Write-Host "  WARNING: '$targetContainerName' container not found in $($part.name)" -ForegroundColor Yellow
+            }
+        }
     }
     else {
-        Write-Host "  WARNING: TestUsers container not found - will import from entire partition" -ForegroundColor Yellow
+        # For Samba AD: select TestUsers container in the domain partition
+        $testUsersContainer = Find-Container -Containers $domainPartition.containers -Name "TestUsers"
+        if ($testUsersContainer) {
+            Set-JIMConnectedSystemContainer -ConnectedSystemId $ldapSystem.id -ContainerId $testUsersContainer.id -Selected $true | Out-Null
+            Write-Host "  OK Selected container: TestUsers (ID: $($testUsersContainer.id))" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  WARNING: TestUsers container not found - will import from entire partition" -ForegroundColor Yellow
+        }
     }
 
-    # Export partition ID for use by test script
+    # Export partition IDs for use by test script
     $script:DomainPartitionId = $domainPartition.id
+    $script:SecondPartitionId = if ($secondPartition) { $secondPartition.id } else { $null }
 }
 catch {
     Write-Host "  FAIL Failed to import/configure hierarchy: $_" -ForegroundColor Red
@@ -271,17 +345,18 @@ catch {
 Write-TestStep "Step 8" "Creating sync rule"
 
 try {
+    $syncRuleName = if ($isOpenLDAP) { "Partition Test - OpenLDAP Import Users" } else { "Partition Test - AD Import Users" }
     $existingRules = @(Get-JIMSyncRule)
-    $importRule = $existingRules | Where-Object { $_.name -eq "Partition Test - AD Import Users" }
+    $importRule = $existingRules | Where-Object { $_.name -eq $syncRuleName }
 
     if (-not $importRule) {
         # Get object types for sync rule creation
         $mvAttributes = @(Get-JIMMetaverseAttribute)
         $ldapObjectTypes = Get-JIMConnectedSystem -Id $ldapSystem.id -ObjectTypes
-        $userObjectType = $ldapObjectTypes | Where-Object { $_.name -eq "user" }
+        $userObjectType = $ldapObjectTypes | Where-Object { $_.name -eq $DirectoryConfig.UserObjectClass }
 
         $importRule = New-JIMSyncRule `
-            -Name "Partition Test - AD Import Users" `
+            -Name $syncRuleName `
             -ConnectedSystemId $ldapSystem.id `
             -ConnectedSystemObjectTypeId $userObjectType.id `
             -MetaverseObjectTypeId $mvUserType.id `
@@ -291,15 +366,27 @@ try {
 
         Write-Host "  OK Created sync rule (ID: $($importRule.id))" -ForegroundColor Green
 
-        # Add attribute mappings
-        $mappings = @(
-            @{ CSAttr = "sAMAccountName"; MVAttr = "Account Name" },
-            @{ CSAttr = "givenName"; MVAttr = "First Name" },
-            @{ CSAttr = "sn"; MVAttr = "Last Name" },
-            @{ CSAttr = "displayName"; MVAttr = "Display Name" },
-            @{ CSAttr = "department"; MVAttr = "Department" },
-            @{ CSAttr = "employeeID"; MVAttr = "Employee ID" }
-        )
+        # Add attribute mappings — varies by directory type
+        # With #435, MVA→SVA import is allowed (first-value selection with RPEI warning)
+        $mappings = if ($isOpenLDAP) {
+            @(
+                @{ CSAttr = "uid"; MVAttr = "Account Name" },
+                @{ CSAttr = "givenName"; MVAttr = "First Name" },
+                @{ CSAttr = "sn"; MVAttr = "Last Name" },
+                @{ CSAttr = "displayName"; MVAttr = "Display Name" },
+                @{ CSAttr = "departmentNumber"; MVAttr = "Department" },
+                @{ CSAttr = "employeeNumber"; MVAttr = "Employee ID" }
+            )
+        } else {
+            @(
+                @{ CSAttr = "sAMAccountName"; MVAttr = "Account Name" },
+                @{ CSAttr = "givenName"; MVAttr = "First Name" },
+                @{ CSAttr = "sn"; MVAttr = "Last Name" },
+                @{ CSAttr = "displayName"; MVAttr = "Display Name" },
+                @{ CSAttr = "department"; MVAttr = "Department" },
+                @{ CSAttr = "employeeID"; MVAttr = "Employee ID" }
+            )
+        }
 
         $mappingsCreated = 0
         foreach ($mapping in $mappings) {
@@ -334,7 +421,7 @@ Write-TestStep "Step 9" "Creating run profiles"
 try {
     $existingProfiles = @(Get-JIMRunProfile -ConnectedSystemId $ldapSystem.id)
 
-    # 1. Full Import - scoped to domain partition
+    # 1. Full Import - scoped to primary partition
     $scopedImportProfile = $existingProfiles | Where-Object { $_.name -eq "Full Import (Scoped)" }
     if (-not $scopedImportProfile) {
         $scopedImportProfile = New-JIMRunProfile `
@@ -376,6 +463,23 @@ try {
     else {
         Write-Host "  'Full Synchronisation' already exists" -ForegroundColor Yellow
     }
+
+    # 4. For OpenLDAP: also create a scoped import for the second partition
+    if ($isOpenLDAP -and $script:SecondPartitionId) {
+        $scopedImport2Profile = $existingProfiles | Where-Object { $_.name -eq "Full Import (Scoped - Second)" }
+        if (-not $scopedImport2Profile) {
+            $scopedImport2Profile = New-JIMRunProfile `
+                -Name "Full Import (Scoped - Second)" `
+                -ConnectedSystemId $ldapSystem.id `
+                -RunType "FullImport" `
+                -PartitionId $script:SecondPartitionId `
+                -PassThru
+            Write-Host "  OK Created 'Full Import (Scoped - Second)' with PartitionId $($script:SecondPartitionId)" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  'Full Import (Scoped - Second)' already exists" -ForegroundColor Yellow
+        }
+    }
 }
 catch {
     Write-Host "  FAIL Failed to create run profiles: $_" -ForegroundColor Red
@@ -383,9 +487,15 @@ catch {
 }
 
 Write-TestSection "Scenario 9 Setup Complete"
-Write-Host "  Connected System: Partition Test AD (ID: $($ldapSystem.id))" -ForegroundColor Cyan
-Write-Host "  Domain Partition ID: $($script:DomainPartitionId)" -ForegroundColor Cyan
+Write-Host "  Connected System: $systemName (ID: $($ldapSystem.id))" -ForegroundColor Cyan
+Write-Host "  Primary Partition ID: $($script:DomainPartitionId)" -ForegroundColor Cyan
+if ($script:SecondPartitionId) {
+    Write-Host "  Second Partition ID: $($script:SecondPartitionId)" -ForegroundColor Cyan
+}
 Write-Host "  Run Profiles:" -ForegroundColor Cyan
-Write-Host "    - Full Import (Scoped)   - targets partition $($script:DomainPartitionId)" -ForegroundColor Cyan
+Write-Host "    - Full Import (Scoped)   - targets primary partition $($script:DomainPartitionId)" -ForegroundColor Cyan
 Write-Host "    - Full Import (Unscoped) - all selected partitions" -ForegroundColor Cyan
 Write-Host "    - Full Synchronisation   - partition-agnostic" -ForegroundColor Cyan
+if ($isOpenLDAP -and $script:SecondPartitionId) {
+    Write-Host "    - Full Import (Scoped - Second) - targets second partition $($script:SecondPartitionId)" -ForegroundColor Cyan
+}

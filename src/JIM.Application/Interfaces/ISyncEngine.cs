@@ -37,6 +37,7 @@ public interface ISyncEngine
     /// <summary>
     /// Flows inbound attribute values from a CSO to its joined MVO using a sync rule's attribute flow mappings.
     /// Mutates the MVO's PendingAttributeValueAdditions and PendingAttributeValueRemovals collections.
+    /// Returns any warnings generated during attribute flow (e.g. multi-valued to single-valued truncation).
     /// </summary>
     /// <param name="cso">The source CSO (must have MetaverseObject set).</param>
     /// <param name="syncRule">The sync rule defining attribute flow mappings.</param>
@@ -45,7 +46,8 @@ public interface ISyncEngine
     /// <param name="skipReferenceAttributes">If true, skip reference attributes (deferred to second pass).</param>
     /// <param name="onlyReferenceAttributes">If true, process only reference attributes.</param>
     /// <param name="isFinalReferencePass">If true, this is the final cross-page resolution pass.</param>
-    void FlowInboundAttributes(
+    /// <returns>A list of warnings generated during attribute flow, empty if none.</returns>
+    List<AttributeFlowWarning> FlowInboundAttributes(
         ConnectedSystemObject cso,
         SyncRule syncRule,
         IReadOnlyList<ConnectedSystemObjectType> objectTypes,
@@ -98,13 +100,27 @@ public interface ISyncEngine
         IReadOnlyList<SyncRule> activeSyncRules);
 
     /// <summary>
-    /// Checks if a CSO attribute value matches a pending export attribute change value.
-    /// Used during export confirmation to verify whether exported changes were persisted.
+    /// Reconciles a Connected System Object against a pre-loaded pending export.
+    /// Compares imported CSO attribute values against pending export assertions to confirm,
+    /// mark for retry, or mark as failed. This method does NOT perform any database operations —
+    /// the caller is responsible for persistence.
     /// </summary>
-    /// <param name="csoValue">The CSO's current attribute value.</param>
-    /// <param name="pendingChange">The pending export attribute change to compare against.</param>
-    /// <returns>True if the values match.</returns>
-    bool AttributeValuesMatch(
-        ConnectedSystemObjectAttributeValue csoValue,
-        PendingExportAttributeValueChange pendingChange);
+    /// <param name="connectedSystemObject">The CSO that was just imported/updated.</param>
+    /// <param name="pendingExport">The pre-loaded pending export for this CSO (or null if none).</param>
+    /// <param name="result">The result object to populate with reconciliation outcomes.</param>
+    void ReconcileCsoAgainstPendingExport(
+        ConnectedSystemObject connectedSystemObject,
+        PendingExport? pendingExport,
+        PendingExportReconciliationResult result);
+
+    /// <summary>
+    /// Determines if an attribute change has been confirmed by comparing the exported value
+    /// against the imported CSO attribute value. Handles all attribute data types comprehensively.
+    /// </summary>
+    /// <param name="cso">The CSO whose current attributes to check.</param>
+    /// <param name="attrChange">The pending export attribute change to verify.</param>
+    /// <returns>True if the attribute change has been confirmed by the CSO's current state.</returns>
+    bool IsAttributeChangeConfirmed(
+        ConnectedSystemObject cso,
+        PendingExportAttributeValueChange attrChange);
 }

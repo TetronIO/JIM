@@ -28,8 +28,8 @@ have significantly more members.
 
 Two LDAP (Active Directory) connected systems in a cross-domain entitlement sync:
 
-- **Source CS** ("Quantum Dynamics APAC") - Authoritative source of users and groups
-- **Target CS** ("Quantum Dynamics EMEA") - Receives users and groups from Source
+- **Source CS** ("Panoply APAC") - Authoritative source of users and groups
+- **Target CS** ("Panoply EMEA") - Receives users and groups from Source
 
 ### Sync Rules (6 total)
 

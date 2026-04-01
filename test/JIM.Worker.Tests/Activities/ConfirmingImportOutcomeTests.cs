@@ -187,6 +187,7 @@ public class ConfirmingImportOutcomeTests
         var importProcessor = new SyncImportTaskProcessor(
             _jim,
             _syncRepo, new SyncServer(_jim),
+            new JIM.Application.Servers.SyncEngine(),
             mockConnector,
             targetSystem!,
             importRunProfile,

@@ -230,6 +230,236 @@ function Get-TemplateScale {
     return $scales[$Template]
 }
 
+function Get-DirectoryConfig {
+    <#
+    .SYNOPSIS
+        Get directory-specific configuration for integration tests
+
+    .DESCRIPTION
+        Returns a hashtable with all directory-specific values needed by setup scripts,
+        scenario scripts, and LDAP helper functions. This abstraction allows the same
+        test scenarios to run against Samba AD or OpenLDAP by varying only the
+        directory-specific details.
+
+    .PARAMETER DirectoryType
+        Which directory type to configure for (SambaAD or OpenLDAP)
+
+    .PARAMETER Instance
+        Which instance to use. For SambaAD: Primary, Source, Target.
+        For OpenLDAP: Primary (the only instance, but with two suffixes).
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [ValidateSet("SambaAD", "OpenLDAP")]
+        [string]$DirectoryType,
+
+        [Parameter(Mandatory=$false)]
+        [string]$Instance = "Primary"
+    )
+
+    switch ($DirectoryType) {
+        "SambaAD" {
+            $instanceConfigs = @{
+                Primary = @{
+                    ContainerName    = "samba-ad-primary"
+                    Host             = "samba-ad-primary"
+                    Port             = 636
+                    UseSSL           = $true
+                    CertValidation   = "Skip Validation (Not Recommended)"
+                    BindDN           = "CN=Administrator,CN=Users,DC=panoply,DC=local"
+                    BindPassword     = "Test@123!"
+                    AuthType         = "Simple"
+                    BaseDN           = "DC=panoply,DC=local"
+                    UserContainer    = "OU=Users,OU=Corp,DC=panoply,DC=local"
+                    GroupContainer   = "OU=Groups,OU=Corp,DC=panoply,DC=local"
+                    UserObjectClass  = "user"
+                    GroupObjectClass = "group"
+                    UserRdnAttr      = "CN"
+                    UserNameAttr     = "sAMAccountName"
+                    ExternalIdAttr   = "objectGUID"
+                    DepartmentAttr   = "department"
+                    DeleteBehaviour  = "Disable"
+                    DisableAttribute = "userAccountControl"
+                    DnTemplate       = 'CN={displayName},OU=Users,OU=Corp,DC=panoply,DC=local'
+                    Domain           = "panoply.local"
+                    ShortDomain      = "PANOPLY"
+                    LdapSearchPort   = 389
+                    LdapSearchScheme = "ldap"
+                    ComposeProfiles  = @()
+                    PopulateScript   = "Populate-SambaAD.ps1"
+                    ConnectedSystemName = "Panoply AD"
+                }
+                Source = @{
+                    ContainerName    = "samba-ad-source"
+                    Host             = "samba-ad-source"
+                    Port             = 636
+                    UseSSL           = $true
+                    CertValidation   = "Skip Validation (Not Recommended)"
+                    BindDN           = "CN=Administrator,CN=Users,DC=resurgam,DC=local"
+                    BindPassword     = "Test@123!"
+                    AuthType         = "Simple"
+                    BaseDN           = "DC=resurgam,DC=local"
+                    UserContainer    = "OU=Users,OU=Corp,DC=resurgam,DC=local"
+                    GroupContainer   = "OU=Groups,OU=Corp,DC=resurgam,DC=local"
+                    UserObjectClass  = "user"
+                    GroupObjectClass = "group"
+                    UserRdnAttr      = "CN"
+                    UserNameAttr     = "sAMAccountName"
+                    ExternalIdAttr   = "objectGUID"
+                    DepartmentAttr   = "department"
+                    DeleteBehaviour  = "Disable"
+                    DisableAttribute = "userAccountControl"
+                    DnTemplate       = 'CN={displayName},OU=Users,OU=Corp,DC=resurgam,DC=local'
+                    Domain           = "resurgam.local"
+                    ShortDomain      = "RESURGAM"
+                    LdapSearchPort   = 389
+                    LdapSearchScheme = "ldap"
+                    ComposeProfiles  = @("scenario2")
+                    PopulateScript   = "Populate-SambaAD.ps1"
+                    ConnectedSystemName = "Resurgam AD"
+                }
+                Target = @{
+                    ContainerName    = "samba-ad-target"
+                    Host             = "samba-ad-target"
+                    Port             = 636
+                    UseSSL           = $true
+                    CertValidation   = "Skip Validation (Not Recommended)"
+                    BindDN           = "CN=Administrator,CN=Users,DC=gentian,DC=local"
+                    BindPassword     = "Test@123!"
+                    AuthType         = "Simple"
+                    BaseDN           = "DC=gentian,DC=local"
+                    UserContainer    = "OU=Users,OU=CorpManaged,DC=gentian,DC=local"
+                    GroupContainer   = "OU=Groups,OU=CorpManaged,DC=gentian,DC=local"
+                    UserObjectClass  = "user"
+                    GroupObjectClass = "group"
+                    UserRdnAttr      = "CN"
+                    UserNameAttr     = "sAMAccountName"
+                    ExternalIdAttr   = "objectGUID"
+                    DepartmentAttr   = "department"
+                    DeleteBehaviour  = "Disable"
+                    DisableAttribute = "userAccountControl"
+                    DnTemplate       = 'CN={displayName},OU=Users,OU=CorpManaged,DC=gentian,DC=local'
+                    Domain           = "gentian.local"
+                    ShortDomain      = "GENTIAN"
+                    LdapSearchPort   = 389
+                    LdapSearchScheme = "ldap"
+                    ComposeProfiles  = @("scenario2")
+                    PopulateScript   = "Populate-SambaAD.ps1"
+                    ConnectedSystemName = "Gentian AD"
+                }
+            }
+
+            if (-not $instanceConfigs.ContainsKey($Instance)) {
+                throw "Unknown SambaAD instance: $Instance. Valid values: Primary, Source, Target"
+            }
+
+            return $instanceConfigs[$Instance]
+        }
+        "OpenLDAP" {
+            $instanceConfigs = @{
+                Primary = @{
+                    ContainerName    = "openldap-primary"
+                    Host             = "openldap-primary"
+                    Port             = 1389
+                    UseSSL           = $false
+                    CertValidation   = $null
+                    BindDN           = "cn=admin,dc=yellowstone,dc=local"
+                    BindPassword     = "Test@123!"
+                    AuthType         = "Simple"
+                    BaseDN           = "dc=yellowstone,dc=local"
+                    UserContainer    = "ou=People,dc=yellowstone,dc=local"
+                    GroupContainer   = "ou=Groups,dc=yellowstone,dc=local"
+                    UserObjectClass  = "inetOrgPerson"
+                    GroupObjectClass = "groupOfNames"
+                    UserRdnAttr      = "uid"
+                    UserNameAttr     = "uid"
+                    ExternalIdAttr   = "entryUUID"
+                    DepartmentAttr   = "departmentNumber"
+                    DeleteBehaviour  = "Delete"
+                    DisableAttribute = $null
+                    DnTemplate       = 'uid={uid},ou=People,dc=yellowstone,dc=local'
+                    Domain           = "yellowstone.local"
+                    ShortDomain      = $null
+                    LdapSearchPort   = 1389
+                    LdapSearchScheme = "ldap"
+                    ComposeProfiles  = @("openldap")
+                    PopulateScript   = "Populate-OpenLDAP.ps1"
+                    ConnectedSystemName = "Yellowstone OpenLDAP"
+                    # Second suffix for multi-partition testing
+                    SecondSuffix     = "dc=glitterband,dc=local"
+                    SecondBindDN     = "cn=admin,dc=glitterband,dc=local"
+                }
+                # Source and Target use the same OpenLDAP container but different suffixes
+                # for cross-domain sync testing (Scenario 2)
+                Source = @{
+                    ContainerName    = "openldap-primary"
+                    Host             = "openldap-primary"
+                    Port             = 1389
+                    UseSSL           = $false
+                    CertValidation   = $null
+                    BindDN           = "cn=admin,dc=yellowstone,dc=local"
+                    BindPassword     = "Test@123!"
+                    AuthType         = "Simple"
+                    BaseDN           = "dc=yellowstone,dc=local"
+                    UserContainer    = "ou=People,dc=yellowstone,dc=local"
+                    GroupContainer   = "ou=Groups,dc=yellowstone,dc=local"
+                    UserObjectClass  = "inetOrgPerson"
+                    GroupObjectClass = "groupOfNames"
+                    UserRdnAttr      = "uid"
+                    UserNameAttr     = "uid"
+                    ExternalIdAttr   = "entryUUID"
+                    DepartmentAttr   = "departmentNumber"
+                    DeleteBehaviour  = "Delete"
+                    DisableAttribute = $null
+                    DnTemplate       = 'uid={uid},ou=People,dc=yellowstone,dc=local'
+                    Domain           = "yellowstone.local"
+                    ShortDomain      = $null
+                    LdapSearchPort   = 1389
+                    LdapSearchScheme = "ldap"
+                    ComposeProfiles  = @("openldap")
+                    PopulateScript   = "Populate-OpenLDAP.ps1"
+                    ConnectedSystemName = "Yellowstone APAC"
+                }
+                Target = @{
+                    ContainerName    = "openldap-primary"
+                    Host             = "openldap-primary"
+                    Port             = 1389
+                    UseSSL           = $false
+                    CertValidation   = $null
+                    BindDN           = "cn=admin,dc=glitterband,dc=local"
+                    BindPassword     = "Test@123!"
+                    AuthType         = "Simple"
+                    BaseDN           = "dc=glitterband,dc=local"
+                    UserContainer    = "ou=People,dc=glitterband,dc=local"
+                    GroupContainer   = "ou=Groups,dc=glitterband,dc=local"
+                    UserObjectClass  = "inetOrgPerson"
+                    GroupObjectClass = "groupOfNames"
+                    UserRdnAttr      = "uid"
+                    UserNameAttr     = "uid"
+                    ExternalIdAttr   = "entryUUID"
+                    DepartmentAttr   = "departmentNumber"
+                    DeleteBehaviour  = "Delete"
+                    DisableAttribute = $null
+                    DnTemplate       = 'uid={uid},ou=People,dc=glitterband,dc=local'
+                    Domain           = "glitterband.local"
+                    ShortDomain      = $null
+                    LdapSearchPort   = 1389
+                    LdapSearchScheme = "ldap"
+                    ComposeProfiles  = @("openldap")
+                    PopulateScript   = "Populate-OpenLDAP.ps1"
+                    ConnectedSystemName = "Glitterband EMEA"
+                }
+            }
+
+            if (-not $instanceConfigs.ContainsKey($Instance)) {
+                throw "Unknown OpenLDAP instance: $Instance. Valid values: Primary, Source, Target"
+            }
+
+            return $instanceConfigs[$Instance]
+        }
+    }
+}
+
 # Script-level cache for name data (loaded once)
 $script:TestNameData = $null
 
@@ -306,7 +536,7 @@ function New-TestUser {
 
         Also generates realistic employment data:
         - EmployeeType: ~20% Contractors, ~80% Employees
-        - Company: Subatomic for employees, one of five partner companies for contractors
+        - Company: Panoply for employees, one of five partner companies for contractors
         - AccountExpires: All contractors get expiry dates (1 week to 12 months)
                          ~15% of employees get expiry dates (resignations, 1 week to 3 months)
         - Pronouns: ~25% of users have pronouns populated (he/him, she/her, they/them, etc.)
@@ -316,7 +546,7 @@ function New-TestUser {
         [int]$Index,
 
         [Parameter(Mandatory=$false)]
-        [string]$Domain = "subatomic.local"
+        [string]$Domain = "panoply.local"
     )
 
     $nameData = Get-TestNameData
@@ -332,13 +562,13 @@ function New-TestUser {
     # Distribution reflects realistic workplace adoption rates
     $pronounOptions = @("he/him", "she/her", "they/them", "he/they", "she/they")
 
-    # Companies: Subatomic is the main company (employees), partner companies for contractors
+    # Companies: Panoply is the main company (employees), partner companies for contractors
     # These are used for company-specific entitlement groups in Scenario 4
-    $mainCompany = "Subatomic"
+    $mainCompany = "Panoply"
     $partnerCompanies = @(
         "Nexus Dynamics",      # Technology consulting partner
-        "Orbital Systems",     # Cloud infrastructure provider
-        "Quantum Bridge",      # Integration services partner
+        "Akinya",     # Cloud infrastructure provider
+        "Rockhopper",      # Integration services partner
         "Stellar Logistics",   # Supply chain partner
         "Vertex Solutions"     # Professional services firm
     )
@@ -387,7 +617,7 @@ function New-TestUser {
     $isContractor = ($Index % 5) -eq 0
     $employeeType = if ($isContractor) { "Contractor" } else { "Employee" }
 
-    # Assign company: Employees work for Subatomic, contractors come from partner companies
+    # Assign company: Employees work for Panoply, contractors come from partner companies
     # Contractors are distributed across the 5 partner companies deterministically
     $company = if ($isContractor) {
         $partnerIndex = ($Index / 5) % $partnerCompanies.Count
@@ -746,7 +976,14 @@ function Assert-ActivitySuccess {
     .EXAMPLE
         Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Delta Sync" -AllowWarnings
 
-        Validates that Delta Sync completed, allowing warnings (but not errors).
+        Validates that Delta Sync completed, allowing any warnings (but not errors).
+
+    .EXAMPLE
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Delta Import" `
+            -AllowWarnings -AllowedWarningTypes @('DeltaImportFallbackToFullImport')
+
+        Validates that the Delta Import completed, allowing CompleteWithWarning ONLY if
+        all warning RPEIs have the DeltaImportFallbackToFullImport error type.
     #>
     param(
         [Parameter(Mandatory=$true)]
@@ -756,7 +993,10 @@ function Assert-ActivitySuccess {
         [string]$Name,
 
         [Parameter(Mandatory=$false)]
-        [switch]$AllowWarnings
+        [switch]$AllowWarnings,
+
+        [Parameter(Mandatory=$false)]
+        [string[]]$AllowedWarningTypes
     )
 
     # Fetch the Activity details
@@ -776,6 +1016,21 @@ function Assert-ActivitySuccess {
 
     # Check if status is acceptable
     if ($status -in $acceptableStatuses) {
+        # If CompleteWithWarning and AllowedWarningTypes specified, verify all warnings are of allowed types
+        if ($status -eq 'CompleteWithWarning' -and $AllowedWarningTypes) {
+            $errorItems = Get-JIMActivity -Id $ActivityId -ExecutionItems |
+                Where-Object { $_.errorType -and $_.errorType -ne 'NotSet' }
+
+            $unexpectedWarnings = $errorItems | Where-Object { $_.errorType -notin $AllowedWarningTypes }
+            if ($unexpectedWarnings) {
+                $unexpectedTypes = ($unexpectedWarnings | ForEach-Object { $_.errorType } | Select-Object -Unique) -join ', '
+                throw "Activity '$Name' completed with unexpected warning types: $unexpectedTypes. " +
+                    "Only these warning types are allowed: $($AllowedWarningTypes -join ', ') (ActivityId: $ActivityId)"
+            }
+            Write-Host "  ✓ $Name completed with expected warning (Status: $status, Warning: $($AllowedWarningTypes -join ', '))" -ForegroundColor Green
+            return
+        }
+
         Write-Host "  ✓ $Name completed successfully (Status: $status)" -ForegroundColor Green
         return  # Success - no output (callers don't use return value)
     }

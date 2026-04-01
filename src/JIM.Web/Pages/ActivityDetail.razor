@@ -148,6 +148,13 @@
         </MudGrid>
     </MudPaper>
 
+    @if (!string.IsNullOrEmpty(_activity.WarningMessage))
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-4">
+            <MudText Typo="Typo.body1" Style="font-weight: 500;">@_activity.WarningMessage</MudText>
+        </MudAlert>
+    }
+
     @if (!string.IsNullOrEmpty(_activity.ErrorMessage) || !string.IsNullOrEmpty(_activity.ErrorStackTrace))
     {
         <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-4 jim-alert-error jim-exception-text">
@@ -413,7 +420,7 @@
                                          Color="Color.Default"
                                          Variant="@(IsObjectTypeSelected(objectType.Key) ? Variant.Outlined : Variant.Text)"
                                          SelectedColor="Color.Default">
-                                    @objectType.Key.SplitOnCapitalLetters()
+                                    @objectType.Key
                                     <MudText Typo="Typo.caption" Class="ml-1">(@objectType.Value.ToString("N0"))</MudText>
                                 </MudChip>
                             }
@@ -502,7 +509,7 @@
                 </MudTd>
                 <MudTd DataLabel="External Id" Class="jim-text-code mud-text-secondary">@(!string.IsNullOrEmpty(context.ExternalIdValue) ? context.ExternalIdValue : "-")</MudTd>
                 <MudTd DataLabel="Display Name">@(!string.IsNullOrEmpty(context.DisplayName) ? context.DisplayName : "-")</MudTd>
-                <MudTd DataLabel="External Object Type">@(context.ConnectedSystemObjectType != null ? context.ConnectedSystemObjectType.ToString().SplitOnCapitalLetters() : "-")</MudTd>
+                <MudTd DataLabel="External Object Type">@(context.ConnectedSystemObjectType != null ? context.ConnectedSystemObjectType.ToString() : "-")</MudTd>
                 <MudTd DataLabel="Outcomes">
                     @{
                         var outcomes = Helpers.ParseOutcomeSummary(context.OutcomeSummary);

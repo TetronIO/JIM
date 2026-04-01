@@ -103,7 +103,7 @@ public class ConnectedSystemServerChangeTrackingTests
             TypeId = 1
         };
 
-        var memberDn = "CN=Alice Adams,OU=Users,OU=Corp,DC=sourcedomain,DC=local";
+        var memberDn = "CN=Alice Adams,OU=Users,OU=Corp,DC=resurgam,DC=local";
 
         var groupCso = new ConnectedSystemObject
         {
@@ -150,7 +150,7 @@ public class ConnectedSystemServerChangeTrackingTests
             "Change record should be created for the group CSO");
 
         var memberAttributeChange = rpei.ConnectedSystemObjectChange!.AttributeChanges
-            .SingleOrDefault(ac => ac.Attribute.Name == "member");
+            .SingleOrDefault(ac => ac.AttributeName == "member");
         Assert.That(memberAttributeChange, Is.Not.Null,
             "Change record should include the member attribute");
 
@@ -188,7 +188,7 @@ public class ConnectedSystemServerChangeTrackingTests
             TypeId = 1
         };
 
-        var memberDn = "CN=Bob Brown,OU=Users,OU=Corp,DC=sourcedomain,DC=local";
+        var memberDn = "CN=Bob Brown,OU=Users,OU=Corp,DC=resurgam,DC=local";
 
         var groupCso = new ConnectedSystemObject
         {
@@ -234,7 +234,7 @@ public class ConnectedSystemServerChangeTrackingTests
             "Change record should be created for the group CSO");
 
         var memberAttributeChange = rpei.ConnectedSystemObjectChange!.AttributeChanges
-            .SingleOrDefault(ac => ac.Attribute.Name == "member");
+            .SingleOrDefault(ac => ac.AttributeName == "member");
         Assert.That(memberAttributeChange, Is.Not.Null,
             "Change record should include the member attribute");
 
@@ -247,4 +247,73 @@ public class ConnectedSystemServerChangeTrackingTests
         Assert.That(valueChange.StringValue, Is.EqualTo(memberDn),
             "StringValue should preserve the DN as a fallback for when the FK cannot be written during bulk persistence");
     }
+
+    #region Attribute name/type snapshot (Issue #58)
+
+    [Test]
+    public async Task CreateConnectedSystemObjectsAsync_PopulatesAttributeNameAndTypeOnChangeAttributeAsync()
+    {
+        // Arrange
+        var groupType = new ConnectedSystemObjectType
+        {
+            Id = 1,
+            Name = "Group",
+            Attributes = new List<ConnectedSystemObjectTypeAttribute> { _externalIdAttr, _memberAttr }
+        };
+
+        var groupCso = new ConnectedSystemObject
+        {
+            Id = Guid.Empty,
+            ConnectedSystemId = 1,
+            TypeId = 1,
+            Type = groupType,
+            ExternalIdAttributeId = _externalIdAttr.Id
+        };
+
+        groupCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Attribute = _externalIdAttr,
+            AttributeId = _externalIdAttr.Id,
+            GuidValue = Guid.NewGuid(),
+            ConnectedSystemObject = groupCso
+        });
+
+        var rpei = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = groupCso
+        };
+
+        // Act
+        await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(
+            new List<ConnectedSystemObject> { groupCso },
+            new List<ActivityRunProfileExecutionItem> { rpei });
+
+        // Assert - sibling properties populated from the attribute definition
+        var attrChange = rpei.ConnectedSystemObjectChange!.AttributeChanges.Single();
+        Assert.That(attrChange.AttributeName, Is.EqualTo("objectGUID"));
+        Assert.That(attrChange.AttributeType, Is.EqualTo(AttributeDataType.Guid));
+    }
+
+    [Test]
+    public void CsoChangeAttribute_WhenAttributeIsNull_SiblingPropertiesStillAvailable()
+    {
+        // Arrange - simulate a change attribute where the FK has been set to null (attribute deleted)
+        var change = new ConnectedSystemObjectChange();
+        var attrChange = new ConnectedSystemObjectChangeAttribute
+        {
+            Attribute = null,
+            AttributeName = "deletedAttribute",
+            AttributeType = AttributeDataType.Text,
+            ConnectedSystemChange = change
+        };
+
+        // Assert - sibling properties are accessible even with null Attribute
+        Assert.That(attrChange.AttributeName, Is.EqualTo("deletedAttribute"));
+        Assert.That(attrChange.AttributeType, Is.EqualTo(AttributeDataType.Text));
+        Assert.That(attrChange.Attribute, Is.Null);
+        Assert.That(attrChange.ToString(), Is.EqualTo("deletedAttribute"));
+    }
+
+    #endregion
 }

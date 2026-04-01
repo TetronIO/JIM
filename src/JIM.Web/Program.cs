@@ -169,6 +169,10 @@ try
             options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
             options.UseTokenLifetime = true; // respect the IdP token lifetime and use our session lifetime
             options.Authority = authority;
+
+            // Allow HTTP authority for local development (e.g. bundled Keycloak at http://localhost:8181)
+            if (authority != null && authority.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+                options.RequireHttpsMetadata = false;
             options.ClientId = clientId;
             options.ClientSecret = clientSecret;
             options.ResponseType = "code";
@@ -183,6 +187,13 @@ try
             // .NET looks for the legacy XML URI by default. Point it at the standard OIDC claim.
             options.TokenValidationParameters.NameClaimType = "name";
 
+            // Accept tokens from any configured valid issuer (supports Docker DNS + localhost dual-path)
+            if (validIssuers.Length > 0)
+            {
+                options.TokenValidationParameters.ValidIssuers = validIssuers;
+                options.TokenValidationParameters.ValidateIssuer = true;
+            }
+
             // intercept the user login when a token is received and validate we can map them to a JIM user
             options.Events.OnTicketReceived = async ctx =>
             {
@@ -193,6 +204,30 @@ try
             // Exception: endpoints marked with [AllowAnonymous] should not trigger authentication
             options.Events.OnRedirectToIdentityProvider = async ctx =>
             {
+                // When the authority uses a Docker DNS hostname (e.g. jim.keycloak), rewrite
+                // the browser redirect to use the localhost issuer from JIM_SSO_VALID_ISSUERS.
+                // Docker-internal hostnames are unreachable from the user's browser.
+                if (validIssuers.Length > 0 && authority != null)
+                {
+                    var authorityUri = new Uri(authority);
+                    var redirectUri = new Uri(ctx.ProtocolMessage.IssuerAddress);
+                    if (redirectUri.Host != "localhost" && redirectUri.Host == authorityUri.Host)
+                    {
+                        var publicIssuer = validIssuers.FirstOrDefault(i =>
+                            i.Contains("localhost", StringComparison.OrdinalIgnoreCase));
+                        if (publicIssuer != null)
+                        {
+                            var publicUri = new Uri(publicIssuer);
+                            var rewritten = new UriBuilder(redirectUri)
+                            {
+                                Host = publicUri.Host,
+                                Port = publicUri.Port
+                            };
+                            ctx.ProtocolMessage.IssuerAddress = rewritten.Uri.ToString();
+                        }
+                    }
+                }
+
                 if (ctx.Request.Path.StartsWithSegments("/api"))
                 {
                     // Check if the endpoint allows anonymous access
@@ -219,6 +254,9 @@ try
         {
             options.Authority = authority;
             options.Audience = apiAudience;
+
+            if (authority != null && authority.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+                options.RequireHttpsMetadata = false;
             options.TokenValidationParameters = new TokenValidationParameters
             {
                 ValidateIssuer = true,

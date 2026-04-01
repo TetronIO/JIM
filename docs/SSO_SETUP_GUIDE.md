@@ -2,7 +2,19 @@
 
 > Step-by-step instructions for configuring Single Sign-On with JIM
 
-This guide covers setting up JIM with three identity providers:
+## Development (Bundled Keycloak)
+
+The devcontainer ships a pre-configured Keycloak instance that starts automatically with `jim-stack`. **No SSO configuration is needed for local development.**
+
+- **Test users:** `admin` / `admin` and `user` / `user`
+- **Keycloak admin console:** `http://localhost:8181` (admin / admin)
+- **Realm:** `jim`
+
+SSO works out of the box — just run `jim-stack` and sign in. To use an external IdP instead, override the `JIM_SSO_*` variables in your `.env` file with your provider's settings (see below).
+
+---
+
+This guide covers setting up JIM with an external identity provider for production:
 - [Microsoft Entra ID (Azure AD)](#microsoft-entra-id-azure-ad)
 - [AD FS (Active Directory Federation Services)](#ad-fs-active-directory-federation-services)
 - [Keycloak](#keycloak)

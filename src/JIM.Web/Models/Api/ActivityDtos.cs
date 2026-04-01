@@ -350,6 +350,11 @@ public class ActivityDetailDto
     public TimeSpan? TotalActivityTime { get; set; }
 
     /// <summary>
+    /// Warning message for non-fatal operational notes (e.g., delta import fell back to full import).
+    /// </summary>
+    public string? WarningMessage { get; set; }
+
+    /// <summary>
     /// Error message if the activity failed.
     /// </summary>
     public string? ErrorMessage { get; set; }
@@ -418,6 +423,7 @@ public class ActivityDetailDto
             ObjectsProcessed = activity.ObjectsProcessed,
             ExecutionTime = activity.ExecutionTime,
             TotalActivityTime = activity.TotalActivityTime,
+            WarningMessage = activity.WarningMessage,
             ErrorMessage = activity.ErrorMessage,
             ErrorStackTrace = activity.ErrorStackTrace,
             ConnectedSystemRunType = activity.ConnectedSystemRunType,

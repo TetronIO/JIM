@@ -239,56 +239,6 @@ public class SyncEngineTests
 
     #endregion
 
-    #region AttributeValuesMatch
-
-    [Test]
-    public void AttributeValuesMatch_StringMatch_ReturnsTrueAsync()
-    {
-        var csoValue = new ConnectedSystemObjectAttributeValue { StringValue = "hello" };
-        var pendingChange = new PendingExportAttributeValueChange { StringValue = "hello" };
-
-        Assert.That(_engine.AttributeValuesMatch(csoValue, pendingChange), Is.True);
-    }
-
-    [Test]
-    public void AttributeValuesMatch_StringMismatch_ReturnsFalseAsync()
-    {
-        var csoValue = new ConnectedSystemObjectAttributeValue { StringValue = "hello" };
-        var pendingChange = new PendingExportAttributeValueChange { StringValue = "world" };
-
-        Assert.That(_engine.AttributeValuesMatch(csoValue, pendingChange), Is.False);
-    }
-
-    [Test]
-    public void AttributeValuesMatch_IntMatch_ReturnsTrueAsync()
-    {
-        var csoValue = new ConnectedSystemObjectAttributeValue { IntValue = 42 };
-        var pendingChange = new PendingExportAttributeValueChange { IntValue = 42 };
-
-        Assert.That(_engine.AttributeValuesMatch(csoValue, pendingChange), Is.True);
-    }
-
-    [Test]
-    public void AttributeValuesMatch_DateTimeMatch_ReturnsTrueAsync()
-    {
-        var dt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        var csoValue = new ConnectedSystemObjectAttributeValue { DateTimeValue = dt };
-        var pendingChange = new PendingExportAttributeValueChange { DateTimeValue = dt };
-
-        Assert.That(_engine.AttributeValuesMatch(csoValue, pendingChange), Is.True);
-    }
-
-    [Test]
-    public void AttributeValuesMatch_NullPendingValues_ReturnsTrueAsync()
-    {
-        var csoValue = new ConnectedSystemObjectAttributeValue { StringValue = "anything" };
-        var pendingChange = new PendingExportAttributeValueChange(); // all nulls
-
-        Assert.That(_engine.AttributeValuesMatch(csoValue, pendingChange), Is.True);
-    }
-
-    #endregion
-
     #region EvaluatePendingExportConfirmation
 
     [Test]
@@ -315,6 +265,7 @@ public class SyncEngineTests
             AttributeValueChanges = [new PendingExportAttributeValueChange
             {
                 AttributeId = attrId,
+                Attribute = new ConnectedSystemObjectTypeAttribute { Id = attrId, Type = AttributeDataType.Text },
                 ChangeType = PendingExportAttributeChangeType.Update,
                 StringValue = "expected"
             }]
@@ -346,6 +297,7 @@ public class SyncEngineTests
             AttributeValueChanges = [new PendingExportAttributeValueChange
             {
                 AttributeId = attrId,
+                Attribute = new ConnectedSystemObjectTypeAttribute { Id = attrId, Type = AttributeDataType.Text },
                 ChangeType = PendingExportAttributeChangeType.Update,
                 StringValue = "expected"
             }]
@@ -399,11 +351,17 @@ public class SyncEngineTests
 
         var confirmedChange = new PendingExportAttributeValueChange
         {
-            AttributeId = 10, ChangeType = PendingExportAttributeChangeType.Update, StringValue = "good"
+            AttributeId = 10,
+            Attribute = new ConnectedSystemObjectTypeAttribute { Id = 10, Type = AttributeDataType.Text },
+            ChangeType = PendingExportAttributeChangeType.Update,
+            StringValue = "good"
         };
         var failedChange = new PendingExportAttributeValueChange
         {
-            AttributeId = 20, ChangeType = PendingExportAttributeChangeType.Update, StringValue = "expected"
+            AttributeId = 20,
+            Attribute = new ConnectedSystemObjectTypeAttribute { Id = 20, Type = AttributeDataType.Text },
+            ChangeType = PendingExportAttributeChangeType.Update,
+            StringValue = "expected"
         };
 
         var pe = new PendingExport

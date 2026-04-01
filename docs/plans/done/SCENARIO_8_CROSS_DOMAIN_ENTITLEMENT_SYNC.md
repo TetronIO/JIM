@@ -22,8 +22,8 @@
   - Support for Nano through XXLarge templates
 
 - **Phase 2: JIM Configuration** - Implemented
-  - Source LDAP Connected System (Quantum Dynamics APAC)
-  - Target LDAP Connected System (Quantum Dynamics EMEA)
+  - Source LDAP Connected System (Panoply APAC)
+  - Target LDAP Connected System (Panoply EMEA)
   - User and Group object type selection with required attributes
   - Import/Export sync rules for both users and groups
   - Attribute flow mappings including DN expressions
@@ -129,12 +129,12 @@ Scenario 8 validates synchronising entitlement groups (security groups, distribu
 │                        Scenario 8: Group Sync Flow                             │
 ├────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                │
-│  Quantum Dynamics APAC (Source)           Quantum Dynamics EMEA (Target)       │
+│  Panoply APAC (Source)           Panoply EMEA (Target)       │
 │  ┌──────────────────────────────┐          ┌────────────────────────────────┐  │
 │  │ OU=Entitlements,OU=Corp      │          │ OU=Entitlements,OU=CorpManaged │  │
 │  │                              │          │                                │  │
 │  │  ┌─────────────────────┐     │          │  ┌─────────────────────┐       │  │
-│  │  │ Company-Subatomic   │     │          │  │ Company-Subatomic   │       │  │
+│  │  │ Company-Panoply   │     │          │  │ Company-Panoply   │       │  │
 │  │  │ Members:            │     │          │  │ Members:            │       │  │
 │  │  │  - CN=John,OU=...   │─────┼──────────┼─>│  - CN=John,OU=...   │       │  │
 │  │  │  - CN=Jane,OU=...   │     │          │  │  - CN=Jane,OU=...   │       │  │
@@ -152,8 +152,8 @@ Scenario 8 validates synchronising entitlement groups (security groups, distribu
 │  ┌────────────────────────────────────────────────────────────────────┐        │
 │  │                         JIM Metaverse                              │        │
 │  │  ┌─────────────────────────────────────────────────────────────┐   │        │
-│  │  │ Group MVO: Company-Subatomic                                │   │        │
-│  │  │   Account Name: Company-Subatomic                           │   │        │
+│  │  │ Group MVO: Company-Panoply                                │   │        │
+│  │  │   Account Name: Company-Panoply                           │   │        │
 │  │  │   Group Type: Universal Security                            │   │        │
 │  │  │   Members: [ref:User-John-MVO, ref:User-Jane-MVO]           │   │        │
 │  │  └─────────────────────────────────────────────────────────────┘   │        │
@@ -167,7 +167,7 @@ Scenario 8 validates synchronising entitlement groups (security groups, distribu
 The member attribute contains DN references that must be transformed between domains:
 
 ```
-Source AD member:  CN=John Smith,OU=Users,OU=Corp,DC=sourcedomain,DC=local
+Source AD member:  CN=John Smith,OU=Users,OU=Corp,DC=resurgam,DC=local
                               ↓
                     Import (CSO reference)
                               ↓
@@ -175,7 +175,7 @@ Metaverse member:  Reference to User MVO (John Smith)
                               ↓
                     Export (DN calculation)
                               ↓
-Target AD member:  CN=John Smith,OU=Users,OU=CorpManaged,DC=targetdomain,DC=local
+Target AD member:  CN=John Smith,OU=Users,OU=CorpManaged,DC=gentian,DC=local
 ```
 
 **Prerequisites**: Users must be synced between domains first so that:
@@ -191,14 +191,14 @@ Target AD member:  CN=John Smith,OU=Users,OU=CorpManaged,DC=targetdomain,DC=loca
 
 | System | Role | Container | Domain |
 |--------|------|-----------|--------|
-| Quantum Dynamics APAC | Source (Authoritative) | `samba-ad-source` | `DC=sourcedomain,DC=local` |
-| Quantum Dynamics EMEA | Target (Replica) | `samba-ad-target` | `DC=targetdomain,DC=local` |
+| Panoply APAC | Source (Authoritative) | `samba-ad-source` | `DC=resurgam,DC=local` |
+| Panoply EMEA | Target (Replica) | `samba-ad-target` | `DC=gentian,DC=local` |
 
 ### Container Structure
 
 **Source AD:**
 ```
-DC=sourcedomain,DC=local
+DC=resurgam,DC=local
 └── OU=Corp
     ├── OU=Users
     └── OU=Entitlements
@@ -206,7 +206,7 @@ DC=sourcedomain,DC=local
 
 **Target AD:**
 ```
-DC=targetdomain,DC=local
+DC=gentian,DC=local
 └── OU=CorpManaged
     ├── OU=Users
     └── OU=Entitlements
@@ -272,7 +272,7 @@ Groups follow a hierarchical naming model for realistic enterprise representatio
 
 | Category | Pattern | Example | Purpose |
 |----------|---------|---------|---------|
-| Company | `Company-{Name}` | `Company-Subatomic` | Top-level organisational groups |
+| Company | `Company-{Name}` | `Company-Panoply` | Top-level organisational groups |
 | Department | `Dept-{Name}` | `Dept-Engineering` | Functional team groups |
 | Location | `Location-{City}` | `Location-Sydney` | Geographic groups |
 | Project | `Project-{Name}` | `Project-Phoenix` | Dynamic project teams (scalable) |
@@ -336,9 +336,9 @@ When a group is mail-enabled, these additional attributes are populated:
 
 | Attribute | Required | Example Value |
 |-----------|----------|---------------|
-| `mail` | Yes | `dept-engineering@sourcedomain.local` |
+| `mail` | Yes | `dept-engineering@resurgam.local` |
 | `mailNickname` | Yes | `Dept-Engineering` |
-| `proxyAddresses` | Optional | `SMTP:dept-engineering@sourcedomain.local` |
+| `proxyAddresses` | Optional | `SMTP:dept-engineering@resurgam.local` |
 
 #### Naming Convention for Mail-Enabled Groups
 
@@ -346,7 +346,7 @@ Mail-enabled groups follow a pattern that indicates their email address:
 
 | Category | Group Name | Mail Address |
 |----------|------------|--------------|
-| Company | `Company-Subatomic` | `company-subatomic@domain.local` |
+| Company | `Company-Panoply` | `company-panoply@domain.local` |
 | Department | `Dept-Engineering` | `dept-engineering@domain.local` |
 | Location | `Location-Sydney` | `location-sydney@domain.local` |
 | Project | `Project-Phoenix` | `project-phoenix@domain.local` |
@@ -377,7 +377,7 @@ This tests the single-valued DN reference attribute sync, which uses the same re
 ### Reference Data
 
 **Company Names:**
-- Subatomic, NexusDynamics, OrbitalSystems, QuantumBridge, StellarLogistics
+- Panoply, NexusDynamics, OrbitalSystems, QuantumBridge, StellarLogistics
 - VortexTech, CatalystCorp, HorizonIndustries, PulsarEnterprises, NovaNetworks
 
 **Department Names:**
@@ -606,7 +606,7 @@ function Get-Scenario8GroupScale {
 
 **DN Expression:**
 ```
-"CN=" + EscapeDN(mv["Display Name"]) + ",OU=Entitlements,OU=CorpManaged,DC=targetdomain,DC=local"
+"CN=" + EscapeDN(mv["Display Name"]) + ",OU=Entitlements,OU=CorpManaged,DC=gentian,DC=local"
 ```
 
 ### Phase 3: Test Script

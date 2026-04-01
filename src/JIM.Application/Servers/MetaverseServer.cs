@@ -396,6 +396,8 @@ public class MetaverseServer
             attributeChange = new MetaverseObjectChangeAttribute
             {
                 Attribute = metaverseObjectAttributeValue.Attribute,
+                AttributeName = metaverseObjectAttributeValue.Attribute.Name,
+                AttributeType = metaverseObjectAttributeValue.Attribute.Type,
                 MetaverseObjectChange = metaverseObjectChange
             };
             metaverseObjectChange.AttributeChanges.Add(attributeChange);
@@ -436,8 +438,19 @@ public class MetaverseServer
                 attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
                     attributeChange, valueChangeType, metaverseObjectAttributeValue.ReferenceValue));
                 break;
+            case AttributeDataType.Reference when metaverseObjectAttributeValue.ReferenceValueId.HasValue:
+                // Navigation property not loaded but FK is set — record the referenced MVO ID as a GUID.
+                // This happens when attribute values are snapshotted without eagerly loading navigation
+                // properties (e.g., during MVO deletion where the referenced MVOs may not be in the
+                // EF change tracker).
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
+                    attributeChange, valueChangeType, metaverseObjectAttributeValue.ReferenceValueId.Value));
+                break;
             case AttributeDataType.Reference when metaverseObjectAttributeValue.UnresolvedReferenceValue != null:
                 // Don't track unresolved references
+                break;
+            case AttributeDataType.Reference:
+                // Reference attribute with no resolved or unresolved value — nothing to track
                 break;
             default:
                 throw new NotImplementedException(

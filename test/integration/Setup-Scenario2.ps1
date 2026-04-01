@@ -5,8 +5,8 @@
 .DESCRIPTION
     Sets up Connected Systems and Sync Rules for bidirectional LDAP synchronisation.
     This script creates:
-    - LDAP Connected System (Quantum Dynamics APAC)
-    - LDAP Connected System (Quantum Dynamics EMEA)
+    - LDAP Connected System (Panoply APAC)
+    - LDAP Connected System (Panoply EMEA)
     - Sync Rules for bidirectional attribute flow
     - Run Profiles for synchronisation
 
@@ -29,7 +29,7 @@
     This script requires:
     - JIM PowerShell module
     - JIM running and accessible
-    - Quantum Dynamics APAC and EMEA containers running (docker compose --profile scenario2)
+    - Panoply APAC and EMEA containers running (docker compose --profile scenario2)
 #>
 
 param(
@@ -47,7 +47,10 @@ param(
     [int]$ExportConcurrency = 1,
 
     [Parameter(Mandatory=$false)]
-    [int]$MaxExportParallelism = 1
+    [int]$MaxExportParallelism = 1,
+
+    [Parameter(Mandatory=$false)]
+    [hashtable]$DirectoryConfig
 )
 
 Set-StrictMode -Version Latest
@@ -56,7 +59,19 @@ $ErrorActionPreference = "Stop"
 # Import helpers
 . "$PSScriptRoot/utils/Test-Helpers.ps1"
 
-Write-TestSection "Scenario 2 Setup: Directory to Directory Synchronisation"
+# Derive Source and Target configs from directory type
+# S2 needs two LDAP connected systems — for SambaAD these are separate containers,
+# for OpenLDAP these are different suffixes on the same container.
+if ($DirectoryConfig -and $DirectoryConfig.UserObjectClass -eq "inetOrgPerson") {
+    $directoryType = "OpenLDAP"
+} else {
+    $directoryType = "SambaAD"
+}
+$SourceConfig = Get-DirectoryConfig -DirectoryType $directoryType -Instance Source
+$TargetConfig = Get-DirectoryConfig -DirectoryType $directoryType -Instance Target
+$isOpenLDAP = $directoryType -eq "OpenLDAP"
+
+Write-TestSection "Scenario 2 Setup: Directory to Directory Synchronisation ($directoryType)"
 
 # Step 1: Import JIM PowerShell module
 Write-TestStep "Step 1" "Importing JIM PowerShell module"
@@ -114,28 +129,29 @@ catch {
     throw
 }
 
-# Step 4: Create Source LDAP Connected System (Quantum Dynamics APAC)
-Write-TestStep "Step 4" "Creating Source LDAP Connected System"
+# Step 4: Create Source LDAP Connected System
+$sourceSystemName = $SourceConfig.ConnectedSystemName
+Write-TestStep "Step 4" "Creating Source LDAP Connected System ($sourceSystemName)"
 
 $existingSystems = Get-JIMConnectedSystem
 
 try {
-    $sourceSystem = $existingSystems | Where-Object { $_.name -eq "Quantum Dynamics APAC" }
+    $sourceSystem = $existingSystems | Where-Object { $_.name -eq $sourceSystemName }
 
     if ($sourceSystem) {
-        Write-Host "  Connected System 'Quantum Dynamics APAC' already exists (ID: $($sourceSystem.id))" -ForegroundColor Yellow
+        Write-Host "  Connected System '$sourceSystemName' already exists (ID: $($sourceSystem.id))" -ForegroundColor Yellow
     }
     else {
         $sourceSystem = New-JIMConnectedSystem `
-            -Name "Quantum Dynamics APAC" `
-            -Description "Quantum Dynamics APAC Active Directory for cross-domain sync" `
+            -Name $sourceSystemName `
+            -Description "Source LDAP directory for cross-domain sync ($($SourceConfig.Host))" `
             -ConnectorDefinitionId $ldapConnector.id `
             -PassThru
 
         Write-Host "  ✓ Created Source LDAP Connected System (ID: $($sourceSystem.id))" -ForegroundColor Green
     }
 
-    # Configure LDAP settings for Source
+    # Configure LDAP settings for Source (driven by SourceConfig)
     $ldapConnectorFull = Get-JIMConnectorDefinition -Id $ldapConnector.id
 
     $hostSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Host" }
@@ -148,30 +164,16 @@ try {
     $authTypeSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Authentication Type" }
 
     $sourceSettings = @{}
-    if ($hostSetting) {
-        $sourceSettings[$hostSetting.id] = @{ stringValue = "samba-ad-source" }
+    if ($hostSetting) { $sourceSettings[$hostSetting.id] = @{ stringValue = $SourceConfig.Host } }
+    if ($portSetting) { $sourceSettings[$portSetting.id] = @{ intValue = $SourceConfig.Port } }
+    if ($usernameSetting) { $sourceSettings[$usernameSetting.id] = @{ stringValue = $SourceConfig.BindDN } }
+    if ($passwordSetting) { $sourceSettings[$passwordSetting.id] = @{ stringValue = $SourceConfig.BindPassword } }
+    if ($useSSLSetting) { $sourceSettings[$useSSLSetting.id] = @{ checkboxValue = $SourceConfig.UseSSL } }
+    if ($certValidationSetting -and $SourceConfig.CertValidation) {
+        $sourceSettings[$certValidationSetting.id] = @{ stringValue = $SourceConfig.CertValidation }
     }
-    if ($portSetting) {
-        $sourceSettings[$portSetting.id] = @{ intValue = 636 }
-    }
-    if ($usernameSetting) {
-        $sourceSettings[$usernameSetting.id] = @{ stringValue = "CN=Administrator,CN=Users,DC=sourcedomain,DC=local" }
-    }
-    if ($passwordSetting) {
-        $sourceSettings[$passwordSetting.id] = @{ stringValue = "Test@123!" }
-    }
-    if ($useSSLSetting) {
-        $sourceSettings[$useSSLSetting.id] = @{ checkboxValue = $true }
-    }
-    if ($certValidationSetting) {
-        $sourceSettings[$certValidationSetting.id] = @{ stringValue = "Skip Validation (Not Recommended)" }
-    }
-    if ($connectionTimeoutSetting) {
-        $sourceSettings[$connectionTimeoutSetting.id] = @{ intValue = 30 }
-    }
-    if ($authTypeSetting) {
-        $sourceSettings[$authTypeSetting.id] = @{ stringValue = "Simple" }
-    }
+    if ($connectionTimeoutSetting) { $sourceSettings[$connectionTimeoutSetting.id] = @{ intValue = 30 } }
+    if ($authTypeSetting) { $sourceSettings[$authTypeSetting.id] = @{ stringValue = $SourceConfig.AuthType } }
 
     if ($sourceSettings.Count -gt 0) {
         Set-JIMConnectedSystem -Id $sourceSystem.id -SettingValues $sourceSettings | Out-Null
@@ -183,51 +185,38 @@ catch {
     throw
 }
 
-# Step 5: Create Target LDAP Connected System (Quantum Dynamics EMEA)
-Write-TestStep "Step 5" "Creating Target LDAP Connected System"
+# Step 5: Create Target LDAP Connected System
+$targetSystemName = $TargetConfig.ConnectedSystemName
+Write-TestStep "Step 5" "Creating Target LDAP Connected System ($targetSystemName)"
 
 try {
-    $targetSystem = $existingSystems | Where-Object { $_.name -eq "Quantum Dynamics EMEA" }
+    $targetSystem = $existingSystems | Where-Object { $_.name -eq $targetSystemName }
 
     if ($targetSystem) {
-        Write-Host "  Connected System 'Quantum Dynamics EMEA' already exists (ID: $($targetSystem.id))" -ForegroundColor Yellow
+        Write-Host "  Connected System '$targetSystemName' already exists (ID: $($targetSystem.id))" -ForegroundColor Yellow
     }
     else {
         $targetSystem = New-JIMConnectedSystem `
-            -Name "Quantum Dynamics EMEA" `
-            -Description "Quantum Dynamics EMEA Active Directory for cross-domain sync" `
+            -Name $targetSystemName `
+            -Description "Target LDAP directory for cross-domain sync ($($TargetConfig.Host))" `
             -ConnectorDefinitionId $ldapConnector.id `
             -PassThru
 
         Write-Host "  ✓ Created Target LDAP Connected System (ID: $($targetSystem.id))" -ForegroundColor Green
     }
 
-    # Configure LDAP settings for Target
+    # Configure LDAP settings for Target (driven by TargetConfig)
     $targetSettings = @{}
-    if ($hostSetting) {
-        $targetSettings[$hostSetting.id] = @{ stringValue = "samba-ad-target" }
+    if ($hostSetting) { $targetSettings[$hostSetting.id] = @{ stringValue = $TargetConfig.Host } }
+    if ($portSetting) { $targetSettings[$portSetting.id] = @{ intValue = $TargetConfig.Port } }
+    if ($usernameSetting) { $targetSettings[$usernameSetting.id] = @{ stringValue = $TargetConfig.BindDN } }
+    if ($passwordSetting) { $targetSettings[$passwordSetting.id] = @{ stringValue = $TargetConfig.BindPassword } }
+    if ($useSSLSetting) { $targetSettings[$useSSLSetting.id] = @{ checkboxValue = $TargetConfig.UseSSL } }
+    if ($certValidationSetting -and $TargetConfig.CertValidation) {
+        $targetSettings[$certValidationSetting.id] = @{ stringValue = $TargetConfig.CertValidation }
     }
-    if ($portSetting) {
-        $targetSettings[$portSetting.id] = @{ intValue = 636 }
-    }
-    if ($usernameSetting) {
-        $targetSettings[$usernameSetting.id] = @{ stringValue = "CN=Administrator,CN=Users,DC=targetdomain,DC=local" }
-    }
-    if ($passwordSetting) {
-        $targetSettings[$passwordSetting.id] = @{ stringValue = "Test@123!" }
-    }
-    if ($useSSLSetting) {
-        $targetSettings[$useSSLSetting.id] = @{ checkboxValue = $true }
-    }
-    if ($certValidationSetting) {
-        $targetSettings[$certValidationSetting.id] = @{ stringValue = "Skip Validation (Not Recommended)" }
-    }
-    if ($connectionTimeoutSetting) {
-        $targetSettings[$connectionTimeoutSetting.id] = @{ intValue = 30 }
-    }
-    if ($authTypeSetting) {
-        $targetSettings[$authTypeSetting.id] = @{ stringValue = "Simple" }
-    }
+    if ($connectionTimeoutSetting) { $targetSettings[$connectionTimeoutSetting.id] = @{ intValue = 30 } }
+    if ($authTypeSetting) { $targetSettings[$authTypeSetting.id] = @{ stringValue = $TargetConfig.AuthType } }
 
     if ($targetSettings.Count -gt 0) {
         Set-JIMConnectedSystem -Id $targetSystem.id -SettingValues $targetSettings | Out-Null
@@ -339,30 +328,35 @@ else {
 Write-TestStep "Step 7" "Creating Test OUs and Selecting Partitions/Containers"
 
 try {
-    # Create TestUsers OU in both AD instances (required for proper scoping)
-    # This filters out built-in accounts like Administrator, Guest, krbtgt
-    Write-Host "  Creating TestUsers OU in Source AD..." -ForegroundColor Gray
-    $result = docker exec samba-ad-source samba-tool ou create "OU=TestUsers,DC=sourcedomain,DC=local" 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "    ✓ Created OU=TestUsers in Source AD" -ForegroundColor Green
-    }
-    elseif ($result -match "already exists") {
-        Write-Host "    OU=TestUsers already exists in Source AD" -ForegroundColor Gray
+    if ($isOpenLDAP) {
+        # OpenLDAP: People OUs already exist from bootstrap — no creation needed
+        Write-Host "  OpenLDAP: Using existing People OUs (created during bootstrap)" -ForegroundColor Gray
     }
     else {
-        Write-Host "    ⚠ Failed to create OU=TestUsers in Source AD: $result" -ForegroundColor Yellow
-    }
+        # Samba AD: Create TestUsers OU in both AD instances (filters out built-in accounts)
+        Write-Host "  Creating TestUsers OU in Source AD..." -ForegroundColor Gray
+        $result = docker exec $SourceConfig.ContainerName samba-tool ou create "OU=TestUsers,$($SourceConfig.BaseDN)" 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "    ✓ Created OU=TestUsers in Source AD" -ForegroundColor Green
+        }
+        elseif ($result -match "already exists") {
+            Write-Host "    OU=TestUsers already exists in Source AD" -ForegroundColor Gray
+        }
+        else {
+            Write-Host "    ⚠ Failed to create OU=TestUsers in Source AD: $result" -ForegroundColor Yellow
+        }
 
-    Write-Host "  Creating TestUsers OU in Target AD..." -ForegroundColor Gray
-    $result = docker exec samba-ad-target samba-tool ou create "OU=TestUsers,DC=targetdomain,DC=local" 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "    ✓ Created OU=TestUsers in Target AD" -ForegroundColor Green
-    }
-    elseif ($result -match "already exists") {
-        Write-Host "    OU=TestUsers already exists in Target AD" -ForegroundColor Gray
-    }
-    else {
-        Write-Host "    ⚠ Failed to create OU=TestUsers in Target AD: $result" -ForegroundColor Yellow
+        Write-Host "  Creating TestUsers OU in Target AD..." -ForegroundColor Gray
+        $result = docker exec $TargetConfig.ContainerName samba-tool ou create "OU=TestUsers,$($TargetConfig.BaseDN)" 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "    ✓ Created OU=TestUsers in Target AD" -ForegroundColor Green
+        }
+        elseif ($result -match "already exists") {
+            Write-Host "    OU=TestUsers already exists in Target AD" -ForegroundColor Gray
+        }
+        else {
+            Write-Host "    ⚠ Failed to create OU=TestUsers in Target AD: $result" -ForegroundColor Yellow
+        }
     }
 
     # Re-import hierarchy to pick up the new OUs
@@ -371,18 +365,19 @@ try {
     Import-JIMConnectedSystemHierarchy -Id $targetSystem.id | Out-Null
     Write-Host "    ✓ Hierarchy re-imported" -ForegroundColor Green
 
-    # Helper function to recursively find a container by name
+    # Helper function to recursively find a container by short name or full DN
     function Find-ContainerByName {
         param(
             [array]$Containers,
-            [string]$Name
+            [string]$Name,
+            [string]$FullDN = ""
         )
         foreach ($container in $Containers) {
-            if ($container.name -eq $Name) {
+            if ($container.name -eq $Name -or ($FullDN -and $container.name -eq $FullDN)) {
                 return $container
             }
             if ($container.childContainers -and $container.childContainers.Count -gt 0) {
-                $found = Find-ContainerByName -Containers $container.childContainers -Name $Name
+                $found = Find-ContainerByName -Containers $container.childContainers -Name $Name -FullDN $FullDN
                 if ($found) {
                     return $found
                 }
@@ -400,9 +395,9 @@ try {
     }
 
     if ($sourcePartitions -and $sourcePartitions.Count -gt 0) {
-        # Find the main domain partition (DC=sourcedomain,DC=local)
+        # Find the main domain partition
         $sourceDomainPartition = $sourcePartitions | Where-Object {
-            $_.name -eq "DC=sourcedomain,DC=local"
+            $_.name -eq $SourceConfig.BaseDN -or $_.externalId -eq $SourceConfig.BaseDN
         }
         # Fallback: if only one partition and filter didn't match, use it
         if (-not $sourceDomainPartition -and $sourcePartitions.Count -eq 1) {
@@ -415,14 +410,19 @@ try {
             Set-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id -PartitionId $sourceDomainPartition.id -Selected $true | Out-Null
             Write-Host "    ✓ Selected partition: $($sourceDomainPartition.name)" -ForegroundColor Green
 
-            # Find and select only the TestUsers container
-            $testUsersContainer = Find-ContainerByName -Containers $sourceDomainPartition.containers -Name "TestUsers"
-            if ($testUsersContainer) {
-                Set-JIMConnectedSystemContainer -ConnectedSystemId $sourceSystem.id -ContainerId $testUsersContainer.id -Selected $true | Out-Null
-                Write-Host "    ✓ Selected container: TestUsers (filters out built-in accounts)" -ForegroundColor Green
+            # Find and select the appropriate container
+            $sourceContainerName = if ($isOpenLDAP) {
+                # OpenLDAP: use People OU (extract short name from UserContainer DN)
+                if ($SourceConfig.UserContainer -match "^[Oo][Uu]=([^,]+)") { $matches[1] } else { "People" }
+            } else { "TestUsers" }
+
+            $sourceContainer = Find-ContainerByName -Containers $sourceDomainPartition.containers -Name $sourceContainerName -FullDN $SourceConfig.UserContainer
+            if ($sourceContainer) {
+                Set-JIMConnectedSystemContainer -ConnectedSystemId $sourceSystem.id -ContainerId $sourceContainer.id -Selected $true | Out-Null
+                Write-Host "    ✓ Selected container: $sourceContainerName" -ForegroundColor Green
             }
             else {
-                Write-Host "    ⚠ TestUsers container not found - run Populate-SambaAD.ps1 first" -ForegroundColor Yellow
+                Write-Host "    ⚠ $sourceContainerName container not found" -ForegroundColor Yellow
             }
         }
         else {
@@ -431,7 +431,7 @@ try {
 
         # Deselect other partitions (DNS zones, Configuration, Schema)
         foreach ($partition in $sourcePartitions) {
-            if ($partition.name -ne "DC=sourcedomain,DC=local" -and $partition.name -ne $sourceDomainPartition.name) {
+            if ($partition.name -ne $SourceConfig.BaseDN -and $partition.name -ne $sourceDomainPartition.name) {
                 Set-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id -PartitionId $partition.id -Selected $false | Out-Null
             }
         }
@@ -449,9 +449,9 @@ try {
     }
 
     if ($targetPartitions -and $targetPartitions.Count -gt 0) {
-        # Find the main domain partition (DC=targetdomain,DC=local)
+        # Find the main domain partition
         $targetDomainPartition = $targetPartitions | Where-Object {
-            $_.name -eq "DC=targetdomain,DC=local"
+            $_.name -eq $TargetConfig.BaseDN -or $_.externalId -eq $TargetConfig.BaseDN
         }
         # Fallback: if only one partition and filter didn't match, use it
         if (-not $targetDomainPartition -and $targetPartitions.Count -eq 1) {
@@ -464,14 +464,18 @@ try {
             Set-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id -PartitionId $targetDomainPartition.id -Selected $true | Out-Null
             Write-Host "    ✓ Selected partition: $($targetDomainPartition.name)" -ForegroundColor Green
 
-            # Find and select only the TestUsers container
-            $testUsersContainer = Find-ContainerByName -Containers $targetDomainPartition.containers -Name "TestUsers"
-            if ($testUsersContainer) {
-                Set-JIMConnectedSystemContainer -ConnectedSystemId $targetSystem.id -ContainerId $testUsersContainer.id -Selected $true | Out-Null
-                Write-Host "    ✓ Selected container: TestUsers (filters out built-in accounts)" -ForegroundColor Green
+            # Find and select the appropriate container
+            $targetContainerName = if ($isOpenLDAP) {
+                if ($TargetConfig.UserContainer -match "^[Oo][Uu]=([^,]+)") { $matches[1] } else { "People" }
+            } else { "TestUsers" }
+
+            $targetContainer = Find-ContainerByName -Containers $targetDomainPartition.containers -Name $targetContainerName -FullDN $TargetConfig.UserContainer
+            if ($targetContainer) {
+                Set-JIMConnectedSystemContainer -ConnectedSystemId $targetSystem.id -ContainerId $targetContainer.id -Selected $true | Out-Null
+                Write-Host "    ✓ Selected container: $targetContainerName" -ForegroundColor Green
             }
             else {
-                Write-Host "    ⚠ TestUsers container not found - will be created during export" -ForegroundColor Yellow
+                Write-Host "    ⚠ $targetContainerName container not found — will be created during export" -ForegroundColor Yellow
             }
         }
         else {
@@ -480,7 +484,7 @@ try {
 
         # Deselect other partitions (DNS zones, Configuration, Schema)
         foreach ($partition in $targetPartitions) {
-            if ($partition.name -ne "DC=targetdomain,DC=local" -and $partition.name -ne $targetDomainPartition.name) {
+            if ($partition.name -ne $TargetConfig.BaseDN -and $partition.name -ne $targetDomainPartition.name) {
                 Set-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id -PartitionId $partition.id -Selected $false | Out-Null
             }
         }
@@ -500,18 +504,19 @@ catch {
 Write-TestStep "Step 8" "Creating Sync Rules"
 
 try {
-    # Get the "user" object type from both systems
-    $sourceUserType = $sourceObjectTypes | Where-Object { $_.name -eq "user" } | Select-Object -First 1
-    $targetUserType = $targetObjectTypes | Where-Object { $_.name -eq "user" } | Select-Object -First 1
+    # Get the user object type from both systems (varies by directory type)
+    $userObjectClass = $SourceConfig.UserObjectClass
+    $sourceUserType = $sourceObjectTypes | Where-Object { $_.name -eq $userObjectClass } | Select-Object -First 1
+    $targetUserType = $targetObjectTypes | Where-Object { $_.name -eq $userObjectClass } | Select-Object -First 1
 
     # Get the Metaverse "User" object type
     $mvUserType = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "User" } | Select-Object -First 1
 
     if (-not $sourceUserType) {
-        throw "No 'user' object type found in Source LDAP schema"
+        throw "No '$userObjectClass' object type found in Source LDAP schema"
     }
     if (-not $targetUserType) {
-        throw "No 'user' object type found in Target LDAP schema"
+        throw "No '$userObjectClass' object type found in Target LDAP schema"
     }
     if (-not $mvUserType) {
         throw "No 'User' object type found in Metaverse"
@@ -525,29 +530,38 @@ try {
     # Mark object types as selected
     Set-JIMConnectedSystemObjectType -ConnectedSystemId $sourceSystem.id -ObjectTypeId $sourceUserType.id -Selected $true | Out-Null
     Set-JIMConnectedSystemObjectType -ConnectedSystemId $targetSystem.id -ObjectTypeId $targetUserType.id -Selected $true | Out-Null
-    Write-Host "  ✓ Selected 'user' object types for Source and Target" -ForegroundColor Green
-
-    # Note: objectGUID is automatically marked as IsExternalId = true by the LDAP connector during schema import.
-    # No manual override needed here.
+    Write-Host "  ✓ Selected '$userObjectClass' object types for Source and Target" -ForegroundColor Green
 
     # Select only the LDAP attributes needed for bidirectional sync flows
-    # This is more representative of real-world ILM configuration where administrators
-    # only import/export the attributes they actually need, rather than the entire schema.
-    # See: https://github.com/TetronIO/JIM/issues/227
-    $requiredLdapAttributes = @(
-        'objectGUID',         # Immutable object identifier - External ID (anchor)
-        'sAMAccountName',     # Account Name - used for matching/joining
-        'givenName',          # First Name
-        'sn',                 # Last Name (surname)
-        'displayName',        # Display Name
-        'cn',                 # Common Name (also mapped from Display Name)
-        'mail',               # Email
-        'userPrincipalName',  # UPN (also mapped from Email)
-        'title',              # Job Title
-        'department',         # Department
-        'telephoneNumber',    # Phone
-        'distinguishedName'   # DN - required for LDAP provisioning (Secondary External ID)
-    )
+    # With #435, MVA→SVA import is now allowed (first-value selection with RPEI warning)
+    $requiredLdapAttributes = if ($isOpenLDAP) {
+        @(
+            'entryUUID',          # Immutable object identifier - External ID (anchor)
+            'uid',                # Account Name - used for matching/joining (MVA, first-value via #435)
+            'givenName',          # First Name (MVA, first-value via #435)
+            'sn',                 # Last Name (MVA, first-value via #435)
+            'displayName',        # Display Name (SINGLE-VALUE)
+            'cn',                 # Common Name
+            'mail',               # Email (MVA, first-value via #435)
+            'employeeNumber',     # Employee ID (SINGLE-VALUE)
+            'distinguishedName'   # DN - required for LDAP provisioning (Secondary External ID)
+        )
+    } else {
+        @(
+            'objectGUID',         # Immutable object identifier - External ID (anchor)
+            'sAMAccountName',     # Account Name - used for matching/joining
+            'givenName',          # First Name
+            'sn',                 # Last Name (surname)
+            'displayName',        # Display Name
+            'cn',                 # Common Name (also mapped from Display Name)
+            'mail',               # Email
+            'userPrincipalName',  # UPN (also mapped from Email)
+            'title',              # Job Title
+            'department',         # Department
+            'telephoneNumber',    # Phone
+            'distinguishedName'   # DN - required for LDAP provisioning (Secondary External ID)
+        )
+    }
 
     # Using bulk update API for efficiency - creates single Activity record instead of one per attribute
     $sourceAttrUpdates = @{}
@@ -570,7 +584,9 @@ try {
 
     # Create Import sync rule (Source -> Metaverse)
     $existingRules = Get-JIMSyncRule
-    $sourceImportRuleName = "APAC AD Import Users"
+    $sourceLabel = if ($isOpenLDAP) { "Yellowstone" } else { "APAC AD" }
+    $targetLabel = if ($isOpenLDAP) { "Glitterband" } else { "EMEA AD" }
+    $sourceImportRuleName = "$sourceLabel Import Users"
     $sourceImportRule = $existingRules | Where-Object { $_.name -eq $sourceImportRuleName }
 
     if (-not $sourceImportRule) {
@@ -589,7 +605,7 @@ try {
     }
 
     # Create Export sync rule (Metaverse -> Target)
-    $targetExportRuleName = "EMEA AD Export Users"
+    $targetExportRuleName = "$targetLabel Export Users"
     $targetExportRule = $existingRules | Where-Object { $_.name -eq $targetExportRuleName }
 
     if (-not $targetExportRule) {
@@ -609,7 +625,7 @@ try {
 
     # For bidirectional sync, create reverse rules as well
     # Import from Target -> Metaverse (for reverse sync)
-    $targetImportRuleName = "EMEA AD Import Users"
+    $targetImportRuleName = "$targetLabel Import Users"
     $targetImportRule = $existingRules | Where-Object { $_.name -eq $targetImportRuleName }
 
     if (-not $targetImportRule) {
@@ -627,7 +643,7 @@ try {
     }
 
     # Export to Source (for reverse sync)
-    $sourceExportRuleName = "APAC AD Export Users"
+    $sourceExportRuleName = "$sourceLabel Export Users"
     $sourceExportRule = $existingRules | Where-Object { $_.name -eq $sourceExportRuleName }
 
     if (-not $sourceExportRule) {
@@ -657,48 +673,90 @@ try {
         Write-Host "  Configuring attribute mappings..." -ForegroundColor Gray
 
         # Define attribute mappings for forward sync (Source -> Metaverse -> Target)
-        # Source imports these attributes to Metaverse
-        $importMappings = @(
-            @{ LdapAttr = "sAMAccountName";     MvAttr = "Account Name" }
-            @{ LdapAttr = "givenName";          MvAttr = "First Name" }
-            @{ LdapAttr = "sn";                 MvAttr = "Last Name" }
-            @{ LdapAttr = "displayName";        MvAttr = "Display Name" }
-            @{ LdapAttr = "mail";               MvAttr = "Email" }
-            @{ LdapAttr = "title";              MvAttr = "Job Title" }
-            @{ LdapAttr = "department";         MvAttr = "Department" }
-            @{ LdapAttr = "telephoneNumber";    MvAttr = "Phone" }
-        )
+        # With #435, MVA→SVA import is allowed — first value is selected with RPEI warning
+        $importMappings = if ($isOpenLDAP) {
+            @(
+                @{ LdapAttr = "uid";                MvAttr = "Account Name" }
+                @{ LdapAttr = "givenName";          MvAttr = "First Name" }
+                @{ LdapAttr = "sn";                 MvAttr = "Last Name" }
+                @{ LdapAttr = "displayName";        MvAttr = "Display Name" }
+                @{ LdapAttr = "mail";               MvAttr = "Email" }
+                @{ LdapAttr = "employeeNumber";     MvAttr = "Employee ID" }
+            )
+        } else {
+            @(
+                @{ LdapAttr = "sAMAccountName";     MvAttr = "Account Name" }
+                @{ LdapAttr = "givenName";          MvAttr = "First Name" }
+                @{ LdapAttr = "sn";                 MvAttr = "Last Name" }
+                @{ LdapAttr = "displayName";        MvAttr = "Display Name" }
+                @{ LdapAttr = "mail";               MvAttr = "Email" }
+                @{ LdapAttr = "title";              MvAttr = "Job Title" }
+                @{ LdapAttr = "department";         MvAttr = "Department" }
+                @{ LdapAttr = "telephoneNumber";    MvAttr = "Phone" }
+            )
+        }
 
-        # Target exports these attributes from Metaverse
-        $exportMappings = @(
-            @{ MvAttr = "Account Name";   LdapAttr = "sAMAccountName" }
-            @{ MvAttr = "First Name";     LdapAttr = "givenName" }
-            @{ MvAttr = "Last Name";      LdapAttr = "sn" }
-            @{ MvAttr = "Display Name";   LdapAttr = "displayName" }
-            @{ MvAttr = "Display Name";   LdapAttr = "cn" }
-            @{ MvAttr = "Email";          LdapAttr = "mail" }
-            @{ MvAttr = "Email";          LdapAttr = "userPrincipalName" }
-            @{ MvAttr = "Job Title";      LdapAttr = "title" }
-            @{ MvAttr = "Department";     LdapAttr = "department" }
-            @{ MvAttr = "Phone";          LdapAttr = "telephoneNumber" }
-        )
+        # Target exports these attributes from Metaverse (SVA→MVA always allowed)
+        $exportMappings = if ($isOpenLDAP) {
+            @(
+                @{ MvAttr = "Account Name";   LdapAttr = "uid" }
+                @{ MvAttr = "First Name";     LdapAttr = "givenName" }
+                @{ MvAttr = "Last Name";      LdapAttr = "sn" }
+                @{ MvAttr = "Display Name";   LdapAttr = "displayName" }
+                @{ MvAttr = "Display Name";   LdapAttr = "cn" }
+                @{ MvAttr = "Email";          LdapAttr = "mail" }
+                @{ MvAttr = "Employee ID";    LdapAttr = "employeeNumber" }
+            )
+        } else {
+            @(
+                @{ MvAttr = "Account Name";   LdapAttr = "sAMAccountName" }
+                @{ MvAttr = "First Name";     LdapAttr = "givenName" }
+                @{ MvAttr = "Last Name";      LdapAttr = "sn" }
+                @{ MvAttr = "Display Name";   LdapAttr = "displayName" }
+                @{ MvAttr = "Display Name";   LdapAttr = "cn" }
+                @{ MvAttr = "Email";          LdapAttr = "mail" }
+                @{ MvAttr = "Email";          LdapAttr = "userPrincipalName" }
+                @{ MvAttr = "Job Title";      LdapAttr = "title" }
+                @{ MvAttr = "Department";     LdapAttr = "department" }
+                @{ MvAttr = "Phone";          LdapAttr = "telephoneNumber" }
+            )
+        }
 
         # Expression-based mappings for computed values
-        # distinguishedName is required for LDAP provisioning - tells the connector where to create the object
-        $targetExpressionMappings = @(
-            @{
-                LdapAttr = "distinguishedName"
-                Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=TestUsers,DC=targetdomain,DC=local"'
-            }
-        )
+        # distinguishedName is required for LDAP provisioning — tells the connector where to create the object
+        # DN expression: OpenLDAP uses uid-based RDN, AD uses CN-based
+        $targetExpressionMappings = if ($isOpenLDAP) {
+            @(
+                @{
+                    LdapAttr = "distinguishedName"
+                    Expression = '"uid=" + mv["Account Name"] + ",' + $TargetConfig.UserContainer + '"'
+                }
+            )
+        } else {
+            @(
+                @{
+                    LdapAttr = "distinguishedName"
+                    Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=TestUsers,' + $TargetConfig.BaseDN + '"'
+                }
+            )
+        }
 
         # For reverse sync (Source export), also need DN expression
-        $sourceExpressionMappings = @(
-            @{
-                LdapAttr = "distinguishedName"
-                Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=TestUsers,DC=sourcedomain,DC=local"'
-            }
-        )
+        $sourceExpressionMappings = if ($isOpenLDAP) {
+            @(
+                @{
+                    LdapAttr = "distinguishedName"
+                    Expression = '"uid=" + mv["Account Name"] + ",' + $SourceConfig.UserContainer + '"'
+                }
+            )
+        } else {
+            @(
+                @{
+                    LdapAttr = "distinguishedName"
+                    Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=TestUsers,' + $SourceConfig.BaseDN + '"'
+                }
+            )
+        }
 
         # Get all metaverse attributes for lookup
         $mvAttributes = Get-JIMMetaverseAttribute
@@ -901,11 +959,13 @@ try {
             }
         }
 
-        # Add object matching rule for Source AD (match by sAMAccountName)
+        # Add object matching rule for Source (match by account name attribute)
         Write-Host "  Configuring object matching rules..." -ForegroundColor Gray
 
-        $sourceSamAttr = $sourceUserType.attributes | Where-Object { $_.name -eq 'sAMAccountName' }
-        $mvAccountNameAttr = $mvAttributes | Where-Object { $_.name -eq 'Account Name' }
+        $matchingCsAttrName = if ($isOpenLDAP) { 'uid' } else { 'sAMAccountName' }
+        $matchingMvAttrName = 'Account Name'
+        $sourceSamAttr = $sourceUserType.attributes | Where-Object { $_.name -eq $matchingCsAttrName }
+        $mvAccountNameAttr = $mvAttributes | Where-Object { $_.name -eq $matchingMvAttrName }
 
         if ($sourceSamAttr -and $mvAccountNameAttr) {
             $existingMatchingRules = Get-JIMMatchingRule -ConnectedSystemId $sourceSystem.id -ObjectTypeId $sourceUserType.id
@@ -922,7 +982,7 @@ try {
                         -MetaverseObjectTypeId $mvUserType.id `
                         -TargetMetaverseAttributeId $mvAccountNameAttr.id `
                         -SourceAttributeId $sourceSamAttr.id | Out-Null
-                    Write-Host "  ✓ Source matching rule configured (sAMAccountName → Account Name)" -ForegroundColor Green
+                    Write-Host "  ✓ Source matching rule configured ($matchingCsAttrName → $matchingMvAttrName)" -ForegroundColor Green
                 }
                 catch {
                     Write-Host "  ⚠ Could not configure Source matching rule: $_" -ForegroundColor Yellow
@@ -933,8 +993,8 @@ try {
             }
         }
 
-        # Add object matching rule for Target AD
-        $targetSamAttr = $targetUserType.attributes | Where-Object { $_.name -eq 'sAMAccountName' }
+        # Add object matching rule for Target
+        $targetSamAttr = $targetUserType.attributes | Where-Object { $_.name -eq $matchingCsAttrName }
 
         if ($targetSamAttr -and $mvAccountNameAttr) {
             $existingMatchingRules = Get-JIMMatchingRule -ConnectedSystemId $targetSystem.id -ObjectTypeId $targetUserType.id
@@ -977,7 +1037,7 @@ try {
     $sourceProfiles = Get-JIMRunProfile -ConnectedSystemId $sourceSystem.id
     $targetProfiles = Get-JIMRunProfile -ConnectedSystemId $targetSystem.id
 
-    # Source (APAC) - Full Import
+    # Source (APAC) - Full Import (unscoped — all selected partitions)
     $sourceImportProfile = $sourceProfiles | Where-Object { $_.name -eq "Full Import" }
     if (-not $sourceImportProfile) {
         $sourceImportProfile = New-JIMRunProfile `
@@ -985,10 +1045,27 @@ try {
             -ConnectedSystemId $sourceSystem.id `
             -RunType "FullImport" `
             -PassThru
-        Write-Host "  ✓ Created 'Full Import' run profile for Source (APAC)" -ForegroundColor Green
+        Write-Host "  ✓ Created 'Full Import' run profile for Source" -ForegroundColor Green
     }
     else {
-        Write-Host "  Run profile 'Full Import' already exists for Source (APAC)" -ForegroundColor Gray
+        Write-Host "  Run profile 'Full Import' already exists for Source" -ForegroundColor Gray
+    }
+
+    # Source (APAC) - Full Import (Scoped) — targets domain partition only
+    if ($sourceDomainPartition) {
+        $sourceScopedImportProfile = $sourceProfiles | Where-Object { $_.name -eq "Full Import (Scoped)" }
+        if (-not $sourceScopedImportProfile) {
+            $sourceScopedImportProfile = New-JIMRunProfile `
+                -Name "Full Import (Scoped)" `
+                -ConnectedSystemId $sourceSystem.id `
+                -RunType "FullImport" `
+                -PartitionId $sourceDomainPartition.id `
+                -PassThru
+            Write-Host "  ✓ Created 'Full Import (Scoped)' run profile for Source (PartitionId: $($sourceDomainPartition.id))" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  Run profile 'Full Import (Scoped)' already exists for Source" -ForegroundColor Gray
+        }
     }
 
     # Source (APAC) - Full Sync
@@ -999,10 +1076,10 @@ try {
             -ConnectedSystemId $sourceSystem.id `
             -RunType "FullSynchronisation" `
             -PassThru
-        Write-Host "  ✓ Created 'Full Sync' run profile for Source (APAC)" -ForegroundColor Green
+        Write-Host "  ✓ Created 'Full Sync' run profile for Source" -ForegroundColor Green
     }
     else {
-        Write-Host "  Run profile 'Full Sync' already exists for Source (APAC)" -ForegroundColor Gray
+        Write-Host "  Run profile 'Full Sync' already exists for Source" -ForegroundColor Gray
     }
 
     # Source (APAC) - Export (for reverse sync)
@@ -1013,13 +1090,13 @@ try {
             -ConnectedSystemId $sourceSystem.id `
             -RunType "Export" `
             -PassThru
-        Write-Host "  ✓ Created 'Export' run profile for Source (APAC)" -ForegroundColor Green
+        Write-Host "  ✓ Created 'Export' run profile for Source" -ForegroundColor Green
     }
     else {
-        Write-Host "  Run profile 'Export' already exists for Source (APAC)" -ForegroundColor Gray
+        Write-Host "  Run profile 'Export' already exists for Source" -ForegroundColor Gray
     }
 
-    # Target (EMEA) - Full Import
+    # Target (EMEA) - Full Import (unscoped — all selected partitions)
     $targetImportProfile = $targetProfiles | Where-Object { $_.name -eq "Full Import" }
     if (-not $targetImportProfile) {
         $targetImportProfile = New-JIMRunProfile `
@@ -1027,10 +1104,27 @@ try {
             -ConnectedSystemId $targetSystem.id `
             -RunType "FullImport" `
             -PassThru
-        Write-Host "  ✓ Created 'Full Import' run profile for Target (EMEA)" -ForegroundColor Green
+        Write-Host "  ✓ Created 'Full Import' run profile for Target" -ForegroundColor Green
     }
     else {
-        Write-Host "  Run profile 'Full Import' already exists for Target (EMEA)" -ForegroundColor Gray
+        Write-Host "  Run profile 'Full Import' already exists for Target" -ForegroundColor Gray
+    }
+
+    # Target (EMEA) - Full Import (Scoped) — targets domain partition only
+    if ($targetDomainPartition) {
+        $targetScopedImportProfile = $targetProfiles | Where-Object { $_.name -eq "Full Import (Scoped)" }
+        if (-not $targetScopedImportProfile) {
+            $targetScopedImportProfile = New-JIMRunProfile `
+                -Name "Full Import (Scoped)" `
+                -ConnectedSystemId $targetSystem.id `
+                -RunType "FullImport" `
+                -PartitionId $targetDomainPartition.id `
+                -PassThru
+            Write-Host "  ✓ Created 'Full Import (Scoped)' run profile for Target (PartitionId: $($targetDomainPartition.id))" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  Run profile 'Full Import (Scoped)' already exists for Target" -ForegroundColor Gray
+        }
     }
 
     # Target (EMEA) - Full Sync
@@ -1041,10 +1135,10 @@ try {
             -ConnectedSystemId $targetSystem.id `
             -RunType "FullSynchronisation" `
             -PassThru
-        Write-Host "  ✓ Created 'Full Sync' run profile for Target (EMEA)" -ForegroundColor Green
+        Write-Host "  ✓ Created 'Full Sync' run profile for Target" -ForegroundColor Green
     }
     else {
-        Write-Host "  Run profile 'Full Sync' already exists for Target (EMEA)" -ForegroundColor Gray
+        Write-Host "  Run profile 'Full Sync' already exists for Target" -ForegroundColor Gray
     }
 
     # Target (EMEA) - Export
@@ -1055,10 +1149,10 @@ try {
             -ConnectedSystemId $targetSystem.id `
             -RunType "Export" `
             -PassThru
-        Write-Host "  ✓ Created 'Export' run profile for Target (EMEA)" -ForegroundColor Green
+        Write-Host "  ✓ Created 'Export' run profile for Target" -ForegroundColor Green
     }
     else {
-        Write-Host "  Run profile 'Export' already exists for Target (EMEA)" -ForegroundColor Gray
+        Write-Host "  Run profile 'Export' already exists for Target" -ForegroundColor Gray
     }
 }
 catch {
@@ -1075,14 +1169,9 @@ Write-Host ""
 Write-Host "✓ Scenario 2 setup complete" -ForegroundColor Green
 Write-Host ""
 Write-Host "Sync Rules Created:" -ForegroundColor Yellow
-Write-Host "  Forward Flow: APAC AD -> Metaverse -> EMEA AD" -ForegroundColor Gray
-Write-Host "  Reverse Flow: EMEA AD -> Metaverse -> APAC AD" -ForegroundColor Gray
+Write-Host "  Forward Flow: $sourceLabel -> Metaverse -> $targetLabel" -ForegroundColor Gray
+Write-Host "  Reverse Flow: $targetLabel -> Metaverse -> $sourceLabel" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Run Profiles Created:" -ForegroundColor Yellow
-Write-Host "  Quantum Dynamics APAC: Full Import, Full Sync, Export" -ForegroundColor Gray
-Write-Host "  Quantum Dynamics EMEA: Full Import, Full Sync, Export" -ForegroundColor Gray
-Write-Host ""
-Write-Host "Next steps:" -ForegroundColor Yellow
-Write-Host "  1. Populate APAC AD with test users:" -ForegroundColor Gray
-Write-Host "     pwsh test/integration/Populate-SambaAD.ps1 -Container samba-ad-source -Template $Template" -ForegroundColor Gray
-Write-Host "  2. Run: ./scenarios/Invoke-Scenario2-CrossDomainSync.ps1 -ApiKey `$ApiKey -Template $Template" -ForegroundColor Gray
+Write-Host "  $sourceSystemName : Full Import, Full Import (Scoped), Full Sync, Export" -ForegroundColor Gray
+Write-Host "  $targetSystemName : Full Import, Full Import (Scoped), Full Sync, Export" -ForegroundColor Gray

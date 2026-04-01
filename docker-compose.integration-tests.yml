@@ -37,14 +37,14 @@ services:
       context: ./test/integration/docker/samba-ad-prebuilt
       dockerfile: Dockerfile
       args:
-        SAMBA_DOMAIN: SUBATOMIC.LOCAL
+        SAMBA_DOMAIN: PANOPLY.LOCAL
         SAMBA_PASSWORD: Test@123!
     container_name: samba-ad-primary
     privileged: true
     environment:
       # diegogslomp/samba-ad-dc environment variables
-      - REALM=SUBATOMIC.LOCAL
-      - DOMAIN=SUBATOMIC
+      - REALM=PANOPLY.LOCAL
+      - DOMAIN=PANOPLY
       - ADMIN_PASS=Test@123!
       - DNS_FORWARDER=8.8.8.8
       # Legacy environment variables for compatibility with existing scripts
@@ -86,14 +86,14 @@ services:
       context: ./test/integration/docker/samba-ad-prebuilt
       dockerfile: Dockerfile
       args:
-        SAMBA_DOMAIN: SOURCEDOMAIN.LOCAL
+        SAMBA_DOMAIN: RESURGAM.LOCAL
         SAMBA_PASSWORD: Test@123!
     container_name: samba-ad-source
     privileged: true
     environment:
       # diegogslomp/samba-ad-dc environment variables
-      - REALM=SOURCEDOMAIN.LOCAL
-      - DOMAIN=SOURCEDOMAIN
+      - REALM=RESURGAM.LOCAL
+      - DOMAIN=RESURGAM
       - ADMIN_PASS=Test@123!
       - DNS_FORWARDER=8.8.8.8
       # Legacy environment variables for compatibility with existing scripts
@@ -134,14 +134,14 @@ services:
       context: ./test/integration/docker/samba-ad-prebuilt
       dockerfile: Dockerfile
       args:
-        SAMBA_DOMAIN: TARGETDOMAIN.LOCAL
+        SAMBA_DOMAIN: GENTIAN.LOCAL
         SAMBA_PASSWORD: Test@123!
     container_name: samba-ad-target
     privileged: true
     environment:
       # diegogslomp/samba-ad-dc environment variables
-      - REALM=TARGETDOMAIN.LOCAL
-      - DOMAIN=TARGETDOMAIN
+      - REALM=GENTIAN.LOCAL
+      - DOMAIN=GENTIAN
       - ADMIN_PASS=Test@123!
       - DNS_FORWARDER=8.8.8.8
       # Legacy environment variables for compatibility with existing scripts
@@ -239,30 +239,49 @@ services:
       timeout: 5s
       retries: 5
 
-  # Phase 2 - Additional LDAP validation
-  openldap:
-    image: osixia/openldap:latest
-    container_name: openldap-test
+  # OpenLDAP with two suffixes for multi-partition testing (Issue #72, Phase 1b)
+  # Suffixes: dc=yellowstone,dc=local and dc=glitterband,dc=local
+  openldap-primary:
+    image: ${OPENLDAP_IMAGE_PRIMARY:-ghcr.io/tetronio/jim-openldap:primary}
+    build:
+      context: ./test/integration/docker/openldap
+      dockerfile: Dockerfile
+    container_name: openldap-primary
     environment:
-      - LDAP_ORGANISATION=TestOrg
-      - LDAP_DOMAIN=test.local
-      - LDAP_ADMIN_PASSWORD=admin
-      - LDAP_CONFIG_PASSWORD=config
-      - LDAP_READONLY_USER=false
-      - LDAP_TLS=false
+      - LDAP_ROOT=dc=yellowstone,dc=local
+      - LDAP_ADMIN_USERNAME=admin
+      - LDAP_ADMIN_PASSWORD=Test@123!
+      - LDAP_CONFIG_ADMIN_ENABLED=yes
+      - LDAP_CONFIG_ADMIN_USERNAME=admin
+      - LDAP_CONFIG_ADMIN_PASSWORD=Test@123!
+      - LDAP_ENABLE_TLS=no
+      - LDAP_SKIP_DEFAULT_TREE=no
+      - LDAP_ENABLE_ACCESSLOG=yes
     # No ports exposed - internal to Docker network only for testing
     volumes:
-      - openldap-data:/var/lib/ldap
-      - openldap-config:/etc/ldap/slapd.d
+      - openldap-primary-data:/bitnami/openldap
+      - test-csv-data:/connector-files
     networks:
       - jim-network
     profiles:
-      - phase2
+      - openldap
     healthcheck:
-      test: ["CMD", "ldapsearch", "-x", "-H", "ldap://localhost", "-b", "dc=test,dc=local", "-D", "cn=admin,dc=test,dc=local", "-w", "admin"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD", "ldapsearch", "-x", "-H", "ldap://localhost:1389",
+             "-b", "dc=yellowstone,dc=local",
+             "-D", "cn=admin,dc=yellowstone,dc=local", "-w", "Test@123!",
+             "-LLL", "(objectClass=organizationalUnit)"]
+      interval: 10s
+      timeout: 5s
       retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: ${OPENLDAP_PRIMARY_CPUS:-2.0}
+          memory: ${OPENLDAP_PRIMARY_MEMORY:-2G}
+        reservations:
+          cpus: ${OPENLDAP_PRIMARY_CPUS_RESERVED:-0.5}
+          memory: ${OPENLDAP_PRIMARY_MEMORY_RESERVED:-512M}
 
   # Phase 2 - MySQL testing
   mysql-test:
@@ -311,10 +330,8 @@ volumes:
   # Other volumes
   test-csv-data:
     name: jim-integration-csv-data
-  openldap-data:
-    name: jim-integration-openldap-data
-  openldap-config:
-    name: jim-integration-openldap-config
+  openldap-primary-data:
+    name: jim-integration-openldap-primary-data
   sqlserver-data:
     name: jim-integration-sqlserver-data
   postgres-test-data:

@@ -437,8 +437,6 @@ public abstract class SyncTaskProcessorBase
                             detailCount: rootDetailCount);
 
                         // In Detailed mode, add AttributeFlow child under DisconnectedOutOfScope when attributes were recalled.
-                        // Note: when MVO is deleted immediately, the recall is nugatory work (see #390) but we still
-                        // show the outcome so the inefficiency is visible until the optimisation is implemented.
                         if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
                             && changeResult.ChangeType == ObjectChangeType.DisconnectedOutOfScope
                             && changeResult.AttributeFlowCount is > 0)
@@ -511,12 +509,6 @@ public abstract class SyncTaskProcessorBase
         _pendingExportsToDelete.AddRange(result.ToDelete);
         _pendingExportsToUpdate.AddRange(result.ToUpdate);
     }
-
-    /// <summary>
-    /// Checks if a CSO attribute value matches a pending export attribute change.
-    /// </summary>
-    protected bool AttributeValuesMatch(ConnectedSystemObjectAttributeValue csoValue, JIM.Models.Transactional.PendingExportAttributeValueChange pendingChange)
-        => _syncEngine.AttributeValuesMatch(csoValue, pendingChange);
 
     /// <summary>
     /// Check if a CSO has been obsoleted and delete it, applying any joined Metaverse Object changes as necessary.
@@ -611,14 +603,23 @@ public abstract class SyncTaskProcessorBase
             _preRecallAttributeSnapshots[mvoId] = mvo.AttributeValues.ToList();
         }
 
+        // Evaluate the MVO deletion rule BEFORE attribute recall (#390 optimisation).
+        // If the MVO will be deleted immediately, attribute recall is nugatory work —
+        // the attributes, MVO update, and export evaluations would all be discarded
+        // when the MVO is deleted moments later in FlushPendingMvoDeletionsAsync.
+        var mvoDeletionFate = await ProcessMvoDeletionRuleAsync(mvo, connectedSystemId, remainingCsoCount);
+
         // Check if we should remove contributed attributes based on the object type setting.
         // When a grace period is configured, skip attribute recall to preserve identity-critical
         // attribute values (e.g., display name, department) that feed expression-based exports
         // (e.g., LDAP Distinguished Name). Recalling these attributes during the grace period
         // would produce invalid export values. The attributes will be cleaned up when the MVO
         // is deleted after the grace period expires, or preserved if the object reappears.
+        // Also skip recall when the MVO will be deleted immediately — the recall work (MVO update,
+        // export evaluation queueing) would be discarded when the MVO is deleted (#390).
         var hasGracePeriod = mvo.Type?.DeletionGracePeriod is { } gp && gp > TimeSpan.Zero;
-        if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !hasGracePeriod)
+        var skipRecallForImmediateDeletion = mvoDeletionFate == MvoDeletionFate.DeletedImmediately;
+        if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !hasGracePeriod && !skipRecallForImmediateDeletion)
         {
             // Find all MVO attribute values contributed by this connected system and mark them for removal
             var contributedAttributes = mvo.AttributeValues
@@ -661,6 +662,12 @@ public abstract class SyncTaskProcessorBase
                 _pendingExportEvaluations.Add((mvo, changedAttributes, removedAttributes));
             }
         }
+        else if (skipRecallForImmediateDeletion)
+        {
+            Log.Debug("ProcessObsoleteConnectedSystemObjectAsync: Skipping attribute recall for CSO {CsoId} " +
+                "because MVO {MvoId} will be deleted immediately (#390 optimisation).",
+                connectedSystemObject.Id, mvo.Id);
+        }
         else if (hasGracePeriod)
         {
             Log.Debug("ProcessObsoleteConnectedSystemObjectAsync: Skipping attribute recall for CSO {CsoId} " +
@@ -684,9 +691,6 @@ public abstract class SyncTaskProcessorBase
         // The same RPEI is used for both the disconnection record and the deletion tracking.
         _obsoleteCsosToDelete.Add((connectedSystemObject, deletionExecutionItem));
 
-        // Evaluate MVO deletion rule based on type configuration
-        var mvoDeletionFate = await ProcessMvoDeletionRuleAsync(mvo, connectedSystemId, remainingCsoCount);
-
         // Build sync outcomes: Disconnected as root, CsoDeleted as child (causal chain).
         // The disconnection is the primary event; CSO deletion is a consequential outcome.
         if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
@@ -698,8 +702,6 @@ public abstract class SyncTaskProcessorBase
                 detailCount: deletionExecutionItem.AttributeFlowCount);
 
             // In Detailed mode, add AttributeFlow child under Disconnected when attributes were recalled.
-            // Note: when MVO is deleted immediately, the recall is nugatory work (see #390) but we still
-            // show the outcome so the inefficiency is visible until the optimisation is implemented.
             if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
                 && deletionExecutionItem.AttributeFlowCount is > 0)
             {
@@ -933,13 +935,27 @@ public abstract class SyncTaskProcessorBase
             // IMPORTANT: Skip reference attributes in the first pass. Reference attributes (e.g., group members)
             // may point to CSOs that haven't been processed yet (processed later in this page).
             // Reference attributes will be processed in a second pass after all CSOs have MVOs.
+            var attributeFlowWarnings = new List<AttributeFlowWarning>();
             using (Diagnostics.Sync.StartSpan("ProcessInboundAttributeFlow"))
             {
                 foreach (var inboundSyncRule in inboundSyncRules)
                 {
                     // evaluate inbound attribute flow rules, skipping reference attributes
-                    ProcessInboundAttributeFlow(connectedSystemObject, inboundSyncRule, skipReferenceAttributes: true);
+                    attributeFlowWarnings.AddRange(
+                        ProcessInboundAttributeFlow(connectedSystemObject, inboundSyncRule, skipReferenceAttributes: true));
                 }
+            }
+
+            // Create warning RPEIs for MVA->SVA truncations (#435)
+            foreach (var warning in attributeFlowWarnings)
+            {
+                var warningRpei = _activity.PrepareRunProfileExecutionItem();
+                warningRpei.ConnectedSystemObject = connectedSystemObject;
+                warningRpei.ConnectedSystemObjectId = connectedSystemObject.Id;
+                warningRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.MultiValuedAttributeTruncated;
+                warningRpei.ErrorMessage = $"Multi-valued source attribute '{warning.SourceAttributeName}' has {warning.ValueCount} values " +
+                    $"but target attribute '{warning.TargetAttributeName}' is single-valued. First value used: '{warning.SelectedValue}'.";
+                _activity.RunProfileExecutionItems.Add(warningRpei);
             }
 
             // Queue this CSO for deferred reference attribute processing
@@ -1295,8 +1311,29 @@ public abstract class SyncTaskProcessorBase
         // Batch update existing MVOs
         if (_pendingMvoUpdates.Count > 0)
         {
+            // Tactical fixup: capture reference FK data from in-memory navigations BEFORE
+            // persistence, because EF clears navigations during SaveChangesAsync when using
+            // explicit Entry().State management. After persist, issue a targeted SQL UPDATE
+            // for any attribute values where EF failed to infer the FK.
+            // We capture (MvoId, AttributeId, TargetMvoId) since av.Id may be Guid.Empty
+            // (assigned by EF during SaveChangesAsync).
+            // RETIRE: when MVO persistence is converted to direct SQL.
+            var refFixups = new List<(Guid MvoId, int AttributeId, Guid TargetMvoId)>();
+            foreach (var mvo in _pendingMvoUpdates)
+            {
+                foreach (var av in mvo.AttributeValues)
+                {
+                    if (!av.ReferenceValueId.HasValue && av.ReferenceValue != null && av.ReferenceValue.Id != Guid.Empty)
+                        refFixups.Add((mvo.Id, av.AttributeId, av.ReferenceValue.Id));
+                }
+            }
+
             await _syncRepo.UpdateMetaverseObjectsAsync(_pendingMvoUpdates);
             Log.Verbose("PersistPendingMetaverseObjectsAsync: Updated {Count} MVOs in batch", _pendingMvoUpdates.Count);
+
+            if (refFixups.Count > 0)
+                await _syncRepo.FixupMvoReferenceValueIdsAsync(refFixups);
+
             _pendingMvoUpdates.Clear();
         }
 
@@ -1363,8 +1400,10 @@ public abstract class SyncTaskProcessorBase
 
             // Process ONLY reference attributes (onlyReferenceAttributes = true)
             // This is more efficient than re-processing all attributes
+            // Note: reference attributes are inherently multi-valued so MVA->SVA warnings are unlikely here
             foreach (var syncRule in syncRules)
             {
+                // Warnings already captured in the first pass; reference-only pass does not repeat them
                 ProcessInboundAttributeFlow(cso, syncRule, skipReferenceAttributes: false, onlyReferenceAttributes: true);
             }
 
@@ -1381,10 +1420,14 @@ public abstract class SyncTaskProcessorBase
                 .Select(s => s.ConnectedSystemAttributeId!.Value)
                 .ToHashSet();
 
+            // A cross-page reference is unresolved if the referenced CSO has no MetaverseObjectId
+            // (it hasn't been joined/projected yet). ResolvedReferenceMetaverseObjectId (direct SQL)
+            // is the primary source; fall back to navigation for in-memory test compatibility.
             var hasUnresolvedCrossPageRefs = mappedRefAttributeIds.Count > 0 &&
                 cso.AttributeValues.Any(av =>
                     mappedRefAttributeIds.Contains(av.AttributeId) &&
                     av.ReferenceValueId.HasValue &&
+                    !av.ResolvedReferenceMetaverseObjectId.HasValue &&
                     (av.ReferenceValue == null || av.ReferenceValue.MetaverseObject == null));
 
             if (hasUnresolvedCrossPageRefs)
@@ -2218,6 +2261,8 @@ public abstract class SyncTaskProcessorBase
             attributeChange = new MetaverseObjectChangeAttribute
             {
                 Attribute = metaverseObjectAttributeValue.Attribute,
+                AttributeName = metaverseObjectAttributeValue.Attribute.Name,
+                AttributeType = metaverseObjectAttributeValue.Attribute.Type,
                 MetaverseObjectChange = metaverseObjectChange
             };
             metaverseObjectChange.AttributeChanges.Add(attributeChange);
@@ -2251,8 +2296,17 @@ public abstract class SyncTaskProcessorBase
             case AttributeDataType.Reference when metaverseObjectAttributeValue.ReferenceValue != null:
                 attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, metaverseObjectAttributeValue.ReferenceValue));
                 break;
+            case AttributeDataType.Reference when metaverseObjectAttributeValue.ReferenceValueId.HasValue:
+                // Navigation property not loaded but FK is set — record the referenced MVO ID as a GUID.
+                // This happens when ReferenceValue navigations are not loaded via EF Include
+                // (replaced by direct SQL PopulateReferenceValuesAsync on the CSO side).
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, metaverseObjectAttributeValue.ReferenceValueId.Value));
+                break;
             case AttributeDataType.Reference when metaverseObjectAttributeValue.UnresolvedReferenceValue != null:
                 // We do not log changes for unresolved references. Only resolved references get change tracked.
+                break;
+            case AttributeDataType.Reference:
+                // Reference attribute with no resolved or unresolved value — nothing to track
                 break;
             default:
                 throw new NotImplementedException($"Attribute data type {metaverseObjectAttributeValue.Attribute.Type} is not yet supported for MVO change tracking.");
@@ -2655,12 +2709,12 @@ public abstract class SyncTaskProcessorBase
     /// <param name="onlyReferenceAttributes">If true, process ONLY reference attributes (for deferred second pass). Takes precedence over skipReferenceAttributes.</param>
     /// <exception cref="InvalidDataException">Can be thrown if a Sync Rule Mapping Source is not properly formed.</exception>
     /// <exception cref="NotImplementedException">Will be thrown whilst Functions have not been implemented, but are being used in the Sync Rule.</exception>
-    protected void ProcessInboundAttributeFlow(ConnectedSystemObject connectedSystemObject, SyncRule syncRule, bool skipReferenceAttributes = false, bool onlyReferenceAttributes = false, bool isFinalReferencePass = false)
+    protected List<AttributeFlowWarning> ProcessInboundAttributeFlow(ConnectedSystemObject connectedSystemObject, SyncRule syncRule, bool skipReferenceAttributes = false, bool onlyReferenceAttributes = false, bool isFinalReferencePass = false)
     {
         if (_objectTypes == null)
             throw new MissingMemberException("_objectTypes is null!");
 
-        _syncEngine.FlowInboundAttributes(connectedSystemObject, syncRule, _objectTypes, _expressionEvaluator, skipReferenceAttributes, onlyReferenceAttributes, isFinalReferencePass);
+        return _syncEngine.FlowInboundAttributes(connectedSystemObject, syncRule, _objectTypes, _expressionEvaluator, skipReferenceAttributes, onlyReferenceAttributes, isFinalReferencePass);
     }
 
     /// <summary>
@@ -2757,12 +2811,21 @@ public abstract class SyncTaskProcessorBase
                 var totalCsoCount = await _syncRepo.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
                 var remainingCsoCount = Math.Max(0, totalCsoCount - 1);
 
+                // Evaluate the MVO deletion rule BEFORE attribute recall (#390 optimisation).
+                // If the MVO will be deleted immediately, attribute recall is nugatory work —
+                // the attributes, MVO update, and export evaluations would all be discarded
+                // when the MVO is deleted moments later in FlushPendingMvoDeletionsAsync.
+                var mvoDeletionFate = await ProcessMvoDeletionRuleAsync(mvo, _connectedSystem.Id, remainingCsoCount);
+
                 // Check if we should remove contributed attributes based on the object type setting.
                 // Skip recall when a grace period is configured (see ProcessObsoleteConnectedSystemObjectAsync).
+                // Also skip recall when the MVO will be deleted immediately — the recall work (MVO update,
+                // export evaluation queueing) would be discarded when the MVO is deleted (#390).
                 int attributeRemovalCount = 0;
                 List<MetaverseObjectAttributeValue>? recalledAttributeValues = null;
                 var hasGracePeriod = mvo.Type?.DeletionGracePeriod is { } gracePeriod && gracePeriod > TimeSpan.Zero;
-                if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !hasGracePeriod)
+                var skipRecallForImmediateDeletion = mvoDeletionFate == MvoDeletionFate.DeletedImmediately;
+                if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !hasGracePeriod && !skipRecallForImmediateDeletion)
                 {
                     var contributedAttributes = mvo.AttributeValues
                         .Where(av => av.ContributedBySystemId == _connectedSystem.Id)
@@ -2785,6 +2848,12 @@ public abstract class SyncTaskProcessorBase
                         recalledAttributeValues = mvo.PendingAttributeValueRemovals.ToList();
                     }
                 }
+                else if (skipRecallForImmediateDeletion)
+                {
+                    Log.Debug("HandleCsoOutOfScopeAsync: Skipping attribute recall for CSO {CsoId} " +
+                        "because MVO {MvoId} will be deleted immediately (#390 optimisation).",
+                        connectedSystemObject.Id, mvo.Id);
+                }
 
                 // Break the CSO-MVO join
                 mvo.ConnectedSystemObjects.Remove(connectedSystemObject);
@@ -2794,12 +2863,13 @@ public abstract class SyncTaskProcessorBase
                 connectedSystemObject.DateJoined = null;
                 Log.Verbose("HandleCsoOutOfScopeAsync: Broke join between CSO {CsoId} and MVO {MvoId}", connectedSystemObject.Id, mvoId);
 
-                // Apply pending attribute changes and update MVO
-                ApplyPendingMetaverseObjectAttributeChanges(mvo);
-                await _syncRepo.UpdateMetaverseObjectAsync(mvo);
-
-                // Evaluate MVO deletion rule based on type configuration
-                var mvoDeletionFate = await ProcessMvoDeletionRuleAsync(mvo, _connectedSystem.Id, remainingCsoCount);
+                // Apply pending attribute changes and update MVO (skip when MVO is about to be
+                // deleted immediately — the update would be a wasted database round trip).
+                if (!skipRecallForImmediateDeletion)
+                {
+                    ApplyPendingMetaverseObjectAttributeChanges(mvo);
+                    await _syncRepo.UpdateMetaverseObjectAsync(mvo);
+                }
 
                 return MetaverseObjectChangeResult.DisconnectedOutOfScope(
                     attributeFlowCount: attributeRemovalCount > 0 ? attributeRemovalCount : null,

@@ -416,23 +416,25 @@ public static class SyncRuleMappingProcessor
         int? contributingSystemId)
     {
         // Helper: get the target MVO ID for a CSO attribute value's reference.
-        // Uses MetaverseObjectId scalar FK (preferred), with MetaverseObject navigation as fallback.
+        // Uses ResolvedReferenceMetaverseObjectId (direct SQL) as primary source,
+        // falling back to navigation properties for compatibility with in-memory tests.
         static Guid? GetReferencedMvoId(ConnectedSystemObjectAttributeValue csoav)
         {
+            if (csoav.ResolvedReferenceMetaverseObjectId.HasValue)
+                return csoav.ResolvedReferenceMetaverseObjectId;
             if (csoav.ReferenceValue == null)
                 return null;
             return csoav.ReferenceValue.MetaverseObjectId ?? csoav.ReferenceValue.MetaverseObject?.Id;
         }
 
-        // A reference is "resolved" if ReferenceValue exists AND has a MetaverseObjectId.
+        // A reference is resolved if we can determine the MVO it points to — either via
+        // ResolvedReferenceMetaverseObjectId (direct SQL) or ReferenceValue navigation (in-memory tests).
         static bool IsResolved(ConnectedSystemObjectAttributeValue csoav)
-            => csoav.ReferenceValue != null && GetReferencedMvoId(csoav).HasValue;
+            => (csoav.ReferenceValueId.HasValue || csoav.ReferenceValue != null) && GetReferencedMvoId(csoav).HasValue;
 
         // Log warning for CSO reference values that cannot be resolved.
-        // This can happen if:
-        // 1. EF Core didn't include ReferenceValue navigation (bug in repository query)
-        // 2. Referenced CSO hasn't been joined to an MVO yet (sync ordering issue)
-        // 3. ReferenceValue.MetaverseObject navigation wasn't loaded AND MetaverseObjectId is null
+        // A reference is unresolved if ReferenceValueId is set but we have no MetaverseObjectId
+        // for the referenced CSO (it hasn't been joined/projected yet — cross-page reference).
         var unresolvedReferenceValues = csoAttributeValues.Where(csoav =>
             !IsResolved(csoav) &&
             (csoav.ReferenceValueId != null || !string.IsNullOrEmpty(csoav.UnresolvedReferenceValue))).ToList();
@@ -441,29 +443,22 @@ public static class SyncRuleMappingProcessor
         {
             foreach (var unresolved in unresolvedReferenceValues)
             {
-                if (unresolved.ReferenceValue == null && unresolved.ReferenceValueId != null)
+                if (unresolved.ReferenceValueId.HasValue && !unresolved.ResolvedReferenceMetaverseObjectId.HasValue)
                 {
-                    // ReferenceValueId is set but ReferenceValue navigation wasn't loaded - this is always a bug
-                    Log.Warning("SyncRuleMappingProcessor: CSO {CsoId} has reference attribute {AttrName} with ReferenceValueId {RefId} but ReferenceValue navigation is null. " +
-                        "This indicates the EF Core query is missing .Include(av => av.ReferenceValue). The reference will not flow to the MVO.",
-                        connectedSystemObject.Id, source.ConnectedSystemAttribute?.Name ?? "unknown", unresolved.ReferenceValueId);
-                }
-                else if (unresolved.ReferenceValue != null && !unresolved.ReferenceValue.MetaverseObjectId.HasValue)
-                {
-                    // ReferenceValue loaded but MetaverseObjectId is null - referenced CSO not yet joined.
+                    // Referenced CSO exists but isn't joined to an MVO yet.
                     // During the within-page deferred pass this is expected (cross-page references will be retried).
                     // During the final cross-page resolution pass this is a real problem.
                     if (isFinalReferencePass)
                     {
                         Log.Warning("SyncRuleMappingProcessor: CSO {CsoId} has reference attribute {AttrName} pointing to CSO {RefCsoId} which is not joined to an MVO. " +
                             "Ensure referenced objects are synced before referencing objects. The reference will not flow to the MVO.",
-                            connectedSystemObject.Id, source.ConnectedSystemAttribute?.Name ?? "unknown", unresolved.ReferenceValue.Id);
+                            connectedSystemObject.Id, source.ConnectedSystemAttribute?.Name ?? "unknown", unresolved.ReferenceValueId);
                     }
                     else
                     {
                         Log.Debug("SyncRuleMappingProcessor: CSO {CsoId} has reference attribute {AttrName} pointing to CSO {RefCsoId} which is not yet joined to an MVO. " +
                             "This will be retried during cross-page reference resolution.",
-                            connectedSystemObject.Id, source.ConnectedSystemAttribute?.Name ?? "unknown", unresolved.ReferenceValue.Id);
+                            connectedSystemObject.Id, source.ConnectedSystemAttribute?.Name ?? "unknown", unresolved.ReferenceValueId);
                     }
                 }
             }
@@ -531,16 +526,14 @@ public static class SyncRuleMappingProcessor
                 ContributedBySystemId = contributingSystemId
             };
 
-            // Prefer setting the navigation property when available (EF can track the relationship).
-            // Fall back to scalar FK when only MetaverseObjectId is available.
+            // When the referenced MVO is available as a tracked navigation (same-page reference),
+            // set the navigation so EF handles insert ordering (the MVO may not be persisted yet).
+            // For cross-page references (navigation unavailable), set the scalar FK directly —
+            // the referenced MVO already exists in the database.
             if (newCsoNewAttributeValue.ReferenceValue?.MetaverseObject != null)
-            {
                 newMvoAv.ReferenceValue = newCsoNewAttributeValue.ReferenceValue.MetaverseObject;
-            }
             else
-            {
                 newMvoAv.ReferenceValueId = targetMvoId.Value;
-            }
 
             mvo.PendingAttributeValueAdditions.Add(newMvoAv);
         }
@@ -639,7 +632,7 @@ public static class SyncRuleMappingProcessor
         ConnectedSystemObject connectedSystemObject,
         ConnectedSystemObjectType csoType)
     {
-        var attributes = new Dictionary<string, object?>();
+        var attributes = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var attributeValue in connectedSystemObject.AttributeValues)
         {

@@ -1,6 +1,6 @@
 # Delta Sync Flow
 
-> Generated against JIM v0.3.0 (`0d1c88e9`). If the codebase has changed significantly since then, these diagrams may be out of date.
+> Last updated: 2026-03-26 — JIM v0.7.1 (`00907431`)
 
 This diagram shows how Delta Synchronisation differs from Full Synchronisation. Both use identical per-CSO processing logic; the only difference is CSO selection and a few lifecycle steps.
 
@@ -81,7 +81,7 @@ flowchart TD
 
 ## Key Design Decisions
 
-- **Identical per-CSO logic**: Both full and delta sync share the exact same `ProcessConnectedSystemObjectAsync()` from `SyncTaskProcessorBase`. The only difference is which CSOs are selected for processing.
+- **Identical per-CSO logic**: Both full and delta sync share the exact same `ProcessConnectedSystemObjectAsync()` from `SyncTaskProcessorBase`, using `ISyncEngine` for pure domain decisions and `ISyncServer`/`ISyncRepository` for orchestration and data access. The only difference is which CSOs are selected for processing.
 
 - **Early exit optimisation**: Delta sync checks if any CSOs have been modified before loading caches and entering the page loop. If nothing has changed, it updates the watermark and returns immediately.
 

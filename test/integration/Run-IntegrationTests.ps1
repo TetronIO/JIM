@@ -109,6 +109,22 @@
     Runs all implemented (non-stub) scenarios sequentially with the Small template.
     Docker images are built once; the environment is reset between each scenario.
     A pass/fail summary is printed at the end.
+
+.EXAMPLE
+    ./Run-IntegrationTests.ps1 -Scenario All -Template Small -DirectoryType All
+
+    Runs all scenarios against Samba AD first, then all scenarios against OpenLDAP.
+    Full environment teardown and rebuild between directory types.
+
+.EXAMPLE
+    ./Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory -DirectoryType All
+
+    Runs Scenario 1 against Samba AD, then against OpenLDAP.
+
+.EXAMPLE
+    ./Run-IntegrationTests.ps1 -Scenario All -DirectoryType OpenLDAP -Template Small
+
+    Runs all scenarios against OpenLDAP only with the Small template.
 #>
 
 param(
@@ -144,7 +160,11 @@ param(
     [switch]$CaptureMetrics,
 
     [Parameter(Mandatory=$false)]
-    [switch]$IgnoreSnapshots
+    [switch]$IgnoreSnapshots,
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("SambaAD", "OpenLDAP", "All")]
+    [string]$DirectoryType = "SambaAD"
 )
 
 Set-StrictMode -Version Latest
@@ -165,6 +185,15 @@ $NC = "$ESC[0m"
 $scriptRoot = $PSScriptRoot
 $repoRoot = (Get-Item $scriptRoot).Parent.Parent.FullName
 
+# Import helpers early so Get-DirectoryConfig is available
+. "$scriptRoot/utils/Test-Helpers.ps1"
+
+# Resolve directory configuration (used throughout for Docker profiles, population, setup)
+# Skip for "All" — the DirectoryType All handler orchestrates multiple runs with specific types.
+if ($DirectoryType -ne "All") {
+    $script:DirectoryConfig = Get-DirectoryConfig -DirectoryType $DirectoryType
+}
+
 # ============================================================================
 # Snapshot detection utilities
 # ============================================================================
@@ -177,8 +206,12 @@ function Get-PopulateScriptHash {
         "$scriptRoot/Build-SambaSnapshots.ps1"
     )
     switch ($ScenarioName) {
-        "Scenario1" { $filesToHash += "$scriptRoot/Populate-SambaAD.ps1" }
-        "Scenario8" { $filesToHash += "$scriptRoot/Populate-SambaAD-Scenario8.ps1" }
+        "Scenario1" {
+            # S1 no longer populates test users — no extra files to hash
+        }
+        "Scenario8" {
+            $filesToHash += "$scriptRoot/Populate-SambaAD-Scenario8.ps1"
+        }
     }
     $combinedContent = ""
     foreach ($file in $filesToHash) {
@@ -202,8 +235,50 @@ function Test-SnapshotAvailable {
     return "$inspect" -eq $ExpectedHash
 }
 
-# Track whether snapshots are being used (set during Samba container startup)
+# Track whether snapshots are being used (set during container startup)
 $script:UsingSnapshots = $false
+$script:UsingOpenLDAPSnapshots = $false
+
+# ============================================================================
+# OpenLDAP snapshot detection utilities
+# ============================================================================
+
+function Get-OpenLDAPPopulateScriptHash {
+    param([string]$ScenarioName)
+    $filesToHash = @(
+        "$scriptRoot/utils/Test-Helpers.ps1",
+        "$scriptRoot/utils/Test-GroupHelpers.ps1",
+        "$scriptRoot/Build-OpenLDAPSnapshots.ps1",
+        "$scriptRoot/docker/openldap/Dockerfile",
+        "$scriptRoot/docker/openldap/scripts/01-add-second-suffix.sh",
+        "$scriptRoot/docker/openldap/bootstrap/01-base-ous-yellowstone.ldif",
+        "$scriptRoot/docker/openldap/start-openldap.sh"
+    )
+    switch ($ScenarioName) {
+        "General" { $filesToHash += "$scriptRoot/Populate-OpenLDAP.ps1" }
+        "Scenario8" { $filesToHash += "$scriptRoot/Populate-OpenLDAP-Scenario8.ps1" }
+    }
+    $combinedContent = ""
+    foreach ($file in $filesToHash) {
+        if (Test-Path $file) { $combinedContent += Get-Content -Path $file -Raw }
+    }
+    $hashBytes = [System.Security.Cryptography.SHA256]::HashData(
+        [System.Text.Encoding]::UTF8.GetBytes($combinedContent)
+    )
+    return [System.BitConverter]::ToString($hashBytes).Replace("-", "").Substring(0, 16).ToLower()
+}
+
+function Get-OpenLDAPSnapshotImageTag {
+    param([string]$Role, [string]$Size)
+    return "jim-openldap:${Role}-$($Size.ToLower())"
+}
+
+function Test-OpenLDAPSnapshotAvailable {
+    param([string]$ImageTag, [string]$ExpectedHash)
+    $inspect = docker image inspect $ImageTag --format '{{index .Config.Labels "jim.openldap.snapshot-hash"}}' 2>&1
+    if ($LASTEXITCODE -ne 0) { return $false }
+    return "$inspect" -eq $ExpectedHash
+}
 
 # Interactive scenario selection function
 function Show-ScenarioMenu {
@@ -497,8 +572,83 @@ function Show-TemplateMenu {
     return $templates[$selectedIndex].Name
 }
 
+# Interactive directory type selection function
+function Show-DirectoryTypeMenu {
+    $directoryTypes = @(
+        @{
+            Name = "SambaAD"
+            Description = "Samba Active Directory (default)"
+            Details = "LDAPS on port 636, objectGUID, AD schema"
+        }
+        @{
+            Name = "OpenLDAP"
+            Description = "OpenLDAP with multi-suffix partitions"
+            Details = "LDAP on port 1389, entryUUID, RFC 4512 schema"
+        }
+        @{
+            Name = "All"
+            Description = "Both directory types (full regression)"
+            Details = "Runs all scenarios against SambaAD first, then OpenLDAP"
+        }
+    )
+
+    $selectedIndex = 0
+    $exitMenu = $false
+
+    [Console]::CursorVisible = $false
+
+    try {
+        while (-not $exitMenu) {
+            Clear-Host
+
+            Write-Host ""
+            Write-Host "${CYAN}$("=" * 70)${NC}"
+            Write-Host "${CYAN}  JIM Integration Test - Directory Type Selection${NC}"
+            Write-Host "${CYAN}$("=" * 70)${NC}"
+            Write-Host ""
+            Write-Host "${GRAY}Use ↑/↓ arrow keys to navigate, Enter to select, Esc to exit${NC}"
+            Write-Host ""
+
+            for ($i = 0; $i -lt $directoryTypes.Count; $i++) {
+                $dt = $directoryTypes[$i]
+
+                if ($i -eq $selectedIndex) {
+                    Write-Host "${GREEN}► $($dt.Name)${NC} ${GRAY}— $($dt.Description)${NC}"
+                    Write-Host "${GRAY}  $($dt.Details)${NC}"
+                }
+                else {
+                    Write-Host "  $($dt.Name) ${GRAY}— $($dt.Description)${NC}"
+                    Write-Host "${GRAY}  $($dt.Details)${NC}"
+                }
+                Write-Host ""
+            }
+
+            $key = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+
+            switch ($key.VirtualKeyCode) {
+                38 { $selectedIndex = [Math]::Max(0, $selectedIndex - 1) }
+                40 { $selectedIndex = [Math]::Min($directoryTypes.Count - 1, $selectedIndex + 1) }
+                13 { $exitMenu = $true }
+                27 {
+                    Write-Host ""
+                    Write-Host "${YELLOW}Cancelled by user${NC}"
+                    [Console]::CursorVisible = $true
+                    exit 0
+                }
+            }
+        }
+    }
+    finally {
+        [Console]::CursorVisible = $true
+    }
+
+    Clear-Host
+    return $directoryTypes[$selectedIndex].Name
+}
+
 # Track if user explicitly set Template parameter
 $TemplateWasExplicitlySet = $PSBoundParameters.ContainsKey('Template')
+$DirectoryTypeWasExplicitlySet = $PSBoundParameters.ContainsKey('DirectoryType')
 
 # Scenarios that provision their own fixed test data and don't use the Template parameter
 # for data sizing. These scenarios accept Template but it has no effect on test execution.
@@ -532,6 +682,107 @@ if (-not $Scenario) {
             $Template = "Nano"
         }
     }
+
+    # Show directory type menu only if not explicitly provided
+    if (-not $DirectoryTypeWasExplicitlySet) {
+        $DirectoryType = Show-DirectoryTypeMenu
+        # Re-resolve directory config with the selected type (skip for "All" — handled below)
+        if ($DirectoryType -ne "All") {
+            $script:DirectoryConfig = Get-DirectoryConfig -DirectoryType $DirectoryType
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Handle "-DirectoryType All": run the suite for each directory type
+# ---------------------------------------------------------------------------
+
+if ($DirectoryType -eq "All") {
+    $selfScript = Join-Path $PSScriptRoot "Run-IntegrationTests.ps1"
+    $directoryTypesToRun = @("SambaAD", "OpenLDAP")
+
+    # Build common parameters to pass through (excluding DirectoryType)
+    $passThruParams = @{}
+    if ($Scenario)   { $passThruParams.Scenario = $Scenario }
+    if ($Template)   { $passThruParams.Template = $Template }
+    if ($Step -ne "All") { $passThruParams.Step = $Step }
+    if ($PSBoundParameters.ContainsKey('ExportConcurrency'))    { $passThruParams.ExportConcurrency = $ExportConcurrency }
+    if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) { $passThruParams.MaxExportParallelism = $MaxExportParallelism }
+    if ($TimeoutSeconds -ne 180)                                { $passThruParams.TimeoutSeconds = $TimeoutSeconds }
+    if ($CaptureMetrics)                                        { $passThruParams.CaptureMetrics = $true }
+    if ($IgnoreSnapshots)                                       { $passThruParams.IgnoreSnapshots = $true }
+
+    $allStart = Get-Date
+    $allResults = @()
+    $anyFailed = $false
+
+    Write-Host ""
+    Write-Host "${CYAN}$("=" * 65)${NC}"
+    Write-Host "${CYAN}  JIM Integration Tests — All Directory Types${NC}"
+    Write-Host "${CYAN}$("=" * 65)${NC}"
+    Write-Host ""
+    Write-Host "${GRAY}Scenario:  ${CYAN}$($Scenario ?? 'All')${NC}"
+    Write-Host "${GRAY}Template:  ${CYAN}$Template${NC}"
+    Write-Host "${GRAY}Directory: ${CYAN}SambaAD → OpenLDAP${NC}"
+    Write-Host ""
+
+    foreach ($dt in $directoryTypesToRun) {
+        $dtStart = Get-Date
+
+        Write-Host ""
+        Write-Host "${CYAN}$("=" * 65)${NC}"
+        Write-Host "${CYAN}  Directory Type: $dt${NC}"
+        Write-Host "${CYAN}$("=" * 65)${NC}"
+        Write-Host ""
+
+        & $selfScript @passThruParams -DirectoryType $dt
+        $dtExitCode = $LASTEXITCODE
+        $dtDuration = (Get-Date) - $dtStart
+
+        $dtPassed = ($dtExitCode -eq 0)
+        $dtStatus = if ($dtPassed) { "${GREEN}PASSED${NC}" } else { "${RED}FAILED (exit code $dtExitCode)${NC}" }
+
+        Write-Host ""
+        Write-Host "  $dt Result: $dtStatus  Duration: $($dtDuration.ToString('hh\:mm\:ss'))"
+
+        $allResults += @{
+            DirectoryType   = $dt
+            Success         = $dtPassed
+            ExitCode        = $dtExitCode
+            Duration        = $dtDuration.ToString('hh\:mm\:ss')
+            DurationSeconds = $dtDuration.TotalSeconds
+        }
+        if (-not $dtPassed) { $anyFailed = $true }
+    }
+
+    # Print summary
+    $allDuration = (Get-Date) - $allStart
+    $passCount = ($allResults | Where-Object { $_.Success }).Count
+
+    Write-Host ""
+    Write-Host "${CYAN}$("=" * 65)${NC}"
+    Write-Host "${CYAN}  All Directory Types — Summary${NC}"
+    Write-Host "${CYAN}$("=" * 65)${NC}"
+    Write-Host ""
+
+    foreach ($r in $allResults) {
+        $icon = if ($r.Success) { "${GREEN}PASS${NC}" } else { "${RED}FAIL${NC}" }
+        Write-Host ("  [{0}]  {1,-20} {2}" -f $icon, $r.DirectoryType, $r.Duration)
+    }
+
+    Write-Host ""
+    Write-Host "${CYAN}Total Duration: ${NC}$($allDuration.ToString('hh\:mm\:ss'))"
+    Write-Host "${CYAN}Passed: ${NC}$passCount / $($allResults.Count)    ${CYAN}Failed: ${NC}$($allResults.Count - $passCount) / $($allResults.Count)"
+    Write-Host ""
+
+    if ($anyFailed) {
+        Write-Host "${RED}One or more directory types failed.${NC}"
+        exit 1
+    }
+    else {
+        Write-Host "${GREEN}All directory types passed.${NC}"
+        exit 0
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -561,27 +812,27 @@ function Reset-JIMForNextScenario {
     # 3. Clean Samba AD test data (delete OUs with --force-subtree-delete; much faster than container restart)
     Write-Host "${GRAY}  Cleaning Samba AD test data...${NC}"
 
-    # Primary (subatomic.local) — used by Scenarios 1, 4, 5, 6
-    foreach ($ou in @("OU=Corp,DC=subatomic,DC=local", "OU=TestUsers,DC=subatomic,DC=local", "OU=TestGroups,DC=subatomic,DC=local")) {
+    # Primary (panoply.local) — used by Scenarios 1, 4, 5, 6
+    foreach ($ou in @("OU=Corp,DC=panoply,DC=local", "OU=TestUsers,DC=panoply,DC=local", "OU=TestGroups,DC=panoply,DC=local")) {
         docker exec samba-ad-primary samba-tool ou delete $ou --force-subtree-delete 2>&1 | Out-Null
     }
     # Legacy department OUs from Populate-SambaAD.ps1
     foreach ($dept in @("Marketing", "Operations", "Finance", "Sales", "Human Resources", "Procurement", "Information Technology", "Research & Development", "Executive", "Legal", "Facilities", "Catering")) {
-        docker exec samba-ad-primary samba-tool ou delete "OU=$dept,DC=subatomic,DC=local" --force-subtree-delete 2>&1 | Out-Null
+        docker exec samba-ad-primary samba-tool ou delete "OU=$dept,DC=panoply,DC=local" --force-subtree-delete 2>&1 | Out-Null
     }
 
-    # Source (sourcedomain.local) — used by Scenarios 2, 8
+    # Source (resurgam.local) — used by Scenarios 2, 8
     $sourceRunning = docker ps --filter "name=samba-ad-source" --format '{{.Names}}' 2>$null
     if ($sourceRunning) {
-        foreach ($ou in @("OU=TestUsers,DC=sourcedomain,DC=local", "OU=Corp,DC=sourcedomain,DC=local")) {
+        foreach ($ou in @("OU=TestUsers,DC=resurgam,DC=local", "OU=Corp,DC=resurgam,DC=local")) {
             docker exec samba-ad-source samba-tool ou delete $ou --force-subtree-delete 2>&1 | Out-Null
         }
     }
 
-    # Target (targetdomain.local) — used by Scenarios 2, 8
+    # Target (gentian.local) — used by Scenarios 2, 8
     $targetRunning = docker ps --filter "name=samba-ad-target" --format '{{.Names}}' 2>$null
     if ($targetRunning) {
-        foreach ($ou in @("OU=TestUsers,DC=targetdomain,DC=local", "OU=CorpManaged,DC=targetdomain,DC=local")) {
+        foreach ($ou in @("OU=TestUsers,DC=gentian,DC=local", "OU=CorpManaged,DC=gentian,DC=local")) {
             docker exec samba-ad-target samba-tool ou delete $ou --force-subtree-delete 2>&1 | Out-Null
         }
     }
@@ -671,7 +922,8 @@ if ($Scenario -eq "All") {
     Write-Host "${CYAN}  JIM Integration Test Runner — Full Regression${NC}"
     Write-Host "${CYAN}$("=" * 65)${NC}"
     Write-Host ""
-    Write-Host "${GRAY}Template: ${CYAN}$Template${NC}  ${GRAY}(used by template-relevant scenarios; others use Nano)${NC}"
+    Write-Host "${GRAY}Template:  ${CYAN}$Template${NC}  ${GRAY}(used by template-relevant scenarios; others use Nano)${NC}"
+    Write-Host "${GRAY}Directory: ${CYAN}$DirectoryType${NC}"
     Write-Host ""
     Write-Host "${GRAY}Scenarios to run ($($implementedScenarios.Count)):${NC}"
     foreach ($s in $implementedScenarios) {
@@ -681,7 +933,7 @@ if ($Scenario -eq "All") {
     Write-Host ""
 
     # Build common parameters — Template is overridden per-scenario inside Invoke-SingleScenario
-    $commonParams = @{}
+    $commonParams = @{ DirectoryType = $DirectoryType }
     if ($Template)   { $commonParams.Template = $Template }
     if ($Step)       { $commonParams.Step = $Step }
     if ($PSBoundParameters.ContainsKey('ExportConcurrency'))    { $commonParams.ExportConcurrency = $ExportConcurrency }
@@ -788,6 +1040,7 @@ if ($Scenario -eq "All") {
 
     $regressionResults = @{
         Mode           = "FullRegression"
+        DirectoryType  = $DirectoryType
         Template       = $Template
         StartTime      = $allStart.ToString("yyyy-MM-dd HH:mm:ss")
         Duration       = $allDuration.ToString('hh\:mm\:ss')
@@ -896,6 +1149,14 @@ Set-Location $repoRoot
 $step0Start = Get-Date
 Write-Section "Step 0: Checking Samba AD Images"
 
+# OpenLDAP scenarios never use Samba AD containers — skip the image build entirely.
+# Building Samba AD images takes 30-600+ seconds and can time out under disk pressure,
+# causing false failures for OpenLDAP runs.
+if ($DirectoryType -eq "OpenLDAP") {
+    Write-Step "Skipping Samba AD image check (DirectoryType=OpenLDAP)"
+}
+else {
+
 $buildScript = Join-Path $scriptRoot "docker" "samba-ad-prebuilt" "Build-SambaImages.ps1"
 
 # Compute current build content hash from source scripts
@@ -958,8 +1219,8 @@ else {
     Write-Success "Samba AD Primary image found and up to date: $sambaImageTag"
 }
 
-# For Scenario 2 and Scenario 8, also check for Source and Target images
-if ($Scenario -like "*Scenario2*" -or $Scenario -like "*Scenario8*") {
+# For Scenario 2 and Scenario 8 with Samba AD, also check for Source and Target images
+if (($Scenario -like "*Scenario2*" -or $Scenario -like "*Scenario8*") -and $DirectoryType -ne "OpenLDAP") {
     # Check Source image
     $sourceImageTag = "ghcr.io/tetronio/jim-samba-ad:source"
     $sourceCheck = Test-SambaImageNeedsRebuild -ImageTag $sourceImageTag
@@ -1025,6 +1286,8 @@ if ($Scenario -like "*Scenario2*" -or $Scenario -like "*Scenario8*") {
     }
 }
 
+} # end: DirectoryType -ne OpenLDAP (Samba AD image check)
+
 $timings["0. Check Samba Image"] = (Get-Date) - $step0Start
 
 # Step 1: Reset (unless skipped)
@@ -1036,13 +1299,13 @@ if (-not $SkipReset) {
     docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down -v 2>&1 | Out-Null
     # Use --profile to stop containers from all scenarios (scenario2, scenario8, etc.)
     # Without specifying profiles, containers started with profiles won't be stopped
-    docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down -v --remove-orphans 2>&1 | Out-Null
+    docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 --profile openldap down -v --remove-orphans 2>&1 | Out-Null
 
     # Force-remove any leftover integration test containers by name.
     # This handles containers that were created under a different Docker Compose project name
     # (e.g., 'jim' instead of 'jim-integration') and are therefore not cleaned up by 'down -v'.
     Write-Step "Removing any leftover integration test containers..."
-    $integrationContainers = @("samba-ad-primary", "samba-ad-source", "samba-ad-target", "sqlserver-hris-a", "oracle-hris-b", "postgres-target", "openldap-test", "mysql-test")
+    $integrationContainers = @("samba-ad-primary", "samba-ad-source", "samba-ad-target", "openldap-primary", "sqlserver-hris-a", "oracle-hris-b", "postgres-target", "mysql-test")
     foreach ($container in $integrationContainers) {
         docker rm -f $container 2>&1 | Out-Null
     }
@@ -1138,6 +1401,18 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Success "JIM stack started"
 
+# Start socat bridge so Keycloak is accessible at localhost:8181 for browser access.
+# Docker-in-Docker proxy ports aren't forwarded by VS Code Dev Containers automatically.
+# Uses setsid + disown to fully detach socat from the PowerShell process tree,
+# so the bridge survives after this script exits (e.g. -SetupOnly mode).
+if (Get-Command socat -ErrorAction SilentlyContinue) {
+    $bridgeScript = "#!/bin/bash`npkill -f 'socat.*TCP:127.0.0.1:8180' 2>/dev/null || true`nsetsid socat TCP-LISTEN:8181,fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:8180 </dev/null >/dev/null 2>&1 &`ndisown`n"
+    $bridgePath = [System.IO.Path]::GetTempPath() + "jim-keycloak-bridge.sh"
+    [System.IO.File]::WriteAllText($bridgePath, $bridgeScript)
+    & bash $bridgePath
+    Write-Success "Keycloak bridge started (localhost:8181)"
+}
+
 Start-Sleep -Seconds 2
 
 # Check for pre-populated snapshot images (Scenario 1 / primary)
@@ -1161,14 +1436,50 @@ if (-not $IgnoreSnapshots -and $Scenario -like "*Scenario1*") {
     }
 }
 
-Write-Step "Starting Samba AD (Primary)..."
-$sambaResult = docker compose -f docker-compose.integration-tests.yml up -d 2>&1
-if ($LASTEXITCODE -ne 0) {
-    Write-Failure "Failed to start Samba AD"
-    Write-Host "${GRAY}$sambaResult${NC}"
-    exit 1
+if ($DirectoryType -eq "OpenLDAP") {
+    # Check for pre-populated OpenLDAP snapshot images
+    # S1 does not need pre-populated data — the target directory starts empty
+    if (-not $IgnoreSnapshots -and $Scenario -notlike "*Scenario1*") {
+        $olSnapshotScenario = if ($Scenario -like "*Scenario8*") { "Scenario8" } else { "General" }
+        $olSnapshotRole = if ($Scenario -like "*Scenario8*") { "s8" } else { "general" }
+        $olHash = Get-OpenLDAPPopulateScriptHash -ScenarioName $olSnapshotScenario
+        $olTag = Get-OpenLDAPSnapshotImageTag -Role $olSnapshotRole -Size $Template
+        if (Test-OpenLDAPSnapshotAvailable -ImageTag $olTag -ExpectedHash $olHash) {
+            $env:OPENLDAP_IMAGE_PRIMARY = $olTag
+            $script:UsingOpenLDAPSnapshots = $true
+            Write-Host "  ${GREEN}Using OpenLDAP snapshot: $olTag${NC}"
+        } else {
+            Write-Host "  ${YELLOW}No OpenLDAP snapshot found for $olTag — building (first run only)...${NC}"
+            & "$scriptRoot/Build-OpenLDAPSnapshots.ps1" -Scenario $olSnapshotScenario -Template $Template
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning "OpenLDAP snapshot build failed — falling back to live population"
+            } elseif (Test-OpenLDAPSnapshotAvailable -ImageTag $olTag -ExpectedHash $olHash) {
+                $env:OPENLDAP_IMAGE_PRIMARY = $olTag
+                $script:UsingOpenLDAPSnapshots = $true
+                Write-Host "  ${GREEN}OpenLDAP snapshot built and ready: $olTag${NC}"
+            }
+        }
+    }
+
+    Write-Step "Starting OpenLDAP (Primary)..."
+    $openldapResult = docker compose -f docker-compose.integration-tests.yml --profile openldap up -d 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Failure "Failed to start OpenLDAP"
+        Write-Host "${GRAY}$openldapResult${NC}"
+        exit 1
+    }
+    Write-Success "OpenLDAP Primary started"
 }
-Write-Success "Samba AD Primary started"
+else {
+    Write-Step "Starting Samba AD (Primary)..."
+    $sambaResult = docker compose -f docker-compose.integration-tests.yml up -d 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Failure "Failed to start Samba AD"
+        Write-Host "${GRAY}$sambaResult${NC}"
+        exit 1
+    }
+    Write-Success "Samba AD Primary started"
+}
 
 # Start Scenario 2 containers if running Scenario 2
 if ($Scenario -like "*Scenario2*") {
@@ -1182,8 +1493,9 @@ if ($Scenario -like "*Scenario2*") {
     Write-Success "Samba AD Source and Target started"
 }
 
-# Start Scenario 8 containers if running Scenario 8
-if ($Scenario -like "*Scenario8*") {
+# Start Scenario 8 containers if running Scenario 8 with Samba AD
+# For OpenLDAP, S8 uses the same openldap-primary container (already started above)
+if ($Scenario -like "*Scenario8*" -and $DirectoryType -ne "OpenLDAP") {
     # Check for pre-populated snapshot images
     if (-not $IgnoreSnapshots) {
         $s8Hash = Get-PopulateScriptHash -ScenarioName "Scenario8"
@@ -1233,24 +1545,49 @@ $timings["3. Start Services"] = (Get-Date) - $step3Start
 $step4Start = Get-Date
 Write-Section "Step 4: Waiting for Services"
 
-# Wait for Samba AD Primary
-Write-Step "Waiting for Samba AD Primary to be ready..."
-$waitScript = Join-Path $scriptRoot "Wait-SambaReady.ps1"
-if (Test-Path $waitScript) {
-    & $waitScript -TimeoutSeconds $TimeoutSeconds
-    if ($LASTEXITCODE -ne 0) {
-        Write-Failure "Samba AD did not become ready in time"
-        Write-Host "${YELLOW}  Check logs: docker logs samba-ad-primary${NC}"
+if ($DirectoryType -eq "OpenLDAP") {
+    # Wait for OpenLDAP
+    Write-Step "Waiting for OpenLDAP to be ready..."
+    $openldapReady = $false
+    $elapsed = 0
+    while (-not $openldapReady -and $elapsed -lt $TimeoutSeconds) {
+        $status = docker inspect --format='{{.State.Health.Status}}' openldap-primary 2>&1
+        if ($status -eq "healthy") {
+            $openldapReady = $true
+            Write-Success "OpenLDAP is healthy"
+        }
+        else {
+            Start-Sleep -Seconds 3
+            $elapsed += 3
+        }
+    }
+    if (-not $openldapReady) {
+        Write-Failure "OpenLDAP did not become ready in time"
+        Write-Host "${YELLOW}  Check logs: docker logs openldap-primary${NC}"
         exit 1
     }
 }
 else {
-    Write-Warning "Wait-SambaReady.ps1 not found, waiting 60 seconds..."
-    Start-Sleep -Seconds 60
+    # Wait for Samba AD Primary
+    Write-Step "Waiting for Samba AD Primary to be ready..."
+    $waitScript = Join-Path $scriptRoot "Wait-SambaReady.ps1"
+    if (Test-Path $waitScript) {
+        & $waitScript -TimeoutSeconds $TimeoutSeconds
+        if ($LASTEXITCODE -ne 0) {
+            Write-Failure "Samba AD did not become ready in time"
+            Write-Host "${YELLOW}  Check logs: docker logs samba-ad-primary${NC}"
+            exit 1
+        }
+    }
+    else {
+        Write-Warning "Wait-SambaReady.ps1 not found, waiting 60 seconds..."
+        Start-Sleep -Seconds 60
+    }
 }
 
-# Wait for Scenario 2 or Scenario 8 containers if applicable
-if ($Scenario -like "*Scenario2*" -or $Scenario -like "*Scenario8*") {
+# Wait for Scenario 2 or Scenario 8 Samba AD containers if applicable
+# For OpenLDAP, the openldap-primary container wait is handled above
+if (($Scenario -like "*Scenario2*" -or $Scenario -like "*Scenario8*") -and $DirectoryType -ne "OpenLDAP") {
     Write-Step "Waiting for Samba AD Source to be ready..."
     $sourceReady = $false
     $elapsed = 0
@@ -1330,12 +1667,12 @@ $timings["4. Wait for Services"] = (Get-Date) - $step4Start
 # For Scenario 1, we need a clean Corp OU - delete if exists and recreate
 # Scenario 2 uses TestUsers OU which is handled by the scenario setup script
 # Skip when using snapshots — the snapshot already has populated data
-if ($Scenario -like "*Scenario1*" -and -not $script:UsingSnapshots) {
+if ($Scenario -like "*Scenario1*" -and -not $script:UsingSnapshots -and $DirectoryType -eq "SambaAD") {
     Write-Section "Step 4b: Preparing Samba AD for Testing"
 
     # First, try to delete the Corp OU if it exists (to ensure clean state)
     Write-Step "Cleaning up any existing Corp OU..."
-    $result = docker exec samba-ad-primary samba-tool ou delete "OU=Corp,DC=subatomic,DC=local" --force-subtree-delete 2>&1
+    $result = docker exec samba-ad-primary samba-tool ou delete "OU=Corp,DC=panoply,DC=local" --force-subtree-delete 2>&1
     if ($LASTEXITCODE -eq 0) {
         Write-Success "Deleted existing OU: Corp"
     }
@@ -1348,7 +1685,7 @@ if ($Scenario -like "*Scenario1*" -and -not $script:UsingSnapshots) {
 
     # Create the Corp base OU and its sub-OUs (Users, Groups)
     Write-Step "Creating Corp OU structure..."
-    $result = docker exec samba-ad-primary samba-tool ou create "OU=Corp,DC=subatomic,DC=local" 2>&1
+    $result = docker exec samba-ad-primary samba-tool ou create "OU=Corp,DC=panoply,DC=local" 2>&1
     if ($LASTEXITCODE -eq 0) {
         Write-Success "Created OU: Corp"
     }
@@ -1360,7 +1697,7 @@ if ($Scenario -like "*Scenario1*" -and -not $script:UsingSnapshots) {
     }
 
     # Create Users OU under Corp
-    $result = docker exec samba-ad-primary samba-tool ou create "OU=Users,OU=Corp,DC=subatomic,DC=local" 2>&1
+    $result = docker exec samba-ad-primary samba-tool ou create "OU=Users,OU=Corp,DC=panoply,DC=local" 2>&1
     if ($LASTEXITCODE -eq 0) {
         Write-Success "Created OU: Users (under Corp)"
     }
@@ -1372,7 +1709,7 @@ if ($Scenario -like "*Scenario1*" -and -not $script:UsingSnapshots) {
     }
 
     # Create Groups OU under Corp
-    $result = docker exec samba-ad-primary samba-tool ou create "OU=Groups,OU=Corp,DC=subatomic,DC=local" 2>&1
+    $result = docker exec samba-ad-primary samba-tool ou create "OU=Groups,OU=Corp,DC=panoply,DC=local" 2>&1
     if ($LASTEXITCODE -eq 0) {
         Write-Success "Created OU: Groups (under Corp)"
     }
@@ -1381,6 +1718,31 @@ if ($Scenario -like "*Scenario1*" -and -not $script:UsingSnapshots) {
     }
     else {
         Write-Warning "Failed to create OU Groups: $result"
+    }
+}
+
+# Step 4c: Populate OpenLDAP with test data
+# OpenLDAP starts empty (only base OUs from bootstrap). Unlike Samba AD which uses snapshot
+# images with pre-populated data, OpenLDAP needs live population via Populate-OpenLDAP.ps1.
+# Skip for S1 — the target directory starts empty (HR-driven provisioning into clean directory).
+# Skip for S8 — it has its own population script (Populate-OpenLDAP-Scenario8.ps1) that only
+# populates Source. The base script populates both suffixes, which would create pre-existing
+# objects in Target and cause CouldNotJoinDueToExistingJoin errors during initial sync.
+if ($DirectoryType -eq "OpenLDAP" -and $Scenario -notlike "*Scenario1*" -and $Scenario -notlike "*Scenario8*" -and -not $script:UsingOpenLDAPSnapshots) {
+    Write-Section "Step 4c: Populating OpenLDAP with Test Data"
+    Write-Step "Running Populate-OpenLDAP.ps1 -Template $Template..."
+    $populateScript = Join-Path $scriptRoot "Populate-OpenLDAP.ps1"
+    if (Test-Path $populateScript) {
+        & $populateScript -Template $Template
+        if ($LASTEXITCODE -ne 0) {
+            Write-Failure "OpenLDAP population failed"
+            exit 1
+        }
+        Write-Success "OpenLDAP populated with $Template template data"
+    }
+    else {
+        Write-Failure "Populate-OpenLDAP.ps1 not found at $populateScript"
+        exit 1
     }
 }
 
@@ -1419,6 +1781,7 @@ if ($SetupOnly) {
             JIMUrl = "http://localhost:5200"
             ApiKey = $apiKey
             Template = $Template
+            DirectoryConfig = $script:DirectoryConfig
         }
         if ($PSBoundParameters.ContainsKey('ExportConcurrency')) {
             $setupParams.ExportConcurrency = $ExportConcurrency
@@ -1465,7 +1828,7 @@ if ($SetupOnly) {
 
     # Docker Cleanup (prune unused images and build cache to prevent disk space accumulation)
     Write-Step "Pruning unused images and build cache (preserving snapshots)..."
-    $imagePrune = docker image prune -af --filter "label!=jim.samba.snapshot-hash" 2>&1
+    $imagePrune = docker image prune -af --filter "label!=jim.samba.snapshot-hash" --filter "label!=jim.samba.build-hash" --filter "label!=jim.openldap.snapshot-hash" --filter "label!=jim.openldap.build-hash" 2>&1
     $builderPrune = docker builder prune -af 2>&1
     $imageReclaimed = $imagePrune | Select-String "Total reclaimed space:\s*(.+)"
     $builderReclaimed = $builderPrune | Select-String "Total reclaimed space:\s*(.+)"
@@ -1550,10 +1913,11 @@ $scenarioParams = @{
     Template = $Template
     Step = $Step
     ApiKey = $apiKey
+    DirectoryConfig = $script:DirectoryConfig
 }
 
-# Skip population if using snapshot images
-if ($script:UsingSnapshots) {
+# Skip population if using snapshot images (Samba AD or OpenLDAP)
+if ($script:UsingSnapshots -or $script:UsingOpenLDAPSnapshots) {
     $scenarioParams.SkipPopulate = $true
 }
 
@@ -1862,7 +2226,7 @@ Write-Section "Step 7: Docker Cleanup"
 
 Write-Step "Pruning unused images and build cache (preserving snapshots)..."
 # Use --filter to exclude snapshot images from pruning (they take hours to build)
-$imagePrune = docker image prune -af --filter "label!=jim.samba.snapshot-hash" 2>&1
+$imagePrune = docker image prune -af --filter "label!=jim.samba.snapshot-hash" --filter "label!=jim.samba.build-hash" --filter "label!=jim.openldap.snapshot-hash" --filter "label!=jim.openldap.build-hash" 2>&1
 $builderPrune = docker builder prune -af 2>&1
 $imageReclaimed = $imagePrune | Select-String "Total reclaimed space:\s*(.+)"
 $builderReclaimed = $builderPrune | Select-String "Total reclaimed space:\s*(.+)"

@@ -145,7 +145,7 @@ function Reset-JIMForNextScenario {
     docker volume rm jim-db-volume 2>&1 | Out-Null
 
     # 3. Clean Samba AD test data
-    docker exec samba-ad-primary samba-tool ou delete "OU=Corp,DC=subatomic,DC=local" --force-subtree-delete 2>&1 | Out-Null
+    docker exec samba-ad-primary samba-tool ou delete "OU=Corp,DC=panoply,DC=local" --force-subtree-delete 2>&1 | Out-Null
     # ... clean other OUs as needed
 
     # 4. Generate new API key, update .env

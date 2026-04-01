@@ -139,7 +139,7 @@ function Get-Scenario8GroupScale {
 
 # Reference data for group names
 $script:CompanyNames = @(
-    "Subatomic", "NexusDynamics", "OrbitalSystems", "QuantumBridge", "StellarLogistics",
+    "Panoply", "NexusDynamics", "OrbitalSystems", "QuantumBridge", "StellarLogistics",
     "VortexTech", "CatalystCorp", "HorizonIndustries", "PulsarEnterprises", "NovaNetworks",
     "FusionCore", "CelestialSystems", "NebulaWorks", "AtomicVentures", "CosmicPlatform"
 )
@@ -337,7 +337,7 @@ function New-TestGroup {
         Index for distribution calculations
 
     .PARAMETER Domain
-        Domain suffix for email addresses (e.g., "sourcedomain.local")
+        Domain suffix for email addresses (e.g., "resurgam.local")
     #>
     param(
         [Parameter(Mandatory=$true)]
@@ -351,7 +351,7 @@ function New-TestGroup {
         [int]$Index,
 
         [Parameter(Mandatory=$false)]
-        [string]$Domain = "sourcedomain.local"
+        [string]$Domain = "resurgam.local"
     )
 
     # Build group name based on category
@@ -432,7 +432,7 @@ function New-Scenario8GroupSet {
         [string]$Template,
 
         [Parameter(Mandatory=$false)]
-        [string]$Domain = "sourcedomain.local"
+        [string]$Domain = "resurgam.local"
     )
 
     $scale = Get-Scenario8GroupScale -Template $Template

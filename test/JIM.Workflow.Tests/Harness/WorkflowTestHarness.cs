@@ -253,10 +253,12 @@ public class WorkflowTestHarness : IDisposable
         var workerTask = CreateWorkerTask(activity);
 
         var cts = new CancellationTokenSource();
+        var syncEngine = new JIM.Application.Servers.SyncEngine();
         var processor = new SyncImportTaskProcessor(
             _jim,
             _syncRepo,
             _syncServer,
+            syncEngine,
             connector,
             system,
             runProfile,

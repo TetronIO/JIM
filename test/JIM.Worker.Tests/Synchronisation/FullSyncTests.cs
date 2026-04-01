@@ -1170,6 +1170,10 @@ public class FullSyncTests
         // get a stub import sync rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
         var mvo = MetaverseObjectsData[0];
+
+        // Set DeletionRule to Manual so the MVO is not deleted immediately when the CSO is obsoleted.
+        // This test is specifically testing attribute recall behaviour, not deletion.
+        mvo.Type!.DeletionRule = MetaverseObjectDeletionRule.Manual;
         cso.MetaverseObject = mvo;
         cso.MetaverseObjectId = mvo.Id;
         cso.JoinType = ConnectedSystemObjectJoinType.Joined;
@@ -1295,6 +1299,11 @@ public class FullSyncTests
         sourceCso.Type.RemoveContributedAttributesOnObsoletion = true;
 
         var mvo = MetaverseObjectsData[0];
+
+        // Set DeletionRule to Manual so the MVO is not deleted immediately when the source CSO
+        // is obsoleted. This test is specifically testing attribute recall pending export behaviour.
+        mvo.Type!.DeletionRule = MetaverseObjectDeletionRule.Manual;
+
         sourceCso.MetaverseObject = mvo;
         sourceCso.MetaverseObjectId = mvo.Id;
         sourceCso.JoinType = ConnectedSystemObjectJoinType.Joined;
@@ -2861,8 +2870,8 @@ public class FullSyncTests
             .FirstOrDefault(av => av.AttributeId == (int)MockMetaverseAttributeName.Manager);
         Assert.That(managerValue, Is.Not.Null,
             "CSO-A's MVO should have a Manager reference attribute (resolved via cross-page reference resolution).");
-        Assert.That(managerValue!.ReferenceValue, Is.EqualTo(csoBMvo),
-            "The Manager reference should point to CSO-B's MVO.");
+        Assert.That(managerValue!.ReferenceValueId, Is.EqualTo(csoBMvo!.Id),
+            "The Manager reference FK should point to CSO-B's MVO.");
 
         // Verify scalar attributes also flowed correctly (basic sanity check)
         var csoADisplayName = csoAMvo.AttributeValues

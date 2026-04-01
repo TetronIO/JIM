@@ -1,6 +1,6 @@
 # Full Synchronisation - CSO Processing Flow
 
-> Generated against JIM v0.3.0 (`0d1c88e9`). If the codebase has changed significantly since then, these diagrams may be out of date.
+> Last updated: 2026-03-26 — JIM v0.7.1 (`00907431`)
 
 This diagram shows the core decision tree for processing a single Connected System Object (CSO) during Full or Delta Synchronisation. This is the central flow of JIM's identity management engine.
 
@@ -8,11 +8,16 @@ Both Full Sync and Delta Sync use identical processing logic per-CSO. The only d
 - **Full Sync**: processes ALL CSOs in the Connected System
 - **Delta Sync**: processes only CSOs modified since `LastDeltaSyncCompletedAt`
 
+Since v0.7.1, sync decisions are split across three layers:
+- **ISyncEngine** — Pure domain logic (projection, attribute flow, deletion rules, export confirmation). Stateless, I/O-free.
+- **ISyncServer** — Orchestration facade (matching, scoping, drift detection, export evaluation). Delegates to application-layer servers.
+- **ISyncRepository** — Dedicated data access (bulk CSO/MVO writes, pending exports, RPEIs).
+
 ## Overall Page Processing
 
 ```mermaid
 flowchart TD
-    Start([Start Sync]) --> Prepare[Prepare: count CSOs + pending exports<br/>Load sync rules, object types<br/>Build drift detection cache<br/>Build export evaluation cache<br/>Pre-load pending exports into dictionary]
+    Start([Start Sync]) --> Prepare[Prepare: count CSOs + pending exports<br/>Load sync rules, object types via ISyncRepository<br/>Build drift detection cache<br/>Build export evaluation cache<br/>Pre-load pending exports into dictionary]
     Prepare --> PageLoop{More CSO<br/>pages?}
 
     PageLoop -->|Yes| LoadPage[Load page of CSOs<br/>without attributes for performance]
@@ -45,7 +50,7 @@ This is the decision tree within `ProcessConnectedSystemObjectAsync` for a singl
 
 ```mermaid
 flowchart TD
-    Entry([ProcessConnectedSystemObjectAsync]) --> ConfirmPE[Confirm pending exports<br/>Check if previously exported values<br/>now match CSO attributes]
+    Entry([ProcessConnectedSystemObjectAsync]) --> ConfirmPE[Confirm pending exports<br/>ISyncEngine.EvaluatePendingExportConfirmation<br/>checks if exported values match CSO attributes]
     ConfirmPE --> CheckObsolete{CSO status<br/>= Obsolete?}
 
     %% --- Obsolete CSO path ---
@@ -55,13 +60,13 @@ flowchart TD
     CheckJoined -->|Yes| CheckOosAction{InboundOutOfScope<br/>Action?}
 
     CheckOosAction -->|RemainJoined| KeepJoin[Delete CSO but preserve<br/>MVO join state<br/>Once managed always managed]
-    CheckOosAction -->|Disconnect| RemoveAttrs{RemoveContributed<br/>AttributesOnObsoletion<br/>enabled on object type?}
+    CheckOosAction -->|Disconnect| RemoveAttrs{ISyncEngine.DetermineOutOfScopeAction<br/>RemoveContributed<br/>AttributesOnObsoletion<br/>enabled on object type?}
 
     RemoveAttrs -->|Yes| RecallAttrs[Attribute Recall:<br/>Find MVO attributes where<br/>ContributedBySystemId = this system<br/>Add to PendingAttributeValueRemovals<br/>Track removedAttributes set]
     RemoveAttrs -->|No| BreakJoin
     RecallAttrs --> QueueRecall[Queue MVO for export evaluation<br/>with removedAttributes set<br/>Pure recalls skip export evaluation]
     QueueRecall --> BreakJoin[Break CSO-MVO join<br/>Set JoinType = NotJoined]
-    BreakJoin --> EvalDeletion[Evaluate MVO deletion rule]
+    BreakJoin --> EvalDeletion[ISyncEngine.EvaluateMvoDeletionRule<br/>Pure decision on MVO fate]
     EvalDeletion --> DeletionRule{MVO deletion<br/>rule?}
 
     DeletionRule -->|Manual| NoDelete[No automatic deletion<br/>MVO remains]
@@ -96,7 +101,7 @@ flowchart TD
     CheckMvo -->|No| AttemptJoin[Attempt Join<br/>For each import sync rule:<br/>Find matching MVO by join criteria]
     AttemptJoin --> JoinResult{Match<br/>found?}
 
-    JoinResult -->|No match| AttemptProject{Sync rule has<br/>ProjectToMetaverse<br/>= true?}
+    JoinResult -->|No match| AttemptProject{ISyncEngine.EvaluateProjection<br/>Sync rule has<br/>ProjectToMetaverse = true?}
     AttemptProject -->|Yes| Project[Create new MVO<br/>Set type from sync rule<br/>Link CSO to new MVO]
     AttemptProject -->|No| Done
 
@@ -107,10 +112,10 @@ flowchart TD
     %% --- Attribute Flow path ---
     EstablishJoin --> AttrFlow
     Project --> AttrFlow
-    CheckMvo -->|Yes| AttrFlow[Inbound Attribute Flow<br/>Pass 1: scalar attributes only<br/>For each sync rule mapping:<br/>- Direct: CSO attr --> MVO attr<br/>- Expression: evaluate --> MVO attr<br/>- ContributedBySystemId set on all new values<br/>Skip reference attributes]
+    CheckMvo -->|Yes| AttrFlow[ISyncEngine.FlowInboundAttributes<br/>Pass 1: scalar attributes only<br/>For each sync rule mapping:<br/>- Direct: CSO attr --> MVO attr<br/>- Expression: evaluate --> MVO attr<br/>- ContributedBySystemId set on all new values<br/>Skip reference attributes]
 
     AttrFlow --> QueueRef[Queue CSO for deferred<br/>reference attribute processing<br/>Pass 2 at end of page]
-    QueueRef --> ApplyChanges[Apply pending attribute<br/>additions and removals to MVO]
+    QueueRef --> ApplyChanges[ISyncEngine.ApplyPendingAttributeChanges<br/>Apply pending attribute<br/>additions and removals to MVO]
     ApplyChanges --> QueueMvo[Queue MVO for batch<br/>persist and export evaluation]
     QueueMvo --> DriftDetect[Drift Detection<br/>Compare CSO values against<br/>expected MVO state<br/>Create corrective pending exports<br/>for EnforceState export rules]
     DriftDetect --> Result([Return change result:<br/>Projected / Joined / AttributeFlow / NoChanges])
@@ -122,13 +127,15 @@ flowchart TD
 
 ## Key Design Decisions
 
-- **Two-pass attribute flow**: Scalar attributes are processed first (pass 1), then reference attributes are deferred to a second pass after all CSOs in the page have MVOs. This ensures group member references can resolve to MVOs that were created later in the same page.
+- **Three-layer sync architecture (v0.7.1)**: Sync decisions are split across `ISyncEngine` (pure domain logic — projection, attribute flow, deletion rules, export confirmation), `ISyncServer` (orchestration — matching, scoping, drift detection, export evaluation), and `ISyncRepository` (dedicated data access — bulk CSO/MVO writes, pending exports, RPEIs). This separation enables deterministic unit testing of business logic without I/O.
 
-- **Batch persistence**: MVO creates/updates, pending exports, and CSO deletions are all batched per-page to reduce database round trips. This is critical for performance at scale.
+- **Two-pass attribute flow**: Scalar attributes are processed first (pass 1 via `ISyncEngine.FlowInboundAttributes`), then reference attributes are deferred to a second pass after all CSOs in the page have MVOs. This ensures group member references can resolve to MVOs that were created later in the same page.
+
+- **Batch persistence**: MVO creates/updates, pending exports, and CSO deletions are all batched per-page via `ISyncRepository` bulk operations to reduce database round trips. This is critical for performance at scale.
 
 - **No-net-change detection**: Before creating pending exports, the system checks if the target CSO already has the expected values (using pre-cached data). This avoids unnecessary export operations.
 
-- **Drift detection**: After inbound attribute flow, the system checks whether CSO values match expected MVO state. If an `EnforceState` export rule exists and the CSO has drifted, a corrective pending export is created.
+- **Drift detection**: After inbound attribute flow, `DriftDetectionService` checks whether CSO values match expected MVO state. If an `EnforceState` export rule exists and the CSO has drifted, a corrective pending export is created.
 
 - **Attribute recall via ContributedBySystemId**: Every MVO attribute value tracks which connected system contributed it. When a CSO is obsoleted and `RemoveContributedAttributesOnObsoletion` is enabled on the object type, all attributes contributed by that system are recalled (removed from the MVO). The `removedAttributes` set is passed to export evaluation, where pure recall operations (all changes are removals) skip export evaluation entirely to avoid expression mapping errors against incomplete data.
 

@@ -44,18 +44,18 @@ $scale = Get-TemplateScale -Template $Template
 $containerMap = @{
     Primary = @{
         Container = "samba-ad-primary"
-        Domain = "SUBATOMIC"
-        DomainDN = "DC=subatomic,DC=local"
+        Domain = "PANOPLY"
+        DomainDN = "DC=panoply,DC=local"
     }
     Source = @{
         Container = "samba-ad-source"
-        Domain = "SOURCEDOMAIN"
-        DomainDN = "DC=sourcedomain,DC=local"
+        Domain = "RESURGAM"
+        DomainDN = "DC=resurgam,DC=local"
     }
     Target = @{
         Container = "samba-ad-target"
-        Domain = "TARGETDOMAIN"
-        DomainDN = "DC=targetdomain,DC=local"
+        Domain = "GENTIAN"
+        DomainDN = "DC=gentian,DC=local"
     }
 }
 
@@ -87,9 +87,9 @@ foreach ($ou in $baseOus) {
 }
 
 # Create the Corp base OU - this is the OU that will be selected in JIM for partition/container testing
-# Structure: OU=Corp,DC=subatomic,DC=local
-#   - OU=Users,OU=Corp,DC=subatomic,DC=local  (for user objects)
-#   - OU=Groups,OU=Corp,DC=subatomic,DC=local (for group objects)
+# Structure: OU=Corp,DC=panoply,DC=local
+#   - OU=Users,OU=Corp,DC=panoply,DC=local  (for user objects)
+#   - OU=Groups,OU=Corp,DC=panoply,DC=local (for group objects)
 Write-Host "  Creating Corp base OU..." -ForegroundColor Gray
 $result = docker exec $container samba-tool ou create "OU=Corp,$domainDN" 2>&1
 if ($LASTEXITCODE -ne 0 -and $result -notmatch "already exists") {

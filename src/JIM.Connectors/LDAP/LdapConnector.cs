@@ -11,6 +11,8 @@ namespace JIM.Connectors.LDAP;
 public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IDisposable
 {
     private LdapConnection? _connection;
+    private Func<LdapConnection>? _connectionFactory;
+    private LdapDirectoryType _directoryType = LdapDirectoryType.Generic;
     private bool _disposed;
     private ICertificateProvider? _certificateProvider;
     private ICredentialProtection? _credentialProtection;
@@ -55,14 +57,21 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     private readonly string _settingMaxRetries = "Maximum Retries";
     private readonly string _settingRetryDelay = "Retry Delay (ms)";
 
+    // Schema settings
+    private readonly string _settingIncludeAuxiliaryClasses = "Include Auxiliary Classes";
+
     // Hierarchy settings
     private readonly string _settingSkipHiddenPartitions = "Skip Hidden Partitions";
+
+    // Import settings
+    private readonly string _settingImportConcurrency = "Import Concurrency";
 
     // Export settings
     private readonly string _settingDeleteBehaviour = "Delete Behaviour";
     private readonly string _settingDisableAttribute = "Disable Attribute";
     private readonly string _settingExportConcurrency = "Export Concurrency";
     private readonly string _settingModifyBatchSize = "Modify Batch Size";
+    private readonly string _settingGroupPlaceholderMemberDn = LdapConnectorConstants.SETTING_GROUP_PLACEHOLDER_MEMBER_DN;
 
     public List<ConnectorSetting> GetSettings()
     {
@@ -85,10 +94,14 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
             new() { Name = "Import Settings", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
             new() { Name = _settingSearchTimeout, Required = false, Description = "Maximum time in seconds to wait for LDAP search results. Default is 300 (5 minutes).", DefaultIntValue = 300, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Integer },
+            new() { Name = _settingImportConcurrency, Required = false, Description = "Maximum number of parallel LDAP connections used during full imports from OpenLDAP and Generic directories. Each connection handles one container and object type combination independently, avoiding RFC 2696 paging cookie limitations. Not used for Active Directory. Default is 4. Recommended range: 2-8.", DefaultIntValue = LdapConnectorConstants.DEFAULT_IMPORT_CONCURRENCY, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Integer },
 
             new() { Name = "Retry Settings", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
             new() { Name = _settingMaxRetries, Required = false, Description = "Maximum number of retry attempts for transient failures. Default is 3.", DefaultIntValue = LdapConnectorConstants.DEFAULT_MAX_RETRIES, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Integer },
             new() { Name = _settingRetryDelay, Required = false, Description = "Initial delay between retries in milliseconds. Uses exponential backoff. Default is 1000ms.", DefaultIntValue = LdapConnectorConstants.DEFAULT_RETRY_DELAY_MS, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Integer },
+
+            new() { Name = "Schema Discovery", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
+            new() { Name = _settingIncludeAuxiliaryClasses, Description = "When enabled, auxiliary object classes are included in schema discovery alongside structural classes. Enable this if you need to import or export objects whose primary class is declared as auxiliary in the directory schema.", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox },
 
             new() { Name = "Container Provisioning", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
             new() { Name = _settingCreateContainersAsNeeded, Description = "i.e. create OUs as needed when provisioning new objects.", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox },
@@ -101,7 +114,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             new() { Name = _settingDeleteBehaviour, Required = false, Description = "How to handle object deletions.", Type = ConnectedSystemSettingType.DropDown, DropDownValues = new() { LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE, LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE }, Category = ConnectedSystemSettingCategory.Export },
             new() { Name = _settingDisableAttribute, Required = false, Description = "Attribute to set when disabling objects (e.g., userAccountControl for AD). Only used when Delete Behaviour is 'Disable'.", DefaultStringValue = "userAccountControl", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.String },
             new() { Name = _settingExportConcurrency, Required = false, Description = "Maximum number of concurrent LDAP operations during export. Higher values improve throughput but increase load on the target directory. Default is 4. Recommended range: 2-8. Values above 8 show diminishing returns and may overwhelm the directory server.", DefaultIntValue = LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Integer },
-            new() { Name = _settingModifyBatchSize, Required = false, Description = "Maximum number of values per multi-valued attribute modification in a single LDAP request. When adding or removing many values from a multi-valued attribute (e.g., group members), changes are split into batches of this size. Lower values improve compatibility with constrained LDAP servers; higher values improve throughput. Default is 100. Recommended range: 50-500.", DefaultIntValue = LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Integer }
+            new() { Name = _settingModifyBatchSize, Required = false, Description = "Maximum number of values per multi-valued attribute modification in a single LDAP request. When adding or removing many values from a multi-valued attribute (e.g., group members), changes are split into batches of this size. Lower values improve compatibility with constrained LDAP servers; higher values improve throughput. Default is 100. Recommended range: 50-500.", DefaultIntValue = LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Integer },
+
+            new() { Name = "Group Membership", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Heading },
+            new() { Name = _settingGroupPlaceholderMemberDn, Required = false, Description = "Placeholder member DN used for group object classes that require at least one member (e.g. groupOfNames). When a group has no real members, this value is added to satisfy the schema constraint. It is automatically filtered out during import. Only applies to non-AD directories. Default: cn=placeholder. If your directory has referential integrity enabled, set this to an existing entry's DN.", DefaultStringValue = LdapConnectorConstants.DEFAULT_GROUP_PLACEHOLDER_MEMBER_DN, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.String }
         };
     }
 
@@ -143,8 +159,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         if (_connection == null)
             throw new Exception("No connection available to get schema with");
 
+        var includeAuxiliaryClasses = settingValues.SingleOrDefault(q => q.Setting.Name == _settingIncludeAuxiliaryClasses)?.CheckboxValue ?? false;
+
         var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
-        var ldapConnectorSchema = new LdapConnectorSchema(_connection, logger, rootDse);
+        var ldapConnectorSchema = new LdapConnectorSchema(_connection, logger, rootDse, includeAuxiliaryClasses);
         var schema = await ldapConnectorSchema.GetSchemaAsync();
         CloseImportConnection();
         return schema;
@@ -160,7 +178,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
         var skipHiddenPartitions = settingValues.SingleOrDefault(q => q.Setting.Name == _settingSkipHiddenPartitions)?.CheckboxValue ?? true;
 
-        var ldapConnectorPartitions = new LdapConnectorPartitions(_connection, logger);
+        // Detect directory type so partition discovery can use the appropriate mechanism
+        var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
+
+        var ldapConnectorPartitions = new LdapConnectorPartitions(_connection, logger, rootDse.DirectoryType);
         var partitions = await ldapConnectorPartitions.GetPartitionsAsync(skipHiddenPartitions);
         CloseImportConnection();
         return partitions;
@@ -221,42 +242,66 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         else if (authTypeSettingValueString == LdapConnectorConstants.SETTING_AUTH_TYPE_NTLM)
             authTypeEnumValue = AuthType.Ntlm;
 
+        // Build a reusable connection factory so LdapConnectorImport can create additional
+        // connections for parallel imports (one connection per container+objectType combo).
+        // Captured values are immutable for the duration of the import session.
+        _connectionFactory = () => CreateConnection(identifier, credential, authTypeEnumValue,
+            TimeSpan.FromSeconds(timeoutSeconds.IntValue.Value), useSsl, skipCertValidation, logger);
+
         // Execute connection with retry logic
         ExecuteWithRetry(() =>
         {
-            _connection = new LdapConnection(identifier, credential, authTypeEnumValue);
-            _connection.SessionOptions.ProtocolVersion = 3;
-            _connection.Timeout = TimeSpan.FromSeconds(timeoutSeconds.IntValue.Value);
-
-            // Configure LDAPS if enabled
-            if (useSsl)
-            {
-                _connection.SessionOptions.SecureSocketLayer = true;
-
-                if (skipCertValidation)
-                {
-                    logger.Warning("Certificate validation is disabled. This is not recommended for production environments.");
-                    // On Linux, setting VerifyServerCertificate can fail. Use LDAPTLS_REQCERT=never
-                    // environment variable instead. On Windows, set the callback directly.
-                    if (OperatingSystem.IsWindows())
-                    {
-                        _connection.SessionOptions.VerifyServerCertificate = (connection, certificate) => true;
-                    }
-                    else
-                    {
-                        logger.Debug("Skipping VerifyServerCertificate callback on Linux - using LDAPTLS_REQCERT environment variable");
-                    }
-                }
-                else if (_trustedCertificates != null && _trustedCertificates.Count > 0)
-                {
-                    // Full validation with JIM certificates supplementing system store
-                    _connection.SessionOptions.VerifyServerCertificate = ValidateServerCertificate;
-                }
-                // else: use system default validation only
-            }
-
-            _connection.Bind();
+            _connection = _connectionFactory();
         }, maxRetries, retryDelayMs, logger);
+    }
+
+    /// <summary>
+    /// Creates a new bound LdapConnection with the specified parameters.
+    /// Used both for the primary import connection and for parallel import connections
+    /// in OpenLDAP/Generic directories where each paged search needs its own connection.
+    /// </summary>
+    private LdapConnection CreateConnection(
+        LdapDirectoryIdentifier identifier,
+        NetworkCredential credential,
+        AuthType authType,
+        TimeSpan timeout,
+        bool useSsl,
+        bool skipCertValidation,
+        ILogger logger)
+    {
+        var connection = new LdapConnection(identifier, credential, authType);
+        connection.SessionOptions.ProtocolVersion = 3;
+        connection.Timeout = timeout;
+
+        // Configure LDAPS if enabled
+        if (useSsl)
+        {
+            connection.SessionOptions.SecureSocketLayer = true;
+
+            if (skipCertValidation)
+            {
+                logger.Warning("Certificate validation is disabled. This is not recommended for production environments.");
+                // On Linux, setting VerifyServerCertificate can fail. Use LDAPTLS_REQCERT=never
+                // environment variable instead. On Windows, set the callback directly.
+                if (OperatingSystem.IsWindows())
+                {
+                    connection.SessionOptions.VerifyServerCertificate = (_, _) => true;
+                }
+                else
+                {
+                    logger.Debug("Skipping VerifyServerCertificate callback on Linux - using LDAPTLS_REQCERT environment variable");
+                }
+            }
+            else if (_trustedCertificates != null && _trustedCertificates.Count > 0)
+            {
+                // Full validation with JIM certificates supplementing system store
+                connection.SessionOptions.VerifyServerCertificate = ValidateServerCertificate;
+            }
+            // else: use system default validation only
+        }
+
+        connection.Bind();
+        return connection;
     }
 
     /// <summary>
@@ -315,7 +360,11 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         // needs to filter by attributes
         // needs to be able to stop processing at convenient points if cancellation has been requested
 
-        var import = new LdapConnectorImport(connectedSystem, runProfile, _connection, paginationTokens, persistedConnectorData, logger, cancellationToken);
+        var importConcurrency = connectedSystem.SettingValues
+            .SingleOrDefault(s => s.Setting.Name == _settingImportConcurrency)?.IntValue
+            ?? LdapConnectorConstants.DEFAULT_IMPORT_CONCURRENCY;
+
+        var import = new LdapConnectorImport(connectedSystem, runProfile, _connection, _connectionFactory, importConcurrency, paginationTokens, persistedConnectorData, logger, cancellationToken);
 
         switch (runProfile.RunType)
         {
@@ -348,6 +397,13 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
         // Reuse the same connection logic as import
         OpenImportConnection(settings.ToList(), Log.Logger);
+
+        // Detect directory type for export operations (external ID fetching, etc.)
+        if (_connection != null)
+        {
+            var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, Log.Logger);
+            _directoryType = rootDse.DirectoryType;
+        }
     }
 
     public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken)
@@ -366,8 +422,12 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             .FirstOrDefault(s => s.Setting.Name == _settingModifyBatchSize)?.IntValue
             ?? LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE;
 
+        var placeholderMemberDn = _exportSettings
+            .FirstOrDefault(s => s.Setting.Name == _settingGroupPlaceholderMemberDn)?.StringValue
+            ?? LdapConnectorConstants.DEFAULT_GROUP_PLACEHOLDER_MEMBER_DN;
+
         var executor = new LdapOperationExecutor(_connection);
-        _currentExport = new LdapConnectorExport(executor, _exportSettings, Log.Logger, concurrency, modifyBatchSize);
+        _currentExport = new LdapConnectorExport(executor, _exportSettings, Log.Logger, concurrency, modifyBatchSize, _directoryType, placeholderMemberDn);
         return _currentExport.ExecuteAsync(pendingExports, cancellationToken);
     }
 

@@ -8,15 +8,28 @@ internal class LdapConnectorPartitions
 {
     private readonly LdapConnection _connection;
     private readonly ILogger _logger;
+    private readonly LdapDirectoryType _directoryType;
     private string _partitionsDn = null!;
 
-    internal LdapConnectorPartitions(LdapConnection ldapConnection, ILogger logger)
+    internal LdapConnectorPartitions(LdapConnection ldapConnection, ILogger logger, LdapDirectoryType directoryType)
     {
         _connection = ldapConnection;
         _logger = logger;
+        _directoryType = directoryType;
     }
 
     internal async Task<List<ConnectorPartition>> GetPartitionsAsync(bool skipHiddenPartitions = true)
+    {
+        return _directoryType is LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD
+            ? await GetActiveDirectoryPartitionsAsync(skipHiddenPartitions)
+            : await GetNamingContextPartitionsAsync();
+    }
+
+    /// <summary>
+    /// Discovers partitions using the AD-specific crossRef/systemFlags mechanism.
+    /// Works for both Microsoft AD and Samba AD.
+    /// </summary>
+    private async Task<List<ConnectorPartition>> GetActiveDirectoryPartitionsAsync(bool skipHiddenPartitions)
     {
         return await Task.Run(() =>
         {
@@ -32,13 +45,13 @@ internal class LdapConnectorPartitions
             var response = (SearchResponse)_connection.SendRequest(request);
             var partitions = new List<ConnectorPartition>();
 
-            _logger.Debug("GetPartitionsAsync: Found {Count} crossRef entries to process (skipHiddenPartitions={SkipHidden})",
+            _logger.Debug("GetActiveDirectoryPartitionsAsync: Found {Count} crossRef entries to process (skipHiddenPartitions={SkipHidden})",
                 response.Entries.Count, skipHiddenPartitions);
 
             foreach (SearchResultEntry entry in response.Entries)
             {
-                // ncName is the actual naming context DN (e.g., "DC=subatomic,DC=local")
-                // entry.DistinguishedName is the crossRef object DN (e.g., "CN=subatomic,CN=Partitions,CN=Configuration,DC=subatomic,DC=local")
+                // ncName is the actual naming context DN (e.g., "DC=panoply,DC=local")
+                // entry.DistinguishedName is the crossRef object DN (e.g., "CN=panoply,CN=Partitions,CN=Configuration,DC=panoply,DC=local")
                 // We use ncName as the Id because container DNs end with the naming context, not the crossRef DN
                 var ncName = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "ncname") ?? entry.DistinguishedName;
                 var systemFlags = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "systemflags");
@@ -54,13 +67,13 @@ internal class LdapConnectorPartitions
                                                !ncName.Contains("ForestDnsZones", StringComparison.OrdinalIgnoreCase);
                 var isHidden = !isDomainPartitionByFlags && !isDomainPartitionByName;
 
-                _logger.Debug("GetPartitionsAsync: Partition '{Name}' - systemFlags={SystemFlags}, isDomainByFlags={ByFlags}, isDomainByName={ByName}, isHidden={IsHidden}",
+                _logger.Debug("GetActiveDirectoryPartitionsAsync: Partition '{Name}' - systemFlags={SystemFlags}, isDomainByFlags={ByFlags}, isDomainByName={ByName}, isHidden={IsHidden}",
                     ncName, systemFlags ?? "(null)", isDomainPartitionByFlags, isDomainPartitionByName, isHidden);
 
                 // Skip hidden partitions early if configured - this avoids expensive LDAP subtree searches
                 if (skipHiddenPartitions && isHidden)
                 {
-                    _logger.Debug("GetPartitionsAsync: Skipping hidden partition '{Name}'", ncName);
+                    _logger.Debug("GetActiveDirectoryPartitionsAsync: Skipping hidden partition '{Name}'", ncName);
                     continue;
                 }
 
@@ -76,7 +89,7 @@ internal class LdapConnectorPartitions
                 partition.Containers = GetPartitionContainers(partition);
                 partitionStopwatch.Stop();
 
-                _logger.Debug("GetPartitionsAsync: Partition '{Name}' (Hidden={Hidden}) - {ContainerCount} containers retrieved in {ElapsedMs}ms",
+                _logger.Debug("GetActiveDirectoryPartitionsAsync: Partition '{Name}' (Hidden={Hidden}) - {ContainerCount} containers retrieved in {ElapsedMs}ms",
                     partition.Name, partition.Hidden, partition.Containers.Count, partitionStopwatch.ElapsedMilliseconds);
 
                 // only return partitions that have containers. Discard the rest.
@@ -85,7 +98,56 @@ internal class LdapConnectorPartitions
             }
 
             totalStopwatch.Stop();
-            _logger.Information("GetPartitionsAsync: Completed - {PartitionCount} partitions with containers in {ElapsedMs}ms total",
+            _logger.Information("GetActiveDirectoryPartitionsAsync: Completed - {PartitionCount} partitions with containers in {ElapsedMs}ms total",
+                partitions.Count, totalStopwatch.ElapsedMilliseconds);
+
+            return partitions;
+        });
+    }
+
+    /// <summary>
+    /// Discovers partitions using the standard LDAP namingContexts rootDSE attribute (RFC 4512).
+    /// Works for OpenLDAP, 389 Directory Server, and other standards-compliant directories.
+    /// All naming contexts are returned as non-hidden partitions.
+    /// </summary>
+    private async Task<List<ConnectorPartition>> GetNamingContextPartitionsAsync()
+    {
+        return await Task.Run(() =>
+        {
+            var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            var namingContexts = GetNamingContexts();
+            if (namingContexts == null || namingContexts.Count == 0)
+                throw new Exception("Couldn't get any namingContexts from rootDSE. The directory may not expose partition information.");
+
+            _logger.Debug("GetNamingContextPartitionsAsync: Found {Count} naming contexts", namingContexts.Count);
+
+            var partitions = new List<ConnectorPartition>();
+
+            foreach (var namingContext in namingContexts)
+            {
+                var partitionStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                var partition = new ConnectorPartition
+                {
+                    Id = namingContext,
+                    Name = namingContext,
+                    Hidden = false,
+                };
+
+                partition.Containers = GetPartitionContainers(partition);
+                partitionStopwatch.Stop();
+
+                _logger.Debug("GetNamingContextPartitionsAsync: Partition '{Name}' - {ContainerCount} containers retrieved in {ElapsedMs}ms",
+                    partition.Name, partition.Containers.Count, partitionStopwatch.ElapsedMilliseconds);
+
+                // only return partitions that have containers. Discard the rest.
+                if (partition.Containers.Count > 0)
+                    partitions.Add(partition);
+            }
+
+            totalStopwatch.Stop();
+            _logger.Information("GetNamingContextPartitionsAsync: Completed - {PartitionCount} partitions with containers in {ElapsedMs}ms total",
                 partitions.Count, totalStopwatch.ElapsedMilliseconds);
 
             return partitions;
@@ -194,6 +256,32 @@ internal class LdapConnectorPartitions
     /// Used to decouple the hierarchy building algorithm from System.DirectoryServices.Protocols.
     /// </summary>
     internal record ContainerEntry(string DistinguishedName, string Name);
+
+    /// <summary>
+    /// Retrieves the namingContexts attribute from the rootDSE (RFC 4512).
+    /// This is the standard mechanism for discovering partitions on non-AD directories.
+    /// </summary>
+    private List<string>? GetNamingContexts()
+    {
+        var request = new SearchRequest { Scope = SearchScope.Base };
+        request.Attributes.Add("namingContexts");
+        var response = (SearchResponse)_connection.SendRequest(request);
+
+        if (response.ResultCode != ResultCode.Success)
+        {
+            _logger.Warning("GetNamingContexts: No success. Result code: {ResultCode}", response.ResultCode);
+            return null;
+        }
+
+        if (response.Entries.Count == 0)
+        {
+            _logger.Warning("GetNamingContexts: Didn't get any results from rootDSE!");
+            return null;
+        }
+
+        var entry = response.Entries[0];
+        return LdapConnectorUtilities.GetEntryAttributeStringValues(entry, "namingContexts");
+    }
 
     private string? GetConfigurationNamingContext()
     {

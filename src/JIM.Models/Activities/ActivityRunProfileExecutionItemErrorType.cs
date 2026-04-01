@@ -80,5 +80,22 @@ public enum ActivityRunProfileExecutionItemErrorType
     /// An unexpected exception occurred during sync processing. The full exception message and
     /// stack trace are captured. This indicates a bug in the processing logic rather than a data issue.
     /// </summary>
-    UnhandledError
+    UnhandledError,
+
+    /// <summary>
+    /// During import attribute flow, a multi-valued source attribute was mapped to a single-valued
+    /// target attribute. The first value was used. This is informational — the sync succeeded,
+    /// but the administrator should verify the correct value was selected.
+    /// </summary>
+    MultiValuedAttributeTruncated,
+
+    /// <summary>
+    /// A delta import could not be performed because the directory's change tracking watermark
+    /// (e.g., OpenLDAP accesslog timestamp) was not available. The connector automatically
+    /// fell back to performing a full import instead, which correctly imported all objects and
+    /// established the watermark for future delta imports. This is informational — the import
+    /// succeeded, but was slower than expected. If this recurs, verify that the directory's
+    /// change tracking mechanism (e.g., accesslog overlay) is accessible to the bind account.
+    /// </summary>
+    DeltaImportFallbackToFullImport
 }

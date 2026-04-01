@@ -51,7 +51,10 @@ param(
     [int]$WaitSeconds = 30,
 
     [Parameter(Mandatory=$false)]
-    [switch]$SkipPopulate
+    [switch]$SkipPopulate,
+
+    [Parameter(Mandatory=$false)]
+    [hashtable]$DirectoryConfig
 )
 
 Set-StrictMode -Version Latest
@@ -60,6 +63,12 @@ $ErrorActionPreference = "Stop"
 # Import helpers
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
 . "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
+
+# Default to SambaAD Primary if no config provided
+if (-not $DirectoryConfig) {
+    $DirectoryConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Primary
+}
+$isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
 
 Write-TestSection "Scenario 5: Object Matching Rules"
 Write-Host "Step:     $Step" -ForegroundColor Gray
@@ -99,26 +108,36 @@ try {
 
     # Copy to container volume
     $csvPath = "$testDataPath/hr-users.csv"
-    docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+    # No docker cp needed — test-data is bind-mounted into JIM containers
     Write-Host "  ✓ Dedicated CSV initialised (1 baseline user for schema discovery)" -ForegroundColor Green
 
-    # Clean up test-specific AD users from previous test runs
-    Write-Host "Cleaning up test-specific AD users from previous runs..." -ForegroundColor Gray
+    # Clean up test-specific directory users from previous test runs
+    Write-Host "Cleaning up test-specific directory users from previous runs..." -ForegroundColor Gray
     $testUsers = @("test.projection", "test.join", "test.duplicate1", "test.duplicate2", "test.multirule.first", "test.multirule.second", "baseline.user1")
     $deletedCount = 0
     foreach ($user in $testUsers) {
-        $output = & docker exec samba-ad-primary bash -c "samba-tool user delete '$user' 2>&1; echo EXIT_CODE:\$?"
-        if ($output -match "Deleted user") {
-            Write-Host "  Deleted $user from AD" -ForegroundColor Gray
-            $deletedCount++
-        } elseif ($output -match "Unable to find user") {
-            Write-Host "  - $user not found (already clean)" -ForegroundColor DarkGray
+        if ($isOpenLDAP) {
+            $userDN = "$($DirectoryConfig.UserRdnAttr)=$user,$($DirectoryConfig.UserContainer)"
+            $output = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H "ldap://localhost:$($DirectoryConfig.Port)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$userDN" 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "  Deleted $user from directory" -ForegroundColor Gray
+                $deletedCount++
+            }
+        }
+        else {
+            $output = & docker exec $DirectoryConfig.ContainerName bash -c "samba-tool user delete '$user' 2>&1; echo EXIT_CODE:\$?"
+            if ($output -match "Deleted user") {
+                Write-Host "  Deleted $user from directory" -ForegroundColor Gray
+                $deletedCount++
+            }
         }
     }
-    Write-Host "  ✓ AD cleanup complete ($deletedCount test users deleted)" -ForegroundColor Green
+    Write-Host "  ✓ Directory cleanup complete ($deletedCount test users deleted)" -ForegroundColor Green
 
     # Setup scenario configuration (reuse Scenario 1 setup)
-    $config = & "$PSScriptRoot/../Setup-Scenario1.ps1" -JIMUrl $JIMUrl -ApiKey $ApiKey -Template $Template
+    $setupParams = @{ JIMUrl = $JIMUrl; ApiKey = $ApiKey; Template = $Template }
+    if ($DirectoryConfig) { $setupParams.DirectoryConfig = $DirectoryConfig }
+    $config = & "$PSScriptRoot/../Setup-Scenario1.ps1" @setupParams
 
     if (-not $config) {
         throw "Failed to setup Scenario configuration"
@@ -160,18 +179,24 @@ try {
 
     # Create department OUs needed for test users AFTER Setup-Scenario1
     # (Setup may recreate base Corp OU structure, so department OUs must come after)
-    # The DN expression uses: OU=<Department>,OU=Users,OU=Corp,DC=subatomic,DC=local
-    Write-Host "Creating department OUs for test users..." -ForegroundColor Gray
-    $testDepartments = @("Information Technology", "Operations", "Finance", "Sales", "Marketing")
-    foreach ($dept in $testDepartments) {
-        $result = docker exec samba-ad-primary samba-tool ou create "OU=$dept,OU=Users,OU=Corp,DC=subatomic,DC=local" 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  ✓ Created OU: $dept" -ForegroundColor Gray
-        } elseif ($result -match "already exists") {
-            Write-Host "  - OU $dept already exists" -ForegroundColor DarkGray
+    if (-not $isOpenLDAP) {
+        # Samba AD: DN expression uses OU=<Department>,OU=Users,OU=Corp,DC=panoply,DC=local
+        Write-Host "Creating department OUs for test users..." -ForegroundColor Gray
+        $testDepartments = @("Information Technology", "Operations", "Finance", "Sales", "Marketing")
+        foreach ($dept in $testDepartments) {
+            $result = docker exec $DirectoryConfig.ContainerName samba-tool ou create "OU=$dept,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)" 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "  ✓ Created OU: $dept" -ForegroundColor Gray
+            } elseif ($result -match "already exists") {
+                Write-Host "  - OU $dept already exists" -ForegroundColor DarkGray
+            }
         }
+        Write-Host "  ✓ Department OUs ready" -ForegroundColor Green
     }
-    Write-Host "  ✓ Department OUs ready" -ForegroundColor Green
+    else {
+        # OpenLDAP: flat OU structure, no department OUs needed (users go to People)
+        Write-Host "  OpenLDAP: flat OU structure, skipping department OU creation" -ForegroundColor Gray
+    }
     Write-Host "  CSV System ID: $($config.CSVSystemId)" -ForegroundColor Gray
     Write-Host "  LDAP System ID: $($config.LDAPSystemId)" -ForegroundColor Gray
 
@@ -186,12 +211,12 @@ try {
         $testUser.HrId = "00009001-0000-0000-0000-000000000000"
         $testUser.EmployeeId = "EMP900001"
         $testUser.SamAccountName = "test.projection"
-        $testUser.Email = "test.projection@subatomic.local"
+        $testUser.Email = "test.projection@panoply.local"
         $testUser.DisplayName = "Test Projection User"
 
         # Add user to CSV using proper CSV parsing (DN is calculated dynamically by the export sync rule expression)
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-        $upn = "$($testUser.SamAccountName)@subatomic.local"
+        $upn = "$($testUser.SamAccountName)@panoply.local"
 
         # Use Import-Csv/Export-Csv to ensure correct column handling
         $csv = Import-Csv $csvPath
@@ -216,7 +241,7 @@ try {
         Write-Host "  Added test.projection to CSV with HrId=$($testUser.HrId), EmployeeId=$($testUser.EmployeeId)" -ForegroundColor Gray
 
         # Copy updated CSV to container
-        docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+        # No docker cp needed — test-data is bind-mounted into JIM containers
 
         # Run import and sync
         Write-Host "  Running import and sync..." -ForegroundColor Gray
@@ -255,12 +280,12 @@ try {
         $testUser.HrId = "00009002-0000-0000-0000-000000000000"
         $testUser.EmployeeId = "EMP900002"
         $testUser.SamAccountName = "test.join"
-        $testUser.Email = "test.join@subatomic.local"
+        $testUser.Email = "test.join@panoply.local"
         $testUser.DisplayName = "Test Join User"
 
         # DN is calculated dynamically by the export sync rule expression
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-        $upn = "$($testUser.SamAccountName)@subatomic.local"
+        $upn = "$($testUser.SamAccountName)@panoply.local"
 
         # Use Import-Csv/Export-Csv to ensure correct column handling
         $csv = Import-Csv $csvPath
@@ -282,7 +307,7 @@ try {
         }
         $csv = @($csv) + $joinUser
         $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
-        docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+        # No docker cp needed — test-data is bind-mounted into JIM containers
 
         # Import from HR to create MVO
         Write-Host "  Creating MVO via HR import..." -ForegroundColor Gray
@@ -355,10 +380,10 @@ try {
         $testUser1.HrId = "00009003-0000-0000-0000-000000000000"
         $testUser1.EmployeeId = "EMP900003"
         $testUser1.SamAccountName = "test.importdup1"
-        $testUser1.Email = "test.importdup1@subatomic.local"
+        $testUser1.Email = "test.importdup1@panoply.local"
         $testUser1.DisplayName = "Test Import Dup One"
 
-        $upn1 = "$($testUser1.SamAccountName)@subatomic.local"
+        $upn1 = "$($testUser1.SamAccountName)@panoply.local"
         $csv = Import-Csv $csvPath
         $dupUser1 = [PSCustomObject]@{
             hrId = $testUser1.HrId
@@ -382,10 +407,10 @@ try {
         $testUser2.HrId = "00009003-0000-0000-0000-000000000000"  # SAME hrId - duplicate external ID
         $testUser2.EmployeeId = "EMP900004"  # Different employeeId
         $testUser2.SamAccountName = "test.importdup2"
-        $testUser2.Email = "test.importdup2@subatomic.local"
+        $testUser2.Email = "test.importdup2@panoply.local"
         $testUser2.DisplayName = "Test Import Dup Two"
 
-        $upn2 = "$($testUser2.SamAccountName)@subatomic.local"
+        $upn2 = "$($testUser2.SamAccountName)@panoply.local"
         $dupUser2 = [PSCustomObject]@{
             hrId = $testUser2.HrId
             employeeId = $testUser2.EmployeeId
@@ -406,7 +431,7 @@ try {
         # Add both users to CSV at once
         $csv = @($csv) + $dupUser1 + $dupUser2
         $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
-        docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+        # No docker cp needed — test-data is bind-mounted into JIM containers
 
         Write-Host "  Added 2 users with SAME hrId=$($testUser1.HrId) to CSV..." -ForegroundColor Gray
 
@@ -457,7 +482,7 @@ try {
 
         # Clean up Test 3 data - reload the baseline CSV to avoid interfering with subsequent tests
         Copy-Item -Path "$scenarioDataPath/scenario5-hr-users.csv" -Destination "$testDataPath/hr-users.csv" -Force
-        docker cp "$testDataPath/hr-users.csv" samba-ad-primary:/connector-files/hr-users.csv
+        # No docker cp needed — test-data is bind-mounted into JIM containers
         Write-Host "  ✓ Reset CSV to baseline for subsequent tests" -ForegroundColor Gray
     }
 
@@ -530,12 +555,12 @@ try {
                 $testUser1.HrId = "00009010-0000-0000-0000-000000000000"
                 $testUser1.EmployeeId = "EMP901000"
                 $testUser1.SamAccountName = "test.multirule.first"
-                $testUser1.Email = "test.multirule@subatomic.local"  # This email will be shared
+                $testUser1.Email = "test.multirule@panoply.local"  # This email will be shared
                 $testUser1.DisplayName = "Test MultiRule First"
 
                 # DN is calculated dynamically by the export sync rule expression
                 $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-                $upn1 = "$($testUser1.SamAccountName)@subatomic.local"
+                $upn1 = "$($testUser1.SamAccountName)@panoply.local"
 
                 # Use Import-Csv/Export-Csv to ensure correct column handling
                 $csv = Import-Csv $csvPath
@@ -557,7 +582,7 @@ try {
                 }
                 $csv = @($csv) + $multiRule1
                 $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
-                docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+                # No docker cp needed — test-data is bind-mounted into JIM containers
 
                 # Import first user to create MVO
                 Write-Host "  Creating MVO with EmployeeId=$($testUser1.EmployeeId), Email=$($testUser1.Email)..." -ForegroundColor Gray
@@ -582,7 +607,7 @@ try {
                     Write-Host "  Removing first user from CSV..." -ForegroundColor Gray
                     $csvContent = Get-Content $csvPath | Where-Object { $_ -notmatch "test.multirule.first" }
                     $csvContent | Set-Content $csvPath
-                    docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+                    # No docker cp needed — test-data is bind-mounted into JIM containers
 
                     # Import to process deletion
                     $delImportResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
@@ -595,11 +620,11 @@ try {
                     $testUser2.HrId = "00009011-0000-0000-0000-000000000000"
                     $testUser2.EmployeeId = "EMP901001"  # Different employeeId (rule 1 won't match)
                     $testUser2.SamAccountName = "test.multirule.second"
-                    $testUser2.Email = "test.multirule@subatomic.local"  # SAME email (rule 2 should match)
+                    $testUser2.Email = "test.multirule@panoply.local"  # SAME email (rule 2 should match)
                     $testUser2.DisplayName = "Test MultiRule Second"
 
                     # DN is calculated dynamically by the export sync rule expression
-                    $upn2 = "$($testUser2.SamAccountName)@subatomic.local"
+                    $upn2 = "$($testUser2.SamAccountName)@panoply.local"
 
                     # Use Import-Csv/Export-Csv to ensure correct column handling
                     $csv = Import-Csv $csvPath
@@ -621,7 +646,7 @@ try {
                     }
                     $csv = @($csv) + $multiRule2
                     $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
-                    docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+                    # No docker cp needed — test-data is bind-mounted into JIM containers
 
                     # Import second user
                     Write-Host "  Importing second user with different EmployeeId=$($testUser2.EmployeeId), same Email=$($testUser2.Email)..." -ForegroundColor Gray
@@ -685,10 +710,10 @@ try {
         $testUser1.HrId = "00009020-0000-0000-0000-000000000000"
         $testUser1.EmployeeId = "EMP900020"  # Same employeeId for both
         $testUser1.SamAccountName = "test.joinconflict1"
-        $testUser1.Email = "test.joinconflict1@subatomic.local"
+        $testUser1.Email = "test.joinconflict1@panoply.local"
         $testUser1.DisplayName = "Test Join Conflict One"
 
-        $upn1 = "$($testUser1.SamAccountName)@subatomic.local"
+        $upn1 = "$($testUser1.SamAccountName)@panoply.local"
         $csv = Import-Csv $csvPath
         $conflictUser1 = [PSCustomObject]@{
             hrId = $testUser1.HrId
@@ -708,7 +733,7 @@ try {
         }
         $csv = @($csv) + $conflictUser1
         $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
-        docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+        # No docker cp needed — test-data is bind-mounted into JIM containers
 
         # Import and sync first user to create MVO
         Write-Host "  Creating MVO with first user (HrId=$($testUser1.HrId), EmployeeId=$($testUser1.EmployeeId))..." -ForegroundColor Gray
@@ -722,10 +747,10 @@ try {
         $testUser2.HrId = "00009021-0000-0000-0000-000000000000"  # DIFFERENT hrId (different CSO)
         $testUser2.EmployeeId = "EMP900020"  # SAME employeeId (will match the MVO)
         $testUser2.SamAccountName = "test.joinconflict2"
-        $testUser2.Email = "test.joinconflict2@subatomic.local"
+        $testUser2.Email = "test.joinconflict2@panoply.local"
         $testUser2.DisplayName = "Test Join Conflict Two"
 
-        $upn2 = "$($testUser2.SamAccountName)@subatomic.local"
+        $upn2 = "$($testUser2.SamAccountName)@panoply.local"
         $csv = Import-Csv $csvPath
         $conflictUser2 = [PSCustomObject]@{
             hrId = $testUser2.HrId
@@ -745,7 +770,7 @@ try {
         }
         $csv = @($csv) + $conflictUser2
         $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
-        docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+        # No docker cp needed — test-data is bind-mounted into JIM containers
 
         # Import second user (this will create a separate CSO)
         Write-Host "  Importing second user with DIFFERENT HrId=$($testUser2.HrId), SAME EmployeeId=$($testUser2.EmployeeId)..." -ForegroundColor Gray
@@ -789,7 +814,7 @@ try {
 
         # Clean up Test 5 data - reset CSV to baseline and run import to obsolete leftover CSOs
         Copy-Item -Path "$scenarioDataPath/scenario5-hr-users.csv" -Destination "$testDataPath/hr-users.csv" -Force
-        docker cp "$testDataPath/hr-users.csv" samba-ad-primary:/connector-files/hr-users.csv
+        # No docker cp needed — test-data is bind-mounted into JIM containers
         $cleanupImport = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
         $cleanupSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
         Write-Host "  ✓ Reset CSV to baseline and ran cleanup import/sync for subsequent tests" -ForegroundColor Gray
@@ -842,11 +867,11 @@ try {
                 $testUser1.HrId = "00009030-0000-0000-0000-000000000000"
                 $testUser1.EmployeeId = "CASETEST123"  # UPPERCASE
                 $testUser1.SamAccountName = "test.casesens.upper"
-                $testUser1.Email = "test.casesens.upper@subatomic.local"
+                $testUser1.Email = "test.casesens.upper@panoply.local"
                 $testUser1.DisplayName = "Test Case Upper"
 
                 $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-                $upn1 = "$($testUser1.SamAccountName)@subatomic.local"
+                $upn1 = "$($testUser1.SamAccountName)@panoply.local"
 
                 $csv = Import-Csv $csvPath
                 $caseUser1 = [PSCustomObject]@{
@@ -867,7 +892,7 @@ try {
                 }
                 $csv = @($csv) + $caseUser1
                 $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
-                docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+                # No docker cp needed — test-data is bind-mounted into JIM containers
 
                 # Import and sync first user to create MVO
                 Write-Host "  Creating MVO with UPPERCASE EmployeeId='$($testUser1.EmployeeId)'..." -ForegroundColor Gray
@@ -900,10 +925,10 @@ try {
                     $testUser2.HrId = "00009031-0000-0000-0000-000000000000"
                     $testUser2.EmployeeId = "casetest123"  # lowercase - should match CASETEST123
                     $testUser2.SamAccountName = "test.casesens.lower"
-                    $testUser2.Email = "test.casesens.lower@subatomic.local"
+                    $testUser2.Email = "test.casesens.lower@panoply.local"
                     $testUser2.DisplayName = "Test Case Lower"
 
-                    $upn2 = "$($testUser2.SamAccountName)@subatomic.local"
+                    $upn2 = "$($testUser2.SamAccountName)@panoply.local"
 
                     $csv = Import-Csv $csvPath
                     $caseUser2 = [PSCustomObject]@{
@@ -924,7 +949,7 @@ try {
                     }
                     $csv = @($csv) + $caseUser2
                     $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
-                    docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+                    # No docker cp needed — test-data is bind-mounted into JIM containers
 
                     # Import and sync second user - should join to existing MVO via case-insensitive match
                     Write-Host "  Importing second user with lowercase EmployeeId='$($testUser2.EmployeeId)'..." -ForegroundColor Gray
@@ -967,7 +992,7 @@ try {
                 # Clean up Test 6 data
                 $csvContent = Get-Content $csvPath | Where-Object { $_ -notmatch "test.casesens" }
                 $csvContent | Set-Content $csvPath
-                docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+                # No docker cp needed — test-data is bind-mounted into JIM containers
                 Write-Host "  ✓ Cleaned up case sensitivity test data" -ForegroundColor Gray
             }
         }

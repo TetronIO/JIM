@@ -263,14 +263,9 @@ try {
         # Step 3: Populate test data
         Write-TestSection "Step 3: Populate Test Data"
 
-        Write-Host "Populating Subatomic AD..." -ForegroundColor Gray
-        & "$scriptRoot/Populate-SambaAD.ps1" -Template $Template -Instance Primary
+        # S1 target directory starts empty — no Populate-SambaAD.ps1 call.
+        # HR-driven provisioning is tested against a clean directory.
 
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to populate Samba AD"
-        }
-
-        Write-Host ""
         Write-Host "Generating test CSV files..." -ForegroundColor Gray
         & "$scriptRoot/Generate-TestCSV.ps1" -Template $Template
 

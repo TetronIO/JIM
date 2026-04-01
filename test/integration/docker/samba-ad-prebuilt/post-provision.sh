@@ -19,7 +19,7 @@ LDOMAIN=${FULL_DOMAIN,,}
 UDOMAIN=${FULL_DOMAIN^^}
 URDOMAIN=${UDOMAIN%%.*}
 
-# Build the DC string (e.g., SUBATOMIC.LOCAL -> DC=subatomic,DC=local)
+# Build the DC string (e.g., PANOPLY.LOCAL -> DC=panoply,DC=local)
 DOMAIN_DC=$(echo "$LDOMAIN" | sed 's/\./,DC=/g' | sed 's/^/DC=/')
 
 echo "Domain: ${FULL_DOMAIN}"

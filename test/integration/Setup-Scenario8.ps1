@@ -5,8 +5,8 @@
 .DESCRIPTION
     Sets up Connected Systems and Sync Rules for cross-domain group synchronisation.
     This script is self-contained and creates:
-    - Source LDAP Connected System (Quantum Dynamics APAC)
-    - Target LDAP Connected System (Quantum Dynamics EMEA)
+    - Source LDAP Connected System (Panoply APAC)
+    - Target LDAP Connected System (Panoply EMEA)
     - User sync rules (prerequisite for group member resolution)
     - Group sync rules for entitlement management
     - Run Profiles for synchronisation
@@ -46,7 +46,10 @@ param(
     [int]$ExportConcurrency = 1,
 
     [Parameter(Mandatory=$false)]
-    [int]$MaxExportParallelism = 1
+    [int]$MaxExportParallelism = 1,
+
+    [Parameter(Mandatory=$false)]
+    [hashtable]$DirectoryConfig
 )
 
 Set-StrictMode -Version Latest
@@ -54,6 +57,195 @@ $ErrorActionPreference = "Stop"
 
 # Import helpers
 . "$PSScriptRoot/utils/Test-Helpers.ps1"
+
+# Derive directory-specific configuration
+if (-not $DirectoryConfig) {
+    $DirectoryConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Source
+}
+
+$isOpenLDAP = ($DirectoryConfig.UserObjectClass -eq "inetOrgPerson")
+
+# Derive Source and Target configs from the DirectoryConfig
+if ($isOpenLDAP) {
+    $sourceConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Source
+    $targetConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Target
+}
+else {
+    $sourceConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Source
+    $targetConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Target
+}
+
+# Directory-specific variables used throughout setup
+$sourceSystemName  = $sourceConfig.ConnectedSystemName
+$targetSystemName  = $targetConfig.ConnectedSystemName
+$sourceHost        = $sourceConfig.Host
+$targetHost        = $targetConfig.Host
+$sourcePort        = $sourceConfig.Port
+$targetPort        = $targetConfig.Port
+$sourceBindDN      = $sourceConfig.BindDN
+$targetBindDN      = $targetConfig.BindDN
+$sourcePassword    = $sourceConfig.BindPassword
+$targetPassword    = $targetConfig.BindPassword
+$sourceUseSSL      = $sourceConfig.UseSSL
+$targetUseSSL      = $targetConfig.UseSSL
+$sourceBaseDN      = $sourceConfig.BaseDN
+$targetBaseDN      = $targetConfig.BaseDN
+$userObjectClass   = $sourceConfig.UserObjectClass
+$groupObjectClass  = $sourceConfig.GroupObjectClass
+
+# Object type names for schema lookup
+$userTypeName  = $userObjectClass    # "user" for AD, "inetOrgPerson" for OpenLDAP
+$groupTypeName = $groupObjectClass   # "group" for AD, "groupOfNames" for OpenLDAP
+
+# Attribute lists differ by directory type
+if ($isOpenLDAP) {
+    # OpenLDAP uses entryUUID (auto-set by connector), uid, departmentNumber
+    # No userAccountControl, extensionAttribute1, userPrincipalName, company, groupType, managedBy
+    $requiredUserAttributes = @(
+        'entryUUID', 'uid', 'givenName', 'sn', 'displayName', 'cn',
+        'mail', 'title', 'departmentNumber', 'employeeNumber', 'distinguishedName'
+    )
+    $requiredGroupAttributes = @(
+        'entryUUID', 'cn', 'description', 'member', 'distinguishedName'
+    )
+
+    # Source container layout: ou=People, ou=Groups under suffix
+    $sourceUserContainerName    = "People"
+    $sourceGroupContainerName   = "Groups"
+    # Target container layout: ou=People, ou=Groups under suffix
+    $targetUserContainerName    = "People"
+    $targetGroupContainerName   = "Groups"
+    # No parent OU nesting for OpenLDAP (flat under suffix)
+    $sourceUserContainerParent  = $null
+    $sourceGroupContainerParent = $null
+    $targetUserContainerParent  = $null
+    $targetGroupContainerParent = $null
+
+    # User attribute mappings for OpenLDAP
+    $userImportMappings = @(
+        @{ LdapAttr = "uid"; MvAttr = "Account Name" }
+        @{ LdapAttr = "givenName"; MvAttr = "First Name" }
+        @{ LdapAttr = "sn"; MvAttr = "Last Name" }
+        @{ LdapAttr = "displayName"; MvAttr = "Display Name" }
+        @{ LdapAttr = "mail"; MvAttr = "Email" }
+        @{ LdapAttr = "title"; MvAttr = "Job Title" }
+        @{ LdapAttr = "departmentNumber"; MvAttr = "Department" }
+    )
+    $userExportMappings = @(
+        @{ MvAttr = "Account Name"; LdapAttr = "uid" }
+        @{ MvAttr = "First Name"; LdapAttr = "givenName" }
+        @{ MvAttr = "Last Name"; LdapAttr = "sn" }
+        @{ MvAttr = "Display Name"; LdapAttr = "displayName" }
+        @{ MvAttr = "Display Name"; LdapAttr = "cn" }
+        @{ MvAttr = "Email"; LdapAttr = "mail" }
+        @{ MvAttr = "Job Title"; LdapAttr = "title" }
+        @{ MvAttr = "Department"; LdapAttr = "departmentNumber" }
+    )
+
+    # Group attribute mappings for OpenLDAP
+    $groupImportMappings = @(
+        @{ LdapAttr = "cn"; MvAttr = "Account Name" }
+        @{ LdapAttr = "cn"; MvAttr = "Common Name" }
+        @{ LdapAttr = "description"; MvAttr = "Description" }
+        @{ LdapAttr = "member"; MvAttr = "Static Members" }
+    )
+    $groupExportMappings = @(
+        @{ MvAttr = "Account Name"; LdapAttr = "cn" }
+        @{ MvAttr = "Description"; LdapAttr = "description" }
+        @{ MvAttr = "Static Members"; LdapAttr = "member" }
+    )
+
+    # DN expressions for target export
+    $userDnExpression  = '"uid=" + mv["Account Name"] + ",' + $targetConfig.UserContainer + '"'
+    $groupDnExpression = '"cn=" + mv["Account Name"] + ",' + $targetConfig.GroupContainer + '"'
+
+    # Matching attribute for users and groups
+    $userMatchingAttrName  = "uid"             # OpenLDAP users match on uid
+    $groupMatchingAttrName = "cn"              # OpenLDAP groups match on cn
+    $userMatchingMvAttr    = "Account Name"
+    $groupMatchingMvAttr   = "Account Name"
+}
+else {
+    # Samba AD / Active Directory defaults (original hardcoded values)
+    $requiredUserAttributes = @(
+        'objectGUID', 'sAMAccountName', 'givenName', 'sn', 'displayName', 'cn',
+        'mail', 'userPrincipalName', 'title', 'department', 'company', 'distinguishedName',
+        'extensionAttribute1', 'userAccountControl'
+    )
+    $requiredGroupAttributes = @(
+        'objectGUID', 'sAMAccountName', 'cn', 'displayName', 'description',
+        'groupType', 'member', 'managedBy', 'mail', 'company', 'distinguishedName'
+    )
+
+    # Source container layout: OU=Users,OU=Corp and OU=Entitlements,OU=Corp
+    $sourceUserContainerName    = "Users"
+    $sourceGroupContainerName   = "Entitlements"
+    $sourceUserContainerParent  = "Corp"
+    $sourceGroupContainerParent = "Corp"
+    # Target container layout: OU=Users,OU=CorpManaged and OU=Entitlements,OU=CorpManaged
+    $targetUserContainerName    = "Users"
+    $targetGroupContainerName   = "Entitlements"
+    $targetUserContainerParent  = "CorpManaged"
+    $targetGroupContainerParent = "CorpManaged"
+
+    # User attribute mappings for Samba AD
+    $userImportMappings = @(
+        @{ LdapAttr = "sAMAccountName"; MvAttr = "Account Name" }
+        @{ LdapAttr = "givenName"; MvAttr = "First Name" }
+        @{ LdapAttr = "sn"; MvAttr = "Last Name" }
+        @{ LdapAttr = "displayName"; MvAttr = "Display Name" }
+        @{ LdapAttr = "mail"; MvAttr = "Email" }
+        @{ LdapAttr = "title"; MvAttr = "Job Title" }
+        @{ LdapAttr = "department"; MvAttr = "Department" }
+        @{ LdapAttr = "company"; MvAttr = "Company" }
+        @{ LdapAttr = "extensionAttribute1"; MvAttr = "Pronouns" }
+    )
+    $userExportMappings = @(
+        @{ MvAttr = "Account Name"; LdapAttr = "sAMAccountName" }
+        @{ MvAttr = "First Name"; LdapAttr = "givenName" }
+        @{ MvAttr = "Last Name"; LdapAttr = "sn" }
+        @{ MvAttr = "Display Name"; LdapAttr = "displayName" }
+        @{ MvAttr = "Display Name"; LdapAttr = "cn" }
+        @{ MvAttr = "Email"; LdapAttr = "mail" }
+        @{ MvAttr = "Email"; LdapAttr = "userPrincipalName" }
+        @{ MvAttr = "Job Title"; LdapAttr = "title" }
+        @{ MvAttr = "Department"; LdapAttr = "department" }
+        @{ MvAttr = "Company"; LdapAttr = "company" }
+        @{ MvAttr = "Pronouns"; LdapAttr = "extensionAttribute1" }
+    )
+
+    # Group attribute mappings for Samba AD
+    $groupImportMappings = @(
+        @{ LdapAttr = "sAMAccountName"; MvAttr = "Account Name" }
+        @{ LdapAttr = "cn"; MvAttr = "Common Name" }
+        @{ LdapAttr = "displayName"; MvAttr = "Display Name" }
+        @{ LdapAttr = "description"; MvAttr = "Description" }
+        @{ LdapAttr = "groupType"; MvAttr = "Group Type Flags" }
+        @{ LdapAttr = "mail"; MvAttr = "Email" }
+        @{ LdapAttr = "member"; MvAttr = "Static Members" }
+        @{ LdapAttr = "managedBy"; MvAttr = "Managed By" }
+    )
+    $groupExportMappings = @(
+        @{ MvAttr = "Account Name"; LdapAttr = "sAMAccountName" }
+        @{ MvAttr = "Common Name"; LdapAttr = "cn" }
+        @{ MvAttr = "Display Name"; LdapAttr = "displayName" }
+        @{ MvAttr = "Description"; LdapAttr = "description" }
+        @{ MvAttr = "Group Type Flags"; LdapAttr = "groupType" }
+        @{ MvAttr = "Email"; LdapAttr = "mail" }
+        @{ MvAttr = "Static Members"; LdapAttr = "member" }
+        @{ MvAttr = "Managed By"; LdapAttr = "managedBy" }
+    )
+
+    # DN expressions for target export
+    $userDnExpression  = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=Users,OU=CorpManaged,DC=gentian,DC=local"'
+    $groupDnExpression = '"CN=" + EscapeDN(mv["Common Name"]) + ",OU=Entitlements,OU=CorpManaged,DC=gentian,DC=local"'
+
+    # Matching attribute for users and groups
+    $userMatchingAttrName  = "sAMAccountName"
+    $groupMatchingAttrName = "sAMAccountName"
+    $userMatchingMvAttr    = "Account Name"
+    $groupMatchingMvAttr   = "Account Name"
+}
 
 Write-TestSection "Scenario 8 Setup: Cross-domain Entitlement Synchronisation"
 
@@ -118,18 +310,18 @@ $authTypeSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Aut
 # ============================================================================
 # Step 4: Create Source LDAP Connected System
 # ============================================================================
-Write-TestStep "Step 4" "Creating Source LDAP Connected System (Quantum Dynamics APAC)"
+Write-TestStep "Step 4" "Creating Source LDAP Connected System ($sourceSystemName)"
 
 $existingSystems = Get-JIMConnectedSystem
-$sourceSystem = $existingSystems | Where-Object { $_.name -eq "Quantum Dynamics APAC" }
+$sourceSystem = $existingSystems | Where-Object { $_.name -eq $sourceSystemName }
 
 if ($sourceSystem) {
-    Write-Host "  Connected System 'Quantum Dynamics APAC' already exists (ID: $($sourceSystem.id))" -ForegroundColor Yellow
+    Write-Host "  Connected System '$sourceSystemName' already exists (ID: $($sourceSystem.id))" -ForegroundColor Yellow
 }
 else {
     $sourceSystem = New-JIMConnectedSystem `
-        -Name "Quantum Dynamics APAC" `
-        -Description "Quantum Dynamics APAC Active Directory - Source for cross-domain entitlement sync" `
+        -Name $sourceSystemName `
+        -Description "$sourceSystemName - Source for cross-domain entitlement sync" `
         -ConnectorDefinitionId $ldapConnector.id `
         -PassThru
     Write-Host "  ✓ Created Source LDAP Connected System (ID: $($sourceSystem.id))" -ForegroundColor Green
@@ -137,12 +329,12 @@ else {
 
 # Configure LDAP settings for Source
 $sourceSettings = @{}
-if ($hostSetting) { $sourceSettings[$hostSetting.id] = @{ stringValue = "samba-ad-source" } }
-if ($portSetting) { $sourceSettings[$portSetting.id] = @{ intValue = 636 } }
-if ($usernameSetting) { $sourceSettings[$usernameSetting.id] = @{ stringValue = "CN=Administrator,CN=Users,DC=sourcedomain,DC=local" } }
-if ($passwordSetting) { $sourceSettings[$passwordSetting.id] = @{ stringValue = "Test@123!" } }
-if ($useSSLSetting) { $sourceSettings[$useSSLSetting.id] = @{ checkboxValue = $true } }
-if ($certValidationSetting) { $sourceSettings[$certValidationSetting.id] = @{ stringValue = "Skip Validation (Not Recommended)" } }
+if ($hostSetting) { $sourceSettings[$hostSetting.id] = @{ stringValue = $sourceHost } }
+if ($portSetting) { $sourceSettings[$portSetting.id] = @{ intValue = $sourcePort } }
+if ($usernameSetting) { $sourceSettings[$usernameSetting.id] = @{ stringValue = $sourceBindDN } }
+if ($passwordSetting) { $sourceSettings[$passwordSetting.id] = @{ stringValue = $sourcePassword } }
+if ($useSSLSetting) { $sourceSettings[$useSSLSetting.id] = @{ checkboxValue = $sourceUseSSL } }
+if ($sourceUseSSL -and $certValidationSetting) { $sourceSettings[$certValidationSetting.id] = @{ stringValue = "Skip Validation (Not Recommended)" } }
 if ($connectionTimeoutSetting) { $sourceSettings[$connectionTimeoutSetting.id] = @{ intValue = 30 } }
 if ($authTypeSetting) { $sourceSettings[$authTypeSetting.id] = @{ stringValue = "Simple" } }
 
@@ -154,17 +346,17 @@ if ($sourceSettings.Count -gt 0) {
 # ============================================================================
 # Step 5: Create Target LDAP Connected System
 # ============================================================================
-Write-TestStep "Step 5" "Creating Target LDAP Connected System (Quantum Dynamics EMEA)"
+Write-TestStep "Step 5" "Creating Target LDAP Connected System ($targetSystemName)"
 
-$targetSystem = $existingSystems | Where-Object { $_.name -eq "Quantum Dynamics EMEA" }
+$targetSystem = $existingSystems | Where-Object { $_.name -eq $targetSystemName }
 
 if ($targetSystem) {
-    Write-Host "  Connected System 'Quantum Dynamics EMEA' already exists (ID: $($targetSystem.id))" -ForegroundColor Yellow
+    Write-Host "  Connected System '$targetSystemName' already exists (ID: $($targetSystem.id))" -ForegroundColor Yellow
 }
 else {
     $targetSystem = New-JIMConnectedSystem `
-        -Name "Quantum Dynamics EMEA" `
-        -Description "Quantum Dynamics EMEA Active Directory - Target for cross-domain entitlement sync" `
+        -Name $targetSystemName `
+        -Description "$targetSystemName - Target for cross-domain entitlement sync" `
         -ConnectorDefinitionId $ldapConnector.id `
         -PassThru
     Write-Host "  ✓ Created Target LDAP Connected System (ID: $($targetSystem.id))" -ForegroundColor Green
@@ -172,12 +364,12 @@ else {
 
 # Configure LDAP settings for Target
 $targetSettings = @{}
-if ($hostSetting) { $targetSettings[$hostSetting.id] = @{ stringValue = "samba-ad-target" } }
-if ($portSetting) { $targetSettings[$portSetting.id] = @{ intValue = 636 } }
-if ($usernameSetting) { $targetSettings[$usernameSetting.id] = @{ stringValue = "CN=Administrator,CN=Users,DC=targetdomain,DC=local" } }
-if ($passwordSetting) { $targetSettings[$passwordSetting.id] = @{ stringValue = "Test@123!" } }
-if ($useSSLSetting) { $targetSettings[$useSSLSetting.id] = @{ checkboxValue = $true } }
-if ($certValidationSetting) { $targetSettings[$certValidationSetting.id] = @{ stringValue = "Skip Validation (Not Recommended)" } }
+if ($hostSetting) { $targetSettings[$hostSetting.id] = @{ stringValue = $targetHost } }
+if ($portSetting) { $targetSettings[$portSetting.id] = @{ intValue = $targetPort } }
+if ($usernameSetting) { $targetSettings[$usernameSetting.id] = @{ stringValue = $targetBindDN } }
+if ($passwordSetting) { $targetSettings[$passwordSetting.id] = @{ stringValue = $targetPassword } }
+if ($useSSLSetting) { $targetSettings[$useSSLSetting.id] = @{ checkboxValue = $targetUseSSL } }
+if ($targetUseSSL -and $certValidationSetting) { $targetSettings[$certValidationSetting.id] = @{ stringValue = "Skip Validation (Not Recommended)" } }
 if ($connectionTimeoutSetting) { $targetSettings[$connectionTimeoutSetting.id] = @{ intValue = 30 } }
 if ($authTypeSetting) { $targetSettings[$authTypeSetting.id] = @{ stringValue = "Simple" } }
 
@@ -272,7 +464,8 @@ function Find-ContainerByName {
         [string]$Name
     )
     foreach ($container in $Containers) {
-        if ($container.name -eq $Name) {
+        # Match by exact name (AD: "Users", "Corp") or by OU-prefixed DN (OpenLDAP: "ou=People,dc=...")
+        if ($container.name -eq $Name -or $container.name -match "^ou=$Name,") {
             return $container
         }
         if ($container.childContainers -and $container.childContainers.Count -gt 0) {
@@ -285,113 +478,104 @@ function Find-ContainerByName {
     return $null
 }
 
-# Configure Source partitions - select domain partition and Corp containers
-Write-Host "  Configuring Source LDAP partitions..." -ForegroundColor Gray
-$sourcePartitions = @(Get-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id)
-Write-Host "    Found $($sourcePartitions.Count) partition(s):" -ForegroundColor Gray
-foreach ($p in $sourcePartitions) {
-    Write-Host "      - Name: '$($p.name)', ExternalId: '$($p.externalId)'" -ForegroundColor Gray
-}
+# Helper function to find and select containers for a connected system
+function Select-ContainersForSystem {
+    param(
+        [string]$SystemId,
+        [string]$SystemName,
+        [string]$BaseDN,
+        [string]$UserContainerName,
+        [string]$GroupContainerName,
+        [string]$UserContainerParent,    # null for flat structure (OpenLDAP)
+        [string]$GroupContainerParent    # null for flat structure (OpenLDAP)
+    )
 
-$sourceDomainPartition = $sourcePartitions | Where-Object { $_.name -eq "DC=sourcedomain,DC=local" }
-if (-not $sourceDomainPartition -and $sourcePartitions.Count -eq 1) {
-    # If only one partition exists and filter didn't match, use it (it's the domain partition)
-    $sourceDomainPartition = $sourcePartitions[0]
-    Write-Host "    Using single available partition: $($sourceDomainPartition.name)" -ForegroundColor Yellow
-}
-if ($sourceDomainPartition) {
-    Set-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id -PartitionId $sourceDomainPartition.id -Selected $true | Out-Null
-    Write-Host "    ✓ Selected partition: $($sourceDomainPartition.name)" -ForegroundColor Green
-
-    # Find and select Corp container's children (Users and Entitlements)
-    # NOTE: We select ONLY the child containers, not the parent Corp container itself,
-    # to avoid importing objects twice. Selecting both parent and child causes duplicates.
-    $corpContainer = Find-ContainerByName -Containers $sourceDomainPartition.containers -Name "Corp"
-    if ($corpContainer) {
-        # Select Users sub-container
-        $usersContainer = Find-ContainerByName -Containers $corpContainer.childContainers -Name "Users"
-        if ($usersContainer) {
-            Set-JIMConnectedSystemContainer -ConnectedSystemId $sourceSystem.id -ContainerId $usersContainer.id -Selected $true | Out-Null
-            Write-Host "    ✓ Selected container: OU=Users,OU=Corp" -ForegroundColor Green
-        }
-
-        # Select Entitlements sub-container
-        $entitlementsContainer = Find-ContainerByName -Containers $corpContainer.childContainers -Name "Entitlements"
-        if ($entitlementsContainer) {
-            Set-JIMConnectedSystemContainer -ConnectedSystemId $sourceSystem.id -ContainerId $entitlementsContainer.id -Selected $true | Out-Null
-            Write-Host "    ✓ Selected container: OU=Entitlements,OU=Corp" -ForegroundColor Green
-        }
-    }
-    else {
-        Write-Host "    ⚠ Corp container not found - run Populate-SambaAD-Scenario8.ps1 first" -ForegroundColor Yellow
+    Write-Host "  Configuring $SystemName LDAP partitions..." -ForegroundColor Gray
+    $partitions = @(Get-JIMConnectedSystemPartition -ConnectedSystemId $SystemId)
+    Write-Host "    Found $($partitions.Count) partition(s):" -ForegroundColor Gray
+    foreach ($p in $partitions) {
+        Write-Host "      - Name: '$($p.name)', ExternalId: '$($p.externalId)'" -ForegroundColor Gray
     }
 
-    # Deselect other partitions
-    foreach ($partition in $sourcePartitions) {
-        if ($partition.name -ne "DC=sourcedomain,DC=local" -and $partition.name -ne $sourceDomainPartition.name) {
-            Set-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id -PartitionId $partition.id -Selected $false | Out-Null
-        }
+    # Find the partition matching the base DN (case-insensitive)
+    $domainPartition = $partitions | Where-Object { $_.name -eq $BaseDN }
+    if (-not $domainPartition -and $partitions.Count -eq 1) {
+        $domainPartition = $partitions[0]
+        Write-Host "    Using single available partition: $($domainPartition.name)" -ForegroundColor Yellow
     }
-}
-else {
-    Write-Host "    ✗ ERROR: Could not find source domain partition!" -ForegroundColor Red
-    throw "Source domain partition not found. Available partitions: $($sourcePartitions | ForEach-Object { $_.name } | Join-String -Separator ', ')"
-}
 
-# Configure Target partitions - select domain partition and CorpManaged containers
-Write-Host "  Configuring Target LDAP partitions..." -ForegroundColor Gray
-$targetPartitions = @(Get-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id)
-Write-Host "    Found $($targetPartitions.Count) partition(s):" -ForegroundColor Gray
-foreach ($p in $targetPartitions) {
-    Write-Host "      - Name: '$($p.name)', ExternalId: '$($p.externalId)'" -ForegroundColor Gray
-}
+    if (-not $domainPartition) {
+        throw "$SystemName partition not found. Available: $($partitions | ForEach-Object { $_.name } | Join-String -Separator ', ')"
+    }
 
-$targetDomainPartition = $targetPartitions | Where-Object { $_.name -eq "DC=targetdomain,DC=local" }
-if (-not $targetDomainPartition -and $targetPartitions.Count -eq 1) {
-    # If only one partition exists and filter didn't match, use it (it's the domain partition)
-    $targetDomainPartition = $targetPartitions[0]
-    Write-Host "    Using single available partition: $($targetDomainPartition.name)" -ForegroundColor Yellow
-}
-if ($targetDomainPartition) {
-    Set-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id -PartitionId $targetDomainPartition.id -Selected $true | Out-Null
-    Write-Host "    ✓ Selected partition: $($targetDomainPartition.name)" -ForegroundColor Green
+    Set-JIMConnectedSystemPartition -ConnectedSystemId $SystemId -PartitionId $domainPartition.id -Selected $true | Out-Null
+    Write-Host "    Selected partition: $($domainPartition.name)" -ForegroundColor Green
 
-    # Find and select CorpManaged container's children (Users and Entitlements)
-    # NOTE: We select ONLY the child containers, not the parent CorpManaged container itself,
-    # to avoid importing objects twice. Selecting both parent and child causes duplicates.
-    $corpManagedContainer = Find-ContainerByName -Containers $targetDomainPartition.containers -Name "CorpManaged"
-    if ($corpManagedContainer) {
-        # Select Users sub-container
-        $usersContainer = Find-ContainerByName -Containers $corpManagedContainer.childContainers -Name "Users"
-        if ($usersContainer) {
-            Set-JIMConnectedSystemContainer -ConnectedSystemId $targetSystem.id -ContainerId $usersContainer.id -Selected $true | Out-Null
-            Write-Host "    ✓ Selected container: OU=Users,OU=CorpManaged" -ForegroundColor Green
+    # Find and select containers
+    if ($UserContainerParent) {
+        # Nested structure (AD): containers are under a parent OU (e.g. OU=Users,OU=Corp)
+        $parentContainer = Find-ContainerByName -Containers $domainPartition.containers -Name $UserContainerParent
+        if ($parentContainer) {
+            $usersContainer = Find-ContainerByName -Containers $parentContainer.childContainers -Name $UserContainerName
+            if ($usersContainer) {
+                Set-JIMConnectedSystemContainer -ConnectedSystemId $SystemId -ContainerId $usersContainer.id -Selected $true | Out-Null
+                Write-Host "    Selected container: $UserContainerName (under $UserContainerParent)" -ForegroundColor Green
+            }
         }
-
-        # Select Entitlements sub-container
-        $entitlementsContainer = Find-ContainerByName -Containers $corpManagedContainer.childContainers -Name "Entitlements"
-        if ($entitlementsContainer) {
-            Set-JIMConnectedSystemContainer -ConnectedSystemId $targetSystem.id -ContainerId $entitlementsContainer.id -Selected $true | Out-Null
-            Write-Host "    ✓ Selected container: OU=Entitlements,OU=CorpManaged" -ForegroundColor Green
+        $groupParent = if ($GroupContainerParent -and $GroupContainerParent -ne $UserContainerParent) {
+            Find-ContainerByName -Containers $domainPartition.containers -Name $GroupContainerParent
+        } else { $parentContainer }
+        if ($groupParent) {
+            $groupContainer = Find-ContainerByName -Containers $groupParent.childContainers -Name $GroupContainerName
+            if ($groupContainer) {
+                Set-JIMConnectedSystemContainer -ConnectedSystemId $SystemId -ContainerId $groupContainer.id -Selected $true | Out-Null
+                Write-Host "    Selected container: $GroupContainerName (under $($GroupContainerParent ?? $UserContainerParent))" -ForegroundColor Green
+            }
         }
     }
     else {
-        Write-Host "    ⚠ CorpManaged container not found - run Populate-SambaAD-Scenario8.ps1 -Instance Target first" -ForegroundColor Yellow
+        # Flat structure (OpenLDAP): containers are directly under the partition
+        $usersContainer = Find-ContainerByName -Containers $domainPartition.containers -Name $UserContainerName
+        if ($usersContainer) {
+            Set-JIMConnectedSystemContainer -ConnectedSystemId $SystemId -ContainerId $usersContainer.id -Selected $true | Out-Null
+            Write-Host "    Selected container: $UserContainerName" -ForegroundColor Green
+        }
+        $groupContainer = Find-ContainerByName -Containers $domainPartition.containers -Name $GroupContainerName
+        if ($groupContainer) {
+            Set-JIMConnectedSystemContainer -ConnectedSystemId $SystemId -ContainerId $groupContainer.id -Selected $true | Out-Null
+            Write-Host "    Selected container: $GroupContainerName" -ForegroundColor Green
+        }
     }
 
     # Deselect other partitions
-    foreach ($partition in $targetPartitions) {
-        if ($partition.name -ne "DC=targetdomain,DC=local" -and $partition.name -ne $targetDomainPartition.name) {
-            Set-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id -PartitionId $partition.id -Selected $false | Out-Null
+    foreach ($partition in $partitions) {
+        if ($partition.id -ne $domainPartition.id) {
+            Set-JIMConnectedSystemPartition -ConnectedSystemId $SystemId -PartitionId $partition.id -Selected $false | Out-Null
         }
     }
 }
-else {
-    Write-Host "    ✗ ERROR: Could not find target domain partition!" -ForegroundColor Red
-    throw "Target domain partition not found. Available partitions: $($targetPartitions | ForEach-Object { $_.name } | Join-String -Separator ', ')"
-}
 
-Write-Host "  ✓ Partitions and containers configured" -ForegroundColor Green
+# Configure Source partitions and containers
+Select-ContainersForSystem `
+    -SystemId $sourceSystem.id `
+    -SystemName "Source" `
+    -BaseDN $sourceBaseDN `
+    -UserContainerName $sourceUserContainerName `
+    -GroupContainerName $sourceGroupContainerName `
+    -UserContainerParent $sourceUserContainerParent `
+    -GroupContainerParent $sourceGroupContainerParent
+
+# Configure Target partitions and containers
+Select-ContainersForSystem `
+    -SystemId $targetSystem.id `
+    -SystemName "Target" `
+    -BaseDN $targetBaseDN `
+    -UserContainerName $targetUserContainerName `
+    -GroupContainerName $targetGroupContainerName `
+    -UserContainerParent $targetUserContainerParent `
+    -GroupContainerParent $targetGroupContainerParent
+
+Write-Host "  Partitions and containers configured" -ForegroundColor Green
 
 # ============================================================================
 # Step 8: Configure Object Types and Attributes
@@ -399,18 +583,18 @@ Write-Host "  ✓ Partitions and containers configured" -ForegroundColor Green
 Write-TestStep "Step 8" "Configuring Object Types and Attributes"
 
 # Get object types
-$sourceUserType = $sourceObjectTypes | Where-Object { $_.name -eq "user" } | Select-Object -First 1
-$sourceGroupType = $sourceObjectTypes | Where-Object { $_.name -eq "group" } | Select-Object -First 1
-$targetUserType = $targetObjectTypes | Where-Object { $_.name -eq "user" } | Select-Object -First 1
-$targetGroupType = $targetObjectTypes | Where-Object { $_.name -eq "group" } | Select-Object -First 1
+$sourceUserType = $sourceObjectTypes | Where-Object { $_.name -eq $userTypeName } | Select-Object -First 1
+$sourceGroupType = $sourceObjectTypes | Where-Object { $_.name -eq $groupTypeName } | Select-Object -First 1
+$targetUserType = $targetObjectTypes | Where-Object { $_.name -eq $userTypeName } | Select-Object -First 1
+$targetGroupType = $targetObjectTypes | Where-Object { $_.name -eq $groupTypeName } | Select-Object -First 1
 
 $mvUserType = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "User" } | Select-Object -First 1
 $mvGroupType = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "Group" } | Select-Object -First 1
 
-if (-not $sourceUserType) { throw "No 'user' object type found in Source schema" }
-if (-not $sourceGroupType) { throw "No 'group' object type found in Source schema" }
-if (-not $targetUserType) { throw "No 'user' object type found in Target schema" }
-if (-not $targetGroupType) { throw "No 'group' object type found in Target schema" }
+if (-not $sourceUserType) { throw "No '$userTypeName' object type found in Source schema" }
+if (-not $sourceGroupType) { throw "No '$groupTypeName' object type found in Source schema" }
+if (-not $targetUserType) { throw "No '$userTypeName' object type found in Target schema" }
+if (-not $targetGroupType) { throw "No '$groupTypeName' object type found in Target schema" }
 if (-not $mvUserType) { throw "No 'User' object type found in Metaverse" }
 if (-not $mvGroupType) { throw "No 'Group' object type found in Metaverse" }
 
@@ -426,32 +610,23 @@ Set-JIMConnectedSystemObjectType -ConnectedSystemId $targetSystem.id -ObjectType
 Set-JIMConnectedSystemObjectType -ConnectedSystemId $targetSystem.id -ObjectTypeId $targetGroupType.id -Selected $true | Out-Null
 Write-Host "  ✓ Selected user and group object types" -ForegroundColor Green
 
-# Note: objectGUID is automatically set as the External ID by the LDAP connector schema import
-# (the connector marks it as IsExternalId = true during schema import). No manual override needed.
-Write-Host "  ✓ Set objectGUID as External ID for all object types" -ForegroundColor Green
+# Note: External ID (objectGUID for AD, entryUUID for OpenLDAP) is automatically set by the LDAP
+# connector schema import (the connector marks it as IsExternalId = true). No manual override needed.
+$externalIdAttr = if ($isOpenLDAP) { "entryUUID" } else { "objectGUID" }
+Write-Host "  Set $externalIdAttr as External ID for all object types" -ForegroundColor Green
 
-# Select required LDAP attributes for users
-$requiredUserAttributes = @(
-    'objectGUID', 'sAMAccountName', 'givenName', 'sn', 'displayName', 'cn',
-    'mail', 'userPrincipalName', 'title', 'department', 'company', 'distinguishedName',
-    'extensionAttribute1',  # Pronouns - AD has no native attribute, uses Exchange extension attribute
-    'userAccountControl'    # Account enabled/disabled state - mapped to Status via expression
-)
-
-# Select required LDAP attributes for groups
-$requiredGroupAttributes = @(
-    'objectGUID', 'sAMAccountName', 'cn', 'displayName', 'description',
-    'groupType', 'member', 'managedBy', 'mail', 'company', 'distinguishedName'
-)
+# Attribute lists are defined at the top of the script based on directory type
 
 # Validate all required user attributes exist in the LDAP schema
 $sourceSchemaAttrNames = @($sourceUserType.attributes | ForEach-Object { $_.name })
 $missingUserAttrs = @($requiredUserAttributes | Where-Object { $_ -notin $sourceSchemaAttrNames })
 if ($missingUserAttrs.Count -gt 0) {
-    Write-Host "  ✗ Required LDAP user attributes not found in schema: $($missingUserAttrs -join ', ')" -ForegroundColor Red
-    Write-Host "    This usually means the Samba AD image is outdated and needs rebuilding." -ForegroundColor Yellow
-    Write-Host "    Run: docker rmi samba-ad-prebuilt:latest && jim-build" -ForegroundColor Yellow
-    throw "Missing required LDAP attributes in schema: $($missingUserAttrs -join ', '). Rebuild the Samba AD image."
+    Write-Host "  Required LDAP user attributes not found in schema: $($missingUserAttrs -join ', ')" -ForegroundColor Red
+    if (-not $isOpenLDAP) {
+        Write-Host "    This usually means the Samba AD image is outdated and needs rebuilding." -ForegroundColor Yellow
+        Write-Host "    Run: docker rmi samba-ad-prebuilt:latest && jim-build" -ForegroundColor Yellow
+    }
+    throw "Missing required LDAP attributes in schema: $($missingUserAttrs -join ', ')"
 }
 
 # Select attributes for Source user
@@ -501,7 +676,9 @@ $existingRules = Get-JIMSyncRule
 
 # --- User Sync Rules ---
 # Source Import (users)
-$sourceUserImportRuleName = "APAC AD Import Users"
+$sourceLabel = if ($isOpenLDAP) { "APAC LDAP" } else { "APAC AD" }
+$targetLabel = if ($isOpenLDAP) { "EMEA LDAP" } else { "EMEA AD" }
+$sourceUserImportRuleName = "$sourceLabel Import Users"
 $sourceUserImportRule = $existingRules | Where-Object { $_.name -eq $sourceUserImportRuleName }
 if (-not $sourceUserImportRule) {
     $sourceUserImportRule = New-JIMSyncRule `
@@ -519,7 +696,7 @@ else {
 }
 
 # Target Export (users)
-$targetUserExportRuleName = "EMEA AD Export Users"
+$targetUserExportRuleName = "$targetLabel Export Users"
 $targetUserExportRule = $existingRules | Where-Object { $_.name -eq $targetUserExportRuleName }
 if (-not $targetUserExportRule) {
     $targetUserExportRule = New-JIMSyncRule `
@@ -537,7 +714,7 @@ else {
 }
 
 # Target Import (users - for confirming import)
-$targetUserImportRuleName = "EMEA AD Import Users"
+$targetUserImportRuleName = "$targetLabel Import Users"
 $targetUserImportRule = $existingRules | Where-Object { $_.name -eq $targetUserImportRuleName }
 if (-not $targetUserImportRule) {
     $targetUserImportRule = New-JIMSyncRule `
@@ -555,7 +732,7 @@ else {
 
 # --- Group Sync Rules ---
 # Source Import (groups)
-$sourceGroupImportRuleName = "APAC AD Import Groups"
+$sourceGroupImportRuleName = "$sourceLabel Import Groups"
 $sourceGroupImportRule = $existingRules | Where-Object { $_.name -eq $sourceGroupImportRuleName }
 if (-not $sourceGroupImportRule) {
     $sourceGroupImportRule = New-JIMSyncRule `
@@ -573,7 +750,7 @@ else {
 }
 
 # Target Export (groups)
-$targetGroupExportRuleName = "EMEA AD Export Groups"
+$targetGroupExportRuleName = "$targetLabel Export Groups"
 $targetGroupExportRule = $existingRules | Where-Object { $_.name -eq $targetGroupExportRuleName }
 if (-not $targetGroupExportRule) {
     $targetGroupExportRule = New-JIMSyncRule `
@@ -598,33 +775,8 @@ Write-TestStep "Step 10" "Configuring Attribute Flow Mappings"
 $mvAttributes = Get-JIMMetaverseAttribute
 
 # --- User Mappings ---
+# (mapping arrays defined at script top based on directory type)
 Write-Host "  Configuring user attribute mappings..." -ForegroundColor Gray
-
-$userImportMappings = @(
-    @{ LdapAttr = "sAMAccountName"; MvAttr = "Account Name" }
-    @{ LdapAttr = "givenName"; MvAttr = "First Name" }
-    @{ LdapAttr = "sn"; MvAttr = "Last Name" }
-    @{ LdapAttr = "displayName"; MvAttr = "Display Name" }
-    @{ LdapAttr = "mail"; MvAttr = "Email" }
-    @{ LdapAttr = "title"; MvAttr = "Job Title" }
-    @{ LdapAttr = "department"; MvAttr = "Department" }
-    @{ LdapAttr = "company"; MvAttr = "Company" }
-    @{ LdapAttr = "extensionAttribute1"; MvAttr = "Pronouns" }
-)
-
-$userExportMappings = @(
-    @{ MvAttr = "Account Name"; LdapAttr = "sAMAccountName" }
-    @{ MvAttr = "First Name"; LdapAttr = "givenName" }
-    @{ MvAttr = "Last Name"; LdapAttr = "sn" }
-    @{ MvAttr = "Display Name"; LdapAttr = "displayName" }
-    @{ MvAttr = "Display Name"; LdapAttr = "cn" }
-    @{ MvAttr = "Email"; LdapAttr = "mail" }
-    @{ MvAttr = "Email"; LdapAttr = "userPrincipalName" }
-    @{ MvAttr = "Job Title"; LdapAttr = "title" }
-    @{ MvAttr = "Department"; LdapAttr = "department" }
-    @{ MvAttr = "Company"; LdapAttr = "company" }
-    @{ MvAttr = "Pronouns"; LdapAttr = "extensionAttribute1" }
-)
 
 # Create user import mappings (Source -> MV)
 $existingSourceUserImportMappings = Get-JIMSyncRuleMapping -SyncRuleId $sourceUserImportRule.id
@@ -650,25 +802,25 @@ foreach ($mapping in $userImportMappings) {
 }
 Write-Host "    ✓ Source user import mappings ($userImportMappingsCreated new)" -ForegroundColor Green
 
-# Add expression mapping for userAccountControl → Status on source user import rule
-# HasBit(uac, 2) checks the ACCOUNTDISABLE flag (bit 2 = 0x0002) regardless of other UAC flags.
-# This is more robust than comparing to fixed values like 512/514, which would fail for accounts
-# with additional flags set (e.g. DONT_EXPIRE_PASSWORD turns 512 into 66048).
-$statusAttr = $mvAttributes | Where-Object { $_.name -eq "Status" }
-$uacAttr = $sourceUserType.attributes | Where-Object { $_.name -eq "userAccountControl" }
-if ($statusAttr -and $uacAttr) {
-    $existingStatusMapping = $existingSourceUserImportMappings | Where-Object {
-        $_.targetMetaverseAttributeId -eq $statusAttr.id
-    }
-    if (-not $existingStatusMapping) {
-        try {
-            New-JIMSyncRuleMapping -SyncRuleId $sourceUserImportRule.id `
-                -TargetMetaverseAttributeId $statusAttr.id `
-                -Expression 'IIF(HasBit(cs["userAccountControl"], 2), "Archived", "Active")' | Out-Null
-            Write-Host "    ✓ Source user import userAccountControl→Status expression mapping configured" -ForegroundColor Green
+# Add expression mapping for userAccountControl → Status on source user import rule (AD only)
+# OpenLDAP has no userAccountControl attribute
+if (-not $isOpenLDAP) {
+    $statusAttr = $mvAttributes | Where-Object { $_.name -eq "Status" }
+    $uacAttr = $sourceUserType.attributes | Where-Object { $_.name -eq "userAccountControl" }
+    if ($statusAttr -and $uacAttr) {
+        $existingStatusMapping = $existingSourceUserImportMappings | Where-Object {
+            $_.targetMetaverseAttributeId -eq $statusAttr.id
         }
-        catch {
-            Write-Host "    ⚠ Could not create Status expression mapping: $_" -ForegroundColor Yellow
+        if (-not $existingStatusMapping) {
+            try {
+                New-JIMSyncRuleMapping -SyncRuleId $sourceUserImportRule.id `
+                    -TargetMetaverseAttributeId $statusAttr.id `
+                    -Expression 'IIF(HasBit(cs["userAccountControl"], 2), "Archived", "Active")' | Out-Null
+                Write-Host "    Source user import userAccountControl->Status expression mapping configured" -ForegroundColor Green
+            }
+            catch {
+                Write-Host "    Could not create Status expression mapping: $_" -ForegroundColor Yellow
+            }
         }
     }
 }
@@ -722,36 +874,15 @@ if ($targetUserDnAttr) {
     if (-not $dnMappingExists) {
         New-JIMSyncRuleMapping -SyncRuleId $targetUserExportRule.id `
             -TargetConnectedSystemAttributeId $targetUserDnAttr.id `
-            -Expression '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=Users,OU=CorpManaged,DC=targetdomain,DC=local"' | Out-Null
+            -Expression $userDnExpression | Out-Null
         $userExportMappingsCreated++
     }
 }
 Write-Host "    ✓ Target user export mappings ($userExportMappingsCreated new)" -ForegroundColor Green
 
 # --- Group Mappings ---
+# (mapping arrays defined at script top based on directory type)
 Write-Host "  Configuring group attribute mappings..." -ForegroundColor Gray
-
-$groupImportMappings = @(
-    @{ LdapAttr = "sAMAccountName"; MvAttr = "Account Name" }
-    @{ LdapAttr = "cn"; MvAttr = "Common Name" }
-    @{ LdapAttr = "displayName"; MvAttr = "Display Name" }
-    @{ LdapAttr = "description"; MvAttr = "Description" }
-    @{ LdapAttr = "groupType"; MvAttr = "Group Type Flags" }
-    @{ LdapAttr = "mail"; MvAttr = "Email" }
-    @{ LdapAttr = "member"; MvAttr = "Static Members" }
-    @{ LdapAttr = "managedBy"; MvAttr = "Managed By" }
-)
-
-$groupExportMappings = @(
-    @{ MvAttr = "Account Name"; LdapAttr = "sAMAccountName" }
-    @{ MvAttr = "Common Name"; LdapAttr = "cn" }
-    @{ MvAttr = "Display Name"; LdapAttr = "displayName" }
-    @{ MvAttr = "Description"; LdapAttr = "description" }
-    @{ MvAttr = "Group Type Flags"; LdapAttr = "groupType" }
-    @{ MvAttr = "Email"; LdapAttr = "mail" }
-    @{ MvAttr = "Static Members"; LdapAttr = "member" }
-    @{ MvAttr = "Managed By"; LdapAttr = "managedBy" }
-)
 
 # Create group import mappings (Source -> MV)
 $existingSourceGroupImportMappings = Get-JIMSyncRuleMapping -SyncRuleId $sourceGroupImportRule.id
@@ -779,50 +910,47 @@ foreach ($mapping in $groupImportMappings) {
 }
 Write-Host "    ✓ Source group import mappings ($groupImportMappingsCreated new)" -ForegroundColor Green
 
-# Create expression-based import mappings for Group Type and Group Scope (derived from groupType flags)
-Write-Host "  Configuring group type/scope expression mappings..." -ForegroundColor Gray
-$groupTypeAttr = $mvAttributes | Where-Object { $_.name -eq "Group Type" }
-$groupScopeAttr = $mvAttributes | Where-Object { $_.name -eq "Group Scope" }
-$groupTypeFlagsAttr = $sourceGroupType.attributes | Where-Object { $_.name -eq "groupType" }
+# Create expression-based import mappings for Group Type and Group Scope (AD only — derived from groupType flags)
+# OpenLDAP groupOfNames has no groupType attribute
+if (-not $isOpenLDAP) {
+    Write-Host "  Configuring group type/scope expression mappings..." -ForegroundColor Gray
+    $groupTypeAttr = $mvAttributes | Where-Object { $_.name -eq "Group Type" }
+    $groupScopeAttr = $mvAttributes | Where-Object { $_.name -eq "Group Scope" }
+    $groupTypeFlagsAttr = $sourceGroupType.attributes | Where-Object { $_.name -eq "groupType" }
 
-if ($groupTypeAttr -and $groupTypeFlagsAttr) {
-    $groupTypeMapping = $existingSourceGroupImportMappings | Where-Object {
-        $_.targetMetaverseAttributeId -eq $groupTypeAttr.id
-    }
-    if (-not $groupTypeMapping) {
-        try {
-            # Expression to decode groupType flags to determine if Security or Distribution
-            # Bit 0x80000000 (-2147483648) set = Security group, otherwise = Distribution group
-            $expression = 'HasBit(cs["groupType"], -2147483648) ? "Security" : "Distribution"'
-            New-JIMSyncRuleMapping -SyncRuleId $sourceGroupImportRule.id `
-                -TargetMetaverseAttributeId $groupTypeAttr.id `
-                -Expression $expression | Out-Null
-            Write-Host "    ✓ Created Group Type mapping with expression" -ForegroundColor Green
+    if ($groupTypeAttr -and $groupTypeFlagsAttr) {
+        $groupTypeMapping = $existingSourceGroupImportMappings | Where-Object {
+            $_.targetMetaverseAttributeId -eq $groupTypeAttr.id
         }
-        catch {
-            Write-Host "    ⚠ Failed to create Group Type expression mapping: $_" -ForegroundColor Yellow
+        if (-not $groupTypeMapping) {
+            try {
+                $expression = 'HasBit(cs["groupType"], -2147483648) ? "Security" : "Distribution"'
+                New-JIMSyncRuleMapping -SyncRuleId $sourceGroupImportRule.id `
+                    -TargetMetaverseAttributeId $groupTypeAttr.id `
+                    -Expression $expression | Out-Null
+                Write-Host "    Created Group Type mapping with expression" -ForegroundColor Green
+            }
+            catch {
+                Write-Host "    Failed to create Group Type expression mapping: $_" -ForegroundColor Yellow
+            }
         }
     }
-}
 
-if ($groupScopeAttr -and $groupTypeFlagsAttr) {
-    $groupScopeMapping = $existingSourceGroupImportMappings | Where-Object {
-        $_.targetMetaverseAttributeId -eq $groupScopeAttr.id
-    }
-    if (-not $groupScopeMapping) {
-        try {
-            # Expression to decode groupType flags to determine scope (Global, Local, or Universal)
-            # Bit 0x00000001 (1) set = Domain Local group
-            # Bit 0x00000002 (2) set = Global group
-            # Bit 0x00000004 (4) set = Universal group (only in mixed/native mode)
-            $expression = 'HasBit(cs["groupType"], 1) ? "Domain Local" : (HasBit(cs["groupType"], 2) ? "Global" : "Universal")'
-            New-JIMSyncRuleMapping -SyncRuleId $sourceGroupImportRule.id `
-                -TargetMetaverseAttributeId $groupScopeAttr.id `
-                -Expression $expression | Out-Null
-            Write-Host "    ✓ Created Group Scope mapping with expression" -ForegroundColor Green
+    if ($groupScopeAttr -and $groupTypeFlagsAttr) {
+        $groupScopeMapping = $existingSourceGroupImportMappings | Where-Object {
+            $_.targetMetaverseAttributeId -eq $groupScopeAttr.id
         }
-        catch {
-            Write-Host "    ⚠ Failed to create Group Scope expression mapping: $_" -ForegroundColor Yellow
+        if (-not $groupScopeMapping) {
+            try {
+                $expression = 'HasBit(cs["groupType"], 1) ? "Domain Local" : (HasBit(cs["groupType"], 2) ? "Global" : "Universal")'
+                New-JIMSyncRuleMapping -SyncRuleId $sourceGroupImportRule.id `
+                    -TargetMetaverseAttributeId $groupScopeAttr.id `
+                    -Expression $expression | Out-Null
+                Write-Host "    Created Group Scope mapping with expression" -ForegroundColor Green
+            }
+            catch {
+                Write-Host "    Failed to create Group Scope expression mapping: $_" -ForegroundColor Yellow
+            }
         }
     }
 }
@@ -860,7 +988,7 @@ if ($targetGroupDnAttr) {
     if (-not $dnMappingExists) {
         New-JIMSyncRuleMapping -SyncRuleId $targetGroupExportRule.id `
             -TargetConnectedSystemAttributeId $targetGroupDnAttr.id `
-            -Expression '"CN=" + EscapeDN(mv["Common Name"]) + ",OU=Entitlements,OU=CorpManaged,DC=targetdomain,DC=local"' | Out-Null
+            -Expression $groupDnExpression | Out-Null
         $groupExportMappingsCreated++
     }
 }
@@ -871,22 +999,23 @@ Write-Host "    ✓ Target group export mappings ($groupExportMappingsCreated ne
 # ============================================================================
 Write-TestStep "Step 11" "Configuring Matching Rules"
 
-$mvAccountNameAttr = $mvAttributes | Where-Object { $_.name -eq 'Account Name' }
+$mvUserMatchingAttr = $mvAttributes | Where-Object { $_.name -eq $userMatchingMvAttr }
+$mvGroupMatchingAttr = $mvAttributes | Where-Object { $_.name -eq $groupMatchingMvAttr }
 
 # Source user matching rule
-$sourceUserSamAttr = $sourceUserType.attributes | Where-Object { $_.name -eq 'sAMAccountName' }
-if ($sourceUserSamAttr -and $mvAccountNameAttr) {
+$sourceUserMatchAttr = $sourceUserType.attributes | Where-Object { $_.name -eq $userMatchingAttrName }
+if ($sourceUserMatchAttr -and $mvUserMatchingAttr) {
     $existingMatchingRules = Get-JIMMatchingRule -ConnectedSystemId $sourceSystem.id -ObjectTypeId $sourceUserType.id
     $matchingRuleExists = $existingMatchingRules | Where-Object {
-        $_.targetMetaverseAttributeId -eq $mvAccountNameAttr.id
+        $_.targetMetaverseAttributeId -eq $mvUserMatchingAttr.id
     }
     if (-not $matchingRuleExists) {
         New-JIMMatchingRule -ConnectedSystemId $sourceSystem.id `
             -ObjectTypeId $sourceUserType.id `
             -MetaverseObjectTypeId $mvUserType.id `
-            -TargetMetaverseAttributeId $mvAccountNameAttr.id `
-            -SourceAttributeId $sourceUserSamAttr.id | Out-Null
-        Write-Host "  ✓ Source user matching rule (sAMAccountName → Account Name)" -ForegroundColor Green
+            -TargetMetaverseAttributeId $mvUserMatchingAttr.id `
+            -SourceAttributeId $sourceUserMatchAttr.id | Out-Null
+        Write-Host "  Source user matching rule ($userMatchingAttrName -> $userMatchingMvAttr)" -ForegroundColor Green
     }
     else {
         Write-Host "  Source user matching rule already exists" -ForegroundColor Gray
@@ -894,19 +1023,19 @@ if ($sourceUserSamAttr -and $mvAccountNameAttr) {
 }
 
 # Target user matching rule
-$targetUserSamAttr = $targetUserType.attributes | Where-Object { $_.name -eq 'sAMAccountName' }
-if ($targetUserSamAttr -and $mvAccountNameAttr) {
+$targetUserMatchAttr = $targetUserType.attributes | Where-Object { $_.name -eq $userMatchingAttrName }
+if ($targetUserMatchAttr -and $mvUserMatchingAttr) {
     $existingMatchingRules = Get-JIMMatchingRule -ConnectedSystemId $targetSystem.id -ObjectTypeId $targetUserType.id
     $matchingRuleExists = $existingMatchingRules | Where-Object {
-        $_.targetMetaverseAttributeId -eq $mvAccountNameAttr.id
+        $_.targetMetaverseAttributeId -eq $mvUserMatchingAttr.id
     }
     if (-not $matchingRuleExists) {
         New-JIMMatchingRule -ConnectedSystemId $targetSystem.id `
             -ObjectTypeId $targetUserType.id `
             -MetaverseObjectTypeId $mvUserType.id `
-            -TargetMetaverseAttributeId $mvAccountNameAttr.id `
-            -SourceAttributeId $targetUserSamAttr.id | Out-Null
-        Write-Host "  ✓ Target user matching rule (sAMAccountName → Account Name)" -ForegroundColor Green
+            -TargetMetaverseAttributeId $mvUserMatchingAttr.id `
+            -SourceAttributeId $targetUserMatchAttr.id | Out-Null
+        Write-Host "  Target user matching rule ($userMatchingAttrName -> $userMatchingMvAttr)" -ForegroundColor Green
     }
     else {
         Write-Host "  Target user matching rule already exists" -ForegroundColor Gray
@@ -914,19 +1043,19 @@ if ($targetUserSamAttr -and $mvAccountNameAttr) {
 }
 
 # Source group matching rule
-$sourceGroupSamAttr = $sourceGroupType.attributes | Where-Object { $_.name -eq 'sAMAccountName' }
-if ($sourceGroupSamAttr -and $mvAccountNameAttr) {
+$sourceGroupMatchAttr = $sourceGroupType.attributes | Where-Object { $_.name -eq $groupMatchingAttrName }
+if ($sourceGroupMatchAttr -and $mvGroupMatchingAttr) {
     $existingMatchingRules = Get-JIMMatchingRule -ConnectedSystemId $sourceSystem.id -ObjectTypeId $sourceGroupType.id
     $matchingRuleExists = $existingMatchingRules | Where-Object {
-        $_.targetMetaverseAttributeId -eq $mvAccountNameAttr.id
+        $_.targetMetaverseAttributeId -eq $mvGroupMatchingAttr.id
     }
     if (-not $matchingRuleExists) {
         New-JIMMatchingRule -ConnectedSystemId $sourceSystem.id `
             -ObjectTypeId $sourceGroupType.id `
             -MetaverseObjectTypeId $mvGroupType.id `
-            -TargetMetaverseAttributeId $mvAccountNameAttr.id `
-            -SourceAttributeId $sourceGroupSamAttr.id | Out-Null
-        Write-Host "  ✓ Source group matching rule (sAMAccountName → Account Name)" -ForegroundColor Green
+            -TargetMetaverseAttributeId $mvGroupMatchingAttr.id `
+            -SourceAttributeId $sourceGroupMatchAttr.id | Out-Null
+        Write-Host "  Source group matching rule ($groupMatchingAttrName -> $groupMatchingMvAttr)" -ForegroundColor Green
     }
     else {
         Write-Host "  Source group matching rule already exists" -ForegroundColor Gray
@@ -934,19 +1063,19 @@ if ($sourceGroupSamAttr -and $mvAccountNameAttr) {
 }
 
 # Target group matching rule
-$targetGroupSamAttr = $targetGroupType.attributes | Where-Object { $_.name -eq 'sAMAccountName' }
-if ($targetGroupSamAttr -and $mvAccountNameAttr) {
+$targetGroupMatchAttr = $targetGroupType.attributes | Where-Object { $_.name -eq $groupMatchingAttrName }
+if ($targetGroupMatchAttr -and $mvGroupMatchingAttr) {
     $existingMatchingRules = Get-JIMMatchingRule -ConnectedSystemId $targetSystem.id -ObjectTypeId $targetGroupType.id
     $matchingRuleExists = $existingMatchingRules | Where-Object {
-        $_.targetMetaverseAttributeId -eq $mvAccountNameAttr.id
+        $_.targetMetaverseAttributeId -eq $mvGroupMatchingAttr.id
     }
     if (-not $matchingRuleExists) {
         New-JIMMatchingRule -ConnectedSystemId $targetSystem.id `
             -ObjectTypeId $targetGroupType.id `
             -MetaverseObjectTypeId $mvGroupType.id `
-            -TargetMetaverseAttributeId $mvAccountNameAttr.id `
-            -SourceAttributeId $targetGroupSamAttr.id | Out-Null
-        Write-Host "  ✓ Target group matching rule (sAMAccountName → Account Name)" -ForegroundColor Green
+            -TargetMetaverseAttributeId $mvGroupMatchingAttr.id `
+            -SourceAttributeId $targetGroupMatchAttr.id | Out-Null
+        Write-Host "  Target group matching rule ($groupMatchingAttrName -> $groupMatchingMvAttr)" -ForegroundColor Green
     }
     else {
         Write-Host "  Target group matching rule already exists" -ForegroundColor Gray
@@ -957,6 +1086,12 @@ if ($targetGroupSamAttr -and $mvAccountNameAttr) {
 # Step 12: Create Run Profiles
 # ============================================================================
 Write-TestStep "Step 12" "Creating Run Profiles"
+
+# Look up selected domain partitions for partition-scoped run profiles
+$sourcePartitions = @(Get-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id)
+$sourceDomainPartition = $sourcePartitions | Where-Object { $_.selected -eq $true } | Select-Object -First 1
+$targetPartitions = @(Get-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id)
+$targetDomainPartition = $targetPartitions | Where-Object { $_.selected -eq $true } | Select-Object -First 1
 
 $sourceProfiles = Get-JIMRunProfile -ConnectedSystemId $sourceSystem.id
 $targetProfiles = Get-JIMRunProfile -ConnectedSystemId $targetSystem.id
@@ -980,6 +1115,18 @@ foreach ($profileName in @("Full Import", "Delta Import", "Full Sync", "Delta Sy
     }
 }
 
+# Source - Full Import (Scoped) — targets domain partition only
+if ($sourceDomainPartition) {
+    $profile = $sourceProfiles | Where-Object { $_.name -eq "Full Import (Scoped)" }
+    if (-not $profile) {
+        New-JIMRunProfile -Name "Full Import (Scoped)" -ConnectedSystemId $sourceSystem.id -RunType "FullImport" -PartitionId $sourceDomainPartition.id -PassThru | Out-Null
+        Write-Host "  ✓ Created 'Full Import (Scoped)' for Source (APAC) (PartitionId: $($sourceDomainPartition.id))" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Run profile 'Full Import (Scoped)' already exists for Source (APAC)" -ForegroundColor Gray
+    }
+}
+
 # Target run profiles (Full + Delta)
 foreach ($profileName in @("Full Import", "Delta Import", "Full Sync", "Delta Sync", "Export")) {
     $runType = switch ($profileName) {
@@ -996,6 +1143,18 @@ foreach ($profileName in @("Full Import", "Delta Import", "Full Sync", "Delta Sy
     }
     else {
         Write-Host "  Run profile '$profileName' already exists for Target (EMEA)" -ForegroundColor Gray
+    }
+}
+
+# Target - Full Import (Scoped) — targets domain partition only
+if ($targetDomainPartition) {
+    $profile = $targetProfiles | Where-Object { $_.name -eq "Full Import (Scoped)" }
+    if (-not $profile) {
+        New-JIMRunProfile -Name "Full Import (Scoped)" -ConnectedSystemId $targetSystem.id -RunType "FullImport" -PartitionId $targetDomainPartition.id -PassThru | Out-Null
+        Write-Host "  ✓ Created 'Full Import (Scoped)' for Target (EMEA) (PartitionId: $($targetDomainPartition.id))" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Run profile 'Full Import (Scoped)' already exists for Target (EMEA)" -ForegroundColor Gray
     }
 }
 
@@ -1034,21 +1193,22 @@ else {
 # ============================================================================
 Write-TestSection "Setup Complete"
 Write-Host "Template:          $Template" -ForegroundColor Cyan
-Write-Host "Source System ID:  $($sourceSystem.id)" -ForegroundColor Cyan
-Write-Host "Target System ID:  $($targetSystem.id)" -ForegroundColor Cyan
+Write-Host "Directory Type:    $(if ($isOpenLDAP) { 'OpenLDAP' } else { 'Samba AD' })" -ForegroundColor Cyan
+Write-Host "Source System:     $sourceSystemName (ID: $($sourceSystem.id))" -ForegroundColor Cyan
+Write-Host "Target System:     $targetSystemName (ID: $($targetSystem.id))" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "✓ Scenario 8 setup complete" -ForegroundColor Green
+Write-Host "Scenario 8 setup complete" -ForegroundColor Green
 Write-Host ""
 Write-Host "Sync Rules Created:" -ForegroundColor Yellow
-Write-Host "  Users:  APAC AD -> Metaverse -> EMEA AD" -ForegroundColor Gray
-Write-Host "  Groups: APAC AD -> Metaverse -> EMEA AD" -ForegroundColor Gray
+Write-Host "  Users:  $sourceSystemName -> Metaverse -> $targetSystemName" -ForegroundColor Gray
+Write-Host "  Groups: $sourceSystemName -> Metaverse -> $targetSystemName" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Deletion Rules Configured:" -ForegroundColor Yellow
-Write-Host "  Groups: WhenAuthoritativeSourceDisconnected (Source=APAC, immediate)" -ForegroundColor Gray
+Write-Host "  Groups: WhenAuthoritativeSourceDisconnected (Source=$sourceSystemName, immediate)" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Run Profiles Created:" -ForegroundColor Yellow
-Write-Host "  Quantum Dynamics APAC: Full Import, Delta Import, Full Sync, Delta Sync, Export" -ForegroundColor Gray
-Write-Host "  Quantum Dynamics EMEA: Full Import, Delta Import, Full Sync, Delta Sync, Export" -ForegroundColor Gray
+Write-Host "  $sourceSystemName`: Full Import, Delta Import, Full Sync, Delta Sync, Export" -ForegroundColor Gray
+Write-Host "  $targetSystemName`: Full Import, Delta Import, Full Sync, Delta Sync, Export" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
 Write-Host "  1. Run Source Full Import to import users and groups" -ForegroundColor Gray

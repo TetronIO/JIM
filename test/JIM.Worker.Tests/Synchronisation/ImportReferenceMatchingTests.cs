@@ -137,7 +137,7 @@ public class ImportReferenceMatchingTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var importProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var importProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await importProcessor.PerformFullImportAsync();
 
         // Verify all 3 member references are preserved
@@ -195,7 +195,7 @@ public class ImportReferenceMatchingTests
 
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
-        var importProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        var importProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await importProcessor.PerformFullImportAsync();
 
         // Since UnresolvedReferenceValue matches the import string (case-sensitive), all 3

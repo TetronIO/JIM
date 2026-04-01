@@ -22,6 +22,7 @@ public class SyncImportTaskProcessor
     private readonly JimApplication _jim;
     private readonly ISyncRepository _syncRepo;
     private readonly ISyncServer _syncServer;
+    private readonly ISyncEngine _syncEngine;
     private readonly IConnector _connector;
     private readonly ConnectedSystem _connectedSystem;
     private readonly ConnectedSystemRunProfile _connectedSystemRunProfile;
@@ -60,6 +61,7 @@ public class SyncImportTaskProcessor
         JimApplication jimApplication,
         ISyncRepository syncRepository,
         ISyncServer syncServer,
+        ISyncEngine syncEngine,
         IConnector connector,
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile connectedSystemRunProfile,
@@ -69,6 +71,7 @@ public class SyncImportTaskProcessor
         _jim = jimApplication;
         _syncRepo = syncRepository;
         _syncServer = syncServer;
+        _syncEngine = syncEngine;
         _connector = connector;
         _connectedSystem = connectedSystem;
         _cancellationTokenSource = cancellationTokenSource;
@@ -146,6 +149,7 @@ public class SyncImportTaskProcessor
                     credentialAwareConnector.SetCredentialProtection(credentialProtection);
                 }
 
+                await _syncRepo.UpdateActivityMessageAsync(_activity, "Connecting to connected system");
                 using (Diagnostics.Connector.StartSpan("OpenImportConnection"))
                 {
                     callBasedImportConnector.OpenImportConnection(_connectedSystem.SettingValues, Log.Logger);
@@ -162,6 +166,7 @@ public class SyncImportTaskProcessor
                 // AFTER all pages are processed.
                 var originalPersistedData = _connectedSystem.PersistedConnectorData;
                 string? newPersistedData = null;
+                string? connectorWarningMessage = null;
 
                 while (initialPage || paginationTokens.Count > 0)
                 {
@@ -169,6 +174,10 @@ public class SyncImportTaskProcessor
                     // IMPORTANT: Always pass the ORIGINAL persisted data to ensure consistent
                     // watermark queries across all pages of a delta import.
                     ConnectedSystemImportResult result;
+                    var fetchMessage = pageNumber > 0
+                        ? $"Importing objects from connected system (page {pageNumber + 1})"
+                        : "Importing objects from connected system";
+                    await _syncRepo.UpdateActivityMessageAsync(_activity, fetchMessage);
                     using (Diagnostics.Connector.StartSpan("ImportPage").SetTag("pageNumber", pageNumber))
                     {
                         result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, originalPersistedData, Log.Logger, _cancellationTokenSource.Token);
@@ -199,6 +208,12 @@ public class SyncImportTaskProcessor
                         newPersistedData = result.PersistedConnectorData;
                     }
 
+                    // Capture connector warning from the first page that reports one
+                    if (result.WarningMessage != null && connectorWarningMessage == null)
+                    {
+                        connectorWarningMessage = result.WarningMessage;
+                    }
+
                     // process the results from this page
                     using (Diagnostics.Sync.StartSpan("ProcessImportObjects").SetTag("objectCount", result.ImportObjects.Count))
                     {
@@ -218,6 +233,16 @@ public class SyncImportTaskProcessor
                     await UpdateConnectedSystemWithInitiatorAsync();
                 }
 
+                // Record connector-level warnings on the Activity itself (not as phantom RPEIs).
+                // Connector warnings (e.g., DeltaImportFallbackToFullImport) are operational notes about
+                // HOW the import was performed, not errors with specific objects. Creating a phantom RPEI
+                // with no CSO association inflates error counts and pollutes the RPEI list.
+                if (connectorWarningMessage != null)
+                {
+                    _activity.WarningMessage = connectorWarningMessage;
+                    Log.Warning("PerformFullImportAsync: Connector reported warning: {WarningMessage}", connectorWarningMessage);
+                }
+
                 using (Diagnostics.Connector.StartSpan("CloseImportConnection"))
                 {
                     callBasedImportConnector.CloseImportConnection();
@@ -229,6 +254,7 @@ public class SyncImportTaskProcessor
                 using var connectorSpan = Diagnostics.Connector.StartSpan("FileBasedImport");
 
                 // file based connectors return all the results from the connected system in one go. no paging.
+                await _syncRepo.UpdateActivityMessageAsync(_activity, "Importing objects from file");
                 ConnectedSystemImportResult result;
                 using (Diagnostics.Connector.StartSpan("ReadFile"))
                 {
@@ -866,6 +892,12 @@ public class SyncImportTaskProcessor
         // add the external ids from the results to our external id collection
         foreach (var importedObject in importResult.ImportObjects)
         {
+            // Skip delete objects — they have no ObjectType or external ID attributes.
+            // Deletion detection uses the *absence* of an external ID from this collection
+            // rather than its presence.
+            if (importedObject.ChangeType == ObjectChangeType.Deleted || string.IsNullOrEmpty(importedObject.ObjectType))
+                continue;
+
             // find the object type for the imported object in our schema
             var connectedSystemObjectType = _connectedSystem.ObjectTypes.Single(q => q.Name.Equals(importedObject.ObjectType, StringComparison.OrdinalIgnoreCase));
 
@@ -2371,7 +2403,6 @@ public class SyncImportTaskProcessor
         Log.Debug("ReconcilePendingExportsAsync: {FilteredCount} of {TotalCount} CSOs have pending exports",
             csoList.Count, updatedCsos.Count);
 
-        var reconciliationService = new PendingExportReconciliationService(_syncRepo);
         var totalConfirmed = 0;
         var totalRetry = 0;
         var totalFailed = 0;
@@ -2418,7 +2449,7 @@ public class SyncImportTaskProcessor
             // - pendingExportsByCsoId: read-only dictionary (concurrent reads are safe)
             // - Each CSO gets its own PendingExportReconciliationResult (no sharing)
             // - Each pending export is unique per CSO (no cross-CSO contention)
-            // - reconciliationService.ReconcileCsoAgainstPendingExport uses only static helper methods
+            // - SyncEngine reconciliation methods are stateless (pure logic, no instance state)
             // - Shared collections use ConcurrentBag, counters use Interlocked
             using (Diagnostics.Sync.StartSpan("ProcessReconciliation").SetTag("csoCount", pageCsos.Count))
             {
@@ -2431,7 +2462,7 @@ public class SyncImportTaskProcessor
 
                         // Perform in-memory reconciliation (no database operations)
                         var result = new PendingExportReconciliationResult();
-                        reconciliationService.ReconcileCsoAgainstPendingExport(cso, pendingExport, result);
+                        _syncEngine.ReconcileCsoAgainstPendingExport(cso, pendingExport, result);
 
                         if (result.HasChanges)
                         {

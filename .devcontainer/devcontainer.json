@@ -1,7 +1,7 @@
 {
   "name": "JIM Development Environment",
   "build": {
-      "dockerfile": "Dockerfile"
+    "dockerfile": "Dockerfile"
   },
   // Features - pre-built development tools
   "features": {
@@ -103,7 +103,8 @@
   "forwardPorts": [
     5432, // PostgreSQL
     5200, // JIM.Web (HTTP) - also serves API at /api/
-    5201 // JIM.Web (HTTPS) - also serves API at /api/
+    5201, // JIM.Web (HTTPS) - also serves API at /api/
+    8181 // Keycloak IdP (OIDC + admin console)
   ],
   // Port labels and auto-forward behaviour
   "portsAttributes": {
@@ -117,6 +118,10 @@
     },
     "5201": {
       "label": "JIM Web + API (HTTPS)",
+      "onAutoForward": "silent"
+    },
+    "8181": {
+      "label": "Keycloak IdP",
       "onAutoForward": "silent"
     }
   },
@@ -140,10 +145,10 @@
   "capAdd": [
     "SYS_PTRACE"
   ],
-  // Improved build performance
+  // Improved build performance and integration test directory snapshot storage
   "hostRequirements": {
     "cpus": 8,
     "memory": "32gb",
-    "storage": "64gb"
+    "storage": "120gb"
   }
 }

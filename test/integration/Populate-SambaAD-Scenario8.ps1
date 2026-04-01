@@ -8,7 +8,7 @@
     which will then be synced to the Target AD by JIM.
 
     Structure created:
-    - OU=Corp,DC=sourcedomain,DC=local
+    - OU=Corp,DC=resurgam,DC=local
       - OU=Users (test users)
       - OU=Entitlements (entitlement groups)
 
@@ -56,10 +56,10 @@ $groupScale = Get-Scenario8GroupScale -Template $Template
 # These must match the lists used in group creation to ensure membership filtering works
 # Keys are technical names (no spaces), values are display names (with spaces)
 $scenario8CompanyNames = @{
-    "Subatomic" = "Subatomic"
+    "Panoply" = "Panoply"
     "NexusDynamics" = "Nexus Dynamics"
-    "OrbitalSystems" = "Orbital Systems"
-    "QuantumBridge" = "Quantum Bridge"
+    "OrbitalSystems" = "Akinya"
+    "QuantumBridge" = "Rockhopper"
     "StellarLogistics" = "Stellar Logistics"
 }
 
@@ -80,15 +80,15 @@ $scenario8DepartmentNames = @{
 $containerMap = @{
     Source = @{
         Container = "samba-ad-source"
-        Domain = "SOURCEDOMAIN"
-        DomainDN = "DC=sourcedomain,DC=local"
-        DomainSuffix = "sourcedomain.local"
+        Domain = "RESURGAM"
+        DomainDN = "DC=resurgam,DC=local"
+        DomainSuffix = "resurgam.local"
     }
     Target = @{
         Container = "samba-ad-target"
-        Domain = "TARGETDOMAIN"
-        DomainDN = "DC=targetdomain,DC=local"
-        DomainSuffix = "targetdomain.local"
+        Domain = "GENTIAN"
+        DomainDN = "DC=gentian,DC=local"
+        DomainSuffix = "gentian.local"
     }
 }
 

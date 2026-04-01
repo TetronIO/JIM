@@ -1879,7 +1879,7 @@ public class ExportEvaluationServer
     /// </summary>
     private Dictionary<string, object?> BuildAttributeDictionary(MetaverseObject mvo)
     {
-        var attributes = new Dictionary<string, object?>();
+        var attributes = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
 
         if (mvo.Type == null)
         {

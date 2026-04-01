@@ -563,4 +563,168 @@ public class MetaverseServerChangeTrackingTests
     }
 
     #endregion
+
+    #region Attribute name/type snapshot (Issue #58)
+
+    [Test]
+    public async Task CreateMetaverseObjectAsync_PopulatesAttributeNameAndTypeOnChangeAttributeAsync()
+    {
+        // Arrange
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType };
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Attribute = _displayNameAttr,
+            StringValue = "Alice Adams"
+        });
+
+        // Act
+        await _jim.Metaverse.CreateMetaverseObjectAsync(
+            mvo,
+            changeInitiatorType: MetaverseObjectChangeInitiatorType.ExampleData);
+
+        // Assert - sibling properties populated from the attribute definition
+        var attrChange = mvo.Changes[0].AttributeChanges.Single();
+        Assert.That(attrChange.AttributeName, Is.EqualTo("DisplayName"));
+        Assert.That(attrChange.AttributeType, Is.EqualTo(AttributeDataType.Text));
+    }
+
+    [Test]
+    public async Task UpdateMetaverseObjectAsync_PopulatesAttributeNameAndTypeOnChangeAttributeAsync()
+    {
+        // Arrange
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType };
+        var additions = new List<MetaverseObjectAttributeValue>
+        {
+            new() { Attribute = _departmentAttr, StringValue = "Engineering" }
+        };
+
+        // Act
+        await _jim.Metaverse.UpdateMetaverseObjectAsync(
+            mvo,
+            additions: additions,
+            changeInitiatorType: MetaverseObjectChangeInitiatorType.System);
+
+        // Assert
+        var attrChange = mvo.Changes[0].AttributeChanges.Single();
+        Assert.That(attrChange.AttributeName, Is.EqualTo("Department"));
+        Assert.That(attrChange.AttributeType, Is.EqualTo(AttributeDataType.Text));
+    }
+
+    [Test]
+    public async Task DeleteMetaverseObjectAsync_PopulatesAttributeNameAndTypeOnChangeAttributeAsync()
+    {
+        // Arrange
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType };
+        var finalAttributeValues = new List<MetaverseObjectAttributeValue>
+        {
+            new() { Attribute = _displayNameAttr, StringValue = "Alice Adams" }
+        };
+
+        MetaverseObjectChange? capturedChange = null;
+        _mockMetaverseRepo
+            .Setup(r => r.CreateMetaverseObjectChangeDirectAsync(It.IsAny<MetaverseObjectChange>()))
+            .Callback<MetaverseObjectChange>(c => capturedChange = c)
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await _jim.Metaverse.DeleteMetaverseObjectAsync(mvo, finalAttributeValues: finalAttributeValues);
+
+        // Assert
+        var attrChange = capturedChange!.AttributeChanges.Single();
+        Assert.That(attrChange.AttributeName, Is.EqualTo("DisplayName"));
+        Assert.That(attrChange.AttributeType, Is.EqualTo(AttributeDataType.Text));
+    }
+
+    [Test]
+    public void AddMvoChangeAttributeValueObject_WhenAttributeIsNull_SiblingPropertiesStillAvailable()
+    {
+        // Arrange - simulate a change attribute where the FK has been set to null (attribute deleted)
+        var change = new MetaverseObjectChange();
+        var attrChange = new MetaverseObjectChangeAttribute
+        {
+            Attribute = null,
+            AttributeName = "DeletedAttribute",
+            AttributeType = AttributeDataType.Text,
+            MetaverseObjectChange = change
+        };
+
+        // Assert - sibling properties are accessible even with null Attribute
+        Assert.That(attrChange.AttributeName, Is.EqualTo("DeletedAttribute"));
+        Assert.That(attrChange.AttributeType, Is.EqualTo(AttributeDataType.Text));
+        Assert.That(attrChange.Attribute, Is.Null);
+    }
+
+    [Test]
+    public void AddMvoChangeAttributeValueObject_ReferenceWithLoadedNavigation_RecordsReferenceAsync()
+    {
+        // Arrange
+        var change = new MetaverseObjectChange();
+        var referencedMvo = new MetaverseObject { Id = Guid.NewGuid() };
+        var refAttr = new MetaverseAttribute { Id = 10, Name = "Manager", Type = AttributeDataType.Reference };
+        var attrValue = new MetaverseObjectAttributeValue
+        {
+            Attribute = refAttr,
+            ReferenceValue = referencedMvo,
+            ReferenceValueId = referencedMvo.Id
+        };
+
+        // Act
+        JIM.Application.Servers.MetaverseServer.AddMvoChangeAttributeValueObject(change, attrValue, ValueChangeType.Add);
+
+        // Assert
+        var attrChange = change.AttributeChanges.Single();
+        Assert.That(attrChange.AttributeName, Is.EqualTo("Manager"));
+        var valueChange = attrChange.ValueChanges.Single();
+        Assert.That(valueChange.ReferenceValue, Is.EqualTo(referencedMvo));
+    }
+
+    [Test]
+    public void AddMvoChangeAttributeValueObject_ReferenceWithFkOnly_RecordsGuidAsync()
+    {
+        // Arrange — navigation property not loaded but FK is set (common during MVO deletion
+        // when referenced MVOs are not in the EF change tracker)
+        var change = new MetaverseObjectChange();
+        var referencedMvoId = Guid.NewGuid();
+        var refAttr = new MetaverseAttribute { Id = 10, Name = "Manager", Type = AttributeDataType.Reference };
+        var attrValue = new MetaverseObjectAttributeValue
+        {
+            Attribute = refAttr,
+            ReferenceValue = null,
+            ReferenceValueId = referencedMvoId
+        };
+
+        // Act
+        JIM.Application.Servers.MetaverseServer.AddMvoChangeAttributeValueObject(change, attrValue, ValueChangeType.Remove);
+
+        // Assert — recorded as a GUID since the navigation property isn't available
+        var attrChange = change.AttributeChanges.Single();
+        Assert.That(attrChange.AttributeName, Is.EqualTo("Manager"));
+        var valueChange = attrChange.ValueChanges.Single();
+        Assert.That(valueChange.GuidValue, Is.EqualTo(referencedMvoId));
+        Assert.That(valueChange.ValueChangeType, Is.EqualTo(ValueChangeType.Remove));
+    }
+
+    [Test]
+    public void AddMvoChangeAttributeValueObject_ReferenceWithNoValue_DoesNotThrowAsync()
+    {
+        // Arrange — reference attribute with no resolved, unresolved, or FK value
+        var change = new MetaverseObjectChange();
+        var refAttr = new MetaverseAttribute { Id = 10, Name = "Manager", Type = AttributeDataType.Reference };
+        var attrValue = new MetaverseObjectAttributeValue
+        {
+            Attribute = refAttr,
+            ReferenceValue = null,
+            ReferenceValueId = null,
+            UnresolvedReferenceValue = null
+        };
+
+        // Act & Assert — should not throw
+        Assert.DoesNotThrow(() =>
+            JIM.Application.Servers.MetaverseServer.AddMvoChangeAttributeValueObject(change, attrValue, ValueChangeType.Remove));
+
+        // No value change recorded (nothing to track)
+        Assert.That(change.AttributeChanges.Single().ValueChanges, Is.Empty);
+    }
+
+    #endregion
 }

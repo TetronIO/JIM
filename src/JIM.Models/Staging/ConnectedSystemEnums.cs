@@ -168,5 +168,13 @@ public enum ConnectedSystemExportErrorType
     /// This typically occurs when expression-based ID attributes evaluate with null or empty
     /// input values, producing malformed identifiers.
     /// </summary>
-    InvalidGeneratedExternalId
+    InvalidGeneratedExternalId,
+
+    /// <summary>
+    /// A constraint violation occurred when managing a placeholder member on a group.
+    /// This typically means the directory has referential integrity enabled and the placeholder DN
+    /// does not reference an existing entry. The administrator should update the 'Group Placeholder
+    /// Member DN' connector setting to point to a valid entry in the directory.
+    /// </summary>
+    PlaceholderMemberConstraintViolation
 }

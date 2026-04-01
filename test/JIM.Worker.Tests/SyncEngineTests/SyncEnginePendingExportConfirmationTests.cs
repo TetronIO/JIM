@@ -1,4 +1,5 @@
 using JIM.Application.Servers;
+using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using NUnit.Framework;
@@ -6,7 +7,7 @@ using NUnit.Framework;
 namespace JIM.Worker.Tests.SyncEngineTests;
 
 /// <summary>
-/// Pure unit tests for SyncEngine.EvaluatePendingExportConfirmation and AttributeValuesMatch — no mocking, no database.
+/// Pure unit tests for SyncEngine.EvaluatePendingExportConfirmation — no mocking, no database.
 /// </summary>
 public class SyncEnginePendingExportConfirmationTests
 {
@@ -48,7 +49,12 @@ public class SyncEnginePendingExportConfirmationTests
         {
             Id = Guid.NewGuid(),
             Status = PendingExportStatus.Pending,
-            AttributeValueChanges = [new PendingExportAttributeValueChange { AttributeId = 1, StringValue = "test" }]
+            AttributeValueChanges = [new PendingExportAttributeValueChange
+            {
+                AttributeId = 1,
+                Attribute = new ConnectedSystemObjectTypeAttribute { Id = 1, Type = AttributeDataType.Text },
+                StringValue = "test"
+            }]
         };
         var dict = new Dictionary<Guid, List<PendingExport>> { [csoId] = [pe] };
 
@@ -73,6 +79,7 @@ public class SyncEnginePendingExportConfirmationTests
                 new PendingExportAttributeValueChange
                 {
                     AttributeId = 1,
+                    Attribute = new ConnectedSystemObjectTypeAttribute { Id = 1, Type = AttributeDataType.Text },
                     StringValue = "expectedValue",
                     ChangeType = PendingExportAttributeChangeType.Add
                 }
@@ -103,6 +110,7 @@ public class SyncEnginePendingExportConfirmationTests
                 new PendingExportAttributeValueChange
                 {
                     AttributeId = 1,
+                    Attribute = new ConnectedSystemObjectTypeAttribute { Id = 1, Type = AttributeDataType.Text },
                     StringValue = "expectedValue",
                     ChangeType = PendingExportAttributeChangeType.Add
                 }
@@ -117,50 +125,5 @@ public class SyncEnginePendingExportConfirmationTests
         Assert.That(result.ToUpdate.Count, Is.EqualTo(1));
         Assert.That(pe.Status, Is.EqualTo(PendingExportStatus.ExportNotConfirmed));
         Assert.That(pe.ErrorCount, Is.EqualTo(1));
-    }
-
-    [Test]
-    public void AttributeValuesMatch_StringMatch_ReturnsTrue()
-    {
-        var csoValue = new ConnectedSystemObjectAttributeValue { StringValue = "hello" };
-        var change = new PendingExportAttributeValueChange { StringValue = "hello" };
-
-        Assert.That(_engine.AttributeValuesMatch(csoValue, change), Is.True);
-    }
-
-    [Test]
-    public void AttributeValuesMatch_StringMismatch_ReturnsFalse()
-    {
-        var csoValue = new ConnectedSystemObjectAttributeValue { StringValue = "hello" };
-        var change = new PendingExportAttributeValueChange { StringValue = "world" };
-
-        Assert.That(_engine.AttributeValuesMatch(csoValue, change), Is.False);
-    }
-
-    [Test]
-    public void AttributeValuesMatch_IntMatch_ReturnsTrue()
-    {
-        var csoValue = new ConnectedSystemObjectAttributeValue { IntValue = 42 };
-        var change = new PendingExportAttributeValueChange { IntValue = 42 };
-
-        Assert.That(_engine.AttributeValuesMatch(csoValue, change), Is.True);
-    }
-
-    [Test]
-    public void AttributeValuesMatch_IntMismatch_ReturnsFalse()
-    {
-        var csoValue = new ConnectedSystemObjectAttributeValue { IntValue = 42 };
-        var change = new PendingExportAttributeValueChange { IntValue = 99 };
-
-        Assert.That(_engine.AttributeValuesMatch(csoValue, change), Is.False);
-    }
-
-    [Test]
-    public void AttributeValuesMatch_NullPendingValues_ReturnsTrue()
-    {
-        var csoValue = new ConnectedSystemObjectAttributeValue { StringValue = "anything" };
-        var change = new PendingExportAttributeValueChange();
-
-        Assert.That(_engine.AttributeValuesMatch(csoValue, change), Is.True);
     }
 }

@@ -1,4 +1,5 @@
-﻿using JIM.Models.Core;
+﻿using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
 using JIM.Models.Staging;
@@ -19,9 +20,12 @@ internal class LdapConnectorImport
     private readonly ConnectedSystemRunProfile _connectedSystemRunProfile;
     private readonly ILogger _logger;
     private readonly LdapConnection _connection;
+    private readonly Func<LdapConnection>? _connectionFactory;
+    private readonly int _importConcurrency;
     private readonly List<ConnectedSystemPaginationToken> _paginationTokens;
     private readonly string? _persistedConnectorData;
     private readonly TimeSpan _searchTimeout;
+    private readonly string _placeholderMemberDn;
     private LdapConnectorRootDse? _previousRootDse;
     private LdapConnectorRootDse? _currentRootDse;
 
@@ -29,6 +33,8 @@ internal class LdapConnectorImport
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile runProfile,
         LdapConnection connection,
+        Func<LdapConnection>? connectionFactory,
+        int importConcurrency,
         List<ConnectedSystemPaginationToken> paginationTokens,
         string? persistedConnectorData,
         ILogger logger,
@@ -37,6 +43,8 @@ internal class LdapConnectorImport
         _connectedSystem = connectedSystem;
         _connectedSystemRunProfile = runProfile;
         _connection = connection;
+        _connectionFactory = connectionFactory;
+        _importConcurrency = Math.Clamp(importConcurrency, 1, LdapConnectorConstants.MAX_IMPORT_CONCURRENCY);
         _paginationTokens = paginationTokens;
         _persistedConnectorData = persistedConnectorData;
         _logger = logger;
@@ -47,6 +55,11 @@ internal class LdapConnectorImport
             .SingleOrDefault(s => s.Setting.Name == SearchTimeoutSettingName);
         var searchTimeoutSeconds = searchTimeoutSetting?.IntValue ?? DefaultSearchTimeoutSeconds;
         _searchTimeout = TimeSpan.FromSeconds(searchTimeoutSeconds);
+
+        // Get placeholder member DN for filtering during import
+        var placeholderSetting = connectedSystem.SettingValues
+            .SingleOrDefault(s => s.Setting.Name == LdapConnectorConstants.SETTING_GROUP_PLACEHOLDER_MEMBER_DN);
+        _placeholderMemberDn = placeholderSetting?.StringValue ?? LdapConnectorConstants.DEFAULT_GROUP_PLACEHOLDER_MEMBER_DN;
 
         // If we have persisted connector data from a previous page, deserialise it to get capabilities
         // This allows subsequent pages to know the directory capabilities without re-querying
@@ -92,25 +105,76 @@ internal class LdapConnectorImport
             result.PersistedConnectorData = JsonSerializer.Serialize(_currentRootDse);
         }
 
-        // enumerate target partitions (scoped to run profile partition if set, otherwise all selected)
+        // OpenLDAP's RFC 2696 paging cookies are connection-scoped: any new search on the same
+        // connection invalidates all outstanding paging cursors. To work around this, we give each
+        // container+objectType combo its own dedicated LdapConnection and run combos in parallel,
+        // capped by the Import Concurrency setting. Each connection fully drains its paged search
+        // before being disposed, so there are no cross-call pagination tokens for this path — all
+        // data is fetched within this single call.
+        //
+        // When the connection factory is unavailable or concurrency is 1, we fall back to the
+        // original serialised approach using the primary connection (one combo at a time).
+        //
+        // For AD directories, this block is skipped entirely — AD supports multiple concurrent
+        // paged searches on a single connection, so the original multi-combo-per-page logic below
+        // is used instead.
+        var isConnectionScopedPaging = _currentRootDse?.DirectoryType is LdapDirectoryType.OpenLDAP or LdapDirectoryType.Generic;
+
+        if (isConnectionScopedPaging)
+        {
+            // Build the ordered list of all container+objectType combos
+            var combos = new List<(ConnectedSystemContainer Container, ConnectedSystemObjectType ObjectType)>();
+            foreach (var selectedPartition in GetTargetPartitions())
+            {
+                foreach (var selectedContainer in ConnectedSystemUtilities.GetTopLevelSelectedContainers(selectedPartition))
+                {
+                    foreach (var selectedObjectType in _connectedSystem.ObjectTypes.Where(ot => ot.Selected))
+                    {
+                        combos.Add((selectedContainer, selectedObjectType));
+                    }
+                }
+            }
+
+            if (combos.Count == 0)
+                return result;
+
+            _logger.Debug("GetFullImportObjects: OpenLDAP/Generic directory detected. Processing {ComboCount} container+objectType combos with concurrency {Concurrency}",
+                combos.Count, _connectionFactory != null ? _importConcurrency : 1);
+
+            if (_connectionFactory != null && _importConcurrency > 1)
+            {
+                // Parallel path: one dedicated connection per combo, capped by semaphore.
+                // Each combo fully drains all pages on its own connection, so no pagination
+                // tokens are returned — the import processor sees this as a single-page result.
+                GetFullImportObjectsParallel(result, combos);
+            }
+            else
+            {
+                // Sequential fallback: use the primary connection, one combo at a time.
+                // Each combo is fully drained before moving to the next.
+                GetFullImportObjectsSequential(result, combos);
+            }
+
+            return result;
+        }
+
+        // Non-OpenLDAP: original behaviour — query all combos on every page
         foreach (var selectedPartition in GetTargetPartitions())
         {
-            // enumerate top-level selected containers in this partition
-            // Use GetTopLevelSelectedContainers to avoid duplicates when both parent and child containers are selected
-            // (subtree search on parent already includes children)
             foreach (var selectedContainer in ConnectedSystemUtilities.GetTopLevelSelectedContainers(selectedPartition))
             {
-                // we need to perform a query per object type, so that we can have distinct attribute lists per LDAP request
                 foreach (var selectedObjectType in _connectedSystem.ObjectTypes.Where(ot => ot.Selected))
                 {
-                    // if this is the subsequent page for this container, use this when getting the results for the next page
                     var paginationTokenName = LdapConnectorUtilities.GetPaginationTokenName(selectedContainer, selectedObjectType);
                     var paginationToken = _paginationTokens.SingleOrDefault(pt => pt.Name == paginationTokenName);
                     var lastRunsCookie = paginationToken?.ByteValue;
 
+                    if (_paginationTokens.Count > 0 && paginationToken == null)
+                        continue;
+
                     if (_cancellationToken.IsCancellationRequested)
                     {
-                        _logger.Debug("GetFullImportObjects: O2 Cancellation requested. Stopping");
+                        _logger.Debug("GetFullImportObjects: Cancellation requested. Stopping");
                         return result;
                     }
 
@@ -166,7 +230,7 @@ internal class LdapConnectorImport
         }
 
         // Determine which delta strategy to use
-        if (_previousRootDse.IsActiveDirectory)
+        if (_previousRootDse.UseUsnDeltaImport)
         {
             if (!_previousRootDse.HighestCommittedUsn.HasValue)
             {
@@ -194,6 +258,10 @@ internal class LdapConnectorImport
                         var paginationToken = _paginationTokens.SingleOrDefault(pt => pt.Name == paginationTokenName);
                         var lastRunsCookie = paginationToken?.ByteValue;
 
+                        // On subsequent pages, skip combos with no pagination token (see full import comment)
+                        if (_paginationTokens.Count > 0 && paginationToken == null)
+                            continue;
+
                         GetDeltaResultsUsingUsn(result, selectedContainer, selectedObjectType, _previousRootDse.HighestCommittedUsn.Value, lastRunsCookie);
                     }
                 }
@@ -210,9 +278,44 @@ internal class LdapConnectorImport
                 GetDeletedObjectsUsingUsn(result, selectedPartition, _previousRootDse.HighestCommittedUsn.Value);
             }
         }
+        else if (_previousRootDse.UseAccesslogDeltaImport)
+        {
+            // For OpenLDAP with accesslog overlay
+            if (string.IsNullOrEmpty(_previousRootDse.LastAccesslogTimestamp))
+            {
+                // The accesslog watermark is not available. This can happen when:
+                // - The accesslog has more entries than the server's olcSizeLimit (default 500)
+                //   and the bind account cannot bypass the limit (not the accesslog DB rootDN)
+                // - The accesslog overlay is not enabled or not accessible
+                // - The previous full import failed to capture the watermark
+                //
+                // Rather than failing, fall back to a full import which will correctly import
+                // all objects AND establish the watermark for future delta imports.
+                _logger.Warning("GetDeltaImportObjects: Accesslog watermark not available. " +
+                    "Falling back to full import to establish baseline. " +
+                    "Future delta imports should work normally after this full import completes.");
+
+                result = GetFullImportObjects();
+                result.WarningMessage = "Delta import was requested but the accesslog watermark was not available " +
+                    "(the cn=accesslog database may have exceeded the server's size limit for the bind account). " +
+                    "A full import was performed instead. The watermark has been established and future " +
+                    "delta imports should succeed normally.";
+                result.WarningErrorType = ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport;
+                return result;
+            }
+
+            _logger.Debug("GetDeltaImportObjects: Using accesslog-based delta import. Previous timestamp: {PreviousTimestamp}",
+                _previousRootDse.LastAccesslogTimestamp);
+
+            // Pass the target partitions so the method can filter accesslog entries by DN suffix.
+            // OpenLDAP uses a shared cn=accesslog for all databases, so entries from other suffixes
+            // (e.g., Target) must be excluded when importing from Source.
+            var targetPartitions = GetTargetPartitions().ToList();
+            GetDeltaResultsUsingAccesslog(result, _previousRootDse.LastAccesslogTimestamp, targetPartitions);
+        }
         else
         {
-            // For changelog-based directories
+            // For generic changelog-based directories (Oracle, 389DS, etc.)
             if (!_previousRootDse.LastChangeNumber.HasValue)
             {
                 throw new CannotPerformDeltaImportException("Previous changelog number not available. Run a full import first.");
@@ -242,6 +345,149 @@ internal class LdapConnectorImport
 
         _logger.Debug("GetTargetPartitions: No partition specified on run profile, importing from all selected partitions");
         return _connectedSystem.Partitions!.Where(p => p.Selected);
+    }
+
+    /// <summary>
+    /// Processes all container+objectType combos in parallel using a dedicated LdapConnection per combo.
+    /// Each combo fully drains all pages on its own connection, avoiding the RFC 2696 connection-scoped
+    /// paging cookie limitation. Concurrency is capped by <see cref="_importConcurrency"/>.
+    /// </summary>
+    private void GetFullImportObjectsParallel(
+        ConnectedSystemImportResult result,
+        List<(ConnectedSystemContainer Container, ConnectedSystemObjectType ObjectType)> combos)
+    {
+        var stopwatch = Stopwatch.StartNew();
+
+        // Each combo gets its own result to avoid contention on shared collections.
+        // Results are merged after all combos complete.
+        var comboResults = new ConnectedSystemImportResult[combos.Count];
+        for (var i = 0; i < comboResults.Length; i++)
+            comboResults[i] = new ConnectedSystemImportResult();
+
+        using var semaphore = new SemaphoreSlim(_importConcurrency);
+        var tasks = new Task[combos.Count];
+
+        for (var i = 0; i < combos.Count; i++)
+        {
+            _cancellationToken.ThrowIfCancellationRequested();
+
+            var index = i;
+            var (container, objectType) = combos[i];
+
+            tasks[i] = Task.Run(async () =>
+            {
+                await semaphore.WaitAsync(_cancellationToken);
+                LdapConnection? comboConnection = null;
+                try
+                {
+                    comboConnection = _connectionFactory!();
+                    _logger.Debug("GetFullImportObjectsParallel: Started combo {Index}/{Total} — container={Container}, objectType={ObjectType}",
+                        index + 1, combos.Count, container.Name, objectType.Name);
+
+                    // Fully drain all pages for this combo on its dedicated connection
+                    DrainAllPages(comboResults[index], comboConnection, container, objectType);
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger.Debug("GetFullImportObjectsParallel: Combo {Index} cancelled", index + 1);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "GetFullImportObjectsParallel: Combo {Index} failed — container={Container}, objectType={ObjectType}",
+                        index + 1, container.Name, objectType.Name);
+                    throw;
+                }
+                finally
+                {
+                    comboConnection?.Dispose();
+                    semaphore.Release();
+                }
+            }, _cancellationToken);
+        }
+
+        try
+        {
+            Task.WaitAll(tasks, _cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.Debug("GetFullImportObjectsParallel: Cancelled while waiting for combos to complete");
+            return;
+        }
+        catch (AggregateException ae)
+        {
+            // Unwrap and rethrow the first real exception so the import processor sees it
+            var inner = ae.Flatten().InnerExceptions.FirstOrDefault(e => e is not OperationCanceledException);
+            if (inner != null)
+                throw inner;
+            return;
+        }
+
+        // Merge results from all combos
+        foreach (var comboResult in comboResults)
+        {
+            result.ImportObjects.AddRange(comboResult.ImportObjects);
+        }
+
+        stopwatch.Stop();
+        _logger.Information("GetFullImportObjectsParallel: Completed {ComboCount} combos in {Elapsed}. Total objects: {ObjectCount}",
+            combos.Count, stopwatch.Elapsed, result.ImportObjects.Count);
+    }
+
+    /// <summary>
+    /// Processes all container+objectType combos sequentially on the primary connection.
+    /// Each combo is fully drained (all pages) before moving to the next.
+    /// Used as a fallback when the connection factory is unavailable or concurrency is 1.
+    /// </summary>
+    private void GetFullImportObjectsSequential(
+        ConnectedSystemImportResult result,
+        List<(ConnectedSystemContainer Container, ConnectedSystemObjectType ObjectType)> combos)
+    {
+        foreach (var (container, objectType) in combos)
+        {
+            if (_cancellationToken.IsCancellationRequested)
+            {
+                _logger.Debug("GetFullImportObjectsSequential: Cancellation requested. Stopping");
+                return;
+            }
+
+            DrainAllPages(result, _connection, container, objectType);
+        }
+    }
+
+    /// <summary>
+    /// Fully drains all pages for a single container+objectType combination on the given connection.
+    /// Keeps issuing paged search requests until the server returns an empty paging cookie.
+    /// </summary>
+    private void DrainAllPages(
+        ConnectedSystemImportResult result,
+        LdapConnection connection,
+        ConnectedSystemContainer container,
+        ConnectedSystemObjectType objectType)
+    {
+        byte[]? pagingCookie = null;
+
+        while (true)
+        {
+            if (_cancellationToken.IsCancellationRequested)
+                return;
+
+            var comboResult = new ConnectedSystemImportResult();
+            GetFisoResults(comboResult, connection, container, objectType, pagingCookie);
+
+            result.ImportObjects.AddRange(comboResult.ImportObjects);
+
+            // Check if there are more pages
+            if (comboResult.PaginationTokens.Count > 0)
+            {
+                pagingCookie = comboResult.PaginationTokens[0].ByteValue;
+            }
+            else
+            {
+                // No more pages — this combo is fully drained
+                break;
+            }
+        }
     }
 
     #region private methods
@@ -286,6 +532,185 @@ internal class LdapConnectorImport
         }
     }
 
+    /// <summary>
+    /// Queries the OpenLDAP accesslog overlay (cn=accesslog) for the latest reqStart timestamp.
+    /// This establishes the watermark for the next delta import.
+    ///
+    /// Strategy:
+    /// 1. Try server-side sort (reverse by reqStart) with SizeLimit=1 to get only the latest entry.
+    ///    This is the most efficient approach but requires the sssvlv overlay to be enabled.
+    /// 2. If sort is not supported, fall back to a simple query that handles size limit exceeded
+    ///    by extracting partial results from the exception response.
+    ///
+    /// OpenLDAP enforces olcSizeLimit (default 500) as a hard cap for non-rootDN clients, even
+    /// with paging controls. The bind account used by the connector is typically not the rootDN
+    /// of the cn=accesslog database, so paging alone cannot bypass the limit. The strategies
+    /// above are designed to work within this constraint.
+    /// </summary>
+    private string? QueryAccesslogForLatestTimestamp()
+    {
+        try
+        {
+            // Strategy 1: Server-side sort (reverse) with SizeLimit=1
+            // This gets only the single latest entry, avoiding size limit issues entirely.
+            var result = QueryAccesslogWithServerSideSort();
+            if (result != null)
+                return result;
+
+            // Strategy 2: Simple query with size limit exceeded handling.
+            // If the accesslog has fewer entries than olcSizeLimit, this returns all entries normally.
+            // If it exceeds the limit, we catch the DirectoryOperationException and extract
+            // the latest timestamp from the partial results in the exception's response.
+            return QueryAccesslogWithSizeLimitHandling();
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "QueryAccesslogForLatestTimestamp: Failed to query accesslog. " +
+                "The directory may not have the accesslog overlay enabled.");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Attempts to query the accesslog using server-side sorting (reverse by reqStart) with
+    /// SizeLimit=1 to retrieve only the latest entry. This requires the sssvlv overlay.
+    /// Returns null if server-side sorting is not supported.
+    /// </summary>
+    private string? QueryAccesslogWithServerSideSort()
+    {
+        try
+        {
+            var request = new SearchRequest("cn=accesslog",
+                "(&(objectClass=auditWriteObject)(reqResult=0))",
+                SearchScope.OneLevel,
+                "reqStart");
+
+            // Request reverse sort by reqStart so the latest entry comes first
+            var sortControl = new SortRequestControl(new SortKey("reqStart", "caseIgnoreOrderingMatch", true));
+            sortControl.IsCritical = true;
+            request.Controls.Add(sortControl);
+            request.SizeLimit = 1;
+
+            var response = (SearchResponse)_connection.SendRequest(request, _searchTimeout);
+            if (response?.Entries.Count > 0)
+            {
+                var timestamp = LdapConnectorUtilities.GetEntryAttributeStringValue(response.Entries[0], "reqStart");
+                if (timestamp != null)
+                {
+                    _logger.Debug("QueryAccesslogWithServerSideSort: Latest accesslog timestamp: {Timestamp} (via server-side sort)", timestamp);
+                    return timestamp;
+                }
+            }
+
+            _logger.Debug("QueryAccesslogWithServerSideSort: No accesslog entries found via server-side sort");
+            return null;
+        }
+        catch (DirectoryOperationException ex) when (ex.Response is SearchResponse { ResultCode: ResultCode.UnavailableCriticalExtension or ResultCode.UnwillingToPerform })
+        {
+            _logger.Debug("QueryAccesslogWithServerSideSort: Server-side sorting not supported (sssvlv overlay not enabled). Falling back to size-limit-aware query.");
+            return null;
+        }
+        catch (DirectoryOperationException ex) when (ex.Response is SearchResponse { ResultCode: ResultCode.InappropriateMatching })
+        {
+            // Matching rule not supported for this attribute — fall back
+            _logger.Debug("QueryAccesslogWithServerSideSort: Sort matching rule not supported for reqStart. Falling back to size-limit-aware query.");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Queries the accesslog using an iterative approach that works within the server's size limit.
+    /// When the size limit is exceeded, extracts the latest timestamp from partial results and
+    /// re-queries with a narrower filter (reqStart >= latest_seen) to walk forward through the
+    /// accesslog until all entries have been scanned. This effectively implements manual paging
+    /// without requiring paging controls to bypass the size limit.
+    /// </summary>
+    private string? QueryAccesslogWithSizeLimitHandling()
+    {
+        string? latestTimestamp = null;
+        var totalEntries = 0;
+        var iterations = 0;
+        const int maxIterations = 100; // Safety limit to prevent infinite loops
+
+        // Start with an unfiltered query to get the first batch
+        var currentFilter = "(&(objectClass=auditWriteObject)(reqResult=0))";
+
+        while (iterations < maxIterations)
+        {
+            iterations++;
+            string? batchLatest;
+            int batchCount;
+            var hitSizeLimit = false;
+
+            try
+            {
+                var request = new SearchRequest("cn=accesslog", currentFilter,
+                    SearchScope.OneLevel, "reqStart");
+
+                var response = (SearchResponse)_connection.SendRequest(request, _searchTimeout);
+                (batchLatest, batchCount) = ExtractLatestTimestamp(response);
+            }
+            catch (DirectoryOperationException ex) when (ex.Response is SearchResponse partialResponse
+                && partialResponse.ResultCode == ResultCode.SizeLimitExceeded)
+            {
+                // The server hit its size limit but returned partial results.
+                (batchLatest, batchCount) = ExtractLatestTimestamp(partialResponse);
+                hitSizeLimit = true;
+            }
+
+            totalEntries += batchCount;
+
+            if (batchCount == 0 || batchLatest == null)
+                break;
+
+            // Update the overall latest timestamp
+            if (latestTimestamp == null || string.Compare(batchLatest, latestTimestamp, StringComparison.Ordinal) > 0)
+                latestTimestamp = batchLatest;
+
+            if (!hitSizeLimit)
+                break; // Got all results without hitting the limit — done
+
+            // Size limit was hit. The partial results contain the earliest entries (OpenLDAP
+            // returns in insertion order). Re-query starting after the latest timestamp we've
+            // seen to walk forward through the remaining entries.
+            _logger.Debug("QueryAccesslogWithSizeLimitHandling: Size limit exceeded on iteration {Iteration}. " +
+                "Latest timestamp so far: {Timestamp}. Re-querying from that point.",
+                iterations, latestTimestamp);
+
+            currentFilter = $"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={latestTimestamp}))";
+        }
+
+        if (totalEntries == 0)
+        {
+            _logger.Debug("QueryAccesslogWithSizeLimitHandling: No accesslog entries found");
+            return null;
+        }
+
+        _logger.Debug("QueryAccesslogWithSizeLimitHandling: Latest accesslog timestamp: {Timestamp} " +
+            "(scanned {Count} entries in {Iterations} iterations)",
+            latestTimestamp, totalEntries, iterations);
+        return latestTimestamp;
+    }
+
+    /// <summary>
+    /// Extracts the latest reqStart timestamp from a search response containing accesslog entries.
+    /// </summary>
+    private static (string? latestTimestamp, int entryCount) ExtractLatestTimestamp(SearchResponse response)
+    {
+        string? latestTimestamp = null;
+        var count = 0;
+
+        foreach (SearchResultEntry entry in response.Entries)
+        {
+            var reqStart = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "reqStart");
+            if (reqStart != null && (latestTimestamp == null || string.Compare(reqStart, latestTimestamp, StringComparison.Ordinal) > 0))
+                latestTimestamp = reqStart;
+            count++;
+        }
+
+        return (latestTimestamp, count);
+    }
+
     private LdapConnectorRootDse GetRootDseInformation()
     {
         var request = new SearchRequest()
@@ -297,7 +722,8 @@ internal class LdapConnectorImport
             "DNSHostName",
             "HighestCommittedUSN",
             "supportedCapabilities",
-            "vendorName"
+            "vendorName",
+            "structuralObjectClass"
         });
 
         var response = (SearchResponse)_connection.SendRequest(request);
@@ -313,43 +739,60 @@ internal class LdapConnectorImport
 
         var rootDseEntry = response.Entries[0];
 
-        // Check if this is Active Directory by looking for AD capability OIDs
+        // Detect directory type from rootDSE capabilities
         var capabilities = LdapConnectorUtilities.GetEntryAttributeStringValues(rootDseEntry, "supportedCapabilities");
-        var isActiveDirectory = capabilities != null &&
-            (capabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_OID) ||
-             capabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_ADAM_OID));
-
-        // Get vendor name for capability detection
         var vendorName = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "vendorName");
-
-        // Determine paging support based on directory type
-        // Samba AD claims AD compatibility but doesn't properly support paged searches
-        // (it returns paging cookies but then returns the same results on subsequent pages)
-        var isSambaAd = vendorName != null &&
-            vendorName.Contains("Samba", StringComparison.OrdinalIgnoreCase);
-        var supportsPaging = isActiveDirectory && !isSambaAd;
+        var structuralObjectClass = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "structuralObjectClass");
+        var directoryType = LdapConnectorUtilities.DetectDirectoryType(capabilities, vendorName, structuralObjectClass);
 
         var rootDse = new LdapConnectorRootDse
         {
             DnsHostName = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "DNSHostName"),
             HighestCommittedUsn = LdapConnectorUtilities.GetEntryAttributeLongValue(rootDseEntry, "HighestCommittedUSN"),
-            IsActiveDirectory = isActiveDirectory,
-            VendorName = vendorName,
-            SupportsPaging = supportsPaging
+            DirectoryType = directoryType,
+            VendorName = vendorName
         };
 
-        // For non-AD directories, try to get the last change number from the changelog
-        if (!isActiveDirectory)
+        // For non-AD directories, capture the current delta watermark.
+        // This must run during BOTH full and delta imports:
+        // - Full import: establishes the baseline watermark for the first delta import
+        // - Delta import: captures the current position so the next delta starts from here
+        if (!rootDse.UseUsnDeltaImport)
         {
-            rootDse.LastChangeNumber = QueryDirectoryForLastChangeNumber(0);
+            if (rootDse.UseAccesslogDeltaImport)
+            {
+                // OpenLDAP: query cn=accesslog for the latest reqStart timestamp
+                rootDse.LastAccesslogTimestamp = QueryAccesslogForLatestTimestamp();
+
+                // If the accesslog is empty (e.g., after snapshot restore clears stale data),
+                // generate a fallback timestamp so the watermark is never null. This prevents
+                // the next delta import from falling back to a full import unnecessarily.
+                if (string.IsNullOrEmpty(rootDse.LastAccesslogTimestamp))
+                {
+                    rootDse.LastAccesslogTimestamp = LdapConnectorUtilities.GenerateAccesslogFallbackTimestamp();
+                    _logger.Information("GetRootDseInformation: Accesslog is empty — using fallback timestamp {Timestamp} as watermark",
+                        rootDse.LastAccesslogTimestamp);
+                }
+            }
+            else
+            {
+                // Generic/Oracle: query cn=changelog for the latest changeNumber
+                rootDse.LastChangeNumber = QueryDirectoryForLastChangeNumber(0);
+            }
         }
 
-        _logger.Information("GetRootDseInformation: Directory capabilities detected. IsActiveDirectory={IsAd}, VendorName={VendorName}, SupportsPaging={SupportsPaging}, HighestUSN={Usn}, LastChangeNumber={ChangeNum}",
-            rootDse.IsActiveDirectory, rootDse.VendorName ?? "(not set)", rootDse.SupportsPaging, rootDse.HighestCommittedUsn, rootDse.LastChangeNumber);
+        _logger.Information("GetRootDseInformation: Directory capabilities detected. DirectoryType={DirectoryType}, VendorName={VendorName}, SupportsPaging={SupportsPaging}, HighestUSN={Usn}, LastChangeNumber={ChangeNum}, LastAccesslogTimestamp={AccesslogTs}",
+            rootDse.DirectoryType, rootDse.VendorName ?? "(not set)", rootDse.SupportsPaging, rootDse.HighestCommittedUsn, rootDse.LastChangeNumber, rootDse.LastAccesslogTimestamp ?? "(not set)");
         return rootDse;
     }
 
+    /// <summary>
+    /// Overload that uses the primary connection. Called by the AD (non-connection-scoped) path and delta imports.
+    /// </summary>
     private void GetFisoResults(ConnectedSystemImportResult connectedSystemImportResult, ConnectedSystemContainer connectedSystemContainer, ConnectedSystemObjectType connectedSystemObjectType, byte[]? lastRunsCookie)
+        => GetFisoResults(connectedSystemImportResult, _connection, connectedSystemContainer, connectedSystemObjectType, lastRunsCookie);
+
+    private void GetFisoResults(ConnectedSystemImportResult connectedSystemImportResult, LdapConnection connection, ConnectedSystemContainer connectedSystemContainer, ConnectedSystemObjectType connectedSystemObjectType, byte[]? lastRunsCookie)
     {
         if (_cancellationToken.IsCancellationRequested)
         {
@@ -402,7 +845,7 @@ internal class LdapConnectorImport
         SearchResponse searchResponse;
         try
         {
-            searchResponse = (SearchResponse)_connection.SendRequest(searchRequest, _searchTimeout);
+            searchResponse = (SearchResponse)connection.SendRequest(searchRequest, _searchTimeout);
         }
         catch (DirectoryOperationException ex) when (lastRunsCookie is { Length: > 0 } &&
             ex.Message.Contains("does not support the control", StringComparison.OrdinalIgnoreCase))
@@ -763,8 +1206,294 @@ internal class LdapConnectorImport
     }
 
     /// <summary>
-    /// Fetches a single object by its DN for changelog-based delta imports.
+    /// Gets delta results using OpenLDAP's accesslog overlay (slapo-accesslog).
+    /// Queries cn=accesslog for write operations that occurred after the previous watermark timestamp.
+    /// For each change, fetches the current state of the affected object.
+    ///
+    /// Handles the server-side size limit (olcSizeLimit, default 500) by iterating through batches:
+    /// when the size limit is exceeded, the latest timestamp from partial results is used to narrow
+    /// the next query, effectively walking forward through the accesslog until all changes are found.
     /// </summary>
+    private void GetDeltaResultsUsingAccesslog(ConnectedSystemImportResult result, string previousTimestamp,
+        List<ConnectedSystemPartition> targetPartitions)
+    {
+        _logger.Debug("GetDeltaResultsUsingAccesslog: Querying for changes since {PreviousTimestamp}", previousTimestamp);
+
+        var currentTimestamp = previousTimestamp;
+        var totalEntries = 0;
+        var skippedOutOfScope = 0;
+        var iterations = 0;
+        const int maxIterations = 100; // Safety limit
+        // Track processed DNs+timestamps to avoid duplicates when iterating with >= filters
+        var processedEntries = new HashSet<string>(StringComparer.Ordinal);
+        // Track processed DNs to avoid importing the same object multiple times when the
+        // accesslog has multiple changes for the same DN (e.g., 3 member modifications to
+        // the same group). Since we fetch current state rather than replaying individual
+        // changes, only the first occurrence needs to be processed.
+        var processedDns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // Build partition suffix list for filtering — OpenLDAP shares cn=accesslog across
+        // all databases, so we must exclude entries from other suffixes.
+        var partitionSuffixes = targetPartitions
+            .Select(p => p.ExternalId)
+            .Where(id => !string.IsNullOrEmpty(id))
+            .ToList();
+
+        while (iterations < maxIterations)
+        {
+            iterations++;
+
+            if (_cancellationToken.IsCancellationRequested)
+            {
+                _logger.Debug("GetDeltaResultsUsingAccesslog: Cancellation requested. Stopping");
+                return;
+            }
+
+            // LDAP only supports >= (not >), so we use >= and skip already-processed entries in code.
+            var ldapFilter = $"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={currentTimestamp}))";
+            // Request reqOld for delete entries — contains the old objectClass and entryUUID
+            // which are needed to construct proper delete import objects.
+            var request = new SearchRequest("cn=accesslog", ldapFilter, SearchScope.OneLevel,
+                "reqStart", "reqType", "reqDN", "reqOld", "reqEntryUUID");
+
+            SearchResponse response;
+            var hitSizeLimit = false;
+
+            try
+            {
+                response = (SearchResponse)_connection.SendRequest(request, _searchTimeout);
+
+                if (response == null || response.ResultCode != ResultCode.Success)
+                {
+                    _logger.Warning("GetDeltaResultsUsingAccesslog: Failed to query accesslog. ResultCode: {ResultCode}",
+                        response?.ResultCode);
+                    return;
+                }
+            }
+            catch (DirectoryOperationException ex) when (ex.Response is SearchResponse partialResponse
+                && partialResponse.ResultCode == ResultCode.SizeLimitExceeded)
+            {
+                // Size limit exceeded — process the partial results we got
+                response = partialResponse;
+                hitSizeLimit = true;
+                _logger.Debug("GetDeltaResultsUsingAccesslog: Size limit exceeded on iteration {Iteration}. " +
+                    "Processing {Count} partial results.", iterations, response.Entries.Count);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "GetDeltaResultsUsingAccesslog: Error querying accesslog");
+                return;
+            }
+
+            if (response.Entries.Count == 0)
+                break;
+
+            _logger.Debug("GetDeltaResultsUsingAccesslog: Processing {Count} accesslog entries (iteration {Iteration})",
+                response.Entries.Count, iterations);
+
+            string? batchLatestTimestamp = null;
+
+            foreach (SearchResultEntry entry in response.Entries)
+            {
+                if (_cancellationToken.IsCancellationRequested)
+                {
+                    _logger.Debug("GetDeltaResultsUsingAccesslog: Cancellation requested. Stopping");
+                    return;
+                }
+
+                var reqStart = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "reqStart");
+                var reqType = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "reqType");
+                var reqDn = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "reqDN");
+
+                if (string.IsNullOrEmpty(reqDn) || string.IsNullOrEmpty(reqStart))
+                    continue;
+
+                // Filter by partition scope — only process entries whose DN falls within
+                // the connected system's selected partitions. OpenLDAP's shared cn=accesslog
+                // records changes from ALL databases (suffixes), so we must exclude entries
+                // from other suffixes to avoid importing objects from the wrong partition.
+                if (partitionSuffixes.Count > 0 &&
+                    !partitionSuffixes.Any(suffix => reqDn.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
+                {
+                    skippedOutOfScope++;
+                    continue;
+                }
+
+                // Track the latest timestamp in this batch for the next iteration
+                if (batchLatestTimestamp == null || string.Compare(reqStart, batchLatestTimestamp, StringComparison.Ordinal) > 0)
+                    batchLatestTimestamp = reqStart;
+
+                // Skip the exact timestamp match from the previous watermark
+                if (reqStart == previousTimestamp)
+                    continue;
+
+                // Skip entries we've already processed (from overlapping >= queries)
+                var entryKey = $"{reqStart}|{reqDn}";
+                if (!processedEntries.Add(entryKey))
+                    continue;
+
+                totalEntries++;
+
+                // Map accesslog reqType to ObjectChangeType
+                var objectChangeType = reqType?.ToLowerInvariant() switch
+                {
+                    "add" => ObjectChangeType.Added,
+                    "modify" => ObjectChangeType.Updated,
+                    "delete" => ObjectChangeType.Deleted,
+                    "modrdn" => ObjectChangeType.Updated,
+                    _ => ObjectChangeType.NotSet
+                };
+
+                // Deduplicate by DN for non-delete operations. Multiple add/modify entries for
+                // the same DN would produce identical import objects (since we fetch current state),
+                // triggering duplicate detection errors. However, delete entries must ALWAYS be
+                // processed even if the DN was already seen — a group that was added then deleted
+                // in the same delta window must be processed as a delete (the final state).
+                if (objectChangeType != ObjectChangeType.Deleted && !processedDns.Add(reqDn))
+                    continue;
+
+                if (objectChangeType == ObjectChangeType.Deleted)
+                {
+                    // For deletes, extract object type and external ID from the accesslog entry.
+                    // The reqOld attribute contains the old attribute values (key: value format),
+                    // and reqEntryUUID contains the entryUUID of the deleted object.
+                    var deleteObject = BuildDeleteImportObjectFromAccesslog(entry);
+                    if (deleteObject != null)
+                        result.ImportObjects.Add(deleteObject);
+                }
+                else
+                {
+                    // For add/modify/modrdn, fetch the current state of the object
+                    var currentObject = GetObjectByDn(reqDn, objectChangeType);
+                    if (currentObject != null)
+                    {
+                        result.ImportObjects.Add(currentObject);
+                    }
+                    else
+                    {
+                        _logger.Warning("GetDeltaResultsUsingAccesslog: GetObjectByDn returned null for DN '{ReqDn}' " +
+                            "(change type: {ChangeType}). The object may have been deleted or moved since the accesslog " +
+                            "entry was recorded. Entry skipped.", reqDn, objectChangeType);
+                    }
+                }
+            }
+
+            if (!hitSizeLimit)
+                break; // Got all results without hitting the limit — done
+
+            // Size limit was hit. Narrow the query to start from the latest timestamp we've seen
+            // to walk forward through the remaining entries.
+            if (batchLatestTimestamp == null || batchLatestTimestamp == currentTimestamp)
+            {
+                // No progress made — all entries have the same timestamp. Cannot narrow further.
+                _logger.Warning("GetDeltaResultsUsingAccesslog: Cannot narrow accesslog query further. " +
+                    "All {Count} entries in this batch have timestamp {Timestamp}. Some changes may be missed.",
+                    response.Entries.Count, currentTimestamp);
+                break;
+            }
+
+            currentTimestamp = batchLatestTimestamp;
+        }
+
+        _logger.Debug("GetDeltaResultsUsingAccesslog: Processed {TotalEntries} change entries in {Iterations} iterations. " +
+            "Skipped {SkippedOutOfScope} entries outside partition scope.",
+            totalEntries, iterations, skippedOutOfScope);
+    }
+
+    /// <summary>
+    /// Fetches a single object by its DN for changelog/accesslog-based delta imports.
+    /// </summary>
+    /// <summary>
+    /// Builds a delete import object from an accesslog auditDelete entry.
+    /// Extracts the objectClass and entryUUID from reqOld attributes to construct
+    /// a proper import object with ObjectType and external ID, matching what the
+    /// USN-based delete detection produces.
+    /// </summary>
+    private ConnectedSystemImportObject? BuildDeleteImportObjectFromAccesslog(SearchResultEntry accesslogEntry)
+    {
+        if (_connectedSystem.ObjectTypes == null)
+            return null;
+
+        // Extract entryUUID — try reqEntryUUID first (direct attribute), then reqOld
+        var entryUuid = LdapConnectorUtilities.GetEntryAttributeStringValue(accesslogEntry, "reqEntryUUID");
+
+        // Extract objectClass from reqOld values (format: "attributeName: value")
+        var reqOldValues = LdapConnectorUtilities.GetEntryAttributeStringValues(accesslogEntry, "reqOld");
+        string? objectClassName = null;
+
+        if (reqOldValues != null)
+        {
+            foreach (var oldValue in reqOldValues)
+            {
+                if (oldValue.StartsWith("objectClass: ", StringComparison.OrdinalIgnoreCase))
+                {
+                    var className = oldValue["objectClass: ".Length..].Trim();
+                    // Find the most specific matching object type (skip generic ones like 'top')
+                    var matchedType = _connectedSystem.ObjectTypes
+                        .FirstOrDefault(ot => ot.Selected && ot.Name.Equals(className, StringComparison.OrdinalIgnoreCase));
+                    if (matchedType != null)
+                        objectClassName = matchedType.Name;
+                }
+
+                // Also try to get entryUUID from reqOld if not found via reqEntryUUID
+                if (entryUuid == null && oldValue.StartsWith("entryUUID: ", StringComparison.OrdinalIgnoreCase))
+                {
+                    entryUuid = oldValue["entryUUID: ".Length..].Trim();
+                }
+            }
+        }
+
+        if (string.IsNullOrEmpty(objectClassName))
+        {
+            var reqDn = LdapConnectorUtilities.GetEntryAttributeStringValue(accesslogEntry, "reqDN");
+            _logger.Warning("BuildDeleteImportObjectFromAccesslog: Could not determine object type for deleted object. " +
+                "DN: {Dn}. The accesslog entry may not contain reqOld attributes.", reqDn);
+            return null;
+        }
+
+        if (string.IsNullOrEmpty(entryUuid))
+        {
+            var reqDn = LdapConnectorUtilities.GetEntryAttributeStringValue(accesslogEntry, "reqDN");
+            _logger.Warning("BuildDeleteImportObjectFromAccesslog: Could not determine entryUUID for deleted object. " +
+                "DN: {Dn}. The accesslog entry may not contain reqEntryUUID or reqOld entryUUID.", reqDn);
+            return null;
+        }
+
+        var importObject = new ConnectedSystemImportObject
+        {
+            ObjectType = objectClassName,
+            ChangeType = ObjectChangeType.Deleted,
+        };
+
+        // Add entryUUID as an attribute so the import processor can match to the existing CSO
+        var externalIdAttribute = _connectedSystem.ObjectTypes
+            .First(ot => ot.Name.Equals(objectClassName, StringComparison.OrdinalIgnoreCase))
+            .Attributes.FirstOrDefault(a => a.IsExternalId);
+
+        if (externalIdAttribute != null)
+        {
+            importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute
+            {
+                Name = externalIdAttribute.Name,
+                StringValues = [entryUuid]
+            });
+        }
+
+        // Add the DN as the secondary external ID (distinguishedName)
+        var reqDnValue = LdapConnectorUtilities.GetEntryAttributeStringValue(accesslogEntry, "reqDN");
+        if (!string.IsNullOrEmpty(reqDnValue))
+        {
+            importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute
+            {
+                Name = "distinguishedName",
+                StringValues = [reqDnValue]
+            });
+        }
+
+        _logger.Debug("BuildDeleteImportObjectFromAccesslog: Built delete import for {ObjectType} with entryUUID {Uuid}, DN: {Dn}",
+            objectClassName, entryUuid, reqDnValue);
+        return importObject;
+    }
+
     private ConnectedSystemImportObject? GetObjectByDn(string dn, ObjectChangeType changeType)
     {
         if (_connectedSystem.ObjectTypes == null)
@@ -922,7 +1651,18 @@ internal class LdapConnectorImport
                     case AttributeDataType.Reference:
                         var referenceValues = LdapConnectorUtilities.GetEntryAttributeStringValues(searchResult, attributeName);
                         if (referenceValues is { Count: > 0 })
-                            importObjectAttribute.ReferenceValues.AddRange(referenceValues);
+                        {
+                            // Filter out the placeholder member DN so it never enters the metaverse.
+                            // The placeholder is injected by the connector during export to satisfy the
+                            // groupOfNames MUST member constraint — it should be invisible to JIM.
+                            var filteredValues = referenceValues.Where(v =>
+                                !_placeholderMemberDn.Equals(v, StringComparison.OrdinalIgnoreCase)).ToList();
+                            if (filteredValues.Count > 0)
+                                importObjectAttribute.ReferenceValues.AddRange(filteredValues);
+                            else if (referenceValues.Count > filteredValues.Count)
+                                _logger.Debug("LdapConnectorImport: Filtered placeholder member '{Placeholder}' from attribute '{Attr}' on '{Dn}'",
+                                    _placeholderMemberDn, attributeName, searchResult.DistinguishedName);
+                        }
                         break;
                     case AttributeDataType.NotSet:
                     default:
@@ -930,6 +1670,22 @@ internal class LdapConnectorImport
                 }
 
                 importObject.Attributes.Add(importObjectAttribute);
+            }
+
+            // Synthesise distinguishedName for directories that don't return it as an attribute.
+            // OpenLDAP (and most RFC-compliant directories) expose the DN as the entry's DistinguishedName
+            // property, not as a searchable/importable attribute. The connector schema synthesises
+            // distinguishedName as an attribute (for DN-based provisioning), so we need to populate it
+            // from the entry's DN during import for export confirmation to match correctly.
+            if (!importObject.Attributes.Any(a => a.Name.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase))
+                && objectType.Attributes.Any(a => a.Name.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase) && a.Selected))
+            {
+                importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute
+                {
+                    Name = "distinguishedName",
+                    Type = AttributeDataType.Text,
+                    StringValues = { searchResult.DistinguishedName }
+                });
             }
 
             importObjects.Add(importObject);

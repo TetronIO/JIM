@@ -1346,10 +1346,8 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/sync-rules/")
         if (targetMetaverseAttribute.Type != _attributeFlowMappingSource.ConnectedSystemAttribute.Type)
             return true;
 
-        // cannot flow an MVA to an SVA: we wouldn't know which value to assign
-        if (targetMetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued &&
-        _attributeFlowMappingSource.ConnectedSystemAttribute.AttributePlurality == AttributePlurality.MultiValued)
-            return true;
+        // Multi-valued to single-valued is permitted (#435) — the runtime selects the first value
+        // and generates a warning RPEI so the administrator can verify correctness.
 
         return false;
     }
@@ -1371,10 +1369,8 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/sync-rules/")
         if (targetConnectedSystemObjectTypeAttribute.Type != _attributeFlowMappingSource.MetaverseAttribute.Type)
             return true;
 
-        // cannot flow an MVA to an SVA: we wouldn't know which value to assign
-        if (targetConnectedSystemObjectTypeAttribute.AttributePlurality == AttributePlurality.SingleValued &&
-        _attributeFlowMappingSource.MetaverseAttribute.AttributePlurality == AttributePlurality.MultiValued)
-            return true;
+        // Multi-valued to single-valued is permitted (#435) — the runtime selects the first value
+        // and generates a warning RPEI so the administrator can verify correctness.
 
         return false;
     }

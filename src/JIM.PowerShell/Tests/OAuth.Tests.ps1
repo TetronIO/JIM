@@ -140,7 +140,7 @@ Describe 'Open-Browser' {
         It 'Should not throw on any platform' {
             # This test just verifies the function doesn't crash
             # It may or may not actually open a browser depending on environment
-            { Open-Browser -Url 'https://example.com' -ErrorAction SilentlyContinue } | Should -Not -Throw
+            { Open-Browser -Url 'https://panoply.org' -ErrorAction SilentlyContinue } | Should -Not -Throw
         }
 
         It 'Should accept a valid URL' {
@@ -163,7 +163,7 @@ Describe 'Get-OidcDiscoveryDocument' {
     Context 'URL Construction' {
 
         It 'Should throw for unreachable authority' {
-            { Get-OidcDiscoveryDocument -Authority 'https://invalid.example.com' } | Should -Throw
+            { Get-OidcDiscoveryDocument -Authority 'https://invalid.panoply.org' } | Should -Throw
         }
     }
 }

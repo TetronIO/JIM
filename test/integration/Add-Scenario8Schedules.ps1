@@ -96,18 +96,18 @@ Write-TestStep "Step 3" "Verifying Scenario 8 connected systems"
 
 $existingSystems = Get-JIMConnectedSystem
 
-$sourceSystem = $existingSystems | Where-Object { $_.name -eq "Quantum Dynamics APAC" }
-$targetSystem = $existingSystems | Where-Object { $_.name -eq "Quantum Dynamics EMEA" }
+$sourceSystem = $existingSystems | Where-Object { $_.name -eq "Panoply APAC" }
+$targetSystem = $existingSystems | Where-Object { $_.name -eq "Panoply EMEA" }
 
 if (-not $sourceSystem) {
-    throw "Source connected system 'Quantum Dynamics APAC' not found. Run Scenario 8 setup first."
+    throw "Source connected system 'Panoply APAC' not found. Run Scenario 8 setup first."
 }
 if (-not $targetSystem) {
-    throw "Target connected system 'Quantum Dynamics EMEA' not found. Run Scenario 8 setup first."
+    throw "Target connected system 'Panoply EMEA' not found. Run Scenario 8 setup first."
 }
 
-Write-Host "  Source: Quantum Dynamics APAC (ID: $($sourceSystem.id))" -ForegroundColor Green
-Write-Host "  Target: Quantum Dynamics EMEA (ID: $($targetSystem.id))" -ForegroundColor Green
+Write-Host "  Source: Panoply APAC (ID: $($sourceSystem.id))" -ForegroundColor Green
+Write-Host "  Target: Panoply EMEA (ID: $($targetSystem.id))" -ForegroundColor Green
 
 # ============================================================================
 # Step 4: Check for existing schedules
@@ -154,13 +154,13 @@ else {
     # Full Import APAC (sequential - first step)
     Add-JIMScheduleStep -ScheduleId $fullSyncSchedule.id `
         -StepType RunProfile `
-        -ConnectedSystemName "Quantum Dynamics APAC" `
+        -ConnectedSystemName "Panoply APAC" `
         -RunProfileName "Full Import" | Out-Null
 
     # Full Import EMEA (parallel with APAC)
     Add-JIMScheduleStep -ScheduleId $fullSyncSchedule.id `
         -StepType RunProfile `
-        -ConnectedSystemName "Quantum Dynamics EMEA" `
+        -ConnectedSystemName "Panoply EMEA" `
         -RunProfileName "Full Import" `
         -Parallel | Out-Null
 
@@ -169,12 +169,12 @@ else {
     # Step 5b: Full Sync - all systems sequentially
     Add-JIMScheduleStep -ScheduleId $fullSyncSchedule.id `
         -StepType RunProfile `
-        -ConnectedSystemName "Quantum Dynamics APAC" `
+        -ConnectedSystemName "Panoply APAC" `
         -RunProfileName "Full Sync" | Out-Null
 
     Add-JIMScheduleStep -ScheduleId $fullSyncSchedule.id `
         -StepType RunProfile `
-        -ConnectedSystemName "Quantum Dynamics EMEA" `
+        -ConnectedSystemName "Panoply EMEA" `
         -RunProfileName "Full Sync" | Out-Null
 
     Write-Host "    + Full Sync (APAC then EMEA sequentially)" -ForegroundColor Gray
@@ -182,7 +182,7 @@ else {
     # Step 5c: Export - target systems in parallel
     Add-JIMScheduleStep -ScheduleId $fullSyncSchedule.id `
         -StepType RunProfile `
-        -ConnectedSystemName "Quantum Dynamics EMEA" `
+        -ConnectedSystemName "Panoply EMEA" `
         -RunProfileName "Export" | Out-Null
 
     Write-Host "    + Export (EMEA)" -ForegroundColor Gray
@@ -190,7 +190,7 @@ else {
     # Step 5d: Delta Import - target systems in parallel (confirming export)
     Add-JIMScheduleStep -ScheduleId $fullSyncSchedule.id `
         -StepType RunProfile `
-        -ConnectedSystemName "Quantum Dynamics EMEA" `
+        -ConnectedSystemName "Panoply EMEA" `
         -RunProfileName "Delta Import" | Out-Null
 
     Write-Host "    + Delta Import (EMEA - confirming export)" -ForegroundColor Gray
@@ -198,7 +198,7 @@ else {
     # Step 5e: Delta Sync - target systems sequentially (confirming export)
     Add-JIMScheduleStep -ScheduleId $fullSyncSchedule.id `
         -StepType RunProfile `
-        -ConnectedSystemName "Quantum Dynamics EMEA" `
+        -ConnectedSystemName "Panoply EMEA" `
         -RunProfileName "Delta Sync" | Out-Null
 
     Write-Host "    + Delta Sync (EMEA - confirming export)" -ForegroundColor Gray
@@ -229,13 +229,13 @@ else {
     # Delta Import APAC (sequential - first step)
     Add-JIMScheduleStep -ScheduleId $deltaSyncSchedule.id `
         -StepType RunProfile `
-        -ConnectedSystemName "Quantum Dynamics APAC" `
+        -ConnectedSystemName "Panoply APAC" `
         -RunProfileName "Delta Import" | Out-Null
 
     # Delta Import EMEA (parallel with APAC)
     Add-JIMScheduleStep -ScheduleId $deltaSyncSchedule.id `
         -StepType RunProfile `
-        -ConnectedSystemName "Quantum Dynamics EMEA" `
+        -ConnectedSystemName "Panoply EMEA" `
         -RunProfileName "Delta Import" `
         -Parallel | Out-Null
 
@@ -244,12 +244,12 @@ else {
     # Step 6b: Delta Sync - all systems sequentially
     Add-JIMScheduleStep -ScheduleId $deltaSyncSchedule.id `
         -StepType RunProfile `
-        -ConnectedSystemName "Quantum Dynamics APAC" `
+        -ConnectedSystemName "Panoply APAC" `
         -RunProfileName "Delta Sync" | Out-Null
 
     Add-JIMScheduleStep -ScheduleId $deltaSyncSchedule.id `
         -StepType RunProfile `
-        -ConnectedSystemName "Quantum Dynamics EMEA" `
+        -ConnectedSystemName "Panoply EMEA" `
         -RunProfileName "Delta Sync" | Out-Null
 
     Write-Host "    + Delta Sync (APAC then EMEA sequentially)" -ForegroundColor Gray
@@ -257,7 +257,7 @@ else {
     # Step 6c: Export - target systems in parallel
     Add-JIMScheduleStep -ScheduleId $deltaSyncSchedule.id `
         -StepType RunProfile `
-        -ConnectedSystemName "Quantum Dynamics EMEA" `
+        -ConnectedSystemName "Panoply EMEA" `
         -RunProfileName "Export" | Out-Null
 
     Write-Host "    + Export (EMEA)" -ForegroundColor Gray
@@ -265,7 +265,7 @@ else {
     # Step 6d: Delta Import - target systems in parallel (confirming export)
     Add-JIMScheduleStep -ScheduleId $deltaSyncSchedule.id `
         -StepType RunProfile `
-        -ConnectedSystemName "Quantum Dynamics EMEA" `
+        -ConnectedSystemName "Panoply EMEA" `
         -RunProfileName "Delta Import" | Out-Null
 
     Write-Host "    + Delta Import (EMEA - confirming export)" -ForegroundColor Gray
@@ -273,7 +273,7 @@ else {
     # Step 6e: Delta Sync - target systems sequentially (confirming export)
     Add-JIMScheduleStep -ScheduleId $deltaSyncSchedule.id `
         -StepType RunProfile `
-        -ConnectedSystemName "Quantum Dynamics EMEA" `
+        -ConnectedSystemName "Panoply EMEA" `
         -RunProfileName "Delta Sync" | Out-Null
 
     Write-Host "    + Delta Sync (EMEA - confirming export)" -ForegroundColor Gray

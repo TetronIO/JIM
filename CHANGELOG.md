@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Bundled Keycloak IdP for Development (#197)
+
+- ✨ Zero-config SSO — `jim-stack` starts a pre-configured Keycloak instance alongside JIM; developers sign in immediately with `admin` / `admin`
+- ✨ Pre-configured realm with `jim-web` (confidential + PKCE) and `jim-powershell` (public + PKCE) clients, `jim-api` scope, and two test users
+- ✨ `.env.example` defaults point to the bundled Keycloak — no manual IdP configuration needed for local development
+- ✨ `jim-keycloak` / `jim-keycloak-stop` / `jim-keycloak-logs` aliases for standalone Keycloak (F5 debugging workflow)
+- ✨ Keycloak admin console accessible at `http://localhost:8181`
+- 🔒 HTTP OIDC authority support for development (RequireHttpsMetadata conditionally disabled)
+
+### Fixed
+
+- 🔒 Attribute change history is no longer cascade-deleted when a metaverse or connected system attribute definition is removed — the FK is set to null and snapshot `AttributeName`/`AttributeType` properties preserve the audit trail indefinitely (#58)
+
+### Added
+
 #### Worker Redesign Option A (#394)
 
 - ✨ Pure domain engine (`ISyncEngine`) — 7 stateless methods with zero I/O dependencies, making core sync logic independently testable with plain objects

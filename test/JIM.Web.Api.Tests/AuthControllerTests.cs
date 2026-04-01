@@ -65,7 +65,7 @@ public class AuthControllerTests
     public void GetConfig_WhenOnlyAuthoritySet_Returns503()
     {
         // Arrange
-        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", "https://login.example.com");
+        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", "https://login.panoply.org");
         // Client ID not set
 
         // Act
@@ -97,7 +97,7 @@ public class AuthControllerTests
     public void GetConfig_WhenSsoConfigured_ReturnsOk()
     {
         // Arrange
-        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", "https://login.example.com");
+        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", "https://login.panoply.org");
         Environment.SetEnvironmentVariable("JIM_SSO_CLIENT_ID", "test-client-id");
 
         // Act
@@ -111,7 +111,7 @@ public class AuthControllerTests
     public void GetConfig_WhenSsoConfigured_ReturnsAuthority()
     {
         // Arrange
-        var authority = "https://login.example.com";
+        var authority = "https://login.panoply.org";
         Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", authority);
         Environment.SetEnvironmentVariable("JIM_SSO_CLIENT_ID", "test-client-id");
 
@@ -129,7 +129,7 @@ public class AuthControllerTests
     {
         // Arrange
         var clientId = "test-client-id";
-        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", "https://login.example.com");
+        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", "https://login.panoply.org");
         Environment.SetEnvironmentVariable("JIM_SSO_CLIENT_ID", clientId);
 
         // Act
@@ -145,7 +145,7 @@ public class AuthControllerTests
     public void GetConfig_WhenSsoConfigured_ReturnsDefaultScopes()
     {
         // Arrange
-        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", "https://login.example.com");
+        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", "https://login.panoply.org");
         Environment.SetEnvironmentVariable("JIM_SSO_CLIENT_ID", "test-client-id");
         // No API scope set
 
@@ -165,7 +165,7 @@ public class AuthControllerTests
     {
         // Arrange
         var apiScope = "api://test-client-id/access_as_user";
-        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", "https://login.example.com");
+        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", "https://login.panoply.org");
         Environment.SetEnvironmentVariable("JIM_SSO_CLIENT_ID", "test-client-id");
         Environment.SetEnvironmentVariable("JIM_SSO_API_SCOPE", apiScope);
 
@@ -185,7 +185,7 @@ public class AuthControllerTests
     public void GetConfig_WhenSsoConfigured_ReturnsCodeResponseType()
     {
         // Arrange
-        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", "https://login.example.com");
+        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", "https://login.panoply.org");
         Environment.SetEnvironmentVariable("JIM_SSO_CLIENT_ID", "test-client-id");
 
         // Act
@@ -201,7 +201,7 @@ public class AuthControllerTests
     public void GetConfig_WhenSsoConfigured_RequiresPkce()
     {
         // Arrange
-        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", "https://login.example.com");
+        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", "https://login.panoply.org");
         Environment.SetEnvironmentVariable("JIM_SSO_CLIENT_ID", "test-client-id");
 
         // Act
@@ -217,7 +217,7 @@ public class AuthControllerTests
     public void GetConfig_WhenSsoConfigured_UsesS256CodeChallengeMethod()
     {
         // Arrange
-        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", "https://login.example.com");
+        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", "https://login.panoply.org");
         Environment.SetEnvironmentVariable("JIM_SSO_CLIENT_ID", "test-client-id");
 
         // Act

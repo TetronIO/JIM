@@ -6,8 +6,8 @@ Clear-Host
 ##[ VARIABLES YOU SET ]########################################################
 
 # per-run specifics! set these!
-$domain = "corp.subatomic.com"
-$ou = "OU=Groups,OU=Corp,DC=corp,DC=subatomic,DC=com"
+$domain = "corp.panoply.com"
+$ou = "OU=Groups,OU=Corp,DC=corp,DC=panoply,DC=com"
 $what_if_mode = $false
 $in_scope_groups_to_create = 100
 $mixed_scope_groups_to_create = 5
@@ -17,11 +17,11 @@ $out_of_scope_groups_to_create = 5
 
 # define the OUs we'll draw users from, for our new groups
 $user_ous_in_scope = @(
-    "OU=Staff,OU=Corp,DC=corp,DC=subatomic,DC=com"
-    "OU=Partners,OU=Corp,DC=corp,DC=subatomic,DC=com"
-    "OU=Contractors,OU=Corp,DC=corp,DC=subatomic,DC=com"
+    "OU=Staff,OU=Corp,DC=corp,DC=panoply,DC=com"
+    "OU=Partners,OU=Corp,DC=corp,DC=panoply,DC=com"
+    "OU=Contractors,OU=Corp,DC=corp,DC=panoply,DC=com"
 )
-$user_ous_out_of_scope = @("OU=Interns,OU=Corp,DC=corp,DC=subatomic,DC=com")
+$user_ous_out_of_scope = @("OU=Interns,OU=Corp,DC=corp,DC=panoply,DC=com")
 
 # read in the source data
 $adjectives = Import-CSV "../Data/Adjectives.en.csv"

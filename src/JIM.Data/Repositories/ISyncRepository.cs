@@ -206,6 +206,14 @@ public interface ISyncRepository
     /// </summary>
     Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId);
 
+    /// <summary>
+    /// Tactical fixup: populates ReferenceValueId on MetaverseObjectAttributeValues where the FK is
+    /// null but the referenced MVO exists. EF does not reliably infer the FK from the ReferenceValue
+    /// navigation when entities are managed via explicit state (Entry().State = Added/Modified).
+    /// This will be retired when MVO persistence is converted to direct SQL.
+    /// </summary>
+    Task<int> FixupMvoReferenceValueIdsAsync(IReadOnlyList<(Guid MvoId, int AttributeId, Guid TargetMvoId)> fixups);
+
     #endregion
 
     #region Object Matching — Data Access

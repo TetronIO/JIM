@@ -108,7 +108,7 @@ public class ImportExportOutcomeTests
         var workerTask = TestUtilities.CreateTestWorkerTask(activity, _initiatedBy);
 
         // Act
-        var processor = new SyncImportTaskProcessor(_jim, _syncRepo, new SyncServer(_jim),mockConnector, connectedSystem!, runProfile, workerTask, new CancellationTokenSource());
+        var processor = new SyncImportTaskProcessor(_jim, _syncRepo, new SyncServer(_jim), new JIM.Application.Servers.SyncEngine(), mockConnector, connectedSystem!, runProfile, workerTask, new CancellationTokenSource());
         await processor.PerformFullImportAsync();
 
         // Assert - RPEIs should have CsoAdded outcomes (default tracking level is Detailed)
@@ -176,7 +176,7 @@ public class ImportExportOutcomeTests
         var workerTask = TestUtilities.CreateTestWorkerTask(activity, _initiatedBy);
 
         // Act
-        var processor = new SyncImportTaskProcessor(_jim, _syncRepo, new SyncServer(_jim),mockConnector, connectedSystem!, runProfile, workerTask, new CancellationTokenSource());
+        var processor = new SyncImportTaskProcessor(_jim, _syncRepo, new SyncServer(_jim), new JIM.Application.Servers.SyncEngine(), mockConnector, connectedSystem!, runProfile, workerTask, new CancellationTokenSource());
         await processor.PerformFullImportAsync();
 
         // Assert - two Added RPEIs, each with independent CsoAdded outcomes
@@ -249,7 +249,7 @@ public class ImportExportOutcomeTests
         var workerTask = TestUtilities.CreateTestWorkerTask(activity, _initiatedBy);
 
         // Act
-        var processor = new SyncImportTaskProcessor(_jim, _syncRepo, new SyncServer(_jim),mockConnector, connectedSystem!, runProfile, workerTask, new CancellationTokenSource());
+        var processor = new SyncImportTaskProcessor(_jim, _syncRepo, new SyncServer(_jim), new JIM.Application.Servers.SyncEngine(), mockConnector, connectedSystem!, runProfile, workerTask, new CancellationTokenSource());
         await processor.PerformFullImportAsync();
 
         // Assert - good object has outcome, error object does not

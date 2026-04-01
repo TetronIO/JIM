@@ -32,7 +32,7 @@ public partial class SyncEngine : ISyncEngine
     }
 
     /// <inheritdoc />
-    public void FlowInboundAttributes(
+    public List<AttributeFlowWarning> FlowInboundAttributes(
         ConnectedSystemObject cso,
         SyncRule syncRule,
         IReadOnlyList<ConnectedSystemObjectType> objectTypes,
@@ -41,10 +41,12 @@ public partial class SyncEngine : ISyncEngine
         bool onlyReferenceAttributes = false,
         bool isFinalReferencePass = false)
     {
+        var warnings = new List<AttributeFlowWarning>();
+
         if (cso.MetaverseObject == null)
         {
             Log.Error("FlowInboundAttributes: CSO ({Cso}) has no MVO!", cso);
-            return;
+            return warnings;
         }
 
         foreach (var syncRuleMapping in syncRule.AttributeFlowRules)
@@ -54,8 +56,10 @@ public partial class SyncEngine : ISyncEngine
 
             ProcessMapping(cso, syncRuleMapping, objectTypes, expressionEvaluator,
                 skipReferenceAttributes, onlyReferenceAttributes, isFinalReferencePass,
-                cso.ConnectedSystemId);
+                cso.ConnectedSystemId, warnings);
         }
+
+        return warnings;
     }
 
     /// <inheritdoc />
@@ -82,7 +86,7 @@ public partial class SyncEngine : ISyncEngine
                 continue;
             }
 
-            // Skip pending exports awaiting confirmation via PendingExportReconciliationService
+            // Skip pending exports awaiting confirmation via confirming import
             if (pendingExport.Status == PendingExportStatus.Exported)
             {
                 Log.Verbose("EvaluatePendingExportConfirmation: Skipping pending export {PeId} - awaiting confirmation via import (Status=Exported).", pendingExport.Id);
@@ -94,23 +98,8 @@ public partial class SyncEngine : ISyncEngine
 
             foreach (var attributeChange in pendingExport.AttributeValueChanges)
             {
-                var csoAttributeValue = cso.AttributeValues
-                    .FirstOrDefault(av => av.AttributeId == attributeChange.AttributeId);
-
-                var changeMatches = attributeChange.ChangeType switch
-                {
-                    PendingExportAttributeChangeType.Add or
-                    PendingExportAttributeChangeType.Update =>
-                        csoAttributeValue != null && AttributeValuesMatch(csoAttributeValue, attributeChange),
-
-                    PendingExportAttributeChangeType.Remove or
-                    PendingExportAttributeChangeType.RemoveAll =>
-                        csoAttributeValue == null || string.IsNullOrEmpty(csoAttributeValue.StringValue),
-
-                    _ => false
-                };
-
-                if (changeMatches)
+                // Use the comprehensive type-aware comparison
+                if (IsAttributeChangeConfirmed(cso, attributeChange))
                     successfulChanges.Add(attributeChange);
                 else
                     failedChanges.Add(attributeChange);
@@ -255,29 +244,6 @@ public partial class SyncEngine : ISyncEngine
             return InboundOutOfScopeAction.Disconnect;
 
         return importSyncRule.InboundOutOfScopeAction;
-    }
-
-    /// <inheritdoc />
-    public bool AttributeValuesMatch(
-        ConnectedSystemObjectAttributeValue csoValue,
-        PendingExportAttributeValueChange pendingChange)
-    {
-        if (pendingChange.StringValue != null && csoValue.StringValue != pendingChange.StringValue)
-            return false;
-
-        if (pendingChange.IntValue.HasValue && csoValue.IntValue != pendingChange.IntValue)
-            return false;
-
-        if (pendingChange.DateTimeValue.HasValue && csoValue.DateTimeValue != pendingChange.DateTimeValue)
-            return false;
-
-        if (pendingChange.ByteValue != null && !JIM.Utilities.Utilities.AreByteArraysTheSame(csoValue.ByteValue, pendingChange.ByteValue))
-            return false;
-
-        if (pendingChange.UnresolvedReferenceValue != null && csoValue.UnresolvedReferenceValue != pendingChange.UnresolvedReferenceValue)
-            return false;
-
-        return true;
     }
 
     /// <summary>

@@ -1,6 +1,6 @@
 # Worker Task Lifecycle
 
-> Generated against JIM v0.3.0 (`0d1c88e9`). If the codebase has changed significantly since then, these diagrams may be out of date.
+> Last updated: 2026-03-26 — JIM v0.7.1 (`00907431`)
 
 This diagram shows how the JIM Worker service picks up, executes, and completes tasks. It covers the main polling loop, task dispatch, heartbeat management, cancellation handling, and housekeeping.
 
@@ -41,11 +41,11 @@ flowchart TD
 
 ## Task Execution (per spawned task)
 
-Each task runs in its own `Task.Run` with an isolated `JimApplication` and `JimDbContext` to avoid EF Core connection sharing issues.
+Each task runs in its own `Task.Run` with an isolated `JimApplication`, `JimDbContext`, `ISyncRepository`, and `ISyncServer` to avoid EF Core connection sharing issues. Sync/delta sync processors also receive a stateless `ISyncEngine` for pure domain decisions.
 
 ```mermaid
 flowchart TD
-    Spawned([Task.Run starts]) --> CreateJim[Create dedicated JimApplication<br/>with fresh JimDbContext]
+    Spawned([Task.Run starts]) --> CreateJim[Create dedicated JimApplication<br/>with fresh JimDbContext<br/>Create ISyncRepository + ISyncServer<br/>for this task's DbContext]
     CreateJim --> ReRetrieve[Re-retrieve WorkerTask<br/>using task-specific JimApplication<br/>Avoid cross-instance issues]
     ReRetrieve --> SetExecuted[Set Activity.Executed = UtcNow]
 
@@ -56,11 +56,11 @@ flowchart TD
     ResolveConnector --> ResolveRP[Get RunProfile from<br/>ConnectedSystem.RunProfiles]
     ResolveRP --> RunType{RunProfile<br/>RunType?}
 
-    RunType -->|FullImport| FI[SyncImportTaskProcessor<br/>PerformFullImportAsync]
+    RunType -->|FullImport| FI[SyncImportTaskProcessor<br/>PerformFullImportAsync<br/>Uses ISyncServer + ISyncRepository]
     RunType -->|DeltaImport| DI[SyncImportTaskProcessor<br/>PerformFullImportAsync<br/>Connector handles delta filtering]
-    RunType -->|FullSynchronisation| FS[SyncFullSyncTaskProcessor<br/>PerformFullSyncAsync]
-    RunType -->|DeltaSynchronisation| DS[SyncDeltaSyncTaskProcessor<br/>PerformDeltaSyncAsync]
-    RunType -->|Export| EX[SyncExportTaskProcessor<br/>PerformExportAsync]
+    RunType -->|FullSynchronisation| FS[SyncFullSyncTaskProcessor<br/>PerformFullSyncAsync<br/>Uses ISyncEngine + ISyncServer + ISyncRepository]
+    RunType -->|DeltaSynchronisation| DS[SyncDeltaSyncTaskProcessor<br/>PerformDeltaSyncAsync<br/>Uses ISyncEngine + ISyncServer + ISyncRepository]
+    RunType -->|Export| EX[SyncExportTaskProcessor<br/>PerformExportAsync<br/>Uses ISyncServer + ISyncRepository]
 
     FI --> CompleteActivity
     DI --> CompleteActivity
@@ -136,7 +136,12 @@ flowchart TD
 
 ## Key Design Decisions
 
-- **Isolated DbContext per task**: Each task gets its own `JimApplication` and `JimDbContext` to avoid EF Core connection sharing issues. The main loop has its own instance for polling and heartbeats.
+- **Three-layer sync architecture**: Worker processors use three collaborating interfaces injected at task spawn time:
+  - **ISyncEngine** — Pure domain logic (projection decisions, attribute flow, deletion rules, export confirmation). Stateless, I/O-free, fully unit-testable. Used by full sync and delta sync processors.
+  - **ISyncServer** — Orchestration facade that delegates to existing application-layer servers (ExportEvaluationServer, ExportExecutionServer, ScopingEvaluationServer, DriftDetectionService) and ISyncRepository. All processors use this.
+  - **ISyncRepository** — Dedicated data access boundary for sync operations (bulk CSO/MVO writes, pending exports, RPEIs). Replaces scattered access through multiple server properties.
+
+- **Isolated DbContext per task**: Each task gets its own `JimApplication`, `JimDbContext`, `ISyncRepository`, and `ISyncServer` to avoid EF Core connection sharing issues. The main loop has its own instance for polling and heartbeats.
 
 - **Heartbeat-based liveness**: Active tasks have their heartbeats updated every polling cycle (2 seconds). The scheduler uses heartbeat timestamps to detect crashed workers and recover stale tasks.
 

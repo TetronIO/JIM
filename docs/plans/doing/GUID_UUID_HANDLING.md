@@ -1,7 +1,7 @@
 # GUID/UUID Handling Strategy
 
-- **Status:** Doing (Phases 1–3 complete)
-- **Last Updated**: 2026-01-28
+- **Status:** Doing (Phases 1–4 complete)
+- **Last Updated**: 2026-03-30
 - **Milestone**: Pre-connector expansion (before SCIM, database, or web service connectors)
 
 ## Overview
@@ -225,41 +225,86 @@ Consider replacing `CsvReader.GetField<Guid>()` with `IdentifierParser.TryFromSt
 
 ---
 
-### Phase 4: OpenLDAP/entryUUID Support (When OpenLDAP Export Needed)
+### Phase 4: OpenLDAP/entryUUID Support ✅
 
-**4.1 Add `entryUUID` attribute handling to LDAP import**
+Implemented as part of OpenLDAP integration support.
 
-Detect non-AD directories (already done via RootDSE) and read `entryUUID` as a string attribute using `Guid.TryParse()` or `IdentifierParser.FromString()` instead of binary conversion.
+**4.1 Add `entryUUID` attribute handling to LDAP import** ✅
 
-**4.2 Add byte order awareness to LDAP export**
+- RootDSE detection distinguishes AD/Samba from OpenLDAP/Generic directories
+- `entryUUID` declared as the external ID attribute for OpenLDAP and Generic directory types in `LdapConnectorRootDse.cs`
+- Schema parser (`Rfc4512SchemaParser.cs`) recognises `entryUUID` and maps it to `AttributeDataType.Text`
+- Import reads `entryUUID` as a string attribute, parsed via `IdentifierParser.FromString()`
+- Delta import via accesslog extracts `entryUUID` from both `reqEntryUUID` and `reqOld` attributes
 
-When exporting GUID-type attributes to non-AD directories, use `IdentifierParser.ToRfc4122Bytes()` instead of `Guid.ToByteArray()`. Determine which method to use based on the directory type detected during connection.
+**4.2 Add byte order awareness to LDAP export** ✅
 
-**4.3 Add `GuidByteOrder` metadata to connector configuration**
+- Post-create fetch correctly handles `entryUUID` as a string for non-AD directories
+- AD/Samba export continues to use `IdentifierParser.FromMicrosoftBytes()` for binary `objectGUID`
+- **Note:** Binary RFC 4122 UUID export for custom attributes deferred to Phase 5 — OpenLDAP's standard identifier (`entryUUID`) is string-based, so no binary byte order conversion is needed in practice
+
+**4.3 `GuidByteOrder` metadata** — deferred to Phase 5
+
+Not needed for OpenLDAP (string-based identifiers). Will be implemented when SQL/database connectors introduce binary UUID columns that require explicit byte order configuration.
+
+---
+
+### Phase 5: SQL/Database Connector Binary UUID Support (When Database Connectors Built)
+
+Database connectors that store UUIDs in binary columns require byte order awareness. The `IdentifierParser` utility already provides `FromRfc4122Bytes()` and `ToRfc4122Bytes()`, but the connector layer needs metadata to determine which byte order a given target uses.
+
+**5.1 Add `GuidByteOrder` metadata to connector configuration**
 
 ```
 public enum GuidByteOrder
 {
     String,           // No binary handling needed (CSV, SCIM, most APIs)
-    MicrosoftNative,  // AD, SQL Server
-    Rfc4122           // OpenLDAP, PostgreSQL binary, Oracle
+    MicrosoftNative,  // AD, SQL Server uniqueidentifier
+    Rfc4122           // PostgreSQL uuid binary, Oracle RAW(16)
 }
 ```
 
-Store as connector-level metadata so the export path knows which byte order to use without per-attribute decisions.
+Store as connector-level metadata so the import/export paths know which byte order to use without per-attribute decisions.
+
+**5.2 PostgreSQL direct connector UUID handling**
+
+When importing/exporting `uuid` columns via a PostgreSQL database connector:
+- Import: Use `IdentifierParser.FromRfc4122Bytes()` for binary UUID values
+- Export: Use `IdentifierParser.ToRfc4122Bytes()` for writing binary UUIDs
+- String representation: No conversion needed (standard hyphenated format)
+
+**5.3 Oracle connector RAW(16) handling**
+
+When importing/exporting `RAW(16)` columns via an Oracle database connector:
+- Import: Use `IdentifierParser.FromRfc4122Bytes()` — Oracle uses big-endian (RFC 4122-like) byte order
+- Export: Use `IdentifierParser.ToRfc4122Bytes()` for writing RAW(16) values
+
+**5.4 SQL Server connector uniqueidentifier handling**
+
+When importing/exporting `uniqueidentifier` columns via a SQL Server database connector:
+- Import: Use `IdentifierParser.FromMicrosoftBytes()` — SQL Server uses Microsoft byte order (same as .NET `Guid`)
+- Export: Use `Guid.ToByteArray()` / `IdentifierParser.ToMicrosoftBytes()` — no conversion needed
+
+**5.5 MySQL connector UUID handling**
+
+MySQL stores UUIDs in varying formats:
+- `CHAR(36)`: String representation — no binary handling needed
+- `BINARY(16)`: Byte order varies by application convention — use `GuidByteOrder` metadata to determine the correct conversion
 
 ---
 
-### Phase 5: Cross-Connector Round-Trip Tests (Before New Connectors)
+### Phase 6: Cross-Connector Round-Trip Tests (After Database Connectors)
 
-**5.1 Add round-trip integration tests**
+**6.1 Add round-trip integration tests**
 
 Verify that a GUID imported from one connector type survives storage in JIM and export to another connector type:
 
-- LDAP import (binary) -> store in PostgreSQL -> CSV export (string) -> CSV import (string) -> LDAP export (binary): original bytes preserved
+- LDAP import (binary, Microsoft byte order) -> store in PostgreSQL -> CSV export (string) -> CSV import (string) -> LDAP export (binary): original bytes preserved
+- PostgreSQL direct import (RFC 4122 binary) -> store in JIM -> LDAP export (Microsoft binary): byte order correctly swapped
+- Oracle RAW(16) import -> store in JIM -> SQL Server export: byte order correctly converted
 - Known GUID value: verify specific byte sequences at each stage
 
-**5.2 Add SCIM identifier tests (when SCIM connector built)**
+**6.2 Add SCIM identifier tests (when SCIM connector built)**
 
 - SCIM `id` stored as opaque string (not forced to Guid)
 - SCIM `externalId` populated with JIM's MVO ID
@@ -270,12 +315,14 @@ Verify that a GUID imported from one connector type survives storage in JIM and 
 
 ## Success Criteria
 
-1. All `new Guid(byte[])` and `Guid.ToByteArray()` calls have documented byte order assumptions
-2. `IdentifierParser` utility exists with comprehensive unit tests
-3. All connector code uses `IdentifierParser` instead of inline GUID operations
-4. GUID round-trip tests pass across all connector combinations
-5. OpenLDAP `entryUUID` is supported when that connector path is implemented
-6. No GUID-related data corruption when mixing connector types
+1. ✅ All `new Guid(byte[])` and `Guid.ToByteArray()` calls have documented byte order assumptions
+2. ✅ `IdentifierParser` utility exists with comprehensive unit tests
+3. ✅ All connector code uses `IdentifierParser` instead of inline GUID operations
+4. ✅ OpenLDAP `entryUUID` is supported for import and export
+5. `GuidByteOrder` metadata allows connectors to declare their binary UUID format
+6. Database connectors (PostgreSQL, Oracle, SQL Server, MySQL) use correct byte order conversions
+7. GUID round-trip tests pass across all connector combinations
+8. No GUID-related data corruption when mixing connector types
 
 ---
 

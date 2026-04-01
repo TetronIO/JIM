@@ -26,6 +26,11 @@ Database Management:
   jim-db-logs        - View database logs
   jim-postgres-tune  - Auto-tune PostgreSQL for current devcontainer specs
 
+Identity Provider (Keycloak):
+  jim-keycloak       - Start Keycloak IdP (for local F5 debugging)
+  jim-keycloak-stop  - Stop Keycloak IdP
+  jim-keycloak-logs  - View Keycloak logs
+
 Docker Stack Management (auto-kills local JIM processes):
   jim-stack          - Start Docker stack
   jim-stack-logs     - View Docker stack logs
@@ -168,6 +173,32 @@ jim-db-logs() {
   docker compose $(_jim_db_compose) logs -f
 }
 
+# Standalone Keycloak IdP (local debugging workflow - use with jim-db + F5)
+# Starts the bundled Keycloak from docker-compose.override.yml without the full stack.
+jim-keycloak() {
+  docker compose -f docker-compose.yml -f docker-compose.override.yml up -d jim.keycloak
+  _jim_keycloak_bridge
+}
+jim-keycloak-stop() {
+  pkill -f 'socat.*TCP:127.0.0.1:8180' 2>/dev/null || true
+  docker compose -f docker-compose.yml -f docker-compose.override.yml stop jim.keycloak
+  docker compose -f docker-compose.yml -f docker-compose.override.yml rm -f jim.keycloak
+}
+jim-keycloak-logs() {
+  docker compose -f docker-compose.yml -f docker-compose.override.yml logs -f jim.keycloak
+}
+
+# Start a userspace port forwarder for Keycloak so VS Code can forward it.
+# Docker-in-Docker proxy ports aren't forwarded by VS Code Dev Containers
+# unless they were present at devcontainer build time. This socat bridge
+# runs as the vscode user, which VS Code detects and forwards to the host.
+_jim_keycloak_bridge() {
+  pkill -f 'socat.*TCP:127.0.0.1:8180' 2>/dev/null || true
+  if command -v socat &>/dev/null; then
+    socat TCP-LISTEN:8181,fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:8180 &
+  fi
+}
+
 # Kill any locally-running JIM .NET processes (jim-web, jim-worker, jim-scheduler)
 # so they don't hold ports that Docker containers need to bind
 _jim_kill_local() {
@@ -181,12 +212,13 @@ _jim_kill_local() {
 }
 
 # Clear any previous aliases before defining functions (zsh cannot redefine alias as function)
-unalias jim-stack jim-stack-logs jim-stack-down jim-restart jim-build jim-build-web jim-build-worker jim-build-scheduler jim-cleanup jim-reset jim-db jim-db-stop jim-db-logs 2>/dev/null || true
+unalias jim-stack jim-stack-logs jim-stack-down jim-restart jim-build jim-build-web jim-build-worker jim-build-scheduler jim-cleanup jim-reset jim-db jim-db-stop jim-db-logs jim-keycloak jim-keycloak-stop jim-keycloak-logs 2>/dev/null || true
 
 # Docker stack management
 jim-stack() {
   _jim_kill_local
   docker compose $(_jim_compose) up -d
+  _jim_keycloak_bridge
 }
 jim-stack-logs() {
   docker compose $(_jim_compose) logs -f
@@ -199,6 +231,7 @@ jim-stack-down() {
 jim-restart() {
   _jim_kill_local
   docker compose $(_jim_compose) down && docker compose $(_jim_compose) up -d --force-recreate
+  _jim_keycloak_bridge
 }
 
 # Docker builds (rebuild and start services)
@@ -209,6 +242,7 @@ _jim_version_suffix() {
 jim-build() {
   _jim_kill_local
   VERSION_SUFFIX="$(_jim_version_suffix)" docker compose $(_jim_compose) up -d --build
+  _jim_keycloak_bridge
 }
 jim-build-web() {
   _jim_kill_local
@@ -244,15 +278,15 @@ jim-cleanup() {
   df -h / | tail -1
 }
 
-# Reset (preserves Samba AD snapshot images — they take a long time to build)
+# Reset (preserves Samba AD and OpenLDAP snapshot images — they take a long time to build)
 jim-reset() {
   docker compose $(_jim_compose) down --volumes
   docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down --volumes --remove-orphans 2>/dev/null || true
   docker rm -f samba-ad-primary samba-ad-source samba-ad-target sqlserver-hris-a oracle-hris-b postgres-target openldap-test mysql-test 2>/dev/null || true
-  docker image prune -af --filter "label!=jim.samba.snapshot-hash" --filter "label!=jim.samba.build-hash" 2>/dev/null || true
+  docker image prune -af --filter "label!=jim.samba.snapshot-hash" --filter "label!=jim.samba.build-hash" --filter "label!=jim.openldap.snapshot-hash" --filter "label!=jim.openldap.build-hash" 2>/dev/null || true
   docker volume ls --format "{{.Name}}" | grep jim-integration | xargs -r docker volume rm 2>/dev/null || true
   docker volume rm -f jim-db-volume jim-logs-volume 2>/dev/null || true
-  echo "JIM reset complete. Containers, images, and volumes removed (snapshots preserved). Run jim-build to rebuild."
+  echo "JIM reset complete. Containers, images, and volumes removed (Samba AD & OpenLDAP snapshots preserved). Run jim-build to rebuild."
 }
 
 # Structurizr diagram export
@@ -281,19 +315,20 @@ jim-diagrams() {
   # Remove any stale container
   docker rm -f "${container_name}" 2>/dev/null
 
-  # Start Structurizr Lite (adrs mount resolves the symlink inside the container)
-  echo "Starting Structurizr Lite on port ${port}..."
+  # Start Structurizr Local (adrs mount resolves the symlink inside the container)
+  # Note: structurizr/lite is deprecated; using structurizr/structurizr with 'local' command
+  echo "Starting Structurizr Local on port ${port}..."
   docker run -d --name "${container_name}" \
     -p "${port}:8080" \
     -v "${structurizr_dir}:/usr/local/structurizr" \
     -v "${repo_root}/docs/adrs:/usr/local/structurizr/adrs" \
-    structurizr/lite > /dev/null
+    structurizr/structurizr local > /dev/null
 
-  # Wait for Structurizr Lite to be ready
-  echo "Waiting for Structurizr Lite to start..."
+  # Wait for Structurizr Local to be ready
+  echo "Waiting for Structurizr Local to start..."
   local attempts=0
   while [ $attempts -lt 30 ]; do
-    if curl -sf "http://localhost:${port}/workspace/diagrams" > /dev/null 2>&1; then
+    if curl -sf "http://localhost:${port}/workspace/1/diagrams" > /dev/null 2>&1; then
       break
     fi
     attempts=$((attempts + 1))
@@ -301,12 +336,12 @@ jim-diagrams() {
   done
 
   if [ $attempts -ge 30 ]; then
-    echo "ERROR: Structurizr Lite failed to start within 60 seconds."
+    echo "ERROR: Structurizr Local failed to start within 60 seconds."
     docker rm -f "${container_name}" > /dev/null 2>&1
     return 1
   fi
 
-  echo "Structurizr Lite is ready."
+  echo "Structurizr Local is ready."
 
   # Remove old images (light, dark, and legacy root-level)
   rm -f "${repo_root}/docs/diagrams/images"/jim-structurizr-1-*.svg
@@ -315,12 +350,12 @@ jim-diagrams() {
 
   # Export diagrams (light + dark)
   node "${structurizr_dir}/export-diagrams.js" \
-    "http://localhost:${port}/workspace/diagrams" \
+    "http://localhost:${port}/workspace/1/diagrams" \
     "${repo_root}/docs/diagrams/images"
   local export_rc=$?
 
   # Cleanup
-  echo "Stopping Structurizr Lite..."
+  echo "Stopping Structurizr Local..."
   docker rm -f "${container_name}" > /dev/null 2>&1
 
   if [ $export_rc -eq 0 ]; then

@@ -175,7 +175,7 @@ For production hardening (TLS, reverse proxy, upgrades, monitoring), see the [De
 
 ### For Developers (Contribute)
 
-**Prerequisites:** Configure SSO using the [SSO Setup Guide](docs/SSO_SETUP_GUIDE.md) — JIM requires authentication even during development.
+**Prerequisites:** None — the devcontainer ships a bundled Keycloak for SSO. Sign in with `admin` / `admin`. To use an external IdP, see the [SSO Setup Guide](docs/SSO_SETUP_GUIDE.md).
 
 **Option 1 — GitHub Codespaces (one click):**
 

@@ -19,9 +19,9 @@
     4. Commits the container as a new image
 
     Images built:
-    - ghcr.io/tetronio/jim-samba-ad:primary   (SUBATOMIC.LOCAL)
-    - ghcr.io/tetronio/jim-samba-ad:source    (SOURCEDOMAIN.LOCAL)
-    - ghcr.io/tetronio/jim-samba-ad:target    (TARGETDOMAIN.LOCAL)
+    - ghcr.io/tetronio/jim-samba-ad:primary   (PANOPLY.LOCAL)
+    - ghcr.io/tetronio/jim-samba-ad:source    (RESURGAM.LOCAL)
+    - ghcr.io/tetronio/jim-samba-ad:target    (GENTIAN.LOCAL)
 
 .PARAMETER Images
     Which images to build (Primary, Source, Target, All)
@@ -75,19 +75,19 @@ Write-Host "Build content hash: $buildContentHash" -ForegroundColor DarkGray
 # Image definitions
 $imageDefinitions = @{
     Primary = @{
-        Domain    = "SUBATOMIC.LOCAL"
+        Domain    = "PANOPLY.LOCAL"
         Tag       = "primary"
         Password  = "Test@123!"
         Container = "samba-build-primary"
     }
     Source  = @{
-        Domain    = "SOURCEDOMAIN.LOCAL"
+        Domain    = "RESURGAM.LOCAL"
         Tag       = "source"
         Password  = "Test@123!"
         Container = "samba-build-source"
     }
     Target  = @{
-        Domain    = "TARGETDOMAIN.LOCAL"
+        Domain    = "GENTIAN.LOCAL"
         Tag       = "target"
         Password  = "Test@123!"
         Container = "samba-build-target"

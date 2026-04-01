@@ -221,6 +221,19 @@ public class LdapConnectorTests
         Assert.That(searchTimeoutSetting.Category, Is.EqualTo(ConnectedSystemSettingCategory.General));
     }
 
+    [Test]
+    public void GetSettings_ContainsImportConcurrencySetting()
+    {
+        var settings = _connector.GetSettings();
+        var importConcurrencySetting = settings.FirstOrDefault(s => s.Name == "Import Concurrency");
+
+        Assert.That(importConcurrencySetting, Is.Not.Null);
+        Assert.That(importConcurrencySetting!.Type, Is.EqualTo(ConnectedSystemSettingType.Integer));
+        Assert.That(importConcurrencySetting.DefaultIntValue, Is.EqualTo(LdapConnectorConstants.DEFAULT_IMPORT_CONCURRENCY));
+        Assert.That(importConcurrencySetting.Required, Is.False);
+        Assert.That(importConcurrencySetting.Category, Is.EqualTo(ConnectedSystemSettingCategory.General));
+    }
+
     #endregion
 
     #region LDAPS settings tests

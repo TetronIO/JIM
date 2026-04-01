@@ -54,6 +54,15 @@ internal static class LdapConnectorConstants
     internal const int DEFAULT_MAX_RETRIES = 3;
     internal const int DEFAULT_RETRY_DELAY_MS = 1000;
 
+    // Import concurrency settings
+    // Controls the number of parallel LDAP connections used during OpenLDAP/Generic directory imports.
+    // Each connection handles one container+objectType combo independently, bypassing the RFC 2696
+    // connection-scoped paging cookie limitation. Not used for AD directories (which multiplex on
+    // a single connection). Typical deployments have 2-6 combos, so even low concurrency values
+    // eliminate the serialisation bottleneck. Higher values add connection overhead with diminishing returns.
+    internal const int DEFAULT_IMPORT_CONCURRENCY = 4;
+    internal const int MAX_IMPORT_CONCURRENCY = 8;
+
     // Export concurrency settings
     internal const int DEFAULT_EXPORT_CONCURRENCY = 4;
     internal const int MAX_EXPORT_CONCURRENCY = 8;
@@ -110,5 +119,23 @@ internal static class LdapConnectorConstants
         "group",
         "samDomain",
         "samServer"
+    };
+
+    // Group placeholder member settings
+    // The groupOfNames object class (RFC 4519) requires at least one member value (MUST constraint).
+    // When a group has no real members, a placeholder DN is used to satisfy this constraint.
+    // This applies to OpenLDAP and Generic directories — AD/Samba AD use the 'group' class which has no such constraint.
+    internal const string DEFAULT_GROUP_PLACEHOLDER_MEMBER_DN = "cn=placeholder";
+    internal const string SETTING_GROUP_PLACEHOLDER_MEMBER_DN = "Group Placeholder Member DN";
+
+    /// <summary>
+    /// LDAP object classes that require at least one member value (MUST constraint on the member attribute).
+    /// When exporting to directories using these classes, a placeholder member is injected
+    /// to satisfy the schema constraint when the group would otherwise be empty.
+    /// </summary>
+    internal static readonly HashSet<string> MUST_MEMBER_OBJECT_CLASSES = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "groupOfNames",
+        "groupOfUniqueNames"
     };
 }

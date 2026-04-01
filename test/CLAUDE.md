@@ -134,6 +134,12 @@ cd /workspaces/JIM
 # Run with a specific template size (Nano, Micro, Small, Medium, Large, XLarge, XXLarge)
 ./test/integration/Run-IntegrationTests.ps1 -Template Small
 
+# Run against OpenLDAP instead of Samba AD
+./test/integration/Run-IntegrationTests.ps1 -Scenario All -Template Small -DirectoryType OpenLDAP
+
+# Run against BOTH directory types (full cross-directory regression)
+./test/integration/Run-IntegrationTests.ps1 -Scenario All -Template Small -DirectoryType All
+
 # Run only a specific test step (Joiner, Mover, Leaver, Reconnection, etc.)
 ./test/integration/Run-IntegrationTests.ps1 -Step Joiner
 

@@ -13,7 +13,7 @@ LDAP export fails during the leaver scenario with:
 ```
 System.DirectoryServices.Protocols.DirectoryOperationException:
 The distinguished name contains invalid syntax.
-Empty RDN value on OU=,OU=Users,OU=Corp,DC=subatomic,DC=local not permitted!
+Empty RDN value on OU=,OU=Users,OU=Corp,DC=panoply,DC=local not permitted!
 ```
 
 The export is an **Update** operation (not a Delete), and it attempts a ModifyDN (rename/move) with an invalid target DN containing an empty `OU=` component.
@@ -25,7 +25,7 @@ The export is an **Update** operation (not a Delete), and it attempts a ModifyDN
       547a7773-... (Update)
 [WRN] MarkExportFailed: Export 547a7773-... failed (attempt 1/5).
       Error: The distinguished name contains invalid syntax.
-      Empty RDN value on OU=,OU=Users,OU=Corp,DC=subatomic,DC=local not permitted!
+      Empty RDN value on OU=,OU=Users,OU=Corp,DC=panoply,DC=local not permitted!
 ```
 
 ## Root Cause
@@ -46,7 +46,7 @@ CSV Delta Sync
               --> MVO is still "in scope" (no scoping filter, type still matches)
               --> Creates UPDATE PendingExport with attribute changes
               --> DN expression evaluates with null department:
-                  "CN=User,OU=,OU=Users,OU=Corp,DC=subatomic,DC=local"
+                  "CN=User,OU=,OU=Users,OU=Corp,DC=panoply,DC=local"
                                  ^^ empty!
           --> Step 2: EvaluateOutOfScopeExportsAsync()
               --> MVO is still in scope (no scoping filter) --> no-op

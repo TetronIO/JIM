@@ -334,7 +334,7 @@ public partial class SyncRepository
 
         await using var writer = await npgsqlConn.BeginBinaryImportAsync(
             """
-            COPY "ConnectedSystemObjectChangeAttributes" ("Id", "ConnectedSystemChangeId", "AttributeId")
+            COPY "ConnectedSystemObjectChangeAttributes" ("Id", "ConnectedSystemChangeId", "AttributeId", "AttributeName", "AttributeType")
             FROM STDIN (FORMAT binary)
             """);
 
@@ -344,6 +344,8 @@ public partial class SyncRepository
             await writer.WriteAsync(attrChange.Id, NpgsqlTypes.NpgsqlDbType.Uuid);
             await writer.WriteAsync(changeId, NpgsqlTypes.NpgsqlDbType.Uuid);
             await writer.WriteAsync(attributeId, NpgsqlTypes.NpgsqlDbType.Integer);
+            await writer.WriteAsync(attrChange.AttributeName, NpgsqlTypes.NpgsqlDbType.Text);
+            await writer.WriteAsync((int)attrChange.AttributeType, NpgsqlTypes.NpgsqlDbType.Integer);
         }
 
         await writer.CompleteAsync();

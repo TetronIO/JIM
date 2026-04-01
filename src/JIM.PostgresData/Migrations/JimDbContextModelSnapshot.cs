@@ -203,6 +203,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("TotalUpdated")
                         .HasColumnType("integer");
 
+                    b.Property<string>("WarningMessage")
+                        .HasColumnType("text");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ConnectedSystemId");
@@ -557,7 +560,14 @@ namespace JIM.PostgresData.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<int>("AttributeId")
+                    b.Property<int?>("AttributeId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("AttributeName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("AttributeType")
                         .HasColumnType("integer");
 
                     b.Property<Guid>("MetaverseObjectChangeId")
@@ -2332,7 +2342,14 @@ namespace JIM.PostgresData.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<int>("AttributeId")
+                    b.Property<int?>("AttributeId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("AttributeName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("AttributeType")
                         .HasColumnType("integer");
 
                     b.Property<Guid>("ConnectedSystemChangeId")
@@ -3328,8 +3345,7 @@ namespace JIM.PostgresData.Migrations
                     b.HasOne("JIM.Models.Core.MetaverseAttribute", "Attribute")
                         .WithMany()
                         .HasForeignKey("AttributeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("JIM.Models.Core.MetaverseObjectChange", "MetaverseObjectChange")
                         .WithMany("AttributeChanges")
@@ -3837,8 +3853,7 @@ namespace JIM.PostgresData.Migrations
                     b.HasOne("JIM.Models.Staging.ConnectedSystemObjectTypeAttribute", "Attribute")
                         .WithMany()
                         .HasForeignKey("AttributeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("JIM.Models.Staging.ConnectedSystemObjectChange", "ConnectedSystemChange")
                         .WithMany("AttributeChanges")

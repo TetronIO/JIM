@@ -73,7 +73,7 @@ else
     done
 
     print_success ".env created from .env.example"
-    print_warning "Remember to update SSO settings for real authentication!"
+    print_success "SSO pre-configured for bundled Keycloak (admin/admin, user/user)"
 fi
 
 # 4. Auto-tune PostgreSQL for devcontainer specs
@@ -88,7 +88,7 @@ else
     print_warning "postgres-tune.sh not found - skipping auto-tuning"
 fi
 
-# 5. Install PowerShell Pester module for testing
+# 5. Install PowerShell Pester module for testing (socat is in the Dockerfile)
 print_step "Installing PowerShell Pester module..."
 if pwsh -NoProfile -Command 'Set-PSRepository PSGallery -InstallationPolicy Trusted; Install-Module -Name Pester -MinimumVersion 5.0 -Force -Scope CurrentUser' 2>/dev/null; then
     print_success "Pester module installed"
@@ -213,6 +213,7 @@ echo "  jim-db             - Start PostgreSQL"
 echo ""
 echo "Available Services:"
 echo "  PostgreSQL:        localhost:5432"
+echo "  Keycloak IdP:      http://localhost:8181  (admin / admin)"
 echo ""
 echo "  When running locally (F5):"
 echo "    JIM Web:         https://localhost:7000"
@@ -227,13 +228,13 @@ echo ""
 echo "🚀 To start developing (choose one):"
 echo ""
 echo "  Option 1 - Local Debug (Recommended):"
-echo "    1. Press F5 in VS Code"
-echo "    2. Select 'JIM Full Stack' or 'JIM Web Stack'"
-echo "    3. Set breakpoints and debug"
+echo "    1. Run: jim-db && jim-keycloak"
+echo "    2. Press F5 in VS Code"
+echo "    3. Sign in with: admin / admin"
 echo ""
 echo "  Option 2 - Docker Stack:"
-echo "    1. Review .env file and update SSO settings"
-echo "    2. Run: jim-stack"
-echo "    3. Open: http://localhost:5200"
+echo "    1. Run: jim-stack"
+echo "    2. Open: http://localhost:5200"
+echo "    3. Sign in with: admin / admin"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

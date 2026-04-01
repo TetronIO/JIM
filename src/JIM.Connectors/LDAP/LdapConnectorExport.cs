@@ -17,6 +17,8 @@ internal class LdapConnectorExport
     private readonly ILogger _logger;
     private readonly int _exportConcurrency;
     private readonly int _modifyBatchSize;
+    private readonly LdapDirectoryType _directoryType;
+    private readonly string _placeholderMemberDn;
 
     // Setting names
     private const string SettingDeleteBehaviour = "Delete Behaviour";
@@ -81,13 +83,17 @@ internal class LdapConnectorExport
         IList<ConnectedSystemSettingValue> settings,
         ILogger logger,
         int exportConcurrency = LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY,
-        int modifyBatchSize = LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE)
+        int modifyBatchSize = LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE,
+        LdapDirectoryType directoryType = LdapDirectoryType.ActiveDirectory,
+        string? placeholderMemberDn = null)
     {
         _executor = executor;
         _settings = settings;
         _logger = logger;
+        _directoryType = directoryType;
         _exportConcurrency = Math.Clamp(exportConcurrency, 1, LdapConnectorConstants.MAX_EXPORT_CONCURRENCY);
         _modifyBatchSize = Math.Clamp(modifyBatchSize, LdapConnectorConstants.MIN_MODIFY_BATCH_SIZE, LdapConnectorConstants.MAX_MODIFY_BATCH_SIZE);
+        _placeholderMemberDn = placeholderMemberDn ?? LdapConnectorConstants.DEFAULT_GROUP_PLACEHOLDER_MEMBER_DN;
 
         if (exportConcurrency > LdapConnectorConstants.MAX_EXPORT_CONCURRENCY)
         {
@@ -196,12 +202,22 @@ internal class LdapConnectorExport
             EnsureParentContainersExist(dn);
         }
 
+        // Track whether we injected a placeholder so we can provide a specific error if it's rejected
+        var hasPlaceholder = RequiresPlaceholderMember(pendingExport);
+
         var (addRequest, overflowModifyRequests) = BuildAddRequestWithOverflow(pendingExport, dn);
 
-        var response = (AddResponse)_executor.SendRequest(addRequest);
-        if (response.ResultCode != ResultCode.Success)
+        try
         {
-            ThrowAddFailure(addRequest, dn, response);
+            var response = (AddResponse)_executor.SendRequest(addRequest);
+            if (response.ResultCode != ResultCode.Success)
+            {
+                ThrowAddFailure(addRequest, dn, response);
+            }
+        }
+        catch (DirectoryOperationException ex) when (hasPlaceholder && IsPlaceholderConstraintViolation(ex))
+        {
+            return HandlePlaceholderRejection(dn, ex);
         }
 
         // Send any overflow ModifyRequests for multi-valued attributes that exceeded the batch size
@@ -215,37 +231,40 @@ internal class LdapConnectorExport
 
         _logger.Debug("LdapConnectorExport.ProcessCreate: Successfully created object at '{Dn}'", dn);
 
-        // After successful create, fetch the system-assigned objectGUID
-        var objectGuid = FetchObjectGuid(dn);
-        if (objectGuid != null)
+        // After successful create, fetch the system-assigned external ID (objectGUID for AD, entryUUID for OpenLDAP)
+        var rootDse = new LdapConnectorRootDse { DirectoryType = _directoryType };
+        var externalId = FetchExternalId(dn, rootDse);
+        if (externalId != null)
         {
-            _logger.Debug("LdapConnectorExport.ProcessCreate: Retrieved objectGUID {ObjectGuid} for '{Dn}'", objectGuid, dn);
-            return ConnectedSystemExportResult.Succeeded(objectGuid, dn);
+            _logger.Debug("LdapConnectorExport.ProcessCreate: Retrieved external ID {ExternalId} for '{Dn}'", externalId, dn);
+            return ConnectedSystemExportResult.Succeeded(externalId, dn);
         }
 
-        // objectGUID not available, return success without external ID
+        // External ID not available, return success without it
         return ConnectedSystemExportResult.Succeeded(null, dn);
     }
 
     /// <summary>
-    /// Fetches the objectGUID for a newly created object.
+    /// Fetches the external ID attribute for a newly created object.
+    /// For AD this is objectGUID (binary GUID); for OpenLDAP this is entryUUID (string UUID).
     /// </summary>
-    private string? FetchObjectGuid(string dn)
+    private string? FetchExternalId(string dn, LdapConnectorRootDse rootDse)
     {
         try
         {
+            var externalIdAttr = rootDse.ExternalIdAttributeName;
             var searchRequest = new SearchRequest(
                 dn,
                 "(objectClass=*)",
                 SearchScope.Base,
-                "objectGUID");
+                externalIdAttr);
 
             var searchResponse = (SearchResponse)_executor.SendRequest(searchRequest);
-            return ParseObjectGuidFromResponse(searchResponse, dn);
+            return ParseExternalIdFromResponse(searchResponse, dn, rootDse);
         }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "LdapConnectorExport.FetchObjectGuid: Error fetching objectGUID for '{Dn}'", dn);
+            _logger.Warning(ex, "LdapConnectorExport.FetchExternalId: Error fetching external ID for '{Dn}'", dn);
             return null;
         }
     }
@@ -278,6 +297,9 @@ internal class LdapConnectorExport
             wasRenamed = true;
         }
 
+        // Track whether placeholder modifications were injected for error handling
+        var hasPlaceholderModifications = RequiresPlaceholderMember(pendingExport);
+
         var modifyRequests = BuildModifyRequests(pendingExport, workingDn);
 
         if (modifyRequests.Count == 0)
@@ -297,8 +319,15 @@ internal class LdapConnectorExport
                     i + 1, modifyRequests.Count, request.Modifications.Count, workingDn);
             }
 
-            var response = (ModifyResponse)_executor.SendRequest(request);
-            lastResult = HandleModifyResponse(response, request, workingDn, wasRenamed);
+            try
+            {
+                var response = (ModifyResponse)_executor.SendRequest(request);
+                lastResult = HandleModifyResponse(response, request, workingDn, wasRenamed);
+            }
+            catch (DirectoryOperationException ex) when (hasPlaceholderModifications && IsPlaceholderConstraintViolation(ex))
+            {
+                return HandlePlaceholderRejection(workingDn, ex);
+            }
         }
 
         return lastResult;
@@ -652,32 +681,34 @@ internal class LdapConnectorExport
 
         _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Successfully created object at '{Dn}'", dn);
 
-        var objectGuid = await FetchObjectGuidAsync(dn);
-        if (objectGuid != null)
+        var rootDse = new LdapConnectorRootDse { DirectoryType = _directoryType };
+        var externalId = await FetchExternalIdAsync(dn, rootDse);
+        if (externalId != null)
         {
-            _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Retrieved objectGUID {ObjectGuid} for '{Dn}'", objectGuid, dn);
-            return ConnectedSystemExportResult.Succeeded(objectGuid, dn);
+            _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Retrieved external ID {ExternalId} for '{Dn}'", externalId, dn);
+            return ConnectedSystemExportResult.Succeeded(externalId, dn);
         }
 
         return ConnectedSystemExportResult.Succeeded(null, dn);
     }
 
-    private async Task<string?> FetchObjectGuidAsync(string dn)
+    private async Task<string?> FetchExternalIdAsync(string dn, LdapConnectorRootDse rootDse)
     {
         try
         {
+            var externalIdAttr = rootDse.ExternalIdAttributeName;
             var searchRequest = new SearchRequest(
                 dn,
                 "(objectClass=*)",
                 SearchScope.Base,
-                "objectGUID");
+                externalIdAttr);
 
             var searchResponse = (SearchResponse)await _executor.SendRequestAsync(searchRequest);
-            return ParseObjectGuidFromResponse(searchResponse, dn);
+            return ParseExternalIdFromResponse(searchResponse, dn, rootDse);
         }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "LdapConnectorExport.FetchObjectGuidAsync: Error fetching objectGUID for '{Dn}'", dn);
+            _logger.Warning(ex, "LdapConnectorExport.FetchExternalIdAsync: Error fetching external ID for '{Dn}'", dn);
             return null;
         }
     }
@@ -994,6 +1025,21 @@ internal class LdapConnectorExport
             }
         }
 
+        // Placeholder member injection for groupOfNames/groupOfUniqueNames on non-AD directories.
+        // If this is a MUST-member object class and no member values are present, inject the placeholder.
+        if (RequiresPlaceholderMember(pendingExport) && !string.IsNullOrEmpty(objectClass))
+        {
+            var memberAttrName = GetMemberAttributeName(objectClass);
+            if (!attributeGroups.ContainsKey(memberAttrName) || attributeGroups[memberAttrName].Count == 0)
+            {
+                _logger.Information(
+                    "LdapConnectorExport.BuildAddRequestWithOverflow: Object class '{ObjectClass}' requires at least one member. " +
+                    "Injecting placeholder member '{Placeholder}' for '{Dn}'.",
+                    objectClass, _placeholderMemberDn, dn);
+                attributeGroups[memberAttrName] = new List<object> { _placeholderMemberDn };
+            }
+        }
+
         var overflowModifyRequests = new List<ModifyRequest>();
 
         foreach (var (attrName, values) in attributeGroups)
@@ -1071,23 +1117,40 @@ internal class LdapConnectorExport
     /// <summary>
     /// Parses the objectGUID from a SearchResponse.
     /// </summary>
-    private string? ParseObjectGuidFromResponse(SearchResponse searchResponse, string dn)
+    private string? ParseExternalIdFromResponse(SearchResponse searchResponse, string dn, LdapConnectorRootDse rootDse)
     {
         if (searchResponse.ResultCode != ResultCode.Success || searchResponse.Entries.Count == 0)
         {
-            _logger.Warning("LdapConnectorExport.ParseObjectGuidFromResponse: Failed to fetch objectGUID for '{Dn}'", dn);
+            _logger.Warning("LdapConnectorExport.ParseExternalIdFromResponse: Failed to fetch external ID for '{Dn}'", dn);
             return null;
         }
 
         var entry = searchResponse.Entries[0];
-        if (entry.Attributes.Contains("objectGUID"))
+        var externalIdAttr = rootDse.ExternalIdAttributeName;
+
+        if (!entry.Attributes.Contains(externalIdAttr))
+            return null;
+
+        switch (rootDse.DirectoryType)
         {
-            var guidBytes = entry.Attributes["objectGUID"][0] as byte[];
-            if (guidBytes != null && guidBytes.Length == 16)
+            case LdapDirectoryType.ActiveDirectory:
+            case LdapDirectoryType.SambaAD:
             {
-                // AD objectGUID uses Microsoft GUID byte order (little-endian first 3 components)
-                var guid = IdentifierParser.FromMicrosoftBytes(guidBytes);
-                return guid.ToString();
+                // AD/Samba AD objectGUID is a 16-byte binary value in Microsoft GUID byte order (little-endian first 3 components)
+                var guidBytes = entry.Attributes[externalIdAttr][0] as byte[];
+                if (guidBytes is { Length: 16 })
+                {
+                    var guid = IdentifierParser.FromMicrosoftBytes(guidBytes);
+                    return guid.ToString();
+                }
+                break;
+            }
+            case LdapDirectoryType.OpenLDAP:
+            case LdapDirectoryType.Generic:
+            {
+                // OpenLDAP entryUUID is a string-formatted UUID (RFC 4530)
+                var uuidString = entry.Attributes[externalIdAttr][0] as string;
+                return uuidString?.Trim();
             }
         }
 
@@ -1104,12 +1167,18 @@ internal class LdapConnectorExport
     {
         // Step 1: Collect all non-RDN attribute changes, grouped by (attribute name, operation)
         // This consolidates e.g. 200 individual "member Add" changes into a single modification with 200 values
-        var consolidatedModifications = ConsolidateModifications(pendingExport);
+        var consolidatedModifications = ConsolidateModifications(pendingExport, workingDn);
 
         if (consolidatedModifications.Count == 0)
             return [];
 
-        // Step 2: Split consolidated modifications into chunks if any exceed the batch size
+        // Step 2: Placeholder member handling for groupOfNames/groupOfUniqueNames on non-AD directories.
+        if (RequiresPlaceholderMember(pendingExport))
+        {
+            InjectPlaceholderModificationsIfNeeded(pendingExport, consolidatedModifications);
+        }
+
+        // Step 3: Split consolidated modifications into chunks if any exceed the batch size
         // Single-valued attributes and small multi-valued changes go into the first request.
         // Large multi-valued changes (e.g., 200 member adds) are split across multiple requests.
         return ChunkModifyRequests(workingDn, consolidatedModifications);
@@ -1121,7 +1190,7 @@ internal class LdapConnectorExport
     /// DirectoryAttributeModification containing all values. This is more efficient and correct
     /// than sending separate modifications for each value.
     /// </summary>
-    internal static List<ConsolidatedModification> ConsolidateModifications(PendingExport pendingExport)
+    internal static List<ConsolidatedModification> ConsolidateModifications(PendingExport pendingExport, string? workingDn = null)
     {
         // Group changes by (attribute name, operation type), preserving the original attribute changes
         // for protected attribute handling
@@ -1135,9 +1204,10 @@ internal class LdapConnectorExport
 
             var attrName = attrChange.Attribute.Name;
 
-            // Skip RDN (Relative Distinguished Name) attributes - they cannot be modified via LDAP ModifyRequest.
+            // Skip RDN (Relative Distinguished Name) attributes — they cannot be modified via LDAP ModifyRequest.
             // These require a ModifyDNRequest (rename operation) instead, which is handled separately.
-            if (IsRdnAttribute(attrName))
+            // The actual RDN attribute is determined from the object's DN (e.g., CN for AD, uid for OpenLDAP).
+            if (IsRdnAttribute(attrName, workingDn))
                 continue;
 
             var operation = attrChange.ChangeType switch
@@ -1324,14 +1394,34 @@ internal class LdapConnectorExport
 
     /// <summary>
     /// Checks if an attribute name is an RDN (Relative Distinguished Name) attribute.
-    /// RDN attributes cannot be modified via LDAP ModifyRequest - they require ModifyDNRequest.
+    /// RDN attributes cannot be modified via LDAP ModifyRequest — they require ModifyDNRequest.
+    /// The actual RDN attribute varies by directory and object type (e.g., CN for AD users, uid for OpenLDAP).
+    /// We determine the RDN by parsing it from the object's current DN.
     /// </summary>
-    private static bool IsRdnAttribute(string attrName)
+    /// <param name="attrName">The attribute name to check.</param>
+    /// <param name="dn">The current DN of the object, used to determine the actual RDN attribute.</param>
+    private static bool IsRdnAttribute(string attrName, string? dn = null)
     {
-        return attrName.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase) ||
-               attrName.Equals("cn", StringComparison.OrdinalIgnoreCase) ||
+        // distinguishedName is always skipped — it's the full DN, not a modifiable attribute
+        if (attrName.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // If we have the DN, determine the actual RDN attribute by parsing the first component
+        if (!string.IsNullOrEmpty(dn))
+        {
+            var equalsIndex = dn.IndexOf('=');
+            if (equalsIndex > 0)
+            {
+                var rdnAttr = dn[..equalsIndex].Trim();
+                return attrName.Equals(rdnAttr, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        // Fallback: common RDN attributes (when DN is not available)
+        return attrName.Equals("cn", StringComparison.OrdinalIgnoreCase) ||
                attrName.Equals("ou", StringComparison.OrdinalIgnoreCase) ||
-               attrName.Equals("dc", StringComparison.OrdinalIgnoreCase);
+               attrName.Equals("dc", StringComparison.OrdinalIgnoreCase) ||
+               attrName.Equals("uid", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -1723,6 +1813,195 @@ internal class LdapConnectorExport
         return firstAttr?.Attribute?.ConnectedSystemObjectType?.Name;
     }
 
+    /// <summary>
+    /// Checks whether a DirectoryOperationException represents a constraint violation that could be
+    /// caused by the directory rejecting the placeholder member DN (e.g. referential integrity enabled).
+    /// </summary>
+    private static bool IsPlaceholderConstraintViolation(DirectoryOperationException ex)
+    {
+        var response = ex.Response;
+        if (response == null)
+            return false;
+
+        return response.ResultCode is ResultCode.ConstraintViolation or ResultCode.NoSuchObject
+                                      or ResultCode.UnwillingToPerform;
+    }
+
+    /// <summary>
+    /// Returns a structured export error when the placeholder member DN is rejected by the directory.
+    /// This typically means the directory has referential integrity enabled and the placeholder DN
+    /// does not reference an existing entry.
+    /// </summary>
+    private ConnectedSystemExportResult HandlePlaceholderRejection(string dn, DirectoryOperationException ex)
+    {
+        _logger.Warning(ex,
+            "LdapConnectorExport: Placeholder member '{Placeholder}' was rejected by the directory for '{Dn}'. " +
+            "The directory may have referential integrity enabled. " +
+            "Update the '{Setting}' connector setting to point to an existing entry.",
+            _placeholderMemberDn, dn, LdapConnectorConstants.SETTING_GROUP_PLACEHOLDER_MEMBER_DN);
+
+        return ConnectedSystemExportResult.Failed(
+            $"Failed to add placeholder member '{_placeholderMemberDn}' to group '{dn}' — " +
+            $"the directory may have referential integrity enabled. " +
+            $"Update the '{LdapConnectorConstants.SETTING_GROUP_PLACEHOLDER_MEMBER_DN}' connector setting to point to an existing entry in the directory.",
+            ConnectedSystemExportErrorType.PlaceholderMemberConstraintViolation);
+    }
+
+    /// <summary>
+    /// Inspects the consolidated modifications for a groupOfNames/groupOfUniqueNames export and injects
+    /// placeholder member add/remove operations as needed:
+    /// - If member removals would leave the group empty, adds the placeholder DN (to satisfy the MUST constraint).
+    /// - If members are being added to a group that currently only has the placeholder, removes the placeholder.
+    /// </summary>
+    private void InjectPlaceholderModificationsIfNeeded(
+        PendingExport pendingExport,
+        List<ConsolidatedModification> consolidatedModifications)
+    {
+        var objectClass = GetObjectClass(pendingExport);
+        if (string.IsNullOrEmpty(objectClass))
+            return;
+
+        var memberAttrName = GetMemberAttributeName(objectClass);
+
+        // Count current members on the CSO (the directory's current state as JIM knows it)
+        var currentMemberCount = GetCurrentMemberCount(pendingExport, memberAttrName);
+
+        // Count how many members are being added and removed in this export
+        var addCount = 0;
+        var removeCount = 0;
+        foreach (var mod in consolidatedModifications)
+        {
+            if (!mod.AttributeName.Equals(memberAttrName, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (mod.Operation == DirectoryAttributeOperation.Add)
+                addCount += mod.AttributeChanges.Count;
+            else if (mod.Operation == DirectoryAttributeOperation.Delete)
+                removeCount += mod.AttributeChanges.Count;
+        }
+
+        // Check if the group currently only has the placeholder member
+        var hasOnlyPlaceholder = currentMemberCount == 1 && GroupHasOnlyPlaceholderMember(pendingExport, memberAttrName);
+
+        // Scenario 1: Removing members would leave the group empty — inject placeholder
+        if (removeCount > 0 && !hasOnlyPlaceholder)
+        {
+            var effectiveMemberCount = currentMemberCount - removeCount + addCount;
+            if (effectiveMemberCount <= 0)
+            {
+                _logger.Information(
+                    "LdapConnectorExport.InjectPlaceholderModificationsIfNeeded: Removing all members from '{ObjectClass}' group. " +
+                    "Injecting placeholder member '{Placeholder}' to satisfy MUST constraint.",
+                    objectClass, _placeholderMemberDn);
+
+                var placeholderAttr = new ConnectedSystemObjectTypeAttribute
+                {
+                    Name = memberAttrName,
+                    ConnectedSystemObjectType = pendingExport.ConnectedSystemObject?.Type
+                };
+
+                consolidatedModifications.Add(new ConsolidatedModification
+                {
+                    AttributeName = memberAttrName,
+                    Operation = DirectoryAttributeOperation.Add,
+                    AttributeChanges = { new PendingExportAttributeValueChange
+                    {
+                        Attribute = placeholderAttr,
+                        ChangeType = PendingExportAttributeChangeType.Add,
+                        StringValue = _placeholderMemberDn
+                    }}
+                });
+            }
+        }
+
+        // Scenario 2: Adding members to a placeholder-only group — remove the placeholder
+        if (addCount > 0 && hasOnlyPlaceholder)
+        {
+            _logger.Information(
+                "LdapConnectorExport.InjectPlaceholderModificationsIfNeeded: Adding real members to placeholder-only '{ObjectClass}' group. " +
+                "Removing placeholder member '{Placeholder}'.",
+                objectClass, _placeholderMemberDn);
+
+            var placeholderAttr = new ConnectedSystemObjectTypeAttribute
+            {
+                Name = memberAttrName,
+                ConnectedSystemObjectType = pendingExport.ConnectedSystemObject?.Type
+            };
+
+            consolidatedModifications.Add(new ConsolidatedModification
+            {
+                AttributeName = memberAttrName,
+                Operation = DirectoryAttributeOperation.Delete,
+                AttributeChanges = { new PendingExportAttributeValueChange
+                {
+                    Attribute = placeholderAttr,
+                    ChangeType = PendingExportAttributeChangeType.Remove,
+                    StringValue = _placeholderMemberDn
+                }}
+            });
+        }
+    }
+
+    /// <summary>
+    /// Gets the number of current member values on the CSO for the specified member attribute.
+    /// </summary>
+    private static int GetCurrentMemberCount(PendingExport pendingExport, string memberAttrName)
+    {
+        var cso = pendingExport.ConnectedSystemObject;
+        if (cso?.AttributeValues == null)
+            return 0;
+
+        return cso.AttributeValues.Count(av =>
+            av.Attribute?.Name.Equals(memberAttrName, StringComparison.OrdinalIgnoreCase) == true);
+    }
+
+    /// <summary>
+    /// Checks whether the group's only current member is the placeholder DN.
+    /// </summary>
+    private bool GroupHasOnlyPlaceholderMember(PendingExport pendingExport, string memberAttrName)
+    {
+        var cso = pendingExport.ConnectedSystemObject;
+        if (cso?.AttributeValues == null)
+            return false;
+
+        var memberValues = cso.AttributeValues
+            .Where(av => av.Attribute?.Name.Equals(memberAttrName, StringComparison.OrdinalIgnoreCase) == true)
+            .ToList();
+
+        if (memberValues.Count != 1)
+            return false;
+
+        var memberDn = memberValues[0].UnresolvedReferenceValue ?? memberValues[0].StringValue;
+        return _placeholderMemberDn.Equals(memberDn, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Determines whether placeholder member handling is required for the given pending export.
+    /// Placeholder handling is needed when:
+    /// 1. The directory is not Active Directory or Samba AD (which use 'group' class with no MUST member constraint)
+    /// 2. The object class is one that requires at least one member value (e.g. groupOfNames, groupOfUniqueNames)
+    /// </summary>
+    internal bool RequiresPlaceholderMember(PendingExport pendingExport)
+    {
+        // AD and Samba AD use the 'group' class which allows empty groups — no placeholder needed
+        if (_directoryType is LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD)
+            return false;
+
+        var objectClass = GetObjectClass(pendingExport);
+        return objectClass != null && LdapConnectorConstants.MUST_MEMBER_OBJECT_CLASSES.Contains(objectClass);
+    }
+
+    /// <summary>
+    /// Gets the member attribute name for the object class. Returns "member" for groupOfNames
+    /// and "uniqueMember" for groupOfUniqueNames.
+    /// </summary>
+    internal static string GetMemberAttributeName(string objectClass)
+    {
+        return objectClass.Equals("groupOfUniqueNames", StringComparison.OrdinalIgnoreCase)
+            ? "uniqueMember"
+            : "member";
+    }
+
     private string? GetSettingValue(string settingName)
     {
         return _settings.SingleOrDefault(s => s.Setting.Name == settingName)?.StringValue;
@@ -1735,8 +2014,8 @@ internal class LdapConnectorExport
 
     /// <summary>
     /// Builds a list of container DNs from root to the specified container.
-    /// For example, for "OU=Engineering,OU=Users,DC=subatomic,DC=local", returns:
-    /// ["OU=Users,DC=subatomic,DC=local", "OU=Engineering,OU=Users,DC=subatomic,DC=local"]
+    /// For example, for "OU=Engineering,OU=Users,DC=panoply,DC=local", returns:
+    /// ["OU=Users,DC=panoply,DC=local", "OU=Engineering,OU=Users,DC=panoply,DC=local"]
     /// </summary>
     internal static List<string> BuildContainerChain(string containerDn)
     {

@@ -1,5 +1,7 @@
 # JIM C4 Architecture Diagrams
 
+> **Last Updated:** 2026-03-26 (JIM v0.7.1)
+
 This folder contains the C4 model architecture diagrams for JIM, defined using [Structurizr DSL](https://docs.structurizr.com/dsl).
 
 ## Diagrams
@@ -111,18 +113,20 @@ From Structurizr Lite, you can export diagrams as:
 
 ## Viewing Interactive Diagrams
 
-### Using Structurizr Lite (Local Docker)
+### Using Structurizr Local (Docker)
 
-1. Start Structurizr Lite from the repository root:
+> **Note:** `structurizr/lite` is deprecated and no longer starts. Use `structurizr/structurizr` with the `local` command instead.
+
+1. Start Structurizr Local from the repository root:
 
    ```powershell
    # PowerShell (Windows/Linux/macOS)
-   docker run -it --rm -p 8085:8080 -v ${PWD}/docs/diagrams/structurizr:/usr/local/structurizr structurizr/lite
+   docker run -it --rm -p 8085:8080 -v ${PWD}/docs/diagrams/structurizr:/usr/local/structurizr structurizr/structurizr local
    ```
 
    ```bash
    # Bash
-   docker run -it --rm -p 8085:8080 -v $(pwd)/docs/diagrams/structurizr:/usr/local/structurizr structurizr/lite
+   docker run -it --rm -p 8085:8080 -v $(pwd)/docs/diagrams/structurizr:/usr/local/structurizr structurizr/structurizr local
    ```
 
 2. Open http://localhost:8085 in your browser
@@ -147,8 +151,8 @@ The workspace contains C4 diagrams at three levels:
 
 ### Level 3: Component
 - **WebAppComponents** - Blazor Pages, API Controllers, Authentication Middleware
-- **AppLayerComponents** - JimApplication Facade and domain services
-- **WorkerComponents** - Worker Host and task processors
+- **AppLayerComponents** - JimApplication Facade, SyncEngine (pure domain logic), SyncServer (worker orchestration), domain services, IJimRepository, ISyncRepository
+- **WorkerComponents** - Worker Host and task processors (using ISyncEngine, ISyncServer, ISyncRepository)
 - **ConnectorComponents** - LDAP and File connector implementations
 - **SchedulerComponents** - Scheduler Host
 
