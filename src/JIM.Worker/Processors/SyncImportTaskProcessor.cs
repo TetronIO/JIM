@@ -50,6 +50,15 @@ public class SyncImportTaskProcessor
     private bool _csIsEmpty;
 
     /// <summary>
+    /// Pre-fetched external ID → CSO GUID lookup dictionary. Loaded once at import start (when the CS
+    /// is not empty) to replace N per-object DB queries with O(1) dictionary lookups.
+    /// Key format: "cso:{connectedSystemId}:{attributeId}:{lowerExternalIdValue}"
+    /// Updated when new CSOs are created mid-import to maintain consistency within the batch.
+    /// This is the "lookup" phase of the Lookup/Hydrate seam (#440).
+    /// </summary>
+    private Dictionary<string, Guid>? _csoExternalIdLookup;
+
+    /// <summary>
     /// Controls how much detail is recorded for sync outcome graphs on each RPEI.
     /// Loaded once at import start from service settings.
     /// </summary>
@@ -108,7 +117,22 @@ public class SyncImportTaskProcessor
         var csoCountAtStart = await _syncRepo.GetConnectedSystemObjectCountAsync(_connectedSystem.Id);
         _csIsEmpty = csoCountAtStart == 0;
         if (_csIsEmpty)
+        {
             Log.Information("PerformFullImportAsync: Connected system {ConnectedSystemId} has no existing CSOs. Skipping CSO lookups for this import.", _connectedSystem.Id);
+        }
+        else
+        {
+            // Pre-fetch all CSO external ID mappings into a lightweight dictionary for O(1) lookups.
+            // This replaces N per-object DB queries with a single bulk query + dictionary lookups.
+            // The dictionary is ~200 bytes per CSO, so 100k CSOs ≈ 20 MB — acceptable at all scales.
+            // See #440 for scaling analysis.
+            using (Diagnostics.Sync.StartSpan("PreFetchCsoExternalIdLookup").SetTag("csoCount", csoCountAtStart))
+            {
+                _csoExternalIdLookup = await _syncRepo.GetAllCsoExternalIdMappingsAsync(_connectedSystem.Id);
+            }
+            Log.Information("PerformFullImportAsync: Pre-fetched {Count} CSO external ID mappings for connected system {ConnectedSystemId}.",
+                _csoExternalIdLookup.Count, _connectedSystem.Id);
+        }
 
         // Load sync outcome tracking level once at start of import
         _syncOutcomeTrackingLevel = await _syncServer.GetSyncOutcomeTrackingLevelAsync();
@@ -932,8 +956,9 @@ public class SyncImportTaskProcessor
             $"Processing imported objects (0 / {totalObjectsInBatch:N0})");
         const int progressUpdateInterval = 100;
 
-        // decision: do we want to load the whole connector space into memory to maximise performance? for now, let's keep it db-centric.
-        // todo: experiment with using parallel foreach to see if we can speed up processing
+        // CSO matching uses a pre-fetched external ID dictionary (O(1) lookup) + per-object hydration by ID.
+        // See #440 for the Lookup/Hydrate design and scaling analysis.
+        // Future: page-level batch hydration (#440 Option B) and persistent caching (#436).
         var importIndex = -1;
         foreach (var importObject in connectedSystemImportResult.ImportObjects)
         {
@@ -1365,17 +1390,17 @@ public class SyncImportTaskProcessor
             connectedSystemImportObject.Attributes.Remove(nullAttribute);
     }
 
-    private async Task<ConnectedSystemObject?> TryAndFindMatchingConnectedSystemObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType)
+    /// <summary>
+    /// Lookup phase: Uses the pre-fetched dictionary to check whether a CSO with this external ID
+    /// already exists, returning just the CSO GUID. O(1) dictionary lookup, no DB query.
+    /// Returns null if no match found (new object) or if this is a first-ever import (_csIsEmpty).
+    /// </summary>
+    private Guid? LookupCsoByExternalId(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType)
     {
-        // If the connected system has no existing CSOs (first-ever import), every object is new.
-        // Skip the DB/cache lookup entirely — there's nothing to match against.
-        if (_csIsEmpty)
+        if (_csIsEmpty || _csoExternalIdLookup == null)
             return null;
 
-        // todo: consider support for multiple external id attributes, i.e. compound primary keys
         var externalIdAttribute = connectedSystemObjectType.Attributes.First(a => a.IsExternalId);
-
-        // find the matching import object attribute
         var importObjectAttribute = connectedSystemImportObject.Attributes.SingleOrDefault(csioa => csioa.Name.Equals(externalIdAttribute.Name, StringComparison.OrdinalIgnoreCase)) ??
                                     throw new MissingExternalIdAttributeException($"The imported object is missing the External Id attribute '{externalIdAttribute.Name}'. It cannot be processed as we will not be able to determine if it's an existing object or not.");
 
@@ -1385,34 +1410,53 @@ public class SyncImportTaskProcessor
             importObjectAttribute.GuidValues.Count > 1)
             throw new ExternalIdAttributeNotSingleValuedException($"External Id attribute ({externalIdAttribute.Name}) on the imported object has multiple values! The External Id attribute must be single-valued.");
 
-        // First, try to find CSO by primary external ID
-        ConnectedSystemObject? cso = externalIdAttribute.Type switch
+        // Build the cache key in the same format as GetAllCsoExternalIdMappingsAsync
+        var externalIdValue = externalIdAttribute.Type switch
         {
             AttributeDataType.Text when importObjectAttribute.StringValues.Count == 0 =>
                 throw new ExternalIdAttributeValueMissingException($"External Id string attribute ({externalIdAttribute.Name}) on the imported object has no value."),
-            AttributeDataType.Text =>
-                await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.StringValues[0]),
+            AttributeDataType.Text => importObjectAttribute.StringValues[0].ToLowerInvariant(),
             AttributeDataType.Number when importObjectAttribute.IntValues.Count == 0 =>
                 throw new ExternalIdAttributeValueMissingException($"External Id number attribute({externalIdAttribute.Name}) on the imported object has no value."),
-            AttributeDataType.Number =>
-                await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.IntValues[0]),
+            AttributeDataType.Number => importObjectAttribute.IntValues[0].ToString(),
             AttributeDataType.LongNumber when importObjectAttribute.LongValues.Count == 0 =>
                 throw new ExternalIdAttributeValueMissingException($"External Id long number attribute({externalIdAttribute.Name}) on the imported object has no value."),
-            AttributeDataType.LongNumber =>
-                await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.LongValues[0]),
+            AttributeDataType.LongNumber => importObjectAttribute.LongValues[0].ToString(),
             AttributeDataType.Guid when importObjectAttribute.GuidValues.Count == 0 =>
                 throw new ExternalIdAttributeValueMissingException($"External Id guid attribute ({externalIdAttribute.Name}) on the imported object has no value."),
-            AttributeDataType.Guid =>
-                await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, importObjectAttribute.GuidValues[0]),
-            _ => throw new InvalidDataException($"TryAndFindMatchingConnectedSystemObjectAsync: Unsupported connected system object type External Id attribute type: {externalIdAttribute.Type}")
+            AttributeDataType.Guid => importObjectAttribute.GuidValues[0].ToString().ToLowerInvariant(),
+            _ => throw new InvalidDataException($"LookupCsoByExternalId: Unsupported connected system object type External Id attribute type: {externalIdAttribute.Type}")
         };
 
-        if (cso != null)
-            return cso;
+        var cacheKey = $"cso:{_connectedSystem.Id}:{externalIdAttribute.Id}:{externalIdValue}";
+        return _csoExternalIdLookup.TryGetValue(cacheKey, out var csoId) ? csoId : null;
+    }
 
-        // No match found by primary external ID. Check for PendingProvisioning CSOs by secondary external ID.
-        // This handles the case where a CSO was created during provisioning evaluation but the object
-        // hasn't been imported yet with its system-assigned external ID (e.g., LDAP objectGUID).
+    /// <summary>
+    /// Hydration phase: Loads a full CSO entity graph by ID with all includes needed for attribute
+    /// diffing during import processing. This is a single PK-based query with includes — much cheaper
+    /// than the previous attribute-value-based search query with LOWER() string comparison.
+    /// Falls back to secondary external ID lookup for PendingProvisioning CSOs not found in the dictionary.
+    /// </summary>
+    private async Task<ConnectedSystemObject?> HydrateCsoAsync(Guid? csoId, ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType)
+    {
+        // If lookup found a match, hydrate the full entity by ID
+        if (csoId.HasValue)
+        {
+            var csos = await _syncRepo.GetConnectedSystemObjectsByIdsAsync(_connectedSystem.Id, new[] { csoId.Value });
+            var cso = csos.FirstOrDefault();
+            if (cso != null)
+                return cso;
+
+            // Cache had the ID but the CSO no longer exists (deleted between pre-fetch and hydrate).
+            // Fall through to secondary external ID check.
+            Log.Warning("HydrateCsoAsync: Pre-fetch dictionary contained CSO {CsoId} but it was not found in the database. Possible concurrent deletion. Falling through to secondary lookup.",
+                csoId.Value);
+        }
+
+        // No match by primary external ID (or CSO was deleted). Check for PendingProvisioning CSOs
+        // by secondary external ID. This is a per-object query but PendingProvisioning CSOs are rare
+        // (only exist during the narrow window between provisioning evaluation and confirming import).
         var secondaryExternalIdAttribute = connectedSystemObjectType.Attributes.FirstOrDefault(a => a.IsSecondaryExternalId);
         if (secondaryExternalIdAttribute == null)
             return null;
@@ -1422,7 +1466,7 @@ public class SyncImportTaskProcessor
         if (secondaryIdImportAttr == null)
             return null;
 
-        cso = secondaryExternalIdAttribute.Type switch
+        var secondaryCso = secondaryExternalIdAttribute.Type switch
         {
             AttributeDataType.Text when secondaryIdImportAttr.StringValues.Count > 0 =>
                 await _syncRepo.GetConnectedSystemObjectBySecondaryExternalIdAsync(
@@ -1431,14 +1475,26 @@ public class SyncImportTaskProcessor
         };
 
         // Only return PendingProvisioning CSOs - if it's already Normal, the primary ID lookup should have found it
-        if (cso != null && cso.Status == ConnectedSystemObjectStatus.PendingProvisioning)
+        if (secondaryCso != null && secondaryCso.Status == ConnectedSystemObjectStatus.PendingProvisioning)
         {
-            Log.Information("TryAndFindMatchingConnectedSystemObjectAsync: Found PendingProvisioning CSO {CsoId} by secondary external ID '{SecondaryId}'. This confirms a provisioned object.",
-                cso.Id, secondaryIdImportAttr.StringValues[0]);
-            return cso;
+            Log.Information("HydrateCsoAsync: Found PendingProvisioning CSO {CsoId} by secondary external ID '{SecondaryId}'. This confirms a provisioned object.",
+                secondaryCso.Id, secondaryIdImportAttr.StringValues[0]);
+            return secondaryCso;
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Combined Lookup + Hydrate: finds a matching CSO for an imported object.
+    /// Phase 1 (Lookup): O(1) dictionary lookup using the pre-fetched external ID mappings.
+    /// Phase 2 (Hydrate): Loads the full CSO entity graph by ID for attribute diffing.
+    /// This replaces the previous per-object attribute-value-based search queries (#440).
+    /// </summary>
+    private async Task<ConnectedSystemObject?> TryAndFindMatchingConnectedSystemObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType)
+    {
+        var csoId = LookupCsoByExternalId(connectedSystemImportObject, connectedSystemObjectType);
+        return await HydrateCsoAsync(csoId, connectedSystemImportObject, connectedSystemObjectType);
     }
 
     private ConnectedSystemObject? CreateConnectedSystemObjectFromImportObject(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)

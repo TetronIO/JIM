@@ -101,6 +101,22 @@ public interface ISyncRepository
     Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(int connectedSystemId, string secondaryExternalIdValue);
 
     /// <summary>
+    /// Bulk-loads all CSO external ID mappings for a connected system into a lightweight dictionary.
+    /// Returns a dictionary mapping cache keys ("cso:{connectedSystemId}:{attributeId}:{lowerExternalIdValue}")
+    /// to CSO GUIDs. Used as the lookup phase of the import pipeline to answer "does this CSO exist?"
+    /// in O(1) without loading full entity graphs.
+    /// </summary>
+    Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Batch-loads full CSO entity graphs by their IDs in a single query.
+    /// Returns CSOs with Type, Attributes, AttributeValues, and ReferenceValue navigations loaded —
+    /// the same shape as GetConnectedSystemObjectByAttributeAsync but for multiple CSOs at once.
+    /// Used as the hydration phase of the import pipeline after the lookup phase identifies which CSOs exist.
+    /// </summary>
+    Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
+
+    /// <summary>
     /// Gets multiple CSOs by their external ID attribute values (batch lookup).
     /// Returns a dictionary keyed by the string representation of the attribute value.
     /// Used during import to batch-match incoming objects.

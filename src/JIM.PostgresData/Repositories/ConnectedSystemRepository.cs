@@ -1388,6 +1388,28 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return null;
     }
 
+    /// <inheritdoc />
+    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
+    {
+        var idList = csoIds.ToList();
+        if (idList.Count == 0)
+            return new List<ConnectedSystemObject>();
+
+        // Same Include chain as GetConnectedSystemObjectByAttributeAsync — callers need the full
+        // entity graph for attribute diffing during import processing.
+        return await Repository.Database.ConnectedSystemObjects
+            .AsSplitQuery()
+            .Include(cso => cso.Type)
+            .ThenInclude(t => t.Attributes)
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.ReferenceValue)
+            .ThenInclude(refCso => refCso!.Type)
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId && idList.Contains(cso.Id))
+            .ToListAsync();
+    }
+
     /// <summary>
     /// Gets a Connected System Object by its secondary external ID attribute value.
     /// Used to find PendingProvisioning CSOs during import reconciliation when the

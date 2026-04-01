@@ -258,6 +258,47 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(cso);
     }
 
+    public Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId)
+    {
+        var result = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        foreach (var cso in GetCsosForSystem(connectedSystemId))
+        {
+            // Try primary external ID first
+            var primaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
+            var primaryValue = GetExternalIdValueString(primaryAv);
+
+            if (primaryValue != null)
+            {
+                var cacheKey = $"cso:{connectedSystemId}:{cso.ExternalIdAttributeId}:{primaryValue}";
+                result.TryAdd(cacheKey, cso.Id);
+                continue;
+            }
+
+            // Fall back to secondary external ID (PendingProvisioning CSOs)
+            if (cso.SecondaryExternalIdAttributeId.HasValue)
+            {
+                var secondaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
+                var secondaryValue = GetExternalIdValueString(secondaryAv);
+
+                if (secondaryValue != null)
+                {
+                    var cacheKey = $"cso:{connectedSystemId}:{cso.SecondaryExternalIdAttributeId.Value}:{secondaryValue}";
+                    result.TryAdd(cacheKey, cso.Id);
+                }
+            }
+        }
+        return Task.FromResult(result);
+    }
+
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
+    {
+        var idSet = new HashSet<Guid>(csoIds);
+        var result = GetCsosForSystem(connectedSystemId)
+            .Where(cso => idSet.Contains(cso.Id))
+            .ToList();
+        return Task.FromResult(result);
+    }
+
     public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(
         int connectedSystemId, int attributeId, IEnumerable<string> attributeValues)
     {
@@ -1515,6 +1556,20 @@ public class SyncRepository : ISyncRepository
                 && (!av.ReferenceValueId.HasValue || av.ReferenceValueId == Guid.Empty))
                 av.ReferenceValueId = av.ReferenceValue.Id;
         }
+    }
+
+    /// <summary>
+    /// Converts a CSO attribute value to its lowercase string representation for cache key building.
+    /// Mirrors the logic in ConnectedSystemRepository.GetExternalIdValueString.
+    /// </summary>
+    private static string? GetExternalIdValueString(ConnectedSystemObjectAttributeValue? av)
+    {
+        if (av == null) return null;
+        if (av.StringValue != null) return av.StringValue.ToLowerInvariant();
+        if (av.IntValue.HasValue) return av.IntValue.Value.ToString();
+        if (av.LongValue.HasValue) return av.LongValue.Value.ToString();
+        if (av.GuidValue.HasValue) return av.GuidValue.Value.ToString().ToLowerInvariant();
+        return null;
     }
 
     private void AddToCsIndex(ConnectedSystemObject cso)

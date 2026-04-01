@@ -2,7 +2,6 @@
 name: release
 description: Create a new JIM release — updates VERSION, CHANGELOG, PowerShell manifest, commits, tags, and pushes
 argument-hint: "<version> (e.g., 0.4.0 or 0.4.0-alpha)"
-allowed-tools: Bash, Read, Edit, Write, Glob, Grep
 ---
 
 # Create a JIM Release
@@ -38,6 +37,121 @@ Before starting, verify:
 4. **The `[Unreleased]` section of `CHANGELOG.md` has entries**. If it is empty, warn the user — a release with no changelog entries is unusual.
 
 5. **Review pinned Docker dependencies**: Check that base image digests and apt package versions are current. If Dependabot PRs for Docker digests have been merged since the last release, flag this so the user can verify pinned apt versions still match.
+
+## Documentation Review and Update
+
+Before validating the changelog, ensure all documentation reflects the current state of the codebase.
+
+### 1. Identify what changed since the last release
+
+Get the last release tag and list all commits since then:
+```
+git describe --tags --abbrev=0
+git log <last-tag>..HEAD --oneline --no-merges
+```
+
+From this list, identify commits that introduced:
+- New features or capabilities
+- Changed behaviour or configuration
+- New or modified API endpoints
+- New connectors, components, or services
+- Architectural changes (new projects, containers, dependencies)
+- Changed deployment or setup steps
+
+### 2. Review and update documentation
+
+Cross-reference the identified changes against ALL of the following documentation files, and update any that are out of date:
+
+- **`README.md`** (root) — Feature list, quick-start instructions, architecture overview, prerequisites
+- **`docs/DEVELOPER_GUIDE.md`** — Architecture guide, development workflows, component documentation, diagram references
+- **`docs/DEPLOYMENT_GUIDE.md`** — Deployment instructions, configuration, environment variables
+- **`docs/DATABASE_GUIDE.md`** — Schema changes, migration notes, database configuration
+- **`docs/EXPRESSIONS_GUIDE.md`** — Expression language documentation, available functions
+- **`docs/TESTING_STRATEGY.md`** — Testing approach, test categories, integration test documentation
+- **`docs/COMPLIANCE_MAPPING.md`** — Security and compliance documentation
+- **`docs/CACHING_STRATEGY.md`** — Caching architecture and configuration
+- **`docs/RELEASE_PROCESS.md`** — Release steps (if process has changed)
+- **`docs/JIM_AI_ASSISTANT_CONTEXT.md`** — AI assistant context document
+- **`docs/JIM_AI_ASSISTANT_INSTRUCTIONS.md`** — AI assistant instructions
+- **Any other `.md` files in `docs/`** that are affected by the changes
+
+For each file, check whether the changes since the last release have made any content inaccurate, incomplete, or missing. Make the updates directly — do not just flag them.
+
+### 3. Review and update architectural diagrams
+
+#### C4 Model (Structurizr)
+
+1. **Review `docs/diagrams/structurizr/workspace.dsl`** against the current codebase. Check that:
+   - All containers (services, databases) are represented
+   - All components within each container are current
+   - Relationships between components/containers are accurate
+   - Any new connectors, services, or significant components added since the last release are included
+   - Removed or renamed components are cleaned up
+
+2. **Update the DSL** if any changes are needed.
+
+3. **Regenerate the C4 SVG images**:
+   ```
+   jim-diagrams
+   ```
+   This exports both light and dark theme SVGs to `docs/diagrams/images/`.
+
+4. **Review `docs/diagrams/structurizr/docs/01-overview.md`** — update the diagram documentation page if the diagrams have changed or new views have been added.
+
+#### Mermaid Process Diagrams
+
+Review each Mermaid diagram in `docs/diagrams/mermaid/` against the current codebase behaviour:
+
+- `FULL_IMPORT_FLOW.md` — Object import, duplicate detection, deletion detection
+- `FULL_SYNC_CSO_PROCESSING.md` — Per-CSO sync decision tree
+- `DELTA_SYNC_FLOW.md` — Delta sync watermark and early exit logic
+- `EXPORT_EXECUTION_FLOW.md` — Export batching, parallelism, retry
+- `PENDING_EXPORT_LIFECYCLE.md` — Pending export state machine
+- `WORKER_TASK_LIFECYCLE.md` — Worker polling, dispatch, heartbeat
+- `SCHEDULE_EXECUTION_LIFECYCLE.md` — Schedule step groups and recovery
+- `CONNECTOR_LIFECYCLE.md` — Connector interface and lifecycle
+- `ACTIVITY_AND_RPEI_FLOW.md` — Activity and RPEI accumulation
+- `MVO_DELETION_AND_GRACE_PERIOD.md` — Deletion rules and grace periods
+
+For each diagram, check whether the logic or flow has changed since the last release. Update any diagrams that no longer accurately reflect the code.
+
+#### Diagram references in documentation
+
+Verify that pages embedding or linking to diagrams are up to date:
+- `README.md` — SVG references
+- `docs/DEVELOPER_GUIDE.md` — C4 and Mermaid diagram listings and links
+- `docs/diagrams/structurizr/README.md` — Structurizr tooling documentation
+
+If new diagrams were added or existing ones renamed/removed, update these references accordingly.
+
+### 4. Review marketing site content
+
+Fetch the public marketing site at `https://tetron.io/jim/` and compare its content against the current state of JIM:
+
+1. **Feature claims** — Are all listed features still accurate? Are significant new features missing?
+2. **Architecture descriptions** — Does the site's description of JIM's architecture match the current state?
+3. **Connector/integration list** — Are all supported connectors and integrations listed?
+4. **Deployment/requirements** — Are prerequisites and deployment descriptions current?
+5. **Screenshots or visuals** — Are they representative of the current UI?
+
+The release agent cannot update the marketing site directly. Instead, present a clear summary of recommended changes to the user, structured so that a website development agent can implement them easily:
+- List each recommended change with: **what to change**, **where on the page**, **what the current text/content says**, and **what it should say or show instead**
+- Include any new feature descriptions that should be added, written in marketing-appropriate language
+- Flag any content that should be removed (e.g., features that were deprecated or renamed)
+
+### 5. Present documentation changes for review
+
+Show the user a summary of all documentation and diagram changes made:
+- List of files updated and what changed in each
+- Any new diagrams added
+- Marketing site recommendations (for manual action)
+- Ask the user to confirm before proceeding to changelog validation
+
+Once confirmed, commit the documentation updates:
+```bash
+git add README.md docs/ docs/diagrams/
+git commit -m "docs: update documentation and diagrams for v<version> release"
+```
 
 ## Changelog Validation
 
