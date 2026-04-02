@@ -781,6 +781,26 @@ docker compose / Kubernetes:
 | Large | 50k - 200k | B delivers required performance |
 | Very Large | 200k - 500k+ | B or C depending on hardware constraints |
 
+### Empirical Memory Ceiling (April 2026)
+
+> **Finding:** Scenario 8 (cross-domain entitlement sync) XLarge template (100K users, 50 groups) OOM-killed the worker during Full Sync on a Docker Desktop VM with 15.8 GB RAM. The worker successfully processed all 100,050 objects (projections + attribute flows) but crashed during the post-page-processing phase (pending export flush / cross-page reference resolution).
+
+**Root causes (two major memory consumers):**
+
+1. **EF change tracker accumulation across pages:** CSOs are loaded with `AsSplitQuery()` (not `AsNoTracking()`) because EF relationship fixup requires tracking. Each page adds ~500 CSOs + MVOs + attribute values, and the change tracker is only cleared conditionally (when MVO deletions occur). After 200 pages, the tracker holds ~100K entity graphs.
+
+2. **Export evaluation cache:** `BuildExportEvaluationCacheAsync` (ExportEvaluationServer.cs) loads ALL target system CSOs and ALL their attribute values upfront before the sync loop starts. For Scenario 8, the target system also holds ~100K objects — doubling the memory footprint.
+
+**This confirms the recommendation matrix above.** Option A's single-DbContext-per-sync-run architecture has a practical memory ceiling. Targeted fixes (clearing the change tracker between pages, chunking the export cache) could raise the ceiling somewhat, but the fundamental accumulation pattern remains. Option B's pipeline architecture — where each stage has its own scope and bounded channels provide back-pressure — is the correct long-term solution for deployments exceeding ~50K objects.
+
+**Tested scale results (Scenario 8, all on Option A):**
+
+| Template | Objects | RAM Available | Result |
+|----------|---------|--------------|--------|
+| Medium | ~1,100 | 15.8 GB | Passes (~9s Full Sync) |
+| Large | ~10,500 | 15.8 GB | Not yet tested |
+| XLarge | ~100,050 | 15.8 GB | **OOM kill** during Full Sync |
+
 ### Risk Analysis
 
 **Option A Risks:**

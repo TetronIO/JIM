@@ -1353,6 +1353,35 @@ public class ExportEvaluationServer
         // For no-net-change detection, we need both the CSO and the attribute cache
         var canDetectNoNetChange = !isCreateOperation && existingCso != null && csoAttributeCache != null;
 
+        // Pre-build O(1) lookup sets from removedAttributes for multi-valued removal detection.
+        // Without this, the removal check is O(N) per value — for a 50K-member group that's 50K × 50K = 2.5B comparisons.
+        // Three matching strategies in priority order:
+        //   1. By ReferenceValueId (most common for group membership)
+        //   2. By persisted entity Id (for saved values without ReferenceValueId)
+        //   3. By value content (fallback for unsaved non-reference values)
+        HashSet<Guid>? removedReferenceValueIds = null;
+        HashSet<Guid>? removedEntityIds = null;
+        HashSet<(string?, int?, long?, Guid?, bool?, DateTime?)>? removedValueContents = null;
+
+        if (removedAttributes is { Count: > 0 })
+        {
+            removedReferenceValueIds = new HashSet<Guid>();
+            removedEntityIds = new HashSet<Guid>();
+            removedValueContents = new HashSet<(string?, int?, long?, Guid?, bool?, DateTime?)>();
+
+            foreach (var rv in removedAttributes)
+            {
+                if (rv.ReferenceValueId.HasValue)
+                    removedReferenceValueIds.Add(rv.ReferenceValueId.Value);
+
+                if (rv.Id != Guid.Empty)
+                    removedEntityIds.Add(rv.Id);
+
+                if (!rv.ReferenceValueId.HasValue && rv.Id == Guid.Empty)
+                    removedValueContents.Add((rv.StringValue, rv.IntValue, rv.LongValue, rv.GuidValue, rv.BoolValue, rv.DateTimeValue));
+            }
+        }
+
         foreach (var mapping in exportRule.AttributeFlowRules)
         {
             // For export rules, the target is the CSO attribute
@@ -1540,20 +1569,14 @@ public class ExportEvaluationServer
                     PendingExportAttributeChangeType attrChangeType;
                     if (isMultiValued)
                     {
-                        // Check if this value is in the removals list
-                        // Note: Can't use Contains() as it compares by reference - need to compare by value content
-                        var isRemoval = removedAttributes?.Any(rv =>
-                            // For reference attributes, compare by ReferenceValueId or Id (for persisted values)
-                            (mvoValue.ReferenceValueId.HasValue && rv.ReferenceValueId == mvoValue.ReferenceValueId) ||
-                            (mvoValue.Id != Guid.Empty && rv.Id == mvoValue.Id) ||
-                            // For non-reference attributes, compare by value content
+                        // Check if this value is in the removals list using pre-built O(1) lookup sets.
+                        // Three matching strategies in priority order (same logic as before, now O(1) per check):
+                        var isRemoval = removedReferenceValueIds != null && (
+                            (mvoValue.ReferenceValueId.HasValue && removedReferenceValueIds.Contains(mvoValue.ReferenceValueId.Value)) ||
+                            (mvoValue.Id != Guid.Empty && removedEntityIds!.Contains(mvoValue.Id)) ||
                             (!mvoValue.ReferenceValueId.HasValue && mvoValue.Id == Guid.Empty &&
-                                rv.StringValue == mvoValue.StringValue &&
-                                rv.IntValue == mvoValue.IntValue &&
-                                rv.LongValue == mvoValue.LongValue &&
-                                rv.GuidValue == mvoValue.GuidValue &&
-                                rv.BoolValue == mvoValue.BoolValue &&
-                                rv.DateTimeValue == mvoValue.DateTimeValue)) == true;
+                                removedValueContents!.Contains((mvoValue.StringValue, mvoValue.IntValue, mvoValue.LongValue,
+                                    mvoValue.GuidValue, mvoValue.BoolValue, mvoValue.DateTimeValue))));
 
                         Log.Debug("CreateAttributeValueChanges: Processing MVO value Id={MvoValueId}, RefValueId={RefValueId}, isRemoval={IsRemoval}",
                             mvoValue.Id, mvoValue.ReferenceValueId, isRemoval);

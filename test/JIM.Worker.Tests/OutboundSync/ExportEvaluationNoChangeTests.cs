@@ -919,6 +919,293 @@ public class ExportEvaluationNoChangeTests
 
     #endregion
 
+    #region CreateAttributeValueChanges - Multi-Valued Removal Tests
+
+    /// <summary>
+    /// When multi-valued reference attribute values are removed from the MVO,
+    /// CreateAttributeValueChanges should detect them as removals by matching on ReferenceValueId.
+    /// This is the primary matching strategy for group membership removals.
+    /// </summary>
+    [Test]
+    public void CreateAttributeValueChanges_MultiValuedReferenceRemovals_MatchedByReferenceValueIdAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var mvGroupType = MetaverseObjectTypesData.Single(q => q.Name == "Group");
+
+        // Use the Member MV attribute (multi-valued reference, defined on Group type)
+        var memberMvAttr = mvGroupType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.Member);
+
+        // Use Manager target attribute as a stand-in for member export
+        var targetManagerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+
+        // Set up export sync rule with multi-valued reference mapping
+        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        exportSyncRule.ConnectedSystemId = targetSystem.Id;
+        exportSyncRule.ConnectedSystem = targetSystem;
+        exportSyncRule.AttributeFlowRules.Clear();
+        exportSyncRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 100,
+            SyncRule = exportSyncRule,
+            TargetConnectedSystemAttribute = targetManagerAttr,
+            TargetConnectedSystemAttributeId = targetManagerAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Id = 200,
+                Order = 0,
+                MetaverseAttribute = memberMvAttr,
+                MetaverseAttributeId = memberMvAttr.Id
+            }}
+        });
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvGroupType;
+        mvo.AttributeValues.Clear();
+
+        // Create reference MVO values that are being removed (matched by ReferenceValueId)
+        var refId1 = Guid.NewGuid();
+        var refId2 = Guid.NewGuid();
+        var refId3 = Guid.NewGuid();
+
+        var addedValue = new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = memberMvAttr,
+            AttributeId = memberMvAttr.Id,
+            ReferenceValueId = refId1
+        };
+        var removedValue1 = new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = memberMvAttr,
+            AttributeId = memberMvAttr.Id,
+            ReferenceValueId = refId2
+        };
+        var removedValue2 = new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = memberMvAttr,
+            AttributeId = memberMvAttr.Id,
+            ReferenceValueId = refId3
+        };
+
+        var changedAttributes = new List<MetaverseObjectAttributeValue> { addedValue, removedValue1, removedValue2 };
+        var removedAttributes = new HashSet<MetaverseObjectAttributeValue> { removedValue1, removedValue2 };
+
+        var existingCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            Status = ConnectedSystemObjectStatus.Normal
+        };
+
+        // Act
+        var changes = Jim.ExportEvaluation.CreateAttributeValueChanges(
+            mvo, exportSyncRule, changedAttributes, PendingExportChangeType.Update,
+            existingCso: existingCso, csoAttributeCache: null, csoAlreadyCurrentCount: out _,
+            removedAttributes: removedAttributes);
+
+        // Assert: 3 changes — 1 Add (addedValue) + 2 Remove (removedValue1, removedValue2)
+        Assert.That(changes, Has.Count.EqualTo(3));
+        Assert.That(changes.Count(c => c.ChangeType == PendingExportAttributeChangeType.Add), Is.EqualTo(1),
+            "Non-removed reference value should produce an Add change");
+        Assert.That(changes.Count(c => c.ChangeType == PendingExportAttributeChangeType.Remove), Is.EqualTo(2),
+            "Removed reference values should produce Remove changes");
+    }
+
+    /// <summary>
+    /// When multi-valued attribute values are removed and matched by persisted entity Id
+    /// (second matching strategy — values that have been saved to the database and have a non-empty Id).
+    /// </summary>
+    [Test]
+    public void CreateAttributeValueChanges_MultiValuedRemovals_MatchedByEntityIdAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var mvGroupType = MetaverseObjectTypesData.Single(q => q.Name == "Group");
+
+        var memberMvAttr = mvGroupType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.Member);
+        var targetManagerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+
+        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        exportSyncRule.ConnectedSystemId = targetSystem.Id;
+        exportSyncRule.ConnectedSystem = targetSystem;
+        exportSyncRule.AttributeFlowRules.Clear();
+        exportSyncRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 100,
+            SyncRule = exportSyncRule,
+            TargetConnectedSystemAttribute = targetManagerAttr,
+            TargetConnectedSystemAttributeId = targetManagerAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Id = 200,
+                Order = 0,
+                MetaverseAttribute = memberMvAttr,
+                MetaverseAttributeId = memberMvAttr.Id
+            }}
+        });
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvGroupType;
+        mvo.AttributeValues.Clear();
+
+        // Create values without ReferenceValueId but with persisted entity Ids
+        // (second matching strategy: mvoValue.Id != Guid.Empty && rv.Id == mvoValue.Id)
+        var sharedId = Guid.NewGuid();
+        var removedValue = new MetaverseObjectAttributeValue
+        {
+            Id = sharedId,
+            MetaverseObject = mvo,
+            Attribute = memberMvAttr,
+            AttributeId = memberMvAttr.Id,
+            ReferenceValueId = null, // no reference — forces Id-based matching
+            StringValue = "some-value"
+        };
+
+        var changedAttributes = new List<MetaverseObjectAttributeValue> { removedValue };
+        var removedAttributes = new HashSet<MetaverseObjectAttributeValue> { removedValue };
+
+        var existingCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            Status = ConnectedSystemObjectStatus.Normal
+        };
+
+        // Act
+        var changes = Jim.ExportEvaluation.CreateAttributeValueChanges(
+            mvo, exportSyncRule, changedAttributes, PendingExportChangeType.Update,
+            existingCso: existingCso, csoAttributeCache: null, csoAlreadyCurrentCount: out _,
+            removedAttributes: removedAttributes);
+
+        // Assert
+        Assert.That(changes, Has.Count.EqualTo(1));
+        Assert.That(changes[0].ChangeType, Is.EqualTo(PendingExportAttributeChangeType.Remove),
+            "Value matched by entity Id should produce a Remove change");
+    }
+
+    /// <summary>
+    /// When multi-valued attribute values are removed and matched by value content
+    /// (third matching strategy — new values without ReferenceValueId or persisted Id).
+    /// </summary>
+    [Test]
+    public void CreateAttributeValueChanges_MultiValuedRemovals_MatchedByValueContentAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var mvGroupType = MetaverseObjectTypesData.Single(q => q.Name == "Group");
+
+        // Create a custom multi-valued TEXT attribute (not Reference) to exercise the value-content matching path
+        var multiValuedTextAttr = new MetaverseAttribute
+        {
+            Id = 999,
+            Name = "TestMultiValuedText",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.MultiValued,
+            BuiltIn = false
+        };
+        mvGroupType.Attributes.Add(multiValuedTextAttr);
+
+        var targetDisplayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        exportSyncRule.ConnectedSystemId = targetSystem.Id;
+        exportSyncRule.ConnectedSystem = targetSystem;
+        exportSyncRule.AttributeFlowRules.Clear();
+        exportSyncRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 100,
+            SyncRule = exportSyncRule,
+            TargetConnectedSystemAttribute = targetDisplayNameAttr,
+            TargetConnectedSystemAttributeId = targetDisplayNameAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Id = 200,
+                Order = 0,
+                MetaverseAttribute = multiValuedTextAttr,
+                MetaverseAttributeId = multiValuedTextAttr.Id
+            }}
+        });
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvGroupType;
+        mvo.AttributeValues.Clear();
+
+        // Create values with no ReferenceValueId AND Guid.Empty Id — forces value-content matching
+        var addedValue = new MetaverseObjectAttributeValue
+        {
+            Id = Guid.Empty,
+            MetaverseObject = mvo,
+            Attribute = multiValuedTextAttr,
+            AttributeId = multiValuedTextAttr.Id,
+            ReferenceValueId = null,
+            StringValue = "keep-this"
+        };
+        var removedValue = new MetaverseObjectAttributeValue
+        {
+            Id = Guid.Empty,
+            MetaverseObject = mvo,
+            Attribute = multiValuedTextAttr,
+            AttributeId = multiValuedTextAttr.Id,
+            ReferenceValueId = null,
+            StringValue = "remove-this"
+        };
+
+        // The removedAttributes set contains a DIFFERENT object instance with the same value content
+        var removedValueCopy = new MetaverseObjectAttributeValue
+        {
+            Id = Guid.Empty,
+            MetaverseObject = mvo,
+            Attribute = multiValuedTextAttr,
+            AttributeId = multiValuedTextAttr.Id,
+            ReferenceValueId = null,
+            StringValue = "remove-this"
+        };
+
+        var changedAttributes = new List<MetaverseObjectAttributeValue> { addedValue, removedValue };
+        var removedAttributes = new HashSet<MetaverseObjectAttributeValue> { removedValueCopy };
+
+        var existingCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            Status = ConnectedSystemObjectStatus.Normal
+        };
+
+        // Act
+        var changes = Jim.ExportEvaluation.CreateAttributeValueChanges(
+            mvo, exportSyncRule, changedAttributes, PendingExportChangeType.Update,
+            existingCso: existingCso, csoAttributeCache: null, csoAlreadyCurrentCount: out _,
+            removedAttributes: removedAttributes);
+
+        // Assert
+        Assert.That(changes, Has.Count.EqualTo(2));
+
+        var addChange = changes.Single(c => c.ChangeType == PendingExportAttributeChangeType.Add);
+        Assert.That(addChange.StringValue, Is.EqualTo("keep-this"),
+            "Non-removed value should be added");
+
+        var removeChange = changes.Single(c => c.ChangeType == PendingExportAttributeChangeType.Remove);
+        Assert.That(removeChange.StringValue, Is.EqualTo("remove-this"),
+            "Value matched by content should produce a Remove change");
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static ConnectedSystemObjectAttributeValue CreateCsoAttributeValue(
