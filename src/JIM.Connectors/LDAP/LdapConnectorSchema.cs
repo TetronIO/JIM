@@ -12,6 +12,8 @@ internal class LdapConnectorSchema
     private readonly bool _includeAuxiliaryClasses;
     private readonly ConnectorSchema _schema;
     private string _schemaNamingContext = null!;
+    private Dictionary<string, SearchResultEntry> _classSchemaCache = null!;
+    private Dictionary<string, SearchResultEntry> _attributeSchemaCache = null!;
 
     internal LdapConnectorSchema(LdapConnection ldapConnection, ILogger logger, LdapConnectorRootDse rootDse, bool includeAuxiliaryClasses = false)
     {
@@ -41,11 +43,20 @@ internal class LdapConnectorSchema
     {
         return await Task.Run(() =>
         {
+            var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
             // get the DN for the schema partition
             var schemaNamingContext = GetSchemaNamingContext();
             if (string.IsNullOrEmpty(schemaNamingContext))
                 throw new Exception($"Couldn't get schema naming context from rootDSE.");
             _schemaNamingContext = schemaNamingContext;
+
+            // pre-fetch all classSchema and attributeSchema entries into in-memory dictionaries
+            // to eliminate N+1 LDAP queries during class hierarchy walks and attribute resolution
+            _classSchemaCache = FetchAllClassSchemaEntries();
+            _attributeSchemaCache = FetchAllAttributeSchemaEntries();
+            _logger.Debug("GetActiveDirectorySchemaAsync: Pre-fetched {ClassCount} classSchema and {AttributeCount} attributeSchema entries",
+                _classSchemaCache.Count, _attributeSchemaCache.Count);
 
             // query: classes, structural (and optionally auxiliary), don't return hidden by default classes, exclude defunct classes
             // objectClassCategory: 1 = structural, 3 = auxiliary
@@ -76,6 +87,10 @@ internal class LdapConnectorSchema
                 }
             }
 
+            totalStopwatch.Stop();
+            _logger.Information("GetActiveDirectorySchemaAsync: Completed — {ObjectTypeCount} object types discovered in {ElapsedMs}ms",
+                _schema.ObjectTypes.Count, totalStopwatch.ElapsedMilliseconds);
+
             return _schema;
         });
     }
@@ -91,8 +106,7 @@ internal class LdapConnectorSchema
 
         while (continueGettingClasses)
         {
-            var objectClassEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _schemaNamingContext, $"(ldapdisplayname={objectClassName})");
-            if (objectClassEntry == null)
+            if (!_classSchemaCache.TryGetValue(objectClassName, out var objectClassEntry))
             {
                 // some object classes do not have a schema entry, i.e. some system objects.
                 return false;
@@ -139,8 +153,8 @@ internal class LdapConnectorSchema
         {
             foreach (var auxiliaryClass in auxiliaryClasses)
             {
-                var auxiliaryClassEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _schemaNamingContext, $"(ldapdisplayname={auxiliaryClass})") ??
-                                          throw new Exception($"Couldn't find auxiliary class entry: {auxiliaryClass}");
+                if (!_classSchemaCache.TryGetValue(auxiliaryClass, out var auxiliaryClassEntry))
+                    throw new Exception($"Couldn't find auxiliary class entry: {auxiliaryClass}");
 
                 GetObjectClassAttributesRecursively(auxiliaryClassEntry, objectType);
             }
@@ -151,8 +165,8 @@ internal class LdapConnectorSchema
 
         foreach (var systemAuxiliaryClass in systemAuxiliaryClasses)
         {
-            var systemAuxiliaryClassEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _schemaNamingContext, $"(ldapdisplayname={systemAuxiliaryClass})") ??
-                                            throw new Exception($"Couldn't find auxiliary class entry: {systemAuxiliaryClass}");
+            if (!_classSchemaCache.TryGetValue(systemAuxiliaryClass, out var systemAuxiliaryClassEntry))
+                throw new Exception($"Couldn't find auxiliary class entry: {systemAuxiliaryClass}");
 
             GetObjectClassAttributesRecursively(systemAuxiliaryClassEntry, objectType);
         }
@@ -180,8 +194,8 @@ internal class LdapConnectorSchema
     /// </summary>
     private ConnectorSchemaAttribute? GetAdSchemaAttribute(string attributeName, string objectClass, bool required, string objectTypeName)
     {
-        var attributeEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _schemaNamingContext, $"(ldapdisplayname={attributeName})") ??
-                             throw new Exception($"Couldn't retrieve schema attribute: {attributeName}");
+        if (!_attributeSchemaCache.TryGetValue(attributeName, out var attributeEntry))
+            throw new Exception($"Couldn't retrieve schema attribute: {attributeName}");
 
         // filter out defunct attributes — these are deprecated and should not be presented to users
         var isDefunctRawValue = LdapConnectorUtilities.GetEntryAttributeStringValue(attributeEntry, "isdefunct");
@@ -254,6 +268,49 @@ internal class LdapConnectorSchema
             attribute.Description = adminDescription;
 
         return attribute;
+    }
+
+    /// <summary>
+    /// Fetches all classSchema entries (including abstract parents) into an in-memory dictionary
+    /// keyed by ldapdisplayname. Uses a broader filter than the object-type enumeration query
+    /// so that parent classes like 'top' and 'organizationalPerson' are included for hierarchy walks.
+    /// </summary>
+    private Dictionary<string, SearchResultEntry> FetchAllClassSchemaEntries()
+    {
+        var filter = "(&(objectClass=classSchema)(!(isDefunct=TRUE)))";
+        var request = new SearchRequest(_schemaNamingContext, filter, SearchScope.Subtree);
+        var response = (SearchResponse)_connection.SendRequest(request);
+
+        var cache = new Dictionary<string, SearchResultEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (SearchResultEntry entry in response.Entries)
+        {
+            var name = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "ldapdisplayname");
+            if (name != null)
+                cache.TryAdd(name, entry);
+        }
+
+        return cache;
+    }
+
+    /// <summary>
+    /// Fetches all non-defunct attributeSchema entries into an in-memory dictionary keyed by ldapdisplayname.
+    /// Eliminates the N+1 pattern where each attribute was queried individually.
+    /// </summary>
+    private Dictionary<string, SearchResultEntry> FetchAllAttributeSchemaEntries()
+    {
+        var filter = "(&(objectClass=attributeSchema)(!(isDefunct=TRUE)))";
+        var request = new SearchRequest(_schemaNamingContext, filter, SearchScope.Subtree);
+        var response = (SearchResponse)_connection.SendRequest(request);
+
+        var cache = new Dictionary<string, SearchResultEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (SearchResultEntry entry in response.Entries)
+        {
+            var name = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "ldapdisplayname");
+            if (name != null)
+                cache.TryAdd(name, entry);
+        }
+
+        return cache;
     }
 
     private string? GetSchemaNamingContext()
