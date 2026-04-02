@@ -2,9 +2,9 @@
 
 > Copy the content below into the "Instructions" or "System Prompt" field when creating an AI assistant project for JIM.
 >
-> **Document Version**: 1.3
+> **Document Version**: 1.4
 >
-> **Last Updated**: 2026-04-01
+> **Last Updated**: 2026-04-02
 
 ---
 
@@ -66,7 +66,7 @@ I've uploaded a context document with detailed architecture, concepts, and curre
 
 ## Current Status
 
-JIM's core platform is complete and in active development approaching v0.9 stabilisation. Core sync (import, sync, export), scheduling, change history, dashboard, and admin UI are all functional. v0.8.0 introduces OpenLDAP connector support (#72) for RFC 4512-compliant directories with parallel imports and delta import, a redesigned Worker with ISyncEngine/ISyncRepository separation and full DI (#394), bundled Keycloak IdP for zero-config development SSO (#197), O(1) import matching (#440), cross-batch fixup elimination (#427), MVO COPY binary protocol (#338), UI improvements including object type icons (#92), pending export detail, activity auto-refresh, run profile editing, tabs view, healthchecks (#185), MVA-to-SVA flow (#435), case-insensitive expression lookups (#341), and PE reconciliation for all data types (#263). The roadmap progresses through v0.9-STABILISATION, v1.0-ILM-COMPLETE, v1.x-CONNECTORS, and v2.0-IGA-FOUNDATION milestones — see GitHub milestones for details.
+JIM's core platform is complete and in active development approaching v0.9 stabilisation. Core sync (import, sync, export), scheduling, change history, dashboard, and admin UI are all functional. v0.8.0 introduces OpenLDAP connector support (#72) for RFC 4512-compliant directories with parallel imports and delta import, a redesigned Worker with ISyncEngine/ISyncRepository separation and full DI (#394), bundled Keycloak IdP for zero-config development SSO (#197), O(1) import matching (#440), cross-batch fixup elimination (#427), MVO COPY binary protocol (#338), UI improvements including object type icons (#92), pending export detail, activity auto-refresh, run profile editing, tabs view, healthchecks (#185), MVA-to-SVA flow (#435), case-insensitive expression lookups (#341), and PE reconciliation for all data types (#263). v0.8.1 adds pre-export CREATE→DELETE reconciliation (#218) that automatically cancels redundant pending exports, export rule evaluation optimisation (#417), AD schema discovery LDAP query batching (#433), a fix for entity tracking conflicts during cross-page reference resolution at scale (#449), cleaner error messages without internal prefixes (#448), context-aware breadcrumbs for activity and RPEI detail pages, and log injection prevention in the global exception handler (#444). The roadmap progresses through v0.9-STABILISATION, v1.0-ILM-COMPLETE, v1.x-CONNECTORS, and v2.0-IGA-FOUNDATION milestones — see GitHub milestones for details.
 ```
 
 ---

@@ -4,9 +4,9 @@
 >
 > **Repository**: https://github.com/TetronIO/JIM
 >
-> **Document Version**: 1.3
+> **Document Version**: 1.4
 >
-> **Last Updated**: 2026-04-01
+> **Last Updated**: 2026-04-02
 >
 > **Note**: This is a snapshot. For current implementation details, check the repository or ask the user to provide updated code/docs.
 
@@ -381,6 +381,16 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 - ✅ **MVA to SVA Flow** (#435) - Attribute flow support for multi-valued to single-valued attribute mappings
 - ✅ **Case-Insensitive Expression Lookups** (#341) - Expression attribute lookups are now case-insensitive, matching expected behaviour
 - ✅ **PE Reconciliation for All Data Types** (#263) - Pending export reconciliation extended to cover all attribute data types
+
+### Recent Enhancements (v0.8.1)
+
+- ✅ **Pre-Export CREATE→DELETE Reconciliation** (#218) - When an object is created and then deleted before export runs, the redundant pending exports are automatically cancelled
+- ✅ **Export Rule Evaluation Optimisation** (#417) - Export rule evaluation optimised to reduce per-MVO processing cost
+- ✅ **AD Schema Discovery Batching** (#433) - Active Directory schema discovery now batches LDAP queries, reducing connection round-trips
+- ✅ **Cross-Page Reference Resolution Fix** (#449) - Full Sync no longer fails with entity tracking conflicts when groups share members across resolution batches (10,000+ users)
+- ✅ **Error Message Cleanup** (#448) - Error messages no longer display the internal "EMERGENCY UPDATE" prefix
+- ✅ **Context-Aware Breadcrumbs** - Activity and RPEI detail page breadcrumbs are now context-aware
+- ✅ **Log Injection Prevention** (#444) - Sanitised Request.Method in global exception handler logging to prevent log injection (CWE-117)
 
 ### Previous Enhancements
 

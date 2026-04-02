@@ -1,6 +1,6 @@
 # Export Execution Flow
 
-> Last updated: 2026-04-01 — JIM v0.8.0
+> Last updated: 2026-04-02 — JIM v0.8.1
 
 This diagram shows how pending exports are executed against connected systems via connectors. The export processor (`SyncExportTaskProcessor`) uses `ISyncServer` to delegate to `ExportExecutionServer` for the core execution logic, and `ISyncRepository` for bulk data access. Supports batching, parallelism, deferred reference resolution, and retry with backoff.
 
@@ -34,7 +34,8 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    Start([ExecuteExportsAsync]) --> GetExecutable[Get executable pending exports<br/>Database filter: Status, NextRetryAt, ErrorCount<br/>In-memory filter: has exportable attribute changes<br/>Delete exports already exported are skipped]
+    Start([ExecuteExportsAsync]) --> Reconcile[Pre-export CREATE to DELETE<br/>reconciliation: cancel contradictory<br/>pairs persisted across sync runs<br/>CREATE+DELETE cancels both<br/>UPDATE+DELETE cancels UPDATE]
+    Reconcile --> GetExecutable[Get executable pending exports<br/>Database filter: Status, NextRetryAt, ErrorCount<br/>In-memory filter: has exportable attribute changes<br/>Delete exports already exported are skipped]
     GetExecutable --> HasExports{Exports<br/>found?}
     HasExports -->|No| EmptyResult([Return empty result])
 
@@ -159,6 +160,8 @@ flowchart TD
 - **Connector instances** are created per-batch via factory to avoid shared connection state
 
 ## Key Design Decisions
+
+- **Pre-export CREATE→DELETE reconciliation** (#218): Before fetching executable exports, `ReconcileCreateDeletePairsAsync` scans all pending exports for contradictory pairs targeting the same CSO. CREATE+DELETE pairs cancel both (object was never exported), UPDATE+DELETE cancels the UPDATE (deletion makes it redundant). This catches pairs persisted across different sync runs — the flush-time reconciliation in `SyncTaskProcessorBase` handles same-page pairs.
 
 - **Two-pass export**: Exports without unresolved references are executed first (immediate). Exports with unresolved MVO references are deferred, with references bulk-resolved in a single query, then executed in a second pass.
 

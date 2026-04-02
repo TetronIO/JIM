@@ -1,6 +1,6 @@
 # Pending Export Lifecycle
 
-> Last updated: 2026-03-26 — JIM v0.7.1 (`00907431`)
+> Last updated: 2026-04-02 — JIM v0.8.1
 
 This diagram shows the full lifecycle of a Pending Export from creation during synchronisation, through export execution, to confirmation during a confirming import. Pending Exports are the mechanism by which JIM propagates changes from the metaverse to target connected systems.
 
@@ -69,10 +69,16 @@ flowchart LR
         NetChange -->|Changes needed| CheckExisting{Existing CSO<br/>in target system?}
         CheckExisting -->|Yes| CreateUpdatePE[Create PE:<br/>ChangeType = Update<br/>Status = Pending]
         CheckExisting -->|No| CreateCreatePE[Create PE:<br/>ChangeType = Create<br/>Status = Pending<br/>Provision new CSO]
+        CreateUpdatePE --> FlushReconcile
+        CreateCreatePE --> FlushReconcile
+        EvalDeprov --> FlushReconcile
+        FlushReconcile[Flush-time reconciliation:<br/>CREATE+DELETE for same CSO<br/>cancels both no net change<br/>UPDATE+DELETE cancels UPDATE<br/>keeps DELETE]
+        FlushReconcile --> PersistPE[Persist remaining PEs]
     end
 
     subgraph "2. Export"
-        GetExecutable[Get executable PEs:<br/>Status = Pending or<br/>ExportNotConfirmed<br/>NextRetryAt <= now] --> MarkExec[Mark batch:<br/>Status = Executing]
+        GetExecutable[Get executable PEs:<br/>Status = Pending or<br/>ExportNotConfirmed<br/>NextRetryAt <= now] --> PreExportReconcile[Pre-export reconciliation:<br/>Catch CREATE+DELETE and<br/>UPDATE+DELETE pairs persisted<br/>across different sync runs]
+        PreExportReconcile --> MarkExec[Mark batch:<br/>Status = Executing]
         MarkExec --> ConnExport[Connector executes<br/>export operations]
         ConnExport --> Success{Success?}
         Success -->|Yes, Create| ProvResult[Status = Exported<br/>Capture new external ID<br/>RPEI: Exported]
@@ -89,9 +95,7 @@ flowchart LR
         AllMatch -->|None| NoneConfirm[Keep all attributes<br/>Increment error count<br/>Status = ExportNotConfirmed]
     end
 
-    CreateUpdatePE --> GetExecutable
-    CreateCreatePE --> GetExecutable
-    EvalDeprov --> GetExecutable
+    PersistPE --> GetExecutable
     ProvResult --> ImportData
     ExpResult --> ImportData
     FailResult -.->|Next export run<br/>after backoff| GetExecutable
@@ -196,5 +200,7 @@ This prevents silent loss of drift corrections when merging with export evaluati
 - **Pure recall skip**: When all changed attributes on an MVO are removals (attribute recall due to CSO disconnection), export evaluation is skipped entirely. Expression-based mappings (e.g., DN templates) would evaluate against post-recall null attributes and produce invalid values. Target systems retain their existing attribute values until attribute priority (Issue #91) enables replacement value resolution.
 
 - **Value-level drift merge**: When merging drift corrections with export evaluation changes, the merge key is a composite of `AttributeId` + value identity (not just `AttributeId`). This prevents silent loss of multi-valued attribute drift corrections — e.g., 117 member removals would be dropped if merged by `AttributeId` alone.
+
+- **Pre-export CREATE→DELETE reconciliation** (#218): Dual-layer reconciliation cancels contradictory pending exports before they reach the connector. At **flush time** (during sync), deferred CREATE/UPDATE PEs are checked against persisted DELETE PEs for the same CSO — CREATE+DELETE pairs cancel both (no net change), UPDATE+DELETE cancels the UPDATE (deletion still needed). At **export time**, the same logic runs across all pending exports to catch pairs persisted in different sync runs. This prevents unnecessary export operations and connector errors.
 
 - **Exponential backoff**: Failed exports use increasing retry delays (`NextRetryAt`) to avoid hammering a target system that's experiencing issues.
