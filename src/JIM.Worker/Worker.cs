@@ -944,7 +944,7 @@ public class Worker : BackgroundService
                     if (freshActivity != null && freshActivity.Status == ActivityStatus.InProgress)
                     {
                         freshActivity.Status = ActivityStatus.FailedWithError;
-                        freshActivity.ErrorMessage = $"EMERGENCY UPDATE: {context}: {GetFullExceptionMessage(originalException)}";
+                        freshActivity.ErrorMessage = $"{context}: {GetFullExceptionMessage(originalException)}";
                         freshActivity.ErrorStackTrace = originalException.ToString();
                         freshActivity.ExecutionTime = DateTime.UtcNow - freshActivity.Executed;
                         freshActivity.TotalActivityTime = DateTime.UtcNow - freshActivity.Created;
