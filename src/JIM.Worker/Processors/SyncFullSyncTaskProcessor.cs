@@ -235,28 +235,28 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 await FlushObsoleteCsoOperationsAsync();
 
                 // batch delete MVOs marked for immediate deletion (0-grace-period)
-                var hadMvoDeletions = _pendingMvoDeletions.Count > 0;
                 await FlushPendingMvoDeletionsAsync();
 
                 // Flush this page's RPEIs via bulk insert before updating progress
                 await FlushRpeisAsync();
-
-                // Clear the change tracker after MVO deletions to prevent stale entity conflicts.
-                // MVO deletion involves raw SQL (nulling FK references in Activities and
-                // MetaverseObjectChanges tables) followed by EF Remove + SaveChanges. The raw SQL
-                // modifies rows that may still be tracked in memory, and cascade deletes at the
-                // database level remove rows that are still in the tracker as Modified.
-                // Without clearing, the next SaveChangesAsync tries to UPDATE these ghost rows
-                // and fails with DbUpdateConcurrencyException.
-                // UpdateDetachedSafe will re-attach the Activity in Modified state.
-                if (hadMvoDeletions && _hasRawSqlSupport)
-                    _syncRepo.ClearChangeTracker();
 
                 // Update progress with page completion - this persists ObjectsProcessed to database (including MVO changes)
                 using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
                 {
                     await _syncRepo.UpdateActivityAsync(_activity);
                 }
+
+                // Clear the change tracker unconditionally at every page boundary to prevent
+                // memory accumulation from tracked entities across pages. Without this, the tracker
+                // grows linearly with total object count (500K+ entries at 100K objects), causing OOM.
+                // All page data has been flushed to the database above. The Activity entity becomes
+                // detached but UpdateDetachedSafe re-attaches it on the next UpdateActivityAsync call.
+                // Cross-page state (_unresolvedCrossPageReferences, _exportEvaluationCache, etc.) is
+                // held in CLR fields — detaching does not null their populated navigation properties.
+                if (_hasRawSqlSupport)
+                    _syncRepo.ClearChangeTracker();
+
+                LogPageMemoryDiagnostics(i, totalCsoPages);
             }
             finally
             {

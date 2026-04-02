@@ -1246,6 +1246,27 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    public Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByMvoIdsAndTargetSystemsAsync(
+        IEnumerable<Guid> mvoIds, IEnumerable<int> targetConnectedSystemIds)
+    {
+        var mvoIdSet = mvoIds.ToHashSet();
+        var targetIds = targetConnectedSystemIds.ToHashSet();
+        var result = new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>();
+
+        foreach (var cso in _csos.Values)
+        {
+            if (cso.MetaverseObjectId.HasValue
+                && mvoIdSet.Contains(cso.MetaverseObjectId.Value)
+                && targetIds.Contains(cso.ConnectedSystemId))
+            {
+                var key = (cso.MetaverseObjectId.Value, cso.ConnectedSystemId);
+                result.TryAdd(key, cso);
+            }
+        }
+
+        return Task.FromResult(result);
+    }
+
     public Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesByCsoIdsAsync(IEnumerable<Guid> csoIds)
     {
         var ids = csoIds.ToHashSet();

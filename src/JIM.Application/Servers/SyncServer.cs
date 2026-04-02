@@ -226,6 +226,9 @@ public class SyncServer : ISyncServer
         List<SyncRule>? preloadedSyncRules = null)
         => _exportEval.BuildExportEvaluationCacheAsync(sourceConnectedSystemId, preloadedSyncRules);
 
+    public Task RefreshExportEvaluationCacheForPageAsync(ExportEvaluationCache cache, IEnumerable<Guid> mvoIds)
+        => _exportEval.RefreshExportEvaluationCacheForPageAsync(cache, mvoIds);
+
     public Task<ExportEvaluationResult> EvaluateExportRulesWithNoNetChangeDetectionAsync(
         MetaverseObject mvo,
         List<MetaverseObjectAttributeValue> changedAttributes,

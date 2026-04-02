@@ -543,6 +543,14 @@ public interface ISyncRepository
         IEnumerable<int> targetConnectedSystemIds);
 
     /// <summary>
+    /// Gets CSOs joined to specific MVOs within the specified target connected systems.
+    /// Used for per-page export evaluation cache refresh — loads only CSOs relevant to the current page's MVOs.
+    /// Returns a dictionary keyed by (MvoId, ConnectedSystemId) for O(1) lookup.
+    /// </summary>
+    Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByMvoIdsAndTargetSystemsAsync(
+        IEnumerable<Guid> mvoIds, IEnumerable<int> targetConnectedSystemIds);
+
+    /// <summary>
     /// Batch loads CSO attribute values for the specified CSO IDs.
     /// Used to pre-load target CSO attribute values for no-net-change detection during export evaluation.
     /// </summary>

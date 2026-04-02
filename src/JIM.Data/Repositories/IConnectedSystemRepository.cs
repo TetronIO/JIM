@@ -314,6 +314,13 @@ public interface IConnectedSystemRepository
     public Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByTargetSystemsAsync(IEnumerable<int> targetConnectedSystemIds);
 
     /// <summary>
+    /// Gets CSOs joined to specific MVOs within the specified target connected systems.
+    /// Used for per-page export evaluation cache refresh — loads only CSOs relevant to the current page.
+    /// </summary>
+    public Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByMvoIdsAndTargetSystemsAsync(
+        IEnumerable<Guid> mvoIds, IEnumerable<int> targetConnectedSystemIds);
+
+    /// <summary>
     /// Batch loads CSO attribute values for the specified CSO IDs.
     /// Used for per-page caching during export evaluation to enable no-net-change detection.
     /// </summary>

@@ -168,6 +168,19 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
+    /// Logs memory diagnostics at page boundaries to track memory usage across the sync run.
+    /// Helps diagnose memory accumulation issues and verify bounded memory behaviour.
+    /// </summary>
+    protected static void LogPageMemoryDiagnostics(int pageNumber, int totalPages)
+    {
+        var memoryBytes = GC.GetTotalMemory(forceFullCollection: false);
+        var memoryMb = memoryBytes / (1024.0 * 1024.0);
+        Log.Information("Page {Page}/{TotalPages} complete. Memory: {MemoryMb:F1} MB, Gen0: {Gen0}, Gen1: {Gen1}, Gen2: {Gen2}",
+            pageNumber, totalPages, memoryMb,
+            GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2));
+    }
+
+    /// <summary>
     /// Flushes the current page's RPEIs to the database via raw SQL bulk insert,
     /// accumulates summary stats incrementally, then releases the RPEIs from memory.
     ///
@@ -1846,7 +1859,11 @@ public abstract class SyncTaskProcessorBase
             // creates fresh PEs with the fully-resolved reference attributes.
             if (_pendingExportEvaluations.Count > 0 && _exportEvaluationCache != null)
             {
+                // Refresh per-page cache for this batch's MVOs so CsoLookup has the target CSOs
                 var mvoIds = _pendingExportEvaluations.Select(e => e.Mvo.Id).ToHashSet();
+                await _syncServer.RefreshExportEvaluationCacheForPageAsync(
+                    _exportEvaluationCache, mvoIds);
+
                 var targetCsoIds = _exportEvaluationCache.CsoLookup
                     .Where(kvp => mvoIds.Contains(kvp.Key.MvoId))
                     .Select(kvp => kvp.Value.Id)
@@ -2001,6 +2018,19 @@ public abstract class SyncTaskProcessorBase
         using var span = Diagnostics.Sync.StartSpan("EvaluatePendingExports");
         span.SetTag("count", _pendingExportEvaluations.Count);
 
+        // Refresh the per-page portion of the export evaluation cache for only this page's MVOs.
+        // This loads target CSOs and their attribute values for no-net-change detection, scoped to
+        // just the MVOs being evaluated — avoiding the previous approach of loading ALL target CSOs
+        // upfront which consumed multiple GB at 100K+ objects.
+        if (_exportEvaluationCache != null)
+        {
+            var mvoIdsForExport = _pendingExportEvaluations
+                .Select(x => x.Mvo.Id)
+                .Where(id => id != Guid.Empty)
+                .Distinct();
+            await _syncServer.RefreshExportEvaluationCacheForPageAsync(_exportEvaluationCache, mvoIdsForExport);
+        }
+
         // Build a set of MVO IDs pending immediate deletion.
         // These MVOs will get Delete exports in FlushPendingMvoDeletionsAsync,
         // so creating Update exports here would be spurious.
@@ -2092,6 +2122,24 @@ public abstract class SyncTaskProcessorBase
         // Batch create new pending exports (evaluated during export evaluation phase)
         if (_pendingExportsToCreate.Count > 0)
         {
+            // Delete any existing PEs for the same CSOs to prevent unique constraint violations.
+            // This can happen when drift detection creates a corrective PE for a CSO that already
+            // has a PE from a previous sync step (e.g., forward sync PE not yet exported).
+            var csoIdsWithNewPes = _pendingExportsToCreate
+                .Where(pe => pe.ConnectedSystemObjectId.HasValue)
+                .Select(pe => pe.ConnectedSystemObjectId!.Value)
+                .Distinct()
+                .ToList();
+            if (csoIdsWithNewPes.Count > 0)
+            {
+                var deletedCount = await _syncRepo.DeletePendingExportsByConnectedSystemObjectIdsAsync(csoIdsWithNewPes);
+                if (deletedCount > 0)
+                {
+                    Log.Information("FlushPendingExportOperationsAsync: Deleted {Count} existing pending exports to prevent duplicates before batch create",
+                        deletedCount);
+                }
+            }
+
             await _syncRepo.CreatePendingExportsAsync(_pendingExportsToCreate);
             Log.Verbose("FlushPendingExportOperationsAsync: Created {Count} pending exports in batch", _pendingExportsToCreate.Count);
             _pendingExportsToCreate.Clear();

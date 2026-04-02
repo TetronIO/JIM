@@ -208,6 +208,13 @@ public interface ISyncServer
         List<SyncRule>? preloadedSyncRules = null);
 
     /// <summary>
+    /// Rebuilds the per-page portions of the export evaluation cache (CsoLookup, CsoAttributeValues)
+    /// for only the MVOs that changed in the current page. This bounds memory to page size rather than
+    /// total dataset size.
+    /// </summary>
+    Task RefreshExportEvaluationCacheForPageAsync(ExportEvaluationCache cache, IEnumerable<Guid> mvoIds);
+
+    /// <summary>
     /// Evaluates all export rules for an MVO that has changed, creating pending exports
     /// with no-net-change detection.
     /// </summary>

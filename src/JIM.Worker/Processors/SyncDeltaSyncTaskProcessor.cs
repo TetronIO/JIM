@@ -222,22 +222,23 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 await FlushObsoleteCsoOperationsAsync();
 
                 // batch delete MVOs marked for immediate deletion (0-grace-period)
-                var hadMvoDeletions = _pendingMvoDeletions.Count > 0;
                 await FlushPendingMvoDeletionsAsync();
 
                 // Flush this page's RPEIs via bulk insert before updating progress
                 await FlushRpeisAsync();
-
-                // Clear the change tracker after MVO deletions to prevent stale entity conflicts.
-                // See SyncFullSyncTaskProcessor for detailed explanation.
-                if (hadMvoDeletions && _hasRawSqlSupport)
-                    _syncRepo.ClearChangeTracker();
 
                 // Update progress with page completion - this persists ObjectsProcessed to database (including MVO changes)
                 using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
                 {
                     await _syncRepo.UpdateActivityAsync(_activity);
                 }
+
+                // Clear the change tracker unconditionally at every page boundary.
+                // See SyncFullSyncTaskProcessor for detailed explanation.
+                if (_hasRawSqlSupport)
+                    _syncRepo.ClearChangeTracker();
+
+                LogPageMemoryDiagnostics(page, totalCsoPages);
             }
             finally
             {

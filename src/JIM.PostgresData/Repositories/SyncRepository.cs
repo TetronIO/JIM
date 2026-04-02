@@ -316,6 +316,10 @@ public partial class SyncRepository : ISyncRepository
         IEnumerable<int> targetConnectedSystemIds)
         => _repo.ConnectedSystems.GetConnectedSystemObjectsByTargetSystemsAsync(targetConnectedSystemIds);
 
+    public Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByMvoIdsAndTargetSystemsAsync(
+        IEnumerable<Guid> mvoIds, IEnumerable<int> targetConnectedSystemIds)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectsByMvoIdsAndTargetSystemsAsync(mvoIds, targetConnectedSystemIds);
+
     public Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesByCsoIdsAsync(IEnumerable<Guid> csoIds)
         => _repo.ConnectedSystems.GetCsoAttributeValuesByCsoIdsAsync(csoIds);
 

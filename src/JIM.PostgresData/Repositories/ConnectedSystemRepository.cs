@@ -2112,8 +2112,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         //
         // Note: We also include CSO.AttributeValues because connectors need access to
         // the current attribute values (e.g., current DN for LDAP rename operations).
-
+        //
+        // AsNoTracking: pending exports loaded here are used for read-only cache lookups
+        // during sync (indexed by CSO ID for O(1) confirmation). In-place mutations during
+        // EvaluatePendingExportConfirmation are persisted through separate batch methods
+        // (DeletePendingExportsAsync, UpdatePendingExportsAsync), not EF change tracking.
         return await Repository.Database.PendingExports
+            .AsNoTracking()
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)
@@ -2849,8 +2854,38 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (systemIds.Count == 0)
             return new Dictionary<(Guid, int), ConnectedSystemObject>();
 
+        // AsNoTracking: these entities are used for read-only cache lookups during export evaluation.
+        // They are never modified via SaveChanges — any CSO mutations go through separate batch methods.
+        // Avoiding tracking prevents these entities from accumulating in the change tracker across pages.
         var csos = await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
             .Where(cso => cso.MetaverseObjectId.HasValue && systemIds.Contains(cso.ConnectedSystemId))
+            .ToListAsync();
+
+        return csos
+            .Where(cso => cso.MetaverseObjectId.HasValue)
+            .ToDictionary(
+                cso => (cso.MetaverseObjectId!.Value, cso.ConnectedSystemId),
+                cso => cso);
+    }
+
+    /// <summary>
+    /// Gets CSOs joined to specific MVOs within the specified target connected systems.
+    /// Used for per-page export evaluation cache refresh — loads only CSOs relevant to the current page.
+    /// </summary>
+    public async Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByMvoIdsAndTargetSystemsAsync(
+        IEnumerable<Guid> mvoIds, IEnumerable<int> targetConnectedSystemIds)
+    {
+        var mvoIdList = mvoIds.ToList();
+        var systemIds = targetConnectedSystemIds.ToList();
+        if (mvoIdList.Count == 0 || systemIds.Count == 0)
+            return new Dictionary<(Guid, int), ConnectedSystemObject>();
+
+        var csos = await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Where(cso => cso.MetaverseObjectId.HasValue
+                && mvoIdList.Contains(cso.MetaverseObjectId.Value)
+                && systemIds.Contains(cso.ConnectedSystemId))
             .ToListAsync();
 
         return csos
@@ -2870,7 +2905,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (ids.Count == 0)
             return [];
 
+        // AsNoTracking: these entities are used for read-only no-net-change detection during export evaluation.
+        // They are never modified via SaveChanges. Avoiding tracking prevents accumulation in the change tracker.
         return await Repository.Database.ConnectedSystemObjectAttributeValues
+            .AsNoTracking()
+            .Include(av => av.ConnectedSystemObject) // Required with AsNoTracking — EF won't auto-populate from tracked CSOs
             .Include(av => av.Attribute)
             .Include(av => av.ReferenceValue) // Include referenced CSO for no-net-change detection on reference attributes
             .Where(av => ids.Contains(av.ConnectedSystemObject.Id))
