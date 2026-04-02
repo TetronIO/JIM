@@ -195,6 +195,40 @@ if ($DirectoryType -ne "All") {
 }
 
 # ============================================================================
+# Docker image pruning (preserves snapshot/build images)
+# ============================================================================
+
+# NOTE: docker image prune --filter "label!=X" with multiple filters is broken —
+# it deletes labelled images despite the exclusion. Work around this by collecting
+# the IDs of images to preserve, pruning everything else, then cleaning up dangling.
+function Invoke-ImagePrunePreservingSnapshots {
+    $labels = @("jim.samba.snapshot-hash", "jim.samba.build-hash", "jim.openldap.snapshot-hash", "jim.openldap.build-hash")
+    $preserveIds = @()
+    foreach ($label in $labels) {
+        $ids = docker images --filter "label=$label" -q 2>$null
+        if ($ids) { $preserveIds += $ids }
+    }
+    $preserveIds = $preserveIds | Sort-Object -Unique | Where-Object { $_ -ne "" }
+
+    if ($preserveIds.Count -eq 0) {
+        $result = docker image prune -af 2>&1
+        return $result
+    }
+
+    # Get all image IDs, subtract the ones to preserve, remove the rest
+    $allIds = docker images -a -q 2>$null | Sort-Object -Unique
+    $removeIds = $allIds | Where-Object { $_ -notin $preserveIds }
+
+    $result = @()
+    if ($removeIds) {
+        $result += docker rmi -f $removeIds 2>&1
+    }
+    # Clean up any remaining dangling images
+    $result += docker image prune -f 2>&1
+    return $result
+}
+
+# ============================================================================
 # Snapshot detection utilities
 # ============================================================================
 
@@ -1832,7 +1866,7 @@ if ($SetupOnly) {
 
     # Docker Cleanup (prune unused images and build cache to prevent disk space accumulation)
     Write-Step "Pruning unused images and build cache (preserving snapshots)..."
-    $imagePrune = docker image prune -af --filter "label!=jim.samba.snapshot-hash" --filter "label!=jim.samba.build-hash" --filter "label!=jim.openldap.snapshot-hash" --filter "label!=jim.openldap.build-hash" 2>&1
+    $imagePrune = Invoke-ImagePrunePreservingSnapshots
     $builderPrune = docker builder prune -af 2>&1
     $imageReclaimed = $imagePrune | Select-String "Total reclaimed space:\s*(.+)"
     $builderReclaimed = $builderPrune | Select-String "Total reclaimed space:\s*(.+)"
@@ -2229,8 +2263,7 @@ $step7Start = Get-Date
 Write-Section "Step 7: Docker Cleanup"
 
 Write-Step "Pruning unused images and build cache (preserving snapshots)..."
-# Use --filter to exclude snapshot images from pruning (they take hours to build)
-$imagePrune = docker image prune -af --filter "label!=jim.samba.snapshot-hash" --filter "label!=jim.samba.build-hash" --filter "label!=jim.openldap.snapshot-hash" --filter "label!=jim.openldap.build-hash" 2>&1
+$imagePrune = Invoke-ImagePrunePreservingSnapshots
 $builderPrune = docker builder prune -af 2>&1
 $imageReclaimed = $imagePrune | Select-String "Total reclaimed space:\s*(.+)"
 $builderReclaimed = $builderPrune | Select-String "Total reclaimed space:\s*(.+)"
