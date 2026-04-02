@@ -12,6 +12,20 @@ Records performance optimisations that were investigated and discounted — pres
 
 **Why discounted:** Expressions are already compiled and cached in a static `ConcurrentDictionary<string, Lambda>`. Re-evaluation is just a `lambda.Invoke()` call — a few microseconds. The implementation would require parsing expression strings to extract attribute references (regex or AST walk), caching the dependency set per expression, cross-referencing against `changedAttributes`, and handling edge cases (functions with side effects, dynamic attribute names, `cs["..."]` references). Benchmarking showed `CreateAttributeValueChanges` averages 0.3ms per call on Micro — the dominant cost is DB operations and pending export creation/merge, not expression evaluation. Complexity-to-benefit ratio is poor. Could revisit if profiling on larger datasets shows expression evaluation as a significant chunk.
 
+## Projection-Based Reference Loading for GetMetaverseObjectAsync (#383 subtask 3.2)
+
+**Context:** Issue #383 proposed replacing full EF Core entity tracking with lightweight projections for reference attribute loading during sync, targeting 50K+ member groups. The theory was that `GetMetaverseObjectAsync` loads deep Include chains (`ReferenceValue → AttributeValues → DisplayName`) that materialise ~150K tracked entities for a 50K-member group.
+
+**Why discounted:** Code path tracing revealed the sync pipeline **already bypasses `GetMetaverseObjectAsync`** entirely:
+- CSO loading uses `PopulateReferenceValuesAsync` — direct SQL projections with `ReferencedCsoRow` record, no entity tracking
+- MVO loading during sync uses `LoadMetaverseObjectsForCsosAsync` — intentionally shallow (no `ReferenceValue.AttributeValues`) to avoid tracking conflicts
+- Worker attribute flow uses `ResolvedReferenceMetaverseObjectId` (`[NotMapped]` property populated via direct SQL), not deep reference navigation
+- The worker project has zero calls to `GetMetaverseObjectAsync`
+
+The deep reference Include chains in `GetMetaverseObjectAsync` only affect UI pages and the API endpoint, which are single-object lookups (not hot loops). The UI already uses `GetMetaverseObjectDetailAsync(CappedMva)` with capped MVA loading. The one API endpoint (`GET /api/v1/metaverse/objects/{id}`) could be migrated to CappedMva, but this is a single-request path with no measurable performance impact.
+
+**Conclusion:** The projection-based optimisation that #383 described was already implemented in prior work (Phases 1-2 of #320). The remaining "un-projected" paths are UI/API single-object lookups that don't contribute to large group performance issues. No further work needed.
+
 ### Batch export evaluation
 
 **Idea:** Evaluate all MVOs against a rule in one pass rather than one MVO against all rules. Would enable shared context and amortise per-rule setup cost.
