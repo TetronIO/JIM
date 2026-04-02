@@ -820,6 +820,16 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    public Task DeleteMetaverseObjectAttributeValuesByIdsAsync(IReadOnlyList<Guid> attributeValueIds)
+    {
+        var idsToDelete = attributeValueIds.ToHashSet();
+        foreach (var mvo in _mvos.Values)
+        {
+            mvo.AttributeValues.RemoveAll(av => idsToDelete.Contains(av.Id));
+        }
+        return Task.CompletedTask;
+    }
+
     #endregion
 
     #region Pending Exports

@@ -5,6 +5,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Utility;
+using Microsoft.EntityFrameworkCore;
 using Serilog;
 
 namespace JIM.PostgresData.Repositories;
@@ -183,6 +184,16 @@ public partial class SyncRepository : ISyncRepository
 
     public Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
         => _repo.Metaverse.DeleteMetaverseObjectAsync(metaverseObject);
+
+    public async Task DeleteMetaverseObjectAttributeValuesByIdsAsync(IReadOnlyList<Guid> attributeValueIds)
+    {
+        if (attributeValueIds.Count == 0)
+            return;
+
+        await _context.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""MetaverseObjectAttributeValues"" WHERE ""Id"" = ANY({0})",
+            attributeValueIds.ToArray());
+    }
 
     #endregion
 

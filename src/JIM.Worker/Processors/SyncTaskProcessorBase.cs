@@ -1457,12 +1457,15 @@ public abstract class SyncTaskProcessorBase
                                         (r.ConnectedSystemObject != null && r.ConnectedSystemObject.Id == cso.Id));
 
                 // Capture additions and removals BEFORE applying changes (they get cleared by ApplyPendingMetaverseObjectAttributeChanges)
-                // This is needed for both export (Remove changes for MVAs) and MVO change tracking
+                // This is needed for both export (Remove changes for MVAs) and MVO change tracking.
+                // Check both ReferenceValue (navigation, set for in-memory resolved refs) and
+                // ReferenceValueId (scalar FK, always set for persisted refs). The navigation may
+                // be null when the ReferenceValue ThenInclude is omitted from MVO loading queries.
                 var refAddedAttributes = mvo.PendingAttributeValueAdditions
-                    .Where(av => av.ReferenceValue != null)
+                    .Where(av => av.ReferenceValue != null || av.ReferenceValueId.HasValue)
                     .ToList();
                 var refRemovedAttributesList = mvo.PendingAttributeValueRemovals
-                    .Where(av => av.ReferenceValue != null)
+                    .Where(av => av.ReferenceValue != null || av.ReferenceValueId.HasValue)
                     .ToList();
                 // Also keep as HashSet for export evaluation (existing code expects HashSet)
                 var refRemovedAttributes = refRemovedAttributesList.Count > 0
@@ -1653,6 +1656,12 @@ public abstract class SyncTaskProcessorBase
         var resolvedCount = 0;
         var updatedExistingRpeis = new List<ActivityRunProfileExecutionItem>();
 
+        // Collect IDs of removed MVO attribute values across all batches for explicit raw SQL deletion.
+        // When ClearChangeTracker() runs between batches, EF loses knowledge of attribute values
+        // removed from MVO.AttributeValues collections (ApplyPendingAttributeChanges). Without this,
+        // the removed rows persist in the database and member removals are never exported.
+        var removedMvoAttributeValueIds = new List<Guid>();
+
         for (var batchIndex = 0; batchIndex < totalBatches; batchIndex++)
         {
             var batch = _unresolvedCrossPageReferences
@@ -1715,6 +1724,14 @@ public abstract class SyncTaskProcessorBase
                     var refRemovedAttributes = refRemovedAttributesList.Count > 0
                         ? refRemovedAttributesList.ToHashSet()
                         : (HashSet<MetaverseObjectAttributeValue>?)null;
+
+                    // Collect IDs of removed attribute values for explicit deletion after
+                    // ClearChangeTracker (which loses EF's collection-removal knowledge).
+                    foreach (var removed in refRemovedAttributesList)
+                    {
+                        if (removed.Id != Guid.Empty)
+                            removedMvoAttributeValueIds.Add(removed.Id);
+                    }
 
                     // Merge into existing RPEI if one was created during initial page processing
                     // (e.g., Projected or Joined). This prevents duplicate RPEIs for the same CSO
@@ -1928,6 +1945,27 @@ public abstract class SyncTaskProcessorBase
             {
                 _syncRepo.SetAutoDetectChangesEnabled(true);
             }
+
+            // Clear the change tracker between batches to prevent entity tracking conflicts.
+            // Each batch loads CSOs, MVOs, MetaverseObjectType, MetaverseAttribute, and other
+            // entities into the tracker. Without clearing, subsequent batches encounter identity
+            // conflicts when the same shared entities (e.g., MetaverseObjectType) are loaded again.
+            // All batch data has been fully persisted above, so clearing is safe.
+            // The Activity entity will be re-attached by UpdateActivityAsync's detached handling.
+            if (batchIndex < totalBatches - 1)
+                _syncRepo.ClearChangeTracker();
+        }
+
+        // Explicitly delete removed MVO attribute values via raw SQL.
+        // ClearChangeTracker between batches erases EF's knowledge of attribute values removed
+        // from MVO.AttributeValues collections (by ApplyPendingAttributeChanges). Without this
+        // explicit deletion, the removed rows persist in the database — member removals would
+        // never be exported to target systems.
+        if (removedMvoAttributeValueIds.Count > 0)
+        {
+            await _syncRepo.DeleteMetaverseObjectAttributeValuesByIdsAsync(removedMvoAttributeValueIds);
+            Log.Information("ResolveCrossPageReferences: Explicitly deleted {Count} removed MVO attribute values via raw SQL",
+                removedMvoAttributeValueIds.Count);
         }
 
         Log.Information("ResolveCrossPageReferences: Completed cross-page reference resolution for {Count} CSOs",
@@ -2096,8 +2134,11 @@ public abstract class SyncTaskProcessorBase
         if (csoIds.Count == 0)
             return;
 
-        // Batch lookup: find DELETE PEs already in the DB for these CSO IDs
-        var persistedPesByCsoId = await _syncRepo.GetPendingExportsByConnectedSystemObjectIdsAsync(csoIds);
+        // Batch lookup: find DELETE PEs already in the DB for these CSO IDs.
+        // Use the lightweight (AsNoTracking, no CSO Include) variant to avoid loading
+        // ConnectedSystemObject entities into the change tracker — tracked CSOs from this
+        // query would conflict with CSOs loaded during cross-page reference resolution batches.
+        var persistedPesByCsoId = await _syncRepo.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(csoIds);
 
         if (persistedPesByCsoId.Count == 0)
             return;
