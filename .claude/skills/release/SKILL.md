@@ -1,14 +1,14 @@
 ---
 name: release
 description: Create a new JIM release — updates VERSION, CHANGELOG, PowerShell manifest, commits, tags, and pushes
-argument-hint: "<version> (e.g., 0.4.0 or 0.4.0-alpha)"
+argument-hint: "[version] (optional — e.g., 0.4.0 or 0.4.0-alpha; if omitted, you'll choose after reviewing the changelog)"
 ---
 
 # Create a JIM Release
 
 Follow the release process defined in `docs/RELEASE_PROCESS.md` to create a new release of JIM.
 
-The target version is `$ARGUMENTS`. If no version was provided, read the current `VERSION` file, show the user the current version and the `[Unreleased]` section of `CHANGELOG.md`, and ask what version to release.
+If a version was provided via `$ARGUMENTS`, note it but do NOT act on it yet — the version will be confirmed after changelog validation.
 
 ## Pre-Flight Checks
 
@@ -185,7 +185,18 @@ Per CLAUDE.md, changelog entries should be added with each commit/PR — but thi
    - Exclude internal/trivial changes that don't matter to customers
    If existing entries need rewording to meet this standard, propose edits.
 
-6. **If entries need adding or rewording**, update the `[Unreleased]` section of `CHANGELOG.md` with the confirmed changes before proceeding to Step 1.
+6. **If entries need adding or rewording**, update the `[Unreleased]` section of `CHANGELOG.md` with the confirmed changes before proceeding.
+
+## Version Confirmation
+
+Now that the changelog is complete and validated, the user can make an informed versioning decision.
+
+1. Read the current `VERSION` file to show the current version
+2. Present the **final `[Unreleased]` section** of `CHANGELOG.md` to the user — this is what will become the release notes
+3. If a version was provided via `$ARGUMENTS`, propose it. Otherwise, suggest a version based on the scope of changes (patch for fixes only, minor for new features, major for breaking changes)
+4. **Ask the user to confirm or choose the version** before proceeding
+
+Do NOT proceed to Step 1 until the user has confirmed the version number.
 
 ## Step 1: Update VERSION File
 
