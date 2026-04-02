@@ -1005,8 +1005,8 @@ public class Worker : BackgroundService
                 break;
         }
 
-        // Suppress verbose EF Core SQL query logging (only log warnings/errors)
-        loggerConfiguration.MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", Serilog.Events.LogEventLevel.Warning);
+        // Suppress EF Core SQL query logging — these are noise with no diagnostic value
+        loggerConfiguration.MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", Serilog.Events.LogEventLevel.Fatal);
 
         loggerConfiguration.Enrich.FromLogContext();
         loggerConfiguration.WriteTo.File(

@@ -511,7 +511,8 @@ static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assi
 
     loggerConfiguration.MinimumLevel.Override("Microsoft", LogEventLevel.Information);
     loggerConfiguration.MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning);
-    loggerConfiguration.MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Warning);
+    // Suppress EF Core SQL query logging — these are noise with no diagnostic value
+    loggerConfiguration.MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Fatal);
     loggerConfiguration.Enrich.FromLogContext();
     loggerConfiguration.WriteTo.File(
         formatter: new RenderedCompactJsonFormatter(),

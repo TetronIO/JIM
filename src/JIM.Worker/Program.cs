@@ -12,6 +12,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
 var host = Host.CreateDefaultBuilder(args)
+    .ConfigureLogging(logging =>
+    {
+        // Suppress EF Core SQL query logging from the default console provider
+        logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.None);
+    })
     .ConfigureServices((hostContext, services) =>
     {
         // Database connection — uses shared connection string builder with bulk operation timeout
