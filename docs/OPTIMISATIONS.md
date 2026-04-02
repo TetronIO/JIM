@@ -26,6 +26,12 @@ The deep reference Include chains in `GetMetaverseObjectAsync` only affect UI pa
 
 **Conclusion:** The projection-based optimisation that #383 described was already implemented in prior work (Phases 1-2 of #320). The remaining "un-projected" paths are UI/API single-object lookups that don't contribute to large group performance issues. No further work needed.
 
+## Materialised Display Names on ConnectedSystemObject (#383 subtask 3.3)
+
+**Context:** Issue #383 proposed storing a denormalised `DisplayName` column on `ConnectedSystemObject`, maintained during import, to eliminate reference traversal when displaying CSO names.
+
+**Why discounted:** Phase 2 of #320 already solved the display problem with capped MVA loading and server-side pagination. The UI no longer needs to traverse reference chains to resolve display names for large groups — it loads capped values (10 per attribute) with reference display names included. Adding a denormalised column would introduce write-time maintenance overhead (keeping it in sync during every import) and a new consistency risk for a problem that no longer exists.
+
 ### Batch export evaluation
 
 **Idea:** Evaluate all MVOs against a rule in one pass rather than one MVO against all rules. Would enable shared context and amortise per-rule setup cost.
