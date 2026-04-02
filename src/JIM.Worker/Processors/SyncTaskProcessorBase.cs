@@ -2042,6 +2042,15 @@ public abstract class SyncTaskProcessorBase
             _provisioningCsosToCreate.Clear();
         }
 
+        // Pre-export reconciliation: detect deferred CREATE/UPDATE PEs whose CSOs already have
+        // a DELETE PE persisted to the DB (created immediately by HandleOutboundDeprovisioningAsync
+        // or EvaluateMvoDeletionAsync during the same page). Cancel contradictory pairs to avoid
+        // exporting objects that would be immediately deleted.
+        if (_pendingExportsToCreate.Count > 0)
+        {
+            await ReconcileDeferredExportsAgainstPersistedDeletesAsync();
+        }
+
         // Batch create new pending exports (evaluated during export evaluation phase)
         if (_pendingExportsToCreate.Count > 0)
         {
@@ -2067,6 +2076,79 @@ public abstract class SyncTaskProcessorBase
         }
 
         span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Checks deferred CREATE/UPDATE pending exports (in-memory) against DELETE pending exports
+    /// already persisted to the DB during this page. Removes contradictory pairs:
+    /// - CREATE(Pending) + DELETE(Pending) → cancel both (no net change)
+    /// - UPDATE(Pending) + DELETE(Pending) → remove UPDATE (DELETE still needed)
+    /// </summary>
+    private async Task ReconcileDeferredExportsAgainstPersistedDeletesAsync()
+    {
+        // Collect CSO IDs from deferred exports that have a CSO reference
+        var csoIds = _pendingExportsToCreate
+            .Where(pe => pe.ConnectedSystemObjectId.HasValue)
+            .Select(pe => pe.ConnectedSystemObjectId!.Value)
+            .Distinct()
+            .ToList();
+
+        if (csoIds.Count == 0)
+            return;
+
+        // Batch lookup: find DELETE PEs already in the DB for these CSO IDs
+        var persistedPesByCsoId = await _syncRepo.GetPendingExportsByConnectedSystemObjectIdsAsync(csoIds);
+
+        if (persistedPesByCsoId.Count == 0)
+            return;
+
+        var reconciledCount = 0;
+
+        foreach (var (csoId, persistedPe) in persistedPesByCsoId)
+        {
+            if (persistedPe.ChangeType != PendingExportChangeType.Delete ||
+                persistedPe.Status != PendingExportStatus.Pending)
+                continue;
+
+            // Find the matching deferred CREATE or UPDATE
+            var deferredPe = _pendingExportsToCreate.FirstOrDefault(pe =>
+                pe.ConnectedSystemObjectId == csoId &&
+                pe.Status == PendingExportStatus.Pending);
+
+            if (deferredPe == null)
+                continue;
+
+            if (deferredPe.ChangeType == PendingExportChangeType.Create)
+            {
+                // CREATE + DELETE → cancel both. Remove deferred CREATE and queue persisted DELETE for deletion.
+                _pendingExportsToCreate.Remove(deferredPe);
+                _pendingExportsToDelete.Add(persistedPe);
+
+                // Also remove the provisioning CSO — it was never exported, so no need to create it
+                var provisioningCso = _provisioningCsosToCreate.FirstOrDefault(c => c.Id == csoId);
+                if (provisioningCso != null)
+                    _provisioningCsosToCreate.Remove(provisioningCso);
+
+                Log.Information("ReconcileDeferredExportsAgainstPersistedDeletesAsync: Cancelled CREATE PE {CreateId} and DELETE PE {DeleteId} for CSO {CsoId} — no net change, object was never exported",
+                    deferredPe.Id, persistedPe.Id, csoId);
+                reconciledCount++;
+            }
+            else if (deferredPe.ChangeType == PendingExportChangeType.Update)
+            {
+                // UPDATE + DELETE → remove UPDATE only, DELETE still needed
+                _pendingExportsToCreate.Remove(deferredPe);
+
+                Log.Information("ReconcileDeferredExportsAgainstPersistedDeletesAsync: Removed redundant UPDATE PE {UpdateId} for CSO {CsoId} — DELETE PE {DeleteId} will proceed",
+                    deferredPe.Id, csoId, persistedPe.Id);
+                reconciledCount++;
+            }
+        }
+
+        if (reconciledCount > 0)
+        {
+            Log.Information("ReconcileDeferredExportsAgainstPersistedDeletesAsync: Reconciled {Count} CREATE/UPDATE+DELETE pairs in this page",
+                reconciledCount);
+        }
     }
 
     /// <summary>

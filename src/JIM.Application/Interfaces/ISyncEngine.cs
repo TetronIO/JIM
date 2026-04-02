@@ -123,4 +123,14 @@ public interface ISyncEngine
     bool IsAttributeChangeConfirmed(
         ConnectedSystemObject cso,
         PendingExportAttributeValueChange attrChange);
+
+    /// <summary>
+    /// Identifies pending export pairs (CREATE+DELETE or UPDATE+DELETE) targeting the same CSO
+    /// that cancel each other out and should not be exported.
+    /// Only reconciles pairs where both exports have Pending status — already-exported
+    /// operations are left untouched since the object may exist in the target system.
+    /// </summary>
+    /// <param name="pendingExports">All pending exports to scan for reconcilable pairs.</param>
+    /// <returns>Result describing which exports should be cancelled.</returns>
+    PreExportReconciliationResult ReconcileCreateDeletePairs(IReadOnlyList<PendingExport> pendingExports);
 }
