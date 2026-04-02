@@ -849,7 +849,9 @@ function Reset-JIMForNextScenario {
     $envContent = Get-Content $envFilePath -Raw
     if ($null -eq $envContent) { $envContent = "" }
     if ($envContent -match "JIM_INFRASTRUCTURE_API_KEY=") {
-        $envContent = $envContent -replace "JIM_INFRASTRUCTURE_API_KEY=.*", "JIM_INFRASTRUCTURE_API_KEY=$newApiKey"
+        # Strip any leading comment marker (# ) so a commented-out line becomes active
+        $envContent = $envContent -replace "(?m)^#\s*JIM_INFRASTRUCTURE_API_KEY=.*", "JIM_INFRASTRUCTURE_API_KEY=$newApiKey"
+        $envContent = $envContent -replace "(?m)^JIM_INFRASTRUCTURE_API_KEY=.*", "JIM_INFRASTRUCTURE_API_KEY=$newApiKey"
     } else {
         $newLine = if ($envContent.EndsWith("`n")) { "" } else { "`n" }
         $envContent = $envContent + $newLine + "JIM_INFRASTRUCTURE_API_KEY=$newApiKey`n"
@@ -1374,7 +1376,9 @@ $envContent = Get-Content $envFilePath -Raw
 if ($null -eq $envContent) { $envContent = "" }
 
 if ($envContent -match "JIM_INFRASTRUCTURE_API_KEY=") {
-    $envContent = $envContent -replace "JIM_INFRASTRUCTURE_API_KEY=.*", "JIM_INFRASTRUCTURE_API_KEY=$apiKey"
+    # Strip any leading comment marker (# ) so a commented-out line becomes active
+    $envContent = $envContent -replace "(?m)^#\s*JIM_INFRASTRUCTURE_API_KEY=.*", "JIM_INFRASTRUCTURE_API_KEY=$apiKey"
+    $envContent = $envContent -replace "(?m)^JIM_INFRASTRUCTURE_API_KEY=.*", "JIM_INFRASTRUCTURE_API_KEY=$apiKey"
 }
 else {
     $newLine = if ($envContent.EndsWith("`n")) { "" } else { "`n" }
