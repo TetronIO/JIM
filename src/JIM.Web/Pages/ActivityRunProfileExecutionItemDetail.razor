@@ -963,6 +963,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     private Activity? _activity;
     private ConnectedSystemHeader? _connectedSystemHeader;
     private List<BreadcrumbItem> _breadcrumbs = null!;
+    private bool _fromOperations;
     private ConnectedSystemObjectAttributeValue? _externalIdAttributeValue;
     private MetaverseObject? _metaverseObject;
     private PendingExport? _pendingExport;
@@ -1025,13 +1026,29 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
 
         _activity = await jim.Activities.GetActivityAsync(_activityRunProfileExecutionItem.ActivityId);
 
-        _breadcrumbs = new List<BreadcrumbItem>
-{
-new("Home", href: "/", icon: Icons.Material.Filled.Home),
-new("Activity", href: "/activity"),
-new(_activity?.DisplayName ?? "Activity Detail", href: $"/activity/{_activityRunProfileExecutionItem.ActivityId}"),
-new("Item Details", href: null, disabled: true)
-};
+        // Determine navigation context from query parameter
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        _fromOperations = string.Equals(query["from"], "operations", StringComparison.OrdinalIgnoreCase);
+
+        var activityName = _activity?.DisplayName ?? "Activity Detail";
+        var activityHref = $"/activity/{_activityRunProfileExecutionItem.ActivityId}{(_fromOperations ? "?from=operations" : "")}";
+
+        _breadcrumbs = _fromOperations
+            ? new List<BreadcrumbItem>
+            {
+                new("Home", href: "/", icon: Icons.Material.Filled.Home),
+                new("Operations", href: "/admin/operations?t=history"),
+                new(activityName, href: activityHref),
+                new("Item Details", href: null, disabled: true)
+            }
+            : new List<BreadcrumbItem>
+            {
+                new("Home", href: "/", icon: Icons.Material.Filled.Home),
+                new("Activity", href: "/activity"),
+                new(activityName, href: activityHref),
+                new("Item Details", href: null, disabled: true)
+            };
         _externalIdAttributeValue = _activityRunProfileExecutionItem.GetExternalIdAttributeValue();
 
         var connectedSystemId = _activityRunProfileExecutionItem.GetConnectedSystemId()

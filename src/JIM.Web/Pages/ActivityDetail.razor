@@ -133,7 +133,7 @@
                     <MudText Typo="Typo.button" Class="mud-text-secondary">Parent Activity:</MudText>
                     <MudText>
                         <MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="mr-1" Style="vertical-align: middle;" />
-                        <MudLink Href="@($"/activity/{_activity.ParentActivityId.Value}")">View parent activity</MudLink>
+                        <MudLink Href="@($"/activity/{_activity.ParentActivityId.Value}{(_fromOperations ? "?from=operations" : "")}")">View parent activity</MudLink>
                     </MudText>
                 </MudItem>
             }
@@ -505,7 +505,7 @@
                     <MudButton Variant="Variant.Outlined"
                                Size="Size.Small"
                                Color="Color.Primary"
-                               Href="@($"/activity/item/{context.Id}")">View</MudButton>
+                               Href="@($"/activity/item/{context.Id}{(_fromOperations ? "?from=operations" : "")}")">View</MudButton>
                 </MudTd>
                 <MudTd DataLabel="External Id" Class="jim-text-code mud-text-secondary">@(!string.IsNullOrEmpty(context.ExternalIdValue) ? context.ExternalIdValue : "-")</MudTd>
                 <MudTd DataLabel="Display Name">@(!string.IsNullOrEmpty(context.DisplayName) ? context.DisplayName : "-")</MudTd>
@@ -581,7 +581,7 @@
                     <MudButton Variant="Variant.Outlined"
                                Size="Size.Small"
                                Color="Color.Primary"
-                               Href="@($"/activity/{context.Id}")">View</MudButton>
+                               Href="@($"/activity/{context.Id}{(_fromOperations ? "?from=operations" : "")}")">View</MudButton>
                 </MudTd>
                 <MudTd DataLabel="Type">@context.TargetType.ToString().SplitOnCapitalLetters()</MudTd>
                 <MudTd DataLabel="Target">
@@ -660,7 +660,9 @@
     // Outcome type filter - filters RPEIs by outcome types present in their OutcomeSummary
     private IReadOnlyCollection<ActivityRunProfileExecutionItemSyncOutcomeType> _selectedOutcomeTypes = new List<ActivityRunProfileExecutionItemSyncOutcomeType>();
 
-    private readonly List<BreadcrumbItem> _breadcrumbs = new List<BreadcrumbItem>
+    private bool _fromOperations;
+
+    private List<BreadcrumbItem> _breadcrumbs = new List<BreadcrumbItem>
     {
         new("Home", href: "/", icon: Icons.Material.Filled.Home),
         new("Activity", href: "/activity"),
@@ -690,6 +692,25 @@
             NavManager.NavigateTo("../");
             return;
         }
+
+        // Determine navigation context from query parameter
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        _fromOperations = string.Equals(query["from"], "operations", StringComparison.OrdinalIgnoreCase);
+
+        _breadcrumbs = _fromOperations
+            ? new List<BreadcrumbItem>
+            {
+                new("Home", href: "/", icon: Icons.Material.Filled.Home),
+                new("Operations", href: "/admin/operations?t=history"),
+                new("Activity Detail", href: null, disabled: true)
+            }
+            : new List<BreadcrumbItem>
+            {
+                new("Home", href: "/", icon: Icons.Material.Filled.Home),
+                new("Activity", href: "/activity"),
+                new("Activity Detail", href: null, disabled: true)
+            };
 
         // Note: These queries run sequentially because EF Core's DbContext is not thread-safe.
         // The main performance win comes from the optimised GROUP BY query in GetActivityRunProfileExecutionStatsAsync.

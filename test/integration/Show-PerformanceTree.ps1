@@ -198,6 +198,16 @@ Write-Host "  Timestamp: $($metrics.Timestamp)"
 Write-Host "  Operations: $($metrics.Operations.Count)"
 Write-Host ""
 
+if ($metrics.WallClockOnly) {
+    $totalTime = Format-FriendlyTime -Ms $metrics.TestDurationMs
+    Write-Host "${CYAN}Wall-Clock Only Metrics:${NC}"
+    Write-Host "  Total Test Duration: $totalTime"
+    Write-Host ""
+    Write-Host "${GRAY}Detailed per-operation breakdown was not captured for this template size.${NC}"
+    Write-Host "${GRAY}Use -CaptureMetrics when running the test to force detailed capture.${NC}"
+    exit 0
+}
+
 if ($metrics.Operations.Count -eq 0) {
     Write-Host "${YELLOW}No operations found in metrics file.${NC}"
     exit 0

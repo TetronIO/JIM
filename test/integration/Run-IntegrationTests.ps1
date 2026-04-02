@@ -195,6 +195,40 @@ if ($DirectoryType -ne "All") {
 }
 
 # ============================================================================
+# Docker image pruning (preserves snapshot/build images)
+# ============================================================================
+
+# NOTE: docker image prune --filter "label!=X" with multiple filters is broken —
+# it deletes labelled images despite the exclusion. Work around this by collecting
+# the IDs of images to preserve, pruning everything else, then cleaning up dangling.
+function Invoke-ImagePrunePreservingSnapshots {
+    $labels = @("jim.samba.snapshot-hash", "jim.samba.build-hash", "jim.openldap.snapshot-hash", "jim.openldap.build-hash")
+    $preserveIds = @()
+    foreach ($label in $labels) {
+        $ids = docker images --filter "label=$label" -q 2>$null
+        if ($ids) { $preserveIds += $ids }
+    }
+    $preserveIds = $preserveIds | Sort-Object -Unique | Where-Object { $_ -ne "" }
+
+    if ($preserveIds.Count -eq 0) {
+        $result = docker image prune -af 2>&1
+        return $result
+    }
+
+    # Get all image IDs, subtract the ones to preserve, remove the rest
+    $allIds = docker images -a -q 2>$null | Sort-Object -Unique
+    $removeIds = $allIds | Where-Object { $_ -notin $preserveIds }
+
+    $result = @()
+    if ($removeIds) {
+        $result += docker rmi -f $removeIds 2>&1
+    }
+    # Clean up any remaining dangling images
+    $result += docker image prune -f 2>&1
+    return $result
+}
+
+# ============================================================================
 # Snapshot detection utilities
 # ============================================================================
 
@@ -1832,7 +1866,7 @@ if ($SetupOnly) {
 
     # Docker Cleanup (prune unused images and build cache to prevent disk space accumulation)
     Write-Step "Pruning unused images and build cache (preserving snapshots)..."
-    $imagePrune = docker image prune -af --filter "label!=jim.samba.snapshot-hash" --filter "label!=jim.samba.build-hash" --filter "label!=jim.openldap.snapshot-hash" --filter "label!=jim.openldap.build-hash" 2>&1
+    $imagePrune = Invoke-ImagePrunePreservingSnapshots
     $builderPrune = docker builder prune -af 2>&1
     $imageReclaimed = $imagePrune | Select-String "Total reclaimed space:\s*(.+)"
     $builderReclaimed = $builderPrune | Select-String "Total reclaimed space:\s*(.+)"
@@ -1964,6 +1998,100 @@ $metricsSkippedTemplates = @("MediumLarge", "Large", "XLarge", "XXLarge")
 if ($Template -in $metricsSkippedTemplates -and -not $CaptureMetrics) {
     Write-Warning "Skipping detailed performance metrics for '$Template' template (log volume too large for efficient parsing)"
     Write-Step "Use -CaptureMetrics to force capture (this will be slow)"
+
+    # Save wall-clock duration so we can still compare total run time between runs
+    $testDurationMs = $timings["5. Run Tests"].TotalMilliseconds
+    Write-Step "Recording wall-clock duration for performance comparison..."
+
+    $wallClockMetrics = @{
+        Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+        Scenario = $Scenario
+        Template = $Template
+        Step = $Step
+        WallClockOnly = $true
+        TestDurationMs = $testDurationMs
+        Operations = @()
+    }
+
+    # Create performance results directory (per hostname)
+    $hostname = [System.Net.Dns]::GetHostName()
+    $perfDir = Join-Path $scriptRoot "results" "performance" $hostname
+    if (-not (Test-Path $perfDir)) {
+        New-Item -ItemType Directory -Path $perfDir -Force | Out-Null
+    }
+
+    # Save current wall-clock metrics
+    $timestamp = (Get-Date).ToString("yyyy-MM-dd_HHmmss")
+    $currentFile = Join-Path $perfDir "$Scenario-$Template-$timestamp.json"
+    $wallClockMetrics | ConvertTo-Json -Depth 10 | Set-Content $currentFile
+    Write-Success "Saved wall-clock metrics to: results/performance/$hostname/$Scenario-$Template-$timestamp.json"
+
+    # Find most recent previous baseline (excluding current run)
+    $previousFiles = Get-ChildItem $perfDir -Filter "$Scenario-$Template-*.json" |
+        Where-Object { $_.Name -ne "$Scenario-$Template-$timestamp.json" } |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+
+    if ($previousFiles) {
+        $baseline = Get-Content $previousFiles.FullName | ConvertFrom-Json
+
+        # Determine baseline duration - could be a wall-clock-only file or a full metrics file
+        $baselineDurationMs = if ($null -ne $baseline.TestDurationMs) {
+            $baseline.TestDurationMs
+        }
+        elseif ($baseline.Operations -and $baseline.Operations.Count -gt 0) {
+            # Full metrics file - sum the top-level operation durations as an approximation
+            ($baseline.Operations | Where-Object { -not $_.Parent } | Measure-Object -Property DurationMs -Sum).Sum
+        }
+        else {
+            $null
+        }
+
+        if ($null -ne $baselineDurationMs -and $baselineDurationMs -gt 0) {
+            Write-Host ""
+            Write-Host "${CYAN}Performance Comparison (Wall-Clock):${NC}"
+            Write-Host "${GRAY}(Detailed per-operation breakdown skipped for large templates)${NC}"
+            Write-Host ""
+
+            $delta = $testDurationMs - $baselineDurationMs
+            $percentChange = ($delta / $baselineDurationMs) * 100
+
+            $symbol = if ($delta -lt 0) { "↓" } elseif ($delta -gt 0) { "↑" } else { "=" }
+            $colour = if ($delta -lt 0) { $GREEN } elseif ($delta -gt ($baselineDurationMs * 0.1)) { $RED } else { $YELLOW }
+
+            # Format durations as friendly time strings
+            function Format-WallClockTime {
+                param([double]$Ms)
+                if ($Ms -lt 1000) { return "$($Ms.ToString('F1'))ms" }
+                elseif ($Ms -lt 60000) { return "$([math]::Round($Ms / 1000, 1))s" }
+                else {
+                    $totalSecs = [int]($Ms / 1000)
+                    $mins = [Math]::Floor($totalSecs / 60)
+                    $secs = $totalSecs % 60
+                    if ($secs -eq 0) { return "${mins}m" }
+                    return "${mins}m ${secs}s"
+                }
+            }
+
+            $currentFormatted = Format-WallClockTime -Ms $testDurationMs
+            $baselineFormatted = Format-WallClockTime -Ms $baselineDurationMs
+            $deltaFormatted = Format-WallClockTime -Ms ([Math]::Abs($delta))
+
+            $deltaSign = if ($delta -lt 0) { "-" } elseif ($delta -gt 0) { "+" } else { "" }
+
+            Write-Host ("  {0,-35} {1,12}  {2}{3} {4}{5} ({6:+0.0;-0.0;0}%)${NC}" -f `
+                "Total Test Duration", $currentFormatted, $colour, $symbol, $deltaSign, $deltaFormatted, $percentChange)
+            Write-Host ("  {0,-35} {1,12}" -f "Previous Baseline", $baselineFormatted)
+
+            Write-Host ""
+            Write-Host "${GRAY}Baseline: $($previousFiles.Name) ($($baseline.Timestamp))${NC}"
+        }
+    }
+    else {
+        Write-Host ""
+        Write-Host "${YELLOW}No previous baseline found for comparison.${NC}"
+        Write-Host "${GRAY}This is the first performance capture for $Scenario-$Template on $hostname${NC}"
+    }
 }
 else {
 Write-Step "Extracting diagnostic timing from worker logs..."
@@ -1977,6 +2105,7 @@ $metrics = @{
     Scenario = $Scenario
     Template = $Template
     Step = $Step
+    TestDurationMs = $timings["5. Run Tests"].TotalMilliseconds
     Operations = @()
 }
 
@@ -2229,8 +2358,7 @@ $step7Start = Get-Date
 Write-Section "Step 7: Docker Cleanup"
 
 Write-Step "Pruning unused images and build cache (preserving snapshots)..."
-# Use --filter to exclude snapshot images from pruning (they take hours to build)
-$imagePrune = docker image prune -af --filter "label!=jim.samba.snapshot-hash" --filter "label!=jim.samba.build-hash" --filter "label!=jim.openldap.snapshot-hash" --filter "label!=jim.openldap.build-hash" 2>&1
+$imagePrune = Invoke-ImagePrunePreservingSnapshots
 $builderPrune = docker builder prune -af 2>&1
 $imageReclaimed = $imagePrune | Select-String "Total reclaimed space:\s*(.+)"
 $builderReclaimed = $builderPrune | Select-String "Total reclaimed space:\s*(.+)"

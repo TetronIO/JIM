@@ -296,6 +296,10 @@ public class ExportEvaluationServer
         var skippedDueToSource = 0;
         var skippedDueToScope = 0;
 
+        // Build the MVO attribute dictionary once for all export rules — avoids rebuilding
+        // per-rule when the same MVO is evaluated against multiple export rules with expressions.
+        Dictionary<string, object?>? mvAttributeDictionary = null;
+
         using var loopSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("EvaluateExportRuleLoop");
         loopSpan.SetTag("ruleCount", exportRules.Count);
         loopSpan.SetTag("mvoId", mvo.Id);
@@ -326,7 +330,8 @@ public class ExportEvaluationServer
                 .SetTag("targetSystem", exportRule.ConnectedSystem?.Name ?? exportRule.ConnectedSystemId.ToString()))
             {
                 var (pendingExport, provisioningCso, csoAlreadyCurrentCount) = await CreateOrUpdatePendingExportWithNoNetChangeAsync(
-                    mvo, exportRule, changedAttributes, cache, deferSave, removedAttributes, existingPendingExports);
+                    mvo, exportRule, changedAttributes, cache, deferSave, removedAttributes, existingPendingExports,
+                    mvAttributeDictionary);
 
                 result.CsoAlreadyCurrentCount += csoAlreadyCurrentCount;
 
@@ -881,7 +886,8 @@ public class ExportEvaluationServer
         ExportEvaluationCache cache,
         bool deferSave = false,
         HashSet<MetaverseObjectAttributeValue>? removedAttributes = null,
-        List<PendingExport>? existingPendingExports = null)
+        List<PendingExport>? existingPendingExports = null,
+        Dictionary<string, object?>? mvAttributeDictionary = null)
     {
         // Find existing CSO using cached lookup instead of database query
         var lookupKey = (mvo.Id, exportRule.ConnectedSystemId);
@@ -996,7 +1002,7 @@ public class ExportEvaluationServer
 
             attributeChanges = CreateAttributeValueChanges(mvo, exportRule, changedAttributes, changeType,
                 existingCso: existingCso, csoAttributeCache: cache.CsoAttributeValues, out csoAlreadyCurrentCount,
-                removedAttributes: removedAttributes);
+                removedAttributes: removedAttributes, mvAttributeDictionary: mvAttributeDictionary);
 
             attrSpan.SetTag("changeCount", attributeChanges.Count);
             attrSpan.SetTag("skippedNoNetChange", csoAlreadyCurrentCount);
@@ -1337,7 +1343,8 @@ public class ExportEvaluationServer
         ConnectedSystemObject? existingCso,
         ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue>? csoAttributeCache,
         out int csoAlreadyCurrentCount,
-        HashSet<MetaverseObjectAttributeValue>? removedAttributes = null)
+        HashSet<MetaverseObjectAttributeValue>? removedAttributes = null,
+        Dictionary<string, object?>? mvAttributeDictionary = null)
     {
         var changes = new List<PendingExportAttributeValueChange>();
         var isCreateOperation = changeType == PendingExportChangeType.Create;
@@ -1345,10 +1352,6 @@ public class ExportEvaluationServer
 
         // For no-net-change detection, we need both the CSO and the attribute cache
         var canDetectNoNetChange = !isCreateOperation && existingCso != null && csoAttributeCache != null;
-
-        // Build the MVO attribute dictionary once for all expression evaluations
-        // This avoids repeatedly iterating through MVO attributes for each expression
-        Dictionary<string, object?>? mvAttributeDictionary = null;
 
         foreach (var mapping in exportRule.AttributeFlowRules)
         {
@@ -1431,13 +1434,8 @@ public class ExportEvaluationServer
                             {
                                 var cacheKey = (existingCso!.Id, change.AttributeId);
                                 var existingCsoValues = csoAttributeCache![cacheKey];
-                                var valuesList = existingCsoValues.ToList();
 
-                                Log.Debug("CreateAttributeValueChanges: No-net-change check for attr {AttrId} on CSO {CsoId}. Change.IntValue={ChangeInt}, Cache has {CacheCount} values: [{CacheValues}]",
-                                    change.AttributeId, existingCso.Id, change.IntValue, valuesList.Count,
-                                    string.Join(", ", valuesList.Select(v => $"Int={v.IntValue},Str={v.StringValue}")));
-
-                                if (IsCsoAttributeAlreadyCurrent(change, valuesList))
+                                if (IsCsoAttributeAlreadyCurrent(change, existingCsoValues))
                                 {
                                     Log.Debug("CreateAttributeValueChanges: Skipping attribute {AttrId} for CSO {CsoId} - CSO already has current value (expression)",
                                         change.AttributeId, existingCso.Id);
