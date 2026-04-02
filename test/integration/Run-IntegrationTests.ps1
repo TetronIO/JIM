@@ -1998,6 +1998,100 @@ $metricsSkippedTemplates = @("MediumLarge", "Large", "XLarge", "XXLarge")
 if ($Template -in $metricsSkippedTemplates -and -not $CaptureMetrics) {
     Write-Warning "Skipping detailed performance metrics for '$Template' template (log volume too large for efficient parsing)"
     Write-Step "Use -CaptureMetrics to force capture (this will be slow)"
+
+    # Save wall-clock duration so we can still compare total run time between runs
+    $testDurationMs = $timings["5. Run Tests"].TotalMilliseconds
+    Write-Step "Recording wall-clock duration for performance comparison..."
+
+    $wallClockMetrics = @{
+        Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+        Scenario = $Scenario
+        Template = $Template
+        Step = $Step
+        WallClockOnly = $true
+        TestDurationMs = $testDurationMs
+        Operations = @()
+    }
+
+    # Create performance results directory (per hostname)
+    $hostname = [System.Net.Dns]::GetHostName()
+    $perfDir = Join-Path $scriptRoot "results" "performance" $hostname
+    if (-not (Test-Path $perfDir)) {
+        New-Item -ItemType Directory -Path $perfDir -Force | Out-Null
+    }
+
+    # Save current wall-clock metrics
+    $timestamp = (Get-Date).ToString("yyyy-MM-dd_HHmmss")
+    $currentFile = Join-Path $perfDir "$Scenario-$Template-$timestamp.json"
+    $wallClockMetrics | ConvertTo-Json -Depth 10 | Set-Content $currentFile
+    Write-Success "Saved wall-clock metrics to: results/performance/$hostname/$Scenario-$Template-$timestamp.json"
+
+    # Find most recent previous baseline (excluding current run)
+    $previousFiles = Get-ChildItem $perfDir -Filter "$Scenario-$Template-*.json" |
+        Where-Object { $_.Name -ne "$Scenario-$Template-$timestamp.json" } |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+
+    if ($previousFiles) {
+        $baseline = Get-Content $previousFiles.FullName | ConvertFrom-Json
+
+        # Determine baseline duration - could be a wall-clock-only file or a full metrics file
+        $baselineDurationMs = if ($null -ne $baseline.TestDurationMs) {
+            $baseline.TestDurationMs
+        }
+        elseif ($baseline.Operations -and $baseline.Operations.Count -gt 0) {
+            # Full metrics file - sum the top-level operation durations as an approximation
+            ($baseline.Operations | Where-Object { -not $_.Parent } | Measure-Object -Property DurationMs -Sum).Sum
+        }
+        else {
+            $null
+        }
+
+        if ($null -ne $baselineDurationMs -and $baselineDurationMs -gt 0) {
+            Write-Host ""
+            Write-Host "${CYAN}Performance Comparison (Wall-Clock):${NC}"
+            Write-Host "${GRAY}(Detailed per-operation breakdown skipped for large templates)${NC}"
+            Write-Host ""
+
+            $delta = $testDurationMs - $baselineDurationMs
+            $percentChange = ($delta / $baselineDurationMs) * 100
+
+            $symbol = if ($delta -lt 0) { "↓" } elseif ($delta -gt 0) { "↑" } else { "=" }
+            $colour = if ($delta -lt 0) { $GREEN } elseif ($delta -gt ($baselineDurationMs * 0.1)) { $RED } else { $YELLOW }
+
+            # Format durations as friendly time strings
+            function Format-WallClockTime {
+                param([double]$Ms)
+                if ($Ms -lt 1000) { return "$($Ms.ToString('F1'))ms" }
+                elseif ($Ms -lt 60000) { return "$([math]::Round($Ms / 1000, 1))s" }
+                else {
+                    $totalSecs = [int]($Ms / 1000)
+                    $mins = [Math]::Floor($totalSecs / 60)
+                    $secs = $totalSecs % 60
+                    if ($secs -eq 0) { return "${mins}m" }
+                    return "${mins}m ${secs}s"
+                }
+            }
+
+            $currentFormatted = Format-WallClockTime -Ms $testDurationMs
+            $baselineFormatted = Format-WallClockTime -Ms $baselineDurationMs
+            $deltaFormatted = Format-WallClockTime -Ms ([Math]::Abs($delta))
+
+            $deltaSign = if ($delta -lt 0) { "-" } elseif ($delta -gt 0) { "+" } else { "" }
+
+            Write-Host ("  {0,-35} {1,12}  {2}{3} {4}{5} ({6:+0.0;-0.0;0}%)${NC}" -f `
+                "Total Test Duration", $currentFormatted, $colour, $symbol, $deltaSign, $deltaFormatted, $percentChange)
+            Write-Host ("  {0,-35} {1,12}" -f "Previous Baseline", $baselineFormatted)
+
+            Write-Host ""
+            Write-Host "${GRAY}Baseline: $($previousFiles.Name) ($($baseline.Timestamp))${NC}"
+        }
+    }
+    else {
+        Write-Host ""
+        Write-Host "${YELLOW}No previous baseline found for comparison.${NC}"
+        Write-Host "${GRAY}This is the first performance capture for $Scenario-$Template on $hostname${NC}"
+    }
 }
 else {
 Write-Step "Extracting diagnostic timing from worker logs..."
@@ -2011,6 +2105,7 @@ $metrics = @{
     Scenario = $Scenario
     Template = $Template
     Step = $Step
+    TestDurationMs = $timings["5. Run Tests"].TotalMilliseconds
     Operations = @()
 }
 
