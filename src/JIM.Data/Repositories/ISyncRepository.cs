@@ -282,6 +282,13 @@ public interface ISyncRepository
     /// </summary>
     Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject);
 
+    /// <summary>
+    /// Deletes MVO attribute values by their IDs using raw SQL.
+    /// Used during cross-page reference resolution where the change tracker is cleared between
+    /// batches — EF cannot infer collection removals after clearing, so deletions must be explicit.
+    /// </summary>
+    Task DeleteMetaverseObjectAttributeValuesByIdsAsync(IReadOnlyList<Guid> attributeValueIds);
+
     #endregion
 
     #region Pending Exports

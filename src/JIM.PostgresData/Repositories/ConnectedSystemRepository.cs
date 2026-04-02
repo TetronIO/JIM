@@ -847,14 +847,22 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// Batch loads Connected System Objects by their IDs with the full Include chain needed for
     /// sync reference attribute processing. Used for cross-page reference resolution after all
     /// pages have been processed and all MVOs exist in the database.
+    ///
+    /// CSOs are loaded with AsNoTracking to prevent entity tracking conflicts during batched
+    /// cross-page resolution. Between batches, CSOs from export reconciliation or EF relationship
+    /// fixup can accumulate in the change tracker — loading new batch CSOs as tracked entities
+    /// would conflict with those already-tracked instances. Since CSOs are read-only during
+    /// cross-page resolution (only MVOs are modified and persisted), tracking is not needed.
+    ///
+    /// Because CSOs are untracked, EF Core relationship fixup cannot automatically populate
+    /// cso.MetaverseObject. Instead, LoadMetaverseObjectsForCsosAsync manually stitches the
+    /// MetaverseObject navigation after loading MVOs (which remain tracked for persistence).
     /// </summary>
     public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsForReferenceResolutionAsync(IList<Guid> csoIds)
     {
         if (csoIds.Count == 0)
             return [];
 
-        // Shallow Include chain — same approach as GetConnectedSystemObjectsAsync.
-        // ReferenceValue navigations populated via direct SQL (PopulateReferenceValuesAsync).
         var csoQuery = Repository.Database.ConnectedSystemObjects
             .Include(cso => cso.Type)
             .Include(cso => cso.AttributeValues)
@@ -928,18 +936,26 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Loads Metaverse Objects and their attribute values for a set of CSOs in a separate query.
-    /// EF Core relationship fixup automatically populates cso.MetaverseObject navigations for
-    /// entities tracked in the same DbContext, so no manual stitching is required.
+    /// Loads Metaverse Objects and their attribute values for a set of CSOs in a separate query,
+    /// then manually stitches cso.MetaverseObject navigations.
     ///
-    /// This replaces the previous approach of loading MVOs as part of the CSO query's Include
-    /// chain with AsSplitQuery(), which suffered from a materialisation bug (dotnet/efcore#33826).
-    /// By loading MVOs in a dedicated query, we avoid the deep Include nesting that triggered the bug.
+    /// MVOs are loaded as tracked entities (required for UpdateMetaverseObjectsAsync persistence).
+    /// CSOs may be tracked or untracked depending on the caller:
+    /// - Per-page sync: CSOs are tracked → EF relationship fixup auto-populates cso.MetaverseObject
+    /// - Cross-page resolution: CSOs are untracked (AsNoTracking) → manual stitching required
+    ///
+    /// Manual stitching handles both cases correctly — for tracked CSOs it's redundant but harmless.
     ///
     /// The MVO query includes:
     /// - Type: Required for deletion rule evaluation and export rule filtering
     /// - AttributeValues.Attribute: Required for attribute name/type lookup during sync and expression evaluation
-    /// - AttributeValues.ReferenceValue: Required for detecting existing MVO reference values
+    ///
+    /// IMPORTANT: AttributeValues.ReferenceValue is intentionally NOT included.
+    /// The sync engine uses the scalar FK (ReferenceValueId) to detect existing MVO reference
+    /// values — the navigation property is only a fallback for newly-created, unflushed MVOs.
+    /// Including ReferenceValue would load ConnectedSystemObject entities into the change tracker
+    /// via the MVO→AttributeValue→ReferenceValue path, causing entity tracking conflicts when
+    /// the same CSO is referenced by multiple batches during cross-page reference resolution.
     /// </summary>
     private async Task LoadMetaverseObjectsForCsosAsync(List<ConnectedSystemObject> csos)
     {
@@ -952,19 +968,26 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (mvoIds.Count == 0)
             return;
 
-        // Loading MVOs into the same DbContext triggers EF Core relationship fixup,
-        // which automatically populates cso.MetaverseObject for all tracked CSOs
-        // whose MetaverseObjectId matches a loaded MVO's primary key.
+        // MVOs remain tracked for persistence by UpdateMetaverseObjectsAsync.
         // Note: ContributedBySystem navigation is NOT included — the sync path uses the
         // scalar FK (ContributedBySystemId) directly, avoiding the need to load the full entity.
-        await Repository.Database.MetaverseObjects
+        var mvos = await Repository.Database.MetaverseObjects
             .Include(mvo => mvo.Type)
             .Include(mvo => mvo.AttributeValues)
                 .ThenInclude(av => av.Attribute)
-            .Include(mvo => mvo.AttributeValues)
-                .ThenInclude(av => av.ReferenceValue)
             .Where(mvo => mvoIds.Contains(mvo.Id))
             .ToListAsync();
+
+        // Manually stitch cso.MetaverseObject navigations. This is required when CSOs are loaded
+        // with AsNoTracking (cross-page resolution) since EF relationship fixup only works for
+        // tracked entities. For tracked CSOs (per-page sync), fixup already populated the navigation
+        // but this explicit assignment is harmless and ensures correctness in both cases.
+        var mvosById = mvos.ToDictionary(mvo => mvo.Id);
+        foreach (var cso in csos)
+        {
+            if (cso.MetaverseObjectId.HasValue && mvosById.TryGetValue(cso.MetaverseObjectId.Value, out var mvo))
+                cso.MetaverseObject = mvo;
+        }
     }
 
 
@@ -2790,7 +2813,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (mvoIds.Count == 0)
             return new Dictionary<Guid, ConnectedSystemObject>();
 
+        // AsNoTracking: these CSOs are used for reference resolution display (snapshot/causality
+        // tree). Tracking them would cause identity conflicts during cross-page reference
+        // resolution when the same CSO is loaded by multiple flush operations.
         var csos = await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
             .Include(cso => cso.Type)
             .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.Attribute)

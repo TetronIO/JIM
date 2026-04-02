@@ -146,6 +146,7 @@ if ($isOpenLDAP) {
     $groupImportMappings = @(
         @{ LdapAttr = "cn"; MvAttr = "Account Name" }
         @{ LdapAttr = "cn"; MvAttr = "Common Name" }
+        @{ LdapAttr = "cn"; MvAttr = "Display Name" }
         @{ LdapAttr = "description"; MvAttr = "Description" }
         @{ LdapAttr = "member"; MvAttr = "Static Members" }
     )
