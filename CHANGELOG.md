@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-04-02
+
 ### Added
 
 - ✨ Pre-export CREATE→DELETE reconciliation — when an object is created and then deleted before export runs, the redundant pending exports are automatically cancelled instead of failing during export (#218)
@@ -528,7 +530,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Air-gapped deployment bundle support
 - PowerShell Gallery publishing
 
-[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/TetronIO/JIM/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/TetronIO/JIM/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/TetronIO/JIM/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/TetronIO/JIM/compare/v0.6.1...v0.7.0
