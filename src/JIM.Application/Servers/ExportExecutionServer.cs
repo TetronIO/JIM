@@ -103,6 +103,25 @@ public class ExportExecutionServer
         Log.Information("ExecuteExportsAsync: Found {Count} pending exports to execute for system {SystemName} (BatchSize: {BatchSize}, MaxParallelism: {MaxParallelism})",
             totalExportCount, connectedSystem.Name, options.BatchSize, options.MaxParallelism);
 
+        // Pre-export reconciliation: detect CREATE+DELETE and UPDATE+DELETE pairs that cancel
+        // each other out. This catches pairs persisted across different sync runs (the flush-time
+        // reconciliation in SyncTaskProcessorBase catches same-page pairs).
+        var reconciled = await ReconcileCreateDeletePairsAsync(connectedSystem.Id);
+        if (reconciled > 0)
+        {
+            totalExportCount -= reconciled;
+            result.TotalPendingExports = totalExportCount;
+            result.ReconciledCount = reconciled;
+
+            if (totalExportCount <= 0)
+            {
+                Log.Information("ExecuteExportsAsync: All exports reconciled for system {SystemName} — nothing to export",
+                    connectedSystem.Name);
+                result.CompletedAt = DateTime.UtcNow;
+                return result;
+            }
+        }
+
         // Report initial progress
         await ReportProgressAsync(progressCallback, new ExportProgressInfo
         {
@@ -161,6 +180,48 @@ public class ExportExecutionServer
         {
             await callback(info);
         }
+    }
+
+    /// <summary>
+    /// Loads all executable exports for a connected system, identifies CREATE+DELETE and
+    /// UPDATE+DELETE pairs targeting the same CSO, and deletes the reconciled exports from the DB.
+    /// Returns the total number of pending exports removed.
+    /// </summary>
+    private async Task<int> ReconcileCreateDeletePairsAsync(int connectedSystemId)
+    {
+        using var span = Diagnostics.Diagnostics.Sync.StartSpan("ReconcileCreateDeletePairs");
+
+        var executableExports = await GetExecutableExportsAsync(connectedSystemId);
+        if (executableExports.Count == 0)
+            return 0;
+
+        var syncEngine = new SyncEngine();
+        var result = syncEngine.ReconcileCreateDeletePairs(executableExports);
+
+        if (result.ReconciledPairs.Count == 0)
+            return 0;
+
+        // Collect all PE IDs to delete
+        var idsToDelete = result.ReconciledPairs
+            .SelectMany(p => p.CancelledExportIds)
+            .ToList();
+
+        // Delete reconciled PEs from DB
+        var exportsToDelete = executableExports
+            .Where(pe => idsToDelete.Contains(pe.Id))
+            .ToList();
+
+        if (exportsToDelete.Count > 0)
+            await SyncRepo.DeletePendingExportsAsync(exportsToDelete);
+
+        Log.Information("ReconcileCreateDeletePairsAsync: Reconciled {PairCount} pairs, cancelled {CancelledCount} pending exports for system {SystemId}",
+            result.ReconciledPairs.Count, result.TotalCancelled, connectedSystemId);
+
+        span.SetTag("reconciledPairs", result.ReconciledPairs.Count);
+        span.SetTag("cancelledExports", result.TotalCancelled);
+        span.SetSuccess();
+
+        return result.TotalCancelled;
     }
 
     /// <summary>

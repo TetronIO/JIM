@@ -84,8 +84,9 @@ if ($envContent -match "JIM_INFRASTRUCTURE_API_KEY=") {
     Write-Host "  JIM_INFRASTRUCTURE_API_KEY already present in .env" -ForegroundColor Yellow
     Write-Host "  Updating value..." -ForegroundColor Gray
 
-    # Replace the existing value
-    $envContent = $envContent -replace "JIM_INFRASTRUCTURE_API_KEY=.*", "JIM_INFRASTRUCTURE_API_KEY=$KeyValue"
+    # Replace the existing value, stripping any leading comment marker (# )
+    $envContent = $envContent -replace "(?m)^#\s*JIM_INFRASTRUCTURE_API_KEY=.*", "JIM_INFRASTRUCTURE_API_KEY=$KeyValue"
+    $envContent = $envContent -replace "(?m)^JIM_INFRASTRUCTURE_API_KEY=.*", "JIM_INFRASTRUCTURE_API_KEY=$KeyValue"
     $envContent | Set-Content $envFilePath -NoNewline
 
     Write-Host "  ✓ Updated JIM_INFRASTRUCTURE_API_KEY in .env" -ForegroundColor Green

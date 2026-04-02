@@ -48,6 +48,13 @@ public class ExportExecutionResult
     public int DeferredCount { get; set; }
 
     /// <summary>
+    /// Number of pending exports cancelled by pre-export reconciliation.
+    /// CREATE+DELETE pairs and redundant UPDATE+DELETE pairs are detected and removed
+    /// before export execution to avoid unnecessary round-trips to the connected system.
+    /// </summary>
+    public int ReconciledCount { get; set; }
+
+    /// <summary>
     /// IDs of the pending exports that were processed.
     /// Use these IDs to fetch the actual PendingExport records for detailed information.
     /// Note: These records may be deleted after successful export, use ProcessedExportItems instead.
