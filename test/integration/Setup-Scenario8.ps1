@@ -124,6 +124,7 @@ if ($isOpenLDAP) {
     # User attribute mappings for OpenLDAP
     $userImportMappings = @(
         @{ LdapAttr = "uid"; MvAttr = "Account Name" }
+        @{ LdapAttr = "employeeNumber"; MvAttr = "Employee ID" }
         @{ LdapAttr = "givenName"; MvAttr = "First Name" }
         @{ LdapAttr = "sn"; MvAttr = "Last Name" }
         @{ LdapAttr = "displayName"; MvAttr = "Display Name" }
@@ -133,6 +134,7 @@ if ($isOpenLDAP) {
     )
     $userExportMappings = @(
         @{ MvAttr = "Account Name"; LdapAttr = "uid" }
+        @{ MvAttr = "Employee ID"; LdapAttr = "employeeNumber" }
         @{ MvAttr = "First Name"; LdapAttr = "givenName" }
         @{ MvAttr = "Last Name"; LdapAttr = "sn" }
         @{ MvAttr = "Display Name"; LdapAttr = "displayName" }
@@ -161,9 +163,9 @@ if ($isOpenLDAP) {
     $groupDnExpression = '"cn=" + mv["Account Name"] + ",' + $targetConfig.GroupContainer + '"'
 
     # Matching attribute for users and groups
-    $userMatchingAttrName  = "uid"             # OpenLDAP users match on uid
+    $userMatchingAttrName  = "employeeNumber"  # OpenLDAP users match on immutable business identifier
     $groupMatchingAttrName = "cn"              # OpenLDAP groups match on cn
-    $userMatchingMvAttr    = "Account Name"
+    $userMatchingMvAttr    = "Employee ID"
     $groupMatchingMvAttr   = "Account Name"
 }
 else {

@@ -385,8 +385,10 @@ public class MetaverseRepository : IMetaverseRepository
 
     public async Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id)
     {
-        return await Repository.Database.MetaverseObjects
-            .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
+        // Materialise the full entity so Include chains are honoured (Include is ignored
+        // when projecting via .Select(), leaving navigation properties null).
+        var entity = await Repository.Database.MetaverseObjects
+            .AsSplitQuery()
             .Include(mo => mo.Type)
             .Include(mo => mo.AttributeValues)
                 .ThenInclude(av => av.Attribute)
@@ -394,16 +396,21 @@ public class MetaverseRepository : IMetaverseRepository
                 .ThenInclude(av => av.ReferenceValue)
                     .ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
                         .ThenInclude(rvav => rvav.Attribute)
-            .Select(d => new MetaverseObjectHeader
-            {
-                Id = d.Id,
-                Created = d.Created,
-                Status = d.Status,
-                TypeId = d.Type.Id,
-                TypeName = d.Type.Name,
-                TypePluralName = d.Type.PluralName,
-                AttributeValues = d.AttributeValues.ToList()
-            }).SingleOrDefaultAsync(mo => mo.Id == id);
+            .SingleOrDefaultAsync(mo => mo.Id == id);
+
+        if (entity == null)
+            return null;
+
+        return new MetaverseObjectHeader
+        {
+            Id = entity.Id,
+            Created = entity.Created,
+            Status = entity.Status,
+            TypeId = entity.Type.Id,
+            TypeName = entity.Type.Name,
+            TypePluralName = entity.Type.PluralName,
+            AttributeValues = entity.AttributeValues.ToList()
+        };
     }
 
     public async Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
@@ -590,9 +597,11 @@ public class MetaverseRepository : IMetaverseRepository
         if (pageSize > 100)
             pageSize = 100;
 
-        // construct the base query. This much is true, regardless of the search properties.
+        // construct the base query.
+        // No AsSplitQuery: the query is paginated (max 100 rows) so cartesian explosion is bounded,
+        // and AsSplitQuery can fail to correlate split queries correctly at scale.
         var objects = from o in Repository.Database.MetaverseObjects.
-                AsSplitQuery(). // Use split query to avoid cartesian explosion from collection includes
+                Include(mo => mo.Type).
                 Include(mo => mo.AttributeValues).
                 ThenInclude(av => av.Attribute).
                 Where(q => q.Type.Id == predefinedSearch.MetaverseObjectType.Id)
@@ -683,8 +692,17 @@ public class MetaverseRepository : IMetaverseRepository
         var grossCount = await objects.CountAsync();
         var offset = (page - 1) * pageSize;
 
-        // select just the attributes we need into a header and just enough objects for the desired page
-        var results = await objects.Skip(offset).Take(pageSize).Select(d => new MetaverseObjectHeader
+        // Materialise a page of full entities so that AsSplitQuery Include chains are honoured
+        // (Include is ignored when projecting via .Select(), leaving navigation properties null).
+        // Max page size is 100 so the overhead of loading full entities is negligible.
+        var predefinedSearchAttributeIds = predefinedSearch.Attributes
+            .Select(a => a.MetaverseAttribute.Id)
+            .ToHashSet();
+
+        var pageEntities = await objects.Skip(offset).Take(pageSize).ToListAsync();
+
+        // Project to headers in memory where Attribute navigations are populated
+        var results = pageEntities.Select(d => new MetaverseObjectHeader
         {
             Id = d.Id,
             Created = d.Created,
@@ -692,8 +710,10 @@ public class MetaverseRepository : IMetaverseRepository
             TypeId = d.Type.Id,
             TypeName = d.Type.Name,
             TypePluralName = d.Type.PluralName,
-            AttributeValues = GetFilteredAttributeValuesList(predefinedSearch, d)
-        }).ToListAsync();
+            AttributeValues = d.AttributeValues
+                .Where(av => predefinedSearchAttributeIds.Contains(av.Attribute.Id))
+                .ToList()
+        }).ToList();
 
         // now with all the ids we know how many total results there are and so can populate paging info
         var pagedResultSet = new PagedResultSet<MetaverseObjectHeader>
@@ -1425,14 +1445,6 @@ public class MetaverseRepository : IMetaverseRepository
         };
     }
 
-    private static List<MetaverseObjectAttributeValue> GetFilteredAttributeValuesList(PredefinedSearch predefinedSearch, MetaverseObject metaverseObject)
-    {
-        return predefinedSearch.Attributes
-            .Select(predefinedSearchAttribute => metaverseObject.AttributeValues
-            .SingleOrDefault(q => q.Attribute.Id == predefinedSearchAttribute.MetaverseAttribute.Id))
-            .OfType<MetaverseObjectAttributeValue>()
-            .ToList();
-    }
     #endregion
 
 }
