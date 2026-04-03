@@ -239,6 +239,31 @@ public interface IConnectedSystemRepository
         string? searchText = null);
 
     /// <summary>
+    /// Retrieves a paged list of all attribute value changes across all attributes for a Pending Export.
+    /// Used by the CSO detail page for server-side pagination of the pending exports table.
+    /// </summary>
+    /// <param name="pendingExportId">The unique identifier of the Pending Export.</param>
+    /// <param name="page">The 1-based page number.</param>
+    /// <param name="pageSize">The number of results per page (max 100).</param>
+    /// <param name="searchText">Optional search text to filter changes by value or attribute name.</param>
+    /// <returns>A paged result set of attribute value changes.</returns>
+    public Task<PagedResultSet<PendingExportAttributeValueChange>> GetAllPendingExportChangesPagedAsync(
+        Guid pendingExportId,
+        int page,
+        int pageSize,
+        string? searchText = null);
+
+    /// <summary>
+    /// Retrieves the Pending Export header (without attribute value changes) for a specific Connected System Object,
+    /// along with the total count of attribute value changes. Used by the CSO detail page where changes are
+    /// loaded separately via server-side paging.
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The unique identifier of the Connected System Object.</param>
+    /// <returns>A tuple of the PendingExport (without changes loaded) and total change count, or null if none exists.</returns>
+    public Task<(PendingExport PendingExport, int ChangeCount)?> GetPendingExportHeaderByConnectedSystemObjectIdAsync(
+        Guid connectedSystemObjectId);
+
+    /// <summary>
     /// Retrieves the Pending Export for a specific Connected System Object.
     /// There should only be one PendingExport per CSO at any time.
     /// </summary>

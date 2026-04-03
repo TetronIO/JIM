@@ -2664,6 +2664,66 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         };
     }
 
+    /// <inheritdoc />
+    public async Task<PagedResultSet<PendingExportAttributeValueChange>> GetAllPendingExportChangesPagedAsync(
+        Guid pendingExportId,
+        int page,
+        int pageSize,
+        string? searchText = null)
+    {
+        var query = Repository.Database.Set<PendingExportAttributeValueChange>()
+            .Where(avc => avc.PendingExportId == pendingExportId);
+
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            var searchPattern = $"%{searchText}%";
+            query = query.Where(avc =>
+                (avc.Attribute.Name != null && EF.Functions.ILike(avc.Attribute.Name, searchPattern))
+                || (avc.StringValue != null && EF.Functions.ILike(avc.StringValue, searchPattern))
+                || (avc.UnresolvedReferenceValue != null && EF.Functions.ILike(avc.UnresolvedReferenceValue, searchPattern)));
+        }
+
+        var totalCount = await query.CountAsync();
+
+        if (page < 1) page = 1;
+        if (pageSize > 100) pageSize = 100;
+
+        var offset = (page - 1) * pageSize;
+        var items = await query
+            .OrderBy(avc => avc.Attribute.Name)
+            .ThenBy(avc => avc.Id)
+            .Skip(offset)
+            .Take(pageSize)
+            .Include(avc => avc.Attribute)
+            .ToListAsync();
+
+        return new PagedResultSet<PendingExportAttributeValueChange>
+        {
+            PageSize = pageSize,
+            TotalResults = totalCount,
+            CurrentPage = page,
+            Results = items
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<(PendingExport PendingExport, int ChangeCount)?> GetPendingExportHeaderByConnectedSystemObjectIdAsync(
+        Guid connectedSystemObjectId)
+    {
+        var pendingExport = await Repository.Database.PendingExports
+            .Include(pe => pe.ConnectedSystem)
+            .Include(pe => pe.ConnectedSystemObject)
+            .FirstOrDefaultAsync(pe => pe.ConnectedSystemObject != null && pe.ConnectedSystemObject.Id == connectedSystemObjectId);
+
+        if (pendingExport == null)
+            return null;
+
+        var changeCount = await Repository.Database.Set<PendingExportAttributeValueChange>()
+            .CountAsync(avc => avc.PendingExportId == pendingExport.Id);
+
+        return (pendingExport, changeCount);
+    }
+
     public async Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
     {
         return await Repository.Database.PendingExports
