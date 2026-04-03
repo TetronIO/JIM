@@ -134,7 +134,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         processCsosSpan.SetTag("pageSize", pageSize);
         processCsosSpan.SetTag("totalPages", totalCsoPages);
 
-        // Set the message once for the entire phase (no page details for users)
+        var throughput = new ThroughputTracker();
         await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing modified Connected System Objects");
 
         for (var page = 1; page <= totalCsoPages; page++)
@@ -232,10 +232,12 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 if (_hasRawSqlSupport)
                     _syncRepo.ClearChangeTracker();
 
-                // Update progress with page completion - this persists ObjectsProcessed to database (including MVO changes)
+                // Update progress with page completion
                 using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
                 {
-                    await _syncRepo.UpdateActivityAsync(_activity);
+                    var message = $"Syncing — {_activity.ObjectsProcessed:N0} of {totalObjectsToProcess:N0}" +
+                        throughput.FormatThroughput(_activity.ObjectsProcessed, totalObjectsToProcess);
+                    await _syncRepo.UpdateActivityMessageAsync(_activity, message);
                 }
 
                 LogPageMemoryDiagnostics(page, totalCsoPages);
@@ -257,6 +259,11 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
 
         // Update the watermark to mark this sync as complete
         await UpdateDeltaSyncWatermarkAsync();
+
+        // Update activity message with throughput summary
+        var syncCompleteMessage = $"Sync complete: {_activity.ObjectsProcessed:N0} objects" +
+            throughput.FormatCompletion(_activity.ObjectsProcessed);
+        await _syncRepo.UpdateActivityMessageAsync(_activity, syncCompleteMessage);
 
         // Summary stats were accumulated incrementally during each FlushRpeisAsync call (production).
         // In tests (EF fallback), RPEIs remain in Activity.RunProfileExecutionItems — compute stats

@@ -20,9 +20,9 @@ public class LdapConnectorImportConcurrencyTests
     }
 
     [Test]
-    public void MaxImportConcurrency_IsEight()
+    public void MaxImportConcurrency_Is64()
     {
-        Assert.That(LdapConnectorConstants.MAX_IMPORT_CONCURRENCY, Is.EqualTo(8));
+        Assert.That(LdapConnectorConstants.MAX_IMPORT_CONCURRENCY, Is.EqualTo(64));
     }
 
     [Test]

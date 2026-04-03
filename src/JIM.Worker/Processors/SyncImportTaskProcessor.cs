@@ -150,6 +150,7 @@ public class SyncImportTaskProcessor
         // (e.g., Samba AD with faulty paging). Memory-efficient: ~124 bytes per object for string keys.
         // Key format: "{objectTypeId}:{externalIdValue}" (same as per-page tracking)
         var crossPageSeenExternalIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var throughput = new ThroughputTracker();
 
         await _syncRepo.UpdateActivityMessageAsync(_activity, "Performing import");
         switch (_connector)
@@ -211,9 +212,11 @@ public class SyncImportTaskProcessor
 
                     // Update progress - for paginated imports we don't know the total, but we track objects imported so far
                     _activity.ObjectsProcessed = totalObjectsImported;
-                    var progressMessage = pageNumber > 1 || result.PaginationTokens.Count > 0
-                        ? $"Imported {totalObjectsImported} objects (page {pageNumber})"
-                        : $"Imported {totalObjectsImported} objects";
+                    var pageInfo = pageNumber > 1 || result.PaginationTokens.Count > 0
+                        ? $" (page {pageNumber})"
+                        : "";
+                    var progressMessage = $"Imported {totalObjectsImported:N0} objects{pageInfo}" +
+                        throughput.FormatThroughput(totalObjectsImported);
                     await _syncRepo.UpdateActivityMessageAsync(_activity, progressMessage);
 
                     // add the external ids from this page worth of results to our external-id collection for later deletion calculation

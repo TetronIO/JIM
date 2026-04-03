@@ -119,7 +119,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         processCsosSpan.SetTag("pageSize", pageSize);
         processCsosSpan.SetTag("totalPages", totalCsoPages);
 
-        // Set the message once for the entire phase (no page details for users)
+        var throughput = new ThroughputTracker();
         await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing Connected System Objects");
 
         for (var i = 1; i <= totalCsoPages; i++)
@@ -253,7 +253,9 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // Update progress with page completion - this persists ObjectsProcessed to database (including MVO changes)
                 using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
                 {
-                    await _syncRepo.UpdateActivityAsync(_activity);
+                    var message = $"Syncing — {_activity.ObjectsProcessed:N0} of {totalObjectsToProcess:N0}" +
+                        throughput.FormatThroughput(_activity.ObjectsProcessed, totalObjectsToProcess);
+                    await _syncRepo.UpdateActivityMessageAsync(_activity, message);
                 }
 
                 LogPageMemoryDiagnostics(i, totalCsoPages);
@@ -278,6 +280,11 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
 
         // Update the delta sync watermark to establish baseline for future delta syncs
         await UpdateDeltaSyncWatermarkAsync();
+
+        // Update activity message with throughput summary
+        var syncCompleteMessage = $"Sync complete: {_activity.ObjectsProcessed:N0} objects" +
+            throughput.FormatCompletion(_activity.ObjectsProcessed);
+        await _syncRepo.UpdateActivityMessageAsync(_activity, syncCompleteMessage);
 
         // Summary stats were accumulated incrementally during each FlushRpeisAsync call (production).
         // In tests (EF fallback), RPEIs remain in Activity.RunProfileExecutionItems — compute stats

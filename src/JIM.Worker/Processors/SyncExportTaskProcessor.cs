@@ -139,6 +139,7 @@ public class SyncExportTaskProcessor
                 MaxParallelism = _connectedSystem.MaxExportParallelism ?? 1
             };
 
+            var throughput = new ThroughputTracker();
             ExportExecutionResult result;
             using (Diagnostics.Connector.StartSpan("ExecuteExports").SetTag("pendingExportCount", pendingExportCount))
             {
@@ -150,11 +151,10 @@ public class SyncExportTaskProcessor
                     _cancellationTokenSource.Token,
                     async progressInfo =>
                     {
-                        // Update activity with progress.
-                        // UpdateActivityMessageAsync sets Message then calls UpdateActivityAsync
-                        // internally, so a separate UpdateActivityAsync call is not needed.
                         _activity.ObjectsProcessed = progressInfo.ProcessedExports;
-                        await _syncRepo.UpdateActivityMessageAsync(_activity, progressInfo.Message);
+                        var message = $"{progressInfo.Message} — {progressInfo.ProcessedExports:N0} of {progressInfo.TotalExports:N0}" +
+                            throughput.FormatThroughput(progressInfo.ProcessedExports, progressInfo.TotalExports);
+                        await _syncRepo.UpdateActivityMessageAsync(_activity, message);
                     },
                     connectorFactory: CreateConnectorForParallelBatch,
                     repositoryFactory: _syncRepoFactory,
@@ -173,7 +173,7 @@ public class SyncExportTaskProcessor
             // Finalise activity with completion message and stats (RPEIs already persisted per-batch)
             using (Diagnostics.Sync.StartSpan("ProcessExportResult"))
             {
-                await ProcessExportResultAsync(result);
+                await ProcessExportResultAsync(result, throughput);
             }
 
             // Auto-select any containers created during export.
@@ -327,7 +327,7 @@ public class SyncExportTaskProcessor
     /// Finalises the export activity with completion message and stats.
     /// RPEIs are already persisted per-batch via PersistBatchRpeisAsync callback.
     /// </summary>
-    private async Task ProcessExportResultAsync(ExportExecutionResult result)
+    private async Task ProcessExportResultAsync(ExportExecutionResult result, ThroughputTracker throughput)
     {
         // Update activity progress
         _activity.ObjectsProcessed = result.TotalPendingExports;
@@ -340,7 +340,9 @@ public class SyncExportTaskProcessor
         }
         else
         {
-            completionMessage = $"Export complete: {result.SuccessCount} succeeded, {result.FailedCount} failed, {result.DeferredCount} deferred";
+            var processed = result.SuccessCount + result.FailedCount + result.DeferredCount;
+            completionMessage = $"Export complete: {result.SuccessCount} succeeded, {result.FailedCount} failed, {result.DeferredCount} deferred" +
+                throughput.FormatCompletion(processed);
         }
 
         await _syncRepo.UpdateActivityMessageAsync(_activity, completionMessage);
