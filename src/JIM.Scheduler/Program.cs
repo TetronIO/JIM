@@ -10,6 +10,11 @@ using Microsoft.AspNetCore.DataProtection.AuthenticatedEncryption.ConfigurationM
 using Microsoft.EntityFrameworkCore;
 
 var host = Host.CreateDefaultBuilder(args)
+    .ConfigureLogging(logging =>
+    {
+        // Suppress EF Core SQL query logging (matches Web and Worker configuration)
+        logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.None);
+    })
     .ConfigureServices((hostContext, services) =>
     {
         // Database connection — uses shared connection string builder

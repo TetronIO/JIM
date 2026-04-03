@@ -221,7 +221,8 @@ jim-stack() {
   _jim_keycloak_bridge
 }
 jim-stack-logs() {
-  docker compose $(_jim_compose) logs -f
+  local lines="${1:-100}"
+  docker compose $(_jim_compose) logs -f --tail="$lines"
 }
 jim-stack-down() {
   docker compose $(_jim_compose) down
