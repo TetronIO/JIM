@@ -83,6 +83,7 @@
     <MudTable @ref="_table" T="Activity" ServerData="ServerReload" @bind-CurrentPage="_currentPage"
               RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged"
               Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
+              Loading="@_tableLoading"
               Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer">
         <HeaderContent>
             <MudTh>
@@ -298,13 +299,13 @@
                     {
                         var percentage = (double)context.ObjectsProcessed / context.ObjectsToProcess * 100;
                         <MudStack Spacing="0" Style="width: 120px;">
-                            <MudProgressLinear Value="@percentage" Color="Color.Primary" Rounded="true" Size="Size.Small" />
+                            <MudProgressLinear Value="@percentage" Color="Color.Info" Rounded="true" Size="Size.Small" />
                             <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="white-space: nowrap;">@context.ObjectsProcessed.ToString("N0") / @context.ObjectsToProcess.ToString("N0")</MudText>
                         </MudStack>
                     }
                     else
                     {
-                        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Rounded="true" Style="width: 80px;" Size="Size.Small" />
+                        <MudProgressLinear Indeterminate="true" Color="Color.Info" Rounded="true" Style="width: 80px;" Size="Size.Small" />
                         @if (!string.IsNullOrEmpty(context.Message))
                         {
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.Message</MudText>
@@ -710,6 +711,10 @@
     // Snapshot of last-displayed data for change detection during polling
     private string? _lastDataFingerprint;
 
+    // Cached polling result and loading control to avoid ReloadServerData() flicker
+    private TableData<Activity>? _pollingCache;
+    private bool _tableLoading;
+
     // Filter state
     private ActivityFilterOptions? _filterOptions;
     private IEnumerable<string> _filterConnectedSystems = [];
@@ -752,6 +757,12 @@
                     var fingerprint = BuildFingerprint(result.Results);
                     if (fingerprint != _lastDataFingerprint)
                     {
+                        _lastDataFingerprint = fingerprint;
+                        _pollingCache = new TableData<Activity>
+                        {
+                            TotalItems = result.TotalResults,
+                            Items = result.Results
+                        };
                         await InvokeAsync(() => _table!.ReloadServerData());
                     }
                 }
@@ -798,34 +809,51 @@
 
     private async Task<TableData<Activity>> ServerReload(TableState state, CancellationToken token)
     {
-        using var jim = JimFactory.Create();
-        var page = state.Page + 1;
-        var sortDescending = state.SortDirection == SortDirection.Descending;
-
-        // Get activities filtered for worker tasks
-        var connectedSystems = _filterConnectedSystems.Any() ? _filterConnectedSystems : null;
-        var runProfiles = _filterRunProfiles.Any() ? _filterRunProfiles : null;
-        var statuses = _filterStatuses.Any() ? _filterStatuses : null;
-        var initiatedBy = string.IsNullOrWhiteSpace(_filterInitiatedBy) ? null : _filterInitiatedBy;
-
-        var result = await jim.Activities.GetWorkerTaskActivitiesAsync(
-            page,
-            state.PageSize,
-            connectedSystems,
-            runProfiles,
-            statuses,
-            initiatedBy,
-            state.SortLabel,
-            sortDescending,
-            _filterHasChildren ? true : null);
-
-        _lastDataFingerprint = BuildFingerprint(result.Results);
-
-        return new TableData<Activity>
+        // If the polling loop already fetched fresh data, use it directly to avoid flicker
+        if (_pollingCache != null)
         {
-            TotalItems = result.TotalResults,
-            Items = result.Results
-        };
+            var cached = _pollingCache;
+            _pollingCache = null;
+            return cached;
+        }
+
+        // Show loading indicator only for user-initiated reloads (filters, paging, sorting)
+        _tableLoading = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var page = state.Page + 1;
+            var sortDescending = state.SortDirection == SortDirection.Descending;
+
+            // Get activities filtered for worker tasks
+            var connectedSystems = _filterConnectedSystems.Any() ? _filterConnectedSystems : null;
+            var runProfiles = _filterRunProfiles.Any() ? _filterRunProfiles : null;
+            var statuses = _filterStatuses.Any() ? _filterStatuses : null;
+            var initiatedBy = string.IsNullOrWhiteSpace(_filterInitiatedBy) ? null : _filterInitiatedBy;
+
+            var result = await jim.Activities.GetWorkerTaskActivitiesAsync(
+                page,
+                state.PageSize,
+                connectedSystems,
+                runProfiles,
+                statuses,
+                initiatedBy,
+                state.SortLabel,
+                sortDescending,
+                _filterHasChildren ? true : null);
+
+            _lastDataFingerprint = BuildFingerprint(result.Results);
+
+            return new TableData<Activity>
+            {
+                TotalItems = result.TotalResults,
+                Items = result.Results
+            };
+        }
+        finally
+        {
+            _tableLoading = false;
+        }
     }
 
     /// <summary>
