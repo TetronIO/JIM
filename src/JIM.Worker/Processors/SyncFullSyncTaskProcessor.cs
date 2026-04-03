@@ -240,12 +240,6 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // Flush this page's RPEIs via bulk insert before updating progress
                 await FlushRpeisAsync();
 
-                // Update progress with page completion - this persists ObjectsProcessed to database (including MVO changes)
-                using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
-                {
-                    await _syncRepo.UpdateActivityAsync(_activity);
-                }
-
                 // Clear the change tracker unconditionally at every page boundary to prevent
                 // memory accumulation from tracked entities across pages. Without this, the tracker
                 // grows linearly with total object count (500K+ entries at 100K objects), causing OOM.
@@ -253,8 +247,16 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // detached but UpdateDetachedSafe re-attaches it on the next UpdateActivityAsync call.
                 // Cross-page state (_unresolvedCrossPageReferences, _exportEvaluationCache, etc.) is
                 // held in CLR fields — detaching does not null their populated navigation properties.
+                // IMPORTANT: Must clear BEFORE UpdateActivityAsync to prevent re-introducing shared
+                // entities (ConnectedSystemObjectTypeAttribute) that would conflict with the next page's load.
                 if (_hasRawSqlSupport)
                     _syncRepo.ClearChangeTracker();
+
+                // Update progress with page completion - this persists ObjectsProcessed to database (including MVO changes)
+                using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
+                {
+                    await _syncRepo.UpdateActivityAsync(_activity);
+                }
 
                 LogPageMemoryDiagnostics(i, totalCsoPages);
             }

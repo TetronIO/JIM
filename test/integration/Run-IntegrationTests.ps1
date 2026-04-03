@@ -1166,9 +1166,9 @@ Write-Host "  Skip Reset:             ${CYAN}$SkipReset${NC}"
 Write-Host "  Skip Build:             ${CYAN}$SkipBuild${NC}"
 Write-Host "  Setup Only:             ${CYAN}$SetupOnly${NC}"
 if ($PSBoundParameters.ContainsKey('ExportConcurrency')) {
-    Write-Host "  Export Concurrency:     ${CYAN}$ExportConcurrency${NC}"
+    Write-Host "  LDAP Export Concurrency:     ${CYAN}$ExportConcurrency${NC}"
 } else {
-    Write-Host "  Export Concurrency:     ${GRAY}(JIM default: 4)${NC}"
+    Write-Host "  LDAP Export Concurrency:     ${GRAY}(JIM default: 4)${NC}"
 }
 if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) {
     Write-Host "  Max Export Parallelism: ${CYAN}$MaxExportParallelism${NC}"
