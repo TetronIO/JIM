@@ -1458,8 +1458,10 @@ public class SyncRepository : ISyncRepository
                       || pe.AttributeValueChanges.Any(ac =>
                             ac.Status == PendingExportAttributeChangeStatus.Pending
                          || ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed))
-            // Delete exports already exported are awaiting import confirmation — do not re-execute
+            // Create and Delete exports already exported are awaiting import confirmation — do not re-execute
             .Where(pe => !(pe.ChangeType == PendingExportChangeType.Delete
+                        && pe.Status == PendingExportStatus.Exported))
+            .Where(pe => !(pe.ChangeType == PendingExportChangeType.Create
                         && pe.Status == PendingExportStatus.Exported));
     }
 

@@ -2207,8 +2207,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                       || pe.AttributeValueChanges.Any(ac =>
                             ac.Status == PendingExportAttributeChangeStatus.Pending
                          || ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed))
-            // Exclude Delete exports that have already been exported (was IsReadyForExecution in-memory check)
+            // Exclude Create and Delete exports that have already been exported — they were sent to the
+            // target system and only need confirming import, not re-execution. Without this exclusion,
+            // batch loading degrades to O(n²) at scale as each batch rescans all previously exported
+            // Create PEs (which re-enter with Status=Exported after success).
+            // Update exports with Status=Exported are already excluded by the attribute change filter
+            // above (all changes transition to ExportedPendingConfirmation after export).
             .Where(pe => !(pe.ChangeType == PendingExportChangeType.Delete
+                        && pe.Status == PendingExportStatus.Exported))
+            .Where(pe => !(pe.ChangeType == PendingExportChangeType.Create
                         && pe.Status == PendingExportStatus.Exported));
     }
 
