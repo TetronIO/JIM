@@ -227,23 +227,23 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 // Flush this page's RPEIs via bulk insert before updating progress
                 await FlushRpeisAsync();
 
+                // Clear the change tracker unconditionally at every page boundary.
+                // See SyncFullSyncTaskProcessor for detailed explanation.
+                if (_hasRawSqlSupport)
+                    _syncRepo.ClearChangeTracker();
+
                 // Update progress with page completion - this persists ObjectsProcessed to database (including MVO changes)
                 using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
                 {
                     await _syncRepo.UpdateActivityAsync(_activity);
                 }
+
+                LogPageMemoryDiagnostics(page, totalCsoPages);
             }
             finally
             {
                 _syncRepo.SetAutoDetectChangesEnabled(true);
             }
-
-            // Clear the change tracker unconditionally at every page boundary.
-            // See SyncFullSyncTaskProcessor for detailed explanation.
-            if (_hasRawSqlSupport)
-                _syncRepo.ClearChangeTracker();
-
-            LogPageMemoryDiagnostics(page, totalCsoPages);
         }
 
         // Resolve cross-page reference attributes (same as full sync — see full sync for detailed explanation)

@@ -240,31 +240,28 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // Flush this page's RPEIs via bulk insert before updating progress
                 await FlushRpeisAsync();
 
+                // Clear the change tracker unconditionally at every page boundary to prevent
+                // memory accumulation from tracked entities across pages. Without this, the tracker
+                // grows linearly with total object count (500K+ entries at 100K objects), causing OOM.
+                // All page data has been flushed to the database above. The Activity entity becomes
+                // detached but UpdateDetachedSafe re-attaches it on the next UpdateActivityAsync call.
+                // Cross-page state (_unresolvedCrossPageReferences, _exportEvaluationCache, etc.) is
+                // held in CLR fields — detaching does not null their populated navigation properties.
+                if (_hasRawSqlSupport)
+                    _syncRepo.ClearChangeTracker();
+
                 // Update progress with page completion - this persists ObjectsProcessed to database (including MVO changes)
                 using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
                 {
                     await _syncRepo.UpdateActivityAsync(_activity);
                 }
+
+                LogPageMemoryDiagnostics(i, totalCsoPages);
             }
             finally
             {
                 _syncRepo.SetAutoDetectChangesEnabled(true);
             }
-
-            // Clear the change tracker unconditionally at every page boundary to prevent
-            // memory accumulation from tracked entities across pages. Without this, the tracker
-            // grows linearly with total object count (500K+ entries at 100K objects), causing OOM.
-            // All page data has been flushed to the database above. The Activity entity becomes
-            // detached but UpdateDetachedSafe re-attaches it on the next UpdateActivityAsync call.
-            // Cross-page state (_unresolvedCrossPageReferences, _exportEvaluationCache, etc.) is
-            // held in CLR fields — detaching does not null their populated navigation properties.
-            // IMPORTANT: Must be the LAST operation in the page loop. UpdateActivityAsync re-introduces
-            // shared entities (ConnectedSystemObjectTypeAttribute) via the Activity's navigation graph,
-            // so clearing must happen after all persistence is complete.
-            if (_hasRawSqlSupport)
-                _syncRepo.ClearChangeTracker();
-
-            LogPageMemoryDiagnostics(i, totalCsoPages);
         }
 
         // Resolve cross-page reference attributes.
