@@ -120,6 +120,18 @@ public interface IConnectedSystemRepository
     public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take);
 
     /// <summary>
+    /// Gets lightweight summaries of executable exports for pre-export reconciliation.
+    /// Returns only scalar fields via projection query — no Include chains, no entity tracking.
+    /// </summary>
+    public Task<List<PendingExportSummary>> GetExecutableExportSummariesAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Deletes pending exports by their IDs using raw SQL.
+    /// Used by reconciliation which operates on lightweight summaries, not full entities.
+    /// </summary>
+    public Task DeletePendingExportsByIdsAsync(IList<Guid> pendingExportIds);
+
+    /// <summary>
     /// Retrieves pending exports by their IDs with all necessary includes for export processing.
     /// Used by parallel batch processing where each batch re-loads its entities from its own DbContext.
     /// </summary>

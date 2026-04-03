@@ -2137,6 +2137,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var now = DateTime.UtcNow;
 
         return await Repository.Database.PendingExports
+            .AsNoTracking()
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)
@@ -2166,6 +2167,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take)
     {
         return await ExecutableExportsQuery(connectedSystemId)
+            .AsNoTracking()
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)
@@ -2211,6 +2213,47 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Gets lightweight summaries of executable exports for pre-export reconciliation.
+    /// Uses a .Select() projection — no Include chains, no entity tracking, ~3 MB at 100K
+    /// instead of ~150 MB for full entity graphs.
+    /// </summary>
+    public async Task<List<PendingExportSummary>> GetExecutableExportSummariesAsync(int connectedSystemId)
+    {
+        return await ExecutableExportsQuery(connectedSystemId)
+            .Select(pe => new PendingExportSummary
+            {
+                Id = pe.Id,
+                ChangeType = pe.ChangeType,
+                Status = pe.Status,
+                ConnectedSystemObjectId = pe.ConnectedSystemObjectId,
+                SourceMetaverseObjectId = pe.SourceMetaverseObjectId
+            })
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Deletes pending exports by their IDs using raw SQL.
+    /// Used by reconciliation which operates on lightweight summaries, not full entities.
+    /// </summary>
+    public async Task DeletePendingExportsByIdsAsync(IList<Guid> pendingExportIds)
+    {
+        if (pendingExportIds.Count == 0)
+            return;
+
+        var ids = pendingExportIds.ToArray();
+
+        // Delete child records first (FK constraint)
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""PendingExportAttributeValueChanges"" WHERE ""PendingExportId"" = ANY({0})",
+            ids);
+
+        // Delete parent records
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""PendingExports"" WHERE ""Id"" = ANY({0})",
+            ids);
+    }
+
+    /// <summary>
     /// Retrieves pending exports by their IDs with all necessary includes for export processing.
     /// Uses the same includes as GetExecutableExportsAsync to ensure connectors have access to
     /// CSO attributes, attribute value changes, and attribute definitions.
@@ -2221,6 +2264,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return [];
 
         return await Repository.Database.PendingExports
+            .AsNoTracking()
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)

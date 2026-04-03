@@ -1463,6 +1463,31 @@ public class SyncRepository : ISyncRepository
                         && pe.Status == PendingExportStatus.Exported));
     }
 
+    public Task<List<PendingExportSummary>> GetExecutableExportSummariesAsync(int connectedSystemId)
+    {
+        var result = GetExecutableExportsForSystem(connectedSystemId)
+            .Select(pe => new PendingExportSummary
+            {
+                Id = pe.Id,
+                ChangeType = pe.ChangeType,
+                Status = pe.Status,
+                ConnectedSystemObjectId = pe.ConnectedSystemObjectId,
+                SourceMetaverseObjectId = pe.SourceMetaverseObjectId
+            })
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    public Task DeletePendingExportsByIdsAsync(IList<Guid> pendingExportIds)
+    {
+        foreach (var id in pendingExportIds)
+        {
+            if (_pendingExports.TryGetValue(id, out var pe))
+                RemovePe(pe);
+        }
+        return Task.CompletedTask;
+    }
+
     public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
     {
         foreach (var pe in pendingExports)

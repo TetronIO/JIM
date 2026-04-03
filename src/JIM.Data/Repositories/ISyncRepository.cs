@@ -606,6 +606,20 @@ public interface ISyncRepository
     Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take);
 
     /// <summary>
+    /// Gets lightweight summaries of executable exports for pre-export reconciliation.
+    /// Returns only scalar fields (Id, ChangeType, Status, CsoId, MvoId) via projection
+    /// query — no Include chains, no entity tracking. At 100K objects this uses ~3 MB
+    /// instead of ~150 MB for full entity graphs.
+    /// </summary>
+    Task<List<PendingExportSummary>> GetExecutableExportSummariesAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Deletes pending exports by their IDs using raw SQL.
+    /// Used by reconciliation which operates on lightweight summaries, not full entities.
+    /// </summary>
+    Task DeletePendingExportsByIdsAsync(IList<Guid> pendingExportIds);
+
+    /// <summary>
     /// Marks pending exports as Executing with the current UTC timestamp.
     /// Uses raw SQL in production for efficiency.
     /// </summary>

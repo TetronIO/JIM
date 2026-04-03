@@ -349,6 +349,12 @@ public partial class SyncRepository : ISyncRepository
     public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take)
         => _repo.ConnectedSystems.GetExecutableExportBatchAsync(connectedSystemId, skip, take);
 
+    public Task<List<PendingExportSummary>> GetExecutableExportSummariesAsync(int connectedSystemId)
+        => _repo.ConnectedSystems.GetExecutableExportSummariesAsync(connectedSystemId);
+
+    public Task DeletePendingExportsByIdsAsync(IList<Guid> pendingExportIds)
+        => _repo.ConnectedSystems.DeletePendingExportsByIdsAsync(pendingExportIds);
+
     public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
         => _repo.ConnectedSystems.MarkPendingExportsAsExecutingAsync(pendingExports);
 

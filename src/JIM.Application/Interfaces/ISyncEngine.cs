@@ -132,5 +132,5 @@ public interface ISyncEngine
     /// </summary>
     /// <param name="pendingExports">All pending exports to scan for reconcilable pairs.</param>
     /// <returns>Result describing which exports should be cancelled.</returns>
-    PreExportReconciliationResult ReconcileCreateDeletePairs(IReadOnlyList<PendingExport> pendingExports);
+    PreExportReconciliationResult ReconcileCreateDeletePairs(IReadOnlyList<PendingExportSummary> pendingExports);
 }
