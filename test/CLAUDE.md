@@ -165,6 +165,12 @@ cd /workspaces/JIM
 
 **For detailed integration testing guide, see:** [`docs/INTEGRATION_TESTING.md`](docs/INTEGRATION_TESTING.md)
 
+**CRITICAL: Always use default runner behaviour — no `-SkipReset` or `-SkipBuild` flags.**
+These flags are for human developer iteration only. Claude must not use them because:
+- `-SkipBuild` can run stale container images that don't reflect the current code, masking real bugs
+- `-SkipReset` carries over state from previous runs, producing results that are not reproducible
+- Integration tests must always prove the code works from a clean state with freshly built containers
+
 **Common templates by data size:**
 - **Nano**: 3 users, 1 group (~10 sec) - Fast dev iteration
 - **Micro**: 10 users, 3 groups (~30 sec) - Quick smoke tests
