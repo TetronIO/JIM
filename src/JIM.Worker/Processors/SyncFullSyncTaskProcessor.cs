@@ -50,11 +50,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
 
         await _syncRepo.UpdateActivityMessageAsync(_activity, "Preparing");
 
-        // how many objects are we processing? that = CSO count + Pending Export Object count.
-        // update the activity with this info so a progress bar can be shown.
+        // how many CSOs are we processing? update the activity so a progress bar can be shown.
+        // pending exports are processed as a side-effect of CSO evaluation, not as separate objects.
         var totalCsosToProcess = await _syncRepo.GetConnectedSystemObjectCountAsync(_connectedSystem.Id);
-        var totalPendingExportObjectsToProcess = await _syncRepo.GetPendingExportsCountAsync(_connectedSystem.Id);
-        var totalObjectsToProcess = totalCsosToProcess + totalPendingExportObjectsToProcess;
+        var totalObjectsToProcess = totalCsosToProcess;
         _activity.ObjectsToProcess = totalObjectsToProcess;
         _activity.ObjectsProcessed = 0;
         await _syncRepo.UpdateActivityAsync(_activity);

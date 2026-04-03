@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- 🐛 Fixed sync progress bar showing inflated object counts (CSOs + pending exports) instead of just CSOs — progress percentage and ETA are now accurate for Full Sync and Delta Sync
+
 ### Performance
 
 - ⚡ Bounded memory sync pipeline — change tracker cleared at every page boundary and export evaluation cache loaded per-page instead of upfront, enabling sync of 100K+ objects without out-of-memory crashes (#451)

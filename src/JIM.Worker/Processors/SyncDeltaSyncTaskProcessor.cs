@@ -69,9 +69,8 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             return;
         }
 
-        // Count pending exports (still need to process these)
-        var totalPendingExportObjectsToProcess = await _syncRepo.GetPendingExportsCountAsync(_connectedSystem.Id);
-        var totalObjectsToProcess = totalCsosToProcess + totalPendingExportObjectsToProcess;
+        // Pending exports are processed as a side-effect of CSO evaluation, not as separate objects.
+        var totalObjectsToProcess = totalCsosToProcess;
         _activity.ObjectsToProcess = totalObjectsToProcess;
         _activity.ObjectsProcessed = 0;
         await _syncRepo.UpdateActivityAsync(_activity);
