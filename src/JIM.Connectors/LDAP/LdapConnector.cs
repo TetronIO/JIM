@@ -162,10 +162,58 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         var includeAuxiliaryClasses = settingValues.SingleOrDefault(q => q.Setting.Name == _settingIncludeAuxiliaryClasses)?.CheckboxValue ?? false;
 
         var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
+
+        // Auto-tune settings based on the detected directory type.
+        // This modifies setting values in-place; the application layer persists
+        // the connected system after schema import, saving any changes.
+        AutoTuneExportConcurrency(settingValues, rootDse, logger);
+
         var ldapConnectorSchema = new LdapConnectorSchema(_connection, logger, rootDse, includeAuxiliaryClasses);
         var schema = await ldapConnectorSchema.GetSchemaAsync();
         CloseImportConnection();
         return schema;
+    }
+    #endregion
+
+    #region Auto-tuning
+    /// <summary>
+    /// Auto-tunes export concurrency based on the detected directory type, but only if the
+    /// administrator has not manually changed the value from the default. This respects
+    /// intentional admin overrides while optimising performance for the specific directory.
+    /// </summary>
+    internal static void AutoTuneExportConcurrency(
+        List<ConnectedSystemSettingValue> settingValues,
+        LdapConnectorRootDse rootDse,
+        ILogger logger)
+    {
+        var exportConcurrencySetting = settingValues
+            .FirstOrDefault(s => s.Setting.Name == "Export Concurrency");
+
+        if (exportConcurrencySetting == null)
+            return;
+
+        var currentValue = exportConcurrencySetting.IntValue
+            ?? LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY;
+
+        // Only auto-tune if the current value matches the default.
+        // If an admin has manually changed it, respect their choice.
+        if (currentValue != LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY)
+        {
+            logger.Debug(
+                "Export Concurrency is {CurrentValue} (manually configured), skipping auto-tune",
+                currentValue);
+            return;
+        }
+
+        var recommended = rootDse.RecommendedExportConcurrency;
+        if (recommended == currentValue)
+            return;
+
+        logger.Information(
+            "Auto-tuning Export Concurrency from {OldValue} to {NewValue} for directory type {DirectoryType}",
+            currentValue, recommended, rootDse.DirectoryType);
+
+        exportConcurrencySetting.IntValue = recommended;
     }
     #endregion
 
