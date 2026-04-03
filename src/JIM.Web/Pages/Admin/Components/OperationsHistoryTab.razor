@@ -732,7 +732,7 @@
             {
                 try
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(5), token);
+                    await Task.Delay(TimeSpan.FromSeconds(1), token);
 
                     // Only auto-refresh when on page 1, panel is closed, and not paused
                     if (_table == null || _currentPage != 0 || _panelOpen || _pollingPaused)
