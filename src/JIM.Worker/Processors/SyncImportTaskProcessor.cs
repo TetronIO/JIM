@@ -363,6 +363,7 @@ public class SyncImportTaskProcessor
             GC.GetTotalMemory(true) / 1024 / 1024,
             System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
         await _syncRepo.UpdateActivityMessageAsync(_activity, "Saving changes");
+        var saveThroughput = new ThroughputTracker();
         using (var persistSpan = Diagnostics.Database.StartSpan("PersistConnectedSystemObjects"))
         {
             persistSpan.SetTag("createCount", createdCount);
@@ -476,6 +477,9 @@ public class SyncImportTaskProcessor
 
                 totalCreatedSoFar += batchSize;
                 _activity.ObjectsProcessed = totalCreatedSoFar;
+                await _syncRepo.UpdateActivityMessageAsync(_activity,
+                    $"Saving changes — creating ({totalCreatedSoFar:N0} / {totalToCreate:N0})" +
+                    saveThroughput.FormatThroughput(totalCreatedSoFar, totalChanges));
                 Log.Information("PerformFullImportAsync: Batch complete ({Processed}/{Total}). GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
                     totalCreatedSoFar, totalToCreate,
                     GC.GetTotalMemory(false) / 1024 / 1024,
@@ -599,6 +603,9 @@ public class SyncImportTaskProcessor
                 }
 
                 _activity.ObjectsProcessed = createdCount + batchStart + batchSize;
+                await _syncRepo.UpdateActivityMessageAsync(_activity,
+                    $"Saving changes — updating ({batchStart + batchSize:N0} / {totalToUpdate:N0})" +
+                    saveThroughput.FormatThroughput(createdCount + batchStart + batchSize, totalChanges));
                 Log.Information("PerformFullImportAsync: Update batch complete ({Processed}/{Total}). GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
                     batchStart + batchSize, totalToUpdate,
                     GC.GetTotalMemory(false) / 1024 / 1024,
@@ -974,6 +981,7 @@ public class SyncImportTaskProcessor
         var totalObjectsInBatch = connectedSystemImportResult.ImportObjects.Count;
         _activity.ObjectsToProcess = totalObjectsInBatch;
         _activity.ObjectsProcessed = 0;
+        var throughput = new ThroughputTracker();
         await _syncRepo.UpdateActivityMessageAsync(_activity,
             $"Processing imported objects (0 / {totalObjectsInBatch:N0})");
         const int progressUpdateInterval = 100;
@@ -1355,7 +1363,8 @@ public class SyncImportTaskProcessor
                 if ((importIndex + 1) % progressUpdateInterval == 0)
                 {
                     await _syncRepo.UpdateActivityMessageAsync(_activity,
-                        $"Processing imported objects ({importIndex + 1:N0} / {totalObjectsInBatch:N0})");
+                        $"Processing imported objects ({importIndex + 1:N0} / {totalObjectsInBatch:N0})" +
+                        throughput.FormatThroughput(importIndex + 1, totalObjectsInBatch));
                 }
             }
         }
@@ -1364,7 +1373,8 @@ public class SyncImportTaskProcessor
         if (totalObjectsInBatch > 0 && totalObjectsInBatch % progressUpdateInterval != 0)
         {
             await _syncRepo.UpdateActivityMessageAsync(_activity,
-                $"Processing imported objects ({totalObjectsInBatch:N0} / {totalObjectsInBatch:N0})");
+                $"Processing imported objects ({totalObjectsInBatch:N0} / {totalObjectsInBatch:N0})" +
+                throughput.FormatCompletion(totalObjectsInBatch));
         }
 
         // DEBUG: Summary statistics for duplicate detection
