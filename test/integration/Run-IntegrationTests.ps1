@@ -1154,6 +1154,14 @@ Write-Banner "JIM Integration Test Runner"
 
 $templateRelevant = Test-TemplateRelevant -ScenarioName $Scenario
 
+# Auto-set higher export concurrency for OpenLDAP (can handle 50+ concurrent writes)
+# unless the user explicitly specified a value. Samba AD keeps the JIM default of 4.
+if ($DirectoryType -eq "OpenLDAP" -and -not $PSBoundParameters.ContainsKey('ExportConcurrency')) {
+    $ExportConcurrency = 16
+    # Mark as explicitly set so it flows through to setup scripts
+    $PSBoundParameters['ExportConcurrency'] = $ExportConcurrency
+}
+
 Write-Host "${GRAY}Configuration:${NC}"
 Write-Host "  Scenario:               ${CYAN}$Scenario${NC}"
 if ($templateRelevant) {
