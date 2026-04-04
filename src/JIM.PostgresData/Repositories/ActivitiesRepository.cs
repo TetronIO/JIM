@@ -623,7 +623,7 @@ public class ActivityRepository : IActivityRepository
     public async Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId)
     {
         // Get total objects processed from the activity itself (tracks all objects in scope)
-        var activity = await Repository.Database.Activities.FirstOrDefaultAsync(a => a.Id == activityId);
+        var activity = await Repository.Database.Activities.OrderBy(a => a.Id).FirstOrDefaultAsync(a => a.Id == activityId);
         var totalObjectsProcessed = activity?.ObjectsProcessed ?? 0;
 
         var rpeiQuery = Repository.Database.ActivityRunProfileExecutionItems
