@@ -140,7 +140,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
             var ticket = new AuthenticationTicket(principal, SchemeName);
 
             var rolesList = string.Join(", ", apiKey.Roles.Select(r => r.Name));
-            Log.Information("ApiKeyAuthenticationHandler: Successfully authenticated API key '{KeyName}' (prefix: {KeyPrefix}) with roles: {Roles}",
+            Log.Debug("ApiKeyAuthenticationHandler: Successfully authenticated API key '{KeyName}' (prefix: {KeyPrefix}) with roles: {Roles}",
                 apiKey.Name, apiKey.KeyPrefix, rolesList);
 
             return AuthenticateResult.Success(ticket);

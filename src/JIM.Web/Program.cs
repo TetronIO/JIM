@@ -446,7 +446,10 @@ try
     // only enable request logging if configured to do so from env vars, as it adds a LOT to the logs
     var enableRequestLogging = Environment.GetEnvironmentVariable(Constants.Config.LogRequests);
     if (enableRequestLogging != null && bool.Parse(enableRequestLogging))
-        app.UseSerilogRequestLogging();
+        app.UseSerilogRequestLogging(options =>
+        {
+            options.GetLevel = (_, _, _) => Serilog.Events.LogEventLevel.Debug;
+        });
 
     // Eager initialisation: warm up EF Core compiled model and database connection pool
     // before accepting requests. This prevents the first browser request from hanging while
