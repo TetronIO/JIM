@@ -62,8 +62,8 @@ public partial class SyncRepository : ISyncRepository
     public Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
         => _repo.ConnectedSystems.GetConnectedSystemObjectModifiedSinceCountAsync(connectedSystemId, modifiedSince);
 
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null)
-        => _repo.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount);
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, lastSyncTimestamp);
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
         int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null)
@@ -239,9 +239,11 @@ public partial class SyncRepository : ISyncRepository
         // which would re-attach the Activity and run DetectChanges on all tracked entities.
         var objectsProcessedParam = BulkSqlHelpers.NullableParam(
             activity.ObjectsProcessed, NpgsqlTypes.NpgsqlDbType.Integer);
+        var objectsToProcessParam = BulkSqlHelpers.NullableParam(
+            activity.ObjectsToProcess, NpgsqlTypes.NpgsqlDbType.Integer);
         await _context.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""Activities"" SET ""Message"" = {0}, ""ObjectsProcessed"" = {1} WHERE ""Id"" = {2}",
-            message, objectsProcessedParam, activity.Id);
+            @"UPDATE ""Activities"" SET ""Message"" = {0}, ""ObjectsProcessed"" = {1}, ""ObjectsToProcess"" = {2} WHERE ""Id"" = {3}",
+            message, objectsProcessedParam, objectsToProcessParam, activity.Id);
     }
 
     public Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId)
