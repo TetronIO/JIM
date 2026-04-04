@@ -143,7 +143,7 @@ public class TaskingRepository : ITaskingRepository
     public async Task<WorkerTaskStatus?> GetFirstExampleDataTemplateWorkerTaskStatus(int templateId)
     {
         await using var db = new JimDbContext();
-        var result = await db.ExampleDataTemplateWorkerTasks.Where(q => q.TemplateId == templateId).Select(q => q.Status).Take(1).ToListAsync();
+        var result = await db.ExampleDataTemplateWorkerTasks.Where(q => q.TemplateId == templateId).OrderBy(q => q.Id).Select(q => q.Status).Take(1).ToListAsync();
         if (result.Count == 1)
             return result[0];
 

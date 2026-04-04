@@ -972,7 +972,7 @@ public class MetaverseRepository : IMetaverseRepository
 
             // Only select IDs — avoids materialising full entity graphs with all attribute values.
             // Take(2) to detect ambiguous matches without loading more than needed.
-            var matchingIds = await matchQuery.Select(mvo => mvo.Id).Take(2).ToListAsync();
+            var matchingIds = await matchQuery.OrderBy(mvo => mvo.Id).Select(mvo => mvo.Id).Take(2).ToListAsync();
 
             switch (matchingIds.Count)
             {
