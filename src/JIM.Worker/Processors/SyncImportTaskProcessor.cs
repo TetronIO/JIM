@@ -1192,10 +1192,11 @@ public class SyncImportTaskProcessor
                 // is existing - apply any changes to the cso from the import object
                 if (connectedSystemObject == null)
                 {
-                    // Log warning if connector said Update but object doesn't exist
+                    // Connector said Update but no CSO exists — this is expected behaviour
+                    // (e.g. delta import without a prior full import, or CSO was purged)
                     if (importObject.ChangeType == ObjectChangeType.Updated)
                     {
-                        Log.Warning("ProcessImportObjectsAsync: Connector indicated Update for object type '{ObjectType}' but no matching CSO found. Creating new object instead. " +
+                        Log.Debug("ProcessImportObjectsAsync: Connector indicated Update for object type '{ObjectType}' but no matching CSO found. Creating new object instead. " +
                             "ConnectedSystem: {ConnectedSystemId} ({ConnectedSystemName}), RunProfile: {RunProfileId} ({RunProfileName}), Activity: {ActivityId}",
                             importObject.ObjectType,
                             _connectedSystem.Id, _connectedSystem.Name,
@@ -1264,10 +1265,11 @@ public class SyncImportTaskProcessor
                 }
                 else
                 {
-                    // Log warning if connector said Add but object already exists
+                    // Connector said Add but object already exists — this is expected behaviour
+                    // (e.g. first delta import after a full import where the accesslog still contains the original add entries)
                     if (importObject.ChangeType == ObjectChangeType.Added)
                     {
-                        Log.Warning("ProcessImportObjectsAsync: Connector indicated Add for object type '{ObjectType}' but CSO {CsoId} already exists. Updating instead. " +
+                        Log.Debug("ProcessImportObjectsAsync: Connector indicated Add for object type '{ObjectType}' but CSO {CsoId} already exists. Updating instead. " +
                             "ConnectedSystem: {ConnectedSystemId} ({ConnectedSystemName}), RunProfile: {RunProfileId} ({RunProfileName}), Activity: {ActivityId}",
                             importObject.ObjectType, connectedSystemObject.Id,
                             _connectedSystem.Id, _connectedSystem.Name,
