@@ -165,25 +165,31 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 {
                     if (_cancellationTokenSource.IsCancellationRequested)
                     {
-                        Log.Information("PerformDeltaSyncAsync: Cancellation requested. Stopping CSO enumeration.");
-                        return;
+                        Log.Information("PerformDeltaSyncAsync: Cancellation requested during Pass 1. Will flush already-processed objects before exiting.");
+                        break;
                     }
 
                     await ProcessObsoleteAndExportConfirmationAsync(activeSyncRules, connectedSystemObject);
                 }
 
-                // Pass 2: Process joins, projections, and attribute flow for non-obsolete CSOs.
-                foreach (var connectedSystemObject in csoPagedResult.Results)
+                // If cancelled during Pass 1, skip Pass 2 entirely — no objects have been
+                // joined/projected yet, so Pass 2 batch collections are empty.
+                if (!_cancellationTokenSource.IsCancellationRequested)
                 {
-                    if (_cancellationTokenSource.IsCancellationRequested)
+                    // Pass 2: Process joins, projections, and attribute flow for non-obsolete CSOs.
+                    foreach (var connectedSystemObject in csoPagedResult.Results)
                     {
-                        Log.Information("PerformDeltaSyncAsync: Cancellation requested. Stopping CSO enumeration.");
-                        return;
-                    }
+                        if (_cancellationTokenSource.IsCancellationRequested)
+                        {
+                            Log.Information("PerformDeltaSyncAsync: Cancellation requested during Pass 2. Will flush already-processed objects before exiting.");
+                            break;
+                        }
 
-                    await ProcessActiveConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject);
-                    _activity.ObjectsProcessed++;
-                    processedInPage++;
+                        await ProcessActiveConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject);
+                        _activity.ObjectsProcessed++;
+                        processedInPage++;
+                        OnCsoProcessedInPass2?.Invoke();
+                    }
                 }
             }
 
@@ -245,30 +251,43 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             {
                 _syncRepo.SetAutoDetectChangesEnabled(true);
             }
+
+            // After flushing the current page, exit the page loop if cancellation was requested.
+            // The flush has completed for all objects processed so far — no data is orphaned.
+            if (_cancellationTokenSource.IsCancellationRequested)
+            {
+                Log.Information("PerformDeltaSyncAsync: Cancellation completed. Page {Page} flushed, exiting page loop.", page);
+                break;
+            }
         }
 
-        // Resolve cross-page reference attributes (same as full sync — see full sync for detailed explanation)
-        await ResolveCrossPageReferencesAsync(activeSyncRules);
+        // Skip post-processing on cancellation: cross-page references target unprocessed pages,
+        // and the watermark must NOT advance so the next sync re-processes everything.
+        if (!_cancellationTokenSource.IsCancellationRequested)
+        {
+            // Resolve cross-page reference attributes (same as full sync — see full sync for detailed explanation)
+            await ResolveCrossPageReferencesAsync(activeSyncRules);
 
-        // Flush any RPEIs from cross-page resolution
-        await FlushRpeisAsync();
+            // Flush any RPEIs from cross-page resolution
+            await FlushRpeisAsync();
 
-        // Ensure the activity and any pending db updates are applied after all pages are processed
-        await _syncRepo.UpdateActivityAsync(_activity);
+            // Ensure the activity and any pending db updates are applied after all pages are processed
+            await _syncRepo.UpdateActivityAsync(_activity);
 
-        // Update the watermark to mark this sync as complete
-        await UpdateDeltaSyncWatermarkAsync();
+            // Update the watermark to mark this sync as complete
+            await UpdateDeltaSyncWatermarkAsync();
 
-        // Update activity message with throughput summary
-        var syncCompleteMessage = $"Sync complete: {_activity.ObjectsProcessed:N0} objects" +
-            throughput.FormatCompletion(_activity.ObjectsProcessed);
-        await _syncRepo.UpdateActivityMessageAsync(_activity, syncCompleteMessage);
+            // Update activity message with throughput summary
+            var syncCompleteMessage = $"Sync complete: {_activity.ObjectsProcessed:N0} objects" +
+                throughput.FormatCompletion(_activity.ObjectsProcessed);
+            await _syncRepo.UpdateActivityMessageAsync(_activity, syncCompleteMessage);
 
-        // Summary stats were accumulated incrementally during each FlushRpeisAsync call (production).
-        // In tests (EF fallback), RPEIs remain in Activity.RunProfileExecutionItems — compute stats
-        // from them now so tests that check stats before CompleteActivityBasedOnExecutionResultsAsync work.
-        if (!_hasRawSqlSupport && _activity.RunProfileExecutionItems.Count > 0)
-            Worker.CalculateActivitySummaryStats(_activity);
+            // Summary stats were accumulated incrementally during each FlushRpeisAsync call (production).
+            // In tests (EF fallback), RPEIs remain in Activity.RunProfileExecutionItems — compute stats
+            // from them now so tests that check stats before CompleteActivityBasedOnExecutionResultsAsync work.
+            if (!_hasRawSqlSupport && _activity.RunProfileExecutionItems.Count > 0)
+                Worker.CalculateActivitySummaryStats(_activity);
+        }
 
         syncSpan.SetSuccess();
     }

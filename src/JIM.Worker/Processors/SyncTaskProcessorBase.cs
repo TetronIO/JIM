@@ -149,6 +149,13 @@ public abstract class SyncTaskProcessorBase
     // Expression evaluator for expression-based sync rule mappings
     protected readonly IExpressionEvaluator _expressionEvaluator = new DynamicExpressoEvaluator();
 
+    /// <summary>
+    /// Test hook: invoked after each CSO is processed in Pass 2.
+    /// Tests can set this to trigger cancellation after N objects.
+    /// No-op in production (null by default).
+    /// </summary>
+    internal Action? OnCsoProcessedInPass2 { get; set; }
+
     protected SyncTaskProcessorBase(
         ISyncEngine syncEngine,
         ISyncServer syncServer,
