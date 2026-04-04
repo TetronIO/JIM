@@ -472,6 +472,12 @@ public interface ISyncRepository
     void ClearChangeTracker();
 
     /// <summary>
+    /// Returns the number of entities currently tracked by the change tracker.
+    /// Used for diagnostics to detect entity accumulation across pages.
+    /// </summary>
+    int GetChangeTrackerEntityCount();
+
+    /// <summary>
     /// Controls whether SaveChangesAsync automatically calls DetectChanges.
     /// Disabled during batch page processing to prevent navigation property traversal
     /// from discovering conflicting entity instances after ClearChangeTracker.

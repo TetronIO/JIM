@@ -182,13 +182,22 @@ public abstract class SyncTaskProcessorBase
     /// Logs memory diagnostics at page boundaries to track memory usage across the sync run.
     /// Helps diagnose memory accumulation issues and verify bounded memory behaviour.
     /// </summary>
-    protected static void LogPageMemoryDiagnostics(int pageNumber, int totalPages)
+    protected void LogPageMemoryDiagnostics(int pageNumber, int totalPages)
     {
         var memoryBytes = GC.GetTotalMemory(forceFullCollection: false);
         var memoryMb = memoryBytes / (1024.0 * 1024.0);
-        Log.Information("Page {Page}/{TotalPages} complete. Memory: {MemoryMb:F1} MB, Gen0: {Gen0}, Gen1: {Gen1}, Gen2: {Gen2}",
+
+        // Log change tracker entity count and key collection sizes to diagnose accumulation
+        var trackerCount = _syncRepo.GetChangeTrackerEntityCount();
+        var pendingExportCount = _pendingExportsByCsoId?.Sum(kvp => kvp.Value.Count) ?? 0;
+        var crossPageRefCount = _unresolvedCrossPageReferences.Count;
+        var rpeiCount = _activity.RunProfileExecutionItems.Count;
+
+        Log.Information("Page {Page}/{TotalPages} complete. Memory: {MemoryMb:F1} MB, Gen0: {Gen0}, Gen1: {Gen1}, Gen2: {Gen2} | " +
+            "Tracker: {TrackerCount}, PendingExports: {PendingExportCount}, CrossPageRefs: {CrossPageRefCount}, RPEIs: {RpeiCount}",
             pageNumber, totalPages, memoryMb,
-            GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2));
+            GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2),
+            trackerCount, pendingExportCount, crossPageRefCount, rpeiCount);
     }
 
     /// <summary>

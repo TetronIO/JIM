@@ -277,6 +277,22 @@ public partial class SyncRepository : ISyncRepository
     public void ClearChangeTracker()
         => _repo.ClearChangeTracker();
 
+    public int GetChangeTrackerEntityCount()
+    {
+        // Use AutoDetectChangesEnabled=false to prevent Entries() from triggering DetectChanges(),
+        // which could walk navigation properties and throw identity conflicts.
+        var wasEnabled = _context.ChangeTracker.AutoDetectChangesEnabled;
+        _context.ChangeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            return _context.ChangeTracker.Entries().Count();
+        }
+        finally
+        {
+            _context.ChangeTracker.AutoDetectChangesEnabled = wasEnabled;
+        }
+    }
+
     public void SetAutoDetectChangesEnabled(bool enabled)
         => _repo.SetAutoDetectChangesEnabled(enabled);
 
