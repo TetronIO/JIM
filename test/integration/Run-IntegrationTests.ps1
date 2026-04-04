@@ -1342,7 +1342,6 @@ function Write-Banner {
     Write-Host "${CYAN}$("=" * 65)${NC}"
     Write-Host "${CYAN}  $Title${NC}"
     Write-Host "${CYAN}$("=" * 65)${NC}"
-    Write-Host ""
 }
 
 function Write-Section {
@@ -2118,6 +2117,7 @@ if ($SetupOnly) {
     $duration = $endTime - $startTime
 
     Write-Banner "SetupOnly Complete - Environment Ready"
+    Write-Host ""
 
     Write-Host "${GRAY}Services:${NC}"
     Write-Host "  JIM Web:            ${CYAN}http://localhost:5200${NC}"
@@ -2154,7 +2154,6 @@ if ($SetupOnly) {
 
     # Performance Summary
     Write-Section "Performance Summary"
-    Write-Host ""
     Write-Host "${CYAN}Stage Timings:${NC}"
 
     $sortedTimings = $timings.GetEnumerator() | Sort-Object Name
@@ -2669,7 +2668,6 @@ Write-Banner "Test Run Complete"
 
 # Performance Summary
 Write-Section "Performance Summary"
-Write-Host ""
 Write-Host "${CYAN}Stage Timings:${NC}"
 
 # Sort timings by key (which has stage number prefix)
@@ -2696,20 +2694,16 @@ else {
     Write-Host "${RED}✗ Some tests failed. Exit code: $scenarioExitCode${NC}"
 }
 
-Write-Host ""
 
 # Output Files
 Write-Section "Output Files"
-Write-Host ""
 Write-Host "  ${GRAY}Scenario log:${NC}       $scenarioLogFile"
 if ($currentFile) {
     Write-Host "  ${GRAY}Performance metrics:${NC} $currentFile"
 }
-Write-Host ""
 
 # Re-run Command
 Write-Section "Re-run Command"
-Write-Host ""
 $rerunParts = @("./test/integration/Run-IntegrationTests.ps1")
 $rerunParts += "-Scenario `"$Scenario`""
 $rerunParts += "-Template $Template"
