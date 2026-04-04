@@ -29,6 +29,11 @@ public class WorkerTaskHeader
     public string? InitiatedByName { get; set; }
 
     /// <summary>
+    /// The associated Activity ID (if the task has started processing).
+    /// </summary>
+    public Guid? ActivityId { get; set; }
+
+    /// <summary>
     /// The total number of objects to process (from the associated Activity).
     /// </summary>
     public int? ObjectsToProcess { get; set; }

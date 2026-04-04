@@ -79,6 +79,7 @@ public class TaskingRepository : ITaskingRepository
                 InitiatedByType = workerTask.InitiatedByType,
                 InitiatedById = workerTask.InitiatedById,
                 InitiatedByName = workerTask.InitiatedByName,
+                ActivityId = workerTask.Activity?.Id,
                 ObjectsToProcess = workerTask.Activity?.ObjectsToProcess,
                 ObjectsProcessed = workerTask.Activity?.ObjectsProcessed,
                 ProgressMessage = workerTask.Activity?.Message,

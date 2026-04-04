@@ -151,7 +151,16 @@ else
                     }
                 }
             </MudTd>
-            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="Name">
+                @if (context.ActivityId.HasValue)
+                {
+                    <MudLink Href="@($"/activity/{context.ActivityId.Value}?from=operations")">@context.Name</MudLink>
+                }
+                else
+                {
+                    @context.Name
+                }
+            </MudTd>
             <MudTd DataLabel="Status">
                 <MudChip T="string" Variant="Variant.Text" Color="GetTaskStatusColor(context.Status)" Class="ml-0">@GetTaskStatusDisplay(context)</MudChip>
             </MudTd>
@@ -567,6 +576,7 @@ else
     private static bool HasWorkerTaskHeaderChanged(WorkerTaskHeader existing, WorkerTaskHeader updated)
     {
         return existing.Status != updated.Status ||
+               existing.ActivityId != updated.ActivityId ||
                existing.ObjectsProcessed != updated.ObjectsProcessed ||
                existing.ObjectsToProcess != updated.ObjectsToProcess ||
                existing.ProgressMessage != updated.ProgressMessage;
