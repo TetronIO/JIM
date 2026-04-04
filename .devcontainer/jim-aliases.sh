@@ -48,6 +48,10 @@ Reset:
   jim-wipe           - Wipe JIM data (reset CSOs/MVOs/config, keep schema)
   jim-cleanup        - Free disk space (prune orphaned volumes and unused images)
 
+Documentation:
+  jim-docs           - Preview docs site at http://localhost:8000
+  jim-docs-build     - Build static docs site to site/
+
 Diagrams:
   jim-diagrams       - Export Structurizr C4 diagrams as SVG
 
@@ -320,11 +324,15 @@ jim-reset() {
   echo "JIM reset complete. Containers, images, and volumes removed (Samba AD & OpenLDAP snapshots preserved). Run jim-build to rebuild."
 }
 
+# Documentation preview (MkDocs Material)
+alias jim-docs='mkdocs serve --dev-addr 0.0.0.0:8000'
+alias jim-docs-build='mkdocs build'
+
 # Structurizr diagram export
 jim-diagrams() {
   local repo_root structurizr_dir container_name port
   repo_root="$(git rev-parse --show-toplevel 2>/dev/null || echo '/workspaces/JIM')"
-  structurizr_dir="${repo_root}/docs/diagrams/structurizr"
+  structurizr_dir="${repo_root}/engineering/diagrams/structurizr"
   container_name="jim-structurizr-export"
   port=8085
 
@@ -352,7 +360,7 @@ jim-diagrams() {
   docker run -d --name "${container_name}" \
     -p "${port}:8080" \
     -v "${structurizr_dir}:/usr/local/structurizr" \
-    -v "${repo_root}/docs/adrs:/usr/local/structurizr/adrs" \
+    -v "${repo_root}/engineering/adrs:/usr/local/structurizr/adrs" \
     structurizr/structurizr local > /dev/null
 
   # Wait for Structurizr Local to be ready
@@ -406,7 +414,7 @@ jim-diagrams() {
 jim-prd() {
   local repo_root prd_dir template raw_name converted_name target_file
   repo_root="$(git rev-parse --show-toplevel 2>/dev/null || echo '/workspaces/JIM')"
-  prd_dir="${repo_root}/docs/prd"
+  prd_dir="${repo_root}/engineering/prd"
   template="${prd_dir}/PRD_TEMPLATE.md"
 
   if [ ! -f "${template}" ]; then
@@ -452,7 +460,7 @@ jim-prd() {
   sed -e "s/^# \[Feature Name\]/# ${converted_name//_/ }/" \
       -e "s/YYYY-MM-DD/$(date -u +%Y-%m-%d)/" "${template}" > "${target_file}"
 
-  echo "Created: docs/prd/PRD_${converted_name}.md"
+  echo "Created: engineering/prd/PRD_${converted_name}.md"
   echo ""
   echo "Next steps:"
   echo "  1. Fill in the required sections in the PRD"

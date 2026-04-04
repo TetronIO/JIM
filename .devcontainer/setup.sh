@@ -96,7 +96,15 @@ else
     print_warning "Pester installation failed - you can install manually: Install-Module -Name Pester -MinimumVersion 5.0 -Force"
 fi
 
-# 6. Build the solution
+# 6. Install MkDocs Material for documentation preview
+print_step "Installing MkDocs Material..."
+if pip install mkdocs-material --break-system-packages --quiet 2>/dev/null; then
+    print_success "MkDocs Material installed (mkdocs serve on port 8000)"
+else
+    print_warning "MkDocs Material installation failed - you can install manually: pip install mkdocs-material --break-system-packages"
+fi
+
+# 7. Build the solution
 print_step "Building JIM solution..."
 if dotnet build JIM.sln --verbosity quiet --no-restore; then
     print_success "Solution built successfully"
@@ -104,7 +112,7 @@ else
     print_warning "Build had warnings or errors. Run 'dotnet build JIM.sln' to see details."
 fi
 
-# 7. Create connector-files directory with symlink to test data
+# 8. Create connector-files directory with symlink to test data
 print_step "Setting up connector-files directory..."
 mkdir -p connector-files
 
@@ -120,7 +128,7 @@ else
     print_success "Symlink already exists: connector-files/test-data"
 fi
 
-# 8. Configure Git SSH commit signing
+# 9. Configure Git SSH commit signing
 print_step "Configuring Git SSH commit signing..."
 
 # Check if SSH agent has keys forwarded
@@ -150,7 +158,7 @@ else
     print_warning "To enable signing, ensure SSH agent forwarding is working"
 fi
 
-# 9. Create useful shell aliases
+# 10. Create useful shell aliases
 print_step "Creating shell aliases..."
 
 # Add source line to .zshrc if not already present
@@ -178,7 +186,7 @@ if ! grep -q "source.*jim-aliases.sh" ~/.bashrc; then
     echo "fi" >> ~/.bashrc
 fi
 
-# 10. Display useful information
+# 11. Display useful information
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${GREEN}✓ JIM Development Environment Ready!${NC}"
@@ -222,7 +230,8 @@ echo "  When running Docker stack:"
 echo "    JIM Web:         http://localhost:5200"
 echo ""
 echo "📖 Documentation:"
-echo "  Developer Guide:   docs/DEVELOPER_GUIDE.md"
+echo "  jim-docs           - Preview docs site at http://localhost:8000"
+echo "  Developer Guide:   docs/developer/"
 echo "  Quick Reference:   CLAUDE.md"
 echo ""
 echo "🚀 To start developing (choose one):"

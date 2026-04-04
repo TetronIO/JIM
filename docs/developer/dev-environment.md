@@ -130,6 +130,23 @@ Best for integration testing or a production-like environment.
 | `http://localhost:5200/api/swagger` | Swagger API documentation |
 | `http://localhost:8181` | Keycloak admin console (`admin` / `admin`) |
 | `https://localhost:7000` | JIM Web UI (local debugging) |
+| `http://localhost:8000` | MkDocs documentation preview |
+
+## Documentation Preview
+
+The devcontainer includes [MkDocs Material](https://squidfunk.github.io/mkdocs-material/) for previewing the documentation site locally. To start the preview server:
+
+```bash
+jim-docs
+```
+
+This runs `mkdocs serve` bound to `0.0.0.0:8000` and opens a live-reloading preview. Changes to files in `docs/` or `mkdocs.yml` are reflected immediately in the browser.
+
+To build the static site without serving:
+
+```bash
+jim-docs-build
+```
 
 ## Git Configuration
 
