@@ -134,15 +134,19 @@ internal class FileConnectorExport
                 return externalIdAttr.Attribute.Name;
         }
 
-        // Fallback: check the CSO for existing exports (Update/Delete)
+        // Fallback: find the External ID attribute name from the CSO's loaded attribute values.
+        // Update/Delete exports don't include the External ID in AttributeValueChanges (it hasn't changed),
+        // but the CSO's AttributeValues collection is always loaded with Attribute navigations.
+        // Use ExternalIdAttributeId (always populated on the CSO) to find the matching attribute.
         foreach (var pendingExport in _pendingExports)
         {
-            if (pendingExport.ConnectedSystemObject?.Type?.Attributes != null)
+            var cso = pendingExport.ConnectedSystemObject;
+            if (cso?.ExternalIdAttributeId is > 0)
             {
-                var externalIdAttr = pendingExport.ConnectedSystemObject.Type.Attributes
-                    .FirstOrDefault(a => a.IsExternalId);
-                if (externalIdAttr != null)
-                    return externalIdAttr.Name;
+                var externalIdAttrValue = cso.AttributeValues
+                    .FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
+                if (externalIdAttrValue?.Attribute != null)
+                    return externalIdAttrValue.Attribute.Name;
             }
         }
 

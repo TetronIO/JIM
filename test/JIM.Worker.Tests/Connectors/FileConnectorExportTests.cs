@@ -684,6 +684,95 @@ public class FileConnectorExportTests
 
     #endregion
 
+    #region External ID Discovery Tests
+
+    [Test]
+    public async Task Export_UpdateWithoutExternalIdInChanges_FindsExternalIdFromCsoAttributeValues()
+    {
+        // Arrange — simulate the production query path where Type.Attributes is NOT loaded
+        // but CSO.AttributeValues (with Attribute navigations) ARE loaded.
+        // This reproduces the bug where Update exports fail with
+        // "No External ID attribute configured for this Connected System" because
+        // FindExternalIdAttributeName only checked Type.Attributes (not loaded) as fallback.
+
+        // First, create the file with a Create export so the Update has something to update
+        var settingValues = CreateExportSettingValues(_testExportPath);
+        var createExports = CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@test.com");
+        await _connector.ExportAsync(settingValues, createExports, CancellationToken.None);
+
+        // Now create an Update export where:
+        // - AttributeValueChanges does NOT contain the External ID attribute (only the changed attr)
+        // - CSO.Type.Attributes is EMPTY (simulating production query without ThenInclude)
+        // - CSO.ExternalIdAttributeId IS set (always loaded)
+        // - CSO.AttributeValues contains the External ID value with its Attribute navigation
+        var objectType = new ConnectedSystemObjectType { Id = 1, Name = "User" };
+        // Deliberately NOT adding attributes to objectType.Attributes — simulates production
+
+        var externalIdAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 100, Name = "employeeId", Type = AttributeDataType.Text,
+            IsExternalId = true, ConnectedSystemObjectType = objectType
+        };
+
+        var titleAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 1, Name = "title", Type = AttributeDataType.Text,
+            ConnectedSystemObjectType = objectType
+        };
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            Type = objectType,
+            ExternalIdAttributeId = externalIdAttr.Id,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            {
+                new()
+                {
+                    Attribute = externalIdAttr,
+                    AttributeId = externalIdAttr.Id,
+                    StringValue = "emp001"
+                },
+                new()
+                {
+                    Attribute = titleAttr,
+                    AttributeId = titleAttr.Id,
+                    StringValue = "Senior Developer"
+                }
+            }
+        };
+
+        var updateExports = new List<PendingExport>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                ChangeType = PendingExportChangeType.Update,
+                ConnectedSystemObject = cso,
+                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                {
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        Attribute = titleAttr,
+                        AttributeId = titleAttr.Id,
+                        StringValue = "Senior Developer"
+                    }
+                }
+            }
+        };
+
+        // Act
+        var results = await _connector.ExportAsync(settingValues, updateExports, CancellationToken.None);
+
+        // Assert — should succeed, not fail with "No External ID attribute"
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].Success, Is.True,
+            $"Update export should succeed but failed with: {results[0].ErrorMessage}");
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static List<ConnectedSystemSettingValue> CreateExportSettingValues(
