@@ -172,7 +172,7 @@ public class SyncRepository : ISyncRepository
     }
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(
-        int connectedSystemId, int page, int pageSize)
+        int connectedSystemId, int page, int pageSize, int? knownTotalCount = null)
     {
         var all = GetCsosForSystem(connectedSystemId)
             .OrderBy(c => c.Created).ThenBy(c => c.Id)
@@ -181,7 +181,7 @@ public class SyncRepository : ISyncRepository
     }
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
-        int connectedSystemId, DateTime modifiedSince, int page, int pageSize)
+        int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null)
     {
         var filtered = GetCsosForSystem(connectedSystemId)
             .Where(c => c.LastUpdated.HasValue && c.LastUpdated.Value >= modifiedSince)

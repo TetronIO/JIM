@@ -111,7 +111,7 @@ namespace JIM.Application.Servers
         /// </summary>
         public async Task<int> GetSyncPageSizeAsync()
         {
-            return await GetSettingValueAsync(Constants.SettingKeys.SyncPageSize, 500);
+            return await GetSettingValueAsync(Constants.SettingKeys.SyncPageSize, 1000);
         }
 
         /// <summary>

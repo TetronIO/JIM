@@ -148,7 +148,8 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                     _connectedSystem.Id,
                     lastSyncTimestamp,
                     page,
-                    pageSize);
+                    pageSize,
+                    totalCsosToProcess);
             }
 
             // Note: Target CSO attribute values for no-net-change detection are pre-loaded in ExportEvaluationCache

@@ -127,7 +127,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             PagedResultSet<ConnectedSystemObject> csoPagedResult;
             using (Diagnostics.Sync.StartSpan("LoadCsoPage"))
             {
-                csoPagedResult = await _syncRepo.GetConnectedSystemObjectsAsync(_connectedSystem.Id, i, pageSize);
+                csoPagedResult = await _syncRepo.GetConnectedSystemObjectsAsync(_connectedSystem.Id, i, pageSize, totalCsosToProcess);
             }
 
             // Note: Target CSO attribute values for no-net-change detection are pre-loaded in ExportEvaluationCache

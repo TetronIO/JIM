@@ -82,7 +82,7 @@ public class DeltaSyncTests
         };
 
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(
-            connectedSystemId, watermark, 1, 200))
+            connectedSystemId, watermark, 1, 200, It.IsAny<int?>()))
             .ReturnsAsync(pagedResult);
 
         // Act
@@ -111,7 +111,7 @@ public class DeltaSyncTests
         };
 
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(
-            connectedSystemId, watermark, 1, 200))
+            connectedSystemId, watermark, 1, 200, It.IsAny<int?>()))
             .ReturnsAsync(pagedResult);
 
         // Act
@@ -150,7 +150,7 @@ public class DeltaSyncTests
         };
 
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(
-            connectedSystemId, watermark, 2, pageSize))
+            connectedSystemId, watermark, 2, pageSize, It.IsAny<int?>()))
             .ReturnsAsync(pagedResult);
 
         // Act
@@ -188,7 +188,7 @@ public class DeltaSyncTests
         };
 
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(
-            connectedSystemId, watermark, 1, 200))
+            connectedSystemId, watermark, 1, 200, It.IsAny<int?>()))
             .ReturnsAsync(pagedResult);
 
         // Act
@@ -551,7 +551,7 @@ public class DeltaSyncTests
         };
 
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(
-            connectedSystemId, watermark, 1, 200))
+            connectedSystemId, watermark, 1, 200, It.IsAny<int?>()))
             .ReturnsAsync(pagedResult);
 
         // Act
@@ -616,7 +616,7 @@ public class DeltaSyncTests
         };
 
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(
-            connectedSystemId, watermark, 1, 200))
+            connectedSystemId, watermark, 1, 200, It.IsAny<int?>()))
             .ReturnsAsync(pagedResult);
 
         // Act
@@ -674,7 +674,7 @@ public class DeltaSyncTests
         };
 
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(
-            connectedSystemId, watermark, 1, 200))
+            connectedSystemId, watermark, 1, 200, It.IsAny<int?>()))
             .ReturnsAsync(pagedResult);
 
         // Act
@@ -701,7 +701,7 @@ public class DeltaSyncTests
         };
 
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(
-            nonExistentConnectedSystemId, watermark, 1, 200))
+            nonExistentConnectedSystemId, watermark, 1, 200, It.IsAny<int?>()))
             .ReturnsAsync(pagedResult);
 
         // Act
@@ -737,7 +737,7 @@ public class DeltaSyncTests
         };
 
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(
-            connectedSystemId, watermark, 1, 200))
+            connectedSystemId, watermark, 1, 200, It.IsAny<int?>()))
             .ReturnsAsync(pagedResult);
 
         // Act
@@ -767,7 +767,7 @@ public class DeltaSyncTests
         };
 
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(
-            connectedSystemId, watermark, 1, 200))
+            connectedSystemId, watermark, 1, 200, It.IsAny<int?>()))
             .ReturnsAsync(pagedResult);
 
         // Act
@@ -809,7 +809,7 @@ public class DeltaSyncTests
         };
 
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(
-            connectedSystemId, watermark, 1, pageSize))
+            connectedSystemId, watermark, 1, pageSize, It.IsAny<int?>()))
             .ReturnsAsync(pagedResult);
 
         // Act
@@ -881,7 +881,7 @@ public class DeltaSyncTests
             };
 
             _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(
-                connectedSystemId, watermark, page, pageSize))
+                connectedSystemId, watermark, page, pageSize, It.IsAny<int?>()))
                 .ReturnsAsync(pagedResult);
         }
 
@@ -925,7 +925,7 @@ public class DeltaSyncTests
 
         // Verify we don't need to fetch any pages
         _mockCsRepo.Verify(r => r.GetConnectedSystemObjectsModifiedSinceAsync(
-            It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+            It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>()), Times.Never);
     }
 
     #endregion
@@ -1057,7 +1057,7 @@ public class DeltaSyncTests
         };
 
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(
-            connectedSystemId, watermark, page, pageSize))
+            connectedSystemId, watermark, page, pageSize, It.IsAny<int?>()))
             .ReturnsAsync(pagedResult);
 
         // Act
@@ -1066,7 +1066,7 @@ public class DeltaSyncTests
 
         // Assert - Verify the repository was called with exact parameters
         _mockCsRepo.Verify(r => r.GetConnectedSystemObjectsModifiedSinceAsync(
-            connectedSystemId, watermark, page, pageSize), Times.Once);
+            connectedSystemId, watermark, page, pageSize, It.IsAny<int?>()), Times.Once);
     }
 
     [Test]
@@ -1110,7 +1110,7 @@ public class DeltaSyncTests
 
         // Repository should receive page 1 even if 0 is passed (implementation detail)
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(
-            connectedSystemId, watermark, 0, 200))
+            connectedSystemId, watermark, 0, 200, It.IsAny<int?>()))
             .ReturnsAsync(pagedResult);
 
         // Act
@@ -1148,7 +1148,7 @@ public class DeltaSyncTests
         };
 
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(
-            connectedSystemId, watermark, 3, pageSize))
+            connectedSystemId, watermark, 3, pageSize, It.IsAny<int?>()))
             .ReturnsAsync(pagedResult);
 
         // Act
@@ -1177,7 +1177,7 @@ public class DeltaSyncTests
         };
 
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(
-            connectedSystemId, watermark, 100, 200))
+            connectedSystemId, watermark, 100, 200, It.IsAny<int?>()))
             .ReturnsAsync(pagedResult);
 
         // Act
@@ -1209,7 +1209,7 @@ public class DeltaSyncTests
             new() { Id = Guid.NewGuid(), ConnectedSystemId = 2, LastUpdated = DateTime.UtcNow }
         };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(1, watermark1, 1, 200))
+        _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(1, watermark1, 1, 200, It.IsAny<int?>()))
             .ReturnsAsync(new PagedResultSet<ConnectedSystemObject>
             {
                 Results = cs1Csos,
@@ -1218,7 +1218,7 @@ public class DeltaSyncTests
                 PageSize = 200
             });
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(2, watermark2, 1, 200))
+        _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(2, watermark2, 1, 200, It.IsAny<int?>()))
             .ReturnsAsync(new PagedResultSet<ConnectedSystemObject>
             {
                 Results = cs2Csos,
@@ -1314,7 +1314,7 @@ public class DeltaSyncTests
         };
 
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(
-            connectedSystemId, watermark, 1, 200))
+            connectedSystemId, watermark, 1, 200, It.IsAny<int?>()))
             .ReturnsAsync(pagedResult);
 
         // Act
@@ -1444,7 +1444,7 @@ public class DeltaSyncTests
         };
 
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectsModifiedSinceAsync(
-            connectedSystemId, watermark, 1, 200))
+            connectedSystemId, watermark, 1, 200, It.IsAny<int?>()))
             .ReturnsAsync(pagedResult);
 
         // Act
