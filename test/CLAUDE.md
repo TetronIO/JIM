@@ -151,6 +151,15 @@ cd /workspaces/JIM
 
 # Setup only - configure environment without running tests (for demos, manual exploration)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory -SetupOnly
+
+# Set log level (overrides .env for this run, restores afterwards)
+./test/integration/Run-IntegrationTests.ps1 -LogLevel Warning
+
+# Disable change tracking (reduces database writes for large tests)
+./test/integration/Run-IntegrationTests.ps1 -DisableChangeTracking
+
+# Large-scale test with reduced logging and no change tracking
+./test/integration/Run-IntegrationTests.ps1 -Template Large -LogLevel Warning -DisableChangeTracking
 ```
 
 **What the runner does automatically:**
@@ -164,6 +173,12 @@ cd /workspaces/JIM
 8. Tears down all containers
 
 **For detailed integration testing guide, see:** [`docs/INTEGRATION_TESTING.md`](docs/INTEGRATION_TESTING.md)
+
+**CRITICAL: Always use default runner behaviour — no `-SkipReset` or `-SkipBuild` flags.**
+These flags are for human developer iteration only. Claude must not use them because:
+- `-SkipBuild` can run stale container images that don't reflect the current code, masking real bugs
+- `-SkipReset` carries over state from previous runs, producing results that are not reproducible
+- Integration tests must always prove the code works from a clean state with freshly built containers
 
 **Common templates by data size:**
 - **Nano**: 3 users, 1 group (~10 sec) - Fast dev iteration

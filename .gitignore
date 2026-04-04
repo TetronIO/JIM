@@ -100,7 +100,7 @@ bld/
 .vs/
 
 # Visual Studio Code directory
-.vscode/
+.vscode/*
 # But allow workspace configuration for debugging
 !.vscode/launch.json
 !.vscode/tasks.json

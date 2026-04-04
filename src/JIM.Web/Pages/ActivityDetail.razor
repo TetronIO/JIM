@@ -9,6 +9,7 @@
 @using JIM.Models.Utility;
 @using JIM.Utilities;
 @using JIM.Web.Services
+@implements IDisposable
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject IUserPreferenceService PreferenceService
@@ -147,6 +148,35 @@
             }
         </MudGrid>
     </MudPaper>
+
+    @if (_activity.Status == ActivityStatus.InProgress)
+    {
+        var progress = _activity.ObjectsToProcess > 0
+            ? (double)_activity.ObjectsProcessed / _activity.ObjectsToProcess * 100
+            : 0;
+        var isIndeterminate = _activity.ObjectsToProcess == 0;
+
+        <MudPaper Class="pa-4 mt-4" Outlined="true">
+            <MudStack Spacing="2">
+                @if (!string.IsNullOrEmpty(_activity.Message))
+                {
+                    <MudText Typo="Typo.body1">@_activity.Message</MudText>
+                }
+                @if (isIndeterminate)
+                {
+                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Rounded="true" Size="Size.Large" />
+                }
+                else
+                {
+                    <MudProgressLinear Value="@progress" Color="Color.Primary" Rounded="true" Size="Size.Large" />
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        @_activity.ObjectsProcessed.ToString("N0") of @_activity.ObjectsToProcess.ToString("N0") objects
+                        (@progress.ToString("F1")%)
+                    </MudText>
+                }
+            </MudStack>
+        </MudPaper>
+    }
 
     @if (!string.IsNullOrEmpty(_activity.WarningMessage))
     {
@@ -648,6 +678,7 @@
     private string _searchString = "";
     private bool _loading;
     private int _rowsPerPage = 10;
+    private CancellationTokenSource? _pollCts;
     private bool _preferencesLoaded;
     private bool _initialisationComplete;
 
@@ -727,6 +758,9 @@
 
         _loadedId = Id;
         _initialisationComplete = true;
+
+        // Start polling while the activity is in progress
+        StartPollingIfInProgress();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -1031,5 +1065,59 @@
             return $"{_activity.TargetContext} → {targetName}";
 
         return targetName;
+    }
+
+    private void StartPollingIfInProgress()
+    {
+        if (_activity?.Status != ActivityStatus.InProgress)
+            return;
+
+        // Cancel any existing polling
+        _pollCts?.Cancel();
+        _pollCts = new CancellationTokenSource();
+        var token = _pollCts.Token;
+
+        _ = Task.Run(async () =>
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(3), token);
+
+                    using var jim = JimFactory.Create();
+                    var updated = await jim.Activities.GetActivityAsync(Id);
+                    if (updated == null)
+                        break;
+
+                    _activity = updated;
+
+                    // Refresh child activities and stats while in progress
+                    _childActivities = await jim.Activities.GetChildActivitiesAsync(_activity.Id);
+                    if (_activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && _activity.TargetOperationType == ActivityTargetOperationType.Execute)
+                        _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(_activity.Id);
+
+                    await InvokeAsync(StateHasChanged);
+
+                    // Stop polling once the activity has completed
+                    if (updated.Status != ActivityStatus.InProgress)
+                        break;
+                }
+                catch (TaskCanceledException)
+                {
+                    break;
+                }
+                catch
+                {
+                    // Ignore transient errors during polling
+                }
+            }
+        }, token);
+    }
+
+    public void Dispose()
+    {
+        _pollCts?.Cancel();
+        _pollCts?.Dispose();
     }
 }

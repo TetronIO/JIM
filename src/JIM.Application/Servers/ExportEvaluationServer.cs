@@ -60,24 +60,58 @@ public class ExportEvaluationServer
             .Distinct()
             .ToList();
 
-        // Load all CSOs for target systems in a single query
-        var csoLookup = await SyncRepo.GetConnectedSystemObjectsByTargetSystemsAsync(targetSystemIds);
+        // CsoLookup and CsoAttributeValues are now populated per-page via RefreshExportEvaluationCacheForPageAsync.
+        // This avoids loading ALL target CSOs upfront, which at 100K+ objects consumes multiple GB of memory.
+        var emptyCsoLookup = new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>();
+        var emptyCsoAttributeValues = Array.Empty<ConnectedSystemObjectAttributeValue>()
+            .ToLookup(x => (x.ConnectedSystemObject.Id, x.AttributeId));
 
-        // Load target CSO attribute values for no-net-change detection during export evaluation.
-        // This is critical for preventing duplicate ADD operations on multi-valued attributes
-        // (e.g., group members that already exist in the target system).
-        var targetCsoIds = csoLookup.Values.Select(cso => cso.Id).ToList();
-        var csoAttributeValues = await SyncRepo.GetCsoAttributeValuesByCsoIdsAsync(targetCsoIds);
+        Log.Debug("BuildExportEvaluationCacheAsync: Cached {RuleCount} export rules across {TypeCount} MVO types for {SystemCount} target systems (CSO data loaded per-page)",
+            exportRules.Count, exportRulesByMvoTypeId.Count, targetSystemIds.Count);
 
-        // Use ToLookup to support multi-valued attributes (e.g., group membership)
-        // where a single (CsoId, AttributeId) key can have multiple values
-        var csoAttributeValueLookup = csoAttributeValues
-            .ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId));
+        return new ExportEvaluationCache(exportRulesByMvoTypeId, emptyCsoLookup, emptyCsoAttributeValues, targetSystemIds);
+    }
 
-        Log.Debug("BuildExportEvaluationCacheAsync: Cached {RuleCount} export rules across {TypeCount} MVO types, {CsoCount} CSOs with {AttrCount} attribute values for {SystemCount} target systems",
-            exportRules.Count, exportRulesByMvoTypeId.Count, csoLookup.Count, csoAttributeValues.Count, targetSystemIds.Count);
+    /// <summary>
+    /// Rebuilds the per-page portions of the export evaluation cache (CsoLookup, CsoAttributeValues)
+    /// for only the MVOs that changed in the current page. This bounds memory to page size rather than
+    /// total dataset size, enabling sync of 100K+ objects without OOM.
+    /// </summary>
+    /// <param name="cache">The cache to refresh (rules and target system IDs are preserved).</param>
+    /// <param name="mvoIds">MVO IDs from the current page's pending export evaluations.</param>
+    public async Task RefreshExportEvaluationCacheForPageAsync(
+        ExportEvaluationCache cache,
+        IEnumerable<Guid> mvoIds)
+    {
+        var mvoIdList = mvoIds.ToList();
+        if (mvoIdList.Count == 0 || cache.TargetSystemIds.Count == 0)
+        {
+            cache.CsoLookup = new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>();
+            cache.CsoAttributeValues = Array.Empty<ConnectedSystemObjectAttributeValue>()
+                .ToLookup(x => (x.ConnectedSystemObject.Id, x.AttributeId));
+            return;
+        }
 
-        return new ExportEvaluationCache(exportRulesByMvoTypeId, csoLookup, csoAttributeValueLookup);
+        // Load only target CSOs joined to this page's MVOs (AsNoTracking via the repository method)
+        cache.CsoLookup = await SyncRepo.GetConnectedSystemObjectsByMvoIdsAndTargetSystemsAsync(
+            mvoIdList, cache.TargetSystemIds);
+
+        // Load attribute values for only these CSOs
+        var targetCsoIds = cache.CsoLookup.Values.Select(cso => cso.Id).ToList();
+        if (targetCsoIds.Count > 0)
+        {
+            var csoAttributeValues = await SyncRepo.GetCsoAttributeValuesByCsoIdsAsync(targetCsoIds);
+            cache.CsoAttributeValues = csoAttributeValues
+                .ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId));
+        }
+        else
+        {
+            cache.CsoAttributeValues = Array.Empty<ConnectedSystemObjectAttributeValue>()
+                .ToLookup(x => (x.ConnectedSystemObject.Id, x.AttributeId));
+        }
+
+        Log.Verbose("RefreshExportEvaluationCacheForPageAsync: Loaded {CsoCount} CSOs with attribute values for {MvoCount} MVOs across {SystemCount} target systems",
+            cache.CsoLookup.Count, mvoIdList.Count, cache.TargetSystemIds.Count);
     }
 
     /// <summary>

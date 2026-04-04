@@ -40,8 +40,6 @@
         // Database
         "ms-azuretools.vscode-docker",
         "cweijan.vscode-postgresql-client2",
-        // JSON tooling
-        "AykutSarac.jsoncrack-vscode",
         // Code quality
         "editorconfig.editorconfig",
         "streetsidesoftware.code-spell-checker",

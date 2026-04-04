@@ -101,9 +101,11 @@ function Write-TestSection {
         [string]$Title
     )
 
-    Write-Host "`n===========================================" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "===========================================" -ForegroundColor Cyan
     Write-Host " $Title" -ForegroundColor Cyan
     Write-Host "===========================================" -ForegroundColor Cyan
+    Write-Host ""
 }
 
 function Write-TestStep {

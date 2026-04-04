@@ -487,10 +487,10 @@
                 ConnectedSystemName = csName,
                 ActivityRunProfileExecutionItemId = change.ActivityRunProfileExecutionItemId,
                 AttributeChanges = change.AttributeChanges
-                    .OrderBy(ac => ac.Attribute.Name)
+                    .OrderBy(ac => ac.AttributeName)
                     .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange
                     {
-                        AttributeName = ac.Attribute.Name,
+                        AttributeName = ac.AttributeName,
                         ChangeType = vc.ValueChangeType,
                         Value = vc.ReferenceValue == null ? vc.ToString() : null,
                         ReferenceValue = vc.ReferenceValue != null ? new ChangeHistoryTimeline.ReferenceValueInfo
@@ -499,8 +499,8 @@
                             DisplayName = vc.ReferenceValue.DisplayNameOrId ?? vc.ReferenceValue.Id.ToString(),
                             Href = JIM.Utilities.Utilities.GetConnectedSystemObjectHref(vc.ReferenceValue)
                         } : null,
-                        IsMultiValued = ac.Attribute.AttributePlurality == AttributePlurality.MultiValued,
-                        AttributeType = ac.Attribute.Type
+                        IsMultiValued = ac.Attribute?.AttributePlurality == AttributePlurality.MultiValued,
+                        AttributeType = ac.AttributeType
                     }))
                     .ToList()
             })
@@ -529,10 +529,10 @@
                 SyncRuleName = change.SyncRuleName,
                 ActivityRunProfileExecutionItemId = change.ActivityRunProfileExecutionItemId,
                 AttributeChanges = change.AttributeChanges
-                    .OrderBy(ac => ac.Attribute.Name)
+                    .OrderBy(ac => ac.AttributeName)
                     .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange
                     {
-                        AttributeName = ac.Attribute.Name,
+                        AttributeName = ac.AttributeName,
                         ChangeType = vc.ValueChangeType,
                         Value = vc.ReferenceValue == null ? vc.ToString() : null,
                         ReferenceValue = vc.ReferenceValue != null ? new ChangeHistoryTimeline.ReferenceValueInfo
@@ -541,8 +541,8 @@
                             DisplayName = vc.ReferenceValue.DisplayName ?? vc.ReferenceValue.Id.ToString(),
                             Href = $"/users/{vc.ReferenceValue.Id}"
                         } : null,
-                        IsMultiValued = ac.Attribute.AttributePlurality == AttributePlurality.MultiValued,
-                        AttributeType = ac.Attribute.Type
+                        IsMultiValued = ac.Attribute?.AttributePlurality == AttributePlurality.MultiValued,
+                        AttributeType = ac.AttributeType
                     }))
                     .ToList()
             })

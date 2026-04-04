@@ -432,7 +432,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         Assert.That(recallChange!.AttributeChanges, Has.Count.EqualTo(1),
             "MVO change should record the recalled Description attribute");
         var recalledAttrChange = recallChange.AttributeChanges.First();
-        Assert.That(recalledAttrChange.Attribute.Name, Is.EqualTo("Description"),
+        Assert.That(recalledAttrChange.Attribute!.Name, Is.EqualTo("Description"),
             "Recalled attribute should be the Training-contributed Description");
         Assert.That(recalledAttrChange.ValueChanges, Has.Count.EqualTo(1));
         Assert.That(recalledAttrChange.ValueChanges.First().ValueChangeType, Is.EqualTo(ValueChangeType.Remove),

@@ -75,11 +75,13 @@ public partial class SyncRepository
                     await tx.CommitAsync();
                 });
 
-            // Step 2: Persist CSO change records on main EF connection (small count, needs EF)
+            // Step 2: Persist CSO change records via raw SQL (same approach as PersistRpeiCsoChangesAsync).
+            // EF AddRange + SaveChangesAsync is not safe here: it traverses navigation properties into
+            // shared ConnectedSystemObjectTypeAttribute entities causing identity conflicts at scale,
+            // and SaveChangesAsync flushes all dirty entities in the tracker (not just CSO changes).
             if (outcomeCsoChanges.Count > 0)
             {
-                _context.AddRange(outcomeCsoChanges);
-                await _context.SaveChangesAsync();
+                await InsertCsoChangeHierarchyRawAsync(outcomeCsoChanges);
                 foreach (var outcome in allOutcomes.Where(o => o.ConnectedSystemObjectChange != null))
                     outcome.ConnectedSystemObjectChangeId = outcome.ConnectedSystemObjectChange!.Id;
             }
@@ -123,8 +125,8 @@ public partial class SyncRepository
 
                 if (outcomeCsoChanges.Count > 0)
                 {
-                    _context.AddRange(outcomeCsoChanges);
-                    await _context.SaveChangesAsync();
+                    // Use raw SQL INSERT (see parallel path comment for explanation)
+                    await InsertCsoChangeHierarchyRawAsync(outcomeCsoChanges);
                     foreach (var outcome in allOutcomes.Where(o => o.ConnectedSystemObjectChange != null))
                         outcome.ConnectedSystemObjectChangeId = outcome.ConnectedSystemObjectChange!.Id;
                 }
@@ -161,6 +163,55 @@ public partial class SyncRepository
                 // Mocked DbContext in tests — Entry() not available, nothing to detach
             }
         }
+    }
+
+    /// <summary>
+    /// Inserts a CSO change record hierarchy (parent + attribute changes + value changes) via raw SQL.
+    /// Pre-generates IDs so FK relationships are known before building SQL statements.
+    /// This avoids EF AddRange graph traversal which causes identity conflicts with shared
+    /// ConnectedSystemObjectTypeAttribute entities at scale.
+    /// </summary>
+    private async Task InsertCsoChangeHierarchyRawAsync(List<ConnectedSystemObjectChange> changes)
+    {
+        // Pre-generate IDs for all entities in the hierarchy
+        foreach (var change in changes)
+        {
+            if (change.Id == Guid.Empty)
+                change.Id = Guid.NewGuid();
+
+            foreach (var attrChange in change.AttributeChanges)
+            {
+                if (attrChange.Id == Guid.Empty)
+                    attrChange.Id = Guid.NewGuid();
+
+                foreach (var valueChange in attrChange.ValueChanges)
+                {
+                    if (valueChange.Id == Guid.Empty)
+                        valueChange.Id = Guid.NewGuid();
+                }
+            }
+        }
+
+        // Step 1: INSERT parent ConnectedSystemObjectChange rows
+        await BulkInsertCsoChangesRawAsync(changes);
+
+        // Step 2: INSERT ConnectedSystemObjectChangeAttribute rows
+        var allAttrChanges = changes
+            .SelectMany(c => c.AttributeChanges.Select(ac =>
+                (ChangeId: c.Id, AttributeId: ac.Attribute?.Id ?? 0, AttrChange: ac)))
+            .ToList();
+
+        if (allAttrChanges.Count > 0)
+            await BulkInsertCsoChangeAttributesRawAsync(allAttrChanges);
+
+        // Step 3: INSERT ConnectedSystemObjectChangeAttributeValue rows
+        var allValueChanges = changes
+            .SelectMany(c => c.AttributeChanges
+                .SelectMany(ac => ac.ValueChanges.Select(vc => (AttrChangeId: ac.Id, Value: vc))))
+            .ToList();
+
+        if (allValueChanges.Count > 0)
+            await BulkInsertCsoChangeAttributeValuesRawAsync(allValueChanges);
     }
 
     /// <inheritdoc />
@@ -208,7 +259,7 @@ public partial class SyncRepository
 
         // Step 2: INSERT ConnectedSystemObjectChangeAttribute rows
         var allAttrChanges = changes
-            .SelectMany(c => c.AttributeChanges.Select(ac => (ChangeId: c.Id, AttributeId: ac.Attribute.Id, AttrChange: ac)))
+            .SelectMany(c => c.AttributeChanges.Select(ac => (ChangeId: c.Id, AttributeId: ac.Attribute!.Id, AttrChange: ac)))
             .ToList();
 
         if (allAttrChanges.Count > 0)

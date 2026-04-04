@@ -26,9 +26,9 @@ public class PreExportReconciliationTests
         // Arrange
         var csoId = Guid.NewGuid();
         var mvoId = Guid.NewGuid();
-        var createPe = CreateTestPendingExport(PendingExportChangeType.Create, PendingExportStatus.Pending, csoId, mvoId);
-        var deletePe = CreateTestPendingExport(PendingExportChangeType.Delete, PendingExportStatus.Pending, csoId, mvoId);
-        var exports = new List<PendingExport> { createPe, deletePe };
+        var createPe = CreateTestSummary(PendingExportChangeType.Create, PendingExportStatus.Pending, csoId, mvoId);
+        var deletePe = CreateTestSummary(PendingExportChangeType.Delete, PendingExportStatus.Pending, csoId, mvoId);
+        var exports = new List<PendingExportSummary> { createPe, deletePe };
 
         // Act
         var result = _engine.ReconcileCreateDeletePairs(exports);
@@ -55,9 +55,9 @@ public class PreExportReconciliationTests
         // Arrange
         var csoId = Guid.NewGuid();
         var mvoId = Guid.NewGuid();
-        var updatePe = CreateTestPendingExport(PendingExportChangeType.Update, PendingExportStatus.Pending, csoId, mvoId);
-        var deletePe = CreateTestPendingExport(PendingExportChangeType.Delete, PendingExportStatus.Pending, csoId, mvoId);
-        var exports = new List<PendingExport> { updatePe, deletePe };
+        var updatePe = CreateTestSummary(PendingExportChangeType.Update, PendingExportStatus.Pending, csoId, mvoId);
+        var deletePe = CreateTestSummary(PendingExportChangeType.Delete, PendingExportStatus.Pending, csoId, mvoId);
+        var exports = new List<PendingExportSummary> { updatePe, deletePe };
 
         // Act
         var result = _engine.ReconcileCreateDeletePairs(exports);
@@ -81,9 +81,9 @@ public class PreExportReconciliationTests
         // Arrange — CREATE has status Exported (already sent to target system)
         var csoId = Guid.NewGuid();
         var mvoId = Guid.NewGuid();
-        var createPe = CreateTestPendingExport(PendingExportChangeType.Create, PendingExportStatus.Exported, csoId, mvoId);
-        var deletePe = CreateTestPendingExport(PendingExportChangeType.Delete, PendingExportStatus.Pending, csoId, mvoId);
-        var exports = new List<PendingExport> { createPe, deletePe };
+        var createPe = CreateTestSummary(PendingExportChangeType.Create, PendingExportStatus.Exported, csoId, mvoId);
+        var deletePe = CreateTestSummary(PendingExportChangeType.Delete, PendingExportStatus.Pending, csoId, mvoId);
+        var exports = new List<PendingExportSummary> { createPe, deletePe };
 
         // Act
         var result = _engine.ReconcileCreateDeletePairs(exports);
@@ -100,9 +100,9 @@ public class PreExportReconciliationTests
         // Arrange — CREATE has status ExportNotConfirmed (sent but not confirmed)
         var csoId = Guid.NewGuid();
         var mvoId = Guid.NewGuid();
-        var createPe = CreateTestPendingExport(PendingExportChangeType.Create, PendingExportStatus.ExportNotConfirmed, csoId, mvoId);
-        var deletePe = CreateTestPendingExport(PendingExportChangeType.Delete, PendingExportStatus.Pending, csoId, mvoId);
-        var exports = new List<PendingExport> { createPe, deletePe };
+        var createPe = CreateTestSummary(PendingExportChangeType.Create, PendingExportStatus.ExportNotConfirmed, csoId, mvoId);
+        var deletePe = CreateTestSummary(PendingExportChangeType.Delete, PendingExportStatus.Pending, csoId, mvoId);
+        var exports = new List<PendingExportSummary> { createPe, deletePe };
 
         // Act
         var result = _engine.ReconcileCreateDeletePairs(exports);
@@ -120,9 +120,9 @@ public class PreExportReconciliationTests
     public void ReconcileCreateDeletePairs_NoMatchingPairs_ReturnsEmpty()
     {
         // Arrange — CREATE and DELETE for different CSOs
-        var createPe = CreateTestPendingExport(PendingExportChangeType.Create, PendingExportStatus.Pending, Guid.NewGuid(), Guid.NewGuid());
-        var deletePe = CreateTestPendingExport(PendingExportChangeType.Delete, PendingExportStatus.Pending, Guid.NewGuid(), Guid.NewGuid());
-        var exports = new List<PendingExport> { createPe, deletePe };
+        var createPe = CreateTestSummary(PendingExportChangeType.Create, PendingExportStatus.Pending, Guid.NewGuid(), Guid.NewGuid());
+        var deletePe = CreateTestSummary(PendingExportChangeType.Delete, PendingExportStatus.Pending, Guid.NewGuid(), Guid.NewGuid());
+        var exports = new List<PendingExportSummary> { createPe, deletePe };
 
         // Act
         var result = _engine.ReconcileCreateDeletePairs(exports);
@@ -136,7 +136,7 @@ public class PreExportReconciliationTests
     public void ReconcileCreateDeletePairs_EmptyList_ReturnsEmpty()
     {
         // Act
-        var result = _engine.ReconcileCreateDeletePairs(new List<PendingExport>());
+        var result = _engine.ReconcileCreateDeletePairs(new List<PendingExportSummary>());
 
         // Assert
         Assert.That(result.ReconciledPairs, Has.Count.EqualTo(0));
@@ -156,12 +156,12 @@ public class PreExportReconciliationTests
         var mvoId1 = Guid.NewGuid();
         var mvoId2 = Guid.NewGuid();
 
-        var exports = new List<PendingExport>
+        var exports = new List<PendingExportSummary>
         {
-            CreateTestPendingExport(PendingExportChangeType.Create, PendingExportStatus.Pending, csoId1, mvoId1),
-            CreateTestPendingExport(PendingExportChangeType.Delete, PendingExportStatus.Pending, csoId1, mvoId1),
-            CreateTestPendingExport(PendingExportChangeType.Create, PendingExportStatus.Pending, csoId2, mvoId2),
-            CreateTestPendingExport(PendingExportChangeType.Delete, PendingExportStatus.Pending, csoId2, mvoId2),
+            CreateTestSummary(PendingExportChangeType.Create, PendingExportStatus.Pending, csoId1, mvoId1),
+            CreateTestSummary(PendingExportChangeType.Delete, PendingExportStatus.Pending, csoId1, mvoId1),
+            CreateTestSummary(PendingExportChangeType.Create, PendingExportStatus.Pending, csoId2, mvoId2),
+            CreateTestSummary(PendingExportChangeType.Delete, PendingExportStatus.Pending, csoId2, mvoId2),
         };
 
         // Act
@@ -181,9 +181,9 @@ public class PreExportReconciliationTests
     {
         // Arrange — CREATE has no CSO ID (brand new provisioning before CSO creation)
         var mvoId = Guid.NewGuid();
-        var createPe = CreateTestPendingExport(PendingExportChangeType.Create, PendingExportStatus.Pending, connectedSystemObjectId: null, mvoId);
-        var deletePe = CreateTestPendingExport(PendingExportChangeType.Delete, PendingExportStatus.Pending, Guid.NewGuid(), mvoId);
-        var exports = new List<PendingExport> { createPe, deletePe };
+        var createPe = CreateTestSummary(PendingExportChangeType.Create, PendingExportStatus.Pending, connectedSystemObjectId: null, mvoId);
+        var deletePe = CreateTestSummary(PendingExportChangeType.Delete, PendingExportStatus.Pending, Guid.NewGuid(), mvoId);
+        var exports = new List<PendingExportSummary> { createPe, deletePe };
 
         // Act
         var result = _engine.ReconcileCreateDeletePairs(exports);
@@ -205,15 +205,15 @@ public class PreExportReconciliationTests
         var csoId2 = Guid.NewGuid();
         var csoId3 = Guid.NewGuid();
 
-        var exports = new List<PendingExport>
+        var exports = new List<PendingExportSummary>
         {
             // Reconcilable pair
-            CreateTestPendingExport(PendingExportChangeType.Create, PendingExportStatus.Pending, csoId1, Guid.NewGuid()),
-            CreateTestPendingExport(PendingExportChangeType.Delete, PendingExportStatus.Pending, csoId1, Guid.NewGuid()),
+            CreateTestSummary(PendingExportChangeType.Create, PendingExportStatus.Pending, csoId1, Guid.NewGuid()),
+            CreateTestSummary(PendingExportChangeType.Delete, PendingExportStatus.Pending, csoId1, Guid.NewGuid()),
             // Standalone UPDATE — no DELETE counterpart
-            CreateTestPendingExport(PendingExportChangeType.Update, PendingExportStatus.Pending, csoId2, Guid.NewGuid()),
+            CreateTestSummary(PendingExportChangeType.Update, PendingExportStatus.Pending, csoId2, Guid.NewGuid()),
             // Standalone CREATE — no DELETE counterpart
-            CreateTestPendingExport(PendingExportChangeType.Create, PendingExportStatus.Pending, csoId3, Guid.NewGuid()),
+            CreateTestSummary(PendingExportChangeType.Create, PendingExportStatus.Pending, csoId3, Guid.NewGuid()),
         };
 
         // Act
@@ -230,9 +230,9 @@ public class PreExportReconciliationTests
     {
         // Arrange — DELETE has status Exported (already sent)
         var csoId = Guid.NewGuid();
-        var createPe = CreateTestPendingExport(PendingExportChangeType.Create, PendingExportStatus.Pending, csoId, Guid.NewGuid());
-        var deletePe = CreateTestPendingExport(PendingExportChangeType.Delete, PendingExportStatus.Exported, csoId, Guid.NewGuid());
-        var exports = new List<PendingExport> { createPe, deletePe };
+        var createPe = CreateTestSummary(PendingExportChangeType.Create, PendingExportStatus.Pending, csoId, Guid.NewGuid());
+        var deletePe = CreateTestSummary(PendingExportChangeType.Delete, PendingExportStatus.Exported, csoId, Guid.NewGuid());
+        var exports = new List<PendingExportSummary> { createPe, deletePe };
 
         // Act
         var result = _engine.ReconcileCreateDeletePairs(exports);
@@ -246,22 +246,19 @@ public class PreExportReconciliationTests
 
     #region Test Helpers
 
-    private static PendingExport CreateTestPendingExport(
+    private static PendingExportSummary CreateTestSummary(
         PendingExportChangeType changeType,
         PendingExportStatus status,
         Guid? connectedSystemObjectId,
-        Guid? sourceMetaverseObjectId,
-        int connectedSystemId = 1)
+        Guid? sourceMetaverseObjectId)
     {
-        return new PendingExport
+        return new PendingExportSummary
         {
             Id = Guid.NewGuid(),
             ChangeType = changeType,
             Status = status,
             ConnectedSystemObjectId = connectedSystemObjectId,
-            SourceMetaverseObjectId = sourceMetaverseObjectId,
-            ConnectedSystemId = connectedSystemId,
-            CreatedAt = DateTime.UtcNow
+            SourceMetaverseObjectId = sourceMetaverseObjectId
         };
     }
 

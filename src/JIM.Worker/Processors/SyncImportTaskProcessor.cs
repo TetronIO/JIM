@@ -150,6 +150,7 @@ public class SyncImportTaskProcessor
         // (e.g., Samba AD with faulty paging). Memory-efficient: ~124 bytes per object for string keys.
         // Key format: "{objectTypeId}:{externalIdValue}" (same as per-page tracking)
         var crossPageSeenExternalIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var throughput = new ThroughputTracker();
 
         await _syncRepo.UpdateActivityMessageAsync(_activity, "Performing import");
         switch (_connector)
@@ -211,9 +212,11 @@ public class SyncImportTaskProcessor
 
                     // Update progress - for paginated imports we don't know the total, but we track objects imported so far
                     _activity.ObjectsProcessed = totalObjectsImported;
-                    var progressMessage = pageNumber > 1 || result.PaginationTokens.Count > 0
-                        ? $"Imported {totalObjectsImported} objects (page {pageNumber})"
-                        : $"Imported {totalObjectsImported} objects";
+                    var pageInfo = pageNumber > 1 || result.PaginationTokens.Count > 0
+                        ? $" (page {pageNumber})"
+                        : "";
+                    var progressMessage = $"Imported {totalObjectsImported:N0} objects{pageInfo}" +
+                        throughput.FormatThroughput(totalObjectsImported);
                     await _syncRepo.UpdateActivityMessageAsync(_activity, progressMessage);
 
                     // add the external ids from this page worth of results to our external-id collection for later deletion calculation
@@ -360,6 +363,7 @@ public class SyncImportTaskProcessor
             GC.GetTotalMemory(true) / 1024 / 1024,
             System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
         await _syncRepo.UpdateActivityMessageAsync(_activity, "Saving changes");
+        var saveThroughput = new ThroughputTracker();
         using (var persistSpan = Diagnostics.Database.StartSpan("PersistConnectedSystemObjects"))
         {
             persistSpan.SetTag("createCount", createdCount);
@@ -473,6 +477,9 @@ public class SyncImportTaskProcessor
 
                 totalCreatedSoFar += batchSize;
                 _activity.ObjectsProcessed = totalCreatedSoFar;
+                await _syncRepo.UpdateActivityMessageAsync(_activity,
+                    $"Saving changes — creating ({totalCreatedSoFar:N0} / {totalToCreate:N0})" +
+                    saveThroughput.FormatThroughput(totalCreatedSoFar, totalChanges));
                 Log.Information("PerformFullImportAsync: Batch complete ({Processed}/{Total}). GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
                     totalCreatedSoFar, totalToCreate,
                     GC.GetTotalMemory(false) / 1024 / 1024,
@@ -596,6 +603,9 @@ public class SyncImportTaskProcessor
                 }
 
                 _activity.ObjectsProcessed = createdCount + batchStart + batchSize;
+                await _syncRepo.UpdateActivityMessageAsync(_activity,
+                    $"Saving changes — updating ({batchStart + batchSize:N0} / {totalToUpdate:N0})" +
+                    saveThroughput.FormatThroughput(createdCount + batchStart + batchSize, totalChanges));
                 Log.Information("PerformFullImportAsync: Update batch complete ({Processed}/{Total}). GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
                     batchStart + batchSize, totalToUpdate,
                     GC.GetTotalMemory(false) / 1024 / 1024,
@@ -971,6 +981,7 @@ public class SyncImportTaskProcessor
         var totalObjectsInBatch = connectedSystemImportResult.ImportObjects.Count;
         _activity.ObjectsToProcess = totalObjectsInBatch;
         _activity.ObjectsProcessed = 0;
+        var throughput = new ThroughputTracker();
         await _syncRepo.UpdateActivityMessageAsync(_activity,
             $"Processing imported objects (0 / {totalObjectsInBatch:N0})");
         const int progressUpdateInterval = 100;
@@ -1181,10 +1192,11 @@ public class SyncImportTaskProcessor
                 // is existing - apply any changes to the cso from the import object
                 if (connectedSystemObject == null)
                 {
-                    // Log warning if connector said Update but object doesn't exist
+                    // Connector said Update but no CSO exists — this is expected behaviour
+                    // (e.g. delta import without a prior full import, or CSO was purged)
                     if (importObject.ChangeType == ObjectChangeType.Updated)
                     {
-                        Log.Warning("ProcessImportObjectsAsync: Connector indicated Update for object type '{ObjectType}' but no matching CSO found. Creating new object instead. " +
+                        Log.Debug("ProcessImportObjectsAsync: Connector indicated Update for object type '{ObjectType}' but no matching CSO found. Creating new object instead. " +
                             "ConnectedSystem: {ConnectedSystemId} ({ConnectedSystemName}), RunProfile: {RunProfileId} ({RunProfileName}), Activity: {ActivityId}",
                             importObject.ObjectType,
                             _connectedSystem.Id, _connectedSystem.Name,
@@ -1253,10 +1265,11 @@ public class SyncImportTaskProcessor
                 }
                 else
                 {
-                    // Log warning if connector said Add but object already exists
+                    // Connector said Add but object already exists — this is expected behaviour
+                    // (e.g. first delta import after a full import where the accesslog still contains the original add entries)
                     if (importObject.ChangeType == ObjectChangeType.Added)
                     {
-                        Log.Warning("ProcessImportObjectsAsync: Connector indicated Add for object type '{ObjectType}' but CSO {CsoId} already exists. Updating instead. " +
+                        Log.Debug("ProcessImportObjectsAsync: Connector indicated Add for object type '{ObjectType}' but CSO {CsoId} already exists. Updating instead. " +
                             "ConnectedSystem: {ConnectedSystemId} ({ConnectedSystemName}), RunProfile: {RunProfileId} ({RunProfileName}), Activity: {ActivityId}",
                             importObject.ObjectType, connectedSystemObject.Id,
                             _connectedSystem.Id, _connectedSystem.Name,
@@ -1352,7 +1365,8 @@ public class SyncImportTaskProcessor
                 if ((importIndex + 1) % progressUpdateInterval == 0)
                 {
                     await _syncRepo.UpdateActivityMessageAsync(_activity,
-                        $"Processing imported objects ({importIndex + 1:N0} / {totalObjectsInBatch:N0})");
+                        $"Processing imported objects ({importIndex + 1:N0} / {totalObjectsInBatch:N0})" +
+                        throughput.FormatThroughput(importIndex + 1, totalObjectsInBatch));
                 }
             }
         }
@@ -1361,7 +1375,8 @@ public class SyncImportTaskProcessor
         if (totalObjectsInBatch > 0 && totalObjectsInBatch % progressUpdateInterval != 0)
         {
             await _syncRepo.UpdateActivityMessageAsync(_activity,
-                $"Processing imported objects ({totalObjectsInBatch:N0} / {totalObjectsInBatch:N0})");
+                $"Processing imported objects ({totalObjectsInBatch:N0} / {totalObjectsInBatch:N0})" +
+                throughput.FormatCompletion(totalObjectsInBatch));
         }
 
         // DEBUG: Summary statistics for duplicate detection

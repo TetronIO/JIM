@@ -61,11 +61,11 @@ internal static class LdapConnectorConstants
     // a single connection). Typical deployments have 2-6 combos, so even low concurrency values
     // eliminate the serialisation bottleneck. Higher values add connection overhead with diminishing returns.
     internal const int DEFAULT_IMPORT_CONCURRENCY = 4;
-    internal const int MAX_IMPORT_CONCURRENCY = 8;
+    internal const int MAX_IMPORT_CONCURRENCY = 64;
 
     // Export concurrency settings
     internal const int DEFAULT_EXPORT_CONCURRENCY = 4;
-    internal const int MAX_EXPORT_CONCURRENCY = 8;
+    internal const int MAX_EXPORT_CONCURRENCY = 64;
 
     // Export modify batch size settings
     // Controls the maximum number of values per multi-valued attribute modification in a single LDAP ModifyRequest.

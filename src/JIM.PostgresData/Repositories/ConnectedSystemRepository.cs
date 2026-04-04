@@ -2112,8 +2112,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         //
         // Note: We also include CSO.AttributeValues because connectors need access to
         // the current attribute values (e.g., current DN for LDAP rename operations).
-
+        //
+        // AsNoTracking: pending exports loaded here are used for read-only cache lookups
+        // during sync (indexed by CSO ID for O(1) confirmation). In-place mutations during
+        // EvaluatePendingExportConfirmation are persisted through separate batch methods
+        // (DeletePendingExportsAsync, UpdatePendingExportsAsync), not EF change tracking.
         return await Repository.Database.PendingExports
+            .AsNoTracking()
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)
@@ -2132,6 +2137,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var now = DateTime.UtcNow;
 
         return await Repository.Database.PendingExports
+            .AsNoTracking()
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)
@@ -2161,6 +2167,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take)
     {
         return await ExecutableExportsQuery(connectedSystemId)
+            .AsNoTracking()
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)
@@ -2200,9 +2207,57 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                       || pe.AttributeValueChanges.Any(ac =>
                             ac.Status == PendingExportAttributeChangeStatus.Pending
                          || ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed))
-            // Exclude Delete exports that have already been exported (was IsReadyForExecution in-memory check)
+            // Exclude Create and Delete exports that have already been exported — they were sent to the
+            // target system and only need confirming import, not re-execution. Without this exclusion,
+            // batch loading degrades to O(n²) at scale as each batch rescans all previously exported
+            // Create PEs (which re-enter with Status=Exported after success).
+            // Update exports with Status=Exported are already excluded by the attribute change filter
+            // above (all changes transition to ExportedPendingConfirmation after export).
             .Where(pe => !(pe.ChangeType == PendingExportChangeType.Delete
+                        && pe.Status == PendingExportStatus.Exported))
+            .Where(pe => !(pe.ChangeType == PendingExportChangeType.Create
                         && pe.Status == PendingExportStatus.Exported));
+    }
+
+    /// <summary>
+    /// Gets lightweight summaries of executable exports for pre-export reconciliation.
+    /// Uses a .Select() projection — no Include chains, no entity tracking, ~3 MB at 100K
+    /// instead of ~150 MB for full entity graphs.
+    /// </summary>
+    public async Task<List<PendingExportSummary>> GetExecutableExportSummariesAsync(int connectedSystemId)
+    {
+        return await ExecutableExportsQuery(connectedSystemId)
+            .Select(pe => new PendingExportSummary
+            {
+                Id = pe.Id,
+                ChangeType = pe.ChangeType,
+                Status = pe.Status,
+                ConnectedSystemObjectId = pe.ConnectedSystemObjectId,
+                SourceMetaverseObjectId = pe.SourceMetaverseObjectId
+            })
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Deletes pending exports by their IDs using raw SQL.
+    /// Used by reconciliation which operates on lightweight summaries, not full entities.
+    /// </summary>
+    public async Task DeletePendingExportsByIdsAsync(IList<Guid> pendingExportIds)
+    {
+        if (pendingExportIds.Count == 0)
+            return;
+
+        var ids = pendingExportIds.ToArray();
+
+        // Delete child records first (FK constraint)
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""PendingExportAttributeValueChanges"" WHERE ""PendingExportId"" = ANY({0})",
+            ids);
+
+        // Delete parent records
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""PendingExports"" WHERE ""Id"" = ANY({0})",
+            ids);
     }
 
     /// <summary>
@@ -2216,6 +2271,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return [];
 
         return await Repository.Database.PendingExports
+            .AsNoTracking()
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)
@@ -2608,6 +2664,66 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         };
     }
 
+    /// <inheritdoc />
+    public async Task<PagedResultSet<PendingExportAttributeValueChange>> GetAllPendingExportChangesPagedAsync(
+        Guid pendingExportId,
+        int page,
+        int pageSize,
+        string? searchText = null)
+    {
+        var query = Repository.Database.Set<PendingExportAttributeValueChange>()
+            .Where(avc => avc.PendingExportId == pendingExportId);
+
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            var searchPattern = $"%{searchText}%";
+            query = query.Where(avc =>
+                (avc.Attribute.Name != null && EF.Functions.ILike(avc.Attribute.Name, searchPattern))
+                || (avc.StringValue != null && EF.Functions.ILike(avc.StringValue, searchPattern))
+                || (avc.UnresolvedReferenceValue != null && EF.Functions.ILike(avc.UnresolvedReferenceValue, searchPattern)));
+        }
+
+        var totalCount = await query.CountAsync();
+
+        if (page < 1) page = 1;
+        if (pageSize > 100) pageSize = 100;
+
+        var offset = (page - 1) * pageSize;
+        var items = await query
+            .OrderBy(avc => avc.Attribute.Name)
+            .ThenBy(avc => avc.Id)
+            .Skip(offset)
+            .Take(pageSize)
+            .Include(avc => avc.Attribute)
+            .ToListAsync();
+
+        return new PagedResultSet<PendingExportAttributeValueChange>
+        {
+            PageSize = pageSize,
+            TotalResults = totalCount,
+            CurrentPage = page,
+            Results = items
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<(PendingExport PendingExport, int ChangeCount)?> GetPendingExportHeaderByConnectedSystemObjectIdAsync(
+        Guid connectedSystemObjectId)
+    {
+        var pendingExport = await Repository.Database.PendingExports
+            .Include(pe => pe.ConnectedSystem)
+            .Include(pe => pe.ConnectedSystemObject)
+            .FirstOrDefaultAsync(pe => pe.ConnectedSystemObject != null && pe.ConnectedSystemObject.Id == connectedSystemObjectId);
+
+        if (pendingExport == null)
+            return null;
+
+        var changeCount = await Repository.Database.Set<PendingExportAttributeValueChange>()
+            .CountAsync(avc => avc.PendingExportId == pendingExport.Id);
+
+        return (pendingExport, changeCount);
+    }
+
     public async Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
     {
         return await Repository.Database.PendingExports
@@ -2849,8 +2965,38 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (systemIds.Count == 0)
             return new Dictionary<(Guid, int), ConnectedSystemObject>();
 
+        // AsNoTracking: these entities are used for read-only cache lookups during export evaluation.
+        // They are never modified via SaveChanges — any CSO mutations go through separate batch methods.
+        // Avoiding tracking prevents these entities from accumulating in the change tracker across pages.
         var csos = await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
             .Where(cso => cso.MetaverseObjectId.HasValue && systemIds.Contains(cso.ConnectedSystemId))
+            .ToListAsync();
+
+        return csos
+            .Where(cso => cso.MetaverseObjectId.HasValue)
+            .ToDictionary(
+                cso => (cso.MetaverseObjectId!.Value, cso.ConnectedSystemId),
+                cso => cso);
+    }
+
+    /// <summary>
+    /// Gets CSOs joined to specific MVOs within the specified target connected systems.
+    /// Used for per-page export evaluation cache refresh — loads only CSOs relevant to the current page.
+    /// </summary>
+    public async Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByMvoIdsAndTargetSystemsAsync(
+        IEnumerable<Guid> mvoIds, IEnumerable<int> targetConnectedSystemIds)
+    {
+        var mvoIdList = mvoIds.ToList();
+        var systemIds = targetConnectedSystemIds.ToList();
+        if (mvoIdList.Count == 0 || systemIds.Count == 0)
+            return new Dictionary<(Guid, int), ConnectedSystemObject>();
+
+        var csos = await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Where(cso => cso.MetaverseObjectId.HasValue
+                && mvoIdList.Contains(cso.MetaverseObjectId.Value)
+                && systemIds.Contains(cso.ConnectedSystemId))
             .ToListAsync();
 
         return csos
@@ -2870,7 +3016,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (ids.Count == 0)
             return [];
 
+        // AsNoTracking: these entities are used for read-only no-net-change detection during export evaluation.
+        // They are never modified via SaveChanges. Avoiding tracking prevents accumulation in the change tracker.
         return await Repository.Database.ConnectedSystemObjectAttributeValues
+            .AsNoTracking()
+            .Include(av => av.ConnectedSystemObject) // Required with AsNoTracking — EF won't auto-populate from tracked CSOs
             .Include(av => av.Attribute)
             .Include(av => av.ReferenceValue) // Include referenced CSO for no-net-change detection on reference attributes
             .Where(av => ids.Contains(av.ConnectedSystemObject.Id))
@@ -2992,7 +3142,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 throw new NotSupportedException($"Attribute type {source.MetaverseAttribute.Type} is not supported for export matching.");
         }
 
-        return await query.FirstOrDefaultAsync();
+        var matches = await query.OrderBy(cso => cso.Id).Take(2).ToListAsync();
+
+        if (matches.Count > 1)
+        {
+            Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Multiple CSOs matched rule {RuleId} in connected system {ConnectedSystemId}. Returning first by ID. This indicates duplicate CSOs that should be investigated.",
+                objectMatchingRule.Id, connectedSystem.Id);
+        }
+
+        return matches.FirstOrDefault();
     }
     #endregion
 
@@ -3586,6 +3744,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.SynchronisationWorkerTasks
             .Where(t => runProfileIds.Contains(t.ConnectedSystemRunProfileId) &&
                        (t.Status == WorkerTaskStatus.Queued || t.Status == WorkerTaskStatus.Processing))
+            .OrderBy(t => t.Id)
             .FirstOrDefaultAsync();
     }
     #endregion

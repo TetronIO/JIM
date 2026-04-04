@@ -63,6 +63,18 @@
     By default, metrics capture is skipped for large templates because parsing the worker
     logs is prohibitively slow. Use this flag when you need performance data for comparison.
 
+.PARAMETER LogLevel
+    Sets the JIM log level in the .env file before starting containers.
+    Valid levels: Verbose, Debug, Information, Warning, Error, Fatal.
+    If not specified, uses whatever is currently set in .env (default: Debug).
+    The original .env value is restored after the test run completes.
+    Use Warning or higher for large tests to reduce log volume.
+
+.PARAMETER DisableChangeTracking
+    Disables both CSO and MVO change tracking via the service settings API after
+    services are ready. This reduces database writes during large test runs.
+    Change tracking is enabled by default.
+
 .EXAMPLE
     ./Run-IntegrationTests.ps1
 
@@ -125,6 +137,12 @@
     ./Run-IntegrationTests.ps1 -Scenario All -DirectoryType OpenLDAP -Template Small
 
     Runs all scenarios against OpenLDAP only with the Small template.
+
+.EXAMPLE
+    ./Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory -Template Large -LogLevel Warning -DisableChangeTracking
+
+    Runs Scenario 1 with Large template, reduced logging (Warning level), and
+    change tracking disabled for maximum throughput during large-scale testing.
 #>
 
 param(
@@ -164,7 +182,14 @@ param(
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("SambaAD", "OpenLDAP", "All")]
-    [string]$DirectoryType = "SambaAD"
+    [string]$DirectoryType = "SambaAD",
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("Verbose", "Debug", "Information", "Warning", "Error", "Fatal")]
+    [string]$LogLevel,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$DisableChangeTracking
 )
 
 Set-StrictMode -Version Latest
@@ -680,9 +705,162 @@ function Show-DirectoryTypeMenu {
     return $directoryTypes[$selectedIndex].Name
 }
 
+# Interactive log level selection function
+function Show-LogLevelMenu {
+    # Read current value from .env
+    $envFilePath = Join-Path $repoRoot ".env"
+    $currentLevel = "Debug"
+    $envContent = Get-Content $envFilePath -Raw
+    if ($envContent -match "(?m)^JIM_LOG_LEVEL=(.+)$") {
+        $currentLevel = $Matches[1].Trim()
+    }
+
+    $logLevels = @(
+        @{ Name = "Verbose"; Description = "All messages including detailed tracing" }
+        @{ Name = "Debug"; Description = "Diagnostic messages for development (default)" }
+        @{ Name = "Information"; Description = "General operational messages" }
+        @{ Name = "Warning"; Description = "Potential issues and unexpected situations" }
+        @{ Name = "Error"; Description = "Errors that prevent operations from completing" }
+        @{ Name = "Fatal"; Description = "Critical failures only" }
+    )
+
+    # Default selection to current .env value
+    $selectedIndex = 0
+    for ($i = 0; $i -lt $logLevels.Count; $i++) {
+        if ($logLevels[$i].Name -eq $currentLevel) {
+            $selectedIndex = $i
+            break
+        }
+    }
+    $exitMenu = $false
+
+    [Console]::CursorVisible = $false
+
+    try {
+        while (-not $exitMenu) {
+            Clear-Host
+
+            Write-Host ""
+            Write-Host "${CYAN}$("=" * 70)${NC}"
+            Write-Host "${CYAN}  JIM Integration Test - Log Level Selection${NC}"
+            Write-Host "${CYAN}$("=" * 70)${NC}"
+            Write-Host ""
+            Write-Host "${GRAY}Use ↑/↓ arrow keys to navigate, Enter to select, Esc to exit${NC}"
+            Write-Host "${GRAY}Current .env value: ${CYAN}$currentLevel${NC}"
+            Write-Host ""
+
+            for ($i = 0; $i -lt $logLevels.Count; $i++) {
+                $level = $logLevels[$i]
+
+                if ($i -eq $selectedIndex) {
+                    Write-Host "${GREEN}► $($level.Name)${NC}"
+                    Write-Host "${GRAY}  $($level.Description)${NC}"
+                }
+                else {
+                    Write-Host "  $($level.Name)"
+                    Write-Host "${GRAY}  $($level.Description)${NC}"
+                }
+                Write-Host ""
+            }
+
+            $key = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+
+            switch ($key.VirtualKeyCode) {
+                38 { $selectedIndex = [Math]::Max(0, $selectedIndex - 1) }
+                40 { $selectedIndex = [Math]::Min($logLevels.Count - 1, $selectedIndex + 1) }
+                13 { $exitMenu = $true }
+                27 {
+                    Write-Host ""
+                    Write-Host "${YELLOW}Cancelled by user${NC}"
+                    [Console]::CursorVisible = $true
+                    exit 0
+                }
+            }
+        }
+    }
+    finally {
+        [Console]::CursorVisible = $true
+    }
+
+    Clear-Host
+    return $logLevels[$selectedIndex].Name
+}
+
+# Interactive change tracking selection function
+function Show-ChangeTrackingMenu {
+    $options = @(
+        @{
+            Name = "Enabled"
+            Description = "Record CSO and MVO changes (default)"
+            Details = "Full audit trail — recommended for most tests"
+        }
+        @{
+            Name = "Disabled"
+            Description = "Skip change tracking for CSO and MVO"
+            Details = "Reduces database writes — recommended for large-scale tests"
+        }
+    )
+
+    $selectedIndex = 0
+    $exitMenu = $false
+
+    [Console]::CursorVisible = $false
+
+    try {
+        while (-not $exitMenu) {
+            Clear-Host
+
+            Write-Host ""
+            Write-Host "${CYAN}$("=" * 70)${NC}"
+            Write-Host "${CYAN}  JIM Integration Test - Change Tracking${NC}"
+            Write-Host "${CYAN}$("=" * 70)${NC}"
+            Write-Host ""
+            Write-Host "${GRAY}Use ↑/↓ arrow keys to navigate, Enter to select, Esc to exit${NC}"
+            Write-Host ""
+
+            for ($i = 0; $i -lt $options.Count; $i++) {
+                $opt = $options[$i]
+
+                if ($i -eq $selectedIndex) {
+                    Write-Host "${GREEN}► $($opt.Name)${NC} ${GRAY}— $($opt.Description)${NC}"
+                    Write-Host "${GRAY}  $($opt.Details)${NC}"
+                }
+                else {
+                    Write-Host "  $($opt.Name) ${GRAY}— $($opt.Description)${NC}"
+                    Write-Host "${GRAY}  $($opt.Details)${NC}"
+                }
+                Write-Host ""
+            }
+
+            $key = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+
+            switch ($key.VirtualKeyCode) {
+                38 { $selectedIndex = [Math]::Max(0, $selectedIndex - 1) }
+                40 { $selectedIndex = [Math]::Min($options.Count - 1, $selectedIndex + 1) }
+                13 { $exitMenu = $true }
+                27 {
+                    Write-Host ""
+                    Write-Host "${YELLOW}Cancelled by user${NC}"
+                    [Console]::CursorVisible = $true
+                    exit 0
+                }
+            }
+        }
+    }
+    finally {
+        [Console]::CursorVisible = $true
+    }
+
+    Clear-Host
+    # Return $true if Disabled was selected (index 1)
+    return ($selectedIndex -eq 1)
+}
+
 # Track if user explicitly set Template parameter
 $TemplateWasExplicitlySet = $PSBoundParameters.ContainsKey('Template')
 $DirectoryTypeWasExplicitlySet = $PSBoundParameters.ContainsKey('DirectoryType')
+$LogLevelWasExplicitlySet = $PSBoundParameters.ContainsKey('LogLevel')
+$ChangeTrackingWasExplicitlySet = $PSBoundParameters.ContainsKey('DisableChangeTracking')
 
 # Scenarios that provision their own fixed test data and don't use the Template parameter
 # for data sizing. These scenarios accept Template but it has no effect on test execution.
@@ -725,6 +903,16 @@ if (-not $Scenario) {
             $script:DirectoryConfig = Get-DirectoryConfig -DirectoryType $DirectoryType
         }
     }
+
+    # Show log level menu only if not explicitly provided
+    if (-not $LogLevelWasExplicitlySet) {
+        $LogLevel = Show-LogLevelMenu
+    }
+
+    # Show change tracking menu only if not explicitly provided
+    if (-not $ChangeTrackingWasExplicitlySet) {
+        $DisableChangeTracking = Show-ChangeTrackingMenu
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -745,6 +933,8 @@ if ($DirectoryType -eq "All") {
     if ($TimeoutSeconds -ne 180)                                { $passThruParams.TimeoutSeconds = $TimeoutSeconds }
     if ($CaptureMetrics)                                        { $passThruParams.CaptureMetrics = $true }
     if ($IgnoreSnapshots)                                       { $passThruParams.IgnoreSnapshots = $true }
+    if ($LogLevel)                                              { $passThruParams.LogLevel = $LogLevel }
+    if ($DisableChangeTracking)                                 { $passThruParams.DisableChangeTracking = $true }
 
     $allStart = Get-Date
     $allResults = @()
@@ -807,6 +997,24 @@ if ($DirectoryType -eq "All") {
     Write-Host ""
     Write-Host "${CYAN}Total Duration: ${NC}$($allDuration.ToString('hh\:mm\:ss'))"
     Write-Host "${CYAN}Passed: ${NC}$passCount / $($allResults.Count)    ${CYAN}Failed: ${NC}$($allResults.Count - $passCount) / $($allResults.Count)"
+    Write-Host ""
+
+    # Re-run Command
+    Write-Host "${CYAN}Re-run Command:${NC}"
+    Write-Host ""
+    $rerunParts = @("pwsh ./test/integration/Run-IntegrationTests.ps1")
+    $rerunParts += "-Scenario `"$($Scenario ?? 'All')`""
+    $rerunParts += "-Template $Template"
+    if ($Step -ne "All") { $rerunParts += "-Step $Step" }
+    $rerunParts += "-DirectoryType All"
+    if ($LogLevel) { $rerunParts += "-LogLevel $LogLevel" }
+    if ($DisableChangeTracking) { $rerunParts += "-DisableChangeTracking" }
+    if ($PSBoundParameters.ContainsKey('ExportConcurrency')) { $rerunParts += "-ExportConcurrency $ExportConcurrency" }
+    if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) { $rerunParts += "-MaxExportParallelism $MaxExportParallelism" }
+    if ($TimeoutSeconds -ne 180) { $rerunParts += "-TimeoutSeconds $TimeoutSeconds" }
+    if ($CaptureMetrics) { $rerunParts += "-CaptureMetrics" }
+    if ($IgnoreSnapshots) { $rerunParts += "-IgnoreSnapshots" }
+    Write-Host "  $($rerunParts -join ' ')"
     Write-Host ""
 
     if ($anyFailed) {
@@ -976,6 +1184,8 @@ if ($Scenario -eq "All") {
     if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) { $commonParams.MaxExportParallelism = $MaxExportParallelism }
     if ($TimeoutSeconds -ne 180)                                { $commonParams.TimeoutSeconds = $TimeoutSeconds }
     if ($CaptureMetrics)                                        { $commonParams.CaptureMetrics = $true }
+    if ($LogLevel)                                              { $commonParams.LogLevel = $LogLevel }
+    if ($DisableChangeTracking)                                 { $commonParams.DisableChangeTracking = $true }
 
     # Run each scenario, collecting results
     $results = @()
@@ -1098,6 +1308,24 @@ if ($Scenario -eq "All") {
     Write-Host "${GRAY}Results saved to: $resultsFile${NC}"
     Write-Host ""
 
+    # Re-run Command
+    Write-Host "${CYAN}Re-run Command:${NC}"
+    Write-Host ""
+    $rerunParts = @("pwsh ./test/integration/Run-IntegrationTests.ps1")
+    $rerunParts += "-Scenario All"
+    $rerunParts += "-Template $Template"
+    if ($Step -ne "All") { $rerunParts += "-Step $Step" }
+    $rerunParts += "-DirectoryType $DirectoryType"
+    if ($LogLevel) { $rerunParts += "-LogLevel $LogLevel" }
+    if ($DisableChangeTracking) { $rerunParts += "-DisableChangeTracking" }
+    if ($PSBoundParameters.ContainsKey('ExportConcurrency')) { $rerunParts += "-ExportConcurrency $ExportConcurrency" }
+    if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) { $rerunParts += "-MaxExportParallelism $MaxExportParallelism" }
+    if ($TimeoutSeconds -ne 180) { $rerunParts += "-TimeoutSeconds $TimeoutSeconds" }
+    if ($CaptureMetrics) { $rerunParts += "-CaptureMetrics" }
+    if ($IgnoreSnapshots) { $rerunParts += "-IgnoreSnapshots" }
+    Write-Host "  $($rerunParts -join ' ')"
+    Write-Host ""
+
     if ($anyFailed) {
         Write-Host "${RED}One or more scenarios failed.${NC}"
         exit 1
@@ -1114,7 +1342,6 @@ function Write-Banner {
     Write-Host "${CYAN}$("=" * 65)${NC}"
     Write-Host "${CYAN}  $Title${NC}"
     Write-Host "${CYAN}$("=" * 65)${NC}"
-    Write-Host ""
 }
 
 function Write-Section {
@@ -1154,28 +1381,46 @@ Write-Banner "JIM Integration Test Runner"
 
 $templateRelevant = Test-TemplateRelevant -ScenarioName $Scenario
 
-Write-Host "${GRAY}Configuration:${NC}"
-Write-Host "  Scenario:               ${CYAN}$Scenario${NC}"
-if ($templateRelevant) {
-    Write-Host "  Template:               ${CYAN}$Template${NC}"
-} else {
-    Write-Host "  Template:               ${GRAY}N/A (scenario uses fixed test data)${NC}"
+# Auto-set higher export concurrency for OpenLDAP (can handle 50+ concurrent writes)
+# unless the user explicitly specified a value. Samba AD keeps the JIM default of 4.
+if ($DirectoryType -eq "OpenLDAP" -and -not $PSBoundParameters.ContainsKey('ExportConcurrency')) {
+    $ExportConcurrency = 16
+    # Mark as explicitly set so it flows through to setup scripts
+    $PSBoundParameters['ExportConcurrency'] = $ExportConcurrency
 }
-Write-Host "  Step:                   ${CYAN}$Step${NC}"
-Write-Host "  Skip Reset:             ${CYAN}$SkipReset${NC}"
-Write-Host "  Skip Build:             ${CYAN}$SkipBuild${NC}"
-Write-Host "  Setup Only:             ${CYAN}$SetupOnly${NC}"
-if ($PSBoundParameters.ContainsKey('ExportConcurrency')) {
-    Write-Host "  Export Concurrency:     ${CYAN}$ExportConcurrency${NC}"
+
+Write-Host "${GRAY}Configuration:${NC}"
+Write-Host "  Scenario:                ${CYAN}$Scenario${NC}"
+if ($templateRelevant) {
+    Write-Host "  Template:                ${CYAN}$Template${NC}"
 } else {
-    Write-Host "  Export Concurrency:     ${GRAY}(JIM default: 4)${NC}"
+    Write-Host "  Template:                ${GRAY}N/A (scenario uses fixed test data)${NC}"
+}
+Write-Host "  Step:                    ${CYAN}$Step${NC}"
+Write-Host "  Skip Reset:              ${CYAN}$SkipReset${NC}"
+Write-Host "  Skip Build:              ${CYAN}$SkipBuild${NC}"
+Write-Host "  Setup Only:              ${CYAN}$SetupOnly${NC}"
+if ($PSBoundParameters.ContainsKey('ExportConcurrency')) {
+    Write-Host "  LDAP Export Concurrency: ${CYAN}$ExportConcurrency${NC}"
+} else {
+    Write-Host "  LDAP Export Concurrency: ${GRAY}(JIM default: 4)${NC}"
 }
 if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) {
-    Write-Host "  Max Export Parallelism: ${CYAN}$MaxExportParallelism${NC}"
+    Write-Host "  Max Export Parallelism:  ${CYAN}$MaxExportParallelism${NC}"
 } else {
-    Write-Host "  Max Export Parallelism: ${GRAY}(JIM default: 1)${NC}"
+    Write-Host "  Max Export Parallelism:  ${GRAY}(JIM default: 1)${NC}"
 }
-Write-Host "  Service Timeout:        ${CYAN}${TimeoutSeconds}s${NC}"
+Write-Host "  Service Timeout:         ${CYAN}${TimeoutSeconds}s${NC}"
+if ($LogLevel) {
+    Write-Host "  Log Level:               ${CYAN}$LogLevel${NC}"
+} else {
+    Write-Host "  Log Level:               ${GRAY}(from .env)${NC}"
+}
+if ($DisableChangeTracking) {
+    Write-Host "  Change Tracking:         ${YELLOW}Disabled${NC}"
+} else {
+    Write-Host "  Change Tracking:         ${CYAN}Enabled${NC}"
+}
 Write-Host ""
 
 # Change to repository root
@@ -1418,6 +1663,17 @@ else {
     $newLine = if ($envContent.EndsWith("`n")) { "" } else { "`n" }
     $envContent = $envContent + $newLine + "JIM_INFRASTRUCTURE_API_KEY=$apiKey`n"
 }
+# Update log level if specified
+$script:OriginalLogLevel = $null
+if ($LogLevel) {
+    # Save original value for restoration later
+    if ($envContent -match "(?m)^JIM_LOG_LEVEL=(.+)$") {
+        $script:OriginalLogLevel = $Matches[1].Trim()
+    }
+    $envContent = $envContent -replace "(?m)^JIM_LOG_LEVEL=.*", "JIM_LOG_LEVEL=$LogLevel"
+    Write-Step "Set JIM_LOG_LEVEL=$LogLevel (was: $($script:OriginalLogLevel ?? 'not set'))"
+}
+
 $envContent | Set-Content $envFilePath -NoNewline
 Write-Success "Updated .env file"
 
@@ -1784,6 +2040,24 @@ if ($DirectoryType -eq "OpenLDAP" -and $Scenario -notlike "*Scenario1*" -and $Sc
     }
 }
 
+# Step 4d: Disable change tracking if requested
+if ($DisableChangeTracking) {
+    Write-Step "Disabling change tracking via service settings API..."
+
+    $modulePath = Join-Path $repoRoot "src" "JIM.PowerShell" "JIM.psd1"
+    Remove-Module JIM -Force -ErrorAction SilentlyContinue
+    Import-Module $modulePath -Force -ErrorAction Stop
+    Connect-JIM -Url "http://localhost:5200" -ApiKey $apiKey | Out-Null
+
+    Set-JIMServiceSetting -Key "ChangeTracking.CsoChanges.Enabled" -Value "false"
+    Set-JIMServiceSetting -Key "ChangeTracking.MvoChanges.Enabled" -Value "false"
+
+    Disconnect-JIM -ErrorAction SilentlyContinue
+    Remove-Module JIM -Force -ErrorAction SilentlyContinue
+
+    Write-Success "Change tracking disabled (CSO + MVO)"
+}
+
 # Step 5: Setup / Run test scenario
 $step5Start = Get-Date
 
@@ -1843,6 +2117,7 @@ if ($SetupOnly) {
     $duration = $endTime - $startTime
 
     Write-Banner "SetupOnly Complete - Environment Ready"
+    Write-Host ""
 
     Write-Host "${GRAY}Services:${NC}"
     Write-Host "  JIM Web:            ${CYAN}http://localhost:5200${NC}"
@@ -1861,7 +2136,7 @@ if ($SetupOnly) {
     Write-Host "  ${BLUE}pwsh test/integration/scenarios/Invoke-$Scenario.ps1 -Template $Template -ApiKey `"$apiKey`"${NC}"
     Write-Host ""
     Write-Host "${GRAY}To re-run with existing environment:${NC}"
-    Write-Host "  ${BLUE}./Run-IntegrationTests.ps1 -Scenario `"$Scenario`" -Template $Template -SkipReset -SkipBuild${NC}"
+    Write-Host "  ${BLUE}pwsh ./test/integration/Run-IntegrationTests.ps1 -Scenario `"$Scenario`" -Template $Template -SkipReset -SkipBuild${NC}"
     Write-Host ""
 
     # Docker Cleanup (prune unused images and build cache to prevent disk space accumulation)
@@ -1879,7 +2154,6 @@ if ($SetupOnly) {
 
     # Performance Summary
     Write-Section "Performance Summary"
-    Write-Host ""
     Write-Host "${CYAN}Stage Timings:${NC}"
 
     $sortedTimings = $timings.GetEnumerator() | Sort-Object Name
@@ -1923,6 +2197,8 @@ if ($scenarioContent -match 'Write-Host\s+"[\s]*NOT YET IMPLEMENTED[\s]*"') {
 $displayParams = @()
 if ($PSBoundParameters.ContainsKey('ExportConcurrency')) { $displayParams += "-ExportConcurrency $ExportConcurrency" }
 if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) { $displayParams += "-MaxExportParallelism $MaxExportParallelism" }
+if ($LogLevel) { $displayParams += "-LogLevel $LogLevel" }
+if ($DisableChangeTracking) { $displayParams += "-DisableChangeTracking" }
 if ($displayParams.Count -gt 0) {
     Write-Step "Running: Invoke-$Scenario.ps1 -Template $Template -Step $Step $($displayParams -join ' ')"
 } else {
@@ -1989,6 +2265,7 @@ Write-Step "Scenario log saved to: $scenarioLogFile"
 
 # Step 6: Capture Performance Metrics
 $step6Start = Get-Date
+$currentFile = $null
 Write-Section "Step 6: Capturing Performance Metrics"
 
 # Skip detailed metrics capture for large templates - parsing the worker logs becomes
@@ -2353,6 +2630,15 @@ else {
 
 $timings["6. Capture Metrics"] = (Get-Date) - $step6Start
 
+# Restore original .env log level if we changed it
+if ($script:OriginalLogLevel) {
+    $envFilePath = Join-Path $repoRoot ".env"
+    $envContent = Get-Content $envFilePath -Raw
+    $envContent = $envContent -replace "(?m)^JIM_LOG_LEVEL=.*", "JIM_LOG_LEVEL=$($script:OriginalLogLevel)"
+    $envContent | Set-Content $envFilePath -NoNewline
+    Write-Step "Restored JIM_LOG_LEVEL=$($script:OriginalLogLevel) in .env"
+}
+
 # Step 7: Docker Cleanup
 $step7Start = Get-Date
 Write-Section "Step 7: Docker Cleanup"
@@ -2382,7 +2668,6 @@ Write-Banner "Test Run Complete"
 
 # Performance Summary
 Write-Section "Performance Summary"
-Write-Host ""
 Write-Host "${CYAN}Stage Timings:${NC}"
 
 # Sort timings by key (which has stage number prefix)
@@ -2409,6 +2694,29 @@ else {
     Write-Host "${RED}✗ Some tests failed. Exit code: $scenarioExitCode${NC}"
 }
 
+
+# Output Files
+Write-Section "Output Files"
+Write-Host "  ${GRAY}Scenario log:${NC}       $scenarioLogFile"
+if ($currentFile) {
+    Write-Host "  ${GRAY}Performance metrics:${NC} $currentFile"
+}
+
+# Re-run Command
+Write-Section "Re-run Command"
+$rerunParts = @("pwsh ./test/integration/Run-IntegrationTests.ps1")
+$rerunParts += "-Scenario `"$Scenario`""
+$rerunParts += "-Template $Template"
+if ($Step -ne "All") { $rerunParts += "-Step $Step" }
+$rerunParts += "-DirectoryType $DirectoryType"
+if ($LogLevel) { $rerunParts += "-LogLevel $LogLevel" }
+if ($DisableChangeTracking) { $rerunParts += "-DisableChangeTracking" }
+if ($PSBoundParameters.ContainsKey('ExportConcurrency')) { $rerunParts += "-ExportConcurrency $ExportConcurrency" }
+if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) { $rerunParts += "-MaxExportParallelism $MaxExportParallelism" }
+if ($TimeoutSeconds -ne 180) { $rerunParts += "-TimeoutSeconds $TimeoutSeconds" }
+if ($CaptureMetrics) { $rerunParts += "-CaptureMetrics" }
+if ($IgnoreSnapshots) { $rerunParts += "-IgnoreSnapshots" }
+Write-Host "  $($rerunParts -join ' ')"
 Write-Host ""
 
 # Stop transcript so the total execution time and summary are captured in the log file

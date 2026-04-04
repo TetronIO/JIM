@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+#### Service Settings REST API & PowerShell Cmdlets
+
+- ✨ New REST API for managing service settings (`GET/PUT/DELETE /api/v1/service-settings`) — enables automation of change tracking, sync page size, history retention, and other operational settings
+- ✨ New PowerShell cmdlets: `Get-JIMServiceSetting`, `Set-JIMServiceSetting`, `Reset-JIMServiceSetting` — manage service settings from the command line or automation scripts
+
+#### Integration Test Runner Enhancements
+
+- ✨ `-LogLevel` parameter for integration test runner — override log verbosity (Verbose/Debug/Information/Warning/Error/Fatal) for the test run without permanently modifying `.env`
+- ✨ `-DisableChangeTracking` switch for integration test runner — disable CSO and MVO change tracking during large-scale tests to reduce database writes and improve throughput
+- 🖥️ Interactive menus for log level and change tracking selection when running tests without explicit parameters
+
+### Fixed
+
+- 🐛 Fixed sync progress bar showing inflated object counts (CSOs + pending exports) instead of just CSOs — progress percentage and ETA are now accurate for Full Sync and Delta Sync
+
+### Changed
+
+- ⚡ LDAP export concurrency is now auto-tuned based on the detected directory server type — AD DS and OpenLDAP default to 16 concurrent operations (up from 4), while Samba AD and unknown directories remain at 4 for compatibility. Administrators who have manually configured the value will not be affected.
+
+### Performance
+
+- ⚡ Pending Exports table on CSO detail page now uses server-side paging — pages with thousands of pending changes (e.g. 10K member adds) load instantly instead of rendering all rows at once
+- ⚡ Bounded memory sync pipeline — change tracker cleared at every page boundary and export evaluation cache loaded per-page instead of upfront, enabling sync of 100K+ objects without out-of-memory crashes (#451)
+- ⚡ All export evaluation and pending export cache queries now use `AsNoTracking`, eliminating unnecessary entity tracking overhead during sync
+- ⚡ Per-page memory diagnostics logging — administrators can monitor memory usage across sync pages to verify bounded memory behaviour
+
 ## [0.8.1] - 2026-04-02
 
 ### Added

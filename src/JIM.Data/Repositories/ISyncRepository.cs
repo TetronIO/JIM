@@ -543,6 +543,14 @@ public interface ISyncRepository
         IEnumerable<int> targetConnectedSystemIds);
 
     /// <summary>
+    /// Gets CSOs joined to specific MVOs within the specified target connected systems.
+    /// Used for per-page export evaluation cache refresh — loads only CSOs relevant to the current page's MVOs.
+    /// Returns a dictionary keyed by (MvoId, ConnectedSystemId) for O(1) lookup.
+    /// </summary>
+    Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByMvoIdsAndTargetSystemsAsync(
+        IEnumerable<Guid> mvoIds, IEnumerable<int> targetConnectedSystemIds);
+
+    /// <summary>
     /// Batch loads CSO attribute values for the specified CSO IDs.
     /// Used to pre-load target CSO attribute values for no-net-change detection during export evaluation.
     /// </summary>
@@ -596,6 +604,20 @@ public interface ISyncRepository
     /// Uses AsNoTracking in production for minimal EF overhead.
     /// </summary>
     Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take);
+
+    /// <summary>
+    /// Gets lightweight summaries of executable exports for pre-export reconciliation.
+    /// Returns only scalar fields (Id, ChangeType, Status, CsoId, MvoId) via projection
+    /// query — no Include chains, no entity tracking. At 100K objects this uses ~3 MB
+    /// instead of ~150 MB for full entity graphs.
+    /// </summary>
+    Task<List<PendingExportSummary>> GetExecutableExportSummariesAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Deletes pending exports by their IDs using raw SQL.
+    /// Used by reconciliation which operates on lightweight summaries, not full entities.
+    /// </summary>
+    Task DeletePendingExportsByIdsAsync(IList<Guid> pendingExportIds);
 
     /// <summary>
     /// Marks pending exports as Executing with the current UTC timestamp.

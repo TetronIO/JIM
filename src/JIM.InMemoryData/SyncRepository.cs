@@ -1246,6 +1246,27 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    public Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByMvoIdsAndTargetSystemsAsync(
+        IEnumerable<Guid> mvoIds, IEnumerable<int> targetConnectedSystemIds)
+    {
+        var mvoIdSet = mvoIds.ToHashSet();
+        var targetIds = targetConnectedSystemIds.ToHashSet();
+        var result = new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>();
+
+        foreach (var cso in _csos.Values)
+        {
+            if (cso.MetaverseObjectId.HasValue
+                && mvoIdSet.Contains(cso.MetaverseObjectId.Value)
+                && targetIds.Contains(cso.ConnectedSystemId))
+            {
+                var key = (cso.MetaverseObjectId.Value, cso.ConnectedSystemId);
+                result.TryAdd(key, cso);
+            }
+        }
+
+        return Task.FromResult(result);
+    }
+
     public Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesByCsoIdsAsync(IEnumerable<Guid> csoIds)
     {
         var ids = csoIds.ToHashSet();
@@ -1437,9 +1458,36 @@ public class SyncRepository : ISyncRepository
                       || pe.AttributeValueChanges.Any(ac =>
                             ac.Status == PendingExportAttributeChangeStatus.Pending
                          || ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed))
-            // Delete exports already exported are awaiting import confirmation — do not re-execute
+            // Create and Delete exports already exported are awaiting import confirmation — do not re-execute
             .Where(pe => !(pe.ChangeType == PendingExportChangeType.Delete
+                        && pe.Status == PendingExportStatus.Exported))
+            .Where(pe => !(pe.ChangeType == PendingExportChangeType.Create
                         && pe.Status == PendingExportStatus.Exported));
+    }
+
+    public Task<List<PendingExportSummary>> GetExecutableExportSummariesAsync(int connectedSystemId)
+    {
+        var result = GetExecutableExportsForSystem(connectedSystemId)
+            .Select(pe => new PendingExportSummary
+            {
+                Id = pe.Id,
+                ChangeType = pe.ChangeType,
+                Status = pe.Status,
+                ConnectedSystemObjectId = pe.ConnectedSystemObjectId,
+                SourceMetaverseObjectId = pe.SourceMetaverseObjectId
+            })
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    public Task DeletePendingExportsByIdsAsync(IList<Guid> pendingExportIds)
+    {
+        foreach (var id in pendingExportIds)
+        {
+            if (_pendingExports.TryGetValue(id, out var pe))
+                RemovePe(pe);
+        }
+        return Task.CompletedTask;
     }
 
     public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)

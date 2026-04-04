@@ -1,0 +1,10 @@
+{
+    "files.watcherExclude": {
+        "**/bin/**": true,
+        "**/obj/**": true,
+        "**/logs/**": true,
+        "**/tmp/**": true,
+        "**/.git/objects/**": true,
+        "**/node_modules/**": true
+    }
+}

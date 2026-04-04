@@ -11,7 +11,7 @@ namespace JIM.Application.Servers;
 public partial class SyncEngine
 {
     /// <inheritdoc />
-    public PreExportReconciliationResult ReconcileCreateDeletePairs(IReadOnlyList<PendingExport> pendingExports)
+    public PreExportReconciliationResult ReconcileCreateDeletePairs(IReadOnlyList<PendingExportSummary> pendingExports)
     {
         var result = new PreExportReconciliationResult();
 

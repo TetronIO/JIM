@@ -89,7 +89,7 @@
 
     </MudPaper>
 
-    @if (PendingExport != null && PendingExport.AttributeValueChanges.Count > 0)
+    @if (PendingExport != null && _pendingExportTotalCount > 0)
     {
         <MudPaper Class="pa-5 mt-5 mb-5" Outlined="true">
             <MudText Typo="Typo.h6">Pending Exports</MudText>
@@ -99,7 +99,19 @@
                 and are awaiting confirmation via a subsequent import. Once confirmed, these changes will be reflected in the
                 CSO attribute values below.
             </MudText>
-            <MudTable Items="@PendingExport.AttributeValueChanges" Hover="true" Dense="true" Outlined="true" Elevation="0">
+            <MudTable @ref="_pendingExportTable" T="PendingExportAttributeValueChange"
+                      ServerData="LoadPendingExportsPagedAsync"
+                      Hover="true" Dense="true" Outlined="true" Elevation="0"
+                      Loading="@_pendingExportLoading" LoadingProgressColor="Color.Primary">
+                <ToolBarContent>
+                    <MudTextField T="string" Value="@_pendingExportSearchText"
+                                  ValueChanged="@OnPendingExportSearch"
+                                  Placeholder="Search pending exports..."
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Immediate="true" DebounceInterval="300"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </ToolBarContent>
                 <HeaderContent>
                     <MudTh>
                         <MudText Typo="Typo.button">Attribute</MudText>
@@ -138,6 +150,9 @@
                     <MudTd DataLabel="Export Attempts">@context.ExportAttemptCount</MudTd>
                     <MudTd DataLabel="Last Exported">@(context.LastExportedAt?.ToFriendlyDate() ?? "-")</MudTd>
                 </RowTemplate>
+                <PagerContent>
+                    <MudTablePager />
+                </PagerContent>
             </MudTable>
         </MudPaper>
     }
@@ -277,6 +292,11 @@
 
     private PendingExport? PendingExport { get; set; }
 
+    private MudTable<PendingExportAttributeValueChange>? _pendingExportTable;
+    private string _pendingExportSearchText = string.Empty;
+    private bool _pendingExportLoading;
+    private int _pendingExportTotalCount;
+
     private List<ConnectedSystemObjectChange>? CsoChanges { get; set; }
 
     private List<BreadcrumbItem> Breadcrumbs { get; set; } = null!;
@@ -323,8 +343,13 @@
         ExternalIdAttributeValue = ConnectedSystemObject.ExternalIdAttributeValue;
         SecondaryExternalIdAttributeValue = ConnectedSystemObject.SecondaryExternalIdAttributeValue;
 
-        // Fetch pending export for this CSO
-        PendingExport = await jim.ConnectedSystems.GetPendingExportForObjectAsync(connectedSystemObjectId);
+        // Fetch pending export header (without loading all attribute value changes) for this CSO
+        var pendingExportResult = await jim.ConnectedSystems.GetPendingExportHeaderForObjectAsync(connectedSystemObjectId);
+        if (pendingExportResult.HasValue)
+        {
+            PendingExport = pendingExportResult.Value.PendingExport;
+            _pendingExportTotalCount = pendingExportResult.Value.ChangeCount;
+        }
 
         // Fetch change history for this CSO
         CsoChanges = await jim.ConnectedSystems.GetConnectedSystemObjectChangesAsync(connectedSystemObjectId);
@@ -408,6 +433,42 @@
         };
 
         await DialogService.ShowAsync<CsoMvaDialog>(attributeName, parameters, options);
+    }
+
+    private async Task<TableData<PendingExportAttributeValueChange>> LoadPendingExportsPagedAsync(
+        TableState state, CancellationToken token)
+    {
+        _pendingExportLoading = true;
+
+        try
+        {
+            if (PendingExport == null)
+                return new TableData<PendingExportAttributeValueChange> { Items = [], TotalItems = 0 };
+
+            var page = state.Page + 1; // MudBlazor is 0-indexed, API is 1-indexed
+            var pageSize = state.PageSize;
+            var searchText = string.IsNullOrWhiteSpace(_pendingExportSearchText) ? null : _pendingExportSearchText;
+
+            using var jim = JimFactory.Create();
+            var result = await jim.ConnectedSystems.GetAllPendingExportChangesPagedAsync(
+                PendingExport.Id, page, pageSize, searchText);
+
+            return new TableData<PendingExportAttributeValueChange>
+            {
+                Items = result.Results,
+                TotalItems = result.TotalResults
+            };
+        }
+        finally
+        {
+            _pendingExportLoading = false;
+        }
+    }
+
+    private void OnPendingExportSearch(string text)
+    {
+        _pendingExportSearchText = text;
+        _pendingExportTable?.ReloadServerData();
     }
 
     private static string GetAttributeValue(PendingExportAttributeValueChange change)
@@ -501,10 +562,10 @@
             SyncRuleName = null,
             ActivityRunProfileExecutionItemId = change.ActivityRunProfileExecutionItemId,
             AttributeChanges = change.AttributeChanges
-        .OrderBy(ac => ac.Attribute.Name)
+        .OrderBy(ac => ac.AttributeName)
         .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange
         {
-            AttributeName = ac.Attribute.Name,
+            AttributeName = ac.AttributeName,
             ChangeType = vc.ValueChangeType,
             Value = vc.ReferenceValue == null ? vc.ToString() : null,
             ReferenceValue = vc.ReferenceValue != null ? new ChangeHistoryTimeline.ReferenceValueInfo
@@ -514,8 +575,8 @@
                 SecondaryId = vc.ReferenceValue.SecondaryExternalIdAttributeValue?.ToStringNoName(),
                 Href = Utilities.GetConnectedSystemObjectHref(vc.ReferenceValue)
             } : null,
-            IsMultiValued = ac.Attribute.AttributePlurality == AttributePlurality.MultiValued,
-            AttributeType = ac.Attribute.Type
+            IsMultiValued = ac.Attribute?.AttributePlurality == AttributePlurality.MultiValued,
+            AttributeType = ac.AttributeType
         }))
         .ToList()
         })

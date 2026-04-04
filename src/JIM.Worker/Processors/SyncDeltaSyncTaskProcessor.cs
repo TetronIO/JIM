@@ -69,9 +69,8 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             return;
         }
 
-        // Count pending exports (still need to process these)
-        var totalPendingExportObjectsToProcess = await _syncRepo.GetPendingExportsCountAsync(_connectedSystem.Id);
-        var totalObjectsToProcess = totalCsosToProcess + totalPendingExportObjectsToProcess;
+        // Pending exports are processed as a side-effect of CSO evaluation, not as separate objects.
+        var totalObjectsToProcess = totalCsosToProcess;
         _activity.ObjectsToProcess = totalObjectsToProcess;
         _activity.ObjectsProcessed = 0;
         await _syncRepo.UpdateActivityAsync(_activity);
@@ -134,7 +133,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         processCsosSpan.SetTag("pageSize", pageSize);
         processCsosSpan.SetTag("totalPages", totalCsoPages);
 
-        // Set the message once for the entire phase (no page details for users)
+        var throughput = new ThroughputTracker();
         await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing modified Connected System Objects");
 
         for (var page = 1; page <= totalCsoPages; page++)
@@ -222,22 +221,25 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 await FlushObsoleteCsoOperationsAsync();
 
                 // batch delete MVOs marked for immediate deletion (0-grace-period)
-                var hadMvoDeletions = _pendingMvoDeletions.Count > 0;
                 await FlushPendingMvoDeletionsAsync();
 
                 // Flush this page's RPEIs via bulk insert before updating progress
                 await FlushRpeisAsync();
 
-                // Clear the change tracker after MVO deletions to prevent stale entity conflicts.
+                // Clear the change tracker unconditionally at every page boundary.
                 // See SyncFullSyncTaskProcessor for detailed explanation.
-                if (hadMvoDeletions && _hasRawSqlSupport)
+                if (_hasRawSqlSupport)
                     _syncRepo.ClearChangeTracker();
 
-                // Update progress with page completion - this persists ObjectsProcessed to database (including MVO changes)
+                // Update progress with page completion
                 using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
                 {
-                    await _syncRepo.UpdateActivityAsync(_activity);
+                    var message = $"Syncing — {_activity.ObjectsProcessed:N0} of {totalObjectsToProcess:N0}" +
+                        throughput.FormatThroughput(_activity.ObjectsProcessed, totalObjectsToProcess);
+                    await _syncRepo.UpdateActivityMessageAsync(_activity, message);
                 }
+
+                LogPageMemoryDiagnostics(page, totalCsoPages);
             }
             finally
             {
@@ -256,6 +258,11 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
 
         // Update the watermark to mark this sync as complete
         await UpdateDeltaSyncWatermarkAsync();
+
+        // Update activity message with throughput summary
+        var syncCompleteMessage = $"Sync complete: {_activity.ObjectsProcessed:N0} objects" +
+            throughput.FormatCompletion(_activity.ObjectsProcessed);
+        await _syncRepo.UpdateActivityMessageAsync(_activity, syncCompleteMessage);
 
         // Summary stats were accumulated incrementally during each FlushRpeisAsync call (production).
         // In tests (EF fallback), RPEIs remain in Activity.RunProfileExecutionItems — compute stats

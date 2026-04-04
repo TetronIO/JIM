@@ -62,6 +62,9 @@ public class ExportExecutionServer
     /// <param name="progressCallback">Optional callback for progress reporting</param>
     /// <param name="connectorFactory">Optional factory to create additional connector instances for parallel batches</param>
     /// <param name="repositoryFactory">Optional factory to create per-batch IRepository instances for parallel batches</param>
+    /// <param name="batchCompletedCallback">Optional callback invoked after each batch with processed export items.
+    /// Enables streaming RPEI creation per-batch instead of accumulating all items across the entire run.
+    /// When provided, ProcessedExportItems on the result will be empty — items are consumed per-batch via this callback.</param>
     /// <returns>Export execution result with preview information</returns>
     public async Task<ExportExecutionResult> ExecuteExportsAsync(
         ConnectedSystem connectedSystem,
@@ -71,7 +74,8 @@ public class ExportExecutionServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback = null,
         Func<IConnector>? connectorFactory = null,
-        Func<ISyncRepository>? repositoryFactory = null)
+        Func<ISyncRepository>? repositoryFactory = null,
+        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
     {
         options ??= new ExportExecutionOptions();
         cancellationToken.ThrowIfCancellationRequested();
@@ -146,12 +150,19 @@ public class ExportExecutionServer
 
         // Execute exports using the connector with batch-loading
         await ExecuteExportsViaConnectorAsync(connectedSystem, connector, result, options,
-            cancellationToken, progressCallback, connectorFactory, repositoryFactory);
+            cancellationToken, progressCallback, connectorFactory, repositoryFactory, batchCompletedCallback);
 
         // Second pass: retry any exports with deferred references that might now be resolvable
         if (!cancellationToken.IsCancellationRequested)
         {
             await ExecuteDeferredReferencesAsync(connectedSystem, connector, result);
+
+            // Drain any items from deferred reference resolution via callback
+            if (batchCompletedCallback != null && result.ProcessedExportItems.Count > 0)
+            {
+                await batchCompletedCallback(result.ProcessedExportItems);
+                result.ProcessedExportItems = [];
+            }
         }
 
         result.CompletedAt = DateTime.UtcNow;
@@ -191,12 +202,12 @@ public class ExportExecutionServer
     {
         using var span = Diagnostics.Diagnostics.Sync.StartSpan("ReconcileCreateDeletePairs");
 
-        var executableExports = await GetExecutableExportsAsync(connectedSystemId);
-        if (executableExports.Count == 0)
+        var exportSummaries = await SyncRepo.GetExecutableExportSummariesAsync(connectedSystemId);
+        if (exportSummaries.Count == 0)
             return 0;
 
         var syncEngine = new SyncEngine();
-        var result = syncEngine.ReconcileCreateDeletePairs(executableExports);
+        var result = syncEngine.ReconcileCreateDeletePairs(exportSummaries);
 
         if (result.ReconciledPairs.Count == 0)
             return 0;
@@ -206,13 +217,9 @@ public class ExportExecutionServer
             .SelectMany(p => p.CancelledExportIds)
             .ToList();
 
-        // Delete reconciled PEs from DB
-        var exportsToDelete = executableExports
-            .Where(pe => idsToDelete.Contains(pe.Id))
-            .ToList();
-
-        if (exportsToDelete.Count > 0)
-            await SyncRepo.DeletePendingExportsAsync(exportsToDelete);
+        // Delete reconciled PEs by ID using lightweight deletion
+        if (idsToDelete.Count > 0)
+            await SyncRepo.DeletePendingExportsByIdsAsync(idsToDelete);
 
         Log.Information("ReconcileCreateDeletePairsAsync: Reconciled {PairCount} pairs, cancelled {CancelledCount} pending exports for system {SystemId}",
             result.ReconciledPairs.Count, result.TotalCancelled, connectedSystemId);
@@ -290,13 +297,14 @@ public class ExportExecutionServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector>? connectorFactory,
-        Func<ISyncRepository>? repositoryFactory)
+        Func<ISyncRepository>? repositoryFactory,
+        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
     {
         // Check if connector supports export using calls
         if (connector is IConnectorExportUsingCalls callsConnector)
         {
             await ExecuteUsingCallsWithBatchingAsync(connectedSystem, callsConnector, result, options,
-                cancellationToken, progressCallback, connectorFactory, repositoryFactory);
+                cancellationToken, progressCallback, connectorFactory, repositoryFactory, batchCompletedCallback);
         }
         // Check if connector supports export using files — still loads all exports upfront
         // (file-based connectors write all data in one pass so batch-loading doesn't help)
@@ -348,7 +356,8 @@ public class ExportExecutionServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector>? connectorFactory,
-        Func<ISyncRepository>? repositoryFactory)
+        Func<ISyncRepository>? repositoryFactory,
+        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
     {
         try
         {
@@ -468,6 +477,14 @@ public class ExportExecutionServer
 
                         processedCount += immediateExports.Count;
 
+                        // Stream processed items to caller per-batch instead of accumulating across
+                        // the entire run. At 100K exports this prevents ~125 MB of retained entity data.
+                        if (batchCompletedCallback != null && result.ProcessedExportItems.Count > 0)
+                        {
+                            await batchCompletedCallback(result.ProcessedExportItems);
+                            result.ProcessedExportItems = [];
+                        }
+
                         // Clear the change tracker between batches to prevent O(n²) degradation.
                         // All DB writes use raw SQL (MarkBatchAsExecuting, BulkUpdatePendingExports),
                         // so tracked entities serve no purpose after each batch completes. Without
@@ -486,6 +503,13 @@ public class ExportExecutionServer
                 {
                     await ProcessDeferredExportsAsync(connectedSystem, connector, deferredExports, result, options,
                         cancellationToken, progressCallback, connectorFactory, repositoryFactory);
+
+                    // Drain any remaining deferred export items via callback
+                    if (batchCompletedCallback != null && result.ProcessedExportItems.Count > 0)
+                    {
+                        await batchCompletedCallback(result.ProcessedExportItems);
+                        result.ProcessedExportItems = [];
+                    }
                 }
 
                 // Capture created containers before closing connection
@@ -719,7 +743,8 @@ public class ExportExecutionServer
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector> connectorFactory,
         Func<ISyncRepository> repositoryFactory,
-        string spanName)
+        string spanName,
+        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
     {
         Log.Information("ProcessBatchesInParallelAsync: Processing {BatchCount} batches with MaxParallelism={MaxParallelism}",
             batches.Count, options.MaxParallelism);
@@ -798,16 +823,24 @@ public class ExportExecutionServer
                     }
 
                     // Aggregate results into shared result (thread-safe)
+                    // Aggregate scalar results into shared result (thread-safe)
                     lock (resultLock)
                     {
                         result.SuccessCount += batchResult.SuccessCount;
                         result.FailedCount += batchResult.FailedCount;
                         result.DeferredCount += batchResult.DeferredCount;
-                        result.ProcessedExportItems.AddRange(batchResult.ProcessedExportItems);
+                        if (batchCompletedCallback == null)
+                            result.ProcessedExportItems.AddRange(batchResult.ProcessedExportItems);
                         if (batchContainerIds != null)
                         {
                             result.CreatedContainerExternalIds.AddRange(batchContainerIds);
                         }
+                    }
+
+                    // Stream processed items per-batch (outside lock — callback may do async I/O)
+                    if (batchCompletedCallback != null && batchResult.ProcessedExportItems.Count > 0)
+                    {
+                        await batchCompletedCallback(batchResult.ProcessedExportItems);
                     }
 
                     // Report progress (serialised to protect caller's DbContext)

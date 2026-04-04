@@ -99,7 +99,7 @@ public static class ExportChangeHistoryBuilder
             // Group by attribute — multiple value changes for the same attribute
             // (e.g., multi-valued add/remove) share one ConnectedSystemObjectChangeAttribute
             var attributeChange = change.AttributeChanges
-                .SingleOrDefault(ac => ac.Attribute.Id == peChange.Attribute.Id);
+                .SingleOrDefault(ac => ac.Attribute!.Id == peChange.Attribute.Id);
 
             if (attributeChange == null)
             {

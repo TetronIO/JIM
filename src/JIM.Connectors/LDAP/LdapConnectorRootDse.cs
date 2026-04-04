@@ -92,6 +92,20 @@ internal class LdapConnectorRootDse
     public bool EnforcesSamSingleValuedRules => DirectoryType is LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD;
 
     /// <summary>
+    /// The recommended export concurrency for this directory type.
+    /// AD DS and OpenLDAP handle concurrent connections well; Samba AD and unknown servers
+    /// are kept conservative due to known quirks (e.g. paged search duplicates).
+    /// </summary>
+    public int RecommendedExportConcurrency => DirectoryType switch
+    {
+        LdapDirectoryType.ActiveDirectory => 16,
+        LdapDirectoryType.OpenLDAP => 16,
+        LdapDirectoryType.SambaAD => LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY,
+        LdapDirectoryType.Generic => LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY,
+        _ => LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY
+    };
+
+    /// <summary>
     /// Whether the directory supports paged search results.
     /// Microsoft AD supports paging; Samba AD claims support but returns duplicate results.
     /// OpenLDAP supports paging via Simple Paged Results control.

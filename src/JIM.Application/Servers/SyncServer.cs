@@ -226,6 +226,9 @@ public class SyncServer : ISyncServer
         List<SyncRule>? preloadedSyncRules = null)
         => _exportEval.BuildExportEvaluationCacheAsync(sourceConnectedSystemId, preloadedSyncRules);
 
+    public Task RefreshExportEvaluationCacheForPageAsync(ExportEvaluationCache cache, IEnumerable<Guid> mvoIds)
+        => _exportEval.RefreshExportEvaluationCacheForPageAsync(cache, mvoIds);
+
     public Task<ExportEvaluationResult> EvaluateExportRulesWithNoNetChangeDetectionAsync(
         MetaverseObject mvo,
         List<MetaverseObjectAttributeValue> changedAttributes,
@@ -264,10 +267,11 @@ public class SyncServer : ISyncServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback = null,
         Func<IConnector>? connectorFactory = null,
-        Func<ISyncRepository>? repositoryFactory = null)
+        Func<ISyncRepository>? repositoryFactory = null,
+        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
         => _exportExec.ExecuteExportsAsync(
             connectedSystem, connector, runMode, options, cancellationToken,
-            progressCallback, connectorFactory, repositoryFactory);
+            progressCallback, connectorFactory, repositoryFactory, batchCompletedCallback);
 
     #endregion
 }

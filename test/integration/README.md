@@ -16,6 +16,9 @@ pwsh test/integration/Invoke-IntegrationTests.ps1 -Template Micro -SkipTearDown
 
 # For minimal testing (3 users)
 pwsh test/integration/Invoke-IntegrationTests.ps1 -Template Nano
+
+# Large-scale test with reduced logging and no change tracking
+pwsh test/integration/Run-IntegrationTests.ps1 -Template Large -LogLevel Warning -DisableChangeTracking
 ```
 
 This will automatically:

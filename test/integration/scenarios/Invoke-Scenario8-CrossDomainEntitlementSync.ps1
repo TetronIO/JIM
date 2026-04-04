@@ -714,24 +714,28 @@ try {
             throw "Not enough users in Source for membership testing. Need at least 2 users."
         }
 
-        # Find users NOT in the group (to add) and users IN the group (to remove)
-        # sourceMembers contains DNs for OpenLDAP, names for Samba AD
-        $usersNotInGroup = @($allUsers | Where-Object { -not (Test-MemberInList -UserName $_ -MemberList $sourceMembers) })
-        $usersInGroup = @($allUsers | Where-Object { Test-MemberInList -UserName $_ -MemberList $sourceMembers })
+        # Build a HashSet of member usernames for O(1) lookups instead of O(N*M) linear scans.
+        # sourceMembers contains DNs for OpenLDAP (uid=name,...) or plain names for Samba AD.
+        $memberSet = [System.Collections.Generic.HashSet[string]]::new(
+            [System.StringComparer]::OrdinalIgnoreCase)
+        foreach ($m in $sourceMembers) {
+            if ($m -match "^(?:uid|cn|CN)=([^,]+),") {
+                [void]$memberSet.Add($matches[1])
+            } else {
+                [void]$memberSet.Add($m)
+            }
+        }
 
-        # Select users to add (up to 2)
+        # Find 2 non-members (to add) and 1 member (to remove) — stop early
         $usersToAdd = @()
-        if ($usersNotInGroup.Count -ge 2) {
-            $usersToAdd = $usersNotInGroup[0..1]
-        }
-        elseif ($usersNotInGroup.Count -eq 1) {
-            $usersToAdd = @($usersNotInGroup[0])
-        }
-
-        # Select user to remove (1)
         $userToRemove = $null
-        if ($usersInGroup.Count -ge 1) {
-            $userToRemove = $usersInGroup[0]
+        foreach ($user in $allUsers) {
+            if ($memberSet.Contains($user)) {
+                if ($null -eq $userToRemove) { $userToRemove = $user }
+            } else {
+                if ($usersToAdd.Count -lt 2) { $usersToAdd += $user }
+            }
+            if ($usersToAdd.Count -ge 2 -and $null -ne $userToRemove) { break }
         }
 
         Write-Host "    Users to add: $($usersToAdd -join ', ')" -ForegroundColor Yellow

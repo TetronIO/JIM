@@ -316,6 +316,10 @@ public partial class SyncRepository : ISyncRepository
         IEnumerable<int> targetConnectedSystemIds)
         => _repo.ConnectedSystems.GetConnectedSystemObjectsByTargetSystemsAsync(targetConnectedSystemIds);
 
+    public Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByMvoIdsAndTargetSystemsAsync(
+        IEnumerable<Guid> mvoIds, IEnumerable<int> targetConnectedSystemIds)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectsByMvoIdsAndTargetSystemsAsync(mvoIds, targetConnectedSystemIds);
+
     public Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesByCsoIdsAsync(IEnumerable<Guid> csoIds)
         => _repo.ConnectedSystems.GetCsoAttributeValuesByCsoIdsAsync(csoIds);
 
@@ -344,6 +348,12 @@ public partial class SyncRepository : ISyncRepository
 
     public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take)
         => _repo.ConnectedSystems.GetExecutableExportBatchAsync(connectedSystemId, skip, take);
+
+    public Task<List<PendingExportSummary>> GetExecutableExportSummariesAsync(int connectedSystemId)
+        => _repo.ConnectedSystems.GetExecutableExportSummariesAsync(connectedSystemId);
+
+    public Task DeletePendingExportsByIdsAsync(IList<Guid> pendingExportIds)
+        => _repo.ConnectedSystems.DeletePendingExportsByIdsAsync(pendingExportIds);
 
     public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
         => _repo.ConnectedSystems.MarkPendingExportsAsExecutingAsync(pendingExports);
