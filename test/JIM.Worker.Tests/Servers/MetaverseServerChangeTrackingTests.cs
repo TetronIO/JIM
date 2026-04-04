@@ -128,10 +128,10 @@ public class MetaverseServerChangeTrackingTests
             Assert.That(attrChange.ValueChanges[0].ValueChangeType, Is.EqualTo(ValueChangeType.Add));
         }
 
-        var displayNameChange = change.AttributeChanges.Single(ac => ac.Attribute.Id == _displayNameAttr.Id);
+        var displayNameChange = change.AttributeChanges.Single(ac => ac.Attribute!.Id == _displayNameAttr.Id);
         Assert.That(displayNameChange.ValueChanges[0].StringValue, Is.EqualTo("Bob Brown"));
 
-        var departmentChange = change.AttributeChanges.Single(ac => ac.Attribute.Id == _departmentAttr.Id);
+        var departmentChange = change.AttributeChanges.Single(ac => ac.Attribute!.Id == _departmentAttr.Id);
         Assert.That(departmentChange.ValueChanges[0].StringValue, Is.EqualTo("Finance"));
     }
 
@@ -411,10 +411,10 @@ public class MetaverseServerChangeTrackingTests
             Assert.That(attrChange.ValueChanges[0].ValueChangeType, Is.EqualTo(ValueChangeType.Remove));
         }
 
-        var displayNameChange = capturedChange.AttributeChanges.Single(ac => ac.Attribute.Id == _displayNameAttr.Id);
+        var displayNameChange = capturedChange.AttributeChanges.Single(ac => ac.Attribute!.Id == _displayNameAttr.Id);
         Assert.That(displayNameChange.ValueChanges[0].StringValue, Is.EqualTo("Alice Adams"));
 
-        var departmentChange = capturedChange.AttributeChanges.Single(ac => ac.Attribute.Id == _departmentAttr.Id);
+        var departmentChange = capturedChange.AttributeChanges.Single(ac => ac.Attribute!.Id == _departmentAttr.Id);
         Assert.That(departmentChange.ValueChanges[0].StringValue, Is.EqualTo("Engineering"));
 
         // LoadMetaverseObjectAttributeValuesAsync should NOT be called when pre-captured values are provided
@@ -450,7 +450,7 @@ public class MetaverseServerChangeTrackingTests
         Assert.That(capturedChange, Is.Not.Null);
         Assert.That(capturedChange!.AttributeChanges, Has.Count.EqualTo(1));
 
-        var displayNameChange = capturedChange.AttributeChanges.Single(ac => ac.Attribute.Id == _displayNameAttr.Id);
+        var displayNameChange = capturedChange.AttributeChanges.Single(ac => ac.Attribute!.Id == _displayNameAttr.Id);
         Assert.That(displayNameChange.ValueChanges[0].StringValue, Is.EqualTo("Bob Brown"));
         Assert.That(displayNameChange.ValueChanges[0].ValueChangeType, Is.EqualTo(ValueChangeType.Remove));
 
@@ -557,7 +557,7 @@ public class MetaverseServerChangeTrackingTests
         // Assert - attribute values were captured after loading
         Assert.That(capturedChange, Is.Not.Null);
         Assert.That(capturedChange!.AttributeChanges, Has.Count.EqualTo(1));
-        var displayNameChange = capturedChange.AttributeChanges.Single(ac => ac.Attribute.Id == _displayNameAttr.Id);
+        var displayNameChange = capturedChange.AttributeChanges.Single(ac => ac.Attribute!.Id == _displayNameAttr.Id);
         Assert.That(displayNameChange.ValueChanges[0].StringValue, Is.EqualTo("Lazy Loaded"));
         Assert.That(displayNameChange.ValueChanges[0].ValueChangeType, Is.EqualTo(ValueChangeType.Remove));
     }

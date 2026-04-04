@@ -168,7 +168,7 @@ public class ExportChangeHistoryBuilderTests
         // Assert
         Assert.That(result.AttributeChanges, Has.Count.EqualTo(1));
         var attrChange = result.AttributeChanges.First();
-        Assert.That(attrChange.Attribute.Name, Is.EqualTo("displayName"));
+        Assert.That(attrChange.Attribute!.Name, Is.EqualTo("displayName"));
         Assert.That(attrChange.ValueChanges, Has.Count.EqualTo(1));
         Assert.That(attrChange.ValueChanges.First().StringValue, Is.EqualTo("John Smith"));
         Assert.That(attrChange.ValueChanges.First().ValueChangeType, Is.EqualTo(ValueChangeType.Add));

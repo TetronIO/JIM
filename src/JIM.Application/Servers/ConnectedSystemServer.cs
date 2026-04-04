@@ -3363,7 +3363,7 @@ public class ConnectedSystemServer
     /// <param name="valueChangeType">The type of change, i.e. CREATE/UPDATE/DELETE.</param>
     private static void AddChangeAttributeValueObject(ConnectedSystemObjectChange connectedSystemObjectChange, ConnectedSystemObjectAttributeValue connectedSystemObjectAttributeValue, ValueChangeType valueChangeType)
     {
-        var attributeChange = connectedSystemObjectChange.AttributeChanges.SingleOrDefault(ac => ac.Attribute.Id == connectedSystemObjectAttributeValue.Attribute.Id);
+        var attributeChange = connectedSystemObjectChange.AttributeChanges.SingleOrDefault(ac => ac.Attribute!.Id == connectedSystemObjectAttributeValue.Attribute.Id);
         if (attributeChange == null)
         {
             // create the attribute change object that provides an audit trail of changes to a cso's attributes

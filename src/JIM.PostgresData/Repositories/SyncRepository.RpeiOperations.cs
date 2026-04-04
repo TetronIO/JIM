@@ -259,7 +259,7 @@ public partial class SyncRepository
 
         // Step 2: INSERT ConnectedSystemObjectChangeAttribute rows
         var allAttrChanges = changes
-            .SelectMany(c => c.AttributeChanges.Select(ac => (ChangeId: c.Id, AttributeId: ac.Attribute.Id, AttrChange: ac)))
+            .SelectMany(c => c.AttributeChanges.Select(ac => (ChangeId: c.Id, AttributeId: ac.Attribute!.Id, AttrChange: ac)))
             .ToList();
 
         if (allAttrChanges.Count > 0)

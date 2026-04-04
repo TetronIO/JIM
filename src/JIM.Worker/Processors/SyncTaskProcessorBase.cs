@@ -2425,7 +2425,7 @@ public abstract class SyncTaskProcessorBase
     /// <param name="valueChangeType">The type of change (Add or Remove).</param>
     private static void AddMvoChangeAttributeValueObject(MetaverseObjectChange metaverseObjectChange, MetaverseObjectAttributeValue metaverseObjectAttributeValue, ValueChangeType valueChangeType)
     {
-        var attributeChange = metaverseObjectChange.AttributeChanges.SingleOrDefault(ac => ac.Attribute.Id == metaverseObjectAttributeValue.Attribute.Id);
+        var attributeChange = metaverseObjectChange.AttributeChanges.SingleOrDefault(ac => ac.Attribute!.Id == metaverseObjectAttributeValue.Attribute.Id);
         if (attributeChange == null)
         {
             // Create the attribute change object that provides an audit trail of changes to an MVO's attributes

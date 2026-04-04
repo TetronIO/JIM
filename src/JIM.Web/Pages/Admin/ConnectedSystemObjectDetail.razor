@@ -562,10 +562,10 @@
             SyncRuleName = null,
             ActivityRunProfileExecutionItemId = change.ActivityRunProfileExecutionItemId,
             AttributeChanges = change.AttributeChanges
-        .OrderBy(ac => ac.Attribute.Name)
+        .OrderBy(ac => ac.AttributeName)
         .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange
         {
-            AttributeName = ac.Attribute.Name,
+            AttributeName = ac.AttributeName,
             ChangeType = vc.ValueChangeType,
             Value = vc.ReferenceValue == null ? vc.ToString() : null,
             ReferenceValue = vc.ReferenceValue != null ? new ChangeHistoryTimeline.ReferenceValueInfo
@@ -575,8 +575,8 @@
                 SecondaryId = vc.ReferenceValue.SecondaryExternalIdAttributeValue?.ToStringNoName(),
                 Href = Utilities.GetConnectedSystemObjectHref(vc.ReferenceValue)
             } : null,
-            IsMultiValued = ac.Attribute.AttributePlurality == AttributePlurality.MultiValued,
-            AttributeType = ac.Attribute.Type
+            IsMultiValued = ac.Attribute?.AttributePlurality == AttributePlurality.MultiValued,
+            AttributeType = ac.AttributeType
         }))
         .ToList()
         })

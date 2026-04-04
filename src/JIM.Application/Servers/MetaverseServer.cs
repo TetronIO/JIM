@@ -389,7 +389,7 @@ public class MetaverseServer
         ValueChangeType valueChangeType)
     {
         var attributeChange = metaverseObjectChange.AttributeChanges.SingleOrDefault(
-            ac => ac.Attribute.Id == metaverseObjectAttributeValue.Attribute.Id);
+            ac => ac.Attribute!.Id == metaverseObjectAttributeValue.Attribute.Id);
 
         if (attributeChange == null)
         {

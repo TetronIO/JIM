@@ -1508,9 +1508,9 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
             return Enumerable.Empty<FlattenedChange>();
 
         return _activityRunProfileExecutionItem.ConnectedSystemObjectChange.AttributeChanges
-        .OrderBy(c => c.Attribute.Name)
+        .OrderBy(c => c.AttributeName)
         .SelectMany(change => change.ValueChanges.Select(vc => new FlattenedChange(
-        change.Attribute.Name,
+        change.AttributeName,
         vc.ValueChangeType,
         vc.ReferenceValue == null ? vc.ToString() : null,
         vc.ReferenceValue

@@ -1897,7 +1897,7 @@ internal class LdapConnectorExport
                 var placeholderAttr = new ConnectedSystemObjectTypeAttribute
                 {
                     Name = memberAttrName,
-                    ConnectedSystemObjectType = pendingExport.ConnectedSystemObject?.Type
+                    ConnectedSystemObjectType = pendingExport.ConnectedSystemObject!.Type
                 };
 
                 consolidatedModifications.Add(new ConsolidatedModification
@@ -1925,7 +1925,7 @@ internal class LdapConnectorExport
             var placeholderAttr = new ConnectedSystemObjectTypeAttribute
             {
                 Name = memberAttrName,
-                ConnectedSystemObjectType = pendingExport.ConnectedSystemObject?.Type
+                ConnectedSystemObjectType = pendingExport.ConnectedSystemObject!.Type
             };
 
             consolidatedModifications.Add(new ConsolidatedModification
