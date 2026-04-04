@@ -54,13 +54,18 @@ public interface ISyncRepository
     /// <summary>
     /// Loads a page of CSOs with full attribute values for sync processing.
     /// </summary>
-    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize);
+    /// <param name="knownTotalCount">When provided, skips the per-page COUNT query and uses this value
+    /// for paging metadata. Callers that already know the total (e.g. full sync) should pass it to
+    /// eliminate redundant COUNT(*) queries at scale.</param>
+    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null);
 
     /// <summary>
     /// Loads a page of CSOs modified since the specified date, with full attribute values.
     /// Used by delta sync to process only recently changed objects.
     /// </summary>
-    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize);
+    /// <param name="knownTotalCount">When provided, skips the per-page COUNT query and uses this value
+    /// for paging metadata.</param>
+    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null);
 
     /// <summary>
     /// Gets a single CSO by ID with full attribute values.

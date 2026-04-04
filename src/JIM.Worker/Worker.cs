@@ -139,7 +139,8 @@ public class Worker : BackgroundService
                             Log.Information($"ExecuteAsync: Cancelling task {workerTaskToCancel.Id}...");
                             taskTask.CancellationTokenSource.Cancel();
                             await mainLoopJim.Tasking.CancelWorkerTaskAsync(workerTaskToCancel);
-                            CurrentTasks.Remove(taskTask);
+                            lock (_currentTasksLock)
+                                CurrentTasks.Remove(taskTask);
                         }
                         else
                         {
@@ -333,8 +334,16 @@ public class Worker : BackgroundService
                                                             break;
                                                     }
 
-                                                    // task completed. determine final status, depending on how the run profile execution went
-                                                    await CompleteActivityBasedOnExecutionResultsAsync(taskJim, newWorkerTask.Activity);
+                                                    // Task completed. Determine final status based on execution results.
+                                                    // Skip if cancelled — the activity is already marked Cancelled by CancelWorkerTaskAsync.
+                                                    if (!cancellationTokenSource.IsCancellationRequested)
+                                                        await CompleteActivityBasedOnExecutionResultsAsync(taskJim, newWorkerTask.Activity);
+                                                }
+                                                catch (OperationCanceledException) when (cancellationTokenSource.IsCancellationRequested)
+                                                {
+                                                    // Connector threw OperationCanceledException in response to the CTS being cancelled.
+                                                    // Activity is already marked Cancelled by CancelWorkerTaskAsync — nothing more to do.
+                                                    Log.Information("ExecuteAsync: Task {TaskId} cancelled during processing.", newWorkerTask.Id);
                                                 }
                                                 catch (Exception ex)
                                                 {
@@ -450,8 +459,10 @@ public class Worker : BackgroundService
                                 }
                             }
                         
-                            // very important: we must mark the task as complete once we're done
-                            await taskJim.Tasking.CompleteWorkerTaskAsync(newWorkerTask);
+                            // Mark the task as complete — unless it was already cancelled by the main loop's
+                            // CancelWorkerTaskAsync (which deletes the DB record and marks the activity Cancelled).
+                            if (!cancellationTokenSource.IsCancellationRequested)
+                                await taskJim.Tasking.CompleteWorkerTaskAsync(newWorkerTask);
 
                             // remove from the current tasks list after locking it for thread safety
                             lock (_currentTasksLock)

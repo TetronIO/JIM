@@ -10,7 +10,6 @@ using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
-using System.Data;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 namespace JIM.PostgresData.Repositories;
@@ -642,7 +641,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(
         int connectedSystemId,
         int page,
-        int pageSize)
+        int pageSize,
+        int? knownTotalCount = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -651,8 +651,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             page = 1;
 
         // limit page size to avoid increasing latency unnecessarily
-        if (pageSize > 500)
-            pageSize = 500;
+        if (pageSize > 2000)
+            pageSize = 2000;
 
         // Load CSOs with a shallow Include chain (CSO → Type, CSO → AttributeValues → Attribute).
         // The deep Include chain (→ ReferenceValue → MetaverseObject) is deliberately excluded:
@@ -670,15 +670,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(q => q.ConnectedSystemId == connectedSystemId)
             .OrderBy(cso => cso.Id);
 
-        // Get count first (lightweight, no includes needed)
-        var grossCount = await Repository.Database.ConnectedSystemObjects
-            .CountAsync(q => q.ConnectedSystemId == connectedSystemId);
+        // Use caller-provided count when available (e.g. full sync already counted at start),
+        // otherwise query the database. Eliminates redundant COUNT(*) at scale.
+        var grossCount = knownTotalCount
+            ?? await Repository.Database.ConnectedSystemObjects.CountAsync(q => q.ConnectedSystemId == connectedSystemId);
         var offset = (page - 1) * pageSize;
-        var itemsToGet = grossCount >= pageSize ? pageSize : grossCount;
-        var pagedCsoQuery = csoQuery.Skip(offset).Take(itemsToGet);
-
-        await using var transaction = await Repository.Database.Database
-            .BeginTransactionAsync(IsolationLevel.RepeatableRead);
+        var pagedCsoQuery = csoQuery.Skip(offset).Take(pageSize);
 
         var results = await pagedCsoQuery.ToListAsync();
 
@@ -687,8 +684,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         // Load MVOs separately — EF relationship fixup populates cso.MetaverseObject automatically.
         await LoadMetaverseObjectsForCsosAsync(results);
-
-        await transaction.CommitAsync();
 
         // now with all the ids we know how many total results there are and so can populate paging info
         var pagedResultSet = new PagedResultSet<ConnectedSystemObject>
@@ -775,7 +770,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         int connectedSystemId,
         DateTime modifiedSince,
         int page,
-        int pageSize)
+        int pageSize,
+        int? knownTotalCount = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -784,8 +780,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             page = 1;
 
         // limit page size to avoid increasing latency unnecessarily
-        if (pageSize > 500)
-            pageSize = 500;
+        if (pageSize > 2000)
+            pageSize = 2000;
 
         // Shallow Include chain — same approach as GetConnectedSystemObjectsAsync.
         // ReferenceValue navigations populated via direct SQL (PopulateReferenceValuesAsync).
@@ -804,23 +800,19 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .OrderBy(cso => cso.Id);
 
         // Get count with lightweight query (no includes)
-        var grossCount = await Repository.Database.ConnectedSystemObjects
-            .CountAsync(cso => cso.ConnectedSystemId == connectedSystemId &&
-                              (cso.Created > modifiedSince ||
-                               (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)));
+        // Use caller-provided count when available, otherwise query the database.
+        var grossCount = knownTotalCount
+            ?? await Repository.Database.ConnectedSystemObjects
+                .CountAsync(cso => cso.ConnectedSystemId == connectedSystemId &&
+                                  (cso.Created > modifiedSince ||
+                                   (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)));
 
         var offset = (page - 1) * pageSize;
-        var itemsToGet = grossCount >= pageSize ? pageSize : grossCount;
-        var pagedCsoQuery = csoQuery.Skip(offset).Take(itemsToGet);
-
-        await using var transaction = await Repository.Database.Database
-            .BeginTransactionAsync(IsolationLevel.RepeatableRead);
+        var pagedCsoQuery = csoQuery.Skip(offset).Take(pageSize);
 
         var results = await pagedCsoQuery.ToListAsync();
         await PopulateReferenceValuesAsync(results);
         await LoadMetaverseObjectsForCsosAsync(results);
-
-        await transaction.CommitAsync();
 
         // Build the paged result set
         var pagedResultSet = new PagedResultSet<ConnectedSystemObject>
@@ -869,14 +861,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .ThenInclude(av => av.Attribute)
             .Where(cso => csoIds.Contains(cso.Id));
 
-        await using var transaction = await Repository.Database.Database
-            .BeginTransactionAsync(IsolationLevel.RepeatableRead);
-
         var results = await csoQuery.ToListAsync();
         await PopulateReferenceValuesAsync(results);
         await LoadMetaverseObjectsForCsosAsync(results);
-
-        await transaction.CommitAsync();
 
         return results;
     }
@@ -1960,6 +1947,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .AsSplitQuery()
             .Include(csp => csp.ConnectedSystem)
             .Include(csp => csp.Containers)
+            .OrderBy(csp => csp.Id)
             .FirstOrDefaultAsync(csp => csp.Id == id);
     }
 
@@ -2000,6 +1988,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(p => p!.ConnectedSystem)
             .Include(c => c.ConnectedSystem)
             .Include(c => c.ChildContainers)
+            .OrderBy(c => c.Id)
             .FirstOrDefaultAsync(c => c.Id == id);
     }
 

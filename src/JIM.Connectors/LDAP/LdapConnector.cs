@@ -22,7 +22,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     #region IConnector members
     public string Name => ConnectorConstants.LdapConnectorName;
 
-    public string? Description => "Enables bi-directional synchronisation with LDAP compliant directories, including Microsoft Active Directory.";
+    public string? Description => "Enables bi-directional synchronisation with LDAP compliant directories, including Microsoft Active Directory, OpenLDAP, and Samba AD.";
 
     public string? Url => "https://github.com/TetronIO/JIM";
     #endregion

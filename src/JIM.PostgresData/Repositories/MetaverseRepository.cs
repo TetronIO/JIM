@@ -1369,6 +1369,7 @@ public class MetaverseRepository : IMetaverseRepository
     {
         // First, get the Delete change record
         var targetChange = await Repository.Database.MetaverseObjectChanges
+            .OrderBy(c => c.Id)
             .FirstOrDefaultAsync(c => c.Id == changeId);
 
         if (targetChange == null)

@@ -195,6 +195,12 @@ public class SyncImportTaskProcessor
 
                 while (initialPage || paginationTokens.Count > 0)
                 {
+                    if (_cancellationTokenSource.IsCancellationRequested)
+                    {
+                        Log.Information("PerformFullImportAsync: Cancellation requested. Stopping before next import page.");
+                        break;
+                    }
+
                     // perform the import for this page
                     // IMPORTANT: Always pass the ORIGINAL persisted data to ensure consistent
                     // watermark queries across all pages of a delta import.
@@ -249,6 +255,12 @@ public class SyncImportTaskProcessor
 
                     if (initialPage)
                         initialPage = false;
+
+                    if (_cancellationTokenSource.IsCancellationRequested)
+                    {
+                        Log.Information("PerformFullImportAsync: Cancellation requested after processing page {Page}. Stopping.", pageNumber);
+                        break;
+                    }
                 }
 
                 // Now that all pages are processed, update the persisted connector data
@@ -312,6 +324,14 @@ public class SyncImportTaskProcessor
                 throw new NotSupportedException("Connector inheritance type is not supported (not calls, not files)");
         }
 
+        // If cancelled during import, skip all post-import phases (deletions, references, persistence).
+        // In-memory CSO collections are discarded cleanly — nothing has been persisted yet.
+        if (_cancellationTokenSource.IsCancellationRequested)
+        {
+            Log.Information("PerformFullImportAsync: Cancellation requested. Skipping persistence and post-import phases.");
+            return;
+        }
+
         // process deletions
         // note: only run deletion detection for Full Imports
         // Delta Imports only return changed objects, so absence doesn't mean deletion
@@ -335,6 +355,12 @@ public class SyncImportTaskProcessor
             connectedSystemObjectsToBeCreated.Count, connectedSystemObjectsToBeUpdated.Count,
             GC.GetTotalMemory(false) / 1024 / 1024,
             System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
+
+        if (_cancellationTokenSource.IsCancellationRequested)
+        {
+            Log.Information("PerformFullImportAsync: Cancellation requested after deletion detection. Skipping persistence.");
+            return;
+        }
 
         // now that all objects have been imported, we can attempt to resolve unresolved reference attribute values
         // i.e. attempt to convert unresolved reference strings into hard links to other Connected System Objects
@@ -620,6 +646,12 @@ public class SyncImportTaskProcessor
 
         // Reconcile pending exports against imported values (confirming import)
         // This confirms exported attribute changes or marks them for retry
+        if (_cancellationTokenSource.IsCancellationRequested)
+        {
+            Log.Information("PerformFullImportAsync: Cancellation requested. Skipping reconciliation.");
+            return;
+        }
+
         _activity.ObjectsToProcess = connectedSystemObjectsToBeUpdated.Count;
         _activity.ObjectsProcessed = 0;
         await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling pending exports");
