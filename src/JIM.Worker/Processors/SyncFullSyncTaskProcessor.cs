@@ -258,8 +258,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // detached but UpdateDetachedSafe re-attaches it on the next UpdateActivityAsync call.
                 // Cross-page state (_unresolvedCrossPageReferences, _exportEvaluationCache, etc.) is
                 // held in CLR fields — detaching does not null their populated navigation properties.
-                if (_hasRawSqlSupport)
-                    _syncRepo.ClearChangeTracker();
+                _syncRepo.ClearChangeTracker();
 
                 // Update progress with page completion - this persists ObjectsProcessed to database (including MVO changes)
                 using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))

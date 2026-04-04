@@ -235,8 +235,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
 
                 // Clear the change tracker unconditionally at every page boundary.
                 // See SyncFullSyncTaskProcessor for detailed explanation.
-                if (_hasRawSqlSupport)
-                    _syncRepo.ClearChangeTracker();
+                _syncRepo.ClearChangeTracker();
 
                 // Update progress with page completion
                 using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
