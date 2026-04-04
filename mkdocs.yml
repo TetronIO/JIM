@@ -1,0 +1,127 @@
+site_name: JIM Documentation
+site_url: https://tetronio.github.io/JIM
+repo_url: https://github.com/TetronIO/JIM
+repo_name: TetronIO/JIM
+
+theme:
+  name: material
+  custom_dir: docs/overrides
+  palette:
+    - scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  logo: assets/images/jim-logo.png
+  favicon: assets/images/jim-logo.png
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - content.tabs.link
+    - search.suggest
+    - search.highlight
+    - toc.follow
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path:
+        - .
+        - docs
+  - pymdownx.critic
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - attr_list
+  - md_in_html
+  - def_list
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - getting-started/index.md
+      - Prerequisites: getting-started/prerequisites.md
+      - Quick Start: getting-started/quickstart.md
+      - Your First Sync: getting-started/first-sync.md
+  - Concepts:
+      - concepts/index.md
+      - Architecture: concepts/architecture.md
+      - Connected Systems: concepts/connected-systems.md
+      - Sync Pipeline: concepts/sync-pipeline.md
+      - Sync Rules: concepts/sync-rules.md
+      - JML Lifecycle: concepts/jml-lifecycle.md
+      - Expressions: concepts/expressions.md
+  - Administration:
+      - administration/index.md
+      - Deployment: administration/deployment.md
+      - SSO Setup: administration/sso-setup.md
+      - Configuration Reference: administration/configuration.md
+      - Upgrading: administration/upgrading.md
+      - Troubleshooting: administration/troubleshooting.md
+  - Connectors:
+      - connectors/index.md
+      - JIM File Connector: connectors/jim-file-connector.md
+      - JIM LDAP Connector: connectors/jim-ldap-connector.md
+  - API:
+      - api/index.md
+      - Authentication: api/authentication.md
+      - Endpoints: api/endpoints.md
+  - PowerShell Module:
+      - powershell/index.md
+      - Cmdlet Reference: powershell/cmdlets.md
+  - Developer Guide:
+      - developer/index.md
+      - Development Environment: developer/dev-environment.md
+      - Architecture: developer/architecture.md
+      - Building from Source: developer/building.md
+      - Testing: developer/testing.md
+      - Writing Connectors: developer/connectors.md
+      - Contributing: developer/contributing.md
+  - Reference:
+      - Glossary: reference/glossary.md
+      - Roadmap: reference/roadmap.md
+      - Changelog: reference/changelog.md
+
+extra_css:
+  - assets/stylesheets/custom.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/TetronIO/JIM
+  generator: false

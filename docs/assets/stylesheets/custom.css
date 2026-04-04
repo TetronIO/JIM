@@ -1,0 +1,19 @@
+/* JIM Brand Colour Overrides */
+
+/* Primary colour - JIM Purple #5A45A2 */
+:root {
+  --md-primary-fg-color: #5A45A2;
+  --md-primary-fg-color--light: #7B68B8;
+  --md-primary-fg-color--dark: #483790;
+  --md-accent-fg-color: #5A45A2;
+}
+
+/* Dark mode adjustments */
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #5A45A2;
+  --md-primary-fg-color--light: #7B68B8;
+  --md-primary-fg-color--dark: #483790;
+  --md-accent-fg-color: #7B68B8;
+  --md-default-bg-color: #0D1D2E;
+  --md-default-bg-color--light: #162A3E;
+}

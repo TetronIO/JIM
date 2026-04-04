@@ -24,7 +24,7 @@ Always use Context7 MCP when you need library/API documentation, code generation
 - **Configuration files** (`.env.example`, `docker-compose.yml`, `Dockerfile`, `.gitignore`, `.editorconfig`, etc.) - not compiled
 - **CI/CD workflows** (`.github/workflows/`) - run remotely, not compiled locally
 - **Diagrams** (`workspace.dsl`, exported SVGs) - non-code assets
-- **Plan documents** (`docs/plans/`) - documentation only
+- **Plan documents** (`engineering/plans/`) - documentation only
 
 **Partial exception:**
 - **UI-only changes** (Blazor pages, Razor components) require `dotnet build` but do NOT require `dotnet test` - there are no UI tests, so running tests just wastes time
@@ -224,7 +224,7 @@ JIM is deployed in high-trust/assurance customer environments, i.e. healthcare, 
 - Use AES-256-GCM for encryption at rest, minimum TLS 1.2 for transit
 - Use `System.Security.Cryptography.RandomNumberGenerator` for security-sensitive random values (never `System.Random`)
 
-> **Full security development guidelines, OWASP Top 10 details, Secure by Design principles, and compliance mapping:** See `docs/COMPLIANCE_MAPPING.md` and `docs/DEVELOPER_GUIDE.md`
+> **Full security development guidelines, OWASP Top 10 details, Secure by Design principles, and compliance mapping:** See `engineering/COMPLIANCE_MAPPING.md` and `engineering/DEVELOPER_GUIDE.md`
 
 ## Third-Party Dependency Governance
 
@@ -236,17 +236,17 @@ Before adding ANY new NuGet package or third-party dependency:
 
 Prefer: Microsoft-maintained packages > established corporate-backed packages > .NET Foundation projects > well-maintained OSS with identifiable maintainers.
 
-> **Full supply chain security requirements:** See `docs/COMPLIANCE_MAPPING.md` and `docs/DEVELOPER_GUIDE.md`
+> **Full supply chain security requirements:** See `engineering/COMPLIANCE_MAPPING.md` and `engineering/DEVELOPER_GUIDE.md`
 
 ## Feature Planning
 
 **When planning new features or significant changes:**
-1. Run `jim-prd` to create a new PRD from the template (or copy `docs/prd/PRD_TEMPLATE.md` manually)
+1. Run `jim-prd` to create a new PRD from the template (or copy `engineering/prd/PRD_TEMPLATE.md` manually)
 2. Fill in the required sections (Problem Statement, Goals, Non-Goals, User Stories, Requirements, Examples, Acceptance Criteria)
 3. Create a GitHub issue linking to the PRD
 4. Ask Claude to generate the implementation plan from the PRD
 
-> **Full PRD template, plan structure guidelines, and documentation organisation:** See `docs/CLAUDE.md`
+> **Full PRD template, plan structure guidelines, and documentation organisation:** See `engineering/CLAUDE.md`
 
 ## Architecture Quick Reference
 
@@ -349,11 +349,11 @@ The `VERSION` file is the single source of truth for JIM's version number. It fe
 
 **To create a release:** Use `/release <version>` — the skill handles VERSION, CHANGELOG, PowerShell manifest, documentation review, commit, tag, and push.
 
-> **Full release process, air-gapped deployment, and Docker image details:** See `docs/RELEASE_PROCESS.md`
+> **Full release process, air-gapped deployment, and Docker image details:** See `engineering/RELEASE_PROCESS.md`
 
 ## Resources
 
-- **Full Architecture Guide**: `docs/DEVELOPER_GUIDE.md`
+- **Full Architecture Guide**: `engineering/DEVELOPER_GUIDE.md`
 - **Repository**: https://github.com/TetronIO/JIM
 - **Documentation**: `README.md`
 - **.NET 9 Docs**: https://learn.microsoft.com/dotnet/

@@ -467,8 +467,11 @@ test-data/
 *.apikey
 
 # Structurizr Lite working files
-docs/diagrams/structurizr/.structurizr/
-docs/diagrams/structurizr/workspace.json
+engineering/diagrams/structurizr/.structurizr/
+engineering/diagrams/structurizr/workspace.json
+
+# MkDocs build output
+site/
 
 # Dev notes
 dev.txt
