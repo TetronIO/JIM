@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🔒 Safe cancellation for sync operations (#339) — when an admin cancels a running Full Sync or Delta Sync, the current page's flush pipeline now completes before exiting. Previously, cancellation could leave orphaned metaverse objects without corresponding pending exports, causing target systems to silently miss updates.
+- 🐛 Fixed import tasks continuing to process after cancellation (#339) — cancelling a Full Import or Delta Import from the Operations Queue now stops the import between pages and skips persistence. Previously, the import processor ignored the cancellation signal and ran to completion.
+- 🐛 Fixed cancelled tasks having their status overwritten to Completed or Failed — the Worker now correctly preserves the Cancelled activity status instead of overwriting it when the processor finishes.
 - 🐛 Fixed sync progress bar showing inflated object counts (CSOs + pending exports) instead of just CSOs — progress percentage and ETA are now accurate for Full Sync and Delta Sync
 
 ### Changed
