@@ -3142,7 +3142,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 throw new NotSupportedException($"Attribute type {source.MetaverseAttribute.Type} is not supported for export matching.");
         }
 
-        return await query.FirstOrDefaultAsync();
+        var matches = await query.OrderBy(cso => cso.Id).Take(2).ToListAsync();
+
+        if (matches.Count > 1)
+        {
+            Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Multiple CSOs matched rule {RuleId} in connected system {ConnectedSystemId}. Returning first by ID. This indicates duplicate CSOs that should be investigated.",
+                objectMatchingRule.Id, connectedSystem.Id);
+        }
+
+        return matches.FirstOrDefault();
     }
     #endregion
 
@@ -3736,6 +3744,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.SynchronisationWorkerTasks
             .Where(t => runProfileIds.Contains(t.ConnectedSystemRunProfileId) &&
                        (t.Status == WorkerTaskStatus.Queued || t.Status == WorkerTaskStatus.Processing))
+            .OrderBy(t => t.Id)
             .FirstOrDefaultAsync();
     }
     #endregion
