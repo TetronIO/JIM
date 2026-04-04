@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+#### Service Settings REST API & PowerShell Cmdlets
+
+- ✨ New REST API for managing service settings (`GET/PUT/DELETE /api/v1/service-settings`) — enables automation of change tracking, sync page size, history retention, and other operational settings
+- ✨ New PowerShell cmdlets: `Get-JIMServiceSetting`, `Set-JIMServiceSetting`, `Reset-JIMServiceSetting` — manage service settings from the command line or automation scripts
+
+#### Integration Test Runner Enhancements
+
+- ✨ `-LogLevel` parameter for integration test runner — override log verbosity (Verbose/Debug/Information/Warning/Error/Fatal) for the test run without permanently modifying `.env`
+- ✨ `-DisableChangeTracking` switch for integration test runner — disable CSO and MVO change tracking during large-scale tests to reduce database writes and improve throughput
+- 🖥️ Interactive menus for log level and change tracking selection when running tests without explicit parameters
+
 ### Fixed
 
 - 🐛 Fixed sync progress bar showing inflated object counts (CSOs + pending exports) instead of just CSOs — progress percentage and ETA are now accurate for Full Sync and Delta Sync

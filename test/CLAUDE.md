@@ -151,6 +151,15 @@ cd /workspaces/JIM
 
 # Setup only - configure environment without running tests (for demos, manual exploration)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory -SetupOnly
+
+# Set log level (overrides .env for this run, restores afterwards)
+./test/integration/Run-IntegrationTests.ps1 -LogLevel Warning
+
+# Disable change tracking (reduces database writes for large tests)
+./test/integration/Run-IntegrationTests.ps1 -DisableChangeTracking
+
+# Large-scale test with reduced logging and no change tracking
+./test/integration/Run-IntegrationTests.ps1 -Template Large -LogLevel Warning -DisableChangeTracking
 ```
 
 **What the runner does automatically:**

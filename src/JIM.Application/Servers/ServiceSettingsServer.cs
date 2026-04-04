@@ -1,5 +1,6 @@
 ﻿using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Security;
 using JIM.Application.Utilities;
 using Serilog;
 
@@ -195,14 +196,58 @@ namespace JIM.Application.Servers
         /// </summary>
         public async Task UpdateSettingValueAsync(string key, string? newValue, MetaverseObject? initiatedBy)
         {
+            var (setting, activity) = await PrepareUpdateAsync(key, newValue);
+            AuditHelper.SetUpdated(setting, initiatedBy);
+            await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+            await Application.Repository.ServiceSettings.UpdateSettingAsync(setting);
+            await Application.Activities.CompleteActivityAsync(activity);
+        }
+
+        /// <summary>
+        /// Updates a service setting value (API key initiated) and creates an Activity for audit purposes.
+        /// Encrypted string values are automatically encrypted before storage.
+        /// </summary>
+        public async Task UpdateSettingValueAsync(string key, string? newValue, ApiKey initiatedByApiKey)
+        {
+            var (setting, activity) = await PrepareUpdateAsync(key, newValue);
+            AuditHelper.SetUpdated(setting, initiatedByApiKey);
+            await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+            await Application.Repository.ServiceSettings.UpdateSettingAsync(setting);
+            await Application.Activities.CompleteActivityAsync(activity);
+        }
+
+        /// <summary>
+        /// Reverts a service setting to its default value and creates an Activity for audit purposes.
+        /// </summary>
+        public async Task RevertSettingToDefaultAsync(string key, MetaverseObject? initiatedBy)
+        {
+            var (setting, activity) = await PrepareRevertAsync(key);
+            AuditHelper.SetUpdated(setting, initiatedBy);
+            await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+            await Application.Repository.ServiceSettings.UpdateSettingAsync(setting);
+            await Application.Activities.CompleteActivityAsync(activity);
+        }
+
+        /// <summary>
+        /// Reverts a service setting to its default value (API key initiated) and creates an Activity for audit purposes.
+        /// </summary>
+        public async Task RevertSettingToDefaultAsync(string key, ApiKey initiatedByApiKey)
+        {
+            var (setting, activity) = await PrepareRevertAsync(key);
+            AuditHelper.SetUpdated(setting, initiatedByApiKey);
+            await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+            await Application.Repository.ServiceSettings.UpdateSettingAsync(setting);
+            await Application.Activities.CompleteActivityAsync(activity);
+        }
+
+        private async Task<(ServiceSetting setting, Activity activity)> PrepareUpdateAsync(string key, string? newValue)
+        {
             var setting = await GetSettingAsync(key);
             if (setting == null)
                 throw new InvalidOperationException($"Setting with key '{key}' not found.");
 
             if (setting.IsReadOnly)
                 throw new InvalidOperationException($"Setting '{setting.DisplayName}' is read-only and cannot be modified.");
-
-            var oldValue = setting.Value;
 
             // Encrypt encrypted string values before storing
             if (setting.ValueType == ServiceSettingValueType.StringEncrypted &&
@@ -213,9 +258,7 @@ namespace JIM.Application.Servers
             }
 
             setting.Value = newValue;
-            AuditHelper.SetUpdated(setting, initiatedBy);
 
-            // Create activity for audit trail
             var activity = new Activity
             {
                 TargetName = setting.DisplayName,
@@ -223,17 +266,11 @@ namespace JIM.Application.Servers
                 TargetOperationType = ActivityTargetOperationType.Update,
                 Status = ActivityStatus.InProgress
             };
-            await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
-            await Application.Repository.ServiceSettings.UpdateSettingAsync(setting);
-
-            await Application.Activities.CompleteActivityAsync(activity);
+            return (setting, activity);
         }
 
-        /// <summary>
-        /// Reverts a service setting to its default value and creates an Activity for audit purposes.
-        /// </summary>
-        public async Task RevertSettingToDefaultAsync(string key, MetaverseObject? initiatedBy)
+        private async Task<(ServiceSetting setting, Activity activity)> PrepareRevertAsync(string key)
         {
             var setting = await GetSettingAsync(key);
             if (setting == null)
@@ -243,9 +280,7 @@ namespace JIM.Application.Servers
                 throw new InvalidOperationException($"Setting '{setting.DisplayName}' is read-only and cannot be modified.");
 
             setting.Value = null; // null means use default
-            AuditHelper.SetUpdated(setting, initiatedBy);
 
-            // Create activity for audit trail
             var activity = new Activity
             {
                 TargetName = setting.DisplayName,
@@ -253,11 +288,8 @@ namespace JIM.Application.Servers
                 TargetOperationType = ActivityTargetOperationType.Revert,
                 Status = ActivityStatus.InProgress
             };
-            await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
-            await Application.Repository.ServiceSettings.UpdateSettingAsync(setting);
-
-            await Application.Activities.CompleteActivityAsync(activity);
+            return (setting, activity);
         }
 
         internal async Task CreateSettingAsync(ServiceSetting setting)
