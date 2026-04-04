@@ -999,6 +999,24 @@ if ($DirectoryType -eq "All") {
     Write-Host "${CYAN}Passed: ${NC}$passCount / $($allResults.Count)    ${CYAN}Failed: ${NC}$($allResults.Count - $passCount) / $($allResults.Count)"
     Write-Host ""
 
+    # Re-run Command
+    Write-Host "${CYAN}Re-run Command:${NC}"
+    Write-Host ""
+    $rerunParts = @("./test/integration/Run-IntegrationTests.ps1")
+    $rerunParts += "-Scenario `"$($Scenario ?? 'All')`""
+    $rerunParts += "-Template $Template"
+    if ($Step -ne "All") { $rerunParts += "-Step $Step" }
+    $rerunParts += "-DirectoryType All"
+    if ($LogLevel) { $rerunParts += "-LogLevel $LogLevel" }
+    if ($DisableChangeTracking) { $rerunParts += "-DisableChangeTracking" }
+    if ($PSBoundParameters.ContainsKey('ExportConcurrency')) { $rerunParts += "-ExportConcurrency $ExportConcurrency" }
+    if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) { $rerunParts += "-MaxExportParallelism $MaxExportParallelism" }
+    if ($TimeoutSeconds -ne 180) { $rerunParts += "-TimeoutSeconds $TimeoutSeconds" }
+    if ($CaptureMetrics) { $rerunParts += "-CaptureMetrics" }
+    if ($IgnoreSnapshots) { $rerunParts += "-IgnoreSnapshots" }
+    Write-Host "  $($rerunParts -join ' ')"
+    Write-Host ""
+
     if ($anyFailed) {
         Write-Host "${RED}One or more directory types failed.${NC}"
         exit 1
@@ -1288,6 +1306,24 @@ if ($Scenario -eq "All") {
     $resultsFile = Join-Path $resultsDir "full-regression-$timestamp.json"
     $regressionResults | ConvertTo-Json -Depth 10 | Set-Content $resultsFile
     Write-Host "${GRAY}Results saved to: $resultsFile${NC}"
+    Write-Host ""
+
+    # Re-run Command
+    Write-Host "${CYAN}Re-run Command:${NC}"
+    Write-Host ""
+    $rerunParts = @("./test/integration/Run-IntegrationTests.ps1")
+    $rerunParts += "-Scenario All"
+    $rerunParts += "-Template $Template"
+    if ($Step -ne "All") { $rerunParts += "-Step $Step" }
+    $rerunParts += "-DirectoryType $DirectoryType"
+    if ($LogLevel) { $rerunParts += "-LogLevel $LogLevel" }
+    if ($DisableChangeTracking) { $rerunParts += "-DisableChangeTracking" }
+    if ($PSBoundParameters.ContainsKey('ExportConcurrency')) { $rerunParts += "-ExportConcurrency $ExportConcurrency" }
+    if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) { $rerunParts += "-MaxExportParallelism $MaxExportParallelism" }
+    if ($TimeoutSeconds -ne 180) { $rerunParts += "-TimeoutSeconds $TimeoutSeconds" }
+    if ($CaptureMetrics) { $rerunParts += "-CaptureMetrics" }
+    if ($IgnoreSnapshots) { $rerunParts += "-IgnoreSnapshots" }
+    Write-Host "  $($rerunParts -join ' ')"
     Write-Host ""
 
     if ($anyFailed) {
@@ -2230,6 +2266,7 @@ Write-Step "Scenario log saved to: $scenarioLogFile"
 
 # Step 6: Capture Performance Metrics
 $step6Start = Get-Date
+$currentFile = $null
 Write-Section "Step 6: Capturing Performance Metrics"
 
 # Skip detailed metrics capture for large templates - parsing the worker logs becomes
@@ -2659,6 +2696,33 @@ else {
     Write-Host "${RED}✗ Some tests failed. Exit code: $scenarioExitCode${NC}"
 }
 
+Write-Host ""
+
+# Output Files
+Write-Section "Output Files"
+Write-Host ""
+Write-Host "  ${GRAY}Scenario log:${NC}       $scenarioLogFile"
+if ($currentFile) {
+    Write-Host "  ${GRAY}Performance metrics:${NC} $currentFile"
+}
+Write-Host ""
+
+# Re-run Command
+Write-Section "Re-run Command"
+Write-Host ""
+$rerunParts = @("./test/integration/Run-IntegrationTests.ps1")
+$rerunParts += "-Scenario `"$Scenario`""
+$rerunParts += "-Template $Template"
+if ($Step -ne "All") { $rerunParts += "-Step $Step" }
+$rerunParts += "-DirectoryType $DirectoryType"
+if ($LogLevel) { $rerunParts += "-LogLevel $LogLevel" }
+if ($DisableChangeTracking) { $rerunParts += "-DisableChangeTracking" }
+if ($PSBoundParameters.ContainsKey('ExportConcurrency')) { $rerunParts += "-ExportConcurrency $ExportConcurrency" }
+if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) { $rerunParts += "-MaxExportParallelism $MaxExportParallelism" }
+if ($TimeoutSeconds -ne 180) { $rerunParts += "-TimeoutSeconds $TimeoutSeconds" }
+if ($CaptureMetrics) { $rerunParts += "-CaptureMetrics" }
+if ($IgnoreSnapshots) { $rerunParts += "-IgnoreSnapshots" }
+Write-Host "  $($rerunParts -join ' ')"
 Write-Host ""
 
 # Stop transcript so the total execution time and summary are captured in the log file
