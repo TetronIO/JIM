@@ -1002,7 +1002,7 @@ if ($DirectoryType -eq "All") {
     # Re-run Command
     Write-Host "${CYAN}Re-run Command:${NC}"
     Write-Host ""
-    $rerunParts = @("./test/integration/Run-IntegrationTests.ps1")
+    $rerunParts = @("pwsh ./test/integration/Run-IntegrationTests.ps1")
     $rerunParts += "-Scenario `"$($Scenario ?? 'All')`""
     $rerunParts += "-Template $Template"
     if ($Step -ne "All") { $rerunParts += "-Step $Step" }
@@ -1311,7 +1311,7 @@ if ($Scenario -eq "All") {
     # Re-run Command
     Write-Host "${CYAN}Re-run Command:${NC}"
     Write-Host ""
-    $rerunParts = @("./test/integration/Run-IntegrationTests.ps1")
+    $rerunParts = @("pwsh ./test/integration/Run-IntegrationTests.ps1")
     $rerunParts += "-Scenario All"
     $rerunParts += "-Template $Template"
     if ($Step -ne "All") { $rerunParts += "-Step $Step" }
@@ -2136,7 +2136,7 @@ if ($SetupOnly) {
     Write-Host "  ${BLUE}pwsh test/integration/scenarios/Invoke-$Scenario.ps1 -Template $Template -ApiKey `"$apiKey`"${NC}"
     Write-Host ""
     Write-Host "${GRAY}To re-run with existing environment:${NC}"
-    Write-Host "  ${BLUE}./Run-IntegrationTests.ps1 -Scenario `"$Scenario`" -Template $Template -SkipReset -SkipBuild${NC}"
+    Write-Host "  ${BLUE}pwsh ./test/integration/Run-IntegrationTests.ps1 -Scenario `"$Scenario`" -Template $Template -SkipReset -SkipBuild${NC}"
     Write-Host ""
 
     # Docker Cleanup (prune unused images and build cache to prevent disk space accumulation)
@@ -2704,7 +2704,7 @@ if ($currentFile) {
 
 # Re-run Command
 Write-Section "Re-run Command"
-$rerunParts = @("./test/integration/Run-IntegrationTests.ps1")
+$rerunParts = @("pwsh ./test/integration/Run-IntegrationTests.ps1")
 $rerunParts += "-Scenario `"$Scenario`""
 $rerunParts += "-Template $Template"
 if ($Step -ne "All") { $rerunParts += "-Step $Step" }
