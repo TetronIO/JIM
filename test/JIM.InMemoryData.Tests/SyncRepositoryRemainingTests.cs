@@ -86,7 +86,7 @@ public class SyncRepositoryRemainingTests
         var cs = new ConnectedSystem { Id = CsId, Name = "HR" };
         _repo.SeedConnectedSystem(cs);
 
-        cs.LastDeltaSyncCompletedAt = DateTime.UtcNow;
+        cs.LastSyncCompletedAt = DateTime.UtcNow;
         await _repo.UpdateConnectedSystemAsync(cs);
         // No exception = success
     }

@@ -642,7 +642,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         int connectedSystemId,
         int page,
         int pageSize,
-        int? knownTotalCount = null)
+        int? knownTotalCount = null,
+        DateTime? lastSyncTimestamp = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -654,36 +655,94 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (pageSize > 2000)
             pageSize = 2000;
 
-        // Load CSOs with a shallow Include chain (CSO → Type, CSO → AttributeValues → Attribute).
-        // The deep Include chain (→ ReferenceValue → MetaverseObject) is deliberately excluded:
-        // at scale (5000+ CSOs, 80K+ member references), it produces a cartesian explosion that
-        // causes EF Core to intermittently fail to materialise ReferenceValue navigations —
-        // different ones each run, leading to false drift corrections that remove group members.
-        //
-        // Instead, referenced CSOs are loaded via direct SQL (PopulateReferenceValuesAsync) which
-        // reliably provides the two values the sync engine needs: ReferenceValueId (the referenced
-        // CSO's ID) and ReferenceValue.MetaverseObjectId (which MVO the referenced CSO is joined to).
-        var csoQuery = Repository.Database.ConnectedSystemObjects
-            .Include(cso => cso.Type)
-            .Include(cso => cso.AttributeValues)
-                .ThenInclude(av => av.Attribute)
-            .Where(q => q.ConnectedSystemId == connectedSystemId)
-            .OrderBy(cso => cso.Id);
-
         // Use caller-provided count when available (e.g. full sync already counted at start),
         // otherwise query the database. Eliminates redundant COUNT(*) at scale.
         var grossCount = knownTotalCount
             ?? await Repository.Database.ConnectedSystemObjects.CountAsync(q => q.ConnectedSystemId == connectedSystemId);
         var offset = (page - 1) * pageSize;
-        var pagedCsoQuery = csoQuery.Skip(offset).Take(pageSize);
 
-        var results = await pagedCsoQuery.ToListAsync();
+        List<ConnectedSystemObject> results;
 
-        // Populate ReferenceValue navigations via direct SQL — bypasses EF Include materialisation.
-        await PopulateReferenceValuesAsync(results);
+        if (lastSyncTimestamp.HasValue)
+        {
+            // Selective attribute loading: load CSO scalars for the whole page first,
+            // then only load attribute values for CSOs that have changed since last sync.
+            // Unchanged CSOs skip attribute flow entirely, saving significant I/O at scale.
+            var watermark = lastSyncTimestamp.Value;
 
-        // Load MVOs separately — EF relationship fixup populates cso.MetaverseObject automatically.
-        await LoadMetaverseObjectsForCsosAsync(results);
+            // Step 1: Load all CSOs for this page WITHOUT attribute values (scalars + Type only)
+            var allCsos = await Repository.Database.ConnectedSystemObjects
+                .Include(cso => cso.Type)
+                .Where(q => q.ConnectedSystemId == connectedSystemId)
+                .OrderBy(cso => cso.Id)
+                .Skip(offset)
+                .Take(pageSize)
+                .ToListAsync();
+
+            // Step 2: Partition into changed and unchanged CSOs
+            var changedCsoIds = new List<Guid>();
+            foreach (var cso in allCsos)
+            {
+                var isUnchanged =
+                    cso.Status == ConnectedSystemObjectStatus.Normal &&
+                    cso.MetaverseObjectId.HasValue &&
+                    (cso.LastUpdated == null ? cso.Created <= watermark : cso.LastUpdated.Value <= watermark);
+
+                if (isUnchanged)
+                {
+                    cso.IsUnchangedSinceLastSync = true;
+                }
+                else
+                {
+                    changedCsoIds.Add(cso.Id);
+                }
+            }
+
+            // Step 3: Load attribute values ONLY for changed CSOs
+            if (changedCsoIds.Count > 0)
+            {
+                var attributeValues = await Repository.Database.ConnectedSystemObjectAttributeValues
+                    .Include(av => av.Attribute)
+                    .Where(av => changedCsoIds.Contains(av.ConnectedSystemObject.Id))
+                    .ToListAsync();
+
+                // EF relationship fixup populates cso.AttributeValues automatically for tracked CSOs
+            }
+
+            // Step 4: Populate reference values only for changed CSOs
+            var changedCsos = allCsos.Where(cso => !cso.IsUnchangedSinceLastSync).ToList();
+            if (changedCsos.Count > 0)
+                await PopulateReferenceValuesAsync(changedCsos);
+
+            // Step 5: Load MVOs for ALL CSOs (needed for Pass 1 pending export confirmation
+            // and for reference attribute processing of unchanged CSOs with reference rules)
+            await LoadMetaverseObjectsForCsosAsync(allCsos);
+
+            Log.Information("GetConnectedSystemObjectsAsync: Page {Page} — {Changed} changed, {Unchanged} unchanged (skipping attribute load)",
+                page, changedCsoIds.Count, allCsos.Count - changedCsoIds.Count);
+
+            results = allCsos;
+        }
+        else
+        {
+            // Standard loading: full Include chain for all CSOs (no watermark available).
+            // Used for first-ever sync or when caller doesn't provide a watermark.
+            var csoQuery = Repository.Database.ConnectedSystemObjects
+                .Include(cso => cso.Type)
+                .Include(cso => cso.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+                .Where(q => q.ConnectedSystemId == connectedSystemId)
+                .OrderBy(cso => cso.Id);
+
+            var pagedCsoQuery = csoQuery.Skip(offset).Take(pageSize);
+            results = await pagedCsoQuery.ToListAsync();
+
+            // Populate ReferenceValue navigations via direct SQL — bypasses EF Include materialisation.
+            await PopulateReferenceValuesAsync(results);
+
+            // Load MVOs separately — EF relationship fixup populates cso.MetaverseObject automatically.
+            await LoadMetaverseObjectsForCsosAsync(results);
+        }
 
         // now with all the ids we know how many total results there are and so can populate paging info
         var pagedResultSet = new PagedResultSet<ConnectedSystemObject>

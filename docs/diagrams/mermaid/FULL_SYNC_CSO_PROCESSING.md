@@ -6,7 +6,7 @@ This diagram shows the core decision tree for processing a single Connected Syst
 
 Both Full Sync and Delta Sync use identical processing logic per-CSO. The only difference is CSO selection:
 - **Full Sync**: processes ALL CSOs in the Connected System (or only those in the target partition, if the run profile specifies a `TargetPartitionId` — see below)
-- **Delta Sync**: processes only CSOs modified since `LastDeltaSyncCompletedAt`
+- **Delta Sync**: processes only CSOs modified since `LastSyncCompletedAt`
 
 Since v0.7.1, sync decisions are split across three layers:
 - **ISyncEngine** — Pure domain logic (projection, attribute flow, deletion rules, export confirmation). Stateless, I/O-free.
@@ -40,7 +40,7 @@ flowchart TD
     UpdateProgress --> PageLoop
 
     PageLoop -->|No| CrossPage[Cross-page reference resolution<br/>Reload CSOs with unresolved references<br/>Resolve MVO references across page boundaries<br/>Re-run flush pipeline for resolved references]
-    CrossPage --> Watermark[Update delta sync watermark<br/>LastDeltaSyncCompletedAt = UtcNow]
+    CrossPage --> Watermark[Update delta sync watermark<br/>LastSyncCompletedAt = UtcNow]
     Watermark --> End([Sync Complete])
 ```
 

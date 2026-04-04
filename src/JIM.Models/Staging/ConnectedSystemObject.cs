@@ -68,6 +68,14 @@ public class ConnectedSystemObject
     public List<ConnectedSystemObjectChange> Changes { get; set; } = null!;
 
     /// <summary>
+    /// Set by the page loader when a CSO's attributes have not changed since the last completed sync.
+    /// When true, the sync processor skips attribute flow, export evaluation, and drift detection
+    /// for this CSO — avoiding the overhead of loading and comparing unchanged attribute values.
+    /// </summary>
+    [NotMapped]
+    public bool IsUnchangedSinceLastSync { get; set; }
+
+    /// <summary>
     /// Only for use by JIM.Service to determine what attribute values need adding and change-tracking.
     /// </summary>
     [NotMapped]

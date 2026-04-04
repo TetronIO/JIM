@@ -42,7 +42,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         await _syncRepo.UpdateActivityMessageAsync(_activity, "Preparing delta sync");
 
         // Determine the watermark - when was the last successful sync?
-        var lastSyncTimestamp = _connectedSystem.LastDeltaSyncCompletedAt ?? DateTime.MinValue;
+        var lastSyncTimestamp = _connectedSystem.LastSyncCompletedAt ?? DateTime.MinValue;
         syncSpan.SetTag("lastSyncTimestamp", lastSyncTimestamp.ToString("O"));
 
         // How many CSOs have been modified since the last sync?

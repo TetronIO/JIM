@@ -172,7 +172,7 @@ public class SyncRepository : ISyncRepository
     }
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(
-        int connectedSystemId, int page, int pageSize, int? knownTotalCount = null)
+        int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null)
     {
         var all = GetCsosForSystem(connectedSystemId)
             .OrderBy(c => c.Created).ThenBy(c => c.Id)

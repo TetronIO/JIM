@@ -33,6 +33,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- ⚡ Selective attribute loading for full sync — unchanged CSOs (based on watermark comparison) skip attribute value loading and attribute flow entirely, dramatically reducing I/O for large-scale repeat syncs
+- ⚡ Eliminated redundant per-page COUNT queries during sync — total count is now passed from sync start, removing 200+ unnecessary full-table scans at 100K objects
+- ⚡ Default sync page size increased from 500 to 1000 — halves the number of database round-trips per sync run
+- ⚡ Sync progress updates now use direct SQL instead of EF Core change tracker, reducing per-page overhead
+- ⚡ Removed explicit RepeatableRead transactions from sync page loading — PostgreSQL MVCC provides sufficient consistency without the round-trip overhead
 - ⚡ Pending Exports table on CSO detail page now uses server-side paging — pages with thousands of pending changes (e.g. 10K member adds) load instantly instead of rendering all rows at once
 - ⚡ Bounded memory sync pipeline — change tracker cleared at every page boundary and export evaluation cache loaded per-page instead of upfront, enabling sync of 100K+ objects without out-of-memory crashes (#451)
 - ⚡ All export evaluation and pending export cache queries now use `AsNoTracking`, eliminating unnecessary entity tracking overhead during sync
@@ -319,7 +324,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 📦 Production-ready Docker Compose configuration — deploy JIM from pre-built images without needing source code
 - 📦 Standalone deployment files attached to each GitHub release for easy download without cloning the repository
 - ✨ Welcome banner displayed on successful PowerShell connection
-- 📖 Comprehensive [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) covering prerequisites, topology options, TLS, reverse proxy, upgrades, and monitoring
+- 📖 Comprehensive [Deployment Guide](https://tetronio.github.io/JIM/administration/deployment/) covering prerequisites, topology options, TLS, reverse proxy, upgrades, and monitoring
 - 🖥️ Sortable columns on the Attribute Flow table
 - 🖥️ Filter controls on the Attribute Flow table
 - ✨ Edit attribute flow mappings inline on the Sync Rule detail page

@@ -57,7 +57,7 @@ public interface ISyncRepository
     /// <param name="knownTotalCount">When provided, skips the per-page COUNT query and uses this value
     /// for paging metadata. Callers that already know the total (e.g. full sync) should pass it to
     /// eliminate redundant COUNT(*) queries at scale.</param>
-    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null);
+    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null);
 
     /// <summary>
     /// Loads a page of CSOs modified since the specified date, with full attribute values.
@@ -456,7 +456,7 @@ public interface ISyncRepository
     Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId);
 
     /// <summary>
-    /// Updates a connected system's fields (e.g., LastDeltaSyncCompletedAt watermark).
+    /// Updates a connected system's fields (e.g., LastSyncCompletedAt watermark).
     /// </summary>
     Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
 

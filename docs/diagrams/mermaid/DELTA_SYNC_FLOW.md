@@ -19,7 +19,7 @@ This diagram shows how Delta Synchronisation differs from Full Synchronisation. 
 
 ```mermaid
 flowchart TD
-    Start([PerformDeltaSyncAsync]) --> Watermark[Determine watermark:<br/>LastDeltaSyncCompletedAt<br/>or DateTime.MinValue if first run]
+    Start([PerformDeltaSyncAsync]) --> Watermark[Determine watermark:<br/>LastSyncCompletedAt<br/>or DateTime.MinValue if first run]
 
     Watermark --> CountModified[Count CSOs modified<br/>since watermark]
     CountModified --> HasChanges{Modified<br/>CSOs > 0?}
@@ -44,7 +44,7 @@ flowchart TD
     PageFlush --> PageLoop
 
     PageLoop -->|No| CrossPage[Cross-page reference resolution<br/>Reload CSOs with unresolved references<br/>Resolve MVO references across page boundaries<br/>Re-run flush pipeline for resolved references]
-    CrossPage --> UpdateWatermark[Update watermark<br/>LastDeltaSyncCompletedAt = UtcNow]
+    CrossPage --> UpdateWatermark[Update watermark<br/>LastSyncCompletedAt = UtcNow]
     UpdateWatermark --> Done([Sync Complete])
 ```
 
@@ -53,17 +53,17 @@ flowchart TD
 ```mermaid
 flowchart LR
     subgraph "First-Ever Delta Sync"
-        NullWatermark[LastDeltaSyncCompletedAt<br/>= null] --> DefaultMin[Defaults to<br/>DateTime.MinValue]
+        NullWatermark[LastSyncCompletedAt<br/>= null] --> DefaultMin[Defaults to<br/>DateTime.MinValue]
         DefaultMin --> AllCSOs[All CSOs selected<br/>Behaves like Full Sync]
     end
 
     subgraph "Subsequent Delta Syncs"
-        PrevWatermark[LastDeltaSyncCompletedAt<br/>= previous sync time] --> FilterCSOs[Only CSOs where<br/>LastUpdated > watermark]
+        PrevWatermark[LastSyncCompletedAt<br/>= previous sync time] --> FilterCSOs[Only CSOs where<br/>LastUpdated > watermark]
         FilterCSOs --> SubsetCSOs[Subset of CSOs<br/>processed]
     end
 
     subgraph "Watermark Update"
-        SyncCompletes[Sync completes<br/>successfully] --> SetWatermark[LastDeltaSyncCompletedAt<br/>= DateTime.UtcNow]
+        SyncCompletes[Sync completes<br/>successfully] --> SetWatermark[LastSyncCompletedAt<br/>= DateTime.UtcNow]
         SetWatermark --> Persisted[Persisted to database<br/>via repository]
     end
 ```
@@ -87,7 +87,7 @@ flowchart TD
 
 - **Watermark always advances**: Even when zero CSOs are modified, the watermark is updated. This prevents the watermark from becoming stale if no changes occur for an extended period.
 
-- **First delta sync processes everything**: If `LastDeltaSyncCompletedAt` is null (no previous sync), the watermark defaults to `DateTime.MinValue`, effectively selecting all CSOs — the same set as a full sync.
+- **First delta sync processes everything**: If `LastSyncCompletedAt` is null (no previous sync), the watermark defaults to `DateTime.MinValue`, effectively selecting all CSOs — the same set as a full sync.
 
 - **No pending export surfacing**: Delta sync skips `SurfacePendingExportsAsExecutionItems()` since it's a lightweight incremental operation. Full sync surfaces pending exports as RPEIs so operators can see what changes are staged for the next export run.
 

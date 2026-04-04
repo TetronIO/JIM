@@ -70,11 +70,11 @@ public class ConnectedSystem : IAuditable
     public ObjectMatchingRuleMode ObjectMatchingRuleMode { get; set; } = ObjectMatchingRuleMode.ConnectedSystem;
 
     /// <summary>
-    /// Timestamp of when the last delta synchronisation completed successfully.
-    /// Used by delta sync to determine which CSOs have been modified since the last run.
-    /// Delta sync queries CSOs where LastUpdated > LastDeltaSyncCompletedAt.
+    /// Timestamp of when the last synchronisation (full or delta) completed successfully.
+    /// Used by delta sync to determine which CSOs have been modified since the last run,
+    /// and by full sync to identify unchanged CSOs that can skip attribute processing.
     /// </summary>
-    public DateTime? LastDeltaSyncCompletedAt { get; set; }
+    public DateTime? LastSyncCompletedAt { get; set; }
 
     /// <summary>
     /// Maximum number of export batches to process concurrently.

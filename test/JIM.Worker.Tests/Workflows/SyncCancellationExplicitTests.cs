@@ -63,7 +63,7 @@ public class SyncCancellationExplicitTests : WorkflowTestBase
 
         // Assert: Watermark NOT set
         connectedSystem = await ReloadEntityAsync(connectedSystem);
-        Assert.That(connectedSystem.LastDeltaSyncCompletedAt, Is.Null,
+        Assert.That(connectedSystem.LastSyncCompletedAt, Is.Null,
             "Watermark must not be set on cancelled sync");
 
         // Assert: Activity shows partial processing
@@ -179,7 +179,7 @@ public class SyncCancellationExplicitTests : WorkflowTestBase
 
         // Assert: Watermark NOT set despite all objects processed
         connectedSystem = await ReloadEntityAsync(connectedSystem);
-        Assert.That(connectedSystem.LastDeltaSyncCompletedAt, Is.Null,
+        Assert.That(connectedSystem.LastSyncCompletedAt, Is.Null,
             "Watermark must not be set even when all objects on the page were processed");
     }
 

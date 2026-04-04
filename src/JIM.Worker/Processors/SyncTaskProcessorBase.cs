@@ -49,6 +49,10 @@ public abstract class SyncTaskProcessorBase
     // Cache of export rules for drift detection (filtered to EnforceState = true)
     protected List<SyncRule>? _driftDetectionExportRules;
 
+    // Object type IDs that have inbound import rules with reference attribute mappings.
+    // Used to skip reference attribute queueing for unchanged CSOs whose types have no reference rules.
+    protected HashSet<int>? _objectTypesWithReferenceRules;
+
     // Aggregate no-net-change counts for the entire sync run
     // Note: Target CSO attribute values for no-net-change detection are now pre-loaded in ExportEvaluationCache
     // (built at sync start) rather than per-page, since we need target system CSO attributes not source CSO attributes.
@@ -291,7 +295,7 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Updates the Connected System's LastDeltaSyncCompletedAt timestamp to mark the sync as complete.
+    /// Updates the Connected System's LastSyncCompletedAt timestamp to mark the sync as complete.
     /// This becomes the watermark for the next delta sync.
     /// Full sync also sets this to establish a baseline for subsequent delta syncs.
     /// </summary>
@@ -299,13 +303,13 @@ public abstract class SyncTaskProcessorBase
     {
         using var span = Diagnostics.Sync.StartSpan("UpdateDeltaSyncWatermark");
 
-        _connectedSystem.LastDeltaSyncCompletedAt = DateTime.UtcNow;
+        _connectedSystem.LastSyncCompletedAt = DateTime.UtcNow;
 
         // Use repository directly to avoid validation that expects RunProfiles to be loaded
         await _syncRepo.UpdateConnectedSystemAsync(_connectedSystem);
 
         Log.Information("UpdateDeltaSyncWatermarkAsync: Updated delta sync watermark to {Timestamp}",
-            _connectedSystem.LastDeltaSyncCompletedAt);
+            _connectedSystem.LastSyncCompletedAt);
 
         span.SetSuccess();
     }
@@ -370,6 +374,12 @@ public abstract class SyncTaskProcessorBase
     {
         // Skip obsolete CSOs - already fully handled in Pass 1
         if (connectedSystemObject.Status == ConnectedSystemObjectStatus.Obsolete)
+            return;
+
+        // Skip unchanged CSOs — their attributes haven't changed since the last completed sync,
+        // so attribute flow would produce zero changes. This avoids the overhead of loading and
+        // comparing attribute values for the majority of CSOs in large-scale repeat syncs.
+        if (connectedSystemObject.IsUnchangedSinceLastSync)
             return;
 
         // Skip if no sync rules defined AND not in simple mode — nothing to join/project/flow.
@@ -3091,6 +3101,23 @@ public abstract class SyncTaskProcessorBase
         span.SetTag("importMappingCount", _importMappingCache.Count);
         span.SetTag("enforceStateExportRuleCount", _driftDetectionExportRules.Count);
         span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Builds a set of object type IDs that have inbound import rules with reference attribute mappings.
+    /// Used to determine whether unchanged CSOs need reference attribute processing.
+    /// </summary>
+    protected void BuildReferenceObjectTypeCache(List<SyncRule> activeSyncRules)
+    {
+        _objectTypesWithReferenceRules = activeSyncRules
+            .Where(sr => sr.Direction == SyncRuleDirection.Import)
+            .Where(sr => sr.AttributeFlowRules.Any(afr =>
+                afr.TargetMetaverseAttribute?.Type == AttributeDataType.Reference))
+            .Select(sr => sr.ConnectedSystemObjectTypeId)
+            .ToHashSet();
+
+        Log.Debug("BuildReferenceObjectTypeCache: {Count} object types have reference attribute rules",
+            _objectTypesWithReferenceRules.Count);
     }
 
     /// <summary>

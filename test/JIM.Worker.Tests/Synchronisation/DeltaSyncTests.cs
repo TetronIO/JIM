@@ -285,17 +285,17 @@ public class DeltaSyncTests
 
     #endregion
 
-    #region LastDeltaSyncCompletedAt Watermark Tests
+    #region LastSyncCompletedAt Watermark Tests
 
     [Test]
-    public async Task ConnectedSystem_WithNullLastDeltaSyncCompletedAt_IndicatesFirstDeltaSyncAsync()
+    public async Task ConnectedSystem_WithNullLastSyncCompletedAt_IndicatesFirstDeltaSyncAsync()
     {
         // Arrange
         var connectedSystem = new ConnectedSystem
         {
             Id = 1,
             Name = "Test System",
-            LastDeltaSyncCompletedAt = null // No previous delta sync
+            LastSyncCompletedAt = null // No previous delta sync
         };
 
         _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
@@ -305,11 +305,11 @@ public class DeltaSyncTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result!.LastDeltaSyncCompletedAt, Is.Null);
+        Assert.That(result!.LastSyncCompletedAt, Is.Null);
     }
 
     [Test]
-    public async Task ConnectedSystem_WithLastDeltaSyncCompletedAt_ProvidesWatermarkAsync()
+    public async Task ConnectedSystem_WithLastSyncCompletedAt_ProvidesWatermarkAsync()
     {
         // Arrange
         var lastSyncTime = DateTime.UtcNow.AddHours(-1);
@@ -317,7 +317,7 @@ public class DeltaSyncTests
         {
             Id = 1,
             Name = "Test System",
-            LastDeltaSyncCompletedAt = lastSyncTime
+            LastSyncCompletedAt = lastSyncTime
         };
 
         _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
@@ -327,28 +327,28 @@ public class DeltaSyncTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result!.LastDeltaSyncCompletedAt, Is.EqualTo(lastSyncTime));
+        Assert.That(result!.LastSyncCompletedAt, Is.EqualTo(lastSyncTime));
     }
 
     [Test]
-    public void ConnectedSystem_LastDeltaSyncCompletedAt_CanBeSetAndRetrieved()
+    public void ConnectedSystem_LastSyncCompletedAt_CanBeSetAndRetrieved()
     {
         // Arrange
         var connectedSystem = new ConnectedSystem
         {
             Id = 1,
             Name = "Test System",
-            LastDeltaSyncCompletedAt = null
+            LastSyncCompletedAt = null
         };
 
         var syncCompletionTime = DateTime.UtcNow;
 
         // Act - Set the watermark
-        connectedSystem.LastDeltaSyncCompletedAt = syncCompletionTime;
+        connectedSystem.LastSyncCompletedAt = syncCompletionTime;
 
         // Assert
-        Assert.That(connectedSystem.LastDeltaSyncCompletedAt, Is.Not.Null);
-        Assert.That(connectedSystem.LastDeltaSyncCompletedAt, Is.EqualTo(syncCompletionTime));
+        Assert.That(connectedSystem.LastSyncCompletedAt, Is.Not.Null);
+        Assert.That(connectedSystem.LastSyncCompletedAt, Is.EqualTo(syncCompletionTime));
     }
 
     [Test]
@@ -360,7 +360,7 @@ public class DeltaSyncTests
         {
             Id = 1,
             Name = "Test System",
-            LastDeltaSyncCompletedAt = syncCompletionTime
+            LastSyncCompletedAt = syncCompletionTime
         };
 
         _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>()))
@@ -372,8 +372,8 @@ public class DeltaSyncTests
         // Assert
         _mockCsRepo.Verify(r => r.UpdateConnectedSystemAsync(
             It.Is<ConnectedSystem>(cs =>
-                cs.LastDeltaSyncCompletedAt.HasValue &&
-                cs.LastDeltaSyncCompletedAt == syncCompletionTime)), Times.Once);
+                cs.LastSyncCompletedAt.HasValue &&
+                cs.LastSyncCompletedAt == syncCompletionTime)), Times.Once);
     }
 
     #endregion
@@ -967,7 +967,7 @@ public class DeltaSyncTests
     }
 
     [Test]
-    public void ConnectedSystem_LastDeltaSyncCompletedAt_IsNullableDateTime()
+    public void ConnectedSystem_LastSyncCompletedAt_IsNullableDateTime()
     {
         // Arrange
         var connectedSystem = new ConnectedSystem
@@ -977,14 +977,14 @@ public class DeltaSyncTests
         };
 
         // Assert - default should be null
-        Assert.That(connectedSystem.LastDeltaSyncCompletedAt, Is.Null);
+        Assert.That(connectedSystem.LastSyncCompletedAt, Is.Null);
 
         // Act - set a value
         var now = DateTime.UtcNow;
-        connectedSystem.LastDeltaSyncCompletedAt = now;
+        connectedSystem.LastSyncCompletedAt = now;
 
         // Assert
-        Assert.That(connectedSystem.LastDeltaSyncCompletedAt, Is.EqualTo(now));
+        Assert.That(connectedSystem.LastSyncCompletedAt, Is.EqualTo(now));
     }
 
     [Test]
@@ -1025,11 +1025,11 @@ public class DeltaSyncTests
         {
             Id = 1,
             Name = "New System",
-            LastDeltaSyncCompletedAt = null // No previous sync
+            LastSyncCompletedAt = null // No previous sync
         };
 
-        // Act - The processor should use DateTime.MinValue when LastDeltaSyncCompletedAt is null
-        var watermark = connectedSystem.LastDeltaSyncCompletedAt ?? DateTime.MinValue;
+        // Act - The processor should use DateTime.MinValue when LastSyncCompletedAt is null
+        var watermark = connectedSystem.LastSyncCompletedAt ?? DateTime.MinValue;
 
         // Assert
         Assert.That(watermark, Is.EqualTo(DateTime.MinValue));

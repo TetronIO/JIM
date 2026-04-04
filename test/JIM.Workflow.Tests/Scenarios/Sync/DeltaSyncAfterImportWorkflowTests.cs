@@ -437,7 +437,7 @@ public class DeltaSyncAfterImportWorkflowTests
 
         // Update the delta sync watermark so delta sync knows what's "new"
         var sourceSystem = _harness.GetConnectedSystem("Source");
-        sourceSystem.LastDeltaSyncCompletedAt = DateTime.UtcNow;
+        sourceSystem.LastSyncCompletedAt = DateTime.UtcNow;
     }
 
     private List<ConnectedSystemImportObject> GenerateSourceUsers()
@@ -598,7 +598,7 @@ public class DeltaSyncAfterImportWorkflowTests
     {
         return _harness.SyncRepo.ConnectedSystems.Values
             .First(s => s.Name == systemName)
-            .LastDeltaSyncCompletedAt;
+            .LastSyncCompletedAt;
     }
 
     #endregion

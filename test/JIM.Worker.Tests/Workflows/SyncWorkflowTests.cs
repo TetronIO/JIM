@@ -12,7 +12,7 @@ namespace JIM.Worker.Tests.Workflows;
 /// particularly testing the watermark mechanism that was previously buggy.
 ///
 /// THE BUG THESE TESTS CATCH:
-/// Before the fix, Full Sync did not set LastDeltaSyncCompletedAt (the watermark).
+/// Before the fix, Full Sync did not set LastSyncCompletedAt (the watermark).
 /// This meant Delta Sync would use DateTime.MinValue as its baseline, causing it
 /// to process ALL CSOs instead of just modified ones - a massive performance problem.
 ///
@@ -25,7 +25,7 @@ namespace JIM.Worker.Tests.Workflows;
 public class SyncWorkflowTests : WorkflowTestBase
 {
     /// <summary>
-    /// Verifies that Full Sync sets the LastDeltaSyncCompletedAt watermark.
+    /// Verifies that Full Sync sets the LastSyncCompletedAt watermark.
     /// This is the fundamental requirement for Delta Sync to work efficiently.
     /// </summary>
     [Test]
@@ -51,7 +51,7 @@ public class SyncWorkflowTests : WorkflowTestBase
             ConnectedSystemRunType.FullSynchronisation);
 
         // Verify watermark is initially null
-        Assert.That(connectedSystem.LastDeltaSyncCompletedAt, Is.Null,
+        Assert.That(connectedSystem.LastSyncCompletedAt, Is.Null,
             "Watermark should be null before first sync");
 
         // Act: Run Full Sync
@@ -69,9 +69,9 @@ public class SyncWorkflowTests : WorkflowTestBase
 
         // Assert: Watermark should now be set
         connectedSystem = await ReloadEntityAsync(connectedSystem);
-        Assert.That(connectedSystem.LastDeltaSyncCompletedAt, Is.Not.Null,
-            "Full Sync MUST set the watermark (LastDeltaSyncCompletedAt) for Delta Sync to work efficiently");
-        Assert.That(connectedSystem.LastDeltaSyncCompletedAt!.Value,
+        Assert.That(connectedSystem.LastSyncCompletedAt, Is.Not.Null,
+            "Full Sync MUST set the watermark (LastSyncCompletedAt) for Delta Sync to work efficiently");
+        Assert.That(connectedSystem.LastSyncCompletedAt!.Value,
             Is.EqualTo(DateTime.UtcNow).Within(TimeSpan.FromMinutes(1)),
             "Watermark should be set to approximately the current time");
     }
@@ -343,7 +343,7 @@ public class SyncWorkflowTests : WorkflowTestBase
         await fullSyncProcessor.PerformFullSyncAsync();
         connectedSystem = await ReloadEntityAsync(connectedSystem);
 
-        var watermarkAfterFullSync = connectedSystem.LastDeltaSyncCompletedAt;
+        var watermarkAfterFullSync = connectedSystem.LastSyncCompletedAt;
 
         // Wait a moment
         await Task.Delay(100);
@@ -367,8 +367,8 @@ public class SyncWorkflowTests : WorkflowTestBase
 
         // Assert: Watermark should be updated
         connectedSystem = await ReloadEntityAsync(connectedSystem);
-        Assert.That(connectedSystem.LastDeltaSyncCompletedAt, Is.Not.Null);
-        Assert.That(connectedSystem.LastDeltaSyncCompletedAt, Is.GreaterThan(watermarkAfterFullSync!.Value),
+        Assert.That(connectedSystem.LastSyncCompletedAt, Is.Not.Null);
+        Assert.That(connectedSystem.LastSyncCompletedAt, Is.GreaterThan(watermarkAfterFullSync!.Value),
             "Delta Sync should advance the watermark forward");
     }
 

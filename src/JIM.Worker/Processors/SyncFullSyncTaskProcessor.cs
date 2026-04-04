@@ -78,6 +78,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // This enables efficient drift detection during CSO processing
         BuildDriftDetectionCache(allSyncRules, activeSyncRules);
 
+        // Build reference object type cache for selective attribute loading optimisation.
+        // Object types with reference attribute rules need full attribute loading even when unchanged.
+        BuildReferenceObjectTypeCache(activeSyncRules);
+
         // get the schema for all object types upfront in this Connected System, so we can retrieve lightweight CSOs without this data.
         using (Diagnostics.Sync.StartSpan("LoadObjectTypes"))
         {
@@ -127,7 +131,9 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             PagedResultSet<ConnectedSystemObject> csoPagedResult;
             using (Diagnostics.Sync.StartSpan("LoadCsoPage"))
             {
-                csoPagedResult = await _syncRepo.GetConnectedSystemObjectsAsync(_connectedSystem.Id, i, pageSize, totalCsosToProcess);
+                csoPagedResult = await _syncRepo.GetConnectedSystemObjectsAsync(
+                    _connectedSystem.Id, i, pageSize, totalCsosToProcess,
+                    _connectedSystem.LastSyncCompletedAt);
             }
 
             // Note: Target CSO attribute values for no-net-change detection are pre-loaded in ExportEvaluationCache

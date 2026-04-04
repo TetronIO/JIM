@@ -75,7 +75,7 @@ public class SyncCancellationTests : WorkflowTestBase
 
         // Assert: Watermark must NOT be updated (so next sync re-processes)
         connectedSystem = await ReloadEntityAsync(connectedSystem);
-        Assert.That(connectedSystem.LastDeltaSyncCompletedAt, Is.Null,
+        Assert.That(connectedSystem.LastSyncCompletedAt, Is.Null,
             "Watermark must NOT be set on cancellation — the next sync must re-process");
 
         // Assert: Only 1 CSO was processed (the one before cancellation fired)
@@ -113,7 +113,7 @@ public class SyncCancellationTests : WorkflowTestBase
 
         // Record the watermark from full sync
         connectedSystem = await ReloadEntityAsync(connectedSystem);
-        var watermarkAfterFullSync = connectedSystem.LastDeltaSyncCompletedAt;
+        var watermarkAfterFullSync = connectedSystem.LastSyncCompletedAt;
         Assert.That(watermarkAfterFullSync, Is.Not.Null, "Full sync should set watermark");
 
         // Wait to ensure modifications are after the watermark
@@ -146,7 +146,7 @@ public class SyncCancellationTests : WorkflowTestBase
 
         // Assert: Watermark must NOT have advanced (should still be the full sync watermark)
         connectedSystem = await ReloadEntityAsync(connectedSystem);
-        Assert.That(connectedSystem.LastDeltaSyncCompletedAt, Is.EqualTo(watermarkAfterFullSync),
+        Assert.That(connectedSystem.LastSyncCompletedAt, Is.EqualTo(watermarkAfterFullSync),
             "Watermark must NOT advance on cancellation — next delta sync must re-process");
 
         // Assert: Not all CSOs were processed
@@ -185,7 +185,7 @@ public class SyncCancellationTests : WorkflowTestBase
         // Assert: No MVOs created, no watermark
         Assert.That(SyncRepo.MetaverseObjects.Count, Is.EqualTo(0),
             "No MVOs should be created when CTS is pre-cancelled");
-        Assert.That(connectedSystem.LastDeltaSyncCompletedAt, Is.Null,
+        Assert.That(connectedSystem.LastSyncCompletedAt, Is.Null,
             "Watermark must not be set on cancellation");
     }
 
@@ -219,7 +219,7 @@ public class SyncCancellationTests : WorkflowTestBase
         Assert.That(SyncRepo.MetaverseObjects.Count, Is.EqualTo(5),
             "All 5 CSOs should project to MVOs");
         connectedSystem = await ReloadEntityAsync(connectedSystem);
-        Assert.That(connectedSystem.LastDeltaSyncCompletedAt, Is.Not.Null,
+        Assert.That(connectedSystem.LastSyncCompletedAt, Is.Not.Null,
             "Watermark must be set after successful sync");
     }
 
@@ -247,7 +247,7 @@ public class SyncCancellationTests : WorkflowTestBase
         await fullSyncProcessor.PerformFullSyncAsync();
 
         connectedSystem = await ReloadEntityAsync(connectedSystem);
-        var watermarkAfterFullSync = connectedSystem.LastDeltaSyncCompletedAt;
+        var watermarkAfterFullSync = connectedSystem.LastSyncCompletedAt;
 
         await Task.Delay(100);
 
@@ -272,7 +272,7 @@ public class SyncCancellationTests : WorkflowTestBase
 
         // Assert: Watermark unchanged, no additional processing
         connectedSystem = await ReloadEntityAsync(connectedSystem);
-        Assert.That(connectedSystem.LastDeltaSyncCompletedAt, Is.EqualTo(watermarkAfterFullSync),
+        Assert.That(connectedSystem.LastSyncCompletedAt, Is.EqualTo(watermarkAfterFullSync),
             "Watermark must not advance on pre-cancelled delta sync");
         Assert.That(deltaSyncActivity.ObjectsProcessed, Is.EqualTo(0),
             "No objects should be processed when CTS is pre-cancelled");
