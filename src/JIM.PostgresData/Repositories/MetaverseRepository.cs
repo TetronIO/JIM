@@ -452,18 +452,37 @@ public class MetaverseRepository : IMetaverseRepository
             return;
 
         // Always use explicit per-entity state management for MVOs and their attribute values.
-        // This avoids two problems:
+        // This avoids three problems:
         // 1. When entities are detached (after ClearChangeTracker), UpdateRange traverses the
         //    full object graph and hits identity conflicts on shared MetaverseAttribute entities.
         // 2. When AutoDetectChangesEnabled is disabled (during cross-page reference resolution),
         //    UpdateRange marks the MVO as Modified but does NOT detect newly added attribute
         //    values in the collection, causing them to silently not be persisted.
+        // 3. When AutoDetectChangesEnabled is disabled, attribute values removed from the
+        //    MVO.AttributeValues collection are not detected by SaveChangesAsync, causing
+        //    stale values to remain in the database (e.g., single-valued attributes accumulating
+        //    multiple values when replaced).
         //
         // By explicitly setting Entry().State on each attribute value, we ensure new attribute
         // values (IsKeySet=false → Added) are always persisted regardless of change detection.
+        // By explicitly marking removed attribute values as Deleted, we ensure they are cleaned up.
         foreach (var mvo in objectList)
         {
             Repository.UpdateDetachedSafe(mvo);
+
+            // Detect attribute values that were removed from the collection but are still tracked.
+            // When AutoDetectChangesEnabled is disabled, EF does not scan collections for removals
+            // during SaveChangesAsync, so removed values silently persist in the database.
+            var currentAvIds = new HashSet<Guid>(mvo.AttributeValues.Where(av => av.Id != Guid.Empty).Select(av => av.Id));
+            var trackedAvEntries = Repository.Database.ChangeTracker.Entries<MetaverseObjectAttributeValue>()
+                .Where(e => e.Entity.MetaverseObject == mvo &&
+                            e.Entity.Id != Guid.Empty &&
+                            e.State is not EntityState.Deleted and not EntityState.Detached &&
+                            !currentAvIds.Contains(e.Entity.Id))
+                .ToList();
+
+            foreach (var removedEntry in trackedAvEntries)
+                removedEntry.State = EntityState.Deleted;
 
             foreach (var av in mvo.AttributeValues)
             {
