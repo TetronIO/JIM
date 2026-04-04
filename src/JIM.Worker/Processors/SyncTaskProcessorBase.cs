@@ -2617,7 +2617,7 @@ public abstract class SyncTaskProcessorBase
             mvo.LastConnectorDisconnectedDate = null;
         }
 
-        Log.Information("EstablishJoinAsync: Established join between CSO {CsoId} and MVO {MvoId}", connectedSystemObject.Id, mvo.Id);
+        Log.Debug("EstablishJoinAsync: Established join between CSO {CsoId} and MVO {MvoId}", connectedSystemObject.Id, mvo.Id);
         return true;
     }
 

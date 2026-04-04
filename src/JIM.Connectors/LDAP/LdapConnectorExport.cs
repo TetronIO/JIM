@@ -1485,7 +1485,7 @@ internal class LdapConnectorExport
             throw new LdapException((int)response.ResultCode, errorDetail);
         }
 
-        _logger.Information("LdapConnectorExport.HandleModifyResponse: Successfully updated object at '{Dn}' with {Count} modifications",
+        _logger.Debug("LdapConnectorExport.HandleModifyResponse: Successfully updated object at '{Dn}' with {Count} modifications",
             workingDn, modifyRequest.Modifications.Count);
 
         return wasRenamed ? ConnectedSystemExportResult.Succeeded(null, workingDn) : ConnectedSystemExportResult.Succeeded();
