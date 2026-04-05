@@ -91,130 +91,32 @@ JIM is a container-based distributed application implementing the metaverse patt
 
 For detailed architecture diagrams (Component level), see the [Architecture](https://tetronio.github.io/JIM/concepts/architecture/) documentation.
 
-## Dependencies
-- A container host, i.e. Docker
-- An OpenID Connect (OIDC) identity provider, i.e. Entra ID, Keycloak, etc.
-
-## Deployment
-JIM runs in a Docker stack using containers and can be deployed to on-premises infrastructure or cloud container services. JIM is designed for air-gapped deployments - no internet connection is required.
-
-**Database Options:**
-- **Bundled PostgreSQL** - A PostgreSQL container is included for simple deployments. Start with `docker compose --profile with-db up -d`
-- **External PostgreSQL** - Connect to your existing PostgreSQL server by configuring `JIM_DB_HOSTNAME` in `.env` and running `docker compose up -d` (without the profile)
-
-Each release includes a downloadable bundle containing pre-built Docker images, compose files, the PowerShell module, and documentation. See the [Deployment Guide](https://tetronio.github.io/JIM/administration/deployment/) for details on air-gapped deployment.
-
-## Connectors
-
-**Available Now:**
-- LDAP directories (Active Directory, OpenLDAP, 389 Directory Server, and other RFC 4512-compliant directories)
-- CSV/Text files
-
-**Planned:**
-- Microsoft SQL Server Database
-- PostgreSQL Database
-- MySQL Database
-- Oracle Database
-- PowerShell (Core)
-- SCIM 2.0
-- Entra ID / Microsoft Graph API
-- Web Services (REST APIs)
-
-Custom connectors can be developed for bespoke scenarios.
-
-## Authentication
-JIM uses OpenID Connect (OIDC) for Single Sign-On authentication. It is IdP-agnostic and works with any OIDC-compliant Identity Provider, including Entra ID, Google Cloud Identity, AWS Identity Center/Cognito, Okta, Auth0, Keycloak, AD FS, etc. PKCE is used for enhanced security.
-
-For API access, JIM supports both JWT Bearer tokens and API keys for automation and CI/CD scenarios.
-
 ## Quick Start
 
-### For Admins (Deploy)
+### Deploy
 
-**Prerequisites:** Docker, Docker Compose v2, and an OpenID Connect identity provider (e.g., Entra ID, Keycloak, AD FS). See the [SSO Setup Guide](https://tetronio.github.io/JIM/administration/sso-setup/) to configure your identity provider before deploying.
-
-**Option 1 — Automated setup (recommended):**
-
-The setup script downloads everything you need, walks you through configuration, and starts JIM:
+The fastest way to get JIM running:
 
 ```bash
 curl -fsSL https://tetron.io/jim/get | bash
 ```
 
-Or download and inspect first:
+This downloads everything you need, walks you through configuration, and starts JIM. For manual setup, air-gapped deployment, and production hardening, see the [Getting Started](https://tetronio.github.io/JIM/getting-started/) guide.
 
-```bash
-curl -fsSL -o setup.sh https://tetron.io/jim/get
-less setup.sh    # review the script
-bash setup.sh
-```
-
-**Option 2 — Manual setup:**
-
-```bash
-mkdir jim && cd jim
-
-# Download compose files and environment template
-curl -fsSL -o docker-compose.yml https://github.com/TetronIO/JIM/releases/latest/download/docker-compose.yml
-curl -fsSL -o docker-compose.production.yml https://github.com/TetronIO/JIM/releases/latest/download/docker-compose.production.yml
-curl -fsSL -o .env https://github.com/TetronIO/JIM/releases/latest/download/.env.example
-
-# Configure - edit .env with your SSO settings (see SSO Setup Guide)
-# Set DOCKER_REGISTRY=ghcr.io/tetronio/ and JIM_VERSION to the latest release version
-
-# Start JIM with bundled PostgreSQL
-docker compose -f docker-compose.yml -f docker-compose.production.yml --profile with-db up -d
-
-# Or without bundled PostgreSQL (set JIM_DB_HOSTNAME in .env to your external DB)
-docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
-```
-
-**Option 3 — Air-gapped deployment:**
-
-Each [release](https://github.com/TetronIO/JIM/releases) includes a downloadable bundle (`jim-release-X.Y.Z.tar.gz`) with pre-built Docker images, compose files, and installation instructions. See the [Deployment Guide](https://tetronio.github.io/JIM/administration/deployment/).
-
-Once running, **access JIM** at [http://localhost:5200](http://localhost:5200) — log in with your identity provider, then use the Example Data feature to populate JIM with sample users and groups for testing.
-
-For production hardening (TLS, reverse proxy, upgrades, monitoring), see the [Deployment Guide](https://tetronio.github.io/JIM/administration/deployment/).
-
-### For Developers (Contribute)
-
-**Prerequisites:** None — the devcontainer includes a bundled Keycloak IdP with pre-configured test users, so no external identity provider is needed for development. Sign in with `admin` / `admin`. To use an external IdP instead, see the [SSO Setup Guide](https://tetronio.github.io/JIM/administration/sso-setup/).
-
-**Option 1 — GitHub Codespaces (one click):**
+### Develop
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/TetronIO/JIM?devcontainer_path=.devcontainer/devcontainer.json)
 
-Everything is pre-configured — .NET 9.0, PostgreSQL, shell aliases, and VS Code extensions. Once the codespace is ready, open a terminal and run:
-```bash
-jim-db    # Start PostgreSQL
-jim-web   # Start JIM (or press F5 to debug)
-```
+The devcontainer includes everything pre-configured — .NET 9.0, PostgreSQL, Keycloak IdP with test users, shell aliases, and VS Code extensions. Or clone locally and open with the [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension. See the [Developer Guide](https://tetronio.github.io/JIM/developer/) for details.
 
-**Option 2 — Local devcontainer:**
-
-Clone the repository and open it in VS Code with the [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension. The devcontainer will set up the full development environment automatically.
-
-For the full development guide, see the [Developer Guide](https://tetronio.github.io/JIM/developer/).
-
-### For Automation (PowerShell Module)
-
-JIM includes a cross-platform PowerShell module for scripting, automation, and Identity as Code (IDaC). Requires PowerShell 7.0+.
-
-**Install from PowerShell Gallery:**
+### Automate
 
 ```powershell
 Install-Module -Name JIM
+Connect-JIM -Url "https://jim.example.com"
 ```
 
-**Connect and verify:**
-
-```powershell
-Connect-JIM -Url "https://jim.example.com"    # Opens browser for SSO sign-in
-Test-JIMConnection
-```
-
-For air-gapped or disconnected installation, see the [Deployment Guide — PowerShell Module](https://tetronio.github.io/JIM/administration/deployment/#powershell-module).
+JIM includes a cross-platform [PowerShell module](https://tetronio.github.io/JIM/powershell/) for scripting, automation, and Identity as Code (IDaC).
 
 ## State of Development
 JIM has reached MVP completion (100%). The core identity lifecycle is fully functional:
