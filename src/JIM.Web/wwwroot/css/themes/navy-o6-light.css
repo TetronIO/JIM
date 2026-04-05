@@ -312,6 +312,34 @@ html[lang] .mud-chip-outlined.mud-chip-color-error {
     border-color: #9e1e1e !important;
 }
 
+/* Filled alerts — override white text to dark, readable colours.
+   MudBlazor filled alerts use --mud-palette-*-text (white) for text,
+   which is invisible on the light wash backgrounds used in this theme. */
+html[lang] .mud-alert-filled-normal .mud-alert-message,
+html[lang] .mud-alert-filled-normal .mud-alert-icon {
+    color: var(--mud-palette-text-primary) !important;
+}
+
+html[lang] .mud-alert-filled-info .mud-alert-message,
+html[lang] .mud-alert-filled-info .mud-alert-icon {
+    color: #005da8 !important;
+}
+
+html[lang] .mud-alert-filled-success .mud-alert-message,
+html[lang] .mud-alert-filled-success .mud-alert-icon {
+    color: #1a7a2e !important;
+}
+
+html[lang] .mud-alert-filled-warning .mud-alert-message,
+html[lang] .mud-alert-filled-warning .mud-alert-icon {
+    color: #8a4400 !important;
+}
+
+html[lang] .mud-alert-filled-error .mud-alert-message,
+html[lang] .mud-alert-filled-error .mud-alert-icon {
+    color: #9e1e1e !important;
+}
+
 /* Nested table footer, pager, and no-records rows use page background
    to contrast against the shaded header row (inner-surface). */
 html[lang] .mud-paper .mud-table .mud-table-pagination-toolbar,
