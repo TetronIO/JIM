@@ -152,6 +152,7 @@ public class SyncImportTaskProcessor
         var crossPageSeenExternalIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var throughput = new ThroughputTracker();
 
+        var importPhaseSw = System.Diagnostics.Stopwatch.StartNew();
         await _syncRepo.UpdateActivityMessageAsync(_activity, "Performing import");
         switch (_connector)
         {
@@ -345,11 +346,19 @@ public class SyncImportTaskProcessor
             _activity.ObjectsToProcess = existingCsoCount;
             _activity.ObjectsProcessed = 0;
             await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing deletions");
+            var deletionsSw = System.Diagnostics.Stopwatch.StartNew();
             using (Diagnostics.Sync.StartSpan("ProcessDeletions"))
             {
                 await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeUpdated);
             }
+            deletionsSw.Stop();
+            Log.Information("PerformFullImportAsync: PHASE TIMING — Deletion detection: {DeletionSeconds:F1}s ({ExistingCount} existing CSOs checked)",
+                deletionsSw.Elapsed.TotalSeconds, existingCsoCount);
         }
+
+        importPhaseSw.Stop();
+        Log.Information("PerformFullImportAsync: PHASE TIMING — Import + processing: {ImportPhaseSeconds:F1}s",
+            importPhaseSw.Elapsed.TotalSeconds);
 
         Log.Information("PerformFullImportAsync: Import complete. CSOs to create: {Creates}, to update: {Updates}, GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
             connectedSystemObjectsToBeCreated.Count, connectedSystemObjectsToBeUpdated.Count,
@@ -369,10 +378,14 @@ public class SyncImportTaskProcessor
         _activity.ObjectsToProcess = objectsWithReferences;
         _activity.ObjectsProcessed = 0;
         await _syncRepo.UpdateActivityMessageAsync(_activity, "Resolving references");
+        var resolveRefsSw = System.Diagnostics.Stopwatch.StartNew();
         using (Diagnostics.Sync.StartSpan("ResolveReferences"))
         {
             await ResolveReferencesAsync(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
         }
+        resolveRefsSw.Stop();
+        Log.Information("PerformFullImportAsync: PHASE TIMING — Reference resolution: {ResolveRefsSeconds:F1}s ({ObjectsWithRefs} objects with refs)",
+            resolveRefsSw.Elapsed.TotalSeconds, objectsWithReferences);
 
         // now persist all CSOs which will also create the required Change Objects within the Activity.
         var createdCount = connectedSystemObjectsToBeCreated.Count;
@@ -389,6 +402,7 @@ public class SyncImportTaskProcessor
             GC.GetTotalMemory(true) / 1024 / 1024,
             System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
         await _syncRepo.UpdateActivityMessageAsync(_activity, "Saving changes");
+        var savePhaseSw = System.Diagnostics.Stopwatch.StartNew();
         var saveThroughput = new ThroughputTracker();
         using (var persistSpan = Diagnostics.Database.StartSpan("PersistConnectedSystemObjects"))
         {
@@ -640,6 +654,10 @@ public class SyncImportTaskProcessor
             }
         }
 
+        savePhaseSw.Stop();
+        Log.Information("PerformFullImportAsync: PHASE TIMING — Save (create + update): {SavePhaseSeconds:F1}s ({Creates} creates, {Updates} updates)",
+            savePhaseSw.Elapsed.TotalSeconds, createdCount, connectedSystemObjectsToBeUpdated.Count);
+
         // CSO → RPEI lookup for reconciliation was populated during the update-phase flush.
         // Only updated CSOs can have pending exports, so create-RPEIs are not included.
         var importRpeisByCsoId = _reconciliationRpeiLookup;
@@ -655,10 +673,14 @@ public class SyncImportTaskProcessor
         _activity.ObjectsToProcess = connectedSystemObjectsToBeUpdated.Count;
         _activity.ObjectsProcessed = 0;
         await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling pending exports");
+        var reconcileSw = System.Diagnostics.Stopwatch.StartNew();
         using (Diagnostics.Sync.StartSpan("ReconcilePendingExports"))
         {
             await ReconcilePendingExportsAsync(connectedSystemObjectsToBeUpdated, importRpeisByCsoId, _connectedSystem.Id);
         }
+        reconcileSw.Stop();
+        Log.Information("PerformFullImportAsync: PHASE TIMING — Reconciliation: {ReconcileSeconds:F1}s ({UpdateCount} CSOs)",
+            reconcileSw.Elapsed.TotalSeconds, connectedSystemObjectsToBeUpdated.Count);
 
         // Validate all RPEIs before persisting - catch any that have no CSO and no error (indicates a bug)
         // Check for RPEIs where: Create operation, no CSO ID assigned, and no error recorded
