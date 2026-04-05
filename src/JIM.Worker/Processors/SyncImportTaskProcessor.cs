@@ -2873,6 +2873,7 @@ public class SyncImportTaskProcessor
             // Batch persist pending export changes for this page.
             // Uses ID-based and tracker-aware methods to avoid conflicts with entities
             // already tracked from the per-CSO processing phase (AsNoTracking loads separate instances).
+            var flushSw = isFirstPage ? Stopwatch.StartNew() : null;
             using (Diagnostics.Sync.StartSpan("FlushPendingExportChanges")
                 .SetTag("deleteCount", pendingExportsToDelete.Count)
                 .SetTag("updateCount", pendingExportsToUpdate.Count)
@@ -2881,22 +2882,32 @@ public class SyncImportTaskProcessor
                 if (pendingExportsToDelete.Count > 0)
                 {
                     await _syncRepo.DeleteUntrackedPendingExportsAsync(pendingExportsToDelete);
-                    Log.Verbose("ReconcilePendingExportsAsync: Page {Page}: Batch deleted {Count} confirmed pending exports", page + 1, pendingExportsToDelete.Count);
+                    if (isFirstPage)
+                        Log.Information("ReconcilePendingExportsAsync: Page 1 flush — DeletePEs: {ElapsedMs:F0}ms ({Count} PEs)",
+                            flushSw!.ElapsedMilliseconds, pendingExportsToDelete.Count);
                 }
 
                 // Delete confirmed attribute changes before updating (AsNoTracking requires explicit child deletion)
                 if (confirmedAttrChangesToDelete.Count > 0)
                 {
+                    var attrSw = isFirstPage ? Stopwatch.StartNew() : null;
                     await _syncRepo.DeleteUntrackedPendingExportAttributeValueChangesAsync(confirmedAttrChangesToDelete);
-                    Log.Verbose("ReconcilePendingExportsAsync: Page {Page}: Batch deleted {Count} confirmed attribute value changes", page + 1, confirmedAttrChangesToDelete.Count);
+                    if (isFirstPage)
+                        Log.Information("ReconcilePendingExportsAsync: Page 1 flush — DeleteAttrChanges: {ElapsedMs:F0}ms ({Count} changes)",
+                            attrSw!.ElapsedMilliseconds, confirmedAttrChangesToDelete.Count);
                 }
 
                 if (pendingExportsToUpdate.Count > 0)
                 {
+                    var updateSw = isFirstPage ? Stopwatch.StartNew() : null;
                     await _syncRepo.UpdateUntrackedPendingExportsAsync(pendingExportsToUpdate);
-                    Log.Verbose("ReconcilePendingExportsAsync: Page {Page}: Batch updated {Count} pending exports", page + 1, pendingExportsToUpdate.Count);
+                    if (isFirstPage)
+                        Log.Information("ReconcilePendingExportsAsync: Page 1 flush — UpdatePEs: {ElapsedMs:F0}ms ({Count} PEs, tracker: {TrackerCount})",
+                            updateSw!.ElapsedMilliseconds, pendingExportsToUpdate.Count, _syncRepo.GetChangeTrackerEntityCount());
                 }
             }
+            if (isFirstPage)
+                Log.Information("ReconcilePendingExportsAsync: Page 1 flush total: {ElapsedMs:F0}ms", flushSw!.ElapsedMilliseconds);
 
             // Update activity progress after each page
             await _syncRepo.UpdateActivityMessageAsync(_activity,
