@@ -48,6 +48,13 @@ public partial class SyncEngine
         Log.Debug("ReconcileCsoAgainstPendingExport: Found pending export {ExportId} with {Count} attribute changes for CSO {CsoId}",
             pendingExport.Id, pendingExport.AttributeValueChanges.Count, connectedSystemObject.Id);
 
+        // Build a lookup of CSO attribute values by attribute ID once per CSO.
+        // This avoids repeated O(n) LINQ scans of cso.AttributeValues for each pending attribute change.
+        // At 100K CSOs × ~10 attribute changes each, this eliminates millions of collection scans.
+        var attrValuesByAttrId = connectedSystemObject.AttributeValues
+            .GroupBy(av => av.AttributeId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         // Process each attribute change that is awaiting confirmation
         var changesAwaitingConfirmation = pendingExport.AttributeValueChanges
             .Where(ac => ac.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation ||
@@ -56,7 +63,7 @@ public partial class SyncEngine
 
         foreach (var attrChange in changesAwaitingConfirmation)
         {
-            var confirmed = IsAttributeChangeConfirmed(connectedSystemObject, attrChange);
+            var confirmed = IsAttributeChangeConfirmed(attrValuesByAttrId, attrChange);
 
             if (Log.IsEnabled(Serilog.Events.LogEventLevel.Verbose))
             {
@@ -66,7 +73,7 @@ public partial class SyncEngine
                     attrChange.ChangeType,
                     connectedSystemObject.Id,
                     GetExpectedValueAsString(attrChange),
-                    GetImportedValueAsString(connectedSystemObject, attrChange),
+                    GetImportedValueAsString(attrValuesByAttrId, attrChange),
                     confirmed);
             }
 
@@ -82,7 +89,7 @@ public partial class SyncEngine
                     ? PendingExportAttributeChangeStatus.Failed
                     : PendingExportAttributeChangeStatus.ExportedNotConfirmed;
 
-                attrChange.LastImportedValue = GetImportedValueAsString(connectedSystemObject, attrChange);
+                attrChange.LastImportedValue = GetImportedValueAsString(attrValuesByAttrId, attrChange);
                 var expectedValue = GetExpectedValueAsString(attrChange);
 
                 if (attrChange.Status == PendingExportAttributeChangeStatus.Failed)
@@ -131,17 +138,31 @@ public partial class SyncEngine
     }
 
     /// <summary>
-    /// Determines if an attribute change has been confirmed by comparing the exported value
-    /// against the imported CSO attribute value. Handles all attribute data types comprehensively.
+    /// Determines if an attribute change has been confirmed. Convenience overload that builds
+    /// a per-attribute lookup from the CSO's attribute values. For batch reconciliation of
+    /// multiple attributes on the same CSO, use the dictionary-based overload to avoid
+    /// repeated collection scans.
     /// </summary>
     public bool IsAttributeChangeConfirmed(ConnectedSystemObject cso, PendingExportAttributeValueChange attrChange)
+    {
+        var lookup = cso.AttributeValues
+            .GroupBy(av => av.AttributeId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        return IsAttributeChangeConfirmed(lookup, attrChange);
+    }
+
+    /// <summary>
+    /// Determines if an attribute change has been confirmed by comparing the exported value
+    /// against a pre-built lookup of CSO attribute values. This avoids O(n) scans per attribute
+    /// change when reconciling multiple changes for the same CSO.
+    /// </summary>
+    public bool IsAttributeChangeConfirmed(Dictionary<int, List<ConnectedSystemObjectAttributeValue>> attrValuesByAttrId, PendingExportAttributeValueChange attrChange)
     {
         if (attrChange.Attribute == null)
             return false;
 
-        var csoAttrValues = cso.AttributeValues
-            .Where(av => av.AttributeId == attrChange.AttributeId)
-            .ToList();
+        attrValuesByAttrId.TryGetValue(attrChange.AttributeId, out var csoAttrValues);
+        csoAttrValues ??= new List<ConnectedSystemObjectAttributeValue>();
 
         switch (attrChange.ChangeType)
         {
@@ -306,11 +327,10 @@ public partial class SyncEngine
     /// <summary>
     /// Gets the imported value as a string for debugging purposes.
     /// </summary>
-    private static string? GetImportedValueAsString(ConnectedSystemObject cso, PendingExportAttributeValueChange attrChange)
+    private static string? GetImportedValueAsString(Dictionary<int, List<ConnectedSystemObjectAttributeValue>> attrValuesByAttrId, PendingExportAttributeValueChange attrChange)
     {
-        var csoAttrValues = cso.AttributeValues
-            .Where(av => av.AttributeId == attrChange.AttributeId)
-            .ToList();
+        attrValuesByAttrId.TryGetValue(attrChange.AttributeId, out var csoAttrValues);
+        csoAttrValues ??= new List<ConnectedSystemObjectAttributeValue>();
 
         if (csoAttrValues.Count == 0)
             return "(no values)";
