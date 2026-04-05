@@ -693,16 +693,13 @@ public class SyncImportTaskProcessor
             return;
         }
 
-        // Clear the change tracker before reconciliation. The import phase has fully persisted
-        // all CSO creates/updates, so tracked entities are no longer needed. Without this, the
-        // reconciliation batch persist methods (DeleteUntrackedPendingExportsAsync,
-        // UpdateUntrackedPendingExportsAsync) must scan 100K+ tracked entities via
-        // DetachTrackedChildEntities/DetachTrackedEntities for each pending export operation,
-        // turning O(1) deletes into O(n) scans.
-        var trackerCount = _syncRepo.GetChangeTrackerEntityCount();
-        Log.Information("PerformImportAsync: Clearing change tracker before reconciliation ({TrackerCount} entities)",
-            trackerCount);
-        _syncRepo.ClearChangeTracker();
+        // Note: we intentionally do NOT clear the change tracker here. The import phase leaves
+        // 100K+ tracked CSO entities whose AttributeValues navigation properties are populated.
+        // ClearChangeTracker() detaches entities and EF Core's fixup clears navigation collections,
+        // which would empty AttributeValues on the in-memory CSOs and break reconciliation
+        // (every attribute comparison would see "(no values)" and mark changes as not confirmed).
+        // The batch persist now uses raw SQL (COPY binary + UPDATE FROM), so tracker bloat no
+        // longer causes performance issues during reconciliation.
 
         _activity.ObjectsToProcess = connectedSystemObjectsToBeUpdated.Count;
         _activity.ObjectsProcessed = 0;
