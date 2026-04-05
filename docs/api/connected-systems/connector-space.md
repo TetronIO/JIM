@@ -155,9 +155,8 @@ GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/connector-spac
     ```powershell
     Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
 
-    Get-JIMConnectedSystemObjectAttributeValues -ConnectedSystemId 1 `
-        -CsoId "a1b2c3d4-e5f6-7890-abcd-ef1234567890" `
-        -AttributeName "memberOf"
+    # No dedicated cmdlet for paginated attribute values yet.
+    # Use the curl example or call the API directly.
     ```
 
 ### Response
@@ -226,7 +225,7 @@ GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/connector-spac
     ```powershell
     Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
 
-    Get-JIMUnresolvedReferenceCount -ConnectedSystemId 1
+    Get-JIMConnectedSystemUnresolvedReferenceCount -ConnectedSystemId 1
     ```
 
 ### Response

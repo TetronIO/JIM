@@ -135,15 +135,8 @@ POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types/
     ```powershell
     Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
 
-    $updates = @{
-        "100" = @{ selected = $true; isExternalId = $true }
-        "101" = @{ selected = $true }
-        "102" = @{ selected = $true }
-        "103" = @{ selected = $false }
-    }
-
-    Update-JIMConnectedSystemAttributesBulk -ConnectedSystemId 1 `
-        -ObjectTypeId 10 -Attributes $updates
+    # No dedicated cmdlet for bulk attribute updates yet.
+    # Use the curl example or call the API directly.
     ```
 
 ### Response

@@ -75,9 +75,18 @@ Setting IDs and their types are defined by the connector. Use the [Retrieve](ret
     ```powershell
     Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
 
+    # Update name and description
     Set-JIMConnectedSystem -Id 1 `
         -Name "Corporate LDAP (Production)" `
         -Description "Primary directory for all employee accounts"
+
+    # Configure connector settings
+    $settings = @{
+        1 = @{ stringValue = "ldap://directory.example.com:389" }
+        2 = @{ stringValue = "CN=JIM,OU=Service,DC=example,DC=com" }
+        3 = @{ stringValue = "s3cur3p@ssw0rd" }
+    }
+    Set-JIMConnectedSystem -Id 1 -SettingValues $settings
     ```
 
 ## Response

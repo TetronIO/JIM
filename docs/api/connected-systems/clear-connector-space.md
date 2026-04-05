@@ -44,7 +44,7 @@ POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/clear
     ```powershell
     Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
 
-    Clear-JIMConnectorSpace -ConnectedSystemId 1
+    Clear-JIMConnectedSystem -Id 1
     ```
 
 ## Response
