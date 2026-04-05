@@ -242,7 +242,7 @@ public static class Helpers
         {
             // Import operations
             ObjectChangeType.Added =>
-                "A new connected system object (CSO) was discovered in the source system and added to the staging area.",
+                "A new connected system object (CSO) was discovered in the source system and added to the connector space.",
             ObjectChangeType.Updated =>
                 "An existing connected system object (CSO) was updated with changed attribute values from the source system.",
             ObjectChangeType.Deleted when !isSyncContext =>

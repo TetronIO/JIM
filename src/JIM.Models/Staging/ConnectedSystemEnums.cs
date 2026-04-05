@@ -131,7 +131,7 @@ public enum ConnectedSystemRunType
     /// </summary>
     NotSet = 0,
     /// <summary>
-    /// Imports all objects from the Connected System, replacing the existing connector space staging data.
+    /// Imports all objects from the Connected System, replacing the existing connector space data.
     /// </summary>
     FullImport = 1,
     /// <summary>

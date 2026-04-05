@@ -13,7 +13,7 @@ public class ActivityRunProfileExecutionStats
 
     #region Import Stats (CSO operations)
     /// <summary>
-    /// Count of new CSOs added to staging during import.
+    /// Count of new CSOs added to the connector space during import.
     /// </summary>
     public int TotalCsoAdds { get; set; }
 

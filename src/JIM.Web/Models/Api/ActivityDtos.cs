@@ -96,7 +96,7 @@ public class ActivityHeader
 
     #region Import Stats
     /// <summary>
-    /// Count of new CSOs added to staging during import.
+    /// Count of new CSOs added to the connector space during import.
     /// </summary>
     public int TotalAdded { get; set; }
 
@@ -472,7 +472,7 @@ public class ActivityRunProfileExecutionStatsDto
 
     #region Import Stats (CSO operations)
     /// <summary>
-    /// Number of CSOs added to staging during import.
+    /// Number of CSOs added to the connector space during import.
     /// </summary>
     public int TotalCsoAdds { get; set; }
 

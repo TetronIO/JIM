@@ -135,7 +135,7 @@ public class Activity
     // -----------------------------------------------------------------------------------------------------------------
 
     #region Import Stats
-    /// <summary>Count of new CSOs added to staging during import.</summary>
+    /// <summary>Count of new CSOs added to the connector space during import.</summary>
     public int TotalAdded { get; set; }
 
     /// <summary>Count of existing CSOs updated during import.</summary>
