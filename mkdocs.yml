@@ -193,7 +193,20 @@ nav:
           - api/system/index.md
   - PowerShell Module:
       - powershell/index.md
-      - Cmdlet Reference: powershell/cmdlets.md
+      - Connection: powershell/connection.md
+      - Connected Systems: powershell/connected-systems.md
+      - Run Profiles: powershell/run-profiles.md
+      - Sync Rules: powershell/sync-rules.md
+      - Metaverse: powershell/metaverse.md
+      - Schedules: powershell/schedules.md
+      - Activities: powershell/activities.md
+      - API Keys: powershell/api-keys.md
+      - Certificates: powershell/certificates.md
+      - Service Settings: powershell/service-settings.md
+      - Security: powershell/security.md
+      - History: powershell/history.md
+      - Example Data: powershell/example-data.md
+      - Expressions: powershell/expressions.md
   - Developer Guide:
       - developer/index.md
       - Development Environment: developer/dev-environment.md
