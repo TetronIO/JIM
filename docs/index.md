@@ -7,7 +7,8 @@ description: A modern, self-hosted Identity Management system for organisations 
 
 JIM is a modern Identity Management system designed for organisations with complex identity synchronisation requirements. It is self-hosted, container-deployable, and works in both connected and air-gapped networks.
 
-![JIM System Context](diagrams/images/light/jim-structurizr-1-SystemContext.svg)
+<img class="diagram-light" alt="JIM System Context" src="diagrams/images/light/jim-structurizr-1-SystemContext.svg">
+<img class="diagram-dark" alt="JIM System Context" src="diagrams/images/dark/jim-structurizr-1-SystemContext.svg">
 
 ## Key Features
 

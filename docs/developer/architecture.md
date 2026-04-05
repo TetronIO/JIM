@@ -8,7 +8,8 @@ JIM implements an enterprise identity management system using the metaverse patt
 
 ## System Context
 
-![System Context](../diagrams/images/light/jim-structurizr-1-SystemContext.svg)
+<img class="diagram-light" alt="System Context" src="../diagrams/images/light/jim-structurizr-1-SystemContext.svg">
+<img class="diagram-dark" alt="System Context" src="../diagrams/images/dark/jim-structurizr-1-SystemContext.svg">
 
 ## Layered Architecture
 
@@ -30,7 +31,8 @@ JIM follows a strict N-tier layered architecture. Upper layers depend on lower l
 
 ## Container Diagram
 
-![Containers](../diagrams/images/light/jim-structurizr-1-Containers.svg)
+<img class="diagram-light" alt="Containers" src="../diagrams/images/light/jim-structurizr-1-Containers.svg">
+<img class="diagram-dark" alt="Containers" src="../diagrams/images/dark/jim-structurizr-1-Containers.svg">
 
 ## Metaverse Pattern
 
@@ -51,23 +53,28 @@ flowchart LR
 
 ### Application Layer
 
-![Application Layer](../diagrams/images/light/jim-structurizr-1-AppLayerComponents.svg)
+<img class="diagram-light" alt="Application Layer" src="../diagrams/images/light/jim-structurizr-1-AppLayerComponents.svg">
+<img class="diagram-dark" alt="Application Layer" src="../diagrams/images/dark/jim-structurizr-1-AppLayerComponents.svg">
 
 ### Connectors
 
-![Connectors](../diagrams/images/light/jim-structurizr-1-ConnectorComponents.svg)
+<img class="diagram-light" alt="Connectors" src="../diagrams/images/light/jim-structurizr-1-ConnectorComponents.svg">
+<img class="diagram-dark" alt="Connectors" src="../diagrams/images/dark/jim-structurizr-1-ConnectorComponents.svg">
 
 ### Web Application
 
-![Web App](../diagrams/images/light/jim-structurizr-1-WebAppComponents.svg)
+<img class="diagram-light" alt="Web App" src="../diagrams/images/light/jim-structurizr-1-WebAppComponents.svg">
+<img class="diagram-dark" alt="Web App" src="../diagrams/images/dark/jim-structurizr-1-WebAppComponents.svg">
 
 ### Worker Service
 
-![Worker](../diagrams/images/light/jim-structurizr-1-WorkerComponents.svg)
+<img class="diagram-light" alt="Worker" src="../diagrams/images/light/jim-structurizr-1-WorkerComponents.svg">
+<img class="diagram-dark" alt="Worker" src="../diagrams/images/dark/jim-structurizr-1-WorkerComponents.svg">
 
 ### Scheduler Service
 
-![Scheduler](../diagrams/images/light/jim-structurizr-1-SchedulerComponents.svg)
+<img class="diagram-light" alt="Scheduler" src="../diagrams/images/light/jim-structurizr-1-SchedulerComponents.svg">
+<img class="diagram-dark" alt="Scheduler" src="../diagrams/images/dark/jim-structurizr-1-SchedulerComponents.svg">
 
 ## Technology Stack
 
