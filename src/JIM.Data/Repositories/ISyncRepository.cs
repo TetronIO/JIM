@@ -489,6 +489,12 @@ public interface ISyncRepository
     int GetChangeTrackerEntityCount();
 
     /// <summary>
+    /// Selectively detaches schema/type entities from the change tracker without affecting
+    /// CSOs or their AttributeValues. Prevents tracker bloat during import processing.
+    /// </summary>
+    void DetachSchemaEntitiesFromTracker();
+
+    /// <summary>
     /// Controls whether SaveChangesAsync automatically calls DetectChanges.
     /// Disabled during batch page processing to prevent navigation property traversal
     /// from discovering conflicting entity instances after ClearChangeTracker.
