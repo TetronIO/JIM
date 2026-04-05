@@ -253,7 +253,7 @@ public class ImportUpdateObjectSvaTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        await synchronisationImportTaskProcessor.PerformImportAsync();
         
         // confirm the results persisted to the sync repository
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
@@ -422,7 +422,7 @@ public class ImportUpdateObjectSvaTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        await synchronisationImportTaskProcessor.PerformImportAsync();
         
         // confirm the results persisted to the sync repository
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
@@ -590,7 +590,7 @@ public class ImportUpdateObjectSvaTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        await synchronisationImportTaskProcessor.PerformImportAsync();
         
         // confirm the results persisted to the sync repository
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
@@ -760,7 +760,7 @@ public class ImportUpdateObjectSvaTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        await synchronisationImportTaskProcessor.PerformImportAsync();
         
         // confirm the results persisted to the sync repository
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
@@ -934,7 +934,7 @@ public class ImportUpdateObjectSvaTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        await synchronisationImportTaskProcessor.PerformImportAsync();
         
         // confirm the results persisted to the sync repository
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
@@ -1109,7 +1109,7 @@ public class ImportUpdateObjectSvaTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        await synchronisationImportTaskProcessor.PerformImportAsync();
         
         // confirm the results persisted to the sync repository
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
@@ -1357,7 +1357,7 @@ public class ImportUpdateObjectSvaTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        await synchronisationImportTaskProcessor.PerformImportAsync();
         
         // confirm the results persisted to the sync repository
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(3), $"Expected three Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
@@ -1462,7 +1462,7 @@ public class ImportUpdateObjectSvaTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        await synchronisationImportTaskProcessor.PerformImportAsync();
         
         // confirm the results persisted to the sync repository
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
@@ -1555,7 +1555,7 @@ public class ImportUpdateObjectSvaTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        await synchronisationImportTaskProcessor.PerformImportAsync();
         
         // confirm the results persisted to the sync repository
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
@@ -1648,7 +1648,7 @@ public class ImportUpdateObjectSvaTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        await synchronisationImportTaskProcessor.PerformImportAsync();
         
         // confirm the results persisted to the sync repository
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
@@ -1741,7 +1741,7 @@ public class ImportUpdateObjectSvaTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        await synchronisationImportTaskProcessor.PerformImportAsync();
         
         // confirm the results persisted to the sync repository
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
@@ -1834,7 +1834,7 @@ public class ImportUpdateObjectSvaTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        await synchronisationImportTaskProcessor.PerformImportAsync();
         
         // confirm the results persisted to the sync repository
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
@@ -1935,7 +1935,7 @@ public class ImportUpdateObjectSvaTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        await synchronisationImportTaskProcessor.PerformImportAsync();
         
         // confirm the results persisted to the sync repository
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
@@ -2028,7 +2028,7 @@ public class ImportUpdateObjectSvaTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        await synchronisationImportTaskProcessor.PerformImportAsync();
         
         // confirm the results persisted to the sync repository
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
@@ -2133,7 +2133,7 @@ public class ImportUpdateObjectSvaTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        await synchronisationImportTaskProcessor.PerformImportAsync();
         
         // confirm the results persisted to the sync repository
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
@@ -2240,7 +2240,7 @@ public class ImportUpdateObjectSvaTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        await synchronisationImportTaskProcessor.PerformImportAsync();
         
         // confirm the results persisted to the sync repository
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
@@ -2348,7 +2348,7 @@ public class ImportUpdateObjectSvaTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        await synchronisationImportTaskProcessor.PerformImportAsync();
         
         // confirm the results persisted to the sync repository
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
@@ -2455,7 +2455,7 @@ public class ImportUpdateObjectSvaTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        await synchronisationImportTaskProcessor.PerformImportAsync();
         
         // confirm the results persisted to the sync repository
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
@@ -2562,7 +2562,7 @@ public class ImportUpdateObjectSvaTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        await synchronisationImportTaskProcessor.PerformImportAsync();
         
         // confirm the results persisted to the sync repository
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
@@ -2745,7 +2745,7 @@ public class ImportUpdateObjectSvaTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        await synchronisationImportTaskProcessor.PerformImportAsync();
         
         // confirm the results persisted to the sync repository
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");
@@ -2942,7 +2942,7 @@ public class ImportUpdateObjectSvaTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+        await synchronisationImportTaskProcessor.PerformImportAsync();
 
         // confirm the results persisted to the sync repository
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2), $"Expected two Connected System Objects to remain persisted. Found {SyncRepo.ConnectedSystemObjects.Count}.");

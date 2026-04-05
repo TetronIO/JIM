@@ -933,6 +933,17 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId)
+    {
+        var result = new Dictionary<Guid, PendingExport>();
+        foreach (var pe in GetPendingExportsForSystem(connectedSystemId))
+        {
+            if (pe.ConnectedSystemObjectId.HasValue)
+                result[pe.ConnectedSystemObjectId.Value] = pe;
+        }
+        return Task.FromResult(result);
+    }
+
     public Task DeleteUntrackedPendingExportsAsync(IEnumerable<PendingExport> untrackedPendingExports)
         => DeletePendingExportsAsync(untrackedPendingExports);
 

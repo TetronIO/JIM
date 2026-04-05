@@ -60,7 +60,7 @@ public class ImportCancellationTests : WorkflowTestBase
             mockConnector, connectedSystem, runProfile, workerTask, cts);
 
         // Act
-        await processor.PerformFullImportAsync();
+        await processor.PerformImportAsync();
 
         // Assert: Only page 1 was imported (cancellation stopped page 2)
         Assert.That(pageCount, Is.EqualTo(1),
@@ -106,7 +106,7 @@ public class ImportCancellationTests : WorkflowTestBase
             mockConnector, connectedSystem, runProfile, workerTask, cts);
 
         // Act
-        await processor.PerformFullImportAsync();
+        await processor.PerformImportAsync();
 
         // Assert: Connector was never called
         Assert.That(importCalled, Is.False,
@@ -148,7 +148,7 @@ public class ImportCancellationTests : WorkflowTestBase
             mockConnector, connectedSystem, runProfile, workerTask, cts);
 
         // Act
-        await processor.PerformFullImportAsync();
+        await processor.PerformImportAsync();
 
         // Assert: All 5 CSOs persisted
         var csoCount = await SyncRepo.GetConnectedSystemObjectCountAsync(connectedSystem.Id);

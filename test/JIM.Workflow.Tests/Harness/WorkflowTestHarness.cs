@@ -265,7 +265,7 @@ public class WorkflowTestHarness : IDisposable
             workerTask,
             cts);
 
-        await processor.PerformFullImportAsync();
+        await processor.PerformImportAsync();
 
         // Clear DbContext change tracker to prevent stale entity conflicts
         // Processors write to InMemoryData.SyncRepository, but DbContext still

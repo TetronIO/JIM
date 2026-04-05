@@ -194,7 +194,7 @@ public class ConfirmingImportOutcomeTests
             TestUtilities.CreateTestWorkerTask(activity, _initiatedBy),
             new CancellationTokenSource());
 
-        await importProcessor.PerformFullImportAsync();
+        await importProcessor.PerformImportAsync();
 
         // Assert: Check the RPEIs on the activity
         var rpeis = activity.RunProfileExecutionItems.ToList();

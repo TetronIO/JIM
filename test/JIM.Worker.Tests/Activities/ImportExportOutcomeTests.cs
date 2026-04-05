@@ -109,7 +109,7 @@ public class ImportExportOutcomeTests
 
         // Act
         var processor = new SyncImportTaskProcessor(_jim, _syncRepo, new SyncServer(_jim), new JIM.Application.Servers.SyncEngine(), mockConnector, connectedSystem!, runProfile, workerTask, new CancellationTokenSource());
-        await processor.PerformFullImportAsync();
+        await processor.PerformImportAsync();
 
         // Assert - RPEIs should have CsoAdded outcomes (default tracking level is Detailed)
         var rpeis = activity.RunProfileExecutionItems
@@ -177,7 +177,7 @@ public class ImportExportOutcomeTests
 
         // Act
         var processor = new SyncImportTaskProcessor(_jim, _syncRepo, new SyncServer(_jim), new JIM.Application.Servers.SyncEngine(), mockConnector, connectedSystem!, runProfile, workerTask, new CancellationTokenSource());
-        await processor.PerformFullImportAsync();
+        await processor.PerformImportAsync();
 
         // Assert - two Added RPEIs, each with independent CsoAdded outcomes
         var addedRpeis = activity.RunProfileExecutionItems
@@ -250,7 +250,7 @@ public class ImportExportOutcomeTests
 
         // Act
         var processor = new SyncImportTaskProcessor(_jim, _syncRepo, new SyncServer(_jim), new JIM.Application.Servers.SyncEngine(), mockConnector, connectedSystem!, runProfile, workerTask, new CancellationTokenSource());
-        await processor.PerformFullImportAsync();
+        await processor.PerformImportAsync();
 
         // Assert - good object has outcome, error object does not
         var addedRpeis = activity.RunProfileExecutionItems

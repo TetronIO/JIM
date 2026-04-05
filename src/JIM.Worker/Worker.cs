@@ -7,6 +7,7 @@ using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Enums;
+using Microsoft.EntityFrameworkCore;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Worker.Processors;
@@ -49,6 +50,7 @@ public class Worker : BackgroundService
 {
     private readonly IJimApplicationFactory _jimFactory;
     private readonly IConnectorFactory _connectorFactory;
+    private readonly IDbContextFactory<JIM.PostgresData.JimDbContext> _dbContextFactory;
 
     /// <summary>
     /// The worker tasks currently being executed.
@@ -56,10 +58,11 @@ public class Worker : BackgroundService
     private List<TaskTask> CurrentTasks { get; } = new();
     private readonly object _currentTasksLock = new();
 
-    public Worker(IJimApplicationFactory jimFactory, IConnectorFactory connectorFactory)
+    public Worker(IJimApplicationFactory jimFactory, IConnectorFactory connectorFactory, IDbContextFactory<JIM.PostgresData.JimDbContext> dbContextFactory)
     {
         _jimFactory = jimFactory;
         _connectorFactory = connectorFactory;
+        _dbContextFactory = dbContextFactory;
     }
 
     /// <summary>
@@ -291,18 +294,18 @@ public class Worker : BackgroundService
                                                         case ConnectedSystemRunType.FullImport:
                                                         {
                                                             var syncEngine = new JIM.Application.Servers.SyncEngine();
-                                                            var syncImportTaskProcessor = new SyncImportTaskProcessor(taskJim, syncRepo, syncServer, syncEngine, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource);
-                                                            await syncImportTaskProcessor.PerformFullImportAsync();
+                                                            var importProcessor = new SyncImportTaskProcessor(taskJim, syncRepo, syncServer, syncEngine, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource, _dbContextFactory);
+                                                            await importProcessor.PerformImportAsync();
                                                             break;
                                                         }
                                                         case ConnectedSystemRunType.DeltaImport:
                                                         {
-                                                            // Delta Import uses the import processor just like Full Import.
+                                                            // Delta Import uses the same import processor as Full Import.
                                                             // The connector's ImportAsync method checks the run profile type
                                                             // to determine whether to do full or delta import.
                                                             var syncEngine = new JIM.Application.Servers.SyncEngine();
-                                                            var syncDeltaImportTaskProcessor = new SyncImportTaskProcessor(taskJim, syncRepo, syncServer, syncEngine, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource);
-                                                            await syncDeltaImportTaskProcessor.PerformFullImportAsync();
+                                                            var importProcessor = new SyncImportTaskProcessor(taskJim, syncRepo, syncServer, syncEngine, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource, _dbContextFactory);
+                                                            await importProcessor.PerformImportAsync();
                                                             break;
                                                         }
                                                         case ConnectedSystemRunType.FullSynchronisation:

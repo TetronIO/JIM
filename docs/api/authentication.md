@@ -88,6 +88,5 @@ Get-JIMConnectedSystem
 
 ## Further Reading
 
-- [API Overview](index.md): general API information and versioning
-- [API Endpoints](endpoints.md): endpoint reference documentation
+- [API Reference](index.md): resource overview, conventions, and endpoint documentation
 - [PowerShell Module](../powershell/index.md): scripting and automation via PowerShell

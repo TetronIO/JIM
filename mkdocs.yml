@@ -28,8 +28,7 @@ theme:
     repo: fontawesome/brands/github
   features:
     - navigation.tabs
-    - navigation.sections
-    - navigation.expand
+    - navigation.indexes
     - navigation.top
     - navigation.footer
     - content.code.copy
@@ -104,7 +103,94 @@ nav:
   - API:
       - api/index.md
       - Authentication: api/authentication.md
-      - Endpoints: api/endpoints.md
+      - Connected Systems:
+          - api/connected-systems/index.md
+          - List: api/connected-systems/list.md
+          - Create: api/connected-systems/create.md
+          - Retrieve: api/connected-systems/retrieve.md
+          - Update: api/connected-systems/update.md
+          - Delete: api/connected-systems/delete.md
+          - Deletion Preview: api/connected-systems/deletion-preview.md
+          - Import Schema: api/connected-systems/import-schema.md
+          - Import Hierarchy: api/connected-systems/import-hierarchy.md
+          - Clear Connector Space: api/connected-systems/clear-connector-space.md
+          - Object Types: api/connected-systems/object-types.md
+          - Attributes: api/connected-systems/attributes.md
+          - Partitions: api/connected-systems/partitions.md
+          - Connector Space: api/connected-systems/connector-space.md
+          - Pending Exports: api/connected-systems/pending-exports.md
+      - Schedules:
+          - api/schedules/index.md
+          - List: api/schedules/list.md
+          - Create: api/schedules/create.md
+          - Retrieve: api/schedules/retrieve.md
+          - Update: api/schedules/update.md
+          - Delete: api/schedules/delete.md
+          - Enable: api/schedules/enable.md
+          - Disable: api/schedules/disable.md
+          - Run: api/schedules/run.md
+          - Manage Steps: api/schedules/steps.md
+          - Executions: api/schedules/executions.md
+      - Run Profiles:
+          - api/run-profiles/index.md
+          - List: api/run-profiles/list.md
+          - Create: api/run-profiles/create.md
+          - Update: api/run-profiles/update.md
+          - Delete: api/run-profiles/delete.md
+          - Execute: api/run-profiles/execute.md
+      - Sync Rules:
+          - api/sync-rules/index.md
+          - List: api/sync-rules/list.md
+          - Create: api/sync-rules/create.md
+          - Retrieve: api/sync-rules/retrieve.md
+          - Update: api/sync-rules/update.md
+          - Delete: api/sync-rules/delete.md
+          - Attribute Mappings: api/sync-rules/mappings.md
+          - Scoping Criteria: api/sync-rules/scoping-criteria.md
+          - Object Matching Rules: api/sync-rules/matching-rules.md
+      - Metaverse:
+          - api/metaverse/index.md
+          - Object Types: api/metaverse/object-types.md
+          - Attributes: api/metaverse/attributes.md
+          - Objects: api/metaverse/objects.md
+          - Pending Deletions: api/metaverse/pending-deletions.md
+      - Activities:
+          - api/activities/index.md
+          - List: api/activities/list.md
+          - Retrieve: api/activities/retrieve.md
+          - Execution Statistics: api/activities/stats.md
+          - Execution Items: api/activities/items.md
+          - Child Activities: api/activities/children.md
+      - Logs: api/logs.md
+      - History: api/history.md
+      - API Keys:
+          - api/api-keys/index.md
+          - List: api/api-keys/list.md
+          - Create: api/api-keys/create.md
+          - Retrieve: api/api-keys/retrieve.md
+          - Update: api/api-keys/update.md
+          - Delete: api/api-keys/delete.md
+      - Certificates:
+          - api/certificates/index.md
+          - List: api/certificates/list.md
+          - List Enabled: api/certificates/enabled.md
+          - Retrieve: api/certificates/retrieve.md
+          - Add from Data: api/certificates/add-data.md
+          - Add from File: api/certificates/add-file.md
+          - Update: api/certificates/update.md
+          - Delete: api/certificates/delete.md
+          - Validate: api/certificates/validate.md
+          - Download: api/certificates/download.md
+      - Service Settings:
+          - api/service-settings/index.md
+          - List: api/service-settings/list.md
+          - Retrieve: api/service-settings/retrieve.md
+          - Update: api/service-settings/update.md
+          - Revert: api/service-settings/revert.md
+      - Security:
+          - api/security/index.md
+      - System:
+          - api/system/index.md
   - PowerShell Module:
       - powershell/index.md
       - Cmdlet Reference: powershell/cmdlets.md

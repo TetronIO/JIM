@@ -164,7 +164,7 @@ public class ActivityRunProfileExecutionItemTests
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
             Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
 
-        await syncImportTaskProcessor.PerformFullImportAsync();
+        await syncImportTaskProcessor.PerformImportAsync();
 
         // Assert
         Assert.That(activity.RunProfileExecutionItems, Has.Count.EqualTo(2),
@@ -235,7 +235,7 @@ public class ActivityRunProfileExecutionItemTests
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
             Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
 
-        await syncImportTaskProcessor.PerformFullImportAsync();
+        await syncImportTaskProcessor.PerformImportAsync();
 
         // Assert
         Assert.That(activity.RunProfileExecutionItems, Has.Count.EqualTo(1),
@@ -299,7 +299,7 @@ public class ActivityRunProfileExecutionItemTests
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
             Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
 
-        await syncImportTaskProcessor.PerformFullImportAsync();
+        await syncImportTaskProcessor.PerformImportAsync();
 
         // Assert
         Assert.That(activity.RunProfileExecutionItems, Has.Count.GreaterThan(0),
@@ -367,7 +367,7 @@ public class ActivityRunProfileExecutionItemTests
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
             Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
 
-        await syncImportTaskProcessor.PerformFullImportAsync();
+        await syncImportTaskProcessor.PerformImportAsync();
 
         // Assert
         Assert.That(activity.RunProfileExecutionItems, Has.Count.EqualTo(objectCount),
@@ -453,7 +453,7 @@ public class ActivityRunProfileExecutionItemTests
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
             Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
 
-        await syncImportTaskProcessor.PerformFullImportAsync();
+        await syncImportTaskProcessor.PerformImportAsync();
 
         // Assert
         Assert.That(activity.RunProfileExecutionItems, Has.Count.EqualTo(4),
