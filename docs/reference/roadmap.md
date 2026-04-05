@@ -48,9 +48,13 @@ Each connector will follow JIM's established connector architecture, supporting 
 
 ## v2.0 -- IGA Foundation
 
-Building on the identity lifecycle to deliver Identity Governance and Administration capabilities.
+JIM's step-change from identity synchronisation into identity governance. Establishes the governance layer that enables compliance-driven organisations to manage access holistically, not just synchronise it.
 
-- **Attestation and certification workflows** -- periodic reviews of access assignments with approval chains
+- **Direct metaverse object management** -- create, view, and manage identity objects directly within the UI
+- **Entitlement visibility and mapping** -- discover and map entitlements across connected systems
+- **Entitlement management** -- manage access assignments with request workflows and attestation:
+    - Access request workflows with approval chains
+    - Basic attestation and certification capabilities
 - **Compliance reporting** -- pre-built and customisable reports for audit and regulatory requirements
 - **Role-based access management** -- define and assign roles that bundle entitlements across connected systems
 - **Policy engine** -- declarative rules for separation of duties, access request approval, and risk scoring
