@@ -1468,9 +1468,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (idList.Count == 0)
             return new List<ConnectedSystemObject>();
 
-        // Same Include chain as GetConnectedSystemObjectByAttributeAsync — callers need the full
-        // entity graph for attribute diffing during import processing.
+        // Load CSOs with AsNoTracking to prevent change tracker bloat. Schema entities (Type,
+        // Type.Attributes, AttributeValue.Attribute) are shared across all CSOs and cause O(n)
+        // identity resolution slowdown when accumulated in the tracker (317ms → 5.6s per CSO
+        // at 100K scale). AsNoTracking bypasses identity resolution entirely.
+        // The save phase uses raw SQL for parent CSO rows and explicit add/remove for attribute
+        // values, so change tracking is not required during import processing.
         return await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
             .AsSplitQuery()
             .Include(cso => cso.Type)
             .ThenInclude(t => t.Attributes)
@@ -1805,23 +1810,59 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (connectedSystemObjects.Count == 0)
             return;
 
-        // Use raw SQL for the parent CSO row updates (bypasses change tracker overhead for the
-        // parent rows). Then call SaveChangesAsync to let the change tracker handle child entity
-        // operations: attribute value additions (Added) and removals (Deleted) that were queued
-        // by ProcessConnectedSystemObjectAttributeValueChanges modifying CSO.AttributeValues.
+        // Use raw SQL for parent CSO row updates (bypasses change tracker entirely).
         await BulkUpdateConnectedSystemObjectsRawAsync(connectedSystemObjects);
 
-        // Mark CSOs as Unchanged to prevent SaveChangesAsync from re-updating them
-        // (the raw SQL already wrote the correct values)
-        foreach (var cso in connectedSystemObjects)
+        // Handle attribute value additions and removals explicitly using the CSO's pending
+        // change lists. This works regardless of whether CSOs are tracked or untracked
+        // (AsNoTracking is used during import hydration to prevent tracker bloat).
+        var removalsToDelete = connectedSystemObjects
+            .SelectMany(cso => cso.PendingAttributeValueRemovals)
+            .Where(av => av.Id != Guid.Empty) // Only delete persisted values (have a real ID)
+            .ToList();
+
+        if (removalsToDelete.Count > 0)
         {
-            var entry = Repository.Database.Entry(cso);
-            if (entry.State == EntityState.Modified)
-                entry.State = EntityState.Unchanged;
+            var removalIds = removalsToDelete.Select(av => av.Id).ToList();
+            if (Repository.Database.Database.IsRelational())
+            {
+                await Repository.Database.ConnectedSystemObjectAttributeValues
+                    .Where(av => removalIds.Contains(av.Id))
+                    .ExecuteDeleteAsync();
+            }
+            else
+            {
+                // InMemory provider: load and remove
+                var entities = await Repository.Database.ConnectedSystemObjectAttributeValues
+                    .Where(av => removalIds.Contains(av.Id))
+                    .ToListAsync();
+                Repository.Database.ConnectedSystemObjectAttributeValues.RemoveRange(entities);
+                await Repository.Database.SaveChangesAsync();
+            }
         }
 
-        // Flush pending child entity changes (attribute value adds/deletes)
-        await Repository.Database.SaveChangesAsync();
+        var additionsWithCsoId = connectedSystemObjects
+            .SelectMany(cso => cso.PendingAttributeValueAdditions.Select(av => (CsoId: cso.Id, Value: av)))
+            .ToList();
+
+        if (additionsWithCsoId.Count > 0)
+        {
+            if (Repository.Database.Database.IsRelational())
+            {
+                await BulkInsertCsoAttributeValuesRawAsync(additionsWithCsoId);
+            }
+            else
+            {
+                // InMemory provider: set navigation properties and use EF Add
+                foreach (var (csoId, av) in additionsWithCsoId)
+                {
+                    // Set the FK via EF's Entry API (shadow property)
+                    Repository.Database.ConnectedSystemObjectAttributeValues.Add(av);
+                    Repository.Database.Entry(av).Property("ConnectedSystemObjectId").CurrentValue = csoId;
+                }
+                await Repository.Database.SaveChangesAsync();
+            }
+        }
     }
 
     /// <inheritdoc />
