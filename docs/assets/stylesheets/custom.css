@@ -13,6 +13,23 @@
    ======================================== */
 
 [data-md-color-scheme="default"] {
+  /* Header and page background */
+  --md-primary-fg-color: #f3f3f3;            /* header background */
+  --md-primary-fg-color--light: #f3f3f3;
+  --md-primary-bg-color: #121b29;            /* header text (dark on grey) */
+  --md-default-bg-color: #ffffff;            /* page background */
+  --md-default-bg-color--light: #f3f3f3;
+
+  /* Footer */
+  --md-footer-bg-color: #f3f3f3;             /* match header */
+  --md-footer-bg-color--dark: #e8e8e8;       /* slightly darker for prev/next nav */
+  --md-footer-fg-color: #121b29;             /* dark text */
+  --md-footer-fg-color--light: #4a5568;      /* secondary text */
+  --md-footer-fg-color--lighter: #4a5568;
+
+  /* Search */
+  --md-primary-bg-color--light: #4a5568;     /* search placeholder text */
+
   /* Links */
   --md-typeset-a-color: #0076d3;             /* --jim-link-color */
   --md-accent-fg-color: #0076d3;
@@ -30,6 +47,23 @@
   --md-code-hl-punctuation-color: #4a5568;
   --md-code-hl-special-color: #af00db;       /* --jim-expr-operator */
   --md-code-hl-generic-color: #121b29;       /* --mud-palette-text-primary */
+}
+
+/* Light mode — search bar styling */
+[data-md-color-scheme="default"] .md-search__input {
+  background-color: #ffffff;                 /* white input on grey header */
+  border: 1px solid rgba(30, 58, 95, 0.28);  /* --mud-palette-lines-default */
+}
+
+/* Light mode — header/footer border to separate from page */
+[data-md-color-scheme="default"] .md-header,
+[data-md-color-scheme="default"] .md-footer {
+  border-bottom: 1px solid rgba(30, 58, 95, 0.12);
+}
+
+[data-md-color-scheme="default"] .md-footer {
+  border-bottom: none;
+  border-top: 1px solid rgba(30, 58, 95, 0.12);
 }
 
 [data-md-color-scheme="default"] .md-typeset a:hover,
@@ -54,12 +88,23 @@
    ======================================== */
 
 [data-md-color-scheme="slate"] {
-  --md-primary-fg-color: #5A45A2;
-  --md-primary-fg-color--light: #7B68B8;
-  --md-primary-fg-color--dark: #483790;
+  --md-primary-fg-color: #15293c;            /* header background */
+  --md-primary-fg-color--light: #15293c;
+  --md-primary-fg-color--dark: #15293c;
+  --md-primary-bg-color: #e0e4ea;            /* header text (light on dark) */
+  --md-default-bg-color: #051526;            /* page background */
+  --md-default-bg-color--light: #0d1e30;
   --md-accent-fg-color: #7B68B8;
-  --md-default-bg-color: #0D1D2E;
-  --md-default-bg-color--light: #162A3E;
+
+  /* Footer */
+  --md-footer-bg-color: #0d1e30;             /* surface colour */
+  --md-footer-bg-color--dark: #15293c;       /* slightly lighter for prev/next nav */
+  --md-footer-fg-color: #e0e4ea;             /* light text */
+  --md-footer-fg-color--light: #8a9eb4;      /* secondary text */
+  --md-footer-fg-color--lighter: #8a9eb4;
+
+  /* Search */
+  --md-primary-bg-color--light: #8a9eb4;     /* search placeholder text */
 
   /* Links */
   --md-typeset-a-color: #67b9ff;             /* --jim-link-color */
@@ -77,6 +122,12 @@
   --md-code-hl-punctuation-color: #8a9eb4;
   --md-code-hl-special-color: #c586c0;        /* --jim-expr-operator */
   --md-code-hl-generic-color: #e0e4ea;        /* --mud-palette-text-primary */
+}
+
+/* Dark mode — search bar styling */
+[data-md-color-scheme="slate"] .md-search__input {
+  background-color: #0d1e30;                 /* surface colour */
+  border: 1px solid #243a52;                  /* --mud-palette-lines-default */
 }
 
 [data-md-color-scheme="slate"] .md-typeset a:hover,
