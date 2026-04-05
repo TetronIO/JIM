@@ -135,6 +135,9 @@ nav:
 extra_css:
   - assets/stylesheets/custom.css
 
+extra_javascript:
+  - assets/javascripts/mermaid-zoom.js
+
 extra:
   social:
     - icon: fontawesome/brands/github

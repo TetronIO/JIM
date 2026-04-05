@@ -162,6 +162,24 @@ Where NOT to use them:
 - Decoratively on every heading -- only where it genuinely adds meaning or helps the reader navigate
 - As a substitute for checklists: use `- [ ]` / `- [x]` task list syntax instead, which renders as styled checkboxes via the `pymdownx.tasklist` extension
 
+## MkDocs Diagrams
+
+**C4 architecture diagrams** are exported SVGs from the Structurizr DSL (`engineering/diagrams/structurizr/`). Each diagram has a light and dark variant. They are embedded in docs as paired `<img>` tags with `class="diagram-light"` and `class="diagram-dark"` so CSS can show the correct variant based on the active theme. GLightbox makes them clickable for full-size viewing automatically (no per-image markup needed).
+
+**Mermaid diagrams** are written inline in markdown using fenced code blocks (` ```mermaid `). No special markup is needed; they are clickable automatically via `docs/assets/javascripts/mermaid-zoom.js`.
+
+**How mermaid-zoom.js works** (important for debugging or upgrading):
+- MkDocs Material renders Mermaid into a **closed Shadow DOM**, making the SVG inaccessible via `querySelector`
+- The script captures each diagram's source text from `<pre class="mermaid">` elements **before** Material replaces them with shadow-host `<div class="mermaid">` elements
+- Sources and divs are matched by **insertion order** (top-to-bottom DOM order); this is stable as long as Material processes diagrams sequentially, which it does
+- On click, the diagram source is re-rendered using the Mermaid JS API (already loaded on the page) via a temporary off-screen DOM node, and the resulting SVG is shown in a custom modal overlay
+- The modal is theme-aware: dark navy background in slate mode, white in default mode
+- No CDN or external dependencies; uses only what MkDocs Material already loads
+
+**Adding or editing Mermaid diagrams:** just write the diagram in markdown as normal. No additional markup, attributes, or configuration is required.
+
+**If diagrams stop being clickable after a MkDocs Material upgrade:** check whether Material has changed how it processes Mermaid (look for changes to `div.mermaid` insertion or shadow DOM mode). The relevant section in the bundle is the `Zn()` function that calls `attachShadow`.
+
 ## ASCII Diagrams
 
 When creating ASCII diagrams in documentation or code comments, use only reliably monospaced characters:
