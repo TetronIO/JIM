@@ -20,7 +20,7 @@ Run profiles are the building blocks of [schedules](../schedules/index.md); each
 
 1. [List run profiles](list.md) for the connected system
 2. [Execute the run profile](execute.md) to trigger it immediately
-3. Monitor progress via the Activities endpoint using the returned activity ID
+3. Monitor progress via the [Activities](../activities/index.md) endpoint using the returned activity ID
 
 ## The Run Profile Object
 

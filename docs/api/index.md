@@ -62,7 +62,7 @@ https://jim.example.com/api/v1/
 
 | Resource | Description |
 |----------|-------------|
-| Activities | Audit trail of all operations (imports, syncs, exports) |
+| [Activities](activities/index.md) | Audit trail of all operations (imports, syncs, exports) |
 | Logs | Application log file access and filtering |
 | History | Deletion history and retention cleanup |
 

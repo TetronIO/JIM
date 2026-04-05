@@ -138,6 +138,13 @@ nav:
           - Update: api/run-profiles/update.md
           - Delete: api/run-profiles/delete.md
           - Execute: api/run-profiles/execute.md
+      - Activities:
+          - api/activities/index.md
+          - List: api/activities/list.md
+          - Retrieve: api/activities/retrieve.md
+          - Execution Statistics: api/activities/stats.md
+          - Execution Items: api/activities/items.md
+          - Child Activities: api/activities/children.md
   - PowerShell Module:
       - powershell/index.md
       - Cmdlet Reference: powershell/cmdlets.md

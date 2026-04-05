@@ -4,7 +4,7 @@ title: Execute a Run Profile
 
 # Execute a Run Profile
 
-Triggers execution of a run profile. The operation is queued and begins processing asynchronously. Use the returned activity ID to monitor progress via the Activities endpoint.
+Triggers execution of a run profile. The operation is queued and begins processing asynchronously. Use the returned activity ID to monitor progress via the [Activities](../activities/index.md) endpoint.
 
 ```
 POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/run-profiles/{runProfileId}/execute
