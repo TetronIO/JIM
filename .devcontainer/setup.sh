@@ -104,7 +104,20 @@ else
     print_warning "MkDocs Material installation failed - you can install manually: pip install \"mkdocs>=1.6,<2\" \"mkdocs-material>=9.7,<10\" --break-system-packages"
 fi
 
-# 7. Build the solution
+# 7. Install Puppeteer and Chrome for diagram export (jim-diagrams)
+print_step "Installing diagram export dependencies (Puppeteer + Chrome)..."
+STRUCTURIZR_DIR="$WORKDIR/engineering/diagrams/structurizr"
+if [ -f "$STRUCTURIZR_DIR/package.json" ]; then
+    if (cd "$STRUCTURIZR_DIR" && npm install --silent 2>/dev/null && npx puppeteer browsers install chrome 2>/dev/null); then
+        print_success "Puppeteer and Chrome installed for diagram export"
+    else
+        print_warning "Diagram export dependencies failed - you can install manually: cd engineering/diagrams/structurizr && npm install && npx puppeteer browsers install chrome"
+    fi
+else
+    print_warning "Structurizr package.json not found - skipping diagram export setup"
+fi
+
+# 8. Build the solution
 print_step "Building JIM solution..."
 if dotnet build JIM.sln --verbosity quiet --no-restore; then
     print_success "Solution built successfully"
@@ -112,7 +125,7 @@ else
     print_warning "Build had warnings or errors. Run 'dotnet build JIM.sln' to see details."
 fi
 
-# 8. Create connector-files directory with symlink to test data
+# 9. Create connector-files directory with symlink to test data
 print_step "Setting up connector-files directory..."
 mkdir -p connector-files
 
@@ -128,7 +141,7 @@ else
     print_success "Symlink already exists: connector-files/test-data"
 fi
 
-# 9. Configure Git SSH commit signing
+# 10. Configure Git SSH commit signing
 print_step "Configuring Git SSH commit signing..."
 
 # Check if SSH agent has keys forwarded
@@ -158,7 +171,7 @@ else
     print_warning "To enable signing, ensure SSH agent forwarding is working"
 fi
 
-# 10. Create useful shell aliases
+# 11. Create useful shell aliases
 print_step "Creating shell aliases..."
 
 # Add source line to .zshrc if not already present
@@ -186,7 +199,7 @@ if ! grep -q "source.*jim-aliases.sh" ~/.bashrc; then
     echo "fi" >> ~/.bashrc
 fi
 
-# 11. Display useful information
+# 12. Display useful information
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${GREEN}✓ JIM Development Environment Ready!${NC}"
