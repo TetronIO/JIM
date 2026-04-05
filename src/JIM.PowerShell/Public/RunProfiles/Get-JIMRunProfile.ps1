@@ -14,6 +14,9 @@ function Get-JIMRunProfile {
     .PARAMETER ConnectedSystemName
         The name of the Connected System to get Run Profiles for. Must be an exact match.
 
+    .PARAMETER Name
+        Filter Run Profiles by name. Supports wildcards (e.g., "Full*").
+
     .OUTPUTS
         PSCustomObject representing Run Profile(s).
 
@@ -26,6 +29,11 @@ function Get-JIMRunProfile {
         Get-JIMRunProfile -ConnectedSystemName 'Contoso AD'
 
         Gets all Run Profiles for the Connected System named 'Contoso AD'.
+
+    .EXAMPLE
+        Get-JIMRunProfile -ConnectedSystemId 1 -Name "Full*"
+
+        Gets Run Profiles with names starting with "Full" for Connected System ID 1.
 
     .EXAMPLE
         Get-JIMConnectedSystem -Name "HR*" | Get-JIMRunProfile
@@ -45,7 +53,12 @@ function Get-JIMRunProfile {
         [int]$ConnectedSystemId,
 
         [Parameter(Mandatory, ParameterSetName = 'ByName')]
-        [string]$ConnectedSystemName
+        [string]$ConnectedSystemName,
+
+        [Parameter(ParameterSetName = 'ById')]
+        [Parameter(ParameterSetName = 'ByName')]
+        [SupportsWildcards()]
+        [string]$Name
     )
 
     process {
@@ -57,6 +70,12 @@ function Get-JIMRunProfile {
 
         Write-Verbose "Getting Run Profiles for Connected System ID: $ConnectedSystemId"
         $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/run-profiles"
+
+        # Filter by name if specified
+        if ($Name) {
+            Write-Verbose "Filtering by name pattern: $Name"
+            $result = $result | Where-Object { $_.name -like $Name }
+        }
 
         # Output each profile individually for pipeline support
         foreach ($profile in $result) {

@@ -19,7 +19,7 @@ Retrieves API key information. The full key value is never returned; only the ke
 
 ```powershell
 # List (default)
-Get-JIMApiKey
+Get-JIMApiKey [-Name <string>]
 
 # ById
 Get-JIMApiKey -Id <guid>
@@ -30,6 +30,7 @@ Get-JIMApiKey -Id <guid>
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Id` | `Guid` | Yes (ById) | | Unique identifier of the API key to retrieve. Accepts pipeline input by property name. |
+| `Name` | `string` | No (List) | | Filter API keys by name. Supports wildcards (e.g., `"CI*"`). |
 
 ### Output
 
@@ -39,6 +40,10 @@ Returns one or more `PSCustomObject` instances representing API keys. The full k
 
 ```powershell title="List all API keys"
 Get-JIMApiKey
+```
+
+```powershell title="Filter by name"
+Get-JIMApiKey -Name "CI*"
 ```
 
 ```powershell title="Get a specific API key by ID"

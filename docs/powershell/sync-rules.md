@@ -22,25 +22,26 @@ Retrieves one or more sync rules. When called without parameters, returns all sy
 
 ```powershell
 # List all sync rules (default)
-Get-JIMSyncRule
+Get-JIMSyncRule [-Name <string>]
 
 # By sync rule ID
 Get-JIMSyncRule -Id <int>
 
 # By connected system ID
-Get-JIMSyncRule -ConnectedSystemId <int>
+Get-JIMSyncRule -ConnectedSystemId <int> [-Name <string>]
 
 # By connected system name
-Get-JIMSyncRule -ConnectedSystemName <string>
+Get-JIMSyncRule -ConnectedSystemName <string> [-Name <string>]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | No | | The ID of a specific sync rule to retrieve |
+| `Id` | `int` | Yes (ById set) | | The ID of a specific sync rule to retrieve |
 | `ConnectedSystemId` | `int` | No | | Filter sync rules by connected system ID. Accepts pipeline input. |
-| `ConnectedSystemName` | `string` | No | | Filter sync rules by connected system name |
+| `ConnectedSystemName` | `string` | No | | Filter sync rules by connected system name. Must be an exact match. |
+| `Name` | `string` | No | | Filter sync rules by name. Supports wildcards (e.g., `"Inbound*"`). |
 
 ### Output
 
@@ -54,6 +55,10 @@ Get-JIMSyncRule
 
 ```powershell title="Get a specific sync rule by ID"
 Get-JIMSyncRule -Id 5
+```
+
+```powershell title="Filter by name"
+Get-JIMSyncRule -Name "Inbound*"
 ```
 
 ```powershell title="Get sync rules for a connected system"

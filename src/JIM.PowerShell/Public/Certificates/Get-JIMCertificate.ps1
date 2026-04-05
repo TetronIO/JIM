@@ -11,6 +11,9 @@ function Get-JIMCertificate {
     .PARAMETER Id
         The unique identifier (GUID) of a specific certificate to retrieve.
 
+    .PARAMETER Name
+        Filter certificates by name. Supports wildcards (e.g., "Contoso*").
+
     .PARAMETER EnabledOnly
         If specified, returns only enabled certificates.
 
@@ -27,6 +30,11 @@ function Get-JIMCertificate {
         Get-JIMCertificate
 
         Gets all certificates.
+
+    .EXAMPLE
+        Get-JIMCertificate -Name "Contoso*"
+
+        Gets all certificates with names starting with "Contoso".
 
     .EXAMPLE
         Get-JIMCertificate -EnabledOnly
@@ -50,6 +58,11 @@ function Get-JIMCertificate {
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [Guid]$Id,
+
+        [Parameter(ParameterSetName = 'List')]
+        [Parameter(ParameterSetName = 'Enabled')]
+        [SupportsWildcards()]
+        [string]$Name,
 
         [Parameter(ParameterSetName = 'Enabled')]
         [switch]$EnabledOnly,
@@ -75,6 +88,12 @@ function Get-JIMCertificate {
                 Write-Verbose "Getting enabled certificates"
                 $response = Invoke-JIMApi -Endpoint "/api/v1/certificates/enabled"
 
+                # Filter by name if specified
+                if ($Name) {
+                    Write-Verbose "Filtering by name pattern: $Name"
+                    $response = $response | Where-Object { $_.name -like $Name }
+                }
+
                 # Output each certificate individually for pipeline support
                 foreach ($cert in $response) {
                     $cert
@@ -92,6 +111,12 @@ function Get-JIMCertificate {
 
                 # Handle paginated response
                 $certs = if ($response.items) { $response.items } else { $response }
+
+                # Filter by name if specified
+                if ($Name) {
+                    Write-Verbose "Filtering by name pattern: $Name"
+                    $certs = $certs | Where-Object { $_.name -like $Name }
+                }
 
                 # Output each certificate individually for pipeline support
                 foreach ($cert in $certs) {

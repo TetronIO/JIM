@@ -15,20 +15,20 @@ Retrieves one or more run profiles from a connected system, either by connected 
 ### Syntax
 
 ```powershell
-# List run profiles for a connected system (default)
-Get-JIMRunProfile -ConnectedSystemId <int> [-ConnectedSystemName <string>]
+# By connected system ID (default)
+Get-JIMRunProfile -ConnectedSystemId <int> [-Name <string>]
 
-# Get a specific run profile by ID
-Get-JIMRunProfile -Id <int>
+# By connected system name
+Get-JIMRunProfile -ConnectedSystemName <string> [-Name <string>]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes (List set) | | ID of the connected system whose run profiles to retrieve. Accepts pipeline input by property name. |
-| `ConnectedSystemName` | `string` | No (List set) | | Display name of the connected system; used for filtering or display purposes alongside `ConnectedSystemId`. |
-| `Id` | `int` | Yes (ById set) | | ID of a specific run profile to retrieve. Alias: `RunProfileId`. Accepts pipeline input by property name. |
+| `ConnectedSystemId` | `int` | Yes (ById set) | | ID of the connected system. Alias: `Id`. Accepts pipeline input by property name. |
+| `ConnectedSystemName` | `string` | Yes (ByName set) | | Name of the connected system. Must be an exact match. |
+| `Name` | `string` | No | | Filter run profiles by name. Supports wildcards (e.g., `"Full*"`). |
 
 ### Output
 
@@ -40,16 +40,16 @@ Returns one or more `PSCustomObject` instances representing run profiles, each c
 Get-JIMRunProfile -ConnectedSystemId 1
 ```
 
-```powershell title="Get a specific run profile by ID"
-Get-JIMRunProfile -Id 42
+```powershell title="Filter by name"
+Get-JIMRunProfile -ConnectedSystemId 1 -Name "Full Import"
+```
+
+```powershell title="Filter by name with wildcards"
+Get-JIMRunProfile -ConnectedSystemName "HR System" -Name "Delta*"
 ```
 
 ```powershell title="Pipeline from Get-JIMConnectedSystem"
 Get-JIMConnectedSystem -Name "Active Directory" | Get-JIMRunProfile
-```
-
-```powershell title="Filter run profiles by type"
-Get-JIMRunProfile -ConnectedSystemId 1 | Where-Object { $_.Type -eq "FullImport" }
 ```
 
 ---

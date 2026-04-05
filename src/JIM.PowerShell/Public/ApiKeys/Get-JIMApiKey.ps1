@@ -11,6 +11,9 @@ function Get-JIMApiKey {
     .PARAMETER Id
         The unique identifier (GUID) of a specific API Key to retrieve.
 
+    .PARAMETER Name
+        Filter API Keys by name. Supports wildcards (e.g., "CI*").
+
     .OUTPUTS
         PSCustomObject representing API Key(s).
 
@@ -24,6 +27,11 @@ function Get-JIMApiKey {
 
         Gets the API Key with the specified ID.
 
+    .EXAMPLE
+        Get-JIMApiKey -Name "CI*"
+
+        Gets all API Keys with names starting with "CI".
+
     .LINK
         New-JIMApiKey
         Set-JIMApiKey
@@ -33,7 +41,11 @@ function Get-JIMApiKey {
     [OutputType([PSCustomObject])]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
-        [Guid]$Id
+        [Guid]$Id,
+
+        [Parameter(ParameterSetName = 'List')]
+        [SupportsWildcards()]
+        [string]$Name
     )
 
     process {
@@ -47,6 +59,12 @@ function Get-JIMApiKey {
             'List' {
                 Write-Verbose "Getting all API Keys"
                 $response = Invoke-JIMApi -Endpoint "/api/v1/apikeys"
+
+                # Filter by name if specified
+                if ($Name) {
+                    Write-Verbose "Filtering by name pattern: $Name"
+                    $response = $response | Where-Object { $_.name -like $Name }
+                }
 
                 # Output each key individually for pipeline support
                 foreach ($key in $response) {

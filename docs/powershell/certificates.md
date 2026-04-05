@@ -16,13 +16,13 @@ Retrieves certificates from the trusted store.
 
 ```powershell
 # List (default)
-Get-JIMCertificate [-Page <int>] [-PageSize <int>]
+Get-JIMCertificate [-Name <string>] [-Page <int>] [-PageSize <int>]
 
 # ById
 Get-JIMCertificate -Id <guid>
 
 # Enabled
-Get-JIMCertificate -EnabledOnly [-Page <int>] [-PageSize <int>]
+Get-JIMCertificate -EnabledOnly [-Name <string>]
 ```
 
 ### Parameters
@@ -30,6 +30,7 @@ Get-JIMCertificate -EnabledOnly [-Page <int>] [-PageSize <int>]
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Id` | `guid` | Yes (ById) | | Certificate identifier. Accepts pipeline input. |
+| `Name` | `string` | No (List, Enabled) | | Filter certificates by name. Supports wildcards (e.g., `"Contoso*"`). |
 | `EnabledOnly` | `switch` | Yes (Enabled) | `$false` | Returns only certificates that are currently enabled |
 | `Page` | `int` | No | `1` | Page number for paged results |
 | `PageSize` | `int` | No | `100` | Number of results per page (maximum 1,000) |
@@ -42,6 +43,10 @@ Certificate objects with properties such as `Id`, `Name`, `Notes`, `Enabled`, `T
 
 ```powershell title="List all certificates"
 Get-JIMCertificate
+```
+
+```powershell title="Filter by name"
+Get-JIMCertificate -Name "Contoso*"
 ```
 
 ```powershell title="Get a specific certificate by ID"

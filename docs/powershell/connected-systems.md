@@ -309,14 +309,22 @@ Retrieves available connector definitions, including their settings and capabili
 ### Syntax
 
 ```powershell
-Get-JIMConnectorDefinition [-Id <int>]
+# List all (default)
+Get-JIMConnectorDefinition
+
+# By ID
+Get-JIMConnectorDefinition -Id <int>
+
+# By name (exact match)
+Get-JIMConnectorDefinition -Name <string>
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | No | | Connector definition identifier. Accepts pipeline input. When omitted, returns all definitions. |
+| `Id` | `int` | Yes (ById) | | Connector definition identifier. Accepts pipeline input. |
+| `Name` | `string` | Yes (ByName) | | Connector definition name. Must be an exact match. |
 
 ### Output
 
@@ -328,7 +336,11 @@ Connector definition objects including name, description, available settings, an
 Get-JIMConnectorDefinition
 ```
 
-```powershell title="Get a specific connector definition"
+```powershell title="Get a connector definition by name"
+Get-JIMConnectorDefinition -Name "CSV File"
+```
+
+```powershell title="Get a specific connector definition by ID"
 Get-JIMConnectorDefinition -Id 1
 ```
 

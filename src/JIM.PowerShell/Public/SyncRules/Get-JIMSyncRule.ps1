@@ -16,6 +16,9 @@ function Get-JIMSyncRule {
     .PARAMETER ConnectedSystemName
         Filter Sync Rules by Connected System name. Must be an exact match.
 
+    .PARAMETER Name
+        Filter Sync Rules by name. Supports wildcards (e.g., "Inbound*").
+
     .OUTPUTS
         PSCustomObject representing Sync Rule(s).
 
@@ -40,6 +43,11 @@ function Get-JIMSyncRule {
         Gets all Sync Rules for the Connected System named 'Contoso AD'.
 
     .EXAMPLE
+        Get-JIMSyncRule -Name "Inbound*"
+
+        Gets all Sync Rules with names starting with "Inbound".
+
+    .EXAMPLE
         Get-JIMConnectedSystem -Name "HR*" | Get-JIMSyncRule
 
         Gets all Sync Rules for Connected Systems with names starting with "HR".
@@ -60,7 +68,13 @@ function Get-JIMSyncRule {
         [int]$ConnectedSystemId,
 
         [Parameter(ParameterSetName = 'ByConnectedSystemName')]
-        [string]$ConnectedSystemName
+        [string]$ConnectedSystemName,
+
+        [Parameter(ParameterSetName = 'List')]
+        [Parameter(ParameterSetName = 'ByConnectedSystemId')]
+        [Parameter(ParameterSetName = 'ByConnectedSystemName')]
+        [SupportsWildcards()]
+        [string]$Name
     )
 
     process {
@@ -88,6 +102,12 @@ function Get-JIMSyncRule {
                 if ($PSBoundParameters.ContainsKey('ConnectedSystemId') -or $PSBoundParameters.ContainsKey('ConnectedSystemName')) {
                     Write-Verbose "Filtering by Connected System ID: $ConnectedSystemId"
                     $rules = $rules | Where-Object { $_.connectedSystemId -eq $ConnectedSystemId }
+                }
+
+                # Filter by name if specified
+                if ($Name) {
+                    Write-Verbose "Filtering by name pattern: $Name"
+                    $rules = $rules | Where-Object { $_.name -like $Name }
                 }
 
                 # Output each rule individually for pipeline support
