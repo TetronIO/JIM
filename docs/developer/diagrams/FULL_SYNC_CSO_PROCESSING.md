@@ -1,17 +1,17 @@
 # Full Synchronisation - CSO Processing Flow
 
-> Last updated: 2026-04-01 — JIM v0.8.0
+> Last updated: 2026-04-01, JIM v0.8.0
 
 This diagram shows the core decision tree for processing a single Connected System Object (CSO) during Full or Delta Synchronisation. This is the central flow of JIM's identity management engine.
 
 Both Full Sync and Delta Sync use identical processing logic per-CSO. The only difference is CSO selection:
-- **Full Sync**: processes ALL CSOs in the Connected System (or only those in the target partition, if the run profile specifies a `TargetPartitionId` — see below)
+- **Full Sync**: processes ALL CSOs in the Connected System (or only those in the target partition, if the run profile specifies a `TargetPartitionId`; see below)
 - **Delta Sync**: processes only CSOs modified since `LastSyncCompletedAt`
 
 Since v0.7.1, sync decisions are split across three layers:
-- **ISyncEngine** — Pure domain logic (projection, attribute flow, deletion rules, export confirmation). Stateless, I/O-free.
-- **ISyncServer** — Orchestration facade (matching, scoping, drift detection, export evaluation). Delegates to application-layer servers.
-- **ISyncRepository** — Dedicated data access (bulk CSO/MVO writes, pending exports, RPEIs).
+- **ISyncEngine:** Pure domain logic (projection, attribute flow, deletion rules, export confirmation). Stateless, I/O-free.
+- **ISyncServer:** Orchestration facade (matching, scoping, drift detection, export evaluation). Delegates to application-layer servers.
+- **ISyncRepository:** Dedicated data access (bulk CSO/MVO writes, pending exports, RPEIs).
 
 ## Overall Page Processing
 
@@ -127,7 +127,7 @@ flowchart TD
 
 ## Key Design Decisions
 
-- **Three-layer sync architecture (v0.7.1)**: Sync decisions are split across `ISyncEngine` (pure domain logic — projection, attribute flow, deletion rules, export confirmation), `ISyncServer` (orchestration — matching, scoping, drift detection, export evaluation), and `ISyncRepository` (dedicated data access — bulk CSO/MVO writes, pending exports, RPEIs). This separation enables deterministic unit testing of business logic without I/O.
+- **Three-layer sync architecture (v0.7.1)**: Sync decisions are split across `ISyncEngine` (pure domain logic: projection, attribute flow, deletion rules, export confirmation), `ISyncServer` (orchestration: matching, scoping, drift detection, export evaluation), and `ISyncRepository` (dedicated data access: bulk CSO/MVO writes, pending exports, RPEIs). This separation enables deterministic unit testing of business logic without I/O.
 
 - **Two-pass attribute flow**: Scalar attributes are processed first (pass 1 via `ISyncEngine.FlowInboundAttributes`), then reference attributes are deferred to a second pass after all CSOs in the page have MVOs. This ensures group member references can resolve to MVOs that were created later in the same page.
 

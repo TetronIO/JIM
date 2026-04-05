@@ -4,7 +4,7 @@ title: API Overview
 
 # API Overview
 
-JIM provides a comprehensive REST API that enables programmatic access to all identity management operations. The API is served from the same application as the web UI — there is no separate API service to deploy or manage.
+JIM provides a comprehensive REST API that enables programmatic access to all identity management operations. The API is served from the same application as the web UI; there is no separate API service to deploy or manage.
 
 ## Base URL
 
@@ -24,8 +24,8 @@ All endpoints are prefixed with `/api/v1/`. Future versions will be introduced u
 
 The API supports two authentication methods:
 
-- **JWT Bearer tokens** — obtained via an OIDC authentication flow, suitable for user-driven integrations and applications that already participate in your organisation's single sign-on infrastructure.
-- **API keys** — created and managed via the JIM web UI or the PowerShell module, suitable for service-to-service integrations, scripts, and automated workflows.
+- **JWT Bearer tokens:** obtained via an OIDC authentication flow, suitable for user-driven integrations and applications that already participate in your organisation's single sign-on infrastructure.
+- **API keys:** created and managed via the JIM web UI or the PowerShell module, suitable for service-to-service integrations, scripts, and automated workflows.
 
 For full details and usage examples, see the [Authentication](authentication.md) page.
 
@@ -49,6 +49,6 @@ The Swagger UI provides:
 
 ## Further Reading
 
-- [Authentication](authentication.md) — configuring and using JWT Bearer tokens and API keys
-- [API Endpoints](endpoints.md) — endpoint reference documentation
-- [PowerShell Module](../powershell/index.md) — a cross-platform PowerShell module that wraps the API for scripting and automation
+- [Authentication](authentication.md): configuring and using JWT Bearer tokens and API keys
+- [API Endpoints](endpoints.md): endpoint reference documentation
+- [PowerShell Module](../powershell/index.md): a cross-platform PowerShell module that wraps the API for scripting and automation

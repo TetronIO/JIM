@@ -25,16 +25,16 @@ For 6 implemented scenarios, this means ~15-20 minutes of redundant infrastructu
 
 Modify `Run-IntegrationTests.ps1` to accept `All` as a scenario value. When selected, the runner will:
 
-1. **Build once** — Docker images are built at the start and reused for all scenarios
-2. **Start all external systems upfront** — Start samba-ad-primary, samba-ad-source, and samba-ad-target at the beginning (covering all scenario infrastructure requirements)
+1. **Build once**: Docker images are built at the start and reused for all scenarios
+2. **Start all external systems upfront**: Start samba-ad-primary, samba-ad-source, and samba-ad-target at the beginning (covering all scenario infrastructure requirements)
 3. **Loop through each implemented scenario**, performing a lightweight reset between each:
    a. Reset JIM database (remove db volume, restart JIM containers, wait for API health)
    b. Clean Samba AD OUs (delete and recreate test OUs via samba-tool, no container restart)
    c. Generate a fresh API key, update `.env`, restart jim.web
    d. Run scenario setup and tests
    e. Collect per-scenario results
-4. **Aggregate results** — Combined pass/fail summary and per-scenario breakdown
-5. **Single cleanup pass** — Docker prune and metrics capture once at the end
+4. **Aggregate results**: Combined pass/fail summary and per-scenario breakdown
+5. **Single cleanup pass**: Docker prune and metrics capture once at the end
 
 ### Infrastructure Grouping
 
@@ -126,7 +126,7 @@ The combined results file will include:
 
 ### Files to Modify
 
-- `test/integration/Run-IntegrationTests.ps1` — Main changes:
+- `test/integration/Run-IntegrationTests.ps1`: Main changes:
   - Add `All` handling in scenario selection/validation
   - Add "All Scenarios" to interactive menu
   - Extract per-scenario execution into a function

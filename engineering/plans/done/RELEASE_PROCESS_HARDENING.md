@@ -1,7 +1,7 @@
 # Release Process Hardening
 
 - **Status:** Done
-- **Note:** Phase 7 (multi-architecture builds) deferred — see [#375](https://github.com/TetronIO/JIM/issues/375)
+- **Note:** Phase 7 (multi-architecture builds) deferred; see [#375](https://github.com/TetronIO/JIM/issues/375)
 - **Priority:** High
 - **Effort:** Large (9 phases, most individually small)
 
@@ -9,7 +9,7 @@
 
 Harden JIM's release pipeline and deployment process to match industry best practices for top-tier containerised services. This plan addresses gaps identified by reviewing the current release workflow against projects like GitLab, Grafana, Traefik, Keycloak, and Bitwarden, and against requirements from CISA Secure by Design, the UK Software Security Code of Practice, and SLSA.
 
-The current release process is solid — cosign signing, air-gapped bundles, digest-pinned base images, and SHA256 checksums are ahead of many projects. This plan closes the remaining gaps without over-engineering what already works.
+The current release process is solid; cosign signing, air-gapped bundles, digest-pinned base images, and SHA256 checksums are ahead of many projects. This plan closes the remaining gaps without over-engineering what already works.
 
 ## Business Value
 
@@ -33,13 +33,13 @@ The current release process is solid — cosign signing, air-gapped bundles, dig
 
 | # | Gap | Risk | Effort |
 |---|-----|------|--------|
-| 1 | No version validation gate — tag and VERSION file can diverge | High | Trivial |
+| 1 | No version validation gate; tag and VERSION file can diverge | High | Trivial |
 | 2 | `latest` tag applied unconditionally, including prereleases | Medium | Trivial |
 | 3 | No container vulnerability scanning before push | High | Small |
 | 4 | No smoke test after image build | Medium | Small |
 | 5 | PostgreSQL image unpinned in bundle script (`postgres:18`) | Medium | Trivial |
 | 6 | No SBOM or SLSA provenance attestation | High (for target market) | Small |
-| 7 | No multi-architecture image builds (deferred — amd64-only) | Low | Medium |
+| 7 | No multi-architecture image builds (deferred; amd64-only) | Low | Medium |
 | 8 | No Docker layer caching in CI | Low (cost only) | Small |
 | 9 | No rollback documentation | Medium (operational) | Small |
 | 10 | Changelog extraction fails silently | Low | Trivial |
@@ -94,7 +94,7 @@ Also validate the PowerShell manifest `ModuleVersion` matches (numeric part):
 
 ### Phase 2: Conditional `latest` Tag ✅
 
-**Problem**: Every tag push — including prereleases like `v0.4.0-alpha` — applies the `latest` Docker tag. Prerelease images should never be `latest`.
+**Problem**: Every tag push; including prereleases like `v0.4.0-alpha`: applies the `latest` Docker tag. Prerelease images should never be `latest`.
 
 **Solution**: Change the `docker/metadata-action` tags configuration to only apply `latest` on stable (non-prerelease) tags.
 
@@ -136,7 +136,7 @@ Add after the build step in `build-containers`, before the push:
     ignore-unfixed: true
 ```
 
-**Note**: This requires changing the build-push step to build locally first (`load: true`), scan, then push in a separate step. Alternatively, scan after push and fail the downstream jobs if vulnerabilities are found — less ideal but simpler.
+**Note**: This requires changing the build-push step to build locally first (`load: true`), scan, then push in a separate step. Alternatively, scan after push and fail the downstream jobs if vulnerabilities are found; less ideal but simpler.
 
 **Considerations**:
 - `ignore-unfixed: true` avoids failing on CVEs with no available fix (common in Debian base images)
@@ -186,7 +186,7 @@ Add a step after image build in `build-containers` (or as a separate job):
     exit 1
 ```
 
-**Prerequisite**: JIM must expose a `/health` endpoint that returns 200 even without a database connection (or returns a degraded status). If the health endpoint requires a live database, this test needs a PostgreSQL service container — which adds complexity. Consider a `/health/live` (liveness) endpoint that just confirms the process is up, separate from `/health/ready` (readiness) that checks dependencies.
+**Prerequisite**: JIM must expose a `/health` endpoint that returns 200 even without a database connection (or returns a degraded status). If the health endpoint requires a live database, this test needs a PostgreSQL service container; which adds complexity. Consider a `/health/live` (liveness) endpoint that just confirms the process is up, separate from `/health/ready` (readiness) that checks dependencies.
 
 **Effort**: ~1 hour including health endpoint review.
 
@@ -194,7 +194,7 @@ Add a step after image build in `build-containers` (or as a separate job):
 
 ### Phase 5: Pin PostgreSQL Digest in Bundle Script ✅
 
-**Problem**: `Build-ReleaseBundle.ps1` does `docker pull postgres:18` — an unpinned floating tag. Two bundle builds on different days could ship different PostgreSQL binaries. This contradicts the project's own dependency pinning policy.
+**Problem**: `Build-ReleaseBundle.ps1` does `docker pull postgres:18`: an unpinned floating tag. Two bundle builds on different days could ship different PostgreSQL binaries. This contradicts the project's own dependency pinning policy.
 
 **Solution**: Pin the PostgreSQL image to a specific digest in the bundle script, matching the approach used for JIM's own base images.
 
@@ -280,7 +280,7 @@ Upload the SBOM files as release assets alongside the bundle and checksums.
 
 ### Phase 7: Multi-Architecture Image Builds (Deferred)
 
-**Status**: Deferred — amd64-only for now. Revisit when customer demand arises or native ARM runners become available. See [#375](https://github.com/TetronIO/JIM/issues/375).
+**Status**: Deferred; amd64-only for now. Revisit when customer demand arises or native ARM runners become available. See [#375](https://github.com/TetronIO/JIM/issues/375).
 
 **Problem**: Images are built only for `linux/amd64`. Air-gapped environments may run on ARM64 hardware (AWS Graviton, Apple Silicon for development).
 
@@ -296,7 +296,7 @@ Upload the SBOM files as release assets alongside the bundle and checksums.
 
 **When to revisit**: Customer/prospect explicitly requires ARM64 deployment, or GitHub native ARM runners become available on our plan (eliminating the QEMU penalty).
 
-**Implementation approach when needed**: Use Docker Buildx with QEMU emulation (or native ARM runners). For the air-gapped bundle, produce separate platform-specific bundles (`jim-release-X.Y.Z-linux-amd64.tar.gz`, `jim-release-X.Y.Z-linux-arm64.tar.gz`) rather than a single multi-arch tarball — keeps each bundle small and avoids forcing air-gapped deployers to transfer architecture-irrelevant images.
+**Implementation approach when needed**: Use Docker Buildx with QEMU emulation (or native ARM runners). For the air-gapped bundle, produce separate platform-specific bundles (`jim-release-X.Y.Z-linux-amd64.tar.gz`, `jim-release-X.Y.Z-linux-arm64.tar.gz`) rather than a single multi-arch tarball; keeps each bundle small and avoids forcing air-gapped deployers to transfer architecture-irrelevant images.
 
 **Effort**: ~2 hours including bundle script updates and testing.
 
@@ -329,7 +329,7 @@ Update the build-push step in `build-containers`:
 
 **Considerations**:
 - `type=gha` uses GitHub Actions' built-in cache (10 GB limit per repository)
-- `mode=max` caches all layers, not just the final stage — important for multi-stage Dockerfiles
+- `mode=max` caches all layers, not just the final stage; important for multi-stage Dockerfiles
 - Can also be applied to the CI build workflow (`dotnet-build-and-test.yml`) for NuGet restore caching
 - If cache size becomes an issue, switch to `type=registry` using GHCR as the cache backend
 
@@ -347,12 +347,12 @@ Update the build-push step in `build-containers`:
 
 Add a "Rolling Back a Release" section covering:
 
-1. **Docker rollback**: Point `JIM_VERSION` at the previous version in `.env` and `docker compose up -d` — images are immutable, so this is safe
+1. **Docker rollback**: Point `JIM_VERSION` at the previous version in `.env` and `docker compose up -d`: images are immutable, so this is safe
 2. **Database rollback**: If migrations were applied, run the reverse migration:
    ```bash
    docker compose exec jim.web dotnet ef database update <PreviousMigrationName>
    ```
-   List how to find the previous migration name. Note: this only works if the migration has a `Down()` method — verify before release.
+   List how to find the previous migration name. Note: this only works if the migration has a `Down()` method; verify before release.
 3. **PowerShell module**: `Install-Module JIM -RequiredVersion <previous>` or restore from the previous air-gapped bundle
 4. **GitHub Release**: Can be deleted/re-drafted. Docker images on GHCR can be deleted via the packages UI.
 5. **Prevention**: Recommend deploying to a staging environment first and running integration tests before promoting to production.
@@ -385,7 +385,7 @@ Strengthen the changelog extraction step to fail loudly if no section is found:
 
 #### 9c: Remove Stale Manual Migration Step from Docs
 
-**Problem**: `docs/RELEASE_PROCESS.md` Step 9 tells air-gapped users to manually run `docker compose exec jim.web dotnet ef database update`. This is unnecessary — JIM already auto-migrates on startup via `PostgresDataRepository.MigrateDatabaseAsync()`, called from `Worker.InitialiseDatabaseAsync()`. The worker checks for pending migrations and applies them before accepting work. JIM.Web waits for readiness via `IsApplicationReadyAsync()`.
+**Problem**: `docs/RELEASE_PROCESS.md` Step 9 tells air-gapped users to manually run `docker compose exec jim.web dotnet ef database update`. This is unnecessary; JIM already auto-migrates on startup via `PostgresDataRepository.MigrateDatabaseAsync()`, called from `Worker.InitialiseDatabaseAsync()`. The worker checks for pending migrations and applies them before accepting work. JIM.Web waits for readiness via `IsApplicationReadyAsync()`.
 
 **Solution**: Remove Step 9 from the air-gapped deployment instructions. Replace with a note explaining that migrations are applied automatically on first startup. Keep the manual command as a troubleshooting fallback only.
 
@@ -422,7 +422,7 @@ All dependencies are well-maintained, widely adopted, and licence-compatible. No
 | Trivy false positives block releases | Use `ignore-unfixed: true` and maintain a `.trivyignore` for accepted risks |
 | Multi-arch builds slow down CI | Start with amd64-only in cache; add arm64 when native runners are available |
 | QEMU arm64 emulation produces subtly different binaries | Run integration tests on native arm64 hardware before claiming arm64 support |
-| GitHub Actions cache eviction invalidates Docker cache | Acceptable — builds still succeed, just slower. Registry cache is an alternative |
+| GitHub Actions cache eviction invalidates Docker cache | Acceptable; builds still succeed, just slower. Registry cache is an alternative |
 
 ## Success Criteria
 
@@ -433,7 +433,7 @@ All dependencies are well-maintained, widely adopted, and licence-compatible. No
 - [ ] PostgreSQL image in air-gapped bundle is digest-pinned
 - [ ] SBOM and SLSA provenance attestations are attached to every image
 - [ ] `cosign verify-attestation` succeeds for published images
-- [ ] ~~Multi-arch images available for amd64 and arm64~~ (deferred — amd64-only for now)
+- [ ] ~~Multi-arch images available for amd64 and arm64~~ (deferred; amd64-only for now)
 - [ ] Release builds use cached Docker layers
 - [ ] `docs/RELEASE_PROCESS.md` includes rollback procedure
 - [ ] Stale manual migration step removed from air-gapped deployment docs

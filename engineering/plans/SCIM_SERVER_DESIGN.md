@@ -313,18 +313,18 @@ Federated Identity Credentials (FIC) enable **secretless machine-to-machine auth
 
 **Standards underpinning FIC:**
 - OpenID Connect Core 1.0 (discovery, JWKS, JWT claims)
-- RFC 7523 — JWT Profile for OAuth 2.0 Client Authentication
-- RFC 8693 — OAuth 2.0 Token Exchange (for optional token exchange flow)
-- SPIFFE/SPIRE — platform-neutral workload identity (fully on-premises, no cloud dependencies)
+- RFC 7523: JWT Profile for OAuth 2.0 Client Authentication
+- RFC 8693: OAuth 2.0 Token Exchange (for optional token exchange flow)
+- SPIFFE/SPIRE: platform-neutral workload identity (fully on-premises, no cloud dependencies)
 
 **Why FIC is recommended:**
-- **No shared secrets** — trust is established via cryptographic verification of signed tokens using public keys
-- **Short-lived tokens** — JWTs typically expire in 5–10 minutes, drastically reducing blast radius if intercepted
-- **Automatic rotation** — no manual credential rotation needed; tokens are ephemeral
-- **Strong audit trail** — each JWT uniquely identifies the calling workload through its claims
-- **Aligns with JIM's OIDC investment** — JIM already uses OIDC for PE/NPE authentication; FIC uses the same standards (JWT, JWKS, OIDC discovery)
-- **Works in air-gapped environments** — requires only network access to the IdP, which is on the same internal network as JIM and the SCIM client
-- **Industry standard** — supported by major platforms (Entra ID, GCP, Kubernetes, Keycloak 26.5+, SPIFFE/SPIRE)
+- **No shared secrets**: trust is established via cryptographic verification of signed tokens using public keys
+- **Short-lived tokens**: JWTs typically expire in 5–10 minutes, drastically reducing blast radius if intercepted
+- **Automatic rotation**: no manual credential rotation needed; tokens are ephemeral
+- **Strong audit trail**: each JWT uniquely identifies the calling workload through its claims
+- **Aligns with JIM's OIDC investment**: JIM already uses OIDC for PE/NPE authentication; FIC uses the same standards (JWT, JWKS, OIDC discovery)
+- **Works in air-gapped environments**: requires only network access to the IdP, which is on the same internal network as JIM and the SCIM client
+- **Industry standard**: supported by major platforms (Entra ID, GCP, Kubernetes, Keycloak 26.5+, SPIFFE/SPIRE)
 
 ### Authentication Flow
 
@@ -651,7 +651,7 @@ C) **Deferred** - Store references, resolve during sync
 SCIM is fundamentally **single-object-at-a-time** for mutations. The spec states:
 
 > "The SCIM protocol does not define any ordering guarantees for bulk operations"
-> — RFC 7644, Section 3.7
+> -- RFC 7644, Section 3.7
 
 **Who handles ordering?**
 

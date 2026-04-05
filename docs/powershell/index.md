@@ -8,7 +8,7 @@ The JIM PowerShell module provides a cross-platform command-line interface for m
 
 ## Requirements
 
-- **PowerShell 7.0 or later** (cross-platform — Windows, macOS, and Linux)
+- **PowerShell 7.0 or later** (cross-platform: Windows, macOS, and Linux)
 
 ## Installation
 
@@ -60,14 +60,14 @@ Test-JIMConnection
 
 The JIM PowerShell module provides cmdlets for managing all core JIM resources, including:
 
-- **Connected Systems** — create, configure, and manage connected systems and their schemas
-- **Sync Rules** — define and manage synchronisation rules between connected systems and the metaverse
-- **Metaverse** — query and manage metaverse objects and attributes
-- **Run Profiles** — create and execute import, export, and synchronisation run profiles
-- **Activities** — monitor activity history and results
-- **API Keys** — create, list, and revoke API keys
-- **Certificates** — manage certificates used for secure connector communication
-- **Example Data** — generate sample data for testing and evaluation
+- **Connected Systems:** create, configure, and manage connected systems and their schemas
+- **Sync Rules:** define and manage synchronisation rules between connected systems and the metaverse
+- **Metaverse:** query and manage metaverse objects and attributes
+- **Run Profiles:** create and execute import, export, and synchronisation run profiles
+- **Activities:** monitor activity history and results
+- **API Keys:** create, list, and revoke API keys
+- **Certificates:** manage certificates used for secure connector communication
+- **Example Data:** generate sample data for testing and evaluation
 
 ## Quick Start
 
@@ -88,6 +88,6 @@ Get-JIMMetaverseObject -ObjectType "person"
 
 ## Further Reading
 
-- [Cmdlet Reference](cmdlets.md) — detailed documentation for all available cmdlets
-- [API Authentication](../api/authentication.md) — authentication methods and security recommendations
-- [API Overview](../api/index.md) — REST API documentation
+- [Cmdlet Reference](cmdlets.md): detailed documentation for all available cmdlets
+- [API Authentication](../api/authentication.md): authentication methods and security recommendations
+- [API Overview](../api/index.md): REST API documentation

@@ -8,8 +8,8 @@ This page covers building JIM from source, managing database migrations, and wor
 
 ## Prerequisites
 
-- **.NET 9.0 SDK** — [Download](https://dotnet.microsoft.com/download/dotnet/9.0)
-- **Docker and Docker Compose** — Required for the database and containerised services
+- **.NET 9.0 SDK:** [Download](https://dotnet.microsoft.com/download/dotnet/9.0)
+- **Docker and Docker Compose:** Required for the database and containerised services
 
 Both are pre-installed in the devcontainer environment. See [Development Environment](dev-environment.md) for setup.
 
@@ -90,7 +90,7 @@ docker compose exec jim.web dotnet ef database update
 ```
 
 !!! danger "Never squash or delete migrations"
-    JIM is deployed in production environments. EF Core tracks applied migrations by name in the `__EFMigrationsHistory` table. Removing existing migrations and replacing them with a combined migration will cause failures on every deployed instance. Migrations are append-only — once committed to `main`, they are permanent.
+    JIM is deployed in production environments. EF Core tracks applied migrations by name in the `__EFMigrationsHistory` table. Removing existing migrations and replacing them with a combined migration will cause failures on every deployed instance. Migrations are append-only; once committed to `main`, they are permanent.
 
 ## Docker Compose File Layering
 
@@ -123,9 +123,9 @@ The default PostgreSQL settings in `docker-compose.yml` are tuned for a 64GB / 1
 
 Key settings to adjust:
 
-- `shared_buffers` — typically ~25% of available host RAM
-- `effective_cache_size` — typically ~75% of available host RAM
-- `shm_size` (Docker) — must be >= `shared_buffers` with ~25% headroom
+- `shared_buffers`: typically ~25% of available host RAM
+- `effective_cache_size`: typically ~75% of available host RAM
+- `shm_size` (Docker): must be >= `shared_buffers` with ~25% headroom
 
 **Sizing reference:**
 

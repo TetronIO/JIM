@@ -15,7 +15,7 @@ PRD (what & why)  -->  Implementation Plan (how)  -->  Code
 
 A **Product Requirements Document** defines what to build and why. It is the input a developer writes to communicate requirements to Claude.
 
-1. Run `jim-prd` — it prompts for a feature name and creates `docs/prd/PRD_YOUR_FEATURE_NAME.md` from the template
+1. Run `jim-prd`; it prompts for a feature name and creates `docs/prd/PRD_YOUR_FEATURE_NAME.md` from the template
 2. Fill in all **required** sections (Problem Statement, Goals, Non-Goals, User Stories, Functional Requirements, Examples, Acceptance Criteria)
 3. Fill in optional sections where relevant
 4. Delete the comment block and any unused optional sections
@@ -82,13 +82,13 @@ Plan documents are filed in one of three locations based on their current state:
 
 | Location | Status | Description |
 |----------|--------|-------------|
-| `docs/plans/` | `Planned` | Not yet started — design and future work |
+| `docs/plans/` | `Planned` | Not yet started: design and future work |
 | `docs/plans/doing/` | `Doing` | Partially implemented or actively being worked on |
 | `docs/plans/done/` | `Done` | Fully implemented (or remaining items explicitly deferred/dropped) |
 
 **Move plans between folders** as their status changes. Use `git mv` to preserve history.
 
-**IMPORTANT — Update all cross-references when moving documents:**
+**IMPORTANT: Update all cross-references when moving documents:**
 When moving a document between `docs/plans/`, `docs/plans/doing/`, and `docs/plans/done/` (or anywhere in the `docs/` tree), you **MUST** search for and update all relative links that reference the moved file. This includes:
 - Links **to** the moved file from other documents (the path has changed)
 - Links **from** the moved file to other documents (the relative path depth has changed)
@@ -118,7 +118,7 @@ Only use these three values. For done plans where some items were deferred, add 
 
 ```markdown
 - **Status:** Done
-- **Note:** Phase 4 (OpenLDAP support) deferred — implement when OpenLDAP connector is needed.
+- **Note:** Phase 4 (OpenLDAP support) deferred; implement when OpenLDAP connector is needed.
 ```
 
 ### Phase Completion

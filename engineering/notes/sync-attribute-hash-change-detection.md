@@ -13,7 +13,7 @@ The current implementation uses `CSO.LastUpdated` compared against `ConnectedSys
 **Limitations:**
 - Requires a prior successful sync to establish the watermark
 - First sync after adding new sync rules must process everything (watermark predates the rules)
-- If a sync fails partway through, the watermark isn't updated — the next sync re-processes everything
+- If a sync fails partway through, the watermark isn't updated, so the next sync re-processes everything
 - Doesn't detect external database modifications (direct SQL changes to attribute values)
 
 ## Alternative: Attribute Hash
@@ -21,8 +21,8 @@ The current implementation uses `CSO.LastUpdated` compared against `ConnectedSys
 ### Design
 
 Add two columns to `ConnectedSystemObject`:
-- `AttributeHash` (string, nullable) — SHA-256 hash of all current attribute values, computed at import time
-- `LastSyncedAttributeHash` (string, nullable) — the `AttributeHash` value as of the last completed sync
+- `AttributeHash` (string, nullable): SHA-256 hash of all current attribute values, computed at import time
+- `LastSyncedAttributeHash` (string, nullable): the `AttributeHash` value as of the last completed sync
 
 ### Import-Time Computation
 
@@ -55,7 +55,7 @@ During sync page loading:
 
 - Works without a prior sync watermark (first sync computes hashes during import)
 - Detects the exact CSOs that changed, not just "something changed after timestamp X"
-- Resilient to failed syncs — the hash comparison is always valid
+- Resilient to failed syncs; the hash comparison is always valid
 - Can detect external attribute modifications (if they don't update the hash, the mismatch triggers processing)
 
 ### Disadvantages
@@ -64,7 +64,7 @@ During sync page loading:
 - Import overhead: hash computation per CSO on every import (~negligible for SHA-256)
 - Storage overhead: ~64 bytes per CSO for two hash columns (~6.4 MB at 100K objects)
 - Complexity: hash computation must be deterministic and handle all attribute types correctly
-- Migration path: existing CSOs have no hash — first import after migration must populate them
+- Migration path: existing CSOs have no hash, so the first import after migration must populate them
 
 ### Implementation Effort
 

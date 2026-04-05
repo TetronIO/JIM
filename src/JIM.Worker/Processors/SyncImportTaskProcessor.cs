@@ -1422,6 +1422,17 @@ public class SyncImportTaskProcessor
                         $"Processing imported objects ({importIndex + 1:N0} / {totalObjectsInBatch:N0})" +
                         throughput.FormatThroughput(importIndex + 1, totalObjectsInBatch));
                 }
+
+                // Clear the change tracker periodically to prevent entity accumulation.
+                // HydrateCsoAsync loads each CSO with full Include chains, tracking all entities.
+                // Without clearing, the tracker grows to 1M+ entities at 100K objects, causing
+                // progressive throughput degradation (231 obj/s → 26 obj/s).
+                // The CSOs in create/update lists are held by CLR references — detaching from
+                // the tracker doesn't null them. They'll be re-attached during batch persistence.
+                if ((importIndex + 1) % 1000 == 0)
+                {
+                    _syncRepo.ClearChangeTracker();
+                }
             }
         }
 
@@ -2560,7 +2571,7 @@ public class SyncImportTaskProcessor
         var pageSize = await _syncServer.GetSyncPageSizeAsync();
         var totalPages = (int)Math.Ceiling((double)csoList.Count / pageSize);
 
-        Log.Debug("ReconcilePendingExportsAsync: Processing {CsoCount} CSOs in {PageCount} pages of {PageSize}",
+        Log.Information("ReconcilePendingExportsAsync: Processing {CsoCount} CSOs with pending exports in {PageCount} pages of {PageSize}",
             csoList.Count, totalPages, pageSize);
 
         var processedCount = 0;
@@ -2578,6 +2589,10 @@ public class SyncImportTaskProcessor
             var pendingExportsToUpdate = new System.Collections.Concurrent.ConcurrentBag<JIM.Models.Transactional.PendingExport>();
             var confirmedAttrChangesToDelete = new System.Collections.Concurrent.ConcurrentBag<JIM.Models.Transactional.PendingExportAttributeValueChange>();
             var pageExecutionItems = new System.Collections.Concurrent.ConcurrentBag<ActivityRunProfileExecutionItem>();
+
+            // Update progress before loading so the UI shows activity during the heavy query
+            await _syncRepo.UpdateActivityMessageAsync(_activity,
+                $"Reconciling pending exports — loading page {page + 1}/{totalPages} ({processedCount:N0}/{csoList.Count:N0})");
 
             // Lightweight fetch: AsNoTracking + only AttributeValueChanges with Attribute.
             // Avoids loading ConnectedSystemObject/ConnectedSystem/SourceMetaverseObject (not needed for reconciliation)
@@ -2819,6 +2834,8 @@ public class SyncImportTaskProcessor
             }
 
             // Update activity progress after each page
+            await _syncRepo.UpdateActivityMessageAsync(_activity,
+                $"Reconciling pending exports ({processedCount:N0}/{csoList.Count:N0})");
             await _syncRepo.UpdateActivityAsync(_activity);
         }
 

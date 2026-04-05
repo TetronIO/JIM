@@ -6,11 +6,11 @@
 
 JIM requires TDD. The workflow is **Red → Green → Refactor**:
 
-1. **Write the test first** — before any implementation
-2. **Run it — confirm it fails (Red)** — a test that cannot fail is not a useful test
+1. **Write the test first**: before any implementation
+2. **Run it, confirm it fails (Red)**: a test that cannot fail is not a useful test
 3. **Implement the minimum code to pass (Green)**
-4. **Run again — confirm it passes**
-5. **Refactor** — clean up without breaking the test
+4. **Run again, confirm it passes**
+5. **Refactor**: clean up without breaking the test
 
 **For bug fixes:**
 - Write a test that reproduces the bug → it must fail before your fix
@@ -53,7 +53,7 @@ public async Task GetObjectAsync_WithValidId_ReturnsObject()
 
 ## Inspecting Docker Container Binaries
 
-When checking whether compiled code is present in a running Docker container (e.g., verifying a fix was included in the image), **do NOT use `strings`** — it is not installed in the runtime container images and silently returns no output, leading to false conclusions.
+When checking whether compiled code is present in a running Docker container (e.g., verifying a fix was included in the image), **do NOT use `strings`**; it is not installed in the runtime container images and silently returns no output, leading to false conclusions.
 
 Use this approach instead:
 ```bash
@@ -174,7 +174,7 @@ cd /workspaces/JIM
 
 **For detailed integration testing guide, see:** [`docs/INTEGRATION_TESTING.md`](docs/INTEGRATION_TESTING.md)
 
-**CRITICAL: Always use default runner behaviour — no `-SkipReset` or `-SkipBuild` flags.**
+**CRITICAL: Always use default runner behaviour, no `-SkipReset` or `-SkipBuild` flags.**
 These flags are for human developer iteration only. Claude must not use them because:
 - `-SkipBuild` can run stale container images that don't reflect the current code, masking real bugs
 - `-SkipReset` carries over state from previous runs, producing results that are not reproducible
@@ -186,10 +186,10 @@ These flags are for human developer iteration only. Claude must not use them bec
 - **Small**: 100 users, 20 groups (~2 min) - Small business scenarios
 - **Medium**: 1,000 users, 100 groups (~2 min) - Medium enterprise
 - **Large**: 10,000 users, 500 groups (~15 min) - Large enterprise
-- **XLarge**: 100,000 users, 50 groups - Requires 20+ GB host RAM (OOM-killed on 16 GB machines — a 16 GB Codespace is not sufficient)
+- **XLarge**: 100,000 users, 50 groups - Requires 20+ GB host RAM (OOM-killed on 16 GB machines; a 16 GB Codespace is not sufficient)
 
 **OpenLDAP accesslog MDB map size (IMPORTANT for large templates):**
 
-The OpenLDAP accesslog database uses an MDB storage engine with a fixed maximum map size (`olcDbMaxSize`). When the map is full, OpenLDAP **silently stops recording changes** — delta imports will find zero modifications and sync changes will be lost. There is no error message; the writes just stop.
+The OpenLDAP accesslog database uses an MDB storage engine with a fixed maximum map size (`olcDbMaxSize`). When the map is full, OpenLDAP **silently stops recording changes**; delta imports will find zero modifications and sync changes will be lost. There is no error message; the writes just stop.
 
-The map size is configured in `test/integration/docker/openldap/scripts/01-add-second-suffix.sh`. Current setting: **4 GB** (sufficient for XLarge / 100K objects). If adding templates beyond XLarge (e.g. XXLarge / 1M objects), increase the accesslog `olcDbMaxSize` proportionally — estimate ~10 MB per 1,000 objects for the initial population, plus additional capacity for sync cycles.
+The map size is configured in `test/integration/docker/openldap/scripts/01-add-second-suffix.sh`. Current setting: **4 GB** (sufficient for XLarge / 100K objects). If adding templates beyond XLarge (e.g. XXLarge / 1M objects), increase the accesslog `olcDbMaxSize` proportionally (estimate ~10 MB per 1,000 objects for the initial population, plus additional capacity for sync cycles).

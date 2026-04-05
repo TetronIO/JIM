@@ -7,7 +7,8 @@ description: A modern, self-hosted Identity Management system for organisations 
 
 JIM is a modern Identity Management system designed for organisations with complex identity synchronisation requirements. It is self-hosted, container-deployable, and works in both connected and air-gapped networks.
 
-![JIM System Context](diagrams/images/light/jim-structurizr-1-SystemContext.svg)
+<img class="diagram-light" alt="JIM System Context" src="diagrams/images/light/jim-structurizr-1-SystemContext.svg">
+<img class="diagram-dark" alt="JIM System Context" src="diagrams/images/dark/jim-structurizr-1-SystemContext.svg">
 
 ## Key Features
 
@@ -23,7 +24,7 @@ JIM is a modern Identity Management system designed for organisations with compl
 
     ---
 
-    Active Directory, OpenLDAP, 389 Directory Server, and other RFC 4512-compliant directories — all supported out of the box.
+    Active Directory, OpenLDAP, 389 Directory Server, and other RFC 4512-compliant directories, all supported out of the box.
 
 -   :material-docker:{ .lg .middle } **Container-Native Deployment**
 
@@ -53,7 +54,7 @@ JIM is a modern Identity Management system designed for organisations with compl
 
     ---
 
-    Fully functional without internet connectivity. No cloud dependencies — designed for sensitive and high-assurance environments.
+    Fully functional without internet connectivity. No cloud dependencies -- designed for sensitive and high-assurance environments.
 
 -   :material-puzzle:{ .lg .middle } **Extensible Connectors**
 
@@ -67,15 +68,15 @@ JIM is a modern Identity Management system designed for organisations with compl
 
 JIM supports common Identity Governance & Administration (IGA) scenarios:
 
-- **Joiner/Mover/Leaver (JML) Automation** — Synchronise users from HR systems to directories, applications, and downstream systems
-- **Attribute Writeback** — Keep HR systems current by writing IT-managed attributes back (e.g. email addresses, phone numbers)
-- **Domain Consolidation** — Prepare for cloud migration, simplification, or organisational mergers
-- **Domain Migration** — Support divestitures and system decommissioning
-- **Identity Correlation** — Bring together user and entitlement data from disparate business applications
+- **Joiner/Mover/Leaver (JML) Automation:** Synchronise users from HR systems to directories, applications, and downstream systems
+- **Attribute Writeback:** Keep HR systems current by writing IT-managed attributes back (e.g. email addresses, phone numbers)
+- **Domain Consolidation:** Prepare for cloud migration, simplification, or organisational mergers
+- **Domain Migration:** Support divestitures and system decommissioning
+- **Identity Correlation:** Bring together user and entitlement data from disparate business applications
 
 ## What Makes JIM Different
 
-Enterprise identity synchronisation typically requires cloud connectivity, complex infrastructure, or expensive licensing. JIM takes a different approach — it deploys as a single Docker stack, runs entirely on-premises, and works in air-gapped networks with no external dependencies. Source-available code means you can inspect, audit, and verify everything JIM does with your identity data.
+Enterprise identity synchronisation typically requires cloud connectivity, complex infrastructure, or expensive licensing. JIM takes a different approach: it deploys as a single Docker stack, runs entirely on-premises, and works in air-gapped networks with no external dependencies. Source-available code means you can inspect, audit, and verify everything JIM does with your identity data.
 
 | Capability | JIM |
 |---|---|

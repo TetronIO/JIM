@@ -4,18 +4,21 @@ title: Development Environment
 
 # Development Environment
 
-JIM provides a fully configured development environment through GitHub Codespaces and VS Code devcontainers. All dependencies — .NET 9.0 SDK, Docker, PostgreSQL, VS Code extensions, and shell aliases — are pre-installed and ready to use.
+JIM provides a fully configured development environment through GitHub Codespaces and VS Code devcontainers. All dependencies (.NET 9.0 SDK, Docker, PostgreSQL, VS Code extensions, and shell aliases) are pre-installed and ready to use.
 
-## GitHub Codespaces (Recommended)
+## GitHub Codespaces
 
-The fastest way to get started is with GitHub Codespaces:
+The fastest way to get started. Everything is pre-configured in the cloud; no local setup required:
 
 1. Open the [JIM repository](https://github.com/TetronIO/JIM) on GitHub
 2. Click **Code** > **Codespaces** > **Create codespace on main**
 3. Wait for provisioning (automatic setup via `.devcontainer/setup.sh`)
-4. Start developing — all tools and aliases are available immediately
+4. Start developing; all tools and aliases are available immediately
 
-The setup script automatically creates a `.env` file with development defaults. SSO is pre-configured for the bundled Keycloak instance — sign in with `admin` / `admin`.
+The setup script automatically creates a `.env` file with development defaults. SSO is pre-configured for the bundled Keycloak instance; sign in with `admin` / `admin`.
+
+!!! info "Codespace machine type"
+    The devcontainer configuration requests 8 cores, 32 GB RAM, and 120 GB storage via `hostRequirements`. GitHub Codespaces selects the closest matching preset, typically 8 cores and 32 GB RAM, but only 64 GB storage (the 120 GB request is not available as a Codespace preset). Verify the machine type in the selector before creating. This is sufficient for day-to-day development, but integration tests with larger template sizes are resource-intensive and may perform better in a [local devcontainer](#local-devcontainer) where Docker has direct access to host resources without virtualisation overhead.
 
 ### Custom Environment Variables in Codespaces
 
@@ -23,7 +26,7 @@ To restore your own `.env` file automatically in Codespaces, set a `DOTENV_BASE6
 
 ## Local Devcontainer
 
-If you prefer to develop locally:
+Recommended for integration testing and large-scale development work where you need more control over resource allocation:
 
 1. Clone the repository: `git clone https://github.com/TetronIO/JIM.git`
 2. Open the folder in VS Code
@@ -31,7 +34,12 @@ If you prefer to develop locally:
 4. When prompted, click **Reopen in Container** (or use the command palette: `Dev Containers: Reopen in Container`)
 5. Wait for the container to build and configure
 
-The devcontainer provides the same environment as Codespaces — all dependencies, extensions, and shell aliases are configured automatically.
+The devcontainer provides the same environment as Codespaces; all dependencies, extensions, and shell aliases are configured automatically.
+
+!!! tip "Allocating resources"
+    Integration tests with large template sizes (10,000+ objects) are memory and CPU intensive. Allocate as much as your host machine can spare: 24–32 GB RAM, 4 GB+ swap, and as many cores as possible. PostgreSQL tuning is applied automatically during setup and can be re-run with `jim-postgres-tune` after changing resource allocations.
+
+    Since host machine performance varies between developers, integration test timings and throughput figures are only directly comparable when run on the same configuration.
 
 ## Bundled Keycloak
 
@@ -45,9 +53,9 @@ JIM ships a bundled Keycloak instance for development SSO, removing the need for
 
 Keycloak management aliases:
 
-- `jim-keycloak` — Start Keycloak only (for local debugging workflow)
-- `jim-keycloak-stop` — Stop Keycloak
-- `jim-keycloak-logs` — View Keycloak logs
+- `jim-keycloak`: Start Keycloak only (for local debugging workflow)
+- `jim-keycloak-stop`: Stop Keycloak
+- `jim-keycloak-logs`: View Keycloak logs
 
 ## Shell Aliases
 
@@ -103,7 +111,7 @@ Rebuild and restart services after code changes:
 
 Choose one of two workflows depending on your task:
 
-### Workflow 1 — Local Debugging (Recommended)
+### Workflow 1: Local Debugging (Recommended)
 
 Best for active development with breakpoints and hot reload.
 
@@ -112,7 +120,7 @@ Best for active development with breakpoints and hot reload.
 3. Press **F5** in VS Code to launch with the debugger
 4. Access JIM at `https://localhost:7000`, Swagger at `/api/swagger`
 
-### Workflow 2 — Full Docker Stack
+### Workflow 2: Full Docker Stack
 
 Best for integration testing or a production-like environment.
 
@@ -159,7 +167,7 @@ git config --global user.name "Your Name"
 git config --global user.email "your@email.com"
 ```
 
-### Optional — SSH Commit Signing
+### Optional: SSH Commit Signing
 
 ```bash
 git config --global gpg.format ssh

@@ -113,23 +113,21 @@ nav:
       - Testing: developer/testing.md
       - Writing Connectors: developer/connectors.md
       - Contributing: developer/contributing.md
-  - Diagrams:
-      - diagrams/mermaid/FULL_IMPORT_FLOW.md
-      - diagrams/mermaid/FULL_SYNC_CSO_PROCESSING.md
-      - diagrams/mermaid/DELTA_SYNC_FLOW.md
-      - diagrams/mermaid/EXPORT_EXECUTION_FLOW.md
-      - diagrams/mermaid/PENDING_EXPORT_LIFECYCLE.md
-      - diagrams/mermaid/ACTIVITY_AND_RPEI_FLOW.md
-      - diagrams/mermaid/CONNECTOR_LIFECYCLE.md
-      - diagrams/mermaid/MVO_DELETION_AND_GRACE_PERIOD.md
-      - diagrams/mermaid/SCHEDULE_EXECUTION_LIFECYCLE.md
-      - diagrams/mermaid/WORKER_TASK_LIFECYCLE.md
+      - Diagrams:
+          - developer/diagrams/FULL_IMPORT_FLOW.md
+          - developer/diagrams/FULL_SYNC_CSO_PROCESSING.md
+          - developer/diagrams/DELTA_SYNC_FLOW.md
+          - developer/diagrams/EXPORT_EXECUTION_FLOW.md
+          - developer/diagrams/PENDING_EXPORT_LIFECYCLE.md
+          - developer/diagrams/ACTIVITY_AND_RPEI_FLOW.md
+          - developer/diagrams/CONNECTOR_LIFECYCLE.md
+          - developer/diagrams/MVO_DELETION_AND_GRACE_PERIOD.md
+          - developer/diagrams/SCHEDULE_EXECUTION_LIFECYCLE.md
+          - developer/diagrams/WORKER_TASK_LIFECYCLE.md
   - Reference:
       - Glossary: reference/glossary.md
       - Roadmap: reference/roadmap.md
       - Changelog: reference/changelog.md
-      - Notes:
-          - Attribute Hash Change Detection: notes/sync-attribute-hash-change-detection.md
 
 extra_css:
   - assets/stylesheets/custom.css

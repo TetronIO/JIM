@@ -8,16 +8,16 @@
 
 ## Overview
 
-Restructure Run Profile Execution Items (RPEIs) so that each RPEI records a structured graph of **causal outcomes** — the full chain of consequences that resulted from processing a single Connected System Object. Today, RPEIs are flat records with a single `ObjectChangeType`. This design replaces that with a tree of `ActivityRunProfileExecutionItemSyncOutcome` nodes that tells the complete story: "this CSO was projected, which caused attribute flow of 12 attributes, which caused provisioning into AD and LDAP."
+Restructure Run Profile Execution Items (RPEIs) so that each RPEI records a structured graph of **causal outcomes**: the full chain of consequences that resulted from processing a single Connected System Object. Today, RPEIs are flat records with a single `ObjectChangeType`. This design replaces that with a tree of `ActivityRunProfileExecutionItemSyncOutcome` nodes that tells the complete story: "this CSO was projected, which caused attribute flow of 12 attributes, which caused provisioning into AD and LDAP."
 
 This gives administrators immediate visibility into what happened and why, from a single row in the activity detail view.
 
 ## Business Value
 
-- **Full story per object**: Click into any RPEI and see the complete causal chain — no cross-referencing between activities
+- **Full story per object**: Click into any RPEI and see the complete causal chain; no cross-referencing between activities
 - **At-a-glance list view**: Stat chips on each row show outcomes (Projected, Attribute Flow, Exported ×2) without drilling in
 - **Accurate statistics**: Aggregate counts derived from outcome types across all trees (e.g., total provisions = sum of provisioning outcomes across all RPEIs, spanning target systems)
-- **Sync Preview foundation**: The outcome graph model is the "what actually happened" counterpart to the Sync Preview "what would happen" model (#288) — same data structure, shared logic
+- **Sync Preview foundation**: The outcome graph model is the "what actually happened" counterpart to the Sync Preview "what would happen" model (#288); same data structure, shared logic
 - **Configurable granularity**: Administrators control how much detail is stored, balancing audit depth against storage and performance
 
 ## Current State
@@ -35,7 +35,7 @@ Each `ActivityRunProfileExecutionItem` is a flat record:
 
 1. **No causal chain**: A projection that triggers attribute flow and provisioning into 3 systems produces a single RPEI with `ObjectChangeType.Projected`. The downstream consequences are invisible unless you look at separate export activity RPEIs
 2. **Stats are type-count-based**: Statistics count RPEIs by `ObjectChangeType`, which conflates "how many objects" with "what happened to each object"
-3. **Cross-activity blindness**: Import, sync, and export are separate activities — there is no single view showing the full impact of processing one object
+3. **Cross-activity blindness**: Import, sync, and export are separate activities; there is no single view showing the full impact of processing one object
 
 ## Design
 
@@ -97,11 +97,11 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     CsoDeleted,
     DeletionDetected,
 
-    // Import outcomes — confirming import (export confirmation)
+    // Import outcomes; confirming import (export confirmation)
     ExportConfirmed,
     ExportFailed,
 
-    // Sync outcomes — inbound
+    // Sync outcomes; inbound
     Projected,
     Joined,
     AttributeFlow,
@@ -110,7 +110,7 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     MvoDeleted,
     DriftCorrection,
 
-    // Sync outcomes — outbound (pending export creation during sync)
+    // Sync outcomes; outbound (pending export creation during sync)
     Provisioned,
     PendingExportCreated,
 
@@ -128,11 +128,11 @@ followed by the outcome nodes as children.
 
 **Visual conventions:**
 
-- `{Connected System Name} - {Run Profile Name}:` — connected system and run profile context header (CS name hyperlinks to CS detail page)
-- `CSO {ExternalID} - {DisplayName}` — CSO identity (hyperlink to CSO detail page)
-- `[Outcome]` — outcome type rendered as a coloured icon + display name
-- `--` — em dash separator between outcome type and inline target description (Projected, Joined, Provisioned show target inline; Joined uses "— to")
-- `Show changes >` / `[show >]` — expand/collapse button with rotating chevron icon
+- `{Connected System Name} - {Run Profile Name}:`: connected system and run profile context header (CS name hyperlinks to CS detail page)
+- `CSO {ExternalID} - {DisplayName}`: CSO identity (hyperlink to CSO detail page)
+- `[Outcome]`: outcome type rendered as a coloured icon + display name
+- `--`: em dash separator between outcome type and inline target description (Projected, Joined, Provisioned show target inline; Joined uses "; to")
+- `Show changes >` / `[show >]`: expand/collapse button with rotating chevron icon
 - MVO names and CS names are hyperlinks to their respective detail pages
 
 **Sync: New employee imported and provisioned**
@@ -219,7 +219,7 @@ The `ActivityRunProfileExecutionItemSyncOutcome` model serves both purposes:
 - **Actual sync**: Build the outcome tree during processing, persist it against the RPEI
 - **Sync Preview**: Build the same tree speculatively (without persisting), return it for display
 
-The `SyncPreviewServer` from #288 and the sync processors share the same `ActivityRunProfileExecutionItemSyncOutcome` model and tree-building logic. The difference is whether outcomes are committed to the database or returned as a preview result. This means implementing the outcome graph is a prerequisite for — and directly enables — sync preview functionality.
+The `SyncPreviewServer` from #288 and the sync processors share the same `ActivityRunProfileExecutionItemSyncOutcome` model and tree-building logic. The difference is whether outcomes are committed to the database or returned as a preview result. This means implementing the outcome graph is a prerequisite for, and directly enables, sync preview functionality.
 
 ```
 SyncPreviewResult
@@ -250,11 +250,11 @@ Description: "Controls how much detail is recorded for sync outcome
 
 | Level | What's Recorded | Use Case |
 |-------|----------------|----------|
-| **None** | No outcome tree — RPEI `ObjectChangeType` only (legacy behaviour) | Maximum performance, minimal storage |
-| **Standard** | Root-level outcomes only (Projected, Joined, Exported, etc.) — no nested children | Stat chips on list view, basic causal visibility |
+| **None** | No outcome tree; RPEI `ObjectChangeType` only (legacy behaviour) | Maximum performance, minimal storage |
+| **Standard** | Root-level outcomes only (Projected, Joined, Exported, etc.); no nested children | Stat chips on list view, basic causal visibility |
 | **Detailed** | Full tree with nested children (Projected → AttributeFlow → PendingExportCreated per system) | Default. Full audit trail, debugging, compliance |
 
-**Detailed** is the default — it provides the complete causal chain needed for debugging, audit, and compliance. **Standard** can be used in high-volume environments where storage is a concern, and **None** preserves legacy behaviour with zero overhead.
+**Detailed** is the default; it provides the complete causal chain needed for debugging, audit, and compliance. **Standard** can be used in high-volume environments where storage is a concern, and **None** preserves legacy behaviour with zero overhead.
 
 This setting complements the existing CSO/MVO change tracking settings. An administrator might enable Detailed outcome tracking but disable CSO change tracking if they care about "what happened" but not "what the attributes looked like before/after."
 
@@ -262,18 +262,18 @@ This setting complements the existing CSO/MVO change tracking settings. An admin
 
 #### ObjectChangeType Evolution
 
-The RPEI's `ObjectChangeType` field remains as the "primary action" — the root of the tree. It continues to work for list views and backward compatibility. The outcome graph enriches this with the full causal chain.
+The RPEI's `ObjectChangeType` field remains as the "primary action"; the root of the tree. It continues to work for list views and backward compatibility. The outcome graph enriches this with the full causal chain.
 
 At **None** tracking level, the system behaves exactly as today. At **Standard** or **Detailed**, the outcome tree provides richer information.
 
 #### List View Denormalisation
 
-For the activity detail table, each RPEI row should show small stat chips for its root-level outcomes (e.g., `[Projected] [Attr Flow: 12] [Exported ×2]`). To avoid joining to the outcomes table on every paginated query, a denormalised `OutcomeSummary` column is stored directly on the RPEI. This keeps the list query fast — no join needed. The full outcome tree is only loaded when drilling into a single RPEI's detail page.
+For the activity detail table, each RPEI row should show small stat chips for its root-level outcomes (e.g., `[Projected] [Attr Flow: 12] [Exported ×2]`). To avoid joining to the outcomes table on every paginated query, a denormalised `OutcomeSummary` column is stored directly on the RPEI. This keeps the list query fast; no join needed. The full outcome tree is only loaded when drilling into a single RPEI's detail page.
 
 `OutcomeSummary` representation:
 - Comma-separated outcome types with counts, e.g., `"Projected:1,AttributeFlow:12,PendingExportCreated:2"`
 - Parsed client-side for chip rendering
-- Populated during outcome tree construction — no separate maintenance path
+- Populated during outcome tree construction; no separate maintenance path
 
 ### Activity Statistics Changes
 
@@ -292,7 +292,7 @@ GROUP BY OutcomeType
 
 Or equivalently via join.
 
-**Key semantic change for exports**: If 10 objects are each exported to 2 connected systems, the "Exported" stat shows **20** — the total number of export actions across target systems. This is the meaningful number for operators ("how many CSOs were exported to target systems").
+**Key semantic change for exports**: If 10 objects are each exported to 2 connected systems, the "Exported" stat shows **20**: the total number of export actions across target systems. This is the meaningful number for operators ("how many CSOs were exported to target systems").
 
 The current `TotalObjectsProcessed` / `TotalObjectChangeCount` concepts remain. Individual outcome-type totals replace the current `ObjectChangeType`-based counts.
 
@@ -307,7 +307,7 @@ The `Activity` model's denormalised stat fields (e.g., `TotalProjected`, `TotalJ
 Each RPEI row shows:
 - External ID, Display Name, Object Type (as today)
 - Primary `ObjectChangeType` (as today)
-- **New**: Outcome stat chips derived from `OutcomeSummary` — e.g., `[Projected] [Attr Flow: 12] [Exported ×2]`
+- **New**: Outcome stat chips derived from `OutcomeSummary`: e.g., `[Projected] [Attr Flow: 12] [Exported ×2]`
 - Error indicator (as today)
 
 #### Activity Detail Filter Controls
@@ -344,11 +344,11 @@ At **Detailed** level, the full nested tree is displayed.
 
 ### Existing Change Detail Models
 
-The existing `ConnectedSystemObjectChange` and `MetaverseObjectChange` navigation properties on RPEIs serve a different purpose — they carry **attribute-level detail** (which specific attributes changed, old/new values). The outcome graph is about the **structural causal chain** (what operations occurred and what they triggered).
+The existing `ConnectedSystemObjectChange` and `MetaverseObjectChange` navigation properties on RPEIs serve a different purpose; they carry **attribute-level detail** (which specific attributes changed, old/new values). The outcome graph is about the **structural causal chain** (what operations occurred and what they triggered).
 
 Both coexist:
-- **Sync outcome tree**: "What happened and what it caused" — structural story
-- **CSOChange / MVOChange**: "What the attribute values looked like before/after" — debugging detail
+- **Sync outcome tree**: "What happened and what it caused"; structural story
+- **CSOChange / MVOChange**: "What the attribute values looked like before/after"; debugging detail
 
 ## Processor Changes
 
@@ -388,13 +388,13 @@ New table `ActivityRunProfileExecutionItemSyncOutcomes` with:
 - `Ordinal` (int)
 
 New column on `ActivityRunProfileExecutionItems`:
-- `OutcomeSummary` (nullable string) — denormalised summary for list view
+- `OutcomeSummary` (nullable string); denormalised summary for list view
 
 Indexes:
-- `IX_ActivityRunProfileExecutionItemSyncOutcomes_ActivityRunProfileExecutionItemId` — for loading outcomes by RPEI
-- `IX_ActivityRunProfileExecutionItemSyncOutcomes_OutcomeType` — for aggregate stats queries (composite with RPEI FK)
+- `IX_ActivityRunProfileExecutionItemSyncOutcomes_ActivityRunProfileExecutionItemId`: for loading outcomes by RPEI
+- `IX_ActivityRunProfileExecutionItemSyncOutcomes_OutcomeType`: for aggregate stats queries (composite with RPEI FK)
 
-Existing RPEIs have no outcomes (empty list) — gracefully handled with no data migration.
+Existing RPEIs have no outcomes (empty list); gracefully handled with no data migration.
 
 CASCADE DELETE on the RPEI FK ensures outcomes are cleaned up automatically when activities are purged by housekeeping.
 
@@ -416,11 +416,11 @@ Outcomes reference pre-generated RPEI IDs, so both inserts can be in the same fl
 |---------|-----------|
 | **Write volume** | Detailed (default): ~5-10 outcome rows per RPEI. 100k objects → ~500k-1M outcome rows. Standard: ~3-5 per RPEI. Manageable with existing chunked bulk insert |
 | **Storage** | Each outcome row is small (~100-200 bytes: GUIDs, enum, int, short string). Detailed level for 100k objects ≈ 50-100 MB per sync run |
-| **List query** | No join needed — `OutcomeSummary` denormalised field. Same performance as today |
+| **List query** | No join needed; `OutcomeSummary` denormalised field. Same performance as today |
 | **Detail query** | Single RPEI + its outcomes via indexed FK. Small result set, fast |
 | **Stats query** | `GROUP BY OutcomeType` on outcomes table with FK filter. Single indexed query |
 | **Filtering** | `OutcomeSummary` string matching (if denormalised) or `EXISTS` subquery (if not). Both indexed |
-| **None level** | Zero overhead — no outcomes created, no summary field populated. Exact current behaviour |
+| **None level** | Zero overhead; no outcomes created, no summary field populated. Exact current behaviour |
 | **Memory during sync** | Outcome trees built in memory per CSO, flushed per page with RPEIs. No unbounded accumulation |
 
 ## Service Setting Seeding
@@ -446,7 +446,7 @@ new ServiceSetting
 
 ## Mapping Reference: Change Types, Outcomes, Stats & UI Labels
 
-This section documents the relationship between `ObjectChangeType` (per-RPEI), `SyncOutcomeType` (per-outcome node), stat box labels, and UI labels. The Change Type filter was removed in Phase 7 — all filtering and display now uses outcome types. The Outcome Filter Chip and Row Outcome Chip columns both use `GetOutcomeTypeDisplayName()` which returns the same label.
+This section documents the relationship between `ObjectChangeType` (per-RPEI), `SyncOutcomeType` (per-outcome node), stat box labels, and UI labels. The Change Type filter was removed in Phase 7; all filtering and display now uses outcome types. The Outcome Filter Chip and Row Outcome Chip columns both use `GetOutcomeTypeDisplayName()` which returns the same label.
 
 ### Import (Full Import / Delta Import)
 
@@ -459,7 +459,7 @@ This section documents the relationship between `ObjectChangeType` (per-RPEI), `
 | Pending export retrying | *(error on RPEI)* | *(none)* | "Exports Retrying" | *(N/A)* |
 | Pending export failed | *(error on RPEI)* | `ExportFailed` | "CSO Exports Failed" | "CSO Export Failed" |
 
-**Key point — import deletions**: During import, the CSO is only marked `Obsolete` (not actually deleted). A `DeletionDetected` outcome is recorded to show the detection in the outcome tree. The actual deletion and `CsoDeleted` outcome occur during the subsequent sync run.
+**Key point; import deletions**: During import, the CSO is only marked `Obsolete` (not actually deleted). A `DeletionDetected` outcome is recorded to show the detection in the outcome tree. The actual deletion and `CsoDeleted` outcome occur during the subsequent sync run.
 
 ### Synchronisation (Full Sync / Delta Sync)
 
@@ -476,7 +476,7 @@ This section documents the relationship between `ObjectChangeType` (per-RPEI), `
 | Pending export created | `PendingExport` | `PendingExportCreated` | "CSO Pending Exports" | "CSO Pending Export" |
 | No attribute changes | `NoChange` | *(none)* | "Unchanged" | *(N/A)* |
 
-**Key point — obsoleted CSOs**: When a joined CSO is marked Obsolete and processed during sync, a single RPEI is created with `ObjectChangeType.Disconnected`. The outcome graph contains sibling root nodes: `Disconnected` (for the join break) and `CsoDeleted` (for the actual CSO deletion). If an MVO deletion rule fires, there may also be `MvoDeleted` and `PendingExportCreated` child outcomes.
+**Key point; obsoleted CSOs**: When a joined CSO is marked Obsolete and processed during sync, a single RPEI is created with `ObjectChangeType.Disconnected`. The outcome graph contains sibling root nodes: `Disconnected` (for the join break) and `CsoDeleted` (for the actual CSO deletion). If an MVO deletion rule fires, there may also be `MvoDeleted` and `PendingExportCreated` child outcomes.
 
 ### Export
 
@@ -545,7 +545,7 @@ Each CSO should produce at most one RPEI per activity. Multiple outcomes are rec
 
 End-to-end tests covering outcome recording and presentation through the API layer.
 
-**NUnit repository-level tests** — `test/JIM.Web.Api.Tests/ActivityOutcomeStatsIntegrationTests.cs` (10 tests covering all 15 cases below):
+**NUnit repository-level tests**: `test/JIM.Web.Api.Tests/ActivityOutcomeStatsIntegrationTests.cs` (10 tests covering all 15 cases below):
 
 1. ~~Test outcome-based stats derivation via `GET /api/v1/activities/{id}/stats` for activities with outcomes~~
 2. ~~Test legacy fallback stats via `GET /api/v1/activities/{id}/stats` for activities without outcomes (tracking level = None)~~
@@ -563,13 +563,13 @@ End-to-end tests covering outcome recording and presentation through the API lay
 14. ~~Test RPEI-only stats (OutOfScopeRetainJoin, Created, NoChange) remain correct alongside outcome-based stats~~
 15. ~~Test error counting remains per-RPEI regardless of outcomes~~
 
-**PowerShell integration test enhancements** — outcome assertions added to Scenario 1:
+**PowerShell integration test enhancements**: outcome assertions added to Scenario 1:
 
 - Helper functions `Assert-ActivityOutcomeStats` and `Assert-ActivityItemsHaveOutcomeSummary` in `test/integration/utils/Test-Helpers.ps1`
 - Outcome assertions at Joiner (CsoAdded, Projected, Exported), Mover (AttributeFlow), and Leaver (DeletionDetected, Disconnected) steps in `test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1`
 - Coverage documented in `docs/INTEGRATION_TESTING.md` under Scenario 1
 
-### Phase 5: UI — List View & Filters ✅
+### Phase 5: UI; List View & Filters ✅
 
 1. ~~Add outcome stat chips to Activity Detail table rows (from `OutcomeSummary`)~~
 2. ~~Update filter controls to support outcome type filtering~~
@@ -591,38 +591,38 @@ navigation properties for Display Name and Object Type. When a CSO is deleted (F
 7. ~~Update RPEI header projection to use snapshot fallbacks~~
 8. ~~Write unit tests for snapshot logic~~
 
-### Phase 6: UI — RPEI Detail Page ✅
+### Phase 6: UI; RPEI Detail Page ✅
 
 1. ~~Create outcome tree view component for RPEI detail page~~
 2. ~~Render tree at appropriate depth based on tracking level~~
 3. ~~Handle graceful display when no outcomes exist (None level / legacy RPEIs)~~
 
-### Phase 7: UI Simplification — Remove Change Type from Web UI ✅
+### Phase 7: UI Simplification; Remove Change Type from Web UI ✅
 
 The outcome graph makes `ObjectChangeType` redundant in the UI. Outcomes provide a strict
-superset of the information Change Type offered — every Change Type has an equivalent Outcome
+superset of the information Change Type offered; every Change Type has an equivalent Outcome
 Type, but outcomes also capture downstream consequences (e.g., pending exports, provisioning)
 that Change Type never could.
 
-1. ~~Remove "Filter by Change Type" section from Activity Detail page — the outcome filter covers all the same scenarios~~
-2. ~~Remove the "Change Type" column from the Activity Detail RPEI table — outcome chips on each row replace it~~
+1. ~~Remove "Filter by Change Type" section from Activity Detail page; the outcome filter covers all the same scenarios~~
+2. ~~Remove the "Change Type" column from the Activity Detail RPEI table; outcome chips on each row replace it~~
 3. ~~Remove `changeTypeFilter` parameter from repository/application stack~~
 4. ~~Remove unused helper methods from `Helpers.cs` (`GetChangeTypesForRunType`, `GetStatCountForChangeType`, `GetChangeTypeDisplayName`)~~
 5. ~~Relocate "Unchanged" informational chip to the outcome filter section~~
 
 **Does NOT affect:**
-- The data model — `ObjectChangeType` remains on `ActivityRunProfileExecutionItem` for
+- The data model; `ObjectChangeType` remains on `ActivityRunProfileExecutionItem` for
   internal processing logic and legacy compatibility
-- Worker code — processors still set `ObjectChangeType` for their own orchestration
-- API contracts — existing API fields remain for backwards compatibility
-- RPEI detail page — "Operation" chip and conditional sections remain (useful context on detail view)
+- Worker code; processors still set `ObjectChangeType` for their own orchestration
+- API contracts; existing API fields remain for backwards compatibility
+- RPEI detail page; "Operation" chip and conditional sections remain (useful context on detail view)
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `src/JIM.Models/Activities/ActivityRunProfileExecutionItemSyncOutcome.cs` | **New** — entity model |
-| `src/JIM.Models/Activities/ActivityEnums.cs` | **Add** — `ActivityRunProfileExecutionItemSyncOutcomeType` and `ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel` enums |
+| `src/JIM.Models/Activities/ActivityRunProfileExecutionItemSyncOutcome.cs` | **New**: entity model |
+| `src/JIM.Models/Activities/ActivityEnums.cs` | **Add**: `ActivityRunProfileExecutionItemSyncOutcomeType` and `ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel` enums |
 | `src/JIM.Models/Activities/ActivityRunProfileExecutionItem.cs` | Add `OutcomeSummary` property and `SyncOutcomes` navigation collection |
 | `src/JIM.Models/Core/Constants.cs` | Add setting key constant |
 | `src/JIM.PostgresData/JimDbContext.cs` | Add `ActivityRunProfileExecutionItemSyncOutcomes` DbSet and EF configuration |
@@ -646,7 +646,7 @@ that Change Type never could.
 |------|------------|
 | Write volume increase (3-10x more rows) | Tracking level setting allows admins to choose None for maximum performance. Standard limits to root-level outcomes only |
 | Bulk insert complexity | Same proven chunking pattern as RPEI bulk insert. Second INSERT in same transaction |
-| Migration on large databases | New table only — no data migration. ALTER TABLE for OutcomeSummary column is lightweight |
+| Migration on large databases | New table only; no data migration. ALTER TABLE for OutcomeSummary column is lightweight |
 | Sync processor complexity | Outcome tree building can be encapsulated in a helper class, keeping processor logic clean |
 | Backward compatibility | None tracking level preserves exact current behaviour. Legacy RPEIs with no outcomes display gracefully |
 | Stats query performance | Indexed on RPEI FK + OutcomeType. For large activities, the GROUP BY is efficient |

@@ -5,7 +5,7 @@
 ## Model Structure
 
 **PendingExport**:
-- `Id` (Guid), `ConnectedSystemId` (int), `ConnectedSystemObjectId` (Guid? — null for Create before CSO exists)
+- `Id` (Guid), `ConnectedSystemId` (int), `ConnectedSystemObjectId` (Guid?; null for Create before CSO exists)
 - `ChangeType`: Create, Update, or Delete
 - `Status`: Pending, ExportNotConfirmed, Executing, Failed, or Exported
 - `SourceMetaverseObjectId` (Guid?): the MVO that triggered the export
@@ -78,20 +78,20 @@ When a drift-detection PE exists and a new export-eval PE is created for the sam
 4. Combine: new export eval changes + cloned drift-only changes
 5. Delete old PE, create new merged PE
 
-**Export eval always wins on conflict** — newer MVO state takes precedence over stale drift detection.
+**Export eval always wins on conflict**: newer MVO state takes precedence over stale drift detection.
 
 ## Sync Rule / RPEI Traceability
 
 **PE attribute changes have no sync-rule provenance field.** There is no `SyncRuleId` or `RpeiId` on `PendingExportAttributeValueChange`. The PE itself only tracks:
-- `SourceMetaverseObjectId` — the MVO that triggered the export
-- `ConnectedSystemId` — the target system
+- `SourceMetaverseObjectId`: the MVO that triggered the export
+- `ConnectedSystemId`: the target system
 
 The association to a sync rule is **indirect**, via the causality tree:
 - `ActivityRunProfileExecutionItemSyncOutcome` records a `PendingExportCreated` outcome as a child of the sync rule evaluation that produced it
 - A `ConnectedSystemObjectChange` snapshot (attached to the outcome) captures the attribute values at creation time
-- But the PE attribute changes themselves are "rule-agnostic" — just the final computed values
+- But the PE attribute changes themselves are "rule-agnostic"; just the final computed values
 
-**Implication**: when a second sync merges into an existing PE, the original sync rule attribution is overwritten. The causality tree outcome is the only durable record of which sync rule originally created or modified the PE. This is why the `HasRelevantChangedAttributes` guard (added March 2026) is important — without it, the causality tree incorrectly claims ownership of PEs it didn't cause.
+**Implication**: when a second sync merges into an existing PE, the original sync rule attribution is overwritten. The causality tree outcome is the only durable record of which sync rule originally created or modified the PE. This is why the `HasRelevantChangedAttributes` guard (added March 2026) is important; without it, the causality tree incorrectly claims ownership of PEs it didn't cause.
 
 ## Consumption During Export
 

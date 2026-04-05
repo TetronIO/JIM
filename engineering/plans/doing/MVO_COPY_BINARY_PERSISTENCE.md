@@ -3,7 +3,7 @@
 - **Status:** Doing (creates complete, updates deferred)
 - **Milestone**: v0.9-STABILISATION
 - **GitHub Issue**: [#436](https://github.com/TetronIO/JIM/issues/436)
-- **Parent**: [#338](https://github.com/TetronIO/JIM/issues/338) (closed — Phases 1–6 creates complete)
+- **Parent**: [#338](https://github.com/TetronIO/JIM/issues/338) (closed; Phases 1–6 creates complete)
 - **Related**: [`docs/plans/done/WORKER_DATABASE_PERFORMANCE_OPTIMISATION.md`](../done/WORKER_DATABASE_PERFORMANCE_OPTIMISATION.md)
 - **Created**: 2026-03-27
 
@@ -15,8 +15,8 @@ MVO persistence was the **last major hot path still using EF Core's per-row SQL 
 
 ## Business Value
 
-- **Eliminates the last single-connection bottleneck** in the sync flush — MVO creates now use COPY binary, matching CSO/RPEI throughput
-- **Consistent architecture** — all bulk write hot paths use the same COPY binary pattern
+- **Eliminates the last single-connection bottleneck** in the sync flush; MVO creates now use COPY binary, matching CSO/RPEI throughput
+- **Consistent architecture**: all bulk write hot paths use the same COPY binary pattern
 - **Expected 5–20x improvement** in MVO create throughput (based on CSO COPY binary results)
 
 ---
@@ -27,12 +27,12 @@ Convert `CreateMetaverseObjectsAsync` to use COPY binary, following the exact pa
 
 **Implementation** (`SyncRepository.MvoOperations.cs`):
 
-- `CreateMetaverseObjectsBulkAsync` — entry point with ID pre-generation, intra-batch reference fixup, route selection
-- `CreateMvosOnSingleConnectionAsync` — single-connection fallback for small batches
-- `BulkInsertMvosOnConnectionAsync` — COPY binary for `MetaverseObjects` (10 columns, `xmin` excluded)
-- `BulkInsertMvoAttributeValuesOnConnectionAsync` — COPY binary for `MetaverseObjectAttributeValues` (13 columns)
-- `BulkInsertMvosViaEfAsync` — parameterised multi-row INSERT fallback (single-connection path)
-- `BulkInsertMvoAttributeValuesViaEfAsync` — parameterised multi-row INSERT fallback (single-connection path)
+- `CreateMetaverseObjectsBulkAsync`: entry point with ID pre-generation, intra-batch reference fixup, route selection
+- `CreateMvosOnSingleConnectionAsync`: single-connection fallback for small batches
+- `BulkInsertMvosOnConnectionAsync`: COPY binary for `MetaverseObjects` (10 columns, `xmin` excluded)
+- `BulkInsertMvoAttributeValuesOnConnectionAsync`: COPY binary for `MetaverseObjectAttributeValues` (13 columns)
+- `BulkInsertMvosViaEfAsync`: parameterised multi-row INSERT fallback (single-connection path)
+- `BulkInsertMvoAttributeValuesViaEfAsync`: parameterised multi-row INSERT fallback (single-connection path)
 
 **Delegation** (`SyncRepository.cs`): `CreateMetaverseObjectsAsync` now routes to the owned `CreateMetaverseObjectsBulkAsync` instead of delegating to `MetaverseRepository`.
 
@@ -42,9 +42,9 @@ Integration testing revealed that bypassing EF for MVO creates caused a `DbUpdat
 
 1. Downstream sync code (`CreatePendingMvoChangeObjectsAsync`) adds `MetaverseObjectChange` entities to `mvo.Changes` navigation collections
 2. When `SaveChangesAsync` runs later (via `UpdateActivityAsync`), EF needs to track the parent MVO to discover and persist these child entities
-3. With COPY binary, MVOs were untracked — EF either missed the child entities or discovered the MVOs through navigation traversal with stale `xmin = 0`
+3. With COPY binary, MVOs were untracked; EF either missed the child entities or discovered the MVOs through navigation traversal with stale `xmin = 0`
 
-**Fix**: After COPY binary persistence, MVOs and their attribute values are attached to the EF change tracker as `Unchanged` with shadow FKs (`TypeId`, `MetaverseObjectId`) set explicitly. This is a **temporary bridge** — it will be removed when MVO change tracking and export evaluation are also converted to raw SQL.
+**Fix**: After COPY binary persistence, MVOs and their attribute values are attached to the EF change tracker as `Unchanged` with shadow FKs (`TypeId`, `MetaverseObjectId`) set explicitly. This is a **temporary bridge**: it will be removed when MVO change tracking and export evaluation are also converted to raw SQL.
 
 ### Column Reference
 
@@ -55,7 +55,7 @@ Integration testing revealed that bypassing EF for MVO creates caused a `DbUpdat
 | Id | uuid | No | Pre-generated `Guid.NewGuid()` |
 | Created | timestamp with time zone | No | |
 | LastUpdated | timestamp with time zone | Yes | |
-| TypeId | integer | No | Shadow FK to MetaverseObjectType — read from `mvo.Type.Id` |
+| TypeId | integer | No | Shadow FK to MetaverseObjectType; read from `mvo.Type.Id` |
 | Status | integer | No | Enum `MetaverseObjectStatus` |
 | Origin | integer | No | Enum `MetaverseObjectOrigin` |
 | LastConnectorDisconnectedDate | timestamp with time zone | Yes | |
@@ -63,7 +63,7 @@ Integration testing revealed that bypassing EF for MVO creates caused a `DbUpdat
 | DeletionInitiatedById | uuid | Yes | |
 | DeletionInitiatedByName | text | Yes | |
 
-Note: `xmin` is a PostgreSQL system column (concurrency token) — assigned automatically by PostgreSQL on INSERT, must NOT be included in COPY statements.
+Note: `xmin` is a PostgreSQL system column (concurrency token); assigned automatically by PostgreSQL on INSERT, must NOT be included in COPY statements.
 
 **MetaverseObjectAttributeValues** (13 columns):
 
@@ -85,9 +85,9 @@ Note: `xmin` is a PostgreSQL system column (concurrency token) — assigned auto
 
 ### FK Fixup
 
-The caller at `SyncTaskProcessorBase` relies on `cso.MetaverseObject.Id` being populated after `CreateMetaverseObjectsAsync`. With pre-generated IDs, `mvo.Id` is set before persistence — no caller changes needed.
+The caller at `SyncTaskProcessorBase` relies on `cso.MetaverseObject.Id` being populated after `CreateMetaverseObjectsAsync`. With pre-generated IDs, `mvo.Id` is set before persistence; no caller changes needed.
 
-### Success Criteria — Met
+### Success Criteria; Met
 
 - ✅ `CreateMetaverseObjectsAsync` uses COPY binary for large batches, parameterised INSERT for small batches
 - ✅ Pre-generated IDs ensure CSO FK fixup works without EF relationship fixup
@@ -99,7 +99,7 @@ The caller at `SyncTaskProcessorBase` relies on `cso.MetaverseObject.Id` being p
 
 ## MVO Updates (deferred)
 
-`UpdateMetaverseObjectsAsync` remains on EF Core. Tracked under [#436](https://github.com/TetronIO/JIM/issues/436) — tackle only when profiling shows MVO updates are a significant bottleneck in delta sync.
+`UpdateMetaverseObjectsAsync` remains on EF Core. Tracked under [#436](https://github.com/TetronIO/JIM/issues/436); tackle only when profiling shows MVO updates are a significant bottleneck in delta sync.
 
 ### Why updates are fundamentally harder than creates
 
@@ -107,10 +107,10 @@ Creates are a single operation (INSERT rows). Updates involve **four distinct op
 
 | Operation | What | Raw SQL approach |
 |-----------|------|-----------------|
-| UPDATE parent MVO rows | Scalar property changes (Status, LastUpdated, deletion fields) | `UPDATE ... FROM (VALUES ...)` batch — straightforward |
-| INSERT new attribute values | AVs added during inbound attribute flow | COPY binary — proven pattern from creates |
-| UPDATE existing attribute values | AVs modified during inbound attribute flow | `UPDATE ... FROM (VALUES ...)` — 13 nullable columns |
-| DELETE removed attribute values | AVs recalled during disconnect/out-of-scope | `DELETE ... WHERE "Id" IN (...)` — need to identify which |
+| UPDATE parent MVO rows | Scalar property changes (Status, LastUpdated, deletion fields) | `UPDATE ... FROM (VALUES ...)` batch; straightforward |
+| INSERT new attribute values | AVs added during inbound attribute flow | COPY binary; proven pattern from creates |
+| UPDATE existing attribute values | AVs modified during inbound attribute flow | `UPDATE ... FROM (VALUES ...)`: 13 nullable columns |
+| DELETE removed attribute values | AVs recalled during disconnect/out-of-scope | `DELETE ... WHERE "Id" IN (...)`: need to identify which |
 
 The crux is **knowing which attribute values are new vs modified vs deleted** without EF's change tracker. Currently:
 
@@ -131,7 +131,7 @@ MVOs arrive at `UpdateMetaverseObjectsAsync` in mixed states depending on the ca
 | Singular update (deletion marking) | Tracked | No AV changes | Enabled |
 | Singular update (out-of-scope disconnect) | Tracked | Removals applied | Enabled |
 
-The cross-page path is the dangerous one — `AutoDetectChangesEnabled = false` prevents `SaveChangesAsync` from walking navigation properties into shared `MetaverseAttribute`/`MetaverseObjectType` instances (which would cause identity conflicts). The current `UpdateDetachedSafe` + per-entity `Entry().State =` pattern was the result of 11 debugging attempts documented in `docs/notes/done/CROSS_PAGE_REFERENCE_IDENTITY_CONFLICT.md`.
+The cross-page path is the dangerous one; `AutoDetectChangesEnabled = false` prevents `SaveChangesAsync` from walking navigation properties into shared `MetaverseAttribute`/`MetaverseObjectType` instances (which would cause identity conflicts). The current `UpdateDetachedSafe` + per-entity `Entry().State =` pattern was the result of 11 debugging attempts documented in `docs/notes/done/CROSS_PAGE_REFERENCE_IDENTITY_CONFLICT.md`.
 
 ### Recommendation
 

@@ -6,7 +6,7 @@
 | **Last Updated** | 2026-02-20 |
 | **Status** | Active |
 
-This guide covers JIM's expression language — a simple, readable syntax for transforming and mapping identity attributes in sync rules. No programming experience is required.
+This guide covers JIM's expression language: a simple, readable syntax for transforming and mapping identity attributes in sync rules. No programming experience is required.
 
 ## Overview
 
@@ -14,10 +14,10 @@ JIM includes a built-in expression engine that lets you write short formulas to 
 
 Expressions are used in:
 
-- **Export attribute mappings** — Transform metaverse attributes before sending them to a connected system
-- **Import attribute mappings** — Transform connected system attributes before storing them in the metaverse
-- **Conditional logic** — Choose different values based on conditions (e.g., enable or disable an account based on employee status)
-- **Scoping filters** — Determine which objects are in scope for a sync rule
+- **Export attribute mappings**: Transform metaverse attributes before sending them to a connected system
+- **Import attribute mappings**: Transform connected system attributes before storing them in the metaverse
+- **Conditional logic**: Choose different values based on conditions (e.g., enable or disable an account based on employee status)
+- **Scoping filters**: Determine which objects are in scope for a sync rule
 
 ## Quick Examples
 
@@ -38,8 +38,8 @@ Coalesce(mv["Preferred Name"], mv["First Name"])
 
 Expressions work with two sources of data:
 
-- **`mv`** — attributes on the Metaverse Object (the central identity record)
-- **`cs`** — attributes on the Connected System Object (the external system record)
+- **`mv`**: attributes on the Metaverse Object (the central identity record)
+- **`cs`**: attributes on the Connected System Object (the external system record)
 
 Access an attribute by putting its name in square brackets and quotes:
 
@@ -52,7 +52,7 @@ cs["sAMAccountName"]
 cs["userAccountControl"]
 ```
 
-Attribute names must match the exact casing as defined in JIM — for example, `mv["Department"]` and `mv["department"]` are treated as different names. If an expression returns nothing unexpectedly, double-check the attribute name casing matches what's shown in the JIM admin UI.
+Attribute names must match the exact casing as defined in JIM; for example, `mv["Department"]` and `mv["department"]` are treated as different names. If an expression returns nothing unexpectedly, double-check the attribute name casing matches what's shown in the JIM admin UI.
 
 ## Operators
 
@@ -105,23 +105,23 @@ Combine multiple conditions using logical operators:
 | `\|\|`   | OR      | `10 > 3 \|\| 5 < 2`           | `true`  |
 | `!`      | NOT     | `!(10 > 3)`                    | `false` |
 
-Example — check that an employee is both active and in the IT department:
+Example: check that an employee is both active and in the IT department:
 
 ```csharp
 Eq(mv["Employee Status"], "Active") && Eq(mv["Department"], "IT")
 ```
 
-## String Comparison — IMPORTANT
+## String Comparison - IMPORTANT
 
 **Always use `Eq()` for comparing text values, NOT `==`.**
 
 The `==` operator can give incorrect results when comparing attribute values to text. This is a technical limitation of how attribute values are stored internally.
 
 ```csharp
-// WRONG — may give incorrect results
+// WRONG - may give incorrect results
 IIF(mv["Employee Status"] == "Active", 512, 514)
 
-// CORRECT — always use Eq() for text comparisons
+// CORRECT - always use Eq() for text comparisons
 IIF(Eq(mv["Employee Status"], "Active"), 512, 514)
 ```
 
@@ -260,8 +260,8 @@ FromFileTime(cs["accountExpires"])
 
 **Important notes:**
 
-- If the date attribute is empty or missing, these functions return nothing (null) — no change is made to the target
-- AD treats `0` and very large numbers as "never expires" — `FromFileTime()` returns nothing for these values
+- If the date attribute is empty or missing, these functions return nothing (null); no change is made to the target
+- AD treats `0` and very large numbers as "never expires"; `FromFileTime()` returns nothing for these values
 - `ToFileTime()` safely handles empty text, missing values, and invalid dates by returning nothing
 
 ### Building Email Addresses
@@ -278,7 +278,7 @@ For "Jane Smith", this produces: `jane.smith@company.com`
 Coalesce(mv["Title"], "") + " " + mv["First Name"] + " " + mv["Last Name"]
 ```
 
-`Coalesce` uses the title if one exists, otherwise uses an empty string — avoiding a "null" appearing in the output.
+`Coalesce` uses the title if one exists, otherwise uses an empty string, avoiding a "null" appearing in the output.
 
 ### Building Distinguished Names (DNs)
 
@@ -322,7 +322,7 @@ IT department users get a "tech-" prefix; everyone else keeps their account name
 
 When a source system stores multiple values in a single field separated by a delimiter (e.g., `"COURSE1|COURSE2|COURSE3"`), use `Split()` to break them into separate values.
 
-**Example — training courses from a CSV file:**
+**Example: training courses from a CSV file:**
 
 The source CSV has pipe-separated courses in a single column:
 ```
@@ -366,31 +366,31 @@ JIM validates expressions when you save a sync rule. If an expression has a synt
 
 Common errors:
 
-- **Missing closing quote or bracket** — check that every `"` and `(` has a matching pair
-- **Unknown function name** — check the spelling; function names are case-sensitive
-- **Wrong number of parameters** — check the function reference above for the correct parameters
-- **Syntax errors** — look for misplaced operators or missing commas between function parameters
+- **Missing closing quote or bracket**: check that every `"` and `(` has a matching pair
+- **Unknown function name**: check the spelling; function names are case-sensitive
+- **Wrong number of parameters**: check the function reference above for the correct parameters
+- **Syntax errors**: look for misplaced operators or missing commas between function parameters
 
 ### Troubleshooting
 
 When an expression doesn't produce the result you expect:
 
-1. **Check attribute names carefully** — names must match the exact casing shown in the JIM admin UI, so `mv["department"]` and `mv["Department"]` are treated differently
-2. **Use `Eq()` for text comparisons** — using `==` for text is a common mistake (see [String Comparison](#string-comparison---important))
-3. **Check for missing values** — if an attribute doesn't exist on the object, it returns nothing (null), which can affect the result. Use `Coalesce()` or `IsNullOrEmpty()` to handle this
-4. **Test with sample data** — use the expression test feature in the sync rule editor to try your expression with real attribute values before saving
-5. **Check the worker logs** — if expressions fail during sync, the worker service logs the error details
+1. **Check attribute names carefully**: names must match the exact casing shown in the JIM admin UI, so `mv["department"]` and `mv["Department"]` are treated differently
+2. **Use `Eq()` for text comparisons**: using `==` for text is a common mistake (see [String Comparison](#string-comparison---important))
+3. **Check for missing values**: if an attribute doesn't exist on the object, it returns nothing (null), which can affect the result. Use `Coalesce()` or `IsNullOrEmpty()` to handle this
+4. **Test with sample data**: use the expression test feature in the sync rule editor to try your expression with real attribute values before saving
+5. **Check the worker logs**: if expressions fail during sync, the worker service logs the error details
 
 ## Best Practices
 
-1. **Always use `Eq()` for text comparisons** — the `==` operator can give incorrect results when comparing attribute values.
+1. **Always use `Eq()` for text comparisons**: the `==` operator can give incorrect results when comparing attribute values.
 
-2. **Handle missing values** — use `Coalesce()` to provide a fallback, or `IsNullOrEmpty()` to check before using a value. This prevents unexpected results when an attribute hasn't been populated yet.
+2. **Handle missing values**: use `Coalesce()` to provide a fallback, or `IsNullOrEmpty()` to check before using a value. This prevents unexpected results when an attribute hasn't been populated yet.
 
-3. **Always use `EscapeDN()` in distinguished names** — this prevents special characters in names from breaking LDAP paths.
+3. **Always use `EscapeDN()` in distinguished names**: this prevents special characters in names from breaking LDAP paths.
 
-4. **Test before saving** — use the expression test feature in the UI to verify your expressions with sample data.
+4. **Test before saving**: use the expression test feature in the UI to verify your expressions with sample data.
 
-5. **Keep expressions simple** — if an expression is getting complex, consider splitting the logic across multiple attribute mappings.
+5. **Keep expressions simple**: if an expression is getting complex, consider splitting the logic across multiple attribute mappings.
 
-6. **Document complex expressions** — add a note in the sync rule's description explaining what complex expressions do, so the next person can understand them.
+6. **Document complex expressions**: add a note in the sync rule's description explaining what complex expressions do, so the next person can understand them.

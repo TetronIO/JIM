@@ -328,7 +328,7 @@ docker compose logs -f
 
 #### Step 9: Verify Startup
 
-JIM automatically applies any pending database migrations on first startup — no manual migration step is required. Watch the logs to confirm:
+JIM automatically applies any pending database migrations on first startup; no manual migration step is required. Watch the logs to confirm:
 
 ```bash
 docker compose logs jim.worker --tail=50
@@ -471,7 +471,7 @@ Then restart services:
 docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
 ```
 
-Docker images are immutable — the previous version's images are still available locally (or in GHCR for online environments). This is the fastest rollback path.
+Docker images are immutable; the previous version's images are still available locally (or in GHCR for online environments). This is the fastest rollback path.
 
 ### 2. Roll Back Database Migrations (If Needed)
 
@@ -512,7 +512,7 @@ If you need to retract the release:
 
 - **Always backup your database** before upgrading JIM
 - Deploy to a staging environment first and run smoke tests before promoting to production
-- Keep previous Docker images available locally — do not prune images immediately after upgrading
+- Keep previous Docker images available locally; do not prune images immediately after upgrading
 
 ## Troubleshooting
 
@@ -533,7 +533,7 @@ The job was not acquired by Runner of type hosted even after multiple attempts
 This is a GitHub infrastructure issue, not a code problem. When this happens to the release workflow:
 
 1. **Go to the failed run**: `https://github.com/TetronIO/JIM/actions` and find the Release workflow run
-2. **Click "Re-run failed jobs"** (not "Re-run all jobs") — this re-runs only the jobs that failed, skipping any that already succeeded
+2. **Click "Re-run failed jobs"** (not "Re-run all jobs"): this re-runs only the jobs that failed, skipping any that already succeeded
 3. **If the entire workflow failed** (e.g., `validate` timed out and all downstream jobs were skipped), use **"Re-run all jobs"** instead
 
 **Important**: The release workflow is triggered by a tag push (`v*`). Re-running jobs on the existing workflow run is safe and does not require deleting and re-pushing the tag. GitHub retains the workflow run and its tag reference, so re-runs work correctly.
@@ -548,13 +548,13 @@ validate
 |   +-- create-release (needs: build-containers, publish-powershell, create-bundle)
 ```
 
-Nothing publishes unless Docker images build successfully — PSGallery publish waits for `build-containers` to prevent partial releases.
+Nothing publishes unless Docker images build successfully; PSGallery publish waits for `build-containers` to prevent partial releases.
 
-- If `validate` fails: all downstream jobs are skipped — re-run all jobs
-- If `build-containers` fails: everything downstream is skipped (no partial release) — re-run failed jobs
-- If `publish-powershell` fails: `create-release` is skipped — re-run failed jobs (PSGallery publish is idempotent; it skips if the version already exists)
-- If `create-bundle` fails: `create-release` is skipped — re-run failed jobs
-- If `create-release` fails: all artefacts are built, only the GitHub Release needs creating — re-run failed jobs
+- If `validate` fails: all downstream jobs are skipped; re-run all jobs
+- If `build-containers` fails: everything downstream is skipped (no partial release); re-run failed jobs
+- If `publish-powershell` fails: `create-release` is skipped; re-run failed jobs (PSGallery publish is idempotent; it skips if the version already exists)
+- If `create-bundle` fails: `create-release` is skipped; re-run failed jobs
+- If `create-release` fails: all artefacts are built, only the GitHub Release needs creating; re-run failed jobs
 
 **Note**: Unrelated workflows (e.g., CodeQL) may also fail due to runner timeouts. These do not affect the release and can be re-run independently.
 

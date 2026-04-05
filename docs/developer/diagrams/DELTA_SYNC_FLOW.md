@@ -1,6 +1,6 @@
 # Delta Sync Flow
 
-> Last updated: 2026-03-26 — JIM v0.7.1 (`00907431`)
+> Last updated: 2026-03-26, JIM v0.7.1 (`00907431`)
 
 This diagram shows how Delta Synchronisation differs from Full Synchronisation. Both use identical per-CSO processing logic; the only difference is CSO selection and a few lifecycle steps.
 
@@ -87,7 +87,7 @@ flowchart TD
 
 - **Watermark always advances**: Even when zero CSOs are modified, the watermark is updated. This prevents the watermark from becoming stale if no changes occur for an extended period.
 
-- **First delta sync processes everything**: If `LastSyncCompletedAt` is null (no previous sync), the watermark defaults to `DateTime.MinValue`, effectively selecting all CSOs — the same set as a full sync.
+- **First delta sync processes everything**: If `LastSyncCompletedAt` is null (no previous sync), the watermark defaults to `DateTime.MinValue`, effectively selecting all CSOs, the same set as a full sync.
 
 - **No pending export surfacing**: Delta sync skips `SurfacePendingExportsAsExecutionItems()` since it's a lightweight incremental operation. Full sync surfaces pending exports as RPEIs so operators can see what changes are staged for the next export run.
 

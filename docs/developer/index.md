@@ -16,7 +16,7 @@ This guide covers everything you need to get started as a contributor: setting u
 
     ---
 
-    Set up your environment with GitHub Codespaces or a local devcontainer — everything is pre-configured.
+    Set up your environment with GitHub Codespaces or a local devcontainer; everything is pre-configured.
 
     [:octicons-arrow-right-24: Environment setup](dev-environment.md)
 

@@ -5,15 +5,15 @@
 
 ## Status: ✅ RESOLVED
 
-All recommendations implemented: defunct attribute filtering, constructed attribute detection, back-link detection, system-only detection, and writability indication (`AttributeWritability`) are all in place. The optional schema query optimisation (Section 5.5 — request only needed attributes) was not implemented but is non-critical.
+All recommendations implemented: defunct attribute filtering, constructed attribute detection, back-link detection, system-only detection, and writability indication (`AttributeWritability`) are all in place. The optional schema query optimisation (Section 5.5; request only needed attributes) was not implemented but is non-critical.
 
 ## Executive Summary
 
 The current implementation correctly walks the objectClass hierarchy and collects attributes from structural superclasses and auxiliary classes. The hierarchy-walking logic is **sound** and aligns with RFC 4512. However, the implementation currently returns **all** schema-declared attributes without filtering out those that are not practically useful or writable, which leads to:
 
-1. **User confusion** — hundreds of attributes per object type, many of which cannot be written to or serve no identity management purpose
-2. **Potential export errors** — if a user maps to a constructed or system-only attribute, the export will fail at runtime
-3. **Reduced performance** — unnecessary schema queries for attributes that will never be used
+1. **User confusion**: hundreds of attributes per object type, many of which cannot be written to or serve no identity management purpose
+2. **Potential export errors**: if a user maps to a constructed or system-only attribute, the export will fail at runtime
+3. **Reduced performance**: unnecessary schema queries for attributes that will never be used
 
 This document analyses what the LDAP spec requires, what the current code does, identifies the gaps, and makes specific recommendations.
 
@@ -21,7 +21,7 @@ This document analyses what the LDAP spec requires, what the current code does, 
 
 ## 1. What the LDAP Specification Says
 
-### RFC 4512 — Object Class Kinds (Sections 2.4.1-2.4.3)
+### RFC 4512; Object Class Kinds (Sections 2.4.1-2.4.3)
 
 Three kinds of object class:
 
@@ -83,7 +83,7 @@ AD extends the RFC model with additional schema metadata on `classSchema` and `a
 | `systemFlags` | Bit flags controlling attribute behaviour | **Critical for filtering** |
 | `systemOnly` | TRUE = server-managed, clients cannot write | **Critical for filtering** |
 | `isDefunct` | TRUE = deprecated, should not be used | Should filter |
-| `isSingleValued` | TRUE/FALSE — value plurality | Already used |
+| `isSingleValued` | TRUE/FALSE; value plurality | Already used |
 | `oMSyntax` | Data type indicator | Already used |
 | `linkID` | If set, attribute is a linked attribute; odd = back-link | Should filter back-links |
 | `searchFlags` | Controls indexing, confidentiality, etc. | Informational |
@@ -111,7 +111,7 @@ Examples: `canonicalName`, `tokenGroups`, `allowedAttributes`, `allowedAttribute
 
 ### SAM Layer Overrides
 
-The Security Account Manager (SAM) layer overrides schema semantics for security principal classes (user, group, computer, inetOrgPerson, samDomain, samServer). The current code already handles the `description` attribute plurality override — this is correct.
+The Security Account Manager (SAM) layer overrides schema semantics for security principal classes (user, group, computer, inetOrgPerson, samDomain, samServer). The current code already handles the `description` attribute plurality override; this is correct.
 
 ### Dynamic Auxiliary Classes
 
@@ -123,16 +123,16 @@ Starting with Windows Server 2003, auxiliary classes can be dynamically linked t
 
 ### What the Code Does Correctly
 
-1. **Filters to structural classes only** (`objectClassCategory=1`) — correct per RFC 4512
-2. **Excludes hidden classes** (`defaultHidingValue=FALSE`) — sensible UX decision
-3. **Walks the full superclass chain** via `subClassOf` — correct per RFC 4512
-4. **Includes auxiliary class attributes** from both `auxiliaryClass` and `systemAuxiliaryClass` — correct per RFC 4512
-5. **Recursively walks auxiliary class hierarchies** — correct, auxiliary classes can subclass other auxiliary classes
-6. **Deduplicates attributes** across the hierarchy — correct, prevents duplicate entries
-7. **Handles SAM layer plurality overrides** — correct for AD environments
-8. **Correctly determines data types** via `oMSyntax` mapping — comprehensive coverage
-9. **Records which class defined each attribute** (`ClassName` property) — useful for user understanding
-10. **Sets recommended external ID attributes** (objectGUID + distinguishedName) — correct for AD
+1. **Filters to structural classes only** (`objectClassCategory=1`); correct per RFC 4512
+2. **Excludes hidden classes** (`defaultHidingValue=FALSE`); sensible UX decision
+3. **Walks the full superclass chain** via `subClassOf`: correct per RFC 4512
+4. **Includes auxiliary class attributes** from both `auxiliaryClass` and `systemAuxiliaryClass`: correct per RFC 4512
+5. **Recursively walks auxiliary class hierarchies**: correct, auxiliary classes can subclass other auxiliary classes
+6. **Deduplicates attributes** across the hierarchy; correct, prevents duplicate entries
+7. **Handles SAM layer plurality overrides**: correct for AD environments
+8. **Correctly determines data types** via `oMSyntax` mapping; comprehensive coverage
+9. **Records which class defined each attribute** (`ClassName` property); useful for user understanding
+10. **Sets recommended external ID attributes** (objectGUID + distinguishedName); correct for AD
 
 ### What the Code Does NOT Do (Gaps)
 
@@ -216,16 +216,16 @@ Exclude from the schema results:
 | Defunct attributes | No longer valid in the schema | `isDefunct = TRUE` |
 | Constructed attributes (optionally) | Cannot be written to; rarely useful for import either | `systemFlags & 0x4` |
 
-**Do NOT exclude** system-only attributes entirely — some are valuable for import (e.g. `whenCreated`, `objectSid`). Instead, mark them as read-only so the UI can indicate they are import-only.
+**Do NOT exclude** system-only attributes entirely; some are valuable for import (e.g. `whenCreated`, `objectSid`). Instead, mark them as read-only so the UI can indicate they are import-only.
 
 ### 5.3 Retrieve Filtering Attributes During Schema Queries (Recommended)
 
 When looking up each attribute's schema entry in `GetSchemaAttribute()`, also request:
 
-- `systemFlags` — to detect constructed attributes
-- `systemOnly` — to detect system-managed attributes
-- `linkID` — to detect back-links
-- `isDefunct` — to detect deprecated attributes
+- `systemFlags`: to detect constructed attributes
+- `systemOnly`: to detect system-managed attributes
+- `linkID`: to detect back-links
+- `isDefunct`: to detect deprecated attributes
 
 These are all available on `attributeSchema` objects in the schema partition and can be retrieved in the same query that already fetches `oMSyntax`, `isSingleValued`, `description`, etc.
 
@@ -241,7 +241,7 @@ Mark these as read-only and consider adding a note in the description indicating
 
 ### 5.5 Performance Optimisation: Request Only Needed Attributes (Optional)
 
-The current `GetSchemaEntry()` method performs a bare search without specifying which attributes to return — the server returns all attributes on each schema entry. For the class hierarchy walk, only `ldapdisplayname`, `subclassof`, `maycontain`, `mustcontain`, `systemmaycontain`, `systemmustcontain`, `auxiliaryclass`, and `systemauxiliaryclass` are needed. For attribute lookups, only `ldapdisplayname`, `description`, `admindescription`, `issinglevalued`, `omsyntax`, `systemflags`, `systemonly`, `linkid`, and `isdefunct` are needed.
+The current `GetSchemaEntry()` method performs a bare search without specifying which attributes to return; the server returns all attributes on each schema entry. For the class hierarchy walk, only `ldapdisplayname`, `subclassof`, `maycontain`, `mustcontain`, `systemmaycontain`, `systemmustcontain`, `auxiliaryclass`, and `systemauxiliaryclass` are needed. For attribute lookups, only `ldapdisplayname`, `description`, `admindescription`, `issinglevalued`, `omsyntax`, `systemflags`, `systemonly`, `linkid`, and `isdefunct` are needed.
 
 Specifying required attributes in the `SearchRequest` would reduce network traffic and server processing time.
 
@@ -298,27 +298,27 @@ This is noted for future reference and is out of scope for issue #346.
 
 ### IETF RFCs
 
-- **RFC 4512** — LDAP: Directory Information Models — [https://www.rfc-editor.org/rfc/rfc4512.html](https://www.rfc-editor.org/rfc/rfc4512.html)
+- **RFC 4512**: LDAP: Directory Information Models; [https://www.rfc-editor.org/rfc/rfc4512.html](https://www.rfc-editor.org/rfc/rfc4512.html)
   - Section 2.4: Object Classes (abstract, structural, auxiliary)
   - Section 2.4.1-2.4.3: Kind-specific rules and inheritance
   - Section 2.5: Attribute Types and USAGE
   - Section 2.6: DIT Content Rules
-- **RFC 4519** — LDAP Schema for User Applications — [https://www.rfc-editor.org/rfc/rfc4519.html](https://www.rfc-editor.org/rfc/rfc4519.html)
-- **RFC 4517** — LDAP Syntaxes and Matching Rules — [https://www.rfc-editor.org/rfc/rfc4517.html](https://www.rfc-editor.org/rfc/rfc4517.html)
+- **RFC 4519**: LDAP Schema for User Applications; [https://www.rfc-editor.org/rfc/rfc4519.html](https://www.rfc-editor.org/rfc/rfc4519.html)
+- **RFC 4517**: LDAP Syntaxes and Matching Rules; [https://www.rfc-editor.org/rfc/rfc4517.html](https://www.rfc-editor.org/rfc/rfc4517.html)
 
 ### Microsoft Documentation
 
-- **MS-ADTS: systemFlags** — [https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/1e38247d-8234-4273-9de3-bbf313548631](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/1e38247d-8234-4273-9de3-bbf313548631)
-- **MS-ADTS: Constructed Attributes** — [https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/a3aff238-5f0e-4eec-8598-0a59c30ecd56](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/a3aff238-5f0e-4eec-8598-0a59c30ecd56)
-- **MS-ADTS: Auxiliary Classes** — [https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/06f3acb8-8cff-49e9-94ad-6737fa0a9503](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/06f3acb8-8cff-49e9-94ad-6737fa0a9503)
-- **AD Schema: Class Inheritance** — [https://learn.microsoft.com/en-us/windows/win32/ad/class-inheritance-in-the-active-directory-schema](https://learn.microsoft.com/en-us/windows/win32/ad/class-inheritance-in-the-active-directory-schema)
-- **AD Schema: description attribute** — [https://learn.microsoft.com/en-us/windows/win32/adschema/a-description](https://learn.microsoft.com/en-us/windows/win32/adschema/a-description)
-- **ADS_SYSTEMFLAG_ENUM** — [https://learn.microsoft.com/en-us/windows/win32/api/iads/ne-iads-ads_systemflag_enum](https://learn.microsoft.com/en-us/windows/win32/api/iads/ne-iads-ads_systemflag_enum)
+- **MS-ADTS: systemFlags**: [https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/1e38247d-8234-4273-9de3-bbf313548631](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/1e38247d-8234-4273-9de3-bbf313548631)
+- **MS-ADTS: Constructed Attributes**: [https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/a3aff238-5f0e-4eec-8598-0a59c30ecd56](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/a3aff238-5f0e-4eec-8598-0a59c30ecd56)
+- **MS-ADTS: Auxiliary Classes**: [https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/06f3acb8-8cff-49e9-94ad-6737fa0a9503](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/06f3acb8-8cff-49e9-94ad-6737fa0a9503)
+- **AD Schema: Class Inheritance**: [https://learn.microsoft.com/en-us/windows/win32/ad/class-inheritance-in-the-active-directory-schema](https://learn.microsoft.com/en-us/windows/win32/ad/class-inheritance-in-the-active-directory-schema)
+- **AD Schema: description attribute**: [https://learn.microsoft.com/en-us/windows/win32/adschema/a-description](https://learn.microsoft.com/en-us/windows/win32/adschema/a-description)
+- **ADS_SYSTEMFLAG_ENUM**: [https://learn.microsoft.com/en-us/windows/win32/api/iads/ne-iads-ads_systemflag_enum](https://learn.microsoft.com/en-us/windows/win32/api/iads/ne-iads-ads_systemflag_enum)
 
 ### Community References
 
-- **LDAP.com: Object Classes** — [https://ldap.com/object-classes/](https://ldap.com/object-classes/)
-- **LDAP.com: DIT Content Rules** — [https://ldap.com/dit-content-rules/](https://ldap.com/dit-content-rules/)
+- **LDAP.com: Object Classes**: [https://ldap.com/object-classes/](https://ldap.com/object-classes/)
+- **LDAP.com: DIT Content Rules**: [https://ldap.com/dit-content-rules/](https://ldap.com/dit-content-rules/)
 
 ---
 
@@ -328,7 +328,7 @@ This is noted for future reference and is out of scope for issue #346.
 
 Microsoft has only ever used `isDefunct` once across the entire history of AD schema updates (Sch1 through Sch91, Windows 2000 to Server 2025). It happened in Windows Server 2012 R2 when they redesigned Device Registration Service.
 
-**Pre-2012 R2 forests have zero defunct objects.** Base schema objects (`FLAG_SCHEMA_BASE_OBJECT`) cannot be made defunct — AD rejects it with `unwillingToPerform`.
+**Pre-2012 R2 forests have zero defunct objects.** Base schema objects (`FLAG_SCHEMA_BASE_OBJECT`) cannot be made defunct; AD rejects it with `unwillingToPerform`.
 
 ### Default Defunct Objects (Windows Server 2012 R2+)
 
@@ -359,10 +359,10 @@ Microsoft has only ever used `isDefunct` once across the entire history of AD sc
 
 ### Impact for JIM
 
-While rare, filtering defunct attributes is cheap insurance. A filter on the classSchema query (`(!(isDefunct=TRUE))`) handles the class level, and checking `isDefunct` during attribute schema lookups handles the attribute level. The cost is negligible — one extra attribute to read per schema entry lookup.
+While rare, filtering defunct attributes is cheap insurance. A filter on the classSchema query (`(!(isDefunct=TRUE))`) handles the class level, and checking `isDefunct` during attribute schema lookups handles the attribute level. The cost is negligible; one extra attribute to read per schema entry lookup.
 
 ### References
 
-- **MS-ADTS: Defunct** — [https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/23f34386-ed78-4ce5-aff2-3f04be12c090](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/23f34386-ed78-4ce5-aff2-3f04be12c090)
-- **AD Schema: isDefunct attribute** — [https://learn.microsoft.com/en-us/windows/win32/adschema/a-isdefunct](https://learn.microsoft.com/en-us/windows/win32/adschema/a-isdefunct)
-- **Disabling Existing Classes and Attributes** — [https://learn.microsoft.com/en-us/windows/win32/ad/disabling-existing-classes-and-attributes](https://learn.microsoft.com/en-us/windows/win32/ad/disabling-existing-classes-and-attributes)
+- **MS-ADTS: Defunct**: [https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/23f34386-ed78-4ce5-aff2-3f04be12c090](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/23f34386-ed78-4ce5-aff2-3f04be12c090)
+- **AD Schema: isDefunct attribute**: [https://learn.microsoft.com/en-us/windows/win32/adschema/a-isdefunct](https://learn.microsoft.com/en-us/windows/win32/adschema/a-isdefunct)
+- **Disabling Existing Classes and Attributes**: [https://learn.microsoft.com/en-us/windows/win32/ad/disabling-existing-classes-and-attributes](https://learn.microsoft.com/en-us/windows/win32/ad/disabling-existing-classes-and-attributes)

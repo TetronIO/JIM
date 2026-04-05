@@ -6,7 +6,7 @@
 
 ## Problem Statement
 
-The `GetConnectedSystemObjectAsync` repository method eagerly loads ALL attribute values with deep `.Include()` chains. For a CSO with a large multi-valued attribute (e.g. a group with 10,000 members), this loads the full entity graph into memory in a single query — including every reference value and their attribute values.
+The `GetConnectedSystemObjectAsync` repository method eagerly loads ALL attribute values with deep `.Include()` chains. For a CSO with a large multi-valued attribute (e.g. a group with 10,000 members), this loads the full entity graph into memory in a single query; including every reference value and their attribute values.
 
 This is a **data layer problem** that affects every consumer:
 
@@ -38,15 +38,15 @@ For a group with 10K members, this loads ~10K `ConnectedSystemObjectAttributeVal
 
 ### Stability Risks
 
-- **EF Core change tracker** scales poorly with entity count — `SaveChangesAsync` diffs every tracked entity
-- **Memory pressure** — multiple groups being processed concurrently compounds the problem
-- **Query timeouts** — even with `AsSplitQuery()`, the split queries for 10K reference values' attribute values are heavy
+- **EF Core change tracker** scales poorly with entity count; `SaveChangesAsync` diffs every tracked entity
+- **Memory pressure**: multiple groups being processed concurrently compounds the problem
+- **Query timeouts**: even with `AsSplitQuery()`, the split queries for 10K reference values' attribute values are heavy
 - **Blazor Server** holds the full entity graph in circuit memory for the duration of the page session
 
 ### What Already Works Well
 
 - Inline display on the CSO detail page is capped at `MvaInlineThreshold = 10` with a "+N more" button
-- `CsoMvaDialog` uses `Virtualize="true"` and has search/filter — good UX patterns, just needs server-side backing
+- `CsoMvaDialog` uses `Virtualize="true"` and has search/filter; good UX patterns, just needs server-side backing
 
 ## Proposed Solution: Fix at the Data Layer, Resolve Upward
 
@@ -68,7 +68,7 @@ The fix must start at the repository/data layer, with both worker and web/API co
 |                                                     |
 | GetConnectedSystemObjectReferenceProjectionsAsync() |
 |   Lightweight projection: (RefValueId,        (new) |
-|   MetaverseObjectId) — just what sync needs         |
+|   MetaverseObjectId); just what sync needs         |
 +-----------------------------------------------------+
           |                          |
           v                          v
@@ -85,11 +85,11 @@ The fix must start at the repository/data layer, with both worker and web/API co
 
 Rather than creating a new method, **fix the existing `GetConnectedSystemObjectAsync`** to remove deep eager loading of referenced CSOs' attribute values. This is what the method should have been doing all along. All current consumers benefit immediately.
 
-**Loading strategy parameter (Phase 2):** Even with shallow references, loading 10K+ attribute value entities in one call is still too heavy for web/API consumers that only display a capped subset. In Phase 2, `GetConnectedSystemObjectAsync` gains an optional loading strategy parameter that controls how much attribute data is loaded (e.g. all values, capped MVA values with counts, SVAs only). This allows consumers to request only the data they need — the web detail page and API load a capped set, while the worker continues to load all values for sync processing. See section 2.1.
+**Loading strategy parameter (Phase 2):** Even with shallow references, loading 10K+ attribute value entities in one call is still too heavy for web/API consumers that only display a capped subset. In Phase 2, `GetConnectedSystemObjectAsync` gains an optional loading strategy parameter that controls how much attribute data is loaded (e.g. all values, capped MVA values with counts, SVAs only). This allows consumers to request only the data they need; the web detail page and API load a capped set, while the worker continues to load all values for sync processing. See section 2.1.
 
 ### Phase 1: Lightweight Worker Queries
 
-**Goal:** Eliminate deep eager loading from sync processing. The worker doesn't need full entity graphs — it needs specific data for specific operations.
+**Goal:** Eliminate deep eager loading from sync processing. The worker doesn't need full entity graphs; it needs specific data for specific operations.
 
 #### 1.1 Analyse Worker Usage Patterns
 
@@ -102,14 +102,14 @@ The worker uses CSO attribute values in these ways:
 | **Reference resolution** (`ProcessReferenceAttribute`) | For each ref value: `ReferenceValueId`, `ReferenceValue.MetaverseObjectId` | Loads full `ReferenceValue` entity with all its `AttributeValues` |
 | **Export confirmation** | CSO attribute values by attribute ID | Loads ALL values; filters in memory |
 
-Key insight: `ProcessReferenceAttribute` only needs `(ReferenceValueId, MetaverseObjectId)` per reference — not the full referenced CSO entity with all its attributes. The deep includes exist only because the detail page needs display names and secondary IDs.
+Key insight: `ProcessReferenceAttribute` only needs `(ReferenceValueId, MetaverseObjectId)` per reference; not the full referenced CSO entity with all its attributes. The deep includes exist only because the detail page needs display names and secondary IDs.
 
 #### 1.2 Fix `GetConnectedSystemObjectAsync`: Remove Deep Includes ✅
 
 Fix the existing method so that it:
 
 - Loads the CSO with its `AttributeValues` and their `Attribute` metadata
-- Loads `ReferenceValue` navigation but **only** includes `Type` and `MetaverseObjectId` — NOT the referenced CSO's own `AttributeValues`
+- Loads `ReferenceValue` navigation but **only** includes `Type` and `MetaverseObjectId`: NOT the referenced CSO's own `AttributeValues`
 - Loads `MetaverseObject` with `Type` and `AttributeValues` (needed for mapping)
 
 This eliminates the most expensive part: loading every referenced CSO's full attribute set.
@@ -134,7 +134,7 @@ Currently `SyncRuleMappingProcessor.ProcessReferenceAttribute` loads all referen
 
 #### 2.1 Loading Strategy Parameter on `GetConnectedSystemObjectAsync`
 
-Add an optional parameter to `GetConnectedSystemObjectAsync` that controls attribute value loading. This keeps the API surface clean — one method, configurable behaviour:
+Add an optional parameter to `GetConnectedSystemObjectAsync` that controls attribute value loading. This keeps the API surface clean; one method, configurable behaviour:
 
 ```csharp
 Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(
@@ -194,7 +194,7 @@ Response:
 - Supports server-side search/filter
 - Supports pagination
 - Used by API consumers (e.g. the JIM PowerShell module)
-- The Blazor dialog does not use this endpoint — it calls JIM.Application directly
+- The Blazor dialog does not use this endpoint; it calls JIM.Application directly
 
 #### 2.4 Application Layer Changes
 
@@ -232,7 +232,7 @@ Convert `CsoMvaDialog` from client-side filtering to `MudTable` `ServerData` cal
 - Passes CSO ID + attribute name to the dialog instead of the full value list
 - No change to inline display (already capped at 10)
 
-### Phase 3: Further Worker Optimisation (Deferred — See #383)
+### Phase 3: Further Worker Optimisation (Deferred; See #383)
 
 Phases 1–2 are sufficient for groups up to ~50K members. Beyond that scale, EF Core change tracker overhead and memory pressure under concurrency become problematic. Phase 3 is deferred to a separate GitHub issue for implementation if/when needed.
 
@@ -242,8 +242,8 @@ Phases 1–2 are sufficient for groups up to ~50K members. Beyond that scale, EF
 |---|---|---|---|
 | 10K | ~20K | ~10–20 MB | Low |
 | 50K | ~100K | ~50–100 MB | Moderate |
-| 100K | ~200K | ~100–200 MB | High — SaveChangesAsync slowdown |
-| 500K+ | ~1M+ | ~500 MB+ | Critical — OOM risk with concurrent tasks |
+| 100K | ~200K | ~100–200 MB | High; SaveChangesAsync slowdown |
+| 500K+ | ~1M+ | ~500 MB+ | Critical; OOM risk with concurrent tasks |
 
 If large MVA processing is still problematic at scale, consider these optimisations:
 
@@ -283,11 +283,11 @@ Store a `DisplayName` column on `ConnectedSystemObject` maintained during import
 
 | Decision | Options | Recommendation |
 |---|---|---|
-| Default cap for detail view | 10 / 50 / 100 | 10 — matches inline display threshold; dialog fetches its own pages |
-| Default page size for paginated endpoint | 25 / 50 / 100 | 50 — standard pagination size |
-| Should API always include `AttributeValueSummaries`? | Always / Only when capped | Always — API consumers need predictable structure |
+| Default cap for detail view | 10 / 50 / 100 | 10; matches inline display threshold; dialog fetches its own pages |
+| Default page size for paginated endpoint | 25 / 50 / 100 | 50; standard pagination size |
+| Should API always include `AttributeValueSummaries`? | Always / Only when capped | Always; API consumers need predictable structure |
 | Phase 1 approach | Remove deep includes / Projection / Chunked | Remove deep includes first (simplest), measure, then consider projection |
-| Phase 3 trigger | Always implement / Only if Phase 1 insufficient | Measure after Phase 1 — may not be needed for typical deployments |
+| Phase 3 trigger | Always implement / Only if Phase 1 insufficient | Measure after Phase 1; may not be needed for typical deployments |
 
 ## Implementation Order
 
@@ -308,7 +308,7 @@ Phase 2 (Web/API Pagination)
 +-- 2.7 Update web page to use detail-view method ✅
 +-- Tests for all of the above ✅
 
-Phase 3 (Further Optimisation — Deferred to #383)
+Phase 3 (Further Optimisation; Deferred to #383)
 +-- Measure performance after Phase 1+2
 +-- 3.1 Chunked reference processing (if memory still an issue)
 +-- 3.2 Projection-based reference loading (if change tracker overhead still an issue)
@@ -319,7 +319,7 @@ Phase 3 (Further Optimisation — Deferred to #383)
 
 - Pagination of the CSO object list page (separate concern)
 - Pagination of change history (separate concern, already bounded by time)
-- Changing sync semantics — the worker must still process all values, just loaded more efficiently
+- Changing sync semantics; the worker must still process all values, just loaded more efficiently
 
 ## Acceptance Criteria
 

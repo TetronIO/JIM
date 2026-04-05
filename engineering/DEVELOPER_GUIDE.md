@@ -54,22 +54,22 @@ JIM's architecture is documented using C4 model diagrams (System Context, Contai
 Detailed Mermaid diagrams document the runtime behaviour of JIM's synchronisation engine, worker, and scheduler. These are viewable directly in GitHub, VS Code, or any Mermaid-compatible markdown renderer.
 
 **Synchronisation**:
-- [Full Sync CSO Processing](diagrams/mermaid/FULL_SYNC_CSO_PROCESSING.md) — Core per-CSO decision tree (scoping, join, projection, attribute flow, drift detection)
-- [Delta Sync Flow](diagrams/mermaid/DELTA_SYNC_FLOW.md) — How delta sync differs from full sync (watermark, early exit, CSO selection)
-- [Full Import Flow](diagrams/mermaid/FULL_IMPORT_FLOW.md) — Object import, duplicate detection, deletion detection, pending export reconciliation
+- [Full Sync CSO Processing](../docs/developer/diagrams/FULL_SYNC_CSO_PROCESSING.md): Core per-CSO decision tree (scoping, join, projection, attribute flow, drift detection)
+- [Delta Sync Flow](../docs/developer/diagrams/DELTA_SYNC_FLOW.md): How delta sync differs from full sync (watermark, early exit, CSO selection)
+- [Full Import Flow](../docs/developer/diagrams/FULL_IMPORT_FLOW.md): Object import, duplicate detection, deletion detection, pending export reconciliation
 
 **Export**:
-- [Export Execution Flow](diagrams/mermaid/EXPORT_EXECUTION_FLOW.md) — Batching, parallelism, deferred reference resolution, retry with backoff
-- [Pending Export Lifecycle](diagrams/mermaid/PENDING_EXPORT_LIFECYCLE.md) — Full lifecycle from creation through execution to confirmation
+- [Export Execution Flow](../docs/developer/diagrams/EXPORT_EXECUTION_FLOW.md): Batching, parallelism, deferred reference resolution, retry with backoff
+- [Pending Export Lifecycle](../docs/developer/diagrams/PENDING_EXPORT_LIFECYCLE.md): Full lifecycle from creation through execution to confirmation
 
 **Worker and Scheduling**:
-- [Worker Task Lifecycle](diagrams/mermaid/WORKER_TASK_LIFECYCLE.md) — Polling, dispatch, heartbeat, cancellation, SafeFailActivityAsync fallback
-- [Schedule Execution Lifecycle](diagrams/mermaid/SCHEDULE_EXECUTION_LIFECYCLE.md) — Step groups, worker-driven advancement, recovery mechanisms
+- [Worker Task Lifecycle](../docs/developer/diagrams/WORKER_TASK_LIFECYCLE.md): Polling, dispatch, heartbeat, cancellation, SafeFailActivityAsync fallback
+- [Schedule Execution Lifecycle](../docs/developer/diagrams/SCHEDULE_EXECUTION_LIFECYCLE.md): Step groups, worker-driven advancement, recovery mechanisms
 
 **Supporting Concepts**:
-- [Connector Lifecycle](diagrams/mermaid/CONNECTOR_LIFECYCLE.md) — Interface hierarchy, resolution, import/export open/close lifecycles
-- [Activity and RPEI Flow](diagrams/mermaid/ACTIVITY_AND_RPEI_FLOW.md) — Activity creation, RPEI accumulation, status determination
-- [MVO Deletion and Grace Period](diagrams/mermaid/MVO_DELETION_AND_GRACE_PERIOD.md) — Deletion rules, grace periods, housekeeping cleanup
+- [Connector Lifecycle](../docs/developer/diagrams/CONNECTOR_LIFECYCLE.md): Interface hierarchy, resolution, import/export open/close lifecycles
+- [Activity and RPEI Flow](../docs/developer/diagrams/ACTIVITY_AND_RPEI_FLOW.md): Activity creation, RPEI accumulation, status determination
+- [MVO Deletion and Grace Period](../docs/developer/diagrams/MVO_DELETION_AND_GRACE_PERIOD.md): Deletion rules, grace periods, housekeeping cleanup
 
 ## Technology Stack
 
@@ -201,7 +201,7 @@ For full details and connector-specific guidance, see [`docs/plans/doing/GUID_UU
 
 > **CRITICAL: NEVER flatten, squash, delete, or reset EF Core migrations.**
 >
-> JIM is deployed in production environments. EF Core tracks applied migrations by name in the `__EFMigrationsHistory` table. If existing migrations are removed and replaced with a new combined migration, EF will not recognise it as already applied, will attempt to re-create all tables, and **will fail on every deployed instance**. Migrations are append-only — once committed to `main`, they are permanent. The only permitted operations are adding new migrations and, in rare cases, reverting the most recent migration on a feature branch before merge.
+> JIM is deployed in production environments. EF Core tracks applied migrations by name in the `__EFMigrationsHistory` table. If existing migrations are removed and replaced with a new combined migration, EF will not recognise it as already applied, will attempt to re-create all tables, and **will fail on every deployed instance**. Migrations are append-only; once committed to `main`, they are permanent. The only permitted operations are adding new migrations and, in rare cases, reverting the most recent migration on a feature branch before merge.
 
 **Performance**:
 - Use `.AsNoTracking()` for read-only queries
@@ -273,7 +273,7 @@ public class MetaverseController : ControllerBase
 - Follow Blazor lifecycle methods
 
 **Tabs**:
-- Use `<NavigableMudTabs>` instead of `<MudTabs>` for all top-level page tabs. This wrapper component syncs the active tab with a `?t=slug` query string parameter, enabling browser back/forward navigation between tabs. It is a drop-in replacement — accepts the same parameters as `MudTabs` (including `Header`, `@bind-ActivePanelIndex`, etc.)
+- Use `<NavigableMudTabs>` instead of `<MudTabs>` for all top-level page tabs. This wrapper component syncs the active tab with a `?t=slug` query string parameter, enabling browser back/forward navigation between tabs. It is a drop-in replacement; it accepts the same parameters as `MudTabs` (including `Header`, `@bind-ActivePanelIndex`, etc.)
 - Plain `<MudTabs>` is still appropriate for tabs inside dialogs or nested sub-tabs within a parent tab, where URL navigation is not needed
 
 **State Management**:
@@ -287,14 +287,14 @@ public class MetaverseController : ControllerBase
 
 The Worker separates pure domain logic from I/O via two core interfaces:
 
-- **`ISyncEngine`** — stateless domain engine with 7 methods (join resolution, projection, attribute flow, scoping, etc.). Zero I/O dependencies; receives all data as parameters and returns results. Unit-testable without mocks.
-- **`ISyncRepository`** — ~80-method data access boundary. Production implementation: `JIM.PostgresData.Repositories.SyncRepository`. Test implementation: `JIM.InMemoryData.SyncRepository`.
+- **`ISyncEngine`**: stateless domain engine with 7 methods (join resolution, projection, attribute flow, scoping, etc.). Zero I/O dependencies; receives all data as parameters and returns results. Unit-testable without mocks.
+- **`ISyncRepository`**: ~80-method data access boundary. Production implementation: `JIM.PostgresData.Repositories.SyncRepository`. Test implementation: `JIM.InMemoryData.SyncRepository`.
 
 **Dependency Injection**: The Worker and Scheduler use `IJimApplicationFactory` and `IConnectorFactory` for per-task context isolation. Each dispatched task gets its own DI scope with independent `DbContext` and connector instances.
 
 **Bulk Write Performance**:
-- **`ParallelBatchWriter`** — splits bulk writes across N concurrent PostgreSQL connections
-- **COPY binary protocol** — used for high-volume inserts (CSO creates, MVO creates, RPEIs, sync outcomes) via Npgsql's binary COPY API
+- **`ParallelBatchWriter`**: splits bulk writes across N concurrent PostgreSQL connections
+- **COPY binary protocol**: used for high-volume inserts (CSO creates, MVO creates, RPEIs, sync outcomes) via Npgsql's binary COPY API
 
 **Task Processing**:
 - Poll task queue from database
@@ -409,16 +409,16 @@ See [GitHub Issue #212](https://github.com/TetronIO/JIM/issues/212) for .NET Asp
 - **ALWAYS** wrap user-controlled `string?` values with `LogSanitiser.Sanitise()` from `JIM.Utilities` before passing them as arguments to any `ILogger` or Serilog log call
 - This prevents log injection attacks (CWE-117 / OWASP Log Injection) where malicious input containing newline characters could forge fake log entries
 - Integers, GUIDs, enums, and `DateTime` values are inherently safe and do not need wrapping
-- `LogSanitiser.Sanitise()` handles null safely — it returns null for null input
+- `LogSanitiser.Sanitise()` handles null safely; it returns null for null input
 
 ```csharp
-// BAD — user-controlled string passed directly
+// BAD - user-controlled string passed directly
 _logger.LogInformation("Search query: {Search}", request.Search);
 
-// GOOD — sanitised before logging
+// GOOD - sanitised before logging
 _logger.LogInformation("Search query: {Search}", LogSanitiser.Sanitise(request.Search));
 
-// Safe — non-string types don't need wrapping
+// Safe - non-string types don't need wrapping
 _logger.LogInformation("Page: {Page}, Id: {Id}", page, objectId);
 ```
 
@@ -431,24 +431,24 @@ _logger.LogInformation("Page: {Page}, Id: {Id}", page, objectId);
 
 ### Test-Driven Development (TDD)
 
-JIM follows TDD as the standard development practice. Tests are written **before** the implementation they cover — not after.
+JIM follows TDD as the standard development practice. Tests are written **before** the implementation they cover, not after.
 
 **The Red → Green → Refactor cycle:**
 
-1. **Red** — Write a failing test that describes the expected behaviour. Run it and confirm it fails (not just fails to compile — it must execute and fail the assertion).
-2. **Green** — Write the minimum production code needed to make the test pass. Run the test and confirm it is green.
-3. **Refactor** — Clean up the implementation and tests without breaking anything.
+1. **Red**: Write a failing test that describes the expected behaviour. Run it and confirm it fails (not just fails to compile; it must execute and fail the assertion).
+2. **Green**: Write the minimum production code needed to make the test pass. Run the test and confirm it is green.
+3. **Refactor**: Clean up the implementation and tests without breaking anything.
 
 **Bug fix workflow:**
-1. Write a test that **reproduces the bug** — it must fail before any fix is applied
+1. Write a test that **reproduces the bug**; it must fail before any fix is applied
 2. Implement the fix
-3. Run the test — it must now pass
+3. Run the test; it must now pass
 4. Commit both the test and the fix together
 
-This workflow is enforced because a test written after a fix cannot prove the fix was necessary — it could pass even on the broken code. The failing test is the evidence that the fix works.
+This workflow is enforced because a test written after a fix cannot prove the fix was necessary; it could pass even on the broken code. The failing test is the evidence that the fix works.
 
 **What this means in practice:**
-- When investigating a bug, write the test as soon as you understand the failure condition — before touching production code
+- When investigating a bug, write the test as soon as you understand the failure condition, before touching production code
 - When adding a feature, write tests for each acceptance criterion before implementing it
 - Never open a PR where tests were written after the implementation without explicit justification
 
@@ -607,7 +607,7 @@ public interface IConnectorExportUsingCalls : IConnector
 
 **Connector Capabilities**: Connectors declare capabilities via `IConnectorCapabilities` properties:
 - `SupportsExport`, `SupportsImport`, `SupportsDeltaImport`, etc.
-- `SupportsParallelExport` — when `true`, the Connected System UI shows the `MaxExportParallelism` setting, enabling parallel batch processing with separate DbContext and connector instances per batch
+- `SupportsParallelExport`: when `true`, the Connected System UI shows the `MaxExportParallelism` setting, enabling parallel batch processing with separate DbContext and connector instances per batch
 
 **Rule**: Keep connectors stateless. Store configuration in `ConnectedSystem.Configuration`.
 
@@ -659,7 +659,7 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 3. Wait for provisioning (automatic setup via `.devcontainer/setup.sh`)
 4. Use shell aliases: `jim-db`, `jim-web`, `jim-stack`, etc.
 
-> **Note**: The setup script automatically creates a `.env` file with development defaults. SSO is pre-configured for the bundled Keycloak — sign in with `admin` / `admin`. You can also set a `DOTENV_BASE64` GitHub Codespaces secret to restore your own `.env` file automatically.
+> **Note**: The setup script automatically creates a `.env` file with development defaults. SSO is pre-configured for the bundled Keycloak; sign in with `admin` / `admin`. You can also set a `DOTENV_BASE64` GitHub Codespaces secret to restore your own `.env` file automatically.
 
 **Available Shell Aliases**:
 - `jim` - List all available jim aliases
@@ -743,7 +743,7 @@ Configuration via environment variables (defined in `.env`). See `.env.example` 
 ### SSO/Authentication (IDP-Agnostic)
 JIM works with any OIDC-compliant Identity Provider (Entra ID, Okta, Auth0, Keycloak, AD FS, etc.).
 
-**Development**: The devcontainer ships a bundled Keycloak instance, pre-configured with a `jim` realm and client. SSO works out of the box — sign in with `admin` / `admin`. The Keycloak admin console is available at `http://localhost:8181`. Use `jim-keycloak`, `jim-keycloak-stop`, and `jim-keycloak-logs` to manage it independently of the full stack.
+**Development**: The devcontainer ships a bundled Keycloak instance, pre-configured with a `jim` realm and client. SSO works out of the box; sign in with `admin` / `admin`. The Keycloak admin console is available at `http://localhost:8181`. Use `jim-keycloak`, `jim-keycloak-stop`, and `jim-keycloak-logs` to manage it independently of the full stack.
 
 **Production**: Override the `JIM_SSO_*` variables with your provider's settings. See the [SSO Setup Guide](SSO_SETUP_GUIDE.md).
 
@@ -781,9 +781,9 @@ JIM uses standard OIDC claims (`sub`, `name`, `given_name`, `family_name`, `pref
 - Use VS Code database extensions (e.g., PostgreSQL) to connect to the database on port 5432
 
 ### Docker Compose
-- Base: `docker-compose.yml` — production/deployment defaults
-- Dev overrides: `docker-compose.override.yml` — tracked dev settings (ports, env, LANG, conservative DB)
-- Local tuning: `docker-compose.local.yml` — gitignored, auto-generated machine-specific DB tuning
+- Base: `docker-compose.yml`: production/deployment defaults
+- Dev overrides: `docker-compose.override.yml`: tracked dev settings (ports, env, LANG, conservative DB)
+- Local tuning: `docker-compose.local.yml`: gitignored, auto-generated machine-specific DB tuning
 - The `jim-*` aliases automatically include the local overlay when present
 
 ### PostgreSQL Tuning
@@ -805,9 +805,9 @@ See `.devcontainer/POSTGRES_TUNING.md` for full details on tuning formulas and p
 The default PostgreSQL settings in `docker-compose.yml` are tuned for a **64GB Windows / 32GB WSL / 16 core** system. For other production environments, use [PGTune](https://pgtune.leopard.in.ua/) to generate settings, then override `command` and `shm_size` in a compose override file.
 
 **Key settings to adjust:**
-- `shared_buffers` — typically ~25% of available host RAM
-- `effective_cache_size` — typically ~75% of available host RAM
-- `shm_size` (Docker) — must be >= `shared_buffers` with ~25% headroom
+- `shared_buffers`: typically ~25% of available host RAM
+- `effective_cache_size`: typically ~75% of available host RAM
+- `shm_size` (Docker): must be >= `shared_buffers` with ~25% headroom
 
 **Sizing reference:**
 
@@ -981,7 +981,7 @@ For production deployments, consider using Docker volume drivers or bind mounts 
 
 The JIM PowerShell module (`src/JIM.PowerShell/`) provides cmdlets for scripting and automation. It's designed to work with the JIM API.
 
-> **For production installation** (PowerShell Gallery or air-gapped), see the [Deployment Guide — PowerShell Module](DEPLOYMENT_GUIDE.md#powershell-module). This section covers development and contribution workflows only.
+> **For production installation** (PowerShell Gallery or air-gapped), see the [Deployment Guide - PowerShell Module](DEPLOYMENT_GUIDE.md#powershell-module). This section covers development and contribution workflows only.
 
 ### Module Structure
 
@@ -1238,7 +1238,7 @@ Invoke-JIMApiRequest -Method Delete -Endpoint "api/v1/connected-systems/$id"
 3. **Async all the way**: All I/O operations async
 4. **Repository pattern**: Never access DbContext directly from application layer
 5. **Log comprehensively**: Use Serilog with structured logging
-6. **Sanitise log arguments**: Wrap all user-controlled `string?` values with `LogSanitiser.Sanitise()` from `JIM.Utilities` before passing them as arguments to any log call — prevents log injection (CWE-117). Integers, GUIDs, enums, and DateTimes are safe without wrapping.
+6. **Sanitise log arguments**: Wrap all user-controlled `string?` values with `LogSanitiser.Sanitise()` from `JIM.Utilities` before passing them as arguments to any log call; prevents log injection (CWE-117). Integers, GUIDs, enums, and DateTimes are safe without wrapping.
 7. **Validate input**: All user input validated at API/UI boundary
 8. **Handle errors gracefully**: Try-catch, log, return meaningful responses
 9. **Test thoroughly**: Unit tests for business logic, integration tests for data layer

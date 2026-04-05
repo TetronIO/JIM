@@ -28,14 +28,14 @@ Tokens are validated against the configured OIDC provider. Standard JWT claims (
 
 ## API Keys
 
-API keys are suitable for service-to-service integrations, scripts, scheduled tasks, and automated workflows — particularly in environments where interactive OIDC authentication is not practical.
+API keys are suitable for service-to-service integrations, scripts, scheduled tasks, and automated workflows, particularly in environments where interactive OIDC authentication is not practical.
 
 ### Creating an API Key
 
 API keys can be created via:
 
-- The **JIM web UI** — navigate to the API Keys management page
-- The **PowerShell module** — use the `New-JIMApiKey` cmdlet
+- The **JIM web UI**: navigate to the API Keys management page
+- The **PowerShell module**: use the `New-JIMApiKey` cmdlet
 
 All API keys are prefixed with `jim_` for easy identification.
 
@@ -79,7 +79,7 @@ Get-JIMConnectedSystem
 
 ## Security Recommendations
 
-- **Rotate API keys regularly.** Treat API keys as credentials — if a key is compromised, revoke it immediately via the web UI or PowerShell module.
+- **Rotate API keys regularly.** Treat API keys as credentials; if a key is compromised, revoke it immediately via the web UI or PowerShell module.
 - **Use the principle of least privilege.** Create separate API keys for different integrations so that keys can be revoked independently.
 - **Prefer OIDC where possible.** JWT Bearer tokens benefit from centralised authentication, token expiry, and your organisation's existing access policies.
 - **Always use HTTPS.** JIM enforces TLS 1.2 or higher for all API traffic. Never transmit tokens or API keys over unencrypted connections.
@@ -88,6 +88,6 @@ Get-JIMConnectedSystem
 
 ## Further Reading
 
-- [API Overview](index.md) — general API information and versioning
-- [API Endpoints](endpoints.md) — endpoint reference documentation
-- [PowerShell Module](../powershell/index.md) — scripting and automation via PowerShell
+- [API Overview](index.md): general API information and versioning
+- [API Endpoints](endpoints.md): endpoint reference documentation
+- [PowerShell Module](../powershell/index.md): scripting and automation via PowerShell
