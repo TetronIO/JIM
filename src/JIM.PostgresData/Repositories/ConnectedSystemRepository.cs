@@ -1281,6 +1281,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(x =>
                 x.ConnectedSystem.Id == connectedSystemId &&
                 x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue.ToLower() == lowerAttributeValue))
+            .OrderBy(x => x.Id)
             .ToListAsync();
 
         if (allMatches.Count > 1)
@@ -1308,6 +1309,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(cso =>
                 cso.ConnectedSystem.Id == connectedSystemId &&
                 cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.IntValue == attributeValue))
+            .OrderBy(cso => cso.Id)
             .ToListAsync();
 
         if (allMatches.Count > 1)
@@ -1335,6 +1337,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(cso =>
                 cso.ConnectedSystem.Id == connectedSystemId &&
                 cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.LongValue == attributeValue))
+            .OrderBy(cso => cso.Id)
             .ToListAsync();
 
         if (allMatches.Count > 1)
@@ -1362,6 +1365,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(x =>
                 x.ConnectedSystem.Id == connectedSystemId &&
                 x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.GuidValue == attributeValue))
+            .OrderBy(x => x.Id)
             .ToListAsync();
 
         if (allMatches.Count > 1)
