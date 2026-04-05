@@ -147,22 +147,22 @@ Detailed Mermaid diagrams document the runtime behaviour of JIM's synchronisatio
 
 ### Synchronisation
 
-- [Full Sync CSO Processing](../diagrams/mermaid/FULL_SYNC_CSO_PROCESSING.md) — Core per-CSO decision tree (scoping, join, projection, attribute flow, drift detection)
-- [Delta Sync Flow](../diagrams/mermaid/DELTA_SYNC_FLOW.md) — How delta sync differs from full sync (watermark, early exit, CSO selection)
-- [Full Import Flow](../diagrams/mermaid/FULL_IMPORT_FLOW.md) — Object import, duplicate detection, deletion detection, pending export reconciliation
+- [Full Sync CSO Processing](diagrams/FULL_SYNC_CSO_PROCESSING.md) — Core per-CSO decision tree (scoping, join, projection, attribute flow, drift detection)
+- [Delta Sync Flow](diagrams/DELTA_SYNC_FLOW.md) — How delta sync differs from full sync (watermark, early exit, CSO selection)
+- [Full Import Flow](diagrams/FULL_IMPORT_FLOW.md) — Object import, duplicate detection, deletion detection, pending export reconciliation
 
 ### Export
 
-- [Export Execution Flow](../diagrams/mermaid/EXPORT_EXECUTION_FLOW.md) — Batching, parallelism, deferred reference resolution, retry with backoff
-- [Pending Export Lifecycle](../diagrams/mermaid/PENDING_EXPORT_LIFECYCLE.md) — Full lifecycle from creation through execution to confirmation
+- [Export Execution Flow](diagrams/EXPORT_EXECUTION_FLOW.md) — Batching, parallelism, deferred reference resolution, retry with backoff
+- [Pending Export Lifecycle](diagrams/PENDING_EXPORT_LIFECYCLE.md) — Full lifecycle from creation through execution to confirmation
 
 ### Worker and Scheduling
 
-- [Worker Task Lifecycle](../diagrams/mermaid/WORKER_TASK_LIFECYCLE.md) — Polling, dispatch, heartbeat, cancellation, SafeFailActivityAsync fallback
-- [Schedule Execution Lifecycle](../diagrams/mermaid/SCHEDULE_EXECUTION_LIFECYCLE.md) — Step groups, worker-driven advancement, recovery mechanisms
+- [Worker Task Lifecycle](diagrams/WORKER_TASK_LIFECYCLE.md) — Polling, dispatch, heartbeat, cancellation, SafeFailActivityAsync fallback
+- [Schedule Execution Lifecycle](diagrams/SCHEDULE_EXECUTION_LIFECYCLE.md) — Step groups, worker-driven advancement, recovery mechanisms
 
 ### Supporting Concepts
 
-- [Connector Lifecycle](../diagrams/mermaid/CONNECTOR_LIFECYCLE.md) — Interface hierarchy, resolution, import/export open/close lifecycles
-- [Activity and RPEI Flow](../diagrams/mermaid/ACTIVITY_AND_RPEI_FLOW.md) — Activity creation, RPEI accumulation, status determination
-- [MVO Deletion and Grace Period](../diagrams/mermaid/MVO_DELETION_AND_GRACE_PERIOD.md) — Deletion rules, grace periods, housekeeping cleanup
+- [Connector Lifecycle](diagrams/CONNECTOR_LIFECYCLE.md) — Interface hierarchy, resolution, import/export open/close lifecycles
+- [Activity and RPEI Flow](diagrams/ACTIVITY_AND_RPEI_FLOW.md) — Activity creation, RPEI accumulation, status determination
+- [MVO Deletion and Grace Period](diagrams/MVO_DELETION_AND_GRACE_PERIOD.md) — Deletion rules, grace periods, housekeeping cleanup

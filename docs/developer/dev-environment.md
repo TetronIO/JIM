@@ -6,9 +6,9 @@ title: Development Environment
 
 JIM provides a fully configured development environment through GitHub Codespaces and VS Code devcontainers. All dependencies — .NET 9.0 SDK, Docker, PostgreSQL, VS Code extensions, and shell aliases — are pre-installed and ready to use.
 
-## GitHub Codespaces (Recommended)
+## GitHub Codespaces
 
-The fastest way to get started is with GitHub Codespaces:
+The fastest way to get started. Everything is pre-configured in the cloud — no local setup required:
 
 1. Open the [JIM repository](https://github.com/TetronIO/JIM) on GitHub
 2. Click **Code** > **Codespaces** > **Create codespace on main**
@@ -17,13 +17,16 @@ The fastest way to get started is with GitHub Codespaces:
 
 The setup script automatically creates a `.env` file with development defaults. SSO is pre-configured for the bundled Keycloak instance — sign in with `admin` / `admin`.
 
+!!! info "Codespace machine type"
+    The devcontainer configuration requests 8 cores, 32 GB RAM, and 120 GB storage via `hostRequirements`. GitHub Codespaces selects the closest matching preset — typically 8 cores and 32 GB RAM, but only 64 GB storage (the 120 GB request is not available as a Codespace preset). Verify the machine type in the selector before creating. This is sufficient for day-to-day development, but integration tests with larger template sizes are resource-intensive and may perform better in a [local devcontainer](#local-devcontainer) where Docker has direct access to host resources without virtualisation overhead.
+
 ### Custom Environment Variables in Codespaces
 
 To restore your own `.env` file automatically in Codespaces, set a `DOTENV_BASE64` secret in your GitHub Codespaces settings. The setup script will decode and apply it during provisioning.
 
 ## Local Devcontainer
 
-If you prefer to develop locally:
+Recommended for integration testing and large-scale development work where you need more control over resource allocation:
 
 1. Clone the repository: `git clone https://github.com/TetronIO/JIM.git`
 2. Open the folder in VS Code
@@ -32,6 +35,11 @@ If you prefer to develop locally:
 5. Wait for the container to build and configure
 
 The devcontainer provides the same environment as Codespaces — all dependencies, extensions, and shell aliases are configured automatically.
+
+!!! tip "Allocating resources"
+    Integration tests with large template sizes (10,000+ objects) are memory and CPU intensive. Allocate as much as your host machine can spare — 24–32 GB RAM, 4 GB+ swap, and as many cores as possible. PostgreSQL tuning is applied automatically during setup and can be re-run with `jim-postgres-tune` after changing resource allocations.
+
+    Since host machine performance varies between developers, integration test timings and throughput figures are only directly comparable when run on the same configuration.
 
 ## Bundled Keycloak
 
