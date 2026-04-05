@@ -128,8 +128,6 @@ nav:
       - Glossary: reference/glossary.md
       - Roadmap: reference/roadmap.md
       - Changelog: reference/changelog.md
-      - Notes:
-          - Attribute Hash Change Detection: reference/notes/sync-attribute-hash-change-detection.md
 
 extra_css:
   - assets/stylesheets/custom.css
