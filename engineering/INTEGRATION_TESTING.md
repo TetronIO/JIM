@@ -1706,6 +1706,36 @@ docker volume inspect test-csv-data
 Get-ChildItem /connector-files/test-data/
 ```
 
+### OpenLDAP Accesslog Issues
+
+**Delta import finds zero changes after modifications were made:**
+
+The OpenLDAP accesslog database uses MDB (Lightning Memory-Mapped Database) with a fixed maximum map size (`olcDbMaxSize`). When the map file reaches this limit, OpenLDAP **silently stops recording changes** — no error, no warning. Delta imports then find zero modifications because the changes were never logged.
+
+**Symptoms:**
+- Delta import reports `Total objects: 0` despite changes being present in the directory
+- `ldapsearch` on `cn=accesslog` shows no entries after a certain timestamp
+- The accesslog `data.mdb` file size matches `olcDbMaxSize` exactly
+
+**Diagnosis:**
+```bash
+# Check accesslog data file size vs configured limit
+docker exec openldap-primary ls -lh /bitnami/openldap/data/accesslog/data.mdb
+
+# Check configured limit
+docker exec openldap-primary ldapsearch -x -H ldapi:/// \
+  -D "cn=admin,cn=config" -w "Test@123!" \
+  -b "cn=config" "(olcSuffix=cn=accesslog)" olcDbMaxSize -LLL
+```
+
+If the file size matches `olcDbMaxSize`, the map is full.
+
+**Fix:**
+
+Increase the map size in `test/integration/docker/openldap/scripts/01-add-second-suffix.sh` and rebuild the OpenLDAP container. Current setting: 4 GB (sufficient for XLarge / 100K objects). For larger templates, estimate ~10 MB per 1,000 objects for initial population plus additional capacity for sync cycles.
+
+The map size cannot be reliably increased on a running instance — it requires a container rebuild.
+
 ### Scenario Failures
 
 **User not provisioned**:
