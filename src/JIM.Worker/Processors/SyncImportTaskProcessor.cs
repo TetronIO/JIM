@@ -1454,16 +1454,13 @@ public class SyncImportTaskProcessor
                         throughput.FormatThroughput(importIndex + 1, totalObjectsInBatch));
                 }
 
-                // Clear the change tracker periodically to prevent entity accumulation.
-                // HydrateCsoAsync loads each CSO with full Include chains, tracking all entities.
-                // Without clearing, the tracker grows to 1M+ entities at 100K objects, causing
-                // progressive throughput degradation (231 obj/s → 26 obj/s).
-                // The CSOs in create/update lists are held by CLR references — detaching from
-                // the tracker doesn't null them. They'll be re-attached during batch persistence.
-                if ((importIndex + 1) % 1000 == 0)
-                {
-                    _syncRepo.ClearChangeTracker();
-                }
+                // Note: we intentionally do NOT clear the change tracker during import processing.
+                // HydrateCsoAsync loads each CSO with full Include chains, growing the tracker.
+                // However, ClearChangeTracker detaches entities and EF Core's fixup clears
+                // navigation collections (AttributeValues) on detached CSOs. Update CSOs need
+                // their AttributeValues intact for both the save phase and reconciliation.
+                // The original 231→26 obj/s degradation was caused by the _hasRawSqlSupport
+                // guard bug (now fixed), not by tracker accumulation alone.
             }
         }
 
