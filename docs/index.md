@@ -53,7 +53,7 @@ JIM is a modern Identity Management system designed for organisations with compl
 
     ---
 
-    Fully functional without internet connectivity. No cloud dependencies; designed for sensitive and high-assurance environments.
+    Fully functional without internet connectivity. No cloud dependencies -- designed for sensitive and high-assurance environments.
 
 -   :material-puzzle:{ .lg .middle } **Extensible Connectors**
 
