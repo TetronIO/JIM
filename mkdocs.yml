@@ -105,6 +105,7 @@ nav:
       - api/index.md
       - Authentication: api/authentication.md
       - Connected Systems: api/connected-systems/index.md
+      - Schedules: api/schedules/index.md
   - PowerShell Module:
       - powershell/index.md
       - Cmdlet Reference: powershell/cmdlets.md

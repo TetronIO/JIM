@@ -55,8 +55,8 @@ https://jim.example.com/api/v1/
 
 | Resource | Description |
 |----------|-------------|
-| Schedules | Automated execution schedules with ordered steps |
-| Schedule Executions | Running and completed schedule execution records |
+| [Schedules](schedules/index.md) | Automated execution schedules with ordered steps |
+| [Schedule Executions](schedules/executions.md) | Running and completed schedule execution records |
 
 ### Operations
 
