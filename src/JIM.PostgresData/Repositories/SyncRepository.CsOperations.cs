@@ -630,7 +630,7 @@ public partial class SyncRepository
                     "LastErrorMessage" text,
                     "LastErrorStackTrace" text,
                     "HasUnresolvedReferences" boolean
-                ) ON COMMIT DROP
+                ) ON COMMIT PRESERVE ROWS
                 """;
             await createCmd.ExecuteNonQueryAsync();
         }
@@ -702,7 +702,7 @@ public partial class SyncRepository
                         "LastImportedValue" text,
                         "ExportAttemptCount" int,
                         "LastExportedAt" timestamptz
-                    ) ON COMMIT DROP
+                    ) ON COMMIT PRESERVE ROWS
                     """;
                 await createCmd.ExecuteNonQueryAsync();
             }
@@ -741,6 +741,16 @@ public partial class SyncRepository
                     """;
                 await updateCmd.ExecuteNonQueryAsync();
             }
+        }
+
+        // Clean up temp tables
+        await using (var dropCmd = new NpgsqlCommand { Connection = npgsqlConn, Transaction = npgsqlTx })
+        {
+            dropCmd.CommandText = """
+                DROP TABLE IF EXISTS _pe_bulk_update;
+                DROP TABLE IF EXISTS _peavc_bulk_update
+                """;
+            await dropCmd.ExecuteNonQueryAsync();
         }
     }
 
