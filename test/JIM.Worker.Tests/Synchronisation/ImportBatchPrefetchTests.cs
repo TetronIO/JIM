@@ -108,7 +108,7 @@ public class ImportBatchPrefetchTests
 
         // Act
         var processor = await CreateProcessorAsync(mockFileConnector);
-        await processor.PerformFullImportAsync();
+        await processor.PerformImportAsync();
 
         // Assert — both objects should be created
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2),
@@ -143,7 +143,7 @@ public class ImportBatchPrefetchTests
 
         // Act
         var processor = await CreateProcessorAsync(mockFileConnector);
-        await processor.PerformFullImportAsync();
+        await processor.PerformImportAsync();
 
         // Assert — same two CSOs should exist (no new ones created)
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2),
@@ -187,7 +187,7 @@ public class ImportBatchPrefetchTests
 
         // Act
         var processor = await CreateProcessorAsync(mockFileConnector);
-        await processor.PerformFullImportAsync();
+        await processor.PerformImportAsync();
 
         // Assert — should have 2 CSOs total: 1 updated + 1 newly created
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(2),
@@ -232,7 +232,7 @@ public class ImportBatchPrefetchTests
 
         // Act
         var processor = await CreateProcessorAsync(mockFileConnector);
-        await processor.PerformFullImportAsync();
+        await processor.PerformImportAsync();
 
         // Assert — all 3 should be created without duplicates
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(3),

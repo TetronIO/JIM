@@ -138,7 +138,7 @@ public class ImportReferenceMatchingTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var importProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await importProcessor.PerformFullImportAsync();
+        await importProcessor.PerformImportAsync();
 
         // Verify all 3 member references are preserved
         var cso4 = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(1, TestConstants.CS_OBJECT_4_ID);
@@ -196,7 +196,7 @@ public class ImportReferenceMatchingTests
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var importProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem!, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await importProcessor.PerformFullImportAsync();
+        await importProcessor.PerformImportAsync();
 
         // Since UnresolvedReferenceValue matches the import string (case-sensitive), all 3
         // refs are preserved even though ReferenceValue is null on member1 and member2.

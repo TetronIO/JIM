@@ -205,7 +205,7 @@ public class ImportDeduplicationTests
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
             Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile,
             TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await syncImportTaskProcessor.PerformFullImportAsync();
+        await syncImportTaskProcessor.PerformImportAsync();
 
         // Assert: Verify the CSO was created with deduplicated values
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(1));
@@ -248,7 +248,7 @@ public class ImportDeduplicationTests
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
             Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile,
             TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await syncImportTaskProcessor.PerformFullImportAsync();
+        await syncImportTaskProcessor.PerformImportAsync();
 
         // Assert: All 3 values should be retained
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(1));
@@ -290,7 +290,7 @@ public class ImportDeduplicationTests
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
             Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile,
             TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await syncImportTaskProcessor.PerformFullImportAsync();
+        await syncImportTaskProcessor.PerformImportAsync();
 
         // Assert: Single value retained
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(1));
@@ -333,7 +333,7 @@ public class ImportDeduplicationTests
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
             Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile,
             TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await syncImportTaskProcessor.PerformFullImportAsync();
+        await syncImportTaskProcessor.PerformImportAsync();
 
         // Assert: Object created, no attribute values for the empty attribute
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(1));
@@ -375,7 +375,7 @@ public class ImportDeduplicationTests
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
             Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile,
             TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await syncImportTaskProcessor.PerformFullImportAsync();
+        await syncImportTaskProcessor.PerformImportAsync();
 
         // Assert
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(1));
@@ -422,7 +422,7 @@ public class ImportDeduplicationTests
         var syncImportTaskProcessor = new SyncImportTaskProcessor(
             Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile,
             TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
-        await syncImportTaskProcessor.PerformFullImportAsync();
+        await syncImportTaskProcessor.PerformImportAsync();
 
         // Assert: All 3 case-different values should be retained (case-sensitive comparison)
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(1));

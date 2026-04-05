@@ -291,18 +291,18 @@ public class Worker : BackgroundService
                                                         case ConnectedSystemRunType.FullImport:
                                                         {
                                                             var syncEngine = new JIM.Application.Servers.SyncEngine();
-                                                            var syncImportTaskProcessor = new SyncImportTaskProcessor(taskJim, syncRepo, syncServer, syncEngine, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource);
-                                                            await syncImportTaskProcessor.PerformFullImportAsync();
+                                                            var importProcessor = new SyncImportTaskProcessor(taskJim, syncRepo, syncServer, syncEngine, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource);
+                                                            await importProcessor.PerformImportAsync();
                                                             break;
                                                         }
                                                         case ConnectedSystemRunType.DeltaImport:
                                                         {
-                                                            // Delta Import uses the import processor just like Full Import.
+                                                            // Delta Import uses the same import processor as Full Import.
                                                             // The connector's ImportAsync method checks the run profile type
                                                             // to determine whether to do full or delta import.
                                                             var syncEngine = new JIM.Application.Servers.SyncEngine();
-                                                            var syncDeltaImportTaskProcessor = new SyncImportTaskProcessor(taskJim, syncRepo, syncServer, syncEngine, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource);
-                                                            await syncDeltaImportTaskProcessor.PerformFullImportAsync();
+                                                            var importProcessor = new SyncImportTaskProcessor(taskJim, syncRepo, syncServer, syncEngine, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource);
+                                                            await importProcessor.PerformImportAsync();
                                                             break;
                                                         }
                                                         case ConnectedSystemRunType.FullSynchronisation:

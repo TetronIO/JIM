@@ -99,17 +99,17 @@ public class SyncImportTaskProcessor
         // RPEI lookup for reconciliation is populated during the update-phase flush only.
     }
 
-    public async Task PerformFullImportAsync()
+    public async Task PerformImportAsync()
     {
         using var importSpan = Diagnostics.Sync.StartSpan("FullImport");
         importSpan.SetTag("connectedSystemId", _connectedSystem.Id);
         importSpan.SetTag("connectedSystemName", _connectedSystem.Name);
         importSpan.SetTag("connectorType", _connector.GetType().Name);
 
-        Log.Verbose("PerformFullImportAsync: Starting");
+        Log.Verbose("PerformImportAsync: Starting");
 
         if (_connectedSystem.ObjectTypes == null)
-            throw new InvalidDataException("PerformFullImportAsync: _connectedSystem.ObjectTypes was null. Cannot continue.");
+            throw new InvalidDataException("PerformImportAsync: _connectedSystem.ObjectTypes was null. Cannot continue.");
 
         // Check if the connected system has any existing CSOs. If it's empty (first-ever import),
         // we can skip all FindMatchingCso lookups since every object is guaranteed to be new.
@@ -118,7 +118,7 @@ public class SyncImportTaskProcessor
         _csIsEmpty = csoCountAtStart == 0;
         if (_csIsEmpty)
         {
-            Log.Information("PerformFullImportAsync: Connected system {ConnectedSystemId} has no existing CSOs. Skipping CSO lookups for this import.", _connectedSystem.Id);
+            Log.Information("PerformImportAsync: Connected system {ConnectedSystemId} has no existing CSOs. Skipping CSO lookups for this import.", _connectedSystem.Id);
         }
         else
         {
@@ -130,8 +130,18 @@ public class SyncImportTaskProcessor
             {
                 _csoExternalIdLookup = await _syncRepo.GetAllCsoExternalIdMappingsAsync(_connectedSystem.Id);
             }
-            Log.Information("PerformFullImportAsync: Pre-fetched {Count} CSO external ID mappings for connected system {ConnectedSystemId}.",
+            Log.Information("PerformImportAsync: Pre-fetched {Count} CSO external ID mappings for connected system {ConnectedSystemId}.",
                 _csoExternalIdLookup.Count, _connectedSystem.Id);
+        }
+
+        // Pre-load pending exports in the background while import processing runs.
+        // This query is independent of import processing and takes several seconds at scale.
+        // By starting it now, the data is typically ready by the time reconciliation begins.
+        Task<Dictionary<Guid, PendingExport>>? pendingExportsTask = null;
+        if (!_csIsEmpty)
+        {
+            Log.Debug("PerformImportAsync: Starting background pre-load of pending exports for connected system {ConnectedSystemId}", _connectedSystem.Id);
+            pendingExportsTask = _syncRepo.GetPendingExportsLightweightByConnectedSystemIdAsync(_connectedSystem.Id);
         }
 
         // Load sync outcome tracking level once at start of import
@@ -198,7 +208,7 @@ public class SyncImportTaskProcessor
                 {
                     if (_cancellationTokenSource.IsCancellationRequested)
                     {
-                        Log.Information("PerformFullImportAsync: Cancellation requested. Stopping before next import page.");
+                        Log.Information("PerformImportAsync: Cancellation requested. Stopping before next import page.");
                         break;
                     }
 
@@ -259,7 +269,7 @@ public class SyncImportTaskProcessor
 
                     if (_cancellationTokenSource.IsCancellationRequested)
                     {
-                        Log.Information("PerformFullImportAsync: Cancellation requested after processing page {Page}. Stopping.", pageNumber);
+                        Log.Information("PerformImportAsync: Cancellation requested after processing page {Page}. Stopping.", pageNumber);
                         break;
                     }
                 }
@@ -280,7 +290,7 @@ public class SyncImportTaskProcessor
                 if (connectorWarningMessage != null)
                 {
                     _activity.WarningMessage = connectorWarningMessage;
-                    Log.Warning("PerformFullImportAsync: Connector reported warning: {WarningMessage}", connectorWarningMessage);
+                    Log.Warning("PerformImportAsync: Connector reported warning: {WarningMessage}", connectorWarningMessage);
                 }
 
                 using (Diagnostics.Connector.StartSpan("CloseImportConnection"))
@@ -329,7 +339,7 @@ public class SyncImportTaskProcessor
         // In-memory CSO collections are discarded cleanly — nothing has been persisted yet.
         if (_cancellationTokenSource.IsCancellationRequested)
         {
-            Log.Information("PerformFullImportAsync: Cancellation requested. Skipping persistence and post-import phases.");
+            Log.Information("PerformImportAsync: Cancellation requested. Skipping persistence and post-import phases.");
             return;
         }
 
@@ -352,22 +362,22 @@ public class SyncImportTaskProcessor
                 await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeUpdated);
             }
             deletionsSw.Stop();
-            Log.Information("PerformFullImportAsync: PHASE TIMING — Deletion detection: {DeletionSeconds:F1}s ({ExistingCount} existing CSOs checked)",
+            Log.Information("PerformImportAsync: PHASE TIMING — Deletion detection: {DeletionSeconds:F1}s ({ExistingCount} existing CSOs checked)",
                 deletionsSw.Elapsed.TotalSeconds, existingCsoCount);
         }
 
         importPhaseSw.Stop();
-        Log.Information("PerformFullImportAsync: PHASE TIMING — Import + processing: {ImportPhaseSeconds:F1}s",
+        Log.Information("PerformImportAsync: PHASE TIMING — Import + processing: {ImportPhaseSeconds:F1}s",
             importPhaseSw.Elapsed.TotalSeconds);
 
-        Log.Information("PerformFullImportAsync: Import complete. CSOs to create: {Creates}, to update: {Updates}, GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
+        Log.Information("PerformImportAsync: Import complete. CSOs to create: {Creates}, to update: {Updates}, GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
             connectedSystemObjectsToBeCreated.Count, connectedSystemObjectsToBeUpdated.Count,
             GC.GetTotalMemory(false) / 1024 / 1024,
             System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
 
         if (_cancellationTokenSource.IsCancellationRequested)
         {
-            Log.Information("PerformFullImportAsync: Cancellation requested after deletion detection. Skipping persistence.");
+            Log.Information("PerformImportAsync: Cancellation requested after deletion detection. Skipping persistence.");
             return;
         }
 
@@ -384,7 +394,7 @@ public class SyncImportTaskProcessor
             await ResolveReferencesAsync(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
         }
         resolveRefsSw.Stop();
-        Log.Information("PerformFullImportAsync: PHASE TIMING — Reference resolution: {ResolveRefsSeconds:F1}s ({ObjectsWithRefs} objects with refs)",
+        Log.Information("PerformImportAsync: PHASE TIMING — Reference resolution: {ResolveRefsSeconds:F1}s ({ObjectsWithRefs} objects with refs)",
             resolveRefsSw.Elapsed.TotalSeconds, objectsWithReferences);
 
         // now persist all CSOs which will also create the required Change Objects within the Activity.
@@ -397,7 +407,7 @@ public class SyncImportTaskProcessor
         // At 100K objects, this can reclaim hundreds of MB.
         GC.Collect(2, GCCollectionMode.Aggressive, true, true);
         GC.WaitForPendingFinalizers();
-        Log.Information("PerformFullImportAsync: Starting save phase. Creates: {Creates}, Updates: {Updates}, RPEIs: {Rpeis}, GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
+        Log.Information("PerformImportAsync: Starting save phase. Creates: {Creates}, Updates: {Updates}, RPEIs: {Rpeis}, GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
             createdCount, connectedSystemObjectsToBeUpdated.Count, _activityRunProfileExecutionItems.Count,
             GC.GetTotalMemory(true) / 1024 / 1024,
             System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
@@ -463,7 +473,7 @@ public class SyncImportTaskProcessor
             while (connectedSystemObjectsToBeCreated.Count > 0)
             {
                 var batchSize = Math.Min(ImportBatchSize, connectedSystemObjectsToBeCreated.Count);
-                Log.Information("PerformFullImportAsync: Starting batch {BatchStart}-{BatchEnd} of {Total}",
+                Log.Information("PerformImportAsync: Starting batch {BatchStart}-{BatchEnd} of {Total}",
                     totalCreatedSoFar, totalCreatedSoFar + batchSize, totalToCreate);
                 var csoBatch = connectedSystemObjectsToBeCreated.GetRange(0, batchSize);
 
@@ -475,7 +485,7 @@ public class SyncImportTaskProcessor
 
                 var batchSw = System.Diagnostics.Stopwatch.StartNew();
                 await _syncServer.CreateConnectedSystemObjectsAsync(csoBatch, batchRpeis, committedCsoIds);
-                Log.Debug("PerformFullImportAsync: CreateConnectedSystemObjectsAsync took {ElapsedMs}ms for {Count} CSOs",
+                Log.Debug("PerformImportAsync: CreateConnectedSystemObjectsAsync took {ElapsedMs}ms for {Count} CSOs",
                     batchSw.ElapsedMilliseconds, batchSize);
 
                 // Sync the FK on RPEIs from CSO IDs (pre-generated before the batch loop)
@@ -508,7 +518,7 @@ public class SyncImportTaskProcessor
                 var batchRpeiCount = batchRpeis.Count;
                 batchSw.Restart();
                 await FlushImportRpeisAsync(batchRpeis);
-                Log.Debug("PerformFullImportAsync: FlushImportRpeisAsync took {ElapsedMs}ms for {Count} RPEIs",
+                Log.Debug("PerformImportAsync: FlushImportRpeisAsync took {ElapsedMs}ms for {Count} RPEIs",
                     batchSw.ElapsedMilliseconds, batchRpeiCount);
 
                 // Remove processed CSOs from the front of the list so their attribute values
@@ -520,7 +530,7 @@ public class SyncImportTaskProcessor
                 await _syncRepo.UpdateActivityMessageAsync(_activity,
                     $"Saving changes — creating ({totalCreatedSoFar:N0} / {totalToCreate:N0})" +
                     saveThroughput.FormatThroughput(totalCreatedSoFar, totalChanges));
-                Log.Information("PerformFullImportAsync: Batch complete ({Processed}/{Total}). GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
+                Log.Information("PerformImportAsync: Batch complete ({Processed}/{Total}). GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
                     totalCreatedSoFar, totalToCreate,
                     GC.GetTotalMemory(false) / 1024 / 1024,
                     System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
@@ -533,11 +543,11 @@ public class SyncImportTaskProcessor
             // references (e.g., groups imported in a later run referencing users from a prior run).
             var crossBatchFixed = await _syncRepo.FixupCrossBatchReferenceIdsAsync(_connectedSystem.Id);
             if (crossBatchFixed > 0)
-                Log.Information("PerformFullImportAsync: Fixed up {Count} cross-batch reference FKs after all create batches completed.", crossBatchFixed);
+                Log.Information("PerformImportAsync: Fixed up {Count} cross-batch reference FKs after all create batches completed.", crossBatchFixed);
 
             var changeRecordFixed = await _syncRepo.FixupCrossBatchChangeRecordReferenceIdsAsync(_connectedSystem.Id);
             if (changeRecordFixed > 0)
-                Log.Information("PerformFullImportAsync: Fixed up {Count} cross-batch change record reference FKs after all create batches completed.", changeRecordFixed);
+                Log.Information("PerformImportAsync: Fixed up {Count} cross-batch change record reference FKs after all create batches completed.", changeRecordFixed);
 
             // Process CSO updates in batches to reduce EF change tracker pressure and report progress.
             // UpdateConnectedSystemObjectsAsync builds ConnectedSystemObjectChange graphs and EF tracks
@@ -554,7 +564,7 @@ public class SyncImportTaskProcessor
             for (var batchStart = 0; batchStart < totalToUpdate; batchStart += ImportBatchSize)
             {
                 var batchSize = Math.Min(ImportBatchSize, totalToUpdate - batchStart);
-                Log.Information("PerformFullImportAsync: Starting update batch {BatchStart}-{BatchEnd} of {Total}",
+                Log.Information("PerformImportAsync: Starting update batch {BatchStart}-{BatchEnd} of {Total}",
                     batchStart, batchStart + batchSize, totalToUpdate);
                 var csoBatch = connectedSystemObjectsToBeUpdated.GetRange(batchStart, batchSize);
 
@@ -646,7 +656,7 @@ public class SyncImportTaskProcessor
                 await _syncRepo.UpdateActivityMessageAsync(_activity,
                     $"Saving changes — updating ({batchStart + batchSize:N0} / {totalToUpdate:N0})" +
                     saveThroughput.FormatThroughput(createdCount + batchStart + batchSize, totalChanges));
-                Log.Information("PerformFullImportAsync: Update batch complete ({Processed}/{Total}). GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
+                Log.Information("PerformImportAsync: Update batch complete ({Processed}/{Total}). GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
                     batchStart + batchSize, totalToUpdate,
                     GC.GetTotalMemory(false) / 1024 / 1024,
                     System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
@@ -655,7 +665,7 @@ public class SyncImportTaskProcessor
         }
 
         savePhaseSw.Stop();
-        Log.Information("PerformFullImportAsync: PHASE TIMING — Save (create + update): {SavePhaseSeconds:F1}s ({Creates} creates, {Updates} updates)",
+        Log.Information("PerformImportAsync: PHASE TIMING — Save (create + update): {SavePhaseSeconds:F1}s ({Creates} creates, {Updates} updates)",
             savePhaseSw.Elapsed.TotalSeconds, createdCount, connectedSystemObjectsToBeUpdated.Count);
 
         // CSO → RPEI lookup for reconciliation was populated during the update-phase flush.
@@ -666,7 +676,7 @@ public class SyncImportTaskProcessor
         // This confirms exported attribute changes or marks them for retry
         if (_cancellationTokenSource.IsCancellationRequested)
         {
-            Log.Information("PerformFullImportAsync: Cancellation requested. Skipping reconciliation.");
+            Log.Information("PerformImportAsync: Cancellation requested. Skipping reconciliation.");
             return;
         }
 
@@ -676,10 +686,10 @@ public class SyncImportTaskProcessor
         var reconcileSw = System.Diagnostics.Stopwatch.StartNew();
         using (Diagnostics.Sync.StartSpan("ReconcilePendingExports"))
         {
-            await ReconcilePendingExportsAsync(connectedSystemObjectsToBeUpdated, importRpeisByCsoId, _connectedSystem.Id);
+            await ReconcilePendingExportsAsync(connectedSystemObjectsToBeUpdated, importRpeisByCsoId, pendingExportsTask);
         }
         reconcileSw.Stop();
-        Log.Information("PerformFullImportAsync: PHASE TIMING — Reconciliation: {ReconcileSeconds:F1}s ({UpdateCount} CSOs)",
+        Log.Information("PerformImportAsync: PHASE TIMING — Reconciliation: {ReconcileSeconds:F1}s ({UpdateCount} CSOs)",
             reconcileSw.Elapsed.TotalSeconds, connectedSystemObjectsToBeUpdated.Count);
 
         // Validate all RPEIs before persisting - catch any that have no CSO and no error (indicates a bug)
@@ -1077,7 +1087,7 @@ public class SyncImportTaskProcessor
                 if (csObjectType == null || !csObjectType.Attributes.Any(a => a.IsExternalId))
                 {
                     activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType;
-                    activityRunProfileExecutionItem.ErrorMessage = $"PerformFullImportAsync: Couldn't find valid connected system ({_connectedSystem.Id}) object type for imported object type: {importObject.ObjectType}";
+                    activityRunProfileExecutionItem.ErrorMessage = $"PerformImportAsync: Couldn't find valid connected system ({_connectedSystem.Id}) object type for imported object type: {importObject.ObjectType}";
                     continue;
                 }
 
@@ -2527,26 +2537,31 @@ public class SyncImportTaskProcessor
     private async Task ReconcilePendingExportsAsync(
         IReadOnlyCollection<ConnectedSystemObject> updatedCsos,
         Dictionary<Guid, ActivityRunProfileExecutionItem> importRpeisByCsoId,
-        int connectedSystemId)
+        Task<Dictionary<Guid, PendingExport>>? pendingExportsTask)
     {
         if (updatedCsos.Count == 0)
             return;
 
-        // Bulk-load ALL pending exports for this connected system in a single query.
-        // This replaces the previous approach of 201 per-page WHERE IN queries, which was the
-        // primary bottleneck at scale (6+ seconds per page × 201 pages = 20+ minutes).
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling pending exports - loading pending exports");
-        Dictionary<Guid, JIM.Models.Transactional.PendingExport> allPendingExportsByCsoId;
-        using (Diagnostics.Sync.StartSpan("BulkLoadPendingExports"))
+        // Await the pre-loaded pending exports. This task was started at the beginning of the
+        // import run, so the data is typically already available by now (loaded in parallel with
+        // import processing). If the connected system was empty at import start, there are no PEs.
+        Dictionary<Guid, PendingExport> allPendingExportsByCsoId;
+        if (pendingExportsTask != null)
         {
-            allPendingExportsByCsoId = await _syncRepo
-                .GetPendingExportsLightweightByConnectedSystemIdAsync(connectedSystemId);
+            await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling pending exports - awaiting pending export data");
+            using (Diagnostics.Sync.StartSpan("AwaitPendingExports"))
+            {
+                allPendingExportsByCsoId = await pendingExportsTask;
+            }
+        }
+        else
+        {
+            allPendingExportsByCsoId = new Dictionary<Guid, PendingExport>();
         }
 
         if (allPendingExportsByCsoId.Count == 0)
         {
-            Log.Debug("ReconcilePendingExportsAsync: No pending exports found for connected system {ConnectedSystemId}. Skipping reconciliation",
-                connectedSystemId);
+            Log.Debug("ReconcilePendingExportsAsync: No pending exports found. Skipping reconciliation");
 
             // Mark progress as complete so the UI doesn't stay stuck at "0 / N"
             _activity.ObjectsProcessed = _activity.ObjectsToProcess;
@@ -2554,8 +2569,8 @@ public class SyncImportTaskProcessor
             return;
         }
 
-        Log.Information("ReconcilePendingExportsAsync: Loaded {PendingExportCount} pending exports for connected system {ConnectedSystemId}",
-            allPendingExportsByCsoId.Count, connectedSystemId);
+        Log.Information("ReconcilePendingExportsAsync: {PendingExportCount} pending exports pre-loaded",
+            allPendingExportsByCsoId.Count);
 
         // Filter to only CSOs that have pending exports
         var csoList = updatedCsos.Where(c => allPendingExportsByCsoId.ContainsKey(c.Id)).ToList();
