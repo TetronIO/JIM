@@ -693,6 +693,17 @@ public class SyncImportTaskProcessor
             return;
         }
 
+        // Clear the change tracker before reconciliation. The import phase has fully persisted
+        // all CSO creates/updates, so tracked entities are no longer needed. Without this, the
+        // reconciliation batch persist methods (DeleteUntrackedPendingExportsAsync,
+        // UpdateUntrackedPendingExportsAsync) must scan 100K+ tracked entities via
+        // DetachTrackedChildEntities/DetachTrackedEntities for each pending export operation,
+        // turning O(1) deletes into O(n) scans.
+        var trackerCount = _syncRepo.GetChangeTrackerEntityCount();
+        Log.Information("PerformImportAsync: Clearing change tracker before reconciliation ({TrackerCount} entities)",
+            trackerCount);
+        _syncRepo.ClearChangeTracker();
+
         _activity.ObjectsToProcess = connectedSystemObjectsToBeUpdated.Count;
         _activity.ObjectsProcessed = 0;
         await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling pending exports");
@@ -2641,18 +2652,31 @@ public class SyncImportTaskProcessor
             // - Each pending export is unique per CSO (no cross-CSO contention)
             // - SyncEngine reconciliation methods are stateless (pure logic, no instance state)
             // - Shared collections use ConcurrentBag, counters use Interlocked
+            // Timing diagnostics for the first page to identify bottlenecks
+            var isFirstPage = page == 0;
+            long reconcileTicksTotal = 0;
+            long rpeiTicksTotal = 0;
+
             using (Diagnostics.Sync.StartSpan("ProcessReconciliation").SetTag("csoCount", pageCsos.Count))
             {
                 Parallel.ForEach(pageCsos, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, cso =>
                 {
                     try
                     {
+                        var perCsoSw = isFirstPage ? Stopwatch.StartNew() : null;
+
                         // Get the pre-loaded pending export for this CSO (if any)
                         allPendingExportsByCsoId.TryGetValue(cso.Id, out var pendingExport);
 
                         // Perform in-memory reconciliation (no database operations)
                         var result = new PendingExportReconciliationResult();
                         _syncEngine.ReconcileCsoAgainstPendingExport(cso, pendingExport, result);
+
+                        if (isFirstPage)
+                        {
+                            Interlocked.Add(ref reconcileTicksTotal, perCsoSw!.ElapsedTicks);
+                            perCsoSw.Restart();
+                        }
 
                         if (result.HasChanges)
                         {
@@ -2815,6 +2839,9 @@ public class SyncImportTaskProcessor
                             }
                         }
 
+                        if (isFirstPage && result.HasChanges)
+                            Interlocked.Add(ref rpeiTicksTotal, perCsoSw!.ElapsedTicks);
+
                         Interlocked.Increment(ref processedCount);
                     }
                     catch (Exception ex)
@@ -2823,6 +2850,16 @@ public class SyncImportTaskProcessor
                         Interlocked.Increment(ref processedCount);
                     }
                 });
+
+                if (isFirstPage)
+                {
+                    var tickFreq = (double)Stopwatch.Frequency;
+                    Log.Information("ReconcilePendingExportsAsync: Page 1 timing breakdown — " +
+                        "Reconcile: {ReconcileMs:F1}ms, RPEI/Outcome: {RpeiMs:F1}ms (thread-aggregated across {CsoCount} CSOs)",
+                        reconcileTicksTotal / tickFreq * 1000.0,
+                        rpeiTicksTotal / tickFreq * 1000.0,
+                        pageCsos.Count);
+                }
 
                 // Update progress after parallel processing completes
                 _activity.ObjectsProcessed = processedCount;
