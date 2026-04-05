@@ -192,7 +192,7 @@ PUT /api/v1/metaverse/attributes/{id}
 | `objectTypeIds` | array | No | Replace object type mappings (replaces the full set; include all desired type IDs) |
 
 !!! warning
-    The `objectTypeIds` field **replaces** all existing mappings. To add a new object type mapping, include all existing type IDs plus the new one. Removing a type ID from the list removes the mapping.
+    The `objectTypeIds` field **replaces** all existing mappings. To add a new object type mapping, include all existing type IDs plus the new one. Removing a type ID from the list removes the mapping. You cannot remove an object type mapping if metaverse objects of that type have values stored for this attribute.
 
 ### Examples
 
@@ -233,14 +233,18 @@ PUT /api/v1/metaverse/attributes/{id}
 
 | Status | Code | Description |
 |--------|------|-------------|
-| `400` | `VALIDATION_ERROR` | Invalid change (e.g. modifying a built-in attribute's type) |
+| `400` | `VALIDATION_ERROR` | Invalid change (e.g. modifying a built-in attribute's type, or removing an object type mapping when objects of that type have values for this attribute) |
 | `404` | `NOT_FOUND` | Attribute does not exist |
 
 ---
 
 ## Delete an Attribute
 
-Permanently deletes an attribute. Built-in attributes cannot be deleted.
+Permanently deletes an attribute. An attribute cannot be deleted if:
+
+- It is a built-in attribute
+- It has values stored on any metaverse objects
+- It is referenced by any sync rule mappings, scoping criteria, or object matching rules
 
 ```
 DELETE /api/v1/metaverse/attributes/{id}
@@ -271,5 +275,5 @@ Returns `204 No Content` on success.
 
 | Status | Code | Description |
 |--------|------|-------------|
-| `400` | `BAD_REQUEST` | Cannot delete a built-in attribute |
+| `400` | `BAD_REQUEST` | Cannot delete: attribute is built-in, has stored values on metaverse objects, or is referenced by sync rule configuration |
 | `404` | `NOT_FOUND` | Attribute does not exist |
