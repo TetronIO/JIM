@@ -41,7 +41,7 @@ The metaverse is the authoritative identity repository at the centre of JIM's ar
 - **SyncRule** — Bidirectional mappings between connected systems and the metaverse
 - **Staging Areas** — Import/export staging for transactional integrity
 
-```
+```text
 +-------------------+       +-----------+       +-------------------+
 | Connected System  | ----> |           | ----> | Connected System  |
 |   (e.g. HR)       |       | Metaverse |       |   (e.g. AD)       |
@@ -86,7 +86,7 @@ The metaverse is the authoritative identity repository at the centre of JIM's ar
 
 ## Project Structure
 
-```
+```text
 src/
   JIM.Application/       -- Business logic, domain servers
   JIM.Connectors/        -- External system connectors

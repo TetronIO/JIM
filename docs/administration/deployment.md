@@ -62,7 +62,7 @@ In air-gapped environments, no outbound connectivity is required after initial d
 
 JIM runs as a Docker Compose stack with four services:
 
-```
+```text
 +------------------+     +------------------+     +------------------+
 |     jim.web      |     |   jim.worker     |     |  jim.scheduler   |
 |  (UI + REST API) |     | (sync processor) |     | (cron triggers)  |
@@ -163,7 +163,7 @@ Each [release](https://github.com/TetronIO/JIM/releases) includes a bundle (`jim
 
 ### Bundle Contents
 
-```
+```text
 jim-release-X.Y.Z/
 +-- docker-images/
 |   +-- jim-web.tar           # Docker image for web/API service
@@ -263,7 +263,7 @@ Ensure your JIM server is resolvable by name in your network:
 1. Add a DNS A record pointing to your JIM server's IP address, or
 2. Add an entry to `/etc/hosts` on client machines:
 
-    ```
+    ```text
     192.168.1.100  jim.your-domain.local
     ```
 
@@ -401,7 +401,7 @@ The `jim.worker` and `jim.scheduler` containers use file-based healthcheck monit
 
 JIM writes structured logs to the `jim-logs-volume` Docker volume. Configure log level via `.env`:
 
-```
+```text
 JIM_LOG_LEVEL=Information
 ```
 

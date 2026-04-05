@@ -44,13 +44,13 @@ Scoping filters determine **which objects** a sync rule applies to. Only objects
 
 For inbound rules, scoping filters evaluate CSO attributes:
 
-```
+```text
 cs["objectClass"] = "user" AND cs["employeeType"] = "FTE"
 ```
 
 For outbound rules, scoping filters evaluate MVO attributes:
 
-```
+```text
 mv["Object Type"] = "Person" AND mv["Employee Status"] = "Active"
 ```
 

@@ -241,7 +241,7 @@ JIM_SSO_API_SCOPE=api://e1234567-89ab-cdef-0123-456789abcdef
 
 AD FS may need claim rules to emit standard OIDC claims (`sub`, `email`, `name`). In your Web API's **Issuance Transform Rules**, add rules to map AD claims to OIDC claims:
 
-```
+```text
 # Rule: Send User Principal Name as sub
 c:[Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn"]
  => issue(Type = "sub", Value = c.Value);

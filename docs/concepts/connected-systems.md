@@ -18,7 +18,7 @@ The **connector space** is a critical concept in JIM's architecture. It acts as 
 
 When JIM imports data from a connected system, it does not write directly to the metaverse. Instead, it creates or updates **Connected System Objects (CSOs)** in the connector space. These CSOs are local representations of the objects in the external system.
 
-```
+```text
 +-------------------+       +-------------------+       +-----------------+
 |  External System  | ----> |  Connector Space  | ----> |   Metaverse     |
 |  (e.g., AD)       |       |  (CSOs)           |       |   (MVOs)        |

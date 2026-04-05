@@ -6,7 +6,7 @@ The **Joiner/Mover/Leaver** (JML) lifecycle is the foundational automation model
 
 Every identity follows a predictable lifecycle:
 
-```
+```text
 +---------------+       +---------------+       +---------------+
 |    Joiner     | ----> |    Mover      | ----> |    Leaver     |
 |               |       |               |       |               |

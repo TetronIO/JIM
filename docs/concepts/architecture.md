@@ -11,7 +11,7 @@ At the heart of JIM is the **metaverse**: a centralised repository of identity o
 - **Decoupled systems** -- connected systems do not need to know about each other; they only interact with the metaverse
 - **Auditability** -- every change is tracked as it passes through the hub
 
-```
+```text
 +-------------------+       +----------------+       +-------------------+
 |   Source Systems   | ----> |   Metaverse    | ----> |  Target Systems   |
 |                    |       |                |       |                   |
@@ -61,7 +61,7 @@ JIM uses PostgreSQL as its sole data store. The database holds all configuration
 
 JIM follows a strict layered architecture. Each layer depends only on the layer directly below it -- higher layers never bypass intermediate layers.
 
-```
+```text
 +------------------------------------------+
 |  Presentation: JIM.Web (Blazor + API)    |
 +------------------------------------------+

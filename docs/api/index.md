@@ -10,7 +10,7 @@ JIM provides a comprehensive REST API that enables programmatic access to all id
 
 The API is available at `/api/` on your JIM instance. For example:
 
-```
+```text
 https://jim.example.com/api/v1/connected-systems
 ```
 
@@ -33,7 +33,7 @@ For full details and usage examples, see the [Authentication](authentication.md)
 
 JIM includes an interactive OpenAPI/Swagger UI, available at:
 
-```
+```text
 https://jim.example.com/api/swagger
 ```
 

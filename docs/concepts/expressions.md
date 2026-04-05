@@ -320,7 +320,7 @@ When a source system stores multiple values in a single field separated by a del
 
 The source CSV has pipe-separated courses in a single column:
 
-```
+```csv
 employeeId,coursesCompleted
 E001,"SOFT101|SOFT201|SEC101"
 ```
