@@ -1,4 +1,4 @@
-﻿@page "/admin/connected-systems/{CsId:int}/staging/{CsoId}"
+﻿@page "/admin/connected-systems/{CsId:int}/connector-space/{CsoId}"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
@@ -336,7 +336,7 @@
             new("Home", href: "/", icon: Icons.Material.Filled.Home),
             new("Connected Systems", href: "/admin/connected-systems/"),
             new(ConnectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(ConnectedSystemHeader)),
-            new("Staging", href: Utilities.GetConnectedSystemObjectsHref(ConnectedSystemHeader)),
+            new("Connector Space", href: Utilities.GetConnectedSystemObjectsHref(ConnectedSystemHeader)),
             new(GetDisplayIdentifier(), href: null, disabled: true)
         };
 

@@ -1,4 +1,4 @@
-@page "/admin/connected-systems/{Id:int}/staging"
+@page "/admin/connected-systems/{Id:int}/connector-space"
 @attribute [Authorize(Roles = "Administrator")]
 @implements IFullWidthPage
 @implements IDisposable
@@ -20,7 +20,7 @@
 @if (_showIntro)
 {
     <MudAlert Severity="Severity.Normal" Class="mt-3 mb-3" ShowCloseIcon="true" CloseIconClicked="() => _showIntro = false">
-        This is the staging area for this Connected System. Inbound changes from the system are held here before being committed to the Metaverse. Outbound changes are staged here ahead of synchronisation to the connected system.
+        This is the connector space for this Connected System. Inbound changes from the system are held here before being committed to the Metaverse. Outbound changes are held here ahead of synchronisation to the connected system.
     </MudAlert>
 }
 
@@ -346,7 +346,7 @@ else
             new("Home", href: "/", icon: Icons.Material.Filled.Home),
             new("Connected Systems", href: "/admin/connected-systems/"),
             new(_connectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(_connectedSystemHeader)),
-            new("Staging", href: null, disabled: true)
+            new("Connector Space", href: null, disabled: true)
         };
 
         _objectTypes = (await jim.ConnectedSystems.GetObjectTypesAsync(Id))

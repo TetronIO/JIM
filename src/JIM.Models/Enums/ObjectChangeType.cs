@@ -10,7 +10,7 @@ public enum ObjectChangeType
 
     // Import operations (CSO changes)
     /// <summary>
-    /// CSO added to staging.
+    /// CSO added to the connector space.
     /// </summary>
     Added,
 

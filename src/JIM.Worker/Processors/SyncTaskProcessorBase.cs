@@ -556,7 +556,7 @@ public abstract class SyncTaskProcessorBase
     /// CSO deletions are batched for performance - call FlushObsoleteCsoOperationsAsync() at page boundaries.
     /// When a joined CSO is obsoleted with Disconnect action, two RPEIs are produced:
     /// 1. Disconnected - records the CSO-MVO join being broken (with any attribute removals)
-    /// 2. Deleted - records the CSO being removed from staging
+    /// 2. Deleted - records the CSO being removed from the connector space
     /// </summary>
     /// <returns>The execution items if CSO was obsoleted (for the caller to add to the activity), empty list otherwise.</returns>
     protected async Task<List<ActivityRunProfileExecutionItem>> ProcessObsoleteConnectedSystemObjectAsync(

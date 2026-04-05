@@ -93,14 +93,14 @@ function Get-JIMConnectedSystemObject {
         switch ($PSCmdlet.ParameterSetName) {
             'ById' {
                 Write-Verbose "Getting Connected System Object $Id from Connected System $ConnectedSystemId"
-                $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/staging/$Id"
+                $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/connector-space/$Id"
                 $result
             }
 
             'AttributeValues' {
                 Write-Verbose "Getting attribute values for '$AttributeName' on CSO $Id (Page: $Page, PageSize: $PageSize)"
                 $encodedAttrName = [System.Uri]::EscapeDataString($AttributeName)
-                $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/staging/$Id/attributes/$encodedAttrName/values?page=$Page&pageSize=$PageSize"
+                $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/connector-space/$Id/attributes/$encodedAttrName/values?page=$Page&pageSize=$PageSize"
                 if ($Search) {
                     $endpoint += "&search=$([System.Uri]::EscapeDataString($Search))"
                 }
@@ -118,7 +118,7 @@ function Get-JIMConnectedSystemObject {
                 $encodedAttrName = [System.Uri]::EscapeDataString($AttributeName)
 
                 while ($hasMore) {
-                    $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/staging/$Id/attributes/$encodedAttrName/values?page=$currentPage&pageSize=$PageSize"
+                    $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/connector-space/$Id/attributes/$encodedAttrName/values?page=$currentPage&pageSize=$PageSize"
                     if ($Search) {
                         $endpoint += "&search=$([System.Uri]::EscapeDataString($Search))"
                     }

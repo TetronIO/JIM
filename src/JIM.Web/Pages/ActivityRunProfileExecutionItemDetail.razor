@@ -1326,7 +1326,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
             // Import operations
-            ObjectChangeType.Added => $"{typeName} Added to Staging",
+            ObjectChangeType.Added => $"{typeName} Added to Connector Space",
             ObjectChangeType.Updated => $"{typeName} Updated",
             ObjectChangeType.Deleted => IsSyncContext() ? "Source Deletion Processed" : $"{typeName} Deletion Detected",
             // Sync operations
@@ -1437,15 +1437,15 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         {
             // Import operations
             ObjectChangeType.Added => hasExternalId
-            ? $"A new connected system object ({externalId}) was imported and added to the staging area."
-            : "A new connected system object was imported and added to the staging area.",
+            ? $"A new connected system object ({externalId}) was imported and added to the connector space."
+            : "A new connected system object was imported and added to the connector space.",
             ObjectChangeType.Updated => hasExternalId
             ? $"The connected system object ({externalId}) was updated with new attribute values."
             : "The connected system object was updated with new attribute values.",
             ObjectChangeType.Deleted => IsSyncContext()
             ? (hasExternalId
-            ? $"The connected system object ({externalId}) was removed from staging after the source system deletion was confirmed."
-            : "The connected system object was removed from staging after the source system deletion was confirmed.")
+            ? $"The connected system object ({externalId}) was removed from the connector space after the source system deletion was confirmed."
+            : "The connected system object was removed from the connector space after the source system deletion was confirmed.")
             : (hasExternalId
             ? $"The connected system object ({externalId}) was detected as deleted from the source system and marked for removal."
             : "The connected system object was detected as deleted from the source system and marked for removal."),
