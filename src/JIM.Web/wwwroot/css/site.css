@@ -82,6 +82,12 @@ html[lang] a.mud-link.mud-primary-text:visited:hover {
     padding-top: 0;
 }
 
+/* Hide the built-in MudTable loading progress bar on tables that use polling-based refresh,
+   preventing a visible flicker every time the table silently reloads data. */
+.no-loading-bar .mud-table-loading {
+    display: none !important;
+}
+
 .mud-table-empty-row {
     font-weight: normal;
     color: var(--mud-palette-text-primary) !important;

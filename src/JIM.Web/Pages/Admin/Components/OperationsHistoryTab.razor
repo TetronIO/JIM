@@ -83,7 +83,8 @@
     <MudTable @ref="_table" T="Activity" ServerData="ServerReload" @bind-CurrentPage="_currentPage"
               RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged"
               Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
-              Loading="false"
+              Loading="@false"
+              Class="no-loading-bar"
               Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer">
         <HeaderContent>
             <MudTh>
