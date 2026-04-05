@@ -36,8 +36,9 @@ GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types
     ```powershell
     Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
 
-    # No dedicated cmdlet for listing object types yet.
-    # Use the curl example or call the API directly.
+    Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
+
+    Get-JIMConnectedSystemObjectType -ConnectedSystemId 1
     ```
 
 ### Response

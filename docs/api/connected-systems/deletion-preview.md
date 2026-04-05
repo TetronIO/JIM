@@ -30,8 +30,9 @@ GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/deletion-previ
     ```powershell
     Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
 
-    # No dedicated cmdlet for deletion preview yet.
-    # Use the curl example or call the API directly.
+    Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
+
+    Get-JIMConnectedSystemDeletionPreview -ConnectedSystemId 1
     ```
 
 ## Response

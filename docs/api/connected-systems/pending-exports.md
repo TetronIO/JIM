@@ -254,8 +254,10 @@ GET /api/v1/synchronisation/pending-exports/{pendingExportId}/attribute-changes/
     ```powershell
     Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
 
-    # No dedicated cmdlet for paginated attribute changes yet.
-    # Use the curl example or call the API directly.
+    Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
+
+    Get-JIMPendingExport -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" `
+        -AttributeName "memberOf"
     ```
 
 ### Response
