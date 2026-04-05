@@ -10,7 +10,7 @@ graph LR
     D -->|Export| E[Target System]
 ```
 
-## Phase 1: Import
+## 📥 Phase 1: Import
 
 Import pulls data from a connected system into JIM's **connector space**. The result is a set of Connected System Objects (CSOs) that represent the current state of the external system.
 
@@ -42,7 +42,7 @@ For example, the OpenLDAP connector supports delta imports via the accesslog ove
 
 Import does **not** modify the metaverse. The connector space acts as a staging area, isolating the metaverse from any issues during import.
 
-## Phase 2: Sync (Synchronisation)
+## 🔀 Phase 2: Sync (Synchronisation)
 
 Sync is the core phase where JIM reconciles connector space data with the metaverse. It applies **sync rules** to determine how CSOs relate to MetaverseObjects (MVOs) and how attributes flow between them.
 
@@ -75,7 +75,7 @@ Outbound sync evaluates MVOs against outbound sync rules and determines what cha
 - **Full Sync** re-evaluates every CSO against the sync rules. Use this after changing sync rule configuration or for periodic reconciliation.
 - **Delta Sync** processes only CSOs that have changed since the last sync. This is faster and is the normal operational mode.
 
-## Phase 3: Export
+## 📤 Phase 3: Export
 
 Export sends pending changes from the connector space to the target connected system. Each pending export represents a create, update, or delete operation.
 

@@ -40,6 +40,7 @@ theme:
 
 plugins:
   - search
+  - glightbox
 
 markdown_extensions:
   - admonition
@@ -62,6 +63,8 @@ markdown_extensions:
   - pymdownx.critic
   - pymdownx.keys
   - pymdownx.mark
+  - pymdownx.tasklist:
+      custom_checkbox: true
   - pymdownx.emoji:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
@@ -131,6 +134,9 @@ nav:
 
 extra_css:
   - assets/stylesheets/custom.css
+
+extra_javascript:
+  - assets/javascripts/mermaid-zoom.js
 
 extra:
   social:

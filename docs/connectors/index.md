@@ -29,7 +29,7 @@ Each connected system in JIM has:
 
 For more detail on these concepts, see [Connected Systems](../concepts/connected-systems.md).
 
-## Available Connectors
+## 🛠️ Available Connectors
 
 JIM ships with the following built-in connectors:
 
@@ -42,6 +42,6 @@ JIM ships with the following built-in connectors:
 
 For planned connectors including SQL databases, PowerShell, SCIM 2.0, and REST APIs, see the [Roadmap](../reference/roadmap.md).
 
-## Custom Connectors
+## 🧩 Custom Connectors
 
 JIM's connector framework is extensible. If none of the built-in connectors meet your requirements, you can develop a custom connector that implements JIM's connector interfaces. For guidance on building your own connector, see [Writing Connectors](../developer/connectors.md).

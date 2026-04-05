@@ -130,3 +130,19 @@
 
 /* Dark mode: show dark diagrams, hide light */
 [data-md-color-scheme="slate"] .diagram-light { display: none; }
+
+/* ========================================
+   GLightbox theme-aware overlay
+   ======================================== */
+
+/* Light mode: give the image a white background so transparent SVGs look correct */
+[data-md-color-scheme="default"] .gslide-image img {
+  background-color: #ffffff;
+  border-radius: 4px;
+}
+
+/* Dark mode: give the image a dark background matching the page surface */
+[data-md-color-scheme="slate"] .gslide-image img {
+  background-color: #051526;
+  border-radius: 4px;
+}

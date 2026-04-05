@@ -10,7 +10,7 @@ JIM is a modern Identity Management system designed for organisations with compl
 <img class="diagram-light" alt="JIM System Context" src="diagrams/images/light/jim-structurizr-1-SystemContext.svg">
 <img class="diagram-dark" alt="JIM System Context" src="diagrams/images/dark/jim-structurizr-1-SystemContext.svg">
 
-## Key Features
+## ✨ Key Features
 
 <div class="grid cards" markdown>
 
@@ -64,7 +64,7 @@ JIM is a modern Identity Management system designed for organisations with compl
 
 </div>
 
-## Scenarios
+## 🎯 Scenarios
 
 JIM supports common Identity Governance & Administration (IGA) scenarios:
 
@@ -74,21 +74,21 @@ JIM supports common Identity Governance & Administration (IGA) scenarios:
 - **Domain Migration:** Support divestitures and system decommissioning
 - **Identity Correlation:** Bring together user and entitlement data from disparate business applications
 
-## What Makes JIM Different
+## 🚀 What Makes JIM Different
 
 Enterprise identity synchronisation typically requires cloud connectivity, complex infrastructure, or expensive licensing. JIM takes a different approach: it deploys as a single Docker stack, runs entirely on-premises, and works in air-gapped networks with no external dependencies. Source-available code means you can inspect, audit, and verify everything JIM does with your identity data.
 
 | Capability | JIM |
 |---|---|
-| Air-gapped deployment | :material-check-bold: |
+| Air-gapped deployment | ✅ |
 | Cloud dependencies | None |
-| Container-native | :material-check-bold: |
-| Source available | :material-check-bold: |
-| SSO with any OIDC provider | :material-check-bold: |
-| Full REST API | :material-check-bold: |
-| PowerShell automation | :material-check-bold: |
+| Container-native | ✅ |
+| Source available | ✅ |
+| SSO with any OIDC provider | ✅ |
+| Full REST API | ✅ |
+| PowerShell automation | ✅ |
 
-## Quick Links
+## 🗺️ Quick Links
 
 <div class="grid cards" markdown>
 
