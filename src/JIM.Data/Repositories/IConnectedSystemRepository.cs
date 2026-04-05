@@ -85,6 +85,11 @@ public interface IConnectedSystemRepository
     /// </summary>
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
 
+    /// <summary>
+    /// Loads CSOs by ID with AttributeValues using AsNoTracking, for reconciliation comparisons.
+    /// </summary>
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
+
     public Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem);
 
     /// <summary>

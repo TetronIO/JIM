@@ -665,6 +665,16 @@ public class SyncImportTaskProcessor
                         _syncServer.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), updatedCso.Id);
                 }
 
+                // Clear the change tracker after each update batch. The batch has been fully persisted
+                // (raw SQL for parent rows + SaveChangesAsync for attribute changes), so tracked
+                // entities are no longer needed. This prevents tracker bloat from accumulating
+                // across 50+ batches of 2000 CSOs each.
+                // NOTE: this clears navigation properties on the batch CSOs, but those CSOs have
+                // already been saved. Reconciliation uses pre-loaded PendingExports (not CSO nav
+                // props) for the comparison data, and rebuilds CSO attribute lookups from a fresh
+                // database query if needed.
+                _syncRepo.ClearChangeTracker();
+
                 _activity.ObjectsProcessed = createdCount + batchStart + batchSize;
                 await _syncRepo.UpdateActivityMessageAsync(_activity,
                     $"Saving changes — updating ({batchStart + batchSize:N0} / {totalToUpdate:N0})" +
@@ -1454,13 +1464,12 @@ public class SyncImportTaskProcessor
                         throughput.FormatThroughput(importIndex + 1, totalObjectsInBatch));
                 }
 
-                // Note: we intentionally do NOT clear the change tracker during import processing.
-                // HydrateCsoAsync loads each CSO with full Include chains, growing the tracker.
-                // However, ClearChangeTracker detaches entities and EF Core's fixup clears
-                // navigation collections (AttributeValues) on detached CSOs. Update CSOs need
-                // their AttributeValues intact for both the save phase and reconciliation.
-                // The original 231→26 obj/s degradation was caused by the _hasRawSqlSupport
-                // guard bug (now fixed), not by tracker accumulation alone.
+                // Note: do NOT clear the change tracker here. Import processing modifies
+                // CSO.AttributeValues in-memory (adds/removes). ClearChangeTracker detaches
+                // entities and EF Core fixup clears navigation collections, losing those
+                // modifications. The save phase and reconciliation both need intact AttributeValues.
+                // Instead, the tracker is cleared between save-phase batches (after each batch
+                // has been persisted and its CSOs are no longer needed).
             }
         }
 
@@ -2630,7 +2639,14 @@ public class SyncImportTaskProcessor
 
         for (var page = 0; page < totalPages; page++)
         {
-            var pageCsos = csoList.Skip(page * pageSize).Take(pageSize).ToList();
+            var pageCsoIds = csoList.Skip(page * pageSize).Take(pageSize).Select(c => c.Id).ToList();
+
+            // Reload CSOs with fresh AttributeValues from the database for this page.
+            // The in-memory CSOs may have stale/empty AttributeValues if the change tracker
+            // was cleared between save-phase batches (which detaches entities and EF fixup
+            // clears navigation collections). AsNoTracking avoids polluting the tracker.
+            var pageCsos = await _syncRepo.GetConnectedSystemObjectsByIdsNoTrackingAsync(
+                _connectedSystem.Id, pageCsoIds);
 
             // Thread-safe batch collections for deferred database operations (per page)
             var pendingExportsToDelete = new System.Collections.Concurrent.ConcurrentBag<JIM.Models.Transactional.PendingExport>();
@@ -2639,7 +2655,7 @@ public class SyncImportTaskProcessor
             var pageExecutionItems = new System.Collections.Concurrent.ConcurrentBag<ActivityRunProfileExecutionItem>();
 
             // Process CSOs in parallel - reconciliation is pure in-memory comparison.
-            // All pending exports are already loaded; no database queries in this loop.
+            // All pending exports are already loaded; no database queries per CSO in this loop.
             // Thread safety:
             // - allPendingExportsByCsoId: read-only dictionary (concurrent reads are safe)
             // - Each CSO gets its own PendingExportReconciliationResult (no sharing)

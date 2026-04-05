@@ -1484,6 +1484,26 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Loads CSOs by ID with AttributeValues for reconciliation, using AsNoTracking to avoid
+    /// polluting the change tracker. Only loads AttributeValues (not Type or ReferenceValues)
+    /// since reconciliation only needs attribute data for comparison.
+    /// </summary>
+    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
+    {
+        var idList = csoIds.ToList();
+        if (idList.Count == 0)
+            return new List<ConnectedSystemObject>();
+
+        return await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(cso => cso.AttributeValues)
+                .ThenInclude(av => av.Attribute)
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId && idList.Contains(cso.Id))
+            .ToListAsync();
+    }
+
+    /// <summary>
     /// Gets a Connected System Object by its secondary external ID attribute value.
     /// Used to find PendingProvisioning CSOs during import reconciliation when the
     /// primary external ID (e.g., objectGUID) is system-assigned and not yet known.

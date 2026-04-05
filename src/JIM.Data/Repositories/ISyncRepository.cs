@@ -122,6 +122,11 @@ public interface ISyncRepository
     Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
 
     /// <summary>
+    /// Loads CSOs by ID with AttributeValues using AsNoTracking, for reconciliation comparisons.
+    /// </summary>
+    Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
+
+    /// <summary>
     /// Gets multiple CSOs by their external ID attribute values (batch lookup).
     /// Returns a dictionary keyed by the string representation of the attribute value.
     /// Used during import to batch-match incoming objects.

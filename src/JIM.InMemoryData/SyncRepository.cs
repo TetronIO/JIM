@@ -299,6 +299,9 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
+        => GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds);
+
     public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(
         int connectedSystemId, int attributeId, IEnumerable<string> attributeValues)
     {
