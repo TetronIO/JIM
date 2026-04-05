@@ -160,6 +160,7 @@ Where NOT to use them:
 - In API/technical reference content (endpoint tables, parameter lists, code comments)
 - More than once per heading or table cell
 - Decoratively on every heading -- only where it genuinely adds meaning or helps the reader navigate
+- As a substitute for checklists: use `- [ ]` / `- [x]` task list syntax instead, which renders as styled checkboxes via the `pymdownx.tasklist` extension
 
 ## ASCII Diagrams
 
