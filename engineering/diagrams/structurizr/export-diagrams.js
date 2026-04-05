@@ -72,10 +72,10 @@ async function openDiagramsPage(browser, isDarkMode) {
   return page;
 }
 
-// Structurizr uses #111111 for dark mode backgrounds. Replace with GitHub's
-// dark mode background (#0e1117) so diagrams blend seamlessly.
+// Structurizr uses #111111 for dark mode backgrounds. Replace with transparent
+// so diagrams blend seamlessly on any dark surface (GitHub, MkDocs, etc.).
 const STRUCTURIZR_DARK_BG = '#111111';
-const GITHUB_DARK_BG = '#0e1117';
+const TRANSPARENT_BG = 'transparent';
 
 /**
  * Exports all views from a Structurizr page to SVG files.
@@ -110,7 +110,7 @@ async function exportViews(page, views, targetDir, isDarkMode) {
     });
 
     if (isDarkMode) {
-      svgForDiagram = svgForDiagram.replaceAll(STRUCTURIZR_DARK_BG, GITHUB_DARK_BG);
+      svgForDiagram = svgForDiagram.replaceAll(STRUCTURIZR_DARK_BG, TRANSPARENT_BG);
     }
 
     const finalDiagram = jimVersion ? injectVersion(svgForDiagram, jimVersion, versionFill) : svgForDiagram;
@@ -128,7 +128,7 @@ async function exportViews(page, views, targetDir, isDarkMode) {
       });
 
       if (isDarkMode) {
-        svgForKey = svgForKey.replaceAll(STRUCTURIZR_DARK_BG, GITHUB_DARK_BG);
+        svgForKey = svgForKey.replaceAll(STRUCTURIZR_DARK_BG, TRANSPARENT_BG);
       }
 
       fs.writeFileSync(keyPath, svgForKey);
