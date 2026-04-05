@@ -29,7 +29,6 @@ theme:
   features:
     - navigation.tabs
     - navigation.sections
-    - navigation.expand
     - navigation.top
     - navigation.footer
     - content.code.copy
@@ -104,8 +103,34 @@ nav:
   - API:
       - api/index.md
       - Authentication: api/authentication.md
-      - Connected Systems: api/connected-systems/index.md
-      - Schedules: api/schedules/index.md
+      - Connected Systems:
+          - api/connected-systems/index.md
+          - List: api/connected-systems/list.md
+          - Create: api/connected-systems/create.md
+          - Retrieve: api/connected-systems/retrieve.md
+          - Update: api/connected-systems/update.md
+          - Delete: api/connected-systems/delete.md
+          - Deletion Preview: api/connected-systems/deletion-preview.md
+          - Import Schema: api/connected-systems/import-schema.md
+          - Import Hierarchy: api/connected-systems/import-hierarchy.md
+          - Clear Connector Space: api/connected-systems/clear-connector-space.md
+          - Object Types: api/connected-systems/object-types.md
+          - Attributes: api/connected-systems/attributes.md
+          - Partitions: api/connected-systems/partitions.md
+          - Connector Space: api/connected-systems/connector-space.md
+          - Pending Exports: api/connected-systems/pending-exports.md
+      - Schedules:
+          - api/schedules/index.md
+          - List: api/schedules/list.md
+          - Create: api/schedules/create.md
+          - Retrieve: api/schedules/retrieve.md
+          - Update: api/schedules/update.md
+          - Delete: api/schedules/delete.md
+          - Enable: api/schedules/enable.md
+          - Disable: api/schedules/disable.md
+          - Run: api/schedules/run.md
+          - Manage Steps: api/schedules/steps.md
+          - Executions: api/schedules/executions.md
   - PowerShell Module:
       - powershell/index.md
       - Cmdlet Reference: powershell/cmdlets.md
