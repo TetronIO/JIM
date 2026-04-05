@@ -41,12 +41,10 @@ The metaverse is the authoritative identity repository at the centre of JIM's ar
 - **SyncRule** — Bidirectional mappings between connected systems and the metaverse
 - **Staging Areas** — Import/export staging for transactional integrity
 
-```text
-+-------------------+       +-----------+       +-------------------+
-| Connected System  | ----> |           | ----> | Connected System  |
-|   (e.g. HR)       |       | Metaverse |       |   (e.g. AD)       |
-|                   | <---- |           | <---- |                   |
-+-------------------+       +-----------+       +-------------------+
+```mermaid
+flowchart LR
+    A["Connected System\n(e.g. HR)"] <-->|Import / Export| B["Metaverse"]
+    B <-->|Import / Export| C["Connected System\n(e.g. AD)"]
 ```
 
 ## Component Diagrams

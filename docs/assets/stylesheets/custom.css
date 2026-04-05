@@ -8,7 +8,51 @@
   --md-accent-fg-color: #5A45A2;
 }
 
-/* Dark mode adjustments */
+/* ========================================
+   Light mode (Navy O6 Light palette)
+   ======================================== */
+
+[data-md-color-scheme="default"] {
+  /* Links */
+  --md-typeset-a-color: #0076d3;             /* --jim-link-color */
+  --md-accent-fg-color: #0076d3;
+
+  /* Syntax highlighting */
+  --md-code-hl-keyword-color: #6a329f;       /* --jim-expr-keyword */
+  --md-code-hl-string-color: #a31515;        /* --jim-expr-string */
+  --md-code-hl-number-color: #0076d3;        /* --jim-expr-number */
+  --md-code-hl-function-color: #795e26;      /* --jim-expr-function */
+  --md-code-hl-variable-color: #001080;      /* --jim-expr-variable */
+  --md-code-hl-operator-color: #af00db;      /* --jim-expr-operator */
+  --md-code-hl-comment-color: #4a5568;       /* --mud-palette-text-secondary */
+  --md-code-hl-name-color: #005da8;          /* --jim-json-key */
+  --md-code-hl-constant-color: #6a329f;      /* --jim-json-boolean */
+  --md-code-hl-punctuation-color: #4a5568;
+  --md-code-hl-special-color: #af00db;       /* --jim-expr-operator */
+  --md-code-hl-generic-color: #121b29;       /* --mud-palette-text-primary */
+}
+
+[data-md-color-scheme="default"] .md-typeset a:hover,
+[data-md-color-scheme="default"] .md-nav__link:hover {
+  color: #005da8;                            /* --jim-link-hover-color */
+}
+
+[data-md-color-scheme="default"] .md-nav__link:focus,
+[data-md-color-scheme="default"] .md-nav__link:focus-visible,
+[data-md-color-scheme="default"] .md-nav__link:active {
+  color: #005da8;                            /* --jim-link-hover-color */
+}
+
+/* Light mode — nav active link */
+[data-md-color-scheme="default"] .md-nav__link--active,
+[data-md-color-scheme="default"] .md-nav__link:is([data-md-state="active"]) {
+  color: #0076d3;                            /* --jim-link-color */
+}
+
+/* ========================================
+   Dark mode (Navy O6 Dark palette)
+   ======================================== */
+
 [data-md-color-scheme="slate"] {
   --md-primary-fg-color: #5A45A2;
   --md-primary-fg-color--light: #7B68B8;
@@ -16,4 +60,38 @@
   --md-accent-fg-color: #7B68B8;
   --md-default-bg-color: #0D1D2E;
   --md-default-bg-color--light: #162A3E;
+
+  /* Links */
+  --md-typeset-a-color: #67b9ff;             /* --jim-link-color */
+
+  /* Syntax highlighting */
+  --md-code-hl-keyword-color: #b0b8c4;       /* --jim-expr-keyword */
+  --md-code-hl-string-color: #a5d6a7;        /* --jim-expr-string */
+  --md-code-hl-number-color: #64b5f6;        /* --jim-expr-number */
+  --md-code-hl-function-color: #dcdcaa;       /* --jim-expr-function */
+  --md-code-hl-variable-color: #9cdcfe;       /* --jim-expr-variable */
+  --md-code-hl-operator-color: #c586c0;       /* --jim-expr-operator */
+  --md-code-hl-comment-color: #8a9eb4;        /* --mud-palette-text-secondary */
+  --md-code-hl-name-color: #67b9ff;           /* --jim-json-key */
+  --md-code-hl-constant-color: #b0b8c4;       /* --jim-json-boolean */
+  --md-code-hl-punctuation-color: #8a9eb4;
+  --md-code-hl-special-color: #c586c0;        /* --jim-expr-operator */
+  --md-code-hl-generic-color: #e0e4ea;        /* --mud-palette-text-primary */
+}
+
+[data-md-color-scheme="slate"] .md-typeset a:hover,
+[data-md-color-scheme="slate"] .md-nav__link:hover {
+  color: #9ad0ff;                             /* --jim-link-hover-color */
+}
+
+[data-md-color-scheme="slate"] .md-nav__link:focus,
+[data-md-color-scheme="slate"] .md-nav__link:focus-visible,
+[data-md-color-scheme="slate"] .md-nav__link:active {
+  color: #9ad0ff;                             /* --jim-link-hover-color */
+}
+
+/* Dark mode — nav active link */
+[data-md-color-scheme="slate"] .md-nav__link--active,
+[data-md-color-scheme="slate"] .md-nav__link:is([data-md-state="active"]) {
+  color: #67b9ff;                             /* --jim-link-color */
 }

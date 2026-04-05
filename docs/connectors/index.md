@@ -12,12 +12,11 @@ JIM uses a hub-and-spoke architecture with the **metaverse** at the centre. Conn
 
 When a connector imports data from an external system, it does not write directly to the metaverse. Instead, it populates the **connector space** -- a staging area that holds local representations of external objects called **Connected System Objects (CSOs)**. During synchronisation, CSOs are joined or projected to **Metaverse Objects (MVOs)** based on configured sync rules. When exporting, the process reverses: changes flow from the metaverse through sync rules to CSOs, and then the connector pushes those changes back to the external system.
 
-```text
-+-----------+     +-------------------+     +-------------------+     +-----------+
-|  External | --> |  Connector Space  | --> |    Metaverse      | --> |  External |
-|  System A |     |  (CSOs)           |     |    (MVOs)         |     |  System B |
-+-----------+     +-------------------+     +-------------------+     +-----------+
-                       Import                    Sync                    Export
+```mermaid
+flowchart LR
+    A["External\nSystem A"] -->|Import| B["Connector Space\n(CSOs)"]
+    B -->|Sync| C["Metaverse\n(MVOs)"]
+    C -->|Export| D["External\nSystem B"]
 ```
 
 Each connected system in JIM has:

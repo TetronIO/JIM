@@ -62,18 +62,11 @@ In air-gapped environments, no outbound connectivity is required after initial d
 
 JIM runs as a Docker Compose stack with four services:
 
-```text
-+------------------+     +------------------+     +------------------+
-|     jim.web      |     |   jim.worker     |     |  jim.scheduler   |
-|  (UI + REST API) |     | (sync processor) |     | (cron triggers)  |
-+--------+---------+     +--------+---------+     +--------+---------+
-         |                        |                        |
-         +------------------------+------------------------+
-                                  |
-                          +-------+--------+
-                          |  jim.database  |
-                          |  (PostgreSQL)  |
-                          +----------------+
+```mermaid
+flowchart TD
+    W["jim.web\n(UI + REST API)"] --> DB["jim.database\n(PostgreSQL)"]
+    WK["jim.worker\n(sync processor)"] --> DB
+    S["jim.scheduler\n(cron triggers)"] --> DB
 ```
 
 | Service            | Description                                                                           |

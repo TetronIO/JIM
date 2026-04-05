@@ -11,16 +11,10 @@ At the heart of JIM is the **metaverse**: a centralised repository of identity o
 - **Decoupled systems** -- connected systems do not need to know about each other; they only interact with the metaverse
 - **Auditability** -- every change is tracked as it passes through the hub
 
-```text
-+-------------------+       +----------------+       +-------------------+
-|   Source Systems   | ----> |   Metaverse    | ----> |  Target Systems   |
-|                    |       |                |       |                   |
-|  - HR Database     |       |  - Identity    |       |  - Active Dir.    |
-|  - Badge System    |       |    Objects     |       |  - Email System   |
-+-------------------+       +----------------+       +-------------------+
-         |                          |                          |
-         v                          v                          v
-       IMPORT                      SYNC                      EXPORT
+```mermaid
+flowchart LR
+    A["Source Systems\n\nHR Database\nBadge System"] -->|Import| B["Metaverse\n\nIdentity\nObjects"]
+    B -->|Export| C["Target Systems\n\nActive Directory\nEmail System"]
 ```
 
 **Key principle**: All identity data flows through the metaverse. JIM never synchronises directly between connected systems.
@@ -61,18 +55,15 @@ JIM uses PostgreSQL as its sole data store. The database holds all configuration
 
 JIM follows a strict layered architecture. Each layer depends only on the layer directly below it -- higher layers never bypass intermediate layers.
 
-```text
-+------------------------------------------+
-|  Presentation: JIM.Web (Blazor + API)    |
-+------------------------------------------+
-|  Application: JIM.Application (Servers)  |
-+------------------------------------------+
-|  Domain: JIM.Models (Entities, DTOs)     |
-+------------------------------------------+
-|  Data: JIM.PostgresData (EF Core)        |
-+------------------------------------------+
-|  Integration: JIM.Connectors             |
-+------------------------------------------+
+```mermaid
+flowchart TD
+    A["<b>Presentation</b><br>JIM.Web (Blazor + API)"]
+    B["<b>Application</b><br>JIM.Application (Servers)"]
+    C["<b>Domain</b><br>JIM.Models (Entities, DTOs)"]
+    D["<b>Data</b><br>JIM.PostgresData (EF Core)"]
+    E["<b>Integration</b><br>JIM.Connectors"]
+
+    A --> B --> C --> D --- E
 ```
 
 ### Presentation Layer
