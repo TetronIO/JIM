@@ -33,6 +33,12 @@ JIM is a modern Identity Management system designed for organisations with compl
 
 ![A screenshot of JIM running](https://tetron.io/images/jim/0.7.1/homepage-dark.png "JIM Screenshot")
 
+<p align="center">
+  <strong>📖 <a href="https://tetronio.github.io/JIM/">Read the full documentation</a></strong>
+  <br>
+  <sub>Getting started guides, architecture deep-dives, API reference, and PowerShell automation</sub>
+</p>
+
 ## What Makes JIM Different
 
 Enterprise identity synchronisation typically requires cloud connectivity, complex infrastructure, or expensive licensing. JIM takes a different approach — it deploys as a single Docker stack, runs entirely on-premises, and works in air-gapped networks with no external dependencies. Source-available code means you can inspect, audit, and verify everything JIM does with your identity data.
@@ -132,4 +138,5 @@ For detailed feature checklists and post-MVP roadmap, see the [Roadmap](https://
 JIM uses a Source-Available model where it is free to use in non-production scenarios, but requires a commercial license for use in production scenarios. [﻿Full details can be found here](https://tetron.io/jim/#licensing).
 
 ## More Information
-Please go to [﻿https://tetron.io/jim](https://tetron.io/jim) for more information.
+- **Documentation:** [tetronio.github.io/JIM](https://tetronio.github.io/JIM/)
+- **Product site:** [tetron.io/jim](https://tetron.io/jim)
