@@ -2932,6 +2932,70 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
 
+    public async Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId)
+    {
+        // Single bulk query: load ALL pending exports for this connected system in one round-trip.
+        // Far more efficient than per-page WHERE IN queries for large-scale reconciliation (100K+ CSOs).
+        var pendingExports = await Repository.Database.PendingExports
+            .AsNoTracking()
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId && pe.ConnectedSystemObjectId != null)
+            .ToListAsync();
+
+        // Build dictionary mapping CSO ID to pending export, with duplicate self-healing.
+        var result = new Dictionary<Guid, PendingExport>();
+        var duplicateIdsToDelete = new List<Guid>();
+
+        foreach (var pe in pendingExports)
+        {
+            var csoId = pe.ConnectedSystemObjectId!.Value;
+            if (result.ContainsKey(csoId))
+            {
+                var existing = result[csoId];
+                PendingExport keeper, discard;
+
+                if (pe.CreatedAt >= existing.CreatedAt)
+                {
+                    keeper = pe;
+                    discard = existing;
+                }
+                else
+                {
+                    keeper = existing;
+                    discard = pe;
+                }
+
+                Log.Warning("GetPendingExportsLightweightByConnectedSystemIdAsync: DUPLICATE PENDING EXPORT detected for CSO {CsoId}. " +
+                    "Keeping PE {KeeperId} (created {KeeperDate}), deleting stale PE {DiscardId} (created {DiscardDate}). " +
+                    "This indicates a previous data integrity issue that has been self-healed.",
+                    csoId, keeper.Id, keeper.CreatedAt, discard.Id, discard.CreatedAt);
+
+                duplicateIdsToDelete.Add(discard.Id);
+                result[csoId] = keeper;
+            }
+            else
+            {
+                result[csoId] = pe;
+            }
+        }
+
+        if (duplicateIdsToDelete.Count > 0)
+        {
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"DELETE FROM ""PendingExportAttributeValueChanges"" WHERE ""PendingExportId"" = ANY({0})",
+                duplicateIdsToDelete.ToArray());
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"DELETE FROM ""PendingExports"" WHERE ""Id"" = ANY({0})",
+                duplicateIdsToDelete.ToArray());
+
+            Log.Information("GetPendingExportsLightweightByConnectedSystemIdAsync: Self-healed {Count} duplicate pending export(s)",
+                duplicateIdsToDelete.Count);
+        }
+
+        return result;
+    }
+
     public async Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId)
     {
         var csoIdsWithExports = await Repository.Database.PendingExports

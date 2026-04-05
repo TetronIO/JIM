@@ -2532,18 +2532,21 @@ public class SyncImportTaskProcessor
         if (updatedCsos.Count == 0)
             return;
 
-        // Filter to only CSOs that actually have pending exports - avoids iterating thousands of CSOs
-        // that have no pending exports (e.g. on a first import before any exports have occurred).
-        // Queries by connected system ID (single integer) rather than passing all CSO IDs to the database,
-        // which would not scale for large imports (10k+ CSOs).
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling pending exports - loading data");
-        var csoIdsWithExports = await _syncRepo
-            .GetCsoIdsWithPendingExportsByConnectedSystemAsync(connectedSystemId);
-
-        if (csoIdsWithExports.Count == 0)
+        // Bulk-load ALL pending exports for this connected system in a single query.
+        // This replaces the previous approach of 201 per-page WHERE IN queries, which was the
+        // primary bottleneck at scale (6+ seconds per page × 201 pages = 20+ minutes).
+        await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling pending exports - loading pending exports");
+        Dictionary<Guid, JIM.Models.Transactional.PendingExport> allPendingExportsByCsoId;
+        using (Diagnostics.Sync.StartSpan("BulkLoadPendingExports"))
         {
-            Log.Debug("ReconcilePendingExportsAsync: No pending exports found for any of the {CsoCount} updated CSOs. Skipping reconciliation",
-                updatedCsos.Count);
+            allPendingExportsByCsoId = await _syncRepo
+                .GetPendingExportsLightweightByConnectedSystemIdAsync(connectedSystemId);
+        }
+
+        if (allPendingExportsByCsoId.Count == 0)
+        {
+            Log.Debug("ReconcilePendingExportsAsync: No pending exports found for connected system {ConnectedSystemId}. Skipping reconciliation",
+                connectedSystemId);
 
             // Mark progress as complete so the UI doesn't stay stuck at "0 / N"
             _activity.ObjectsProcessed = _activity.ObjectsToProcess;
@@ -2551,7 +2554,11 @@ public class SyncImportTaskProcessor
             return;
         }
 
-        var csoList = updatedCsos.Where(c => csoIdsWithExports.Contains(c.Id)).ToList();
+        Log.Information("ReconcilePendingExportsAsync: Loaded {PendingExportCount} pending exports for connected system {ConnectedSystemId}",
+            allPendingExportsByCsoId.Count, connectedSystemId);
+
+        // Filter to only CSOs that have pending exports
+        var csoList = updatedCsos.Where(c => allPendingExportsByCsoId.ContainsKey(c.Id)).ToList();
 
         // Update progress counter to reflect the filtered count (only CSOs with pending exports)
         _activity.ObjectsToProcess = csoList.Count;
@@ -2567,7 +2574,7 @@ public class SyncImportTaskProcessor
         var totalFailed = 0;
         var exportsDeleted = 0;
 
-        // Use sync page size for consistent batching across all sync operations
+        // Use sync page size for batching database persistence operations
         var pageSize = await _syncServer.GetSyncPageSizeAsync();
         var totalPages = (int)Math.Ceiling((double)csoList.Count / pageSize);
 
@@ -2590,26 +2597,10 @@ public class SyncImportTaskProcessor
             var confirmedAttrChangesToDelete = new System.Collections.Concurrent.ConcurrentBag<JIM.Models.Transactional.PendingExportAttributeValueChange>();
             var pageExecutionItems = new System.Collections.Concurrent.ConcurrentBag<ActivityRunProfileExecutionItem>();
 
-            // Update progress before loading so the UI shows activity during the heavy query
-            await _syncRepo.UpdateActivityMessageAsync(_activity,
-                $"Reconciling pending exports — loading page {page + 1}/{totalPages} ({processedCount:N0}/{csoList.Count:N0})");
-
-            // Lightweight fetch: AsNoTracking + only AttributeValueChanges with Attribute.
-            // Avoids loading ConnectedSystemObject/ConnectedSystem/SourceMetaverseObject (not needed for reconciliation)
-            // and eliminates EF Core identity resolution overhead against the import phase's tracked entity graph.
-            Dictionary<Guid, JIM.Models.Transactional.PendingExport> pendingExportsByCsoId;
-            using (Diagnostics.Sync.StartSpan("LoadPendingExports").SetTag("csoCount", pageCsos.Count))
-            {
-                pendingExportsByCsoId = await _syncRepo
-                    .GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(pageCsos.Select(c => c.Id));
-            }
-
-            Log.Verbose("ReconcilePendingExportsAsync: Page {Page}/{TotalPages}: Loaded {PendingExportCount} pending exports for {CsoCount} CSOs",
-                page + 1, totalPages, pendingExportsByCsoId.Count, pageCsos.Count);
-
             // Process CSOs in parallel - reconciliation is pure in-memory comparison.
+            // All pending exports are already loaded; no database queries in this loop.
             // Thread safety:
-            // - pendingExportsByCsoId: read-only dictionary (concurrent reads are safe)
+            // - allPendingExportsByCsoId: read-only dictionary (concurrent reads are safe)
             // - Each CSO gets its own PendingExportReconciliationResult (no sharing)
             // - Each pending export is unique per CSO (no cross-CSO contention)
             // - SyncEngine reconciliation methods are stateless (pure logic, no instance state)
@@ -2621,7 +2612,7 @@ public class SyncImportTaskProcessor
                     try
                     {
                         // Get the pre-loaded pending export for this CSO (if any)
-                        pendingExportsByCsoId.TryGetValue(cso.Id, out var pendingExport);
+                        allPendingExportsByCsoId.TryGetValue(cso.Id, out var pendingExport);
 
                         // Perform in-memory reconciliation (no database operations)
                         var result = new PendingExportReconciliationResult();
@@ -2799,6 +2790,7 @@ public class SyncImportTaskProcessor
 
                 // Update progress after parallel processing completes
                 _activity.ObjectsProcessed = processedCount;
+                await _syncRepo.UpdateActivityAsync(_activity);
 
                 // Transfer execution items from thread-safe collection to main list
                 foreach (var item in pageExecutionItems)

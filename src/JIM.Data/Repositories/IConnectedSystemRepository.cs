@@ -312,6 +312,12 @@ public interface IConnectedSystemRepository
     public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId);
 
     /// <summary>
+    /// Loads all pending exports for a connected system in a single bulk query, keyed by CSO ID.
+    /// More efficient than per-page loading for large-scale reconciliation.
+    /// </summary>
+    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId);
+
+    /// <summary>
     /// Gets all Connected System Objects that are joined to a specific Metaverse Object.
     /// Used for evaluating MVO deletion exports.
     /// </summary>

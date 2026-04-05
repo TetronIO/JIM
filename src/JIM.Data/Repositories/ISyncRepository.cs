@@ -360,6 +360,12 @@ public interface ISyncRepository
     Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId);
 
     /// <summary>
+    /// Loads all pending exports for a connected system in a single bulk query, keyed by CSO ID.
+    /// More efficient than per-page loading for large-scale reconciliation.
+    /// </summary>
+    Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId);
+
+    /// <summary>
     /// Deletes pending exports that are not tracked by the EF change tracker.
     /// Used during import reconciliation to clean up confirmed exports.
     /// </summary>

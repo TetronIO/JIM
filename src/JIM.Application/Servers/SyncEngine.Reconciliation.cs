@@ -93,7 +93,7 @@ public partial class SyncEngine
                 else
                 {
                     result.RetryChanges.Add(attrChange);
-                    Log.Information("ReconcileCsoAgainstPendingExport: Attribute change {AttrChangeId} (Attr: {AttrName}) not confirmed, will retry (attempt {Attempt}). " +
+                    Log.Debug("ReconcileCsoAgainstPendingExport: Attribute change {AttrChangeId} (Attr: {AttrName}) not confirmed, will retry (attempt {Attempt}). " +
                         "Expected: '{ExpectedValue}', Actual: '{ImportedValue}'",
                         attrChange.Id, attrChange.Attribute?.Name ?? "unknown", attrChange.ExportAttemptCount,
                         expectedValue, attrChange.LastImportedValue);
@@ -269,7 +269,7 @@ public partial class SyncEngine
                 .FirstOrDefault(ac => ac.Attribute?.IsSecondaryExternalId == true)?.Attribute?.Name ?? "unknown";
 
             pendingExport.ChangeType = PendingExportChangeType.Update;
-            Log.Information("ReconcileCsoAgainstPendingExport: Transitioned pending export {ExportId} from Create to Update. " +
+            Log.Debug("ReconcileCsoAgainstPendingExport: Transitioned pending export {ExportId} from Create to Update. " +
                 "Secondary External ID attribute '{AttributeName}' was confirmed but {RemainingCount} attribute changes remain.",
                 pendingExport.Id, confirmedAttrName, pendingExport.AttributeValueChanges.Count);
         }
