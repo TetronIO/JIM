@@ -224,6 +224,29 @@ PUT /api/v1/metaverse/attributes/{id}
 | `attributePlurality` | string | No | `SingleValued` or `MultiValued` |
 | `objectTypeIds` | array | No | Replace all object type mappings (see below) |
 
+### Examples
+
+=== "curl"
+
+    ```bash
+    # Rename the attribute
+    curl -X PUT https://jim.example.com/api/v1/metaverse/attributes/20 \
+      -H "X-Api-Key: jim_xxxxxxxxxxxx" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "costCentreCode"
+      }'
+    ```
+
+=== "PowerShell"
+
+    ```powershell
+    Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
+
+    # Rename the attribute
+    Set-JIMMetaverseAttribute -Id 20 -Name "costCentreCode"
+    ```
+
 ### Managing Object Type Mappings
 
 The `objectTypeIds` field **replaces** all existing mappings with the provided set. To manage mappings:
@@ -234,8 +257,6 @@ The `objectTypeIds` field **replaces** all existing mappings with the provided s
 
 !!! warning
     You cannot remove an object type mapping if metaverse objects of that type have values stored for this attribute. The API returns a `400 VALIDATION_ERROR` indicating which type cannot be removed and how many objects are affected. Remove the attribute values first (e.g. by removing the sync rule mapping that flows data into this attribute, then running a full sync).
-
-### Examples
 
 === "curl"
 
@@ -263,14 +284,6 @@ The `objectTypeIds` field **replaces** all existing mappings with the provided s
       -d '{
         "objectTypeIds": [1, 3]
       }'
-
-    # Rename the attribute
-    curl -X PUT https://jim.example.com/api/v1/metaverse/attributes/20 \
-      -H "X-Api-Key: jim_xxxxxxxxxxxx" \
-      -H "Content-Type: application/json" \
-      -d '{
-        "name": "costCentreCode"
-      }'
     ```
 
 === "PowerShell"
@@ -286,9 +299,6 @@ The `objectTypeIds` field **replaces** all existing mappings with the provided s
 
     # Remove the group mapping (only if no group objects have values)
     Set-JIMMetaverseAttribute -Id 20 -ObjectTypeIds @(1, 3)
-
-    # Rename the attribute
-    Set-JIMMetaverseAttribute -Id 20 -Name "costCentreCode"
     ```
 
 ### Errors
