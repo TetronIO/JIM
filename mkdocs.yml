@@ -131,6 +131,13 @@ nav:
           - Run: api/schedules/run.md
           - Manage Steps: api/schedules/steps.md
           - Executions: api/schedules/executions.md
+      - Run Profiles:
+          - api/run-profiles/index.md
+          - List: api/run-profiles/list.md
+          - Create: api/run-profiles/create.md
+          - Update: api/run-profiles/update.md
+          - Delete: api/run-profiles/delete.md
+          - Execute: api/run-profiles/execute.md
   - PowerShell Module:
       - powershell/index.md
       - Cmdlet Reference: powershell/cmdlets.md
