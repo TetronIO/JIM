@@ -4,10 +4,12 @@ title: Scoping Criteria
 
 # Scoping Criteria
 
-Scoping criteria control which metaverse objects are in scope for export sync rules. Criteria are organised into groups that use AND (`All`) or OR (`Any`) logic. Groups can be nested for complex conditions.
+Scoping criteria control which objects are in scope for a sync rule. They are organised into groups that use AND (`All`) or OR (`Any`) logic, and groups can be nested for complex conditions.
 
-!!! note
-    Scoping criteria are only available on **export** sync rules. Import rules do not support scoping criteria.
+Scoping works in both directions:
+
+- **Export rules**: criteria evaluate **metaverse object** attributes to determine which MVOs should be exported (e.g. only export users in the Finance department)
+- **Import rules**: criteria evaluate **connected system object** attributes to determine which CSOs should be projected or joined (e.g. only import users from a specific OU)
 
 ### The Criteria Group Object
 
@@ -58,7 +60,7 @@ Scoping criteria control which metaverse objects are in scope for export sync ru
 
 ## List Scoping Criteria Groups
 
-Returns all scoping criteria groups for an export sync rule.
+Returns all scoping criteria groups for a sync rule.
 
 ```
 GET /api/v1/synchronisation/sync-rules/{syncRuleId}/scoping-criteria
@@ -85,7 +87,6 @@ GET /api/v1/synchronisation/sync-rules/{syncRuleId}/scoping-criteria
 
 | Status | Code | Description |
 |--------|------|-------------|
-| `400` | `BAD_REQUEST` | Sync rule is not an export rule |
 | `401` | `UNAUTHORISED` | Authentication required |
 | `404` | `NOT_FOUND` | Sync rule does not exist |
 

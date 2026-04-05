@@ -17,7 +17,7 @@ Sync rules are the core configuration mechanism for identity synchronisation. Th
 
 **Attribute Mappings:** Define how individual attributes are transformed between systems. Mappings can be direct (one attribute to another), multi-source (combining multiple attributes), or expression-based (using DynamicExpresso syntax).
 
-**Scoping Criteria:** Control which metaverse objects are in scope for export sync rules. Criteria are organised into groups with AND/OR logic and support nested groups for complex conditions.
+**Scoping Criteria:** Control which objects are in scope for a sync rule. For export rules, criteria evaluate metaverse object attributes; for import rules, criteria evaluate connected system object attributes. Criteria are organised into groups with AND/OR logic and support nested groups for complex conditions.
 
 **Object Matching Rules:** Determine how connector space objects are matched to existing metaverse objects during synchronisation. Rules can be configured at the connected system level (simple mode) or per sync rule (advanced mode).
 
@@ -97,7 +97,7 @@ Sync rules are the core configuration mechanism for identity synchronisation. Th
 | `POST` | [`/api/v1/synchronisation/sync-rules/{id}/mappings`](mappings.md#create-a-mapping) | Create a mapping |
 | `DELETE` | [`/api/v1/synchronisation/sync-rules/{id}/mappings/{mappingId}`](mappings.md#delete-a-mapping) | Delete a mapping |
 
-### Scoping Criteria (Export Rules)
+### Scoping Criteria
 
 | Method | Path | Description |
 |--------|------|-------------|
