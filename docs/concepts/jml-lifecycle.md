@@ -17,7 +17,7 @@ flowchart LR
 
 JIM handles each phase through its [sync rules](sync-rules.md) and [sync pipeline](sync-pipeline.md), applying the appropriate actions automatically based on your configuration.
 
-## Joiner
+## 👤 Joiner
 
 A **joiner** event occurs when a new identity appears in a source system for the first time. For example, when HR creates a record for a new employee.
 
@@ -47,7 +47,7 @@ A new employee, Jane Smith, is added to the HR system:
 6. Expression sets account to enabled: `userAccountControl = 512`
 7. Export creates Jane's AD account
 
-## Mover
+## 🔄 Mover
 
 A **mover** event occurs when an existing identity's attributes change. This covers any mid-lifecycle change: department transfers, title changes, name changes, office relocations, and so on.
 
@@ -82,7 +82,7 @@ A mover event can also change whether an identity is **in scope** for a particul
 
 When an identity falls out of scope for an outbound sync rule, this triggers **deprovisioning** behaviour for that specific target system (see Leaver below).
 
-## Leaver
+## 🚪 Leaver
 
 A **leaver** event occurs when an identity is removed or marked as inactive in the source system. For example, when HR processes an employee's termination.
 

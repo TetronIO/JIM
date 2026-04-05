@@ -6,7 +6,7 @@ For the latest milestone status and issue tracking, see the [GitHub milestones](
 
 ---
 
-## v0.9 -- Pre-release Stabilisation
+## 🔨 v0.9 -- Pre-release Stabilisation
 
 Hardening and polish ahead of the first stable release.
 
@@ -17,7 +17,7 @@ Hardening and polish ahead of the first stable release.
 
 ---
 
-## v1.0 -- Identity Lifecycle Complete
+## 🎯 v1.0 -- Identity Lifecycle Complete
 
 The first stable release, delivering a production-ready identity lifecycle platform.
 
@@ -28,7 +28,7 @@ The first stable release, delivering a production-ready identity lifecycle platf
 
 ---
 
-## v1.x -- Connector Ecosystem
+## 🌳 v1.x -- Connector Ecosystem
 
 Expanding the range of systems JIM can connect to out of the box.
 
@@ -46,7 +46,7 @@ Each connector will follow JIM's established connector architecture, supporting 
 
 ---
 
-## v2.0 -- IGA Foundation
+## 🏛️ v2.0 -- IGA Foundation
 
 JIM's step-change from identity synchronisation into identity governance. Establishes the governance layer that enables compliance-driven organisations to manage access holistically, not just synchronise it.
 

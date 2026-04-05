@@ -143,6 +143,24 @@ Sync operations are the core of JIM. Customers depend on JIM to synchronise thei
 - `jim-db` / `jim-stack` - Start database / full Docker stack
 - `jim-build-web` / `jim-build-worker` / `jim-build-scheduler` - Rebuild containers after code changes
 
+## MkDocs Documentation Style
+
+**Use `✅` for positive indicators and `❌` for negative indicators in tables** (e.g. feature comparison tables). Do NOT use `:material-check-bold:`, `:material-close:`, or other Material icon syntax -- these render as small monochrome icons. The emoji equivalents render as clear green/red symbols in MkDocs and on GitHub.
+
+**Use emojis to add energy and aid visual scanning, but keep them purposeful and professional.** JIM documentation should feel alive and modern, not dry -- but never unprofessional.
+
+Where to use them:
+- Table indicators: `✅` / `❌` for yes/no capability comparisons
+- Changelog entries: one leading emoji per entry to signal the type of change (✨ new, 🐛 fix, ⚡ performance, 🔄 changed, 🗑️ removed, 🔒 security, 📦 deployment, 🖥️ UI/UX)
+- Section lead-ins on feature-heavy or conceptual pages: a single emoji before a heading or card title to anchor the concept visually
+- Admonition-style callouts where an emoji reinforces the tone (e.g. a warning or tip paragraph)
+
+Where NOT to use them:
+- Mid-sentence or inline within body text
+- In API/technical reference content (endpoint tables, parameter lists, code comments)
+- More than once per heading or table cell
+- Decoratively on every heading -- only where it genuinely adds meaning or helps the reader navigate
+
 ## ASCII Diagrams
 
 When creating ASCII diagrams in documentation or code comments, use only reliably monospaced characters:
