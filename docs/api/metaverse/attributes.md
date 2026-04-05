@@ -4,7 +4,9 @@ title: Attributes
 
 # Attributes
 
-Metaverse attributes define the fields available on metaverse objects. Each attribute has a data type, plurality (single or multi-valued), and is associated with one or more object types.
+Metaverse attributes are independent schema definitions, each with a data type and plurality (single or multi-valued). Attributes are mapped to object types to make them available on objects of that type. For example, the `displayName` attribute is mapped to both `person` and `group`, meaning objects of either type can hold a `displayName` value.
+
+Attributes exist independently of object types. The `objectTypeIds` field on create and update controls which object types the attribute is mapped to.
 
 ### The Attribute Object
 
@@ -31,7 +33,7 @@ Metaverse attributes define the fields available on metaverse objects. Each attr
 | `type` | string | Data type (see below) |
 | `attributePlurality` | string | `SingleValued` or `MultiValued` |
 | `builtIn` | boolean | Built-in attributes cannot be deleted or have their type changed |
-| `objectTypes` | array | Object types this attribute is associated with |
+| `objectTypes` | array | Object types this attribute is mapped to |
 
 ### Data Types
 
@@ -123,21 +125,21 @@ POST /api/v1/metaverse/attributes
 | `name` | string | Yes | Attribute name (1-200 characters, must be unique) |
 | `type` | string | Yes | Data type: `Text`, `Number`, `LongNumber`, `DateTime`, `Boolean`, `Guid`, `Reference`, `Binary` |
 | `attributePlurality` | string | No | `SingleValued` (default) or `MultiValued` |
-| `objectTypeIds` | array | No | Object type IDs to associate with |
+| `objectTypeIds` | array | No | Object type IDs to map this attribute to |
 
 ### Examples
 
 === "curl"
 
     ```bash
-    # Create a single-valued text attribute
+    # Create a text attribute mapped to person and group
     curl -X POST https://jim.example.com/api/v1/metaverse/attributes \
       -H "X-Api-Key: jim_xxxxxxxxxxxx" \
       -H "Content-Type: application/json" \
       -d '{
         "name": "costCentre",
         "type": "Text",
-        "objectTypeIds": [1]
+        "objectTypeIds": [1, 2]
       }'
 
     # Create a multi-valued reference attribute
@@ -157,8 +159,8 @@ POST /api/v1/metaverse/attributes
     ```powershell
     Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
 
-    # Create a single-valued text attribute
-    New-JIMMetaverseAttribute -Name "costCentre" -Type Text -ObjectTypeIds @(1)
+    # Create a text attribute mapped to person and group
+    New-JIMMetaverseAttribute -Name "costCentre" -Type Text -ObjectTypeIds @(1, 2)
 
     # Create a multi-valued reference attribute
     New-JIMMetaverseAttribute -Name "directReports" `
@@ -174,7 +176,7 @@ Returns `201 Created` with the attribute object.
 
 ## Update an Attribute
 
-Updates an attribute's name, type, plurality, or object type associations. Built-in attributes have restrictions on what can be changed.
+Updates an attribute's name, type, plurality, or object type mappings. Built-in attributes have restrictions on what can be changed.
 
 ```
 PUT /api/v1/metaverse/attributes/{id}
@@ -187,19 +189,31 @@ PUT /api/v1/metaverse/attributes/{id}
 | `name` | string | No | New name (1-200 characters) |
 | `type` | string | No | New data type |
 | `attributePlurality` | string | No | `SingleValued` or `MultiValued` |
-| `objectTypeIds` | array | No | Replace object type associations |
+| `objectTypeIds` | array | No | Replace object type mappings (replaces the full set; include all desired type IDs) |
+
+!!! warning
+    The `objectTypeIds` field **replaces** all existing mappings. To add a new object type mapping, include all existing type IDs plus the new one. Removing a type ID from the list removes the mapping.
 
 ### Examples
 
 === "curl"
 
     ```bash
+    # Rename and map to both person and group
     curl -X PUT https://jim.example.com/api/v1/metaverse/attributes/20 \
       -H "X-Api-Key: jim_xxxxxxxxxxxx" \
       -H "Content-Type: application/json" \
       -d '{
         "name": "costCentreCode",
         "objectTypeIds": [1, 2]
+      }'
+
+    # Add a third object type mapping (must include all existing IDs)
+    curl -X PUT https://jim.example.com/api/v1/metaverse/attributes/20 \
+      -H "X-Api-Key: jim_xxxxxxxxxxxx" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "objectTypeIds": [1, 2, 3]
       }'
     ```
 
@@ -208,7 +222,11 @@ PUT /api/v1/metaverse/attributes/{id}
     ```powershell
     Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
 
+    # Rename and map to both person and group
     Set-JIMMetaverseAttribute -Id 20 -Name "costCentreCode" -ObjectTypeIds @(1, 2)
+
+    # Add a third object type mapping
+    Set-JIMMetaverseAttribute -Id 20 -ObjectTypeIds @(1, 2, 3)
     ```
 
 ### Errors
