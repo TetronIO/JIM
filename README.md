@@ -14,7 +14,7 @@
 &nbsp;
 [![License](https://img.shields.io/badge/License-Source_Available-orange)](https://tetron.io/jim/#licensing)
 &nbsp;
-[![Documentation](https://img.shields.io/badge/Docs-docs%2F-green)](https://github.com/TetronIO/JIM/tree/main/docs)
+[![Documentation](https://img.shields.io/badge/Docs-tetronio.github.io%2FJIM-green)](https://tetronio.github.io/JIM/)
 &nbsp;
 [![Open in GitHub Codespaces](https://img.shields.io/badge/Open_in-Codespaces-black?logo=github)](https://codespaces.new/TetronIO/JIM?devcontainer_path=.devcontainer/devcontainer.json)
 
