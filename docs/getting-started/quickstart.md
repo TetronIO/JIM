@@ -9,7 +9,7 @@ This page covers all the ways to get JIM up and running. Choose the option that 
 
 ## For Administrators
 
-### Option 1 — Automated Setup (Recommended)
+### Option 1: Automated Setup (Recommended)
 
 The setup script downloads everything you need, walks you through configuration, and starts JIM:
 
@@ -25,7 +25,7 @@ less setup.sh    # review the script
 bash setup.sh
 ```
 
-### Option 2 — Manual Setup
+### Option 2: Manual Setup
 
 If you prefer to set things up manually using Docker Compose:
 
@@ -50,7 +50,7 @@ docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
 !!! note "SSO configuration required"
     Before starting JIM, you must configure your OpenID Connect identity provider settings in the `.env` file. See the [SSO Setup Guide](../administration/sso-setup.md) for step-by-step instructions.
 
-### Option 3 — Air-Gapped Deployment
+### Option 3: Air-Gapped Deployment
 
 For environments without internet connectivity, each release includes a downloadable bundle (`jim-release-X.Y.Z.tar.gz`) containing:
 
@@ -76,7 +76,7 @@ For production hardening (TLS, reverse proxy, upgrades, monitoring), see the [De
 
 ### GitHub Codespaces (One Click)
 
-The fastest way to get a development environment. Everything is pre-configured — .NET 9.0, PostgreSQL, shell aliases, and VS Code extensions.
+The fastest way to get a development environment. Everything is pre-configured: .NET 9.0, PostgreSQL, shell aliases, and VS Code extensions.
 
 Once the Codespace is ready, open a terminal and run:
 
@@ -113,4 +113,4 @@ Connect-JIM -Url "https://jim.example.com"    # Opens browser for SSO sign-in
 Test-JIMConnection
 ```
 
-For air-gapped or disconnected installation of the PowerShell module, see the [Deployment Guide — PowerShell Module](../administration/deployment.md#powershell-module).
+For air-gapped or disconnected installation of the PowerShell module, see the [Deployment Guide: PowerShell Module](../administration/deployment.md#powershell-module).

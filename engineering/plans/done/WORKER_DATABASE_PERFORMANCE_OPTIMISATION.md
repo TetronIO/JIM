@@ -113,7 +113,7 @@ var allMatches = await Repository.Database.ConnectedSystemObjects
 
 **Approach**: Service-lifetime CSO lookup index using .NET's built-in `IMemoryCache`.
 
-The cache stores a **lookup index only** — mapping external ID values to CSO GUIDs — not full entity graphs. This keeps memory lightweight (~100 bytes per entry), avoids EF Core entity lifecycle concerns (attach/detach, change tracking), and simplifies cache invalidation. When a cache hit returns a CSO GUID, the full entity is loaded by primary key (fast indexed lookup, ~1-2ms) in the current `DbContext`.
+The cache stores a **lookup index only**: mapping external ID values to CSO GUIDs; not full entity graphs. This keeps memory lightweight (~100 bytes per entry), avoids EF Core entity lifecycle concerns (attach/detach, change tracking), and simplifies cache invalidation. When a cache hit returns a CSO GUID, the full entity is loaded by primary key (fast indexed lookup, ~1-2ms) in the current `DbContext`.
 
 **Cache key format**: `$"cso:{connectedSystemId}:{attributeId}:{lowerExternalIdValue}"`
 
@@ -133,21 +133,21 @@ The cache stores a **lookup index only** — mapping external ID values to CSO G
 
 | Scenario | Behaviour |
 |----------|-----------|
-| First run is Full Import | Bulk-load all CSO IDs into cache — eliminates N+1 entirely |
+| First run is Full Import | Bulk-load all CSO IDs into cache; eliminates N+1 entirely |
 | Subsequent Full Import | Cache already warm, all lookups are cache hits |
 | First run is Delta Import | No bulk pre-load (wasteful for a few objects). Per-object DB lookup on cache miss, result added to cache |
 | Delta Import after Full Import | Cache warm from prior full import, most lookups are cache hits |
 | Delta Import, new object in source | Cache miss → DB query → add to cache. Subsequent delta imports for same object are cache hits |
 
-**Cache lifetime**: Service-lifetime (lives as long as the Worker process). No automatic expiration — CSO external IDs rarely change. Explicit invalidation on mutation events ensures coherency.
+**Cache lifetime**: Service-lifetime (lives as long as the Worker process). No automatic expiration; CSO external IDs rarely change. Explicit invalidation on mutation events ensures coherency.
 
-**Thread safety**: All cache writes use `IMemoryCache.Set()` (upsert semantics) rather than `TryAdd()`. `Set()` silently overwrites if the key already exists. This is safe because the cached value (a CSO GUID) is immutable for a given external ID — two threads writing the same key will always write the same value. No locking, no exceptions, no conflict handling needed.
+**Thread safety**: All cache writes use `IMemoryCache.Set()` (upsert semantics) rather than `TryAdd()`. `Set()` silently overwrites if the key already exists. This is safe because the cached value (a CSO GUID) is immutable for a given external ID; two threads writing the same key will always write the same value. No locking, no exceptions, no conflict handling needed.
 
-**Infrastructure**: Uses `Microsoft.Extensions.Caching.Memory` (`IMemoryCache`), already available as a transitive dependency in the Worker — no new NuGet package required. A single `MemoryCache` instance is created at Worker startup and passed through `JimApplication` to the repository/server layer.
+**Infrastructure**: Uses `Microsoft.Extensions.Caching.Memory` (`IMemoryCache`), already available as a transitive dependency in the Worker; no new NuGet package required. A single `MemoryCache` instance is created at Worker startup and passed through `JimApplication` to the repository/server layer.
 
 **Database indexes**: No new indexes required. The bulk load query joins `ConnectedSystemObjects` to `ConnectedSystemObjectAttributeValues` filtering by `ConnectedSystemId` and `AttributeId`. Existing indexes cover this:
-- `IX_ConnectedSystemObjects_ConnectedSystemId_TypeId` — `ConnectedSystemId` as leading column satisfies the CS filter
-- `IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId` — composite on `(ConnectedSystemObjectId, AttributeId)` covers the join and attribute filter
+- `IX_ConnectedSystemObjects_ConnectedSystemId_TypeId`: `ConnectedSystemId` as leading column satisfies the CS filter
+- `IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId`: composite on `(ConnectedSystemObjectId, AttributeId)` covers the join and attribute filter
 
 **Cache warming strategy**: Blocking startup warm. When the Worker starts, it loads CSO lookup indexes for all connected systems before accepting tasks. Connected systems are warmed with limited parallelism (default 3 concurrent, configurable) to balance startup speed against database load.
 
@@ -159,7 +159,7 @@ The cache stores a **lookup index only** — mapping external ID values to CSO G
 | Very large (10 CS x 100k) | 1,000,000 | ~30-60s | ~15-20s |
 | Extreme (20 CS x 100k) | 2,000,000 | ~1-2min | ~30-40s |
 
-Blocking startup avoids all concurrency complexity between cache warming and task processing. The delay is within acceptable tolerance — schedules queue tasks until the Worker is ready, and the Worker only needs to warm once per process lifetime.
+Blocking startup avoids all concurrency complexity between cache warming and task processing. The delay is within acceptable tolerance; schedules queue tasks until the Worker is ready, and the Worker only needs to warm once per process lifetime.
 
 **Future consideration**: If startup delays become problematic (e.g., frequent Worker restarts during active schedules, or if upgrading to full entity caching where load times are significantly longer), the warming strategy can be changed to non-blocking background loading. This would require a shared `SemaphoreSlim` to limit total concurrent database queries across warming threads and task processing threads, with cache misses falling back to per-object DB queries while warming is in progress. The `Set()` upsert semantics already support concurrent writes from both warming and task threads without conflict.
 
@@ -172,15 +172,15 @@ Blocking startup avoids all concurrency complexity between cache warming and tas
 | 50,000 | ~5 MB | Very large |
 | 100,000 | ~10 MB | Enterprise scale |
 | 500,000 | ~50 MB | Extreme scale |
-| 1,000,000 | ~100 MB | Theoretical upper bound — comfortably viable |
+| 1,000,000 | ~100 MB | Theoretical upper bound; comfortably viable |
 
-**Empty connected system optimisation**: When a connected system has no existing CSOs (first-ever import), `TryAndFindMatchingConnectedSystemObjectAsync` is skipped entirely. A single `COUNT(*)` query at import start determines if the CS is empty — if so, all N per-object lookups (cache and DB) are eliminated since every object is guaranteed to be new. This is particularly beneficial for integration tests (which run from a blank slate) and for initial production deployments with large source systems. CSOs are bulk-persisted after all pages are processed, so the empty flag remains valid for the entire import run.
+**Empty connected system optimisation**: When a connected system has no existing CSOs (first-ever import), `TryAndFindMatchingConnectedSystemObjectAsync` is skipped entirely. A single `COUNT(*)` query at import start determines if the CS is empty; if so, all N per-object lookups (cache and DB) are eliminated since every object is guaranteed to be new. This is particularly beneficial for integration tests (which run from a blank slate) and for initial production deployments with large source systems. CSOs are bulk-persisted after all pages are processed, so the empty flag remains valid for the entire import run.
 
-**Estimated impact**: Eliminates all N+1 import lookup queries. Import of 10,000 objects drops from ~30,000-40,000 queries to 10,000 PK lookups (cache hit path) or 1 bulk query + 10,000 PK lookups (first full import). For first-ever imports against an empty CS, the lookup is skipped entirely — reducing to 0 lookup queries.
+**Estimated impact**: Eliminates all N+1 import lookup queries. Import of 10,000 objects drops from ~30,000-40,000 queries to 10,000 PK lookups (cache hit path) or 1 bulk query + 10,000 PK lookups (first full import). For first-ever imports against an empty CS, the lookup is skipped entirely; reducing to 0 lookup queries.
 
 **Complexity**: Moderate
 
-**Migration path**: If the index-only approach proves insufficient for performance (the per-object PK load still adds ~1-2ms per object), the next step is to cache full CSO entity graphs in memory (`AsNoTracking`) rather than just IDs. This eliminates DB queries entirely for cache hits but introduces entity lifecycle complexity (attaching detached entities for modification, staleness of cached attribute values). The `IMemoryCache` infrastructure would remain identical — only the cached value type changes from `Guid` to `ConnectedSystemObject`. If upgrading to full entity caching, the blocking startup warm strategy should be reassessed — full entity loads are significantly slower and may warrant switching to non-blocking background warming (see future consideration above).
+**Migration path**: If the index-only approach proves insufficient for performance (the per-object PK load still adds ~1-2ms per object), the next step is to cache full CSO entity graphs in memory (`AsNoTracking`) rather than just IDs. This eliminates DB queries entirely for cache hits but introduces entity lifecycle complexity (attaching detached entities for modification, staleness of cached attribute values). The `IMemoryCache` infrastructure would remain identical; only the cached value type changes from `Guid` to `ConnectedSystemObject`. If upgrading to full entity caching, the blocking startup warm strategy should be reassessed; full entity loads are significantly slower and may warrant switching to non-blocking background warming (see future consideration above).
 
 **Files affected**:
 - `src/JIM.Application/JimApplication.cs` (accept `IMemoryCache` in constructor)
@@ -258,8 +258,8 @@ var result = await metaVerseObjects.ToListAsync();
 
 **Implementation details**:
 - **Multi-row INSERT** via `ExecuteSqlRawAsync` with parameterised `INSERT INTO ... VALUES (...), (...)` for creates
-- **Batch UPDATE** via `UPDATE ... FROM (VALUES ...) AS v(...)` pattern for updates — single round-trip per chunk
-- **Batch DELETE** via `DELETE WHERE Id = ANY({0})` for deletes — children first, then parents
+- **Batch UPDATE** via `UPDATE ... FROM (VALUES ...) AS v(...)` pattern for updates; single round-trip per chunk
+- **Batch DELETE** via `DELETE WHERE Id = ANY({0})` for deletes; children first, then parents
 - **Pre-generated GUIDs**: All entity IDs (`Guid.NewGuid()`) assigned before raw SQL to bypass EF's `ValueGeneratedOnAdd`
 - **Shadow FK handling**: `ConnectedSystemObjectId` on attribute values and `PendingExportId` on attribute value changes set explicitly via parent's pre-generated ID
 - **Explicit transactions**: Parent-child INSERTs wrapped in `Database.BeginTransactionAsync()` for atomicity
@@ -270,7 +270,7 @@ var result = await metaVerseObjects.ToListAsync();
 **Estimated impact**: 5-10x faster bulk writes compared to EF Core's per-entity SQL generation.
 
 **Files affected**:
-- `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` — all 5 methods + 7 private helpers
+- `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs`: all 5 methods + 7 private helpers
 
 ---
 
@@ -282,23 +282,23 @@ var result = await metaVerseObjects.ToListAsync();
 
 **Changes made (prior)**:
 1. ✅ Fixed synchronous `.Count()` → `CountAsync()` in `GetConnectedSystemObjectsAsync` (was blocking a thread pool thread)
-2. ✅ Removed dead `returnAttributes` branching — the `if/else` branches were identical and the only caller always passed `false`. Eliminated the parameter from the interface, application layer, and repository, consolidating to a single query
+2. ✅ Removed dead `returnAttributes` branching; the `if/else` branches were identical and the only caller always passed `false`. Eliminated the parameter from the interface, application layer, and repository, consolidating to a single query
 3. ✅ Added missing `ContributedBySystem` include to `GetConnectedSystemObjectsModifiedSinceAsync` (delta sync method)
 
 **Changes made (AsSplitQuery elimination)**:
 4. ✅ Replaced `AsSplitQuery()` + 8-branch deep Include chains with two separate queries inside a `RepeatableRead` transaction across all 3 sync page-load methods
-5. ✅ Added `LoadMetaverseObjectsForCsosAsync()` helper — loads MVOs separately, EF relationship fixup auto-populates `cso.MetaverseObject` navigations
+5. ✅ Added `LoadMetaverseObjectsForCsosAsync()` helper; loads MVOs separately, EF relationship fixup auto-populates `cso.MetaverseObject` navigations
 6. ✅ Removed `RepairReferenceValueMaterialisationAsync` (~80 lines of post-load SQL patching)
 7. ✅ Removed `RepairMvoAttributeValueMaterialisationAsync` (~90 lines of post-load SQL patching)
 8. ✅ Removed `ReferenceRepairRow` and `MvoAttributeValueRepairRow` DTOs
 9. ✅ Updated AsSplitQuery workaround comments in DriftDetectionService, ExportEvaluationServer, and SyncRuleMappingProcessor
 
 **Files changed**:
-- `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` — query refactoring, repair removal, helper addition
-- `src/JIM.Application/Services/DriftDetectionService.cs` — comment cleanup
-- `src/JIM.Application/Servers/ExportEvaluationServer.cs` — comment cleanup
-- `src/JIM.Worker/Processors/SyncRuleMappingProcessor.cs` — comment cleanup
-- `test/JIM.Worker.Tests/OutboundSync/DriftDetectionTests.cs` — test comment update
+- `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs`: query refactoring, repair removal, helper addition
+- `src/JIM.Application/Services/DriftDetectionService.cs`: comment cleanup
+- `src/JIM.Application/Servers/ExportEvaluationServer.cs`: comment cleanup
+- `src/JIM.Worker/Processors/SyncRuleMappingProcessor.cs`: comment cleanup
+- `test/JIM.Worker.Tests/OutboundSync/DriftDetectionTests.cs`: test comment update
 
 **Design notes**: See `docs/notes/done/PHASE4_SYNC_PAGE_LOADING_OPTIMISATION.md` for the full rationale and implementation details
 
@@ -313,14 +313,14 @@ var result = await metaVerseObjects.ToListAsync();
 **Problem**: RPEIs were added to the `Activity.RunProfileExecutionItems` collection and persisted via `UpdateActivityAsync`, which calls `SaveChangesAsync()`. For large sync runs (10,000+ objects), the change tracker had to diff the entire growing RPEI collection on every call. For imports, all RPEIs were accumulated in memory and persisted in one massive `SaveChangesAsync` at the end.
 
 **Changes made**:
-1. ✅ Added `BulkInsertRpeisAsync` to `IActivityRepository` and `ActivityRepository` — parameterised multi-row INSERT with auto-chunking (5,454 rows per statement), try/catch fallback to EF for unit tests
+1. ✅ Added `BulkInsertRpeisAsync` to `IActivityRepository` and `ActivityRepository`: parameterised multi-row INSERT with auto-chunking (5,454 rows per statement), try/catch fallback to EF for unit tests
 2. ✅ Added `BulkInsertRpeisAsync` pass-through to `ActivityServer` (n-tier compliance)
-3. ✅ Added `FlushRpeisAsync()` to `SyncTaskProcessorBase` — flushes current page's RPEIs via bulk insert, moves to `_allPersistedRpeis`, clears Activity collection
-4. ✅ Updated `SyncFullSyncTaskProcessor` and `SyncDeltaSyncTaskProcessor` — flush at each page boundary and after cross-page resolution, restore RPEIs at end for summary stats
-5. ✅ Updated `SyncImportTaskProcessor` — incremental flush after CSO creates, CSO updates, and reconciliation (instead of one massive persist at the end)
-6. ✅ Updated `SyncExportTaskProcessor` — bulk insert before final `UpdateActivityAsync`
+3. ✅ Added `FlushRpeisAsync()` to `SyncTaskProcessorBase`: flushes current page's RPEIs via bulk insert, moves to `_allPersistedRpeis`, clears Activity collection
+4. ✅ Updated `SyncFullSyncTaskProcessor` and `SyncDeltaSyncTaskProcessor`: flush at each page boundary and after cross-page resolution, restore RPEIs at end for summary stats
+5. ✅ Updated `SyncImportTaskProcessor`: incremental flush after CSO creates, CSO updates, and reconciliation (instead of one massive persist at the end)
+6. ✅ Updated `SyncExportTaskProcessor`: bulk insert before final `UpdateActivityAsync`
 7. ✅ Added cross-page resolution flush in `ResolveCrossPageReferencesAsync` batch loop
-8. ✅ `SurfacePendingExportsAsExecutionItems` — immediate flush after surfacing RPEIs in full sync
+8. ✅ `SurfacePendingExportsAsExecutionItems`: immediate flush after surfacing RPEIs in full sync
 9. ✅ `SetAutoDetectChangesEnabled(false)` during page flush sequences to prevent `DetectChanges()` from discovering RPEIs
 10. ✅ `ClearChangeTracker()` after MVO deletions (production only) to prevent stale entity concurrency errors
 
@@ -338,22 +338,22 @@ The following issues were discovered and resolved during production integration 
 3. **Concurrency exception after MVO deletion**: MVO deletion involves raw SQL (`UPDATE Activities SET MetaverseObjectId = NULL`) followed by `Remove(mvo)` + `SaveChangesAsync`. The raw SQL modifies rows still tracked in memory, and cascade deletes at the DB level remove rows the tracker still references as Modified. Subsequent `SaveChangesAsync` tries to UPDATE ghost rows → 0 rows affected.
    - **Fix**: `ClearChangeTracker()` after pages with MVO deletions (production only, not in tests). `_hasRawSqlSupport` flag distinguishes production (raw SQL available) from test (in-memory provider). In-memory provider cannot handle re-attachment of previously-tracked entities after clear.
 
-**Estimated impact**: Moderate-High — eliminates unbounded RPEI accumulation in memory and change tracker. Import of 10,000 objects no longer requires persisting 10,000+ RPEIs in a single `SaveChangesAsync`. Sync page boundaries no longer scan the growing RPEI collection.
+**Estimated impact**: Moderate-High; eliminates unbounded RPEI accumulation in memory and change tracker. Import of 10,000 objects no longer requires persisting 10,000+ RPEIs in a single `SaveChangesAsync`. Sync page boundaries no longer scan the growing RPEI collection.
 
 **Complexity**: Low-Moderate (implementation), High (debugging EF change tracker interactions)
 
 **Files changed**:
-- `src/JIM.Data/Repositories/IActivityRepository.cs` — new method signature
-- `src/JIM.PostgresData/Repositories/ActivitiesRepository.cs` — bulk insert implementation + raw SQL helper
-- `src/JIM.PostgresData/PostgresDataRepository.cs` — `UpdateDetachedSafe` always uses `Entry().State = Modified`
-- `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` — `UpdateConnectedSystemObjectAsync` uses `UpdateDetachedSafe`
-- `src/JIM.Application/Servers/ActivityServer.cs` — pass-through method
-- `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs` — `_allPersistedRpeis` field, `_hasRawSqlSupport` flag, `FlushRpeisAsync()` method, cross-page batch flush
-- `src/JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs` — page boundary flush, auto-detect disable, ClearChangeTracker after MVO deletions, immediate flush after SurfacePendingExports
-- `src/JIM.Worker/Processors/SyncDeltaSyncTaskProcessor.cs` — same as full sync
-- `src/JIM.Worker/Processors/SyncImportTaskProcessor.cs` — incremental flush + `FlushImportRpeisAsync()`
-- `src/JIM.Worker/Processors/SyncExportTaskProcessor.cs` — bulk insert before final persist
-- `test/JIM.Worker.Tests/Activities/BulkInsertRpeisTests.cs` — unit tests
+- `src/JIM.Data/Repositories/IActivityRepository.cs`: new method signature
+- `src/JIM.PostgresData/Repositories/ActivitiesRepository.cs`: bulk insert implementation + raw SQL helper
+- `src/JIM.PostgresData/PostgresDataRepository.cs`: `UpdateDetachedSafe` always uses `Entry().State = Modified`
+- `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs`: `UpdateConnectedSystemObjectAsync` uses `UpdateDetachedSafe`
+- `src/JIM.Application/Servers/ActivityServer.cs`: pass-through method
+- `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs`: `_allPersistedRpeis` field, `_hasRawSqlSupport` flag, `FlushRpeisAsync()` method, cross-page batch flush
+- `src/JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs`: page boundary flush, auto-detect disable, ClearChangeTracker after MVO deletions, immediate flush after SurfacePendingExports
+- `src/JIM.Worker/Processors/SyncDeltaSyncTaskProcessor.cs`: same as full sync
+- `src/JIM.Worker/Processors/SyncImportTaskProcessor.cs`: incremental flush + `FlushImportRpeisAsync()`
+- `src/JIM.Worker/Processors/SyncExportTaskProcessor.cs`: bulk insert before final persist
+- `test/JIM.Worker.Tests/Activities/BulkInsertRpeisTests.cs`: unit tests
 
 ---
 
@@ -363,17 +363,17 @@ If the above phases don't yield sufficient improvement, or if we decide to push 
 
 ### A. Upgrade Lookup Index to Full Entity Cache
 
-**Concept**: Phase 1 introduces a service-lifetime `IMemoryCache` storing a lookup index (external ID → CSO GUID). If the per-object PK load on cache hit (~1-2ms per object) still results in unacceptable import times, upgrade the cache to store full CSO entity graphs (`AsNoTracking`) instead of just IDs. This eliminates all database queries for cache hits entirely — lookups become pure in-memory O(1) operations.
+**Concept**: Phase 1 introduces a service-lifetime `IMemoryCache` storing a lookup index (external ID → CSO GUID). If the per-object PK load on cache hit (~1-2ms per object) still results in unacceptable import times, upgrade the cache to store full CSO entity graphs (`AsNoTracking`) instead of just IDs. This eliminates all database queries for cache hits entirely; lookups become pure in-memory O(1) operations.
 
 **Advantages**:
 - Eliminates all per-object database round-trips for CSO matching during import (zero DB queries on cache hit)
-- Builds on the same `IMemoryCache` infrastructure from Phase 1 — only the cached value type changes from `Guid` to `ConnectedSystemObject`
+- Builds on the same `IMemoryCache` infrastructure from Phase 1; only the cached value type changes from `Guid` to `ConnectedSystemObject`
 - Memory usage is bounded by the connected system's object count (known up front)
 
 **Trade-offs**:
 - Memory consumption scales with connected system size (~10 KB per CSO with attribute values vs ~100 bytes for index-only)
 - Entity lifecycle complexity: cached entities are detached from EF Core change tracking. Modification requires attaching to the current `DbContext`, which needs careful handling to avoid tracking conflicts
-- Cache invalidation becomes more critical — a stale cached entity with outdated attribute values could cause incorrect delta detection
+- Cache invalidation becomes more critical; a stale cached entity with outdated attribute values could cause incorrect delta detection
 - Requires `AsNoTracking()` on load and explicit `Attach()`/`Update()` on modification
 
 **Estimated memory (full entity cache)**:
@@ -388,17 +388,17 @@ If the above phases don't yield sufficient improvement, or if we decide to push 
 
 ### B. MVO Join-Attribute Lookup Cache
 
-**Concept**: Extend the `IMemoryCache` infrastructure from Phase 1 to cache MVO join-attribute values — the attributes referenced in object matching rules across all sync rules. During sync, `FindMetaverseObjectUsingMatchingRuleAsync` is called per CSO to find a matching MVO. If the join-rule-referenced attribute values are cached (e.g., `mvo-match:{objectTypeId}:{attributeId}:{value}` → MVO GUID), sync matching becomes a pure in-memory lookup followed by a single PK load, eliminating the N+1 matching queries entirely.
+**Concept**: Extend the `IMemoryCache` infrastructure from Phase 1 to cache MVO join-attribute values; the attributes referenced in object matching rules across all sync rules. During sync, `FindMetaverseObjectUsingMatchingRuleAsync` is called per CSO to find a matching MVO. If the join-rule-referenced attribute values are cached (e.g., `mvo-match:{objectTypeId}:{attributeId}:{value}` → MVO GUID), sync matching becomes a pure in-memory lookup followed by a single PK load, eliminating the N+1 matching queries entirely.
 
 **Advantages**:
 - Reuses the proven `IMemoryCache` infrastructure and patterns from Phase 1 (cache warming, miss-population, eviction)
-- Join rules typically reference a small, well-defined set of attributes (1-2 per sync rule — e.g., `employeeId`, `sAMAccountName`, `objectGUID`), keeping the cache footprint small
+- Join rules typically reference a small, well-defined set of attributes (1-2 per sync rule; e.g., `employeeId`, `sAMAccountName`, `objectGUID`), keeping the cache footprint small
 - MVO join attributes are identity anchors that rarely change, making the cache highly effective
 - Cache warming can read sync rule configurations to determine exactly which attributes to index
 
 **Trade-offs**:
 - MVO attribute values can change during sync (unlike CSO external IDs which are essentially immutable). Cache invalidation must cover attribute value updates, not just creates/deletes
-- The set of "which attributes are join-rule attributes" must be resolved at warmup time by reading sync rule configurations. If sync rules change (admin adds/modifies a join rule), the cache needs re-warming — but this is rare and a Worker restart suffices
+- The set of "which attributes are join-rule attributes" must be resolved at warmup time by reading sync rule configurations. If sync rules change (admin adds/modifies a join rule), the cache needs re-warming; but this is rare and a Worker restart suffices
 - More complex than the lightweight query optimisation in Phase 2, but potentially higher impact
 
 **When to consider**: If Phase 2's lightweight query optimisation doesn't sufficiently reduce sync matching times, particularly for large environments with 50k+ MVOs where even optimised per-object queries accumulate significant total time.

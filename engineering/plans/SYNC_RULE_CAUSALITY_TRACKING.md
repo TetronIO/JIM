@@ -3,7 +3,7 @@
 - **Status:** Planned
 - **Issue:** [#399](https://github.com/TetronIO/JIM/issues/399)
 
-> Track and display which sync rule caused each MVO projection, MVO attribute change, CSO provisioning, and pending export attribute change — surfaced in the UI as icon links on causality trees and attribute change tables.
+> Track and display which sync rule caused each MVO projection, MVO attribute change, CSO provisioning, and pending export attribute change; surfaced in the UI as icon links on causality trees and attribute change tables.
 
 ## Overview
 
@@ -21,12 +21,12 @@ Administrators managing complex environments with multiple sync rules flowing di
 
 | Record | Sync Rule Field | Populated? |
 |--------|----------------|------------|
-| `MetaverseObjectChange` | `SyncRuleId`, `SyncRuleName` (exist) | No — field exists from a prior migration but is never populated by the worker |
+| `MetaverseObjectChange` | `SyncRuleId`, `SyncRuleName` (exist) | No; field exists from a prior migration but is never populated by the worker |
 | `MetaverseObjectChangeAttribute` | None | N/A |
 | `PendingExport` | None | N/A |
 | `PendingExportAttributeValueChange` | None | N/A |
 
-The sync rule context is available in the worker and application code at the point each record is created — it is simply not being persisted.
+The sync rule context is available in the worker and application code at the point each record is created; it is simply not being persisted.
 
 ## Goals
 
@@ -46,28 +46,28 @@ The sync rule context is available in the worker and application code at the poi
 ### Pattern
 
 All new sync rule references follow the existing pattern established on `MetaverseObjectChange`:
-- `SyncRuleId` — nullable FK to `SyncRule`, becomes null if the sync rule is deleted
-- `SyncRuleName` — snapshot string, preserved for audit trail even after sync rule deletion
+- `SyncRuleId`: nullable FK to `SyncRule`, becomes null if the sync rule is deleted
+- `SyncRuleName`: snapshot string, preserved for audit trail even after sync rule deletion
 
 ### Changes Required
 
 #### Models (`JIM.Models`)
 
-**`MetaverseObjectChangeAttribute`** — add:
+**`MetaverseObjectChangeAttribute`**: add:
 ```csharp
 public int? SyncRuleId { get; set; }
 public SyncRule? SyncRule { get; set; }
 public string? SyncRuleName { get; set; }
 ```
 
-**`PendingExport`** — add (represents the rule that triggered provisioning, for Create-type exports):
+**`PendingExport`**: add (represents the rule that triggered provisioning, for Create-type exports):
 ```csharp
 public int? SyncRuleId { get; set; }
 public SyncRule? SyncRule { get; set; }
 public string? SyncRuleName { get; set; }
 ```
 
-**`PendingExportAttributeValueChange`** — add:
+**`PendingExportAttributeValueChange`**: add:
 ```csharp
 public int? SyncRuleId { get; set; }
 public SyncRule? SyncRule { get; set; }
@@ -87,19 +87,19 @@ One migration covering all three model changes above.
 #### Application (`JIM.Application`)
 
 **`ExportEvaluationServer`**:
-- Populate `SyncRuleId` / `SyncRuleName` on `PendingExport` when it is created for a provisioning (Create) operation — the responsible `exportRule` is already a parameter at that point.
-- Populate `SyncRuleId` / `SyncRuleName` on each `PendingExportAttributeValueChange` as it is constructed in `CreateAttributeValueChanges` — the `exportRule` parameter is already in scope.
+- Populate `SyncRuleId` / `SyncRuleName` on `PendingExport` when it is created for a provisioning (Create) operation; the responsible `exportRule` is already a parameter at that point.
+- Populate `SyncRuleId` / `SyncRuleName` on each `PendingExportAttributeValueChange` as it is constructed in `CreateAttributeValueChanges`: the `exportRule` parameter is already in scope.
 
 #### UI (`JIM.Web`)
 
-**`AttributeChangeTable.razor`** — add a rightmost icon-button column:
+**`AttributeChangeTable.razor`**: add a rightmost icon-button column:
 - When `SyncRuleId` is present: render a `MudIconButton` linking to `/sync-rules/{SyncRuleId}` with `SyncRuleName` as the tooltip.
 - When `SyncRuleId` is null but `SyncRuleName` is present (rule deleted): render a disabled icon button with the rule name and "(deleted)" in the tooltip.
 - When both are null: render nothing in that cell.
 
-**`PendingExportDetail.razor`** — apply the same icon-button pattern to the attribute change rows in the pending export attribute table.
+**`PendingExportDetail.razor`**: apply the same icon-button pattern to the attribute change rows in the pending export attribute table.
 
-**Causality tree (projection/provisioning rows)** — for the top-level projection and provisioning rows (not just attribute rows), display the same icon button referencing the sync rule on `MetaverseObjectChange` and `PendingExport` respectively.
+**Causality tree (projection/provisioning rows)**: for the top-level projection and provisioning rows (not just attribute rows), display the same icon button referencing the sync rule on `MetaverseObjectChange` and `PendingExport` respectively.
 
 ## Implementation Phases
 
@@ -111,13 +111,13 @@ One migration covering all three model changes above.
 - Create and review EF Core migration
 - Write failing tests for the new fields (TDD)
 
-### Phase 2: Worker — Inbound (Import/Projection)
+### Phase 2: Worker; Inbound (Import/Projection)
 
 - Populate sync rule on `MetaverseObjectChange` for projection changes
 - Populate sync rule on `MetaverseObjectChangeAttribute` per-attribute during inbound attribute flow
 - Tests must pass (red → green)
 
-### Phase 3: Application — Outbound (Export/Provisioning)
+### Phase 3: Application; Outbound (Export/Provisioning)
 
 - Populate sync rule on `PendingExport` at provisioning creation time
 - Populate sync rule on `PendingExportAttributeValueChange` per-attribute in `CreateAttributeValueChanges`

@@ -1,7 +1,7 @@
 # Memory Optimisation for Sync Processors
 
 - **Status:** Done
-- **Note:** Phases 1-2 and batched save phase complete. Paged import processing (Phase 4) deferred — implement if memory requirements need reducing below current thresholds.
+- **Note:** Phases 1-2 and batched save phase complete. Paged import processing (Phase 4) deferred; implement if memory requirements need reducing below current thresholds.
 > **Milestone**: Post-MVP
 > **Priority**: High
 > **Effort**: Medium (3 phases completed, 1 deferred)
@@ -33,7 +33,7 @@ Measured from XLarge integration tests (100K objects, 20 attributes each):
 | 50,000 - 100,000 objects | 20 GB | 24 GB |
 | 100,000+ objects | 24 GB | 32 GB |
 
-**Verified:** A 16 GB machine (GitHub Codespace) is **not sufficient** for 100K object imports — the worker is OOM-killed during the save phase. Total stack consumption at 100K objects reaches 8–10 GB (worker 2.3 GB peak + database 1–2 GB under bulk inserts + web/scheduler/OS overhead), but Linux memory management requires headroom beyond the sum of working sets.
+**Verified:** A 16 GB machine (GitHub Codespace) is **not sufficient** for 100K object imports; the worker is OOM-killed during the save phase. Total stack consumption at 100K objects reaches 8–10 GB (worker 2.3 GB peak + database 1–2 GB under bulk inserts + web/scheduler/OS overhead), but Linux memory management requires headroom beyond the sum of working sets.
 
 **Development environments:** Use a 32 GB Codespace or dedicated test machine for XLarge tests.
 
@@ -43,7 +43,7 @@ Measured from XLarge integration tests (100K objects, 20 attributes each):
 
 - **Location**: `SyncTaskProcessorBase._allPersistedRpeis`, `SyncImportTaskProcessor._allPersistedImportRpeis`
 - **Problem**: All RPEIs from every page were accumulated across the entire sync run. At 100K objects with change tracking, each RPEI carried ConnectedSystemObjectChange graphs (~50 attribute changes each), creating ~5M objects in memory.
-- **Fix**: Added `AccumulateActivitySummaryStats` to `Worker.cs` — computes running tallies using `+=` during each `FlushRpeisAsync` call. Removed `_allPersistedRpeis` and `_allPersistedImportRpeis` accumulation lists entirely. RPEIs are released immediately after each flush. Import processor retains only a lightweight `_reconciliationRpeiLookup` dictionary for the update-phase RPEIs needed by pending export reconciliation.
+- **Fix**: Added `AccumulateActivitySummaryStats` to `Worker.cs`: computes running tallies using `+=` during each `FlushRpeisAsync` call. Removed `_allPersistedRpeis` and `_allPersistedImportRpeis` accumulation lists entirely. RPEIs are released immediately after each flush. Import processor retains only a lightweight `_reconciliationRpeiLookup` dictionary for the update-phase RPEIs needed by pending export reconciliation.
 - **Commits**: `ec43acee`
 
 ### 2. RPEI Error Detection ✅
@@ -100,7 +100,7 @@ Measured from XLarge integration tests (100K objects, 20 attributes each):
 
 ### Phase 1: Incremental Summary Stats ✅
 
-Replaced `_allPersistedRpeis` accumulation with `AccumulateActivitySummaryStats` — running tallies updated during each `FlushRpeisAsync` call.
+Replaced `_allPersistedRpeis` accumulation with `AccumulateActivitySummaryStats`: running tallies updated during each `FlushRpeisAsync` call.
 
 - Added `AccumulateActivitySummaryStats` to `Worker.cs` (uses `+=` vs `=` in `CalculateActivitySummaryStats`)
 - Updated `FlushRpeisAsync` in `SyncTaskProcessorBase` and `FlushImportRpeisAsync` in `SyncImportTaskProcessor` to compute stats before releasing RPEIs
@@ -122,7 +122,7 @@ Batched CSO creation, change persistence, and RPEI flushing with incremental mem
 - RPEIs flushed and detached after each batch
 - Memory bounded by batch size, not total object count
 
-### Phase 4: Paged Import Processing (DEFERRED — Future Optimisation)
+### Phase 4: Paged Import Processing (DEFERRED; Future Optimisation)
 
 The remaining memory bottleneck is `ProcessImportObjectsAsync`, which loads all imported objects into memory before the save phase begins. At 100K objects with 20 attributes each, this consumes ~1-1.5 GB.
 
@@ -133,7 +133,7 @@ The remaining memory bottleneck is `ProcessImportObjectsAsync`, which loads all 
 3. Duplicate detection would need a cross-page strategy (bloom filter or DB-backed set)
 4. Reference resolution would need cross-page tracking (already partially implemented)
 
-**Complexity:** High — requires significant refactoring of the import processor's flow, which currently:
+**Complexity:** High; requires significant refactoring of the import processor's flow, which currently:
 - Builds complete `connectedSystemObjectsToBeCreated` and `connectedSystemObjectsToBeUpdated` lists
 - Runs deletion detection against the full set of imported external IDs
 - Uses `seenExternalIds` dictionary for within-page and cross-page duplicate detection
@@ -160,7 +160,7 @@ Only pursue if subsequent full imports of 100K+ objects cause issues.
 - ✅ Imports up to 10K objects complete reliably on 4-8 GB host RAM
 - ✅ Save phase memory is bounded by batch size (2000 CSOs), not total object count
 - ✅ No regression in sync performance (wall clock time)
-- ⬚ XLarge integration tests (100K objects) — requires 20+ GB host RAM (OOM-killed on 16 GB machine)
+- ⬚ XLarge integration tests (100K objects); requires 20+ GB host RAM (OOM-killed on 16 GB machine)
 
 ## Benefits
 

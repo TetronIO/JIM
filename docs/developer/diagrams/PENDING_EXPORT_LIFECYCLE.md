@@ -1,6 +1,6 @@
 # Pending Export Lifecycle
 
-> Last updated: 2026-04-02 — JIM v0.8.1
+> Last updated: 2026-04-02, JIM v0.8.1
 
 This diagram shows the full lifecycle of a Pending Export from creation during synchronisation, through export execution, to confirmation during a confirming import. Pending Exports are the mechanism by which JIM propagates changes from the metaverse to target connected systems.
 
@@ -199,8 +199,8 @@ This prevents silent loss of drift corrections when merging with export evaluati
 
 - **Pure recall skip**: When all changed attributes on an MVO are removals (attribute recall due to CSO disconnection), export evaluation is skipped entirely. Expression-based mappings (e.g., DN templates) would evaluate against post-recall null attributes and produce invalid values. Target systems retain their existing attribute values until attribute priority (Issue #91) enables replacement value resolution.
 
-- **Value-level drift merge**: When merging drift corrections with export evaluation changes, the merge key is a composite of `AttributeId` + value identity (not just `AttributeId`). This prevents silent loss of multi-valued attribute drift corrections — e.g., 117 member removals would be dropped if merged by `AttributeId` alone.
+- **Value-level drift merge**: When merging drift corrections with export evaluation changes, the merge key is a composite of `AttributeId` + value identity (not just `AttributeId`). This prevents silent loss of multi-valued attribute drift corrections; e.g., 117 member removals would be dropped if merged by `AttributeId` alone.
 
-- **Pre-export CREATE→DELETE reconciliation** (#218): Dual-layer reconciliation cancels contradictory pending exports before they reach the connector. At **flush time** (during sync), deferred CREATE/UPDATE PEs are checked against persisted DELETE PEs for the same CSO — CREATE+DELETE pairs cancel both (no net change), UPDATE+DELETE cancels the UPDATE (deletion still needed). At **export time**, the same logic runs across all pending exports to catch pairs persisted in different sync runs. This prevents unnecessary export operations and connector errors.
+- **Pre-export CREATE→DELETE reconciliation** (#218): Dual-layer reconciliation cancels contradictory pending exports before they reach the connector. At **flush time** (during sync), deferred CREATE/UPDATE PEs are checked against persisted DELETE PEs for the same CSO: CREATE+DELETE pairs cancel both (no net change), UPDATE+DELETE cancels the UPDATE (deletion still needed). At **export time**, the same logic runs across all pending exports to catch pairs persisted in different sync runs. This prevents unnecessary export operations and connector errors.
 
 - **Exponential backoff**: Failed exports use increasing retry delays (`NextRetryAt`) to avoid hammering a target system that's experiencing issues.

@@ -42,10 +42,10 @@ All core outbound sync functionality has been implemented:
 - `PendingExport` model with `ChangeType` (Create, Update, Delete)
 - `PendingExportAttributeValueChange` for attribute-level changes with per-attribute confirmation tracking
 - Export sync rule direction (`SyncRuleDirection.Export`)
-- `ExportEvaluationServer` — evaluates export rules and creates Pending Exports immediately when MVO changes (Q1)
-- `ExportExecutionServer` — executes Pending Exports via connectors with batching, retry, and parallel support
-- `PendingExportReconciliationService` — confirms exports via confirming import with per-attribute granularity
-- `SyncExportTaskProcessor` — processes Export run profiles in the Worker
+- `ExportEvaluationServer`: evaluates export rules and creates Pending Exports immediately when MVO changes (Q1)
+- `ExportExecutionServer`: executes Pending Exports via connectors with batching, retry, and parallel support
+- `PendingExportReconciliationService`: confirms exports via confirming import with per-attribute granularity
+- `SyncExportTaskProcessor`: processes Export run profiles in the Worker
 - CSO origin tracking via `JoinType.Provisioned` (Q2)
 - Circular sync prevention via `ContributedBySystem` (Q3)
 - Deferred reference resolution for out-of-order object provisioning
@@ -321,25 +321,25 @@ The original MVP decision was sequential-only operations. Post-MVP, parallelism 
 
 **Implemented Parallelism (see `docs/plans/done/EXPORT_PERFORMANCE_OPTIMISATION.md`):**
 
-1. **LDAP Connector Pipelining** (Phase 2) — Multiple LDAP operations execute concurrently within a single export batch:
+1. **LDAP Connector Pipelining** (Phase 2); Multiple LDAP operations execute concurrently within a single export batch:
    - Per-connector "Export Concurrency" setting (1-16, default 1)
    - `SemaphoreSlim`-based throttling with async APM wrappers (`LdapConnectionExtensions.SendRequestAsync`)
    - Container creation serialised to prevent race conditions; multi-step operations remain sequential within each export
 
-2. **Parallel Batch Export Processing** (Phase 3) — Multiple export batches process concurrently:
+2. **Parallel Batch Export Processing** (Phase 3); Multiple export batches process concurrently:
    - Per-Connected System `MaxExportParallelism` setting (1-16, default 1)
    - Each parallel batch creates its own `IRepository` (via factory delegate) and `IConnector` instance
    - Gated by `SupportsParallelExport` connector capability (LDAP: true, File: false)
    - Thread-safe result aggregation under `lock`; progress callback serialised via `SemaphoreSlim(1,1)`
 
-3. **Parallel Schedule Step Execution** (Phase 4) — Schedule steps at the same `StepIndex` execute concurrently:
+3. **Parallel Schedule Step Execution** (Phase 4); Schedule steps at the same `StepIndex` execute concurrently:
    - Scheduler detects parallel groups and queues tasks with `ExecutionMode = Parallel`
    - Worker dispatches parallel task groups via `Task.WhenAll`, each with its own DI scope
    - Integration tested with timing overlap validation (Scenario 6)
 
 **Safety approach** (unchanged from MVP philosophy):
 - All parallelism defaults to sequential (opt-in via admin configuration)
-- Each parallel unit gets its own `DbContext` — no shared EF Core contexts across threads
+- Each parallel unit gets its own `DbContext`: no shared EF Core contexts across threads
 - Per-system configuration rather than global flags (different systems have different capacity)
 
 **✅ DECISION: Sequential operations for MVP, parallelism implemented post-MVP with safe defaults.**

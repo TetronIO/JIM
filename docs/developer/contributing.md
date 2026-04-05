@@ -17,7 +17,7 @@ JIM is a source-available project. This page covers the guidelines and expectati
 
 ### Language and Spelling
 
-Use **British English** (en-GB) throughout the codebase — code comments, log messages, UI text, and documentation.
+Use **British English** (en-GB) throughout the codebase: code comments, log messages, UI text, and documentation.
 
 | Correct | Incorrect |
 |---------|-----------|
@@ -33,9 +33,9 @@ Use **British English** (en-GB) throughout the codebase — code comments, log m
 - **Constructor injection** for all dependencies. Avoid the service locator pattern.
 - **One class per file**. File names match class names exactly.
 - **Nullable reference types** are enabled. Use `string?` for optional values and `string` with a default for required values.
-- **Descriptive names** — avoid abbreviations. Use `ConnectedSystemServer` not `CSSrv`.
-- All models and POCOs belong in `src/JIM.Models/` — never inline in service files.
-- Use `DateTime.UtcNow` — never `DateTime.Now`.
+- **Descriptive names:** avoid abbreviations. Use `ConnectedSystemServer` not `CSSrv`.
+- All models and POCOs belong in `src/JIM.Models/`, never inline in service files.
+- Use `DateTime.UtcNow`, never `DateTime.Now`.
 
 ### Error Handling
 
@@ -53,7 +53,7 @@ catch (Exception ex)
 
 ## Git Workflow
 
-1. **Always work on a feature branch** — never commit directly to `main`
+1. **Always work on a feature branch**, never commit directly to `main`
 2. Use descriptive branch names: `feature/description`
 3. Write clear, descriptive commit messages with issue references where applicable
 4. **Build and test before every commit** of .NET code
@@ -72,11 +72,11 @@ catch (Exception ex)
 Every commit of .NET code must be preceded by a successful build and test run.
 
 ```bash
-# During development — targeted builds
+# During development: targeted builds
 dotnet build test/JIM.Worker.Tests/
 dotnet test test/JIM.Worker.Tests/
 
-# Final pre-PR check — full solution
+# Final pre-PR check: full solution
 dotnet build JIM.sln
 dotnet test JIM.sln
 ```
@@ -95,14 +95,14 @@ JIM is deployed in high-trust environments (healthcare, financial services, gove
 
 ### Authentication and Authorisation
 
-- Use `[Authorize]` on all API controllers — deny by default
-- No local authentication — SSO/OIDC is required for all deployments
+- Use `[Authorize]` on all API controllers; deny by default
+- No local authentication; SSO/OIDC is required for all deployments
 - Use claims-based authorisation for role-based access control
 
 ### Input Validation
 
 - Validate all user input at system boundaries (API controllers, Blazor form submissions)
-- Use parameterised queries (EF Core default) — never bypass with unparameterised raw SQL
+- Use parameterised queries (EF Core default); never bypass with unparameterised raw SQL
 - Use DTOs with data annotations for request validation
 
 ### Log Injection Prevention
@@ -110,10 +110,10 @@ JIM is deployed in high-trust environments (healthcare, financial services, gove
 Wrap user-controlled `string?` values with `LogSanitiser.Sanitise()` from `JIM.Utilities` before passing them to any logger call. This prevents log injection attacks (CWE-117).
 
 ```csharp
-// Correct — sanitised before logging
+// Correct: sanitised before logging
 _logger.LogInformation("Search query: {Search}", LogSanitiser.Sanitise(request.Search));
 
-// Safe — non-string types do not need wrapping
+// Safe: non-string types do not need wrapping
 _logger.LogInformation("Page: {Page}, Id: {Id}", page, objectId);
 ```
 
@@ -129,9 +129,9 @@ Integers, GUIDs, enums, and `DateTime` values are inherently safe and do not nee
 
 Before adding any new NuGet package or third-party dependency:
 
-1. **Notify the maintainers** — state the need and conduct a suitability analysis
-2. **Research** — licence compatibility, maintainer reputation, maintenance status, known vulnerabilities
-3. **Present findings** — include a comparison table if alternatives exist
+1. **Notify the maintainers:** state the need and conduct a suitability analysis
+2. **Research:** licence compatibility, maintainer reputation, maintenance status, known vulnerabilities
+3. **Present findings:** include a comparison table if alternatives exist
 4. **Await approval** before adding the dependency
 
 **Preference order:**

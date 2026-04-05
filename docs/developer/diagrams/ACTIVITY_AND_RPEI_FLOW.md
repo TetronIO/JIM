@@ -1,6 +1,6 @@
 # Activity and RPEI Flow
 
-> Last updated: 2026-03-26 — JIM v0.7.1 (`00907431`)
+> Last updated: 2026-03-26, JIM v0.7.1 (`00907431`)
 
 This diagram shows how Activities are created, how Run Profile Execution Items (RPEIs) are accumulated during operations, and how the final activity status is determined. Activities are the immutable audit record for every operation in JIM.
 
@@ -172,6 +172,6 @@ flowchart TD
 
 - **Three-tier status model**: `Complete` (no errors), `CompleteWithWarning` (some errors), `FailedWithError` (all errors or unhandled exception). This gives operators clear visibility into the severity of issues.
 
-- **Triple fallback for failure**: `SafeFailActivityAsync` ensures activities are never left stuck in `InProgress`, even when the DbContext is corrupted or disposed. This is critical for system reliability — stuck activities would block future schedule executions.
+- **Triple fallback for failure**: `SafeFailActivityAsync` ensures activities are never left stuck in `InProgress`, even when the DbContext is corrupted or disposed. This is critical for system reliability; stuck activities would block future schedule executions.
 
 - **Initiator triad audit**: Every activity records who initiated it (`InitiatedByType`, `InitiatedById`, `InitiatedByName`). For scheduled tasks, this preserves the schedule context. For deferred MVO deletions, the original initiator is captured at mark time and replayed during housekeeping.

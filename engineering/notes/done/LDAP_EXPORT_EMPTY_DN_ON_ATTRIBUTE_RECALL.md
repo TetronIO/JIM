@@ -1,6 +1,6 @@
 # LDAP Export Failure: Empty DN Component on Attribute Recall
 
-- **Status:** Fixed (Option C only — defence-in-depth DN validation)
+- **Status:** Fixed (Option C only; defence-in-depth DN validation)
 - **Severity:** High - blocks leaver (deprovisioning) scenario
 - **First observed:** Integration test Scenario 1, Test 3 (Leaver)
 - **Occurrences:** Reproduced multiple times
@@ -58,13 +58,13 @@ LDAP Export
   --> LDAP server rejects: "Empty RDN value not permitted!"
 ```
 
-**The fundamental issue:** The export evaluation creates an Update PE with recalled (now-null) attributes, and the DN expression evaluates those null values into an invalid DN. The system doesn't recognise that the MVO is being deprovisioned — it sees attribute changes and creates an Update export, not a Delete export.
+**The fundamental issue:** The export evaluation creates an Update PE with recalled (now-null) attributes, and the DN expression evaluates those null values into an invalid DN. The system doesn't recognise that the MVO is being deprovisioned; it sees attribute changes and creates an Update export, not a Delete export.
 
 ## Why No Delete PE Is Created
 
-The deprovisioning path (`EvaluateOutOfScopeExportsAsync`) only creates a Delete PE when the MVO falls **out of scope** for an export rule. In Scenario 1, the LDAP export rule has no scoping filter — all User-type MVOs are in scope regardless of their attribute values. Therefore the MVO remains "in scope" even after the CSV CSO disconnects and attributes are recalled.
+The deprovisioning path (`EvaluateOutOfScopeExportsAsync`) only creates a Delete PE when the MVO falls **out of scope** for an export rule. In Scenario 1, the LDAP export rule has no scoping filter; all User-type MVOs are in scope regardless of their attribute values. Therefore the MVO remains "in scope" even after the CSV CSO disconnects and attributes are recalled.
 
-The actual deprovisioning relies on the **MVO deletion rule** (WhenLastConnectorDisconnected with 7-day grace period). But the LDAP CSO is still connected — only the CSV CSO was disconnected. So:
+The actual deprovisioning relies on the **MVO deletion rule** (WhenLastConnectorDisconnected with 7-day grace period). But the LDAP CSO is still connected; only the CSV CSO was disconnected. So:
 
 - The MVO is not being deleted (grace period hasn't started for the LDAP CSO)
 - The MVO is still in scope for the LDAP export rule
@@ -91,12 +91,12 @@ The core problem is an **operation priority issue**. When the CSV source CSO dis
 
 When export evaluation runs (`EvaluateOutboundExportsAsync`):
 
-- **Step 1** (`EvaluateExportRulesWithNoNetChangeDetectionAsync`): The MVO is still "in scope" for the LDAP export rule (no scoping filter, type still matches). So it creates an **Update** PE — treating the attribute recall as a normal attribute change. The DN expression re-evaluates against the now-incomplete MVO (null department) and produces `OU=,OU=Users,...`.
-- **Step 2** (`EvaluateOutOfScopeExportsAsync`): The MVO is still in scope — no-op.
+- **Step 1** (`EvaluateExportRulesWithNoNetChangeDetectionAsync`): The MVO is still "in scope" for the LDAP export rule (no scoping filter, type still matches). So it creates an **Update** PE; treating the attribute recall as a normal attribute change. The DN expression re-evaluates against the now-incomplete MVO (null department) and produces `OU=,OU=Users,...`.
+- **Step 2** (`EvaluateOutOfScopeExportsAsync`): The MVO is still in scope; no-op.
 
 Meanwhile, `ProcessMvoDeletionRuleAsync` runs with `WhenLastConnectorDisconnected` and a 7-day grace period. Since the LDAP CSO is still connected (`remainingCsoCount > 0`), no Delete PE is created. The MVO isn't being deleted yet.
 
-**The result:** An Update PE with an invalid DN reaches the LDAP connector. It should never have been created — the system should recognise that a source disconnection with attribute recall means the Update PE is based on incomplete/invalid MVO state and should not be actioned.
+**The result:** An Update PE with an invalid DN reaches the LDAP connector. It should never have been created; the system should recognise that a source disconnection with attribute recall means the Update PE is based on incomplete/invalid MVO state and should not be actioned.
 
 ## Recommended Solutions
 
@@ -108,7 +108,7 @@ Meanwhile, `ProcessMvoDeletionRuleAsync` runs with `WhenLastConnectorDisconnecte
 
 **What:**
 1. When a source CSO disconnects and attributes are recalled, check whether the deprovisioning path will generate a Delete PE (based on `OutboundDeprovisionAction`, deletion rules, grace period, remaining CSO count).
-2. If a Delete PE will be created: skip export evaluation for the recalled attributes entirely — the Delete PE supersedes any attribute-level Updates.
+2. If a Delete PE will be created: skip export evaluation for the recalled attributes entirely; the Delete PE supersedes any attribute-level Updates.
 3. If a Delete PE will NOT be created (e.g., `OutboundDeprovisionAction=Disconnect`, or grace period active with remaining CSOs): still skip expression-based re-evaluation (DN, userAccountControl, accountExpires) during the recall, because the MVO state is now incomplete and expression outputs will be invalid. Only propagate direct attribute removals (e.g., clear `department` in the target).
 4. Remove any pre-existing Update PEs for the same CSO that are now superseded by the deprovisioning outcome.
 
@@ -126,15 +126,15 @@ Meanwhile, `ProcessMvoDeletionRuleAsync` runs with `WhenLastConnectorDisconnecte
 
 **Where:** `ExportEvaluationServer.cs`, in `CreateAttributeValueChanges()`.
 
-**What:** When processing `removedAttributes`, skip expression-based mappings (like DN, userAccountControl, accountExpires) and only generate DELETE/REMOVE changes for the directly-mapped recalled attribute values. Expressions derive their values from other MVO attributes — if those source attributes are being removed, the expression should not be re-evaluated against the now-incomplete state.
+**What:** When processing `removedAttributes`, skip expression-based mappings (like DN, userAccountControl, accountExpires) and only generate DELETE/REMOVE changes for the directly-mapped recalled attribute values. Expressions derive their values from other MVO attributes; if those source attributes are being removed, the expression should not be re-evaluated against the now-incomplete state.
 
 **Pros:**
-- Simpler than Option A — contained within `CreateAttributeValueChanges()`
+- Simpler than Option A; contained within `CreateAttributeValueChanges()`
 - The `removedAttributes` parameter is already threaded through the pipeline
 - Semantically correct: a recall means "remove this value", not "recalculate derived values"
 
 **Cons:**
-- Narrower fix — only prevents expression re-evaluation, doesn't address the broader priority question
+- Narrower fix; only prevents expression re-evaluation, doesn't address the broader priority question
 - Update PE is still created (just without the expression-based attribute changes)
 - Doesn't handle the case where a pre-existing Update PE already has the invalid DN
 
@@ -150,14 +150,14 @@ Meanwhile, `ProcessMvoDeletionRuleAsync` runs with `WhenLastConnectorDisconnecte
 - Clear, actionable error message for administrators
 
 **Cons:**
-- Doesn't fix the root cause — export still fails, just with a better error
+- Doesn't fix the root cause; export still fails, just with a better error
 - Should be implemented alongside Option A or B, not as a standalone fix
 
 ## Recommended Approach
 
 **Option A** is the correct architectural fix. The principle is clear: when a source CSO disconnects and triggers deprovisioning, that deprovisioning decision should take priority over any Update exports generated from the attribute recall. Update PEs based on incomplete MVO state should be invalidated, not sent to target systems.
 
-**Option C** should also be implemented as defence-in-depth, regardless of which primary fix is chosen — invalid DNs should never reach the LDAP server.
+**Option C** should also be implemented as defence-in-depth, regardless of which primary fix is chosen; invalid DNs should never reach the LDAP server.
 
 ## Reproduction Steps
 
@@ -171,24 +171,24 @@ Meanwhile, `ProcessMvoDeletionRuleAsync` runs with `WhenLastConnectorDisconnecte
 
 **Approach:** Implemented Option B (skip expression re-evaluation during "pure attribute recall") as the primary fix and Option C (DN validation in LDAP connector) as defence-in-depth.
 
-**Outcome:** Option B was **removed** after review — it violated separation of concerns and was based on a non-representative test scenario. See Attempt 2 for the reasoning and final fix.
+**Outcome:** Option B was **removed** after review; it violated separation of concerns and was based on a non-representative test scenario. See Attempt 2 for the reasoning and final fix.
 
-### Attempt 2: Option C Only — Defence-in-Depth (Final)
+### Attempt 2: Option C Only; Defence-in-Depth (Final)
 
 **Branch:** `fix/ldap-export-empty-dn-on-attribute-recall`
 
 **Key Insight:** The original bug scenario (single-source CS with attribute recall enabled, whose attributes feed DN expressions) is a **misconfiguration**. In a properly configured system:
 
-- **Primary sources** (e.g., HR) contribute identity-critical attributes that feed expressions (DN, userAccountControl, etc.). Attribute recall should be **disabled** on these — their disconnection triggers deprovisioning, not recall.
-- **Supplemental sources** (e.g., Training) contribute non-critical attributes. Attribute recall is **enabled** on these — their attributes don't feed expressions, so recall produces valid null-clearing exports without breaking DN generation.
+- **Primary sources** (e.g., HR) contribute identity-critical attributes that feed expressions (DN, userAccountControl, etc.). Attribute recall should be **disabled** on these; their disconnection triggers deprovisioning, not recall.
+- **Supplemental sources** (e.g., Training) contribute non-critical attributes. Attribute recall is **enabled** on these; their attributes don't feed expressions, so recall produces valid null-clearing exports without breaking DN generation.
 
 **Why Option B was removed:**
 
-1. **Separation of concerns violation**: The `isPureRecall` detection in `ExportEvaluationServer` made the class aware of "recall" semantics — a worker-level concept. A removal is a removal regardless of cause; the class shouldn't detect or special-case specific upstream scenarios.
+1. **Separation of concerns violation**: The `isPureRecall` detection in `ExportEvaluationServer` made the class aware of "recall" semantics; a worker-level concept. A removal is a removal regardless of cause; the class shouldn't detect or special-case specific upstream scenarios.
 2. **Suppressing admin intent**: Admins may intentionally write expressions that handle null values for their business logic. It's not for the system to decide that expressions shouldn't be evaluated during attribute removal.
-3. **Non-representative test scenario**: The test used a single-source topology where the primary source had attribute recall enabled — this doesn't match real-world deployment patterns.
+3. **Non-representative test scenario**: The test used a single-source topology where the primary source had attribute recall enabled; this doesn't match real-world deployment patterns.
 
-**What remains — Fix (Option C): DN validation in LDAP connector**
+**What remains; Fix (Option C): DN validation in LDAP connector**
 
 Added `HasValidRdnValues(string dn)` utility method using the existing `DNParser` package (`CPI.DirectoryServices.DN`) to validate that no RDN component has an empty value. This is called before any ModifyDN or AddRequest in the LDAP connector.
 
@@ -212,5 +212,5 @@ This ensures that if an admin misconfigures attribute recall on a primary source
 
 ## Related Documents
 
-- [PHASE4_SYNC_PAGE_LOADING_OPTIMISATION.md](PHASE4_SYNC_PAGE_LOADING_OPTIMISATION.md) — Documents a similar issue where expression-based mappings failed after attribute recall (resolved differently for Scenario 4)
-- [LDAP_SCHEMA_DISCOVERY_REVIEW.md](LDAP_SCHEMA_DISCOVERY_REVIEW.md) — Related LDAP export attribute writability issues
+- [PHASE4_SYNC_PAGE_LOADING_OPTIMISATION.md](PHASE4_SYNC_PAGE_LOADING_OPTIMISATION.md); Documents a similar issue where expression-based mappings failed after attribute recall (resolved differently for Scenario 4)
+- [LDAP_SCHEMA_DISCOVERY_REVIEW.md](LDAP_SCHEMA_DISCOVERY_REVIEW.md); Related LDAP export attribute writability issues

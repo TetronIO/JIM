@@ -1,6 +1,6 @@
 ---
 title: Prerequisites
-description: What you need before deploying JIM — container runtime, identity provider, and hardware requirements.
+description: What you need before deploying JIM: container runtime, identity provider, and hardware requirements.
 ---
 
 # Prerequisites
@@ -28,7 +28,7 @@ JIM uses OpenID Connect (OIDC) for Single Sign-On authentication. You will need 
 Before deploying, configure your identity provider with a client registration for JIM. See the [SSO Setup Guide](../administration/sso-setup.md) for detailed instructions.
 
 !!! tip "Developer environments"
-    If you are using the devcontainer for development, a bundled Keycloak instance is included with pre-configured test users. No external identity provider is needed — sign in with `admin` / `admin`.
+    If you are using the devcontainer for development, a bundled Keycloak instance is included with pre-configured test users. No external identity provider is needed; sign in with `admin` / `admin`.
 
 ## Hardware Requirements
 
@@ -40,16 +40,16 @@ As a general guideline, JIM's resource requirements are modest. A small deployme
 
 JIM uses PostgreSQL as its database. You have two options:
 
-- **Bundled PostgreSQL** — A PostgreSQL container is included in the Docker Compose stack for simple deployments. No additional setup is required.
-- **External PostgreSQL** — Connect to your existing PostgreSQL server by configuring the `JIM_DB_HOSTNAME` environment variable.
+- **Bundled PostgreSQL:** A PostgreSQL container is included in the Docker Compose stack for simple deployments. No additional setup is required.
+- **External PostgreSQL:** Connect to your existing PostgreSQL server by configuring the `JIM_DB_HOSTNAME` environment variable.
 
 ## For Developers
 
 If you are contributing to JIM or building custom connectors, the development environment is fully self-contained:
 
-- **GitHub Codespaces** — One-click setup with everything pre-configured (.NET 9.0, PostgreSQL, shell aliases, VS Code extensions).
-- **Local devcontainer** — Clone the repository and open it in VS Code with the Dev Containers extension. The devcontainer will set up the full environment automatically.
+- **GitHub Codespaces:** One-click setup with everything pre-configured (.NET 9.0, PostgreSQL, shell aliases, VS Code extensions).
+- **Local devcontainer:** Clone the repository and open it in VS Code with the Dev Containers extension. The devcontainer will set up the full environment automatically.
 
-No additional prerequisites are needed when using the devcontainer — it includes all build tools, a PostgreSQL instance, and a bundled Keycloak identity provider for testing.
+No additional prerequisites are needed when using the devcontainer; it includes all build tools, a PostgreSQL instance, and a bundled Keycloak identity provider for testing.
 
 See the [Developer Guide](../developer/index.md) for the full development setup.

@@ -1,6 +1,6 @@
 # Worker Task Lifecycle
 
-> Last updated: 2026-04-01 — JIM v0.8.0
+> Last updated: 2026-04-01, JIM v0.8.0
 
 This diagram shows how the JIM Worker service picks up, executes, and completes tasks. It covers the main polling loop, task dispatch, heartbeat management, cancellation handling, and housekeeping.
 
@@ -158,11 +158,11 @@ flowchart LR
 ## Key Design Decisions
 
 - **Three-layer sync DI architecture (#394)**: Worker processors use three collaborating interfaces injected at task spawn time:
-  - **ISyncEngine** — Pure domain logic (projection decisions, attribute flow, deletion rules, export confirmation). Stateless, synchronous, zero-dependency, I/O-free, fully unit-testable. 8 methods covering projection, attribute flow, export confirmation, deletion rules, and reconciliation. Used by import, full sync, and delta sync processors.
-  - **ISyncServer** — Orchestration facade that delegates to existing application-layer servers (ExportEvaluationServer, ExportExecutionServer, ScopingEvaluationServer, DriftDetectionService) and ISyncRepository. All processors use this.
-  - **ISyncRepository** — Dedicated data access boundary for sync operations (bulk CSO/MVO writes, pending exports, RPEIs). Replaces scattered access through multiple server properties.
+  - **ISyncEngine:** Pure domain logic (projection decisions, attribute flow, deletion rules, export confirmation). Stateless, synchronous, zero-dependency, I/O-free, fully unit-testable. 8 methods covering projection, attribute flow, export confirmation, deletion rules, and reconciliation. Used by import, full sync, and delta sync processors.
+  - **ISyncServer:** Orchestration facade that delegates to existing application-layer servers (ExportEvaluationServer, ExportExecutionServer, ScopingEvaluationServer, DriftDetectionService) and ISyncRepository. All processors use this.
+  - **ISyncRepository:** Dedicated data access boundary for sync operations (bulk CSO/MVO writes, pending exports, RPEIs). Replaces scattered access through multiple server properties.
 
-- **Per-task DI scope (#394)**: Each spawned task gets its own `JimApplication` (via `IJimApplicationFactory.Create()`), `JimDbContext`, `ISyncRepository`, `ISyncServer`, and `ISyncEngine` — fully isolated from the main loop and other tasks. This avoids EF Core connection sharing issues and ensures each task can be disposed independently. The main loop has its own instance for polling and heartbeats.
+- **Per-task DI scope (#394)**: Each spawned task gets its own `JimApplication` (via `IJimApplicationFactory.Create()`), `JimDbContext`, `ISyncRepository`, `ISyncServer`, and `ISyncEngine`, fully isolated from the main loop and other tasks. This avoids EF Core connection sharing issues and ensures each task can be disposed independently. The main loop has its own instance for polling and heartbeats.
 
 - **Heartbeat-based liveness (two levels)**:
   - **Task-level**: Active tasks have their database heartbeats updated every polling cycle (2 seconds). The scheduler uses heartbeat timestamps to detect crashed workers and recover stale tasks.

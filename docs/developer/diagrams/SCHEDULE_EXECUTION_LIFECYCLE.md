@@ -1,6 +1,6 @@
 # Schedule Execution Lifecycle
 
-> Last updated: 2026-03-26 — JIM v0.7.1 (`00907431`)
+> Last updated: 2026-03-26, JIM v0.7.1 (`00907431`)
 
 This diagram shows how schedules are triggered, how step groups are queued and advanced, and how the scheduler and worker collaborate to drive multi-step execution to completion.
 

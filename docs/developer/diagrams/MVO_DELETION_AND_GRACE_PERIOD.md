@@ -1,6 +1,6 @@
 # MVO Deletion and Grace Period
 
-> Last updated: 2026-03-26 — JIM v0.7.1 (`00907431`)
+> Last updated: 2026-03-26, JIM v0.7.1 (`00907431`)
 
 This diagram shows the full lifecycle of Metaverse Object (MVO) deletion, from the trigger event (CSO disconnection) through deletion rule evaluation, grace period handling, and deferred housekeeping cleanup.
 
@@ -149,7 +149,7 @@ stateDiagram-v2
 
 - **Grace period reconnection**: If a CSO reconnects to an MVO during the grace period, the MVO is no longer eligible for deletion. The `LastConnectorDisconnectedDate` remains set, but the eligibility query checks for remaining CSOs, so the MVO won't be deleted.
 
-- **Initiator preservation**: When an MVO is marked for deferred deletion, the original initiator info (who/what caused the disconnection) is captured on the MVO. When housekeeping eventually deletes it, this original initiator is used in the audit trail — not "housekeeping" or "system".
+- **Initiator preservation**: When an MVO is marked for deferred deletion, the original initiator info (who/what caused the disconnection) is captured on the MVO. When housekeeping eventually deletes it, this original initiator is used in the audit trail, not "housekeeping" or "system".
 
 - **Export cleanup before deletion**: Both immediate and housekeeping deletion paths call `EvaluateMvoDeletionAsync()` before the actual deletion. This creates delete pending exports for any provisioned target system CSOs, ensuring the external system is cleaned up.
 

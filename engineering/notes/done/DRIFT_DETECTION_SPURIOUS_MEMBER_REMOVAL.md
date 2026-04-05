@@ -95,7 +95,7 @@ import**, not during drift detection.
 
 ### Actual Failure Point
 
-The failure occurs at **Step 6 of InitialSync** (Target CS - Full Confirming Import) —
+The failure occurs at **Step 6 of InitialSync** (Target CS - Full Confirming Import); 
 not Step 7 as initially hypothesised. The data corruption persists into all subsequent
 steps.
 
@@ -154,7 +154,7 @@ When `AsSplitQuery()` drops the `ReferenceValue` navigation (or its nested
 **Result**: For a group with 201 members, if AsSplitQuery drops navigations on many refs,
 the import removes those resolved refs, adds them back as unresolved, and reference
 resolution only succeeds for a subset. In the observed failure, only 86 of 201 refs were
-re-resolved — the remaining 115 were either left unresolved or failed resolution entirely.
+re-resolved; the remaining 115 were either left unresolved or failed resolution entirely.
 
 **Database evidence from the failed test:**
 
@@ -165,7 +165,7 @@ re-resolved — the remaining 115 were either left unresolved or failed resoluti
 | Target CSO (EMEA) | 86 | All resolved, 115 missing |
 
 Drift detection then correctly observes Expected=201, Actual=86 and stages 115 corrective
-DELETE exports — it is reporting real drift that was introduced by the confirming import.
+DELETE exports; it is reporting real drift that was introduced by the confirming import.
 
 ### The Secondary Bug: Drift Detection Navigation Failures
 
@@ -199,7 +199,7 @@ navigation left null**, despite the data existing in the database. This means ei
 - `av.ReferenceValue` is loaded but `MetaverseObjectId` is null on the entity
 
 Since `MetaverseObjectId` is a scalar FK property that EF always loads with the entity
-row, the more likely scenario is that `ReferenceValue` itself is null — meaning the
+row, the more likely scenario is that `ReferenceValue` itself is null; meaning the
 **referenced CSO entity was not materialised** into the navigation property.
 
 **Both the import and sync code paths** load CSOs using `AsSplitQuery()` with deep Include
@@ -240,10 +240,10 @@ merges results in memory. There is a **documented EF Core bug**
 
 The conditions that trigger this are:
 
-1. `AsSplitQuery()` is enabled (confirmed — line 607)
-2. No explicit transaction wraps the query (confirmed — no `BeginTransaction` in the
+1. `AsSplitQuery()` is enabled (confirmed; line 607)
+2. No explicit transaction wraps the query (confirmed; no `BeginTransaction` in the
    page load methods)
-3. Concurrent writes occur between split query executions (likely — the Worker updates
+3. Concurrent writes occur between split query executions (likely; the Worker updates
    Activity progress, persists MVOs, and flushes Pending Exports between pages, all of
    which write to shared tables)
 
@@ -270,29 +270,29 @@ window for the race condition.
 
 **Confirming Import Path** (primary corruption source):
 
-1. `SyncImportTaskProcessor.ProcessConnectedSystemObjectAsync()` — processes each imported
+1. `SyncImportTaskProcessor.ProcessConnectedSystemObjectAsync()`: processes each imported
    CSO from the connector
 2. For reference attributes, loads the existing Target CSO via
-   `ConnectedSystemRepository.GetConnectedSystemObjectByAttributeAsync()` — line 994:
+   `ConnectedSystemRepository.GetConnectedSystemObjectByAttributeAsync()`: line 994:
    executes Include chain with `AsSplitQuery()`
-3. `ImportRefMatchesCsoValue()` — line 1371: attempts to match imported DN strings against
+3. `ImportRefMatchesCsoValue()`: line 1371: attempts to match imported DN strings against
    existing CSO member references using `av.ReferenceValue.SecondaryExternalIdAttributeValue`
 4. When AsSplitQuery drops navigations, matches fail, existing resolved refs are removed,
    and replacement unresolved refs are added
-5. `ResolveReferencesAsync()` — line 1595: attempts to re-resolve the unresolved refs but
+5. `ResolveReferencesAsync()`: line 1595: attempts to re-resolve the unresolved refs but
    only succeeds for a subset
 
-**Confirming Sync Path** (secondary — reports damage done by import):
+**Confirming Sync Path** (secondary; reports damage done by import):
 
-1. `SyncFullSyncTaskProcessor.PerformFullSyncAsync()` — line 127: calls
+1. `SyncFullSyncTaskProcessor.PerformFullSyncAsync()`: line 127: calls
    `GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize)`
-2. `ConnectedSystemRepository.GetConnectedSystemObjectsAsync()` — line 606: executes the
+2. `ConnectedSystemRepository.GetConnectedSystemObjectsAsync()`: line 606: executes the
    Include chain with `AsSplitQuery()`
-3. `SyncTaskProcessorBase.ProcessConnectedSystemObjectAsync()` — line 145: receives the
+3. `SyncTaskProcessorBase.ProcessConnectedSystemObjectAsync()`: line 145: receives the
    loaded CSO
-4. `SyncTaskProcessorBase.EvaluateDriftAndEnforceState()` — line 841: passes the same CSO
+4. `SyncTaskProcessorBase.EvaluateDriftAndEnforceState()`: line 841: passes the same CSO
    to `DriftDetectionService.EvaluateDrift()`
-5. `DriftDetectionService.GetActualValue()` — accesses `av.ReferenceValue?.MetaverseObjectId`
+5. `DriftDetectionService.GetActualValue()`: accesses `av.ReferenceValue?.MetaverseObjectId`
 
 No re-query or reload occurs between steps 2 and 5. The CSO used for drift detection is
 the same entity graph loaded by the original split query.
@@ -323,15 +323,15 @@ by EF Core.
   → Corrective export: ADD 51 members
 ```
 
-The Expected count went from 48 to 101 between runs — the same MVO, reloaded by a different
+The Expected count went from 48 to 101 between runs; the same MVO, reloaded by a different
 query, now shows the correct count. The first run's truncated Expected set caused drift
 detection to delete 52 valid members, leaving only 50 in the target.
 
 **Why Layers 1-3 don't help:**
-- Layer 1 (CSO repair): Fixes null navigations on *loaded* CSO attribute values — doesn't
+- Layer 1 (CSO repair): Fixes null navigations on *loaded* CSO attribute values; doesn't
   address MVO attribute values, and can't fix entities that were never loaded
 - Layer 2 (scalar FK): Uses `av.ReferenceValueId` instead of `av.ReferenceValue?.Id` for
-  MVOs — works when the attribute value entity is loaded but its navigation is null, but
+  MVOs; works when the attribute value entity is loaded but its navigation is null, but
   can't help when the entire `MetaverseObjectAttributeValue` row is absent from the collection
 - Layer 3 (import dictionary): Only fixes the import path, not drift detection
 
@@ -342,7 +342,7 @@ The MVO attribute values are loaded as part of the CSO query's Include chain (li
     .ThenInclude(av => av.ReferenceValue)
 ```
 
-This is 3 levels deep through AsSplitQuery — prime territory for the materialisation bug.
+This is 3 levels deep through AsSplitQuery; prime territory for the materialisation bug.
 
 ---
 
@@ -368,7 +368,7 @@ WHERE av."ConnectedSystemObjectId" = ANY({0})
 For any attribute value where EF failed to materialise the `ReferenceValue` navigation,
 the repair creates a detached stub `ConnectedSystemObject` with the correct `Id` and
 `MetaverseObjectId` and assigns it to `av.ReferenceValue`. This stub is not tracked by
-the DbContext — it exists only to satisfy the in-memory navigation chain that drift
+the DbContext; it exists only to satisfy the in-memory navigation chain that drift
 detection (and other sync processors) depend on.
 
 Called from all three page-load methods:
@@ -398,7 +398,7 @@ AsSplitQuery bug was triggered.
   Phase 4. The repair approach is a targeted fix that can be applied now without the larger
   refactoring effort, while remaining compatible with a future full SQL migration.
 
-### Layer 3: Import Reference Matching Fallback (primary — fixes the root cause)
+### Layer 3: Import Reference Matching Fallback (primary; fixes the root cause)
 
 When `SyncImportTaskProcessor.UpdateConnectedSystemObjectFromImportObject()` processes
 reference attributes during a confirming import, it compares imported DN strings against
@@ -480,7 +480,7 @@ Called from all three page-load methods (same locations as Layer 1):
 
 Logs a Warning when any repairs are needed, providing diagnostic visibility.
 
-### Layer 5: Sync Projection — Scalar FK for Reference Resolution
+### Layer 5: Sync Projection; Scalar FK for Reference Resolution
 
 `SyncRuleMappingProcessor.ProcessReferenceAttribute()` was refactored to use
 `MetaverseObjectId` scalar FK instead of requiring the full `MetaverseObject` navigation
@@ -495,7 +495,7 @@ the `ReferenceValue` navigation when the full `MetaverseObject` is available, bu
 back to setting only `ReferenceValueId` (scalar FK) when only `MetaverseObjectId` is
 available from AsSplitQuery repair stubs.
 
-### Layer 6: Export Evaluation — ReferenceValueId Fallback
+### Layer 6: Export Evaluation; ReferenceValueId Fallback
 
 `ExportEvaluationServer.CreateAttributeValueChanges()` was updated to fall back to the
 scalar FK when the `ReferenceValue` navigation is null on MVO attribute values:
@@ -508,7 +508,7 @@ Without this fix, reference attributes where `ReferenceValue` was null (AsSplitQ
 materialisation failure) were silently skipped during export evaluation, resulting in
 missing member exports.
 
-### Layer 7: MVO Persistence — Explicit State Management
+### Layer 7: MVO Persistence; Explicit State Management
 
 `MetaverseRepository.UpdateMetaverseObjectsAsync()` was changed to always use explicit
 `Entry().State` management for MVO attribute values instead of relying on `UpdateRange()`.
@@ -533,19 +533,19 @@ This ensures new attribute values are always persisted regardless of the
   Regression test verifying no spurious drift after the repository repair (all 5 CSO
   member references have `MetaverseObjectId` properly populated).
 - `EvaluateDrift_CrossSystem_NullReferenceValueNavigation_CreatesSpuriousRemovalsAsync`:
-  Documents the raw EF Core bug behaviour — when `ReferenceValue` is null (repair not
+  Documents the raw EF Core bug behaviour; when `ReferenceValue` is null (repair not
   applied), drift detection sees an incomplete actual set and creates spurious exports.
 - `EvaluateDrift_CrossSystem_TargetExportsSourceImportedAttribute_ShouldNotDetectDriftWhenCsoMembersMatchMvoAsync`:
-  Positive case — all references fully resolved, no drift detected.
+  Positive case; all references fully resolved, no drift detected.
 
 **Import reference matching tests:**
 - `FullImportUpdate_ReferenceWithHealthyNavigation_NoSpuriousRemovalsAsync`:
-  Baseline — all ReferenceValue navigations are healthy, no removals when import matches.
+  Baseline; all ReferenceValue navigations are healthy, no removals when import matches.
 - `FullImportUpdate_NullReferenceNavigation_WithMatchingUnresolvedRef_NoSpuriousRemovalsAsync`:
   When AsSplitQuery drops navigations but UnresolvedReferenceValue matches the import
   string, no spurious removals occur (first check in ImportRefMatchesCsoValue succeeds).
 
-### Design Notes — Import Reference Matching
+### Design Notes; Import Reference Matching
 
 Layer 3 addresses the confirming **import** path, which is the **primary** source of data
 corruption. The import path uses `AsSplitQuery()` on both CSO load paths (cache hit via PK
@@ -553,10 +553,10 @@ and cache miss via attribute lookup).
 
 Note: there are **two** CSO load paths during import, depending on the CSO lookup cache:
 
-- **Cache hit** → `GetConnectedSystemObjectAsync` (PK lookup, line 971) — also uses
+- **Cache hit** → `GetConnectedSystemObjectAsync` (PK lookup, line 971); also uses
   `AsSplitQuery()` with deep Include chains including `ReferenceValue.AttributeValues`
 - **Cache miss** → `GetConnectedSystemObjectByAttributeAsync` (attribute lookup, line 994)
-  — same `AsSplitQuery()` pattern
+; same `AsSplitQuery()` pattern
 
 Both paths are vulnerable to the same materialisation bug. The CSO lookup cache
 (see `docs/CACHING_STRATEGY.md`) determines *which* query runs, but doesn't avoid the bug.
@@ -588,14 +588,14 @@ A lookup dictionary of `ReferenceValueId → external ID string` is pre-loaded v
 direct SQL query and used as a fallback in `ImportRefMatchesCsoValue` when the navigation
 chain is null. This approach:
 
-1. **Single SQL query per CSO** — no N+1 problem. Query all referenced CSOs' external IDs
+1. **Single SQL query per CSO**: no N+1 problem. Query all referenced CSOs' external IDs
    in one round-trip, similar to the sync path's `RepairReferenceValueMaterialisationAsync`
-2. **No EF entity tracking conflicts** — read-only dictionary, no stub entities
-3. **Directly reusable for #338** — the dictionary becomes the *primary* path when the
+2. **No EF entity tracking conflicts**: read-only dictionary, no stub entities
+3. **Directly reusable for #338**: the dictionary becomes the *primary* path when the
    Include chain is removed entirely in Phase 4, making this a stepping stone not a throwaway
-4. **No cache interaction** — the dictionary is scoped to the current CSO being processed,
+4. **No cache interaction**: the dictionary is scoped to the current CSO being processed,
    built on demand, and discarded after use. The CSO lookup cache continues unchanged
-5. **Contained change** — only `ImportRefMatchesCsoValue` and its caller need modification;
+5. **Contained change**: only `ImportRefMatchesCsoValue` and its caller need modification;
    no changes to the repository query or the Include chain
 
 **Dictionary lifecycle:**
@@ -609,7 +609,7 @@ chain is null. This approach:
   returns. It is a local `Dictionary<Guid, string>` with no shared state, no entries in
   `IMemoryCache`, and no invalidation logic.
 
-No cache management concerns — the dictionary is a point-in-time database read with method
+No cache management concerns; the dictionary is a point-in-time database read with method
 scope, rebuilt from scratch for each group CSO.
 
 **Implementation sketch:**
@@ -648,11 +648,11 @@ window when a referenced CSO's DN changes during the same import:
 ```
 Import batch processing (objects processed one at a time):
 
-  Object 1: User "John" — DN renamed from OU=OldOU to OU=NewOU
+  Object 1: User "John"; DN renamed from OU=OldOU to OU=NewOU
     → CSO updated in-memory with new DN
     → Not yet flushed to database
 
-  Object 50: Group "Engineering" — member list includes John's NEW DN
+  Object 50: Group "Engineering"; member list includes John's NEW DN
     → Dictionary SQL query reads John's OLD DN from database
     → ImportRefMatchesCsoValue("CN=John,OU=NewOU,...", av):
         Navigation chain: av.ReferenceValue also has OLD DN (loaded from DB)
@@ -661,7 +661,7 @@ Import batch processing (objects processed one at a time):
     → ResolveReferencesAsync later re-resolves it (recovery)
 ```
 
-This is **not a regression** — the existing navigation chain has the same staleness
+This is **not a regression**: the existing navigation chain has the same staleness
 problem. `ResolveReferencesAsync` provides recovery by re-resolving unresolved refs against
 the full batch + database after all objects are processed. However, the unnecessary
 remove-and-readd cycle is wasteful and, as demonstrated by this bug, re-resolution can
@@ -686,7 +686,7 @@ independently.
 
 Extend `RepairReferenceValueMaterialisationAsync` to cover the import query. More complex
 than the sync repair because `ImportRefMatchesCsoValue` depends on
-`SecondaryExternalIdAttributeValue` and `ExternalIdAttributeValue` navigations — building
+`SecondaryExternalIdAttributeValue` and `ExternalIdAttributeValue` navigations; building
 stub entities with those nested navigations fights against EF's tracking model.
 
 **Option B: Per-attribute-value fallback query** (N+1 problem)

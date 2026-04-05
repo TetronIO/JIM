@@ -24,7 +24,7 @@
 | **Auth** | OpenID Connect (OIDC) with PKCE |
 | **Deployment** | Docker containers, air-gapped capable |
 | **License** | Source-available (free non-production, commercial for production) |
-| **Status** | Active development — approaching v0.9 stabilisation |
+| **Status** | Active development, approaching v0.9 stabilisation |
 | **Language** | British English (en-GB) for all text |
 
 ---
@@ -212,7 +212,7 @@ IConnectorExportUsingFiles    // Write to files (async with CancellationToken)
 ```
 
 Connectors also declare capability flags via `IConnectorCapabilities`:
-- `SupportsParallelExport` — enables per-system `MaxExportParallelism` setting for parallel batch processing
+- `SupportsParallelExport`: enables per-system `MaxExportParallelism` setting for parallel batch processing
 - LDAP connectors additionally support configurable "Export Concurrency" (1-16) for async LDAP operation pipelining
 
 ---
@@ -415,9 +415,9 @@ Development follows sequenced milestones (see [GitHub Milestones](https://github
 | Milestone | Focus |
 |-----------|-------|
 | **v0.9-STABILISATION** | Configuration controls, identity fusing, lifecycle state management (JML triggers), sync engine refinement, architectural foundation for extensibility |
-| **v1.0-ILM-COMPLETE** | First production-ready release — robust sync rules, lifecycle automation, scheduling, error handling, operational monitoring |
-| **v1.x-CONNECTORS** | Expanding connector coverage — broader LDAP support, SQL databases, SCIM endpoints, HR systems, connector framework improvements |
-| **v2.0-IGA-FOUNDATION** | Step-change into identity governance — entitlement visibility, access request workflows, attestation capabilities |
+| **v1.0-ILM-COMPLETE** | First production-ready release: robust sync rules, lifecycle automation, scheduling, error handling, operational monitoring |
+| **v1.x-CONNECTORS** | Expanding connector coverage: broader LDAP support, SQL databases, SCIM endpoints, HR systems, connector framework improvements |
+| **v2.0-IGA-FOUNDATION** | Step-change into identity governance: entitlement visibility, access request workflows, attestation capabilities |
 
 ---
 

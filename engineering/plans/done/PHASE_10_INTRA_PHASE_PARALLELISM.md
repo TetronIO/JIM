@@ -226,14 +226,14 @@ for batch in batches:              all_csos = accumulated from pages
 ```
 
 **What changes:**
-- `SyncImportTaskProcessor` accumulates all CSOs as before (connector pages are sequential — connector I/O is the bottleneck there, not CPU)
+- `SyncImportTaskProcessor` accumulates all CSOs as before (connector pages are sequential; connector I/O is the bottleneck there, not CPU)
 - Create phase: instead of sequential 2K batches, partition all creates across N connections
 - Update phase: same parallel pattern
 - Reference fixup: remains single connection (it's a single UPDATE...JOIN, already fast with functional indexes)
 - Cache updates: happen after all parallel writes complete (single-threaded, in-memory)
 
 **What stays the same:**
-- Connector pagination (sequential — connectors are not thread-safe)
+- Connector pagination (sequential; connectors are not thread-safe)
 - CSO accumulation (single-threaded in-memory)
 - Deletion detection (single-threaded, read-heavy)
 
@@ -267,7 +267,7 @@ Pass 2: foreach cso -> join/flow       (sequential -- ordering matters)
 ```
 
 **Why CSO processing stays sequential:**
-- Pass 1 records disconnections in `_pendingDisconnectedMvoIds` — Pass 2 reads this to avoid joining MVOs about to lose their authority
+- Pass 1 records disconnections in `_pendingDisconnectedMvoIds`: Pass 2 reads this to avoid joining MVOs about to lose their authority
 - Join evaluation checks `existingJoinCount` which can change as CSOs in the same page join the same MVO
 - ISyncEngine is pure, but the *orchestrator state* between engine calls has ordering dependencies
 

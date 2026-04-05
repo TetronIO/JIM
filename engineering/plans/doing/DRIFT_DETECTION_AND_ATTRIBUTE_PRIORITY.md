@@ -177,7 +177,7 @@ With `EnforceState` flag:
 
 **Existing Infrastructure:**
 - `ContributedBySystem` navigation property exists on `MetaverseObjectAttributeValue` ([MetaverseObjectAttributeValue.cs:45](../src/JIM.Models/Core/MetaverseObjectAttributeValue.cs#L45)) - tracks which connected system contributed each attribute value
-- `ContributedBySystemId` scalar FK (added Feb 2026, commit `41116255`) — explicit `int?` property that avoids the need to `.Include(ContributedBySystem)`. All 14 attribute creation paths in `SyncRuleMappingProcessor` now set this scalar FK via a `contributingSystemId` parameter. Recall logic in `SyncTaskProcessorBase` uses the scalar FK directly (`av.ContributedBySystemId == connectedSystemId`).
+- `ContributedBySystemId` scalar FK (added Feb 2026, commit `41116255`); explicit `int?` property that avoids the need to `.Include(ContributedBySystem)`. All 14 attribute creation paths in `SyncRuleMappingProcessor` now set this scalar FK via a `contributingSystemId` parameter. Recall logic in `SyncTaskProcessorBase` uses the scalar FK directly (`av.ContributedBySystemId == connectedSystemId`).
 
 **Current Behaviour (Temporary):**
 As noted in [SyncRuleMappingProcessor.cs:56](../src/JIM.Worker/Processors/SyncRuleMappingProcessor.cs#L56):
@@ -665,7 +665,7 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 
 #### Future Phase 1: Schema and Model Changes
 
-- [x] Add `ContributedBySystemId` scalar FK to `MetaverseObjectAttributeValue` (prerequisite — Feb 2026, commit `41116255`)
+- [x] Add `ContributedBySystemId` scalar FK to `MetaverseObjectAttributeValue` (prerequisite; Feb 2026, commit `41116255`)
 - [x] Thread `contributingSystemId` through all 14 attribute creation paths in `SyncRuleMappingProcessor`
 - [ ] Add `Priority` property to `SyncRuleMapping` model (default: int.MaxValue)
 - [ ] Add `NullIsValue` property to `SyncRuleMapping` model (default: false)

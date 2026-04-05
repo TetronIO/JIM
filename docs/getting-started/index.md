@@ -1,6 +1,6 @@
 ---
 title: Getting Started
-description: Get up and running with JIM — from prerequisites through to your first identity synchronisation.
+description: Get up and running with JIM, from prerequisites through to your first identity synchronisation.
 ---
 
 # Getting Started
@@ -17,7 +17,7 @@ Whether you are deploying JIM for production use or setting up a development env
 
     ---
 
-    What you need before deploying JIM — container runtime, identity provider, and hardware considerations.
+    What you need before deploying JIM: container runtime, identity provider, and hardware considerations.
 
     [:octicons-arrow-right-24: Prerequisites](prerequisites.md)
 
@@ -43,8 +43,8 @@ Whether you are deploying JIM for production use or setting up a development env
 
 Getting JIM running involves three main steps:
 
-1. **Prepare your environment** — Ensure Docker is installed and you have access to an OpenID Connect identity provider for authentication.
-2. **Deploy JIM** — Choose from automated setup, manual Docker Compose, or air-gapped deployment depending on your environment.
-3. **Configure your first synchronisation** — Connect a source system, define sync rules, and verify data flows correctly through the metaverse.
+1. **Prepare your environment:** Ensure Docker is installed and you have access to an OpenID Connect identity provider for authentication.
+2. **Deploy JIM:** Choose from automated setup, manual Docker Compose, or air-gapped deployment depending on your environment.
+3. **Configure your first synchronisation:** Connect a source system, define sync rules, and verify data flows correctly through the metaverse.
 
 Once deployed, JIM is accessible via a web portal at `http://localhost:5200` by default. You can also interact with JIM through its REST API or the cross-platform PowerShell module.

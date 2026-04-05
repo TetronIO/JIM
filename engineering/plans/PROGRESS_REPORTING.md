@@ -17,26 +17,26 @@ The original version of this plan predates significant progress reporting work t
 
 ### Worker Progress Updates
 All processor types update `Activity.ObjectsToProcess`, `ObjectsProcessed`, and `Message` in real-time during execution via `UpdateActivityMessageAsync()` (single-row UPDATE, negligible load):
-- `SyncImportTaskProcessor` — updates throughout import phases (importing, deletions, references, saving)
-- `SyncFullSyncTaskProcessor` — sets totals at start, increments per-object and at page boundaries
-- `SyncDeltaSyncTaskProcessor` — same pattern for modified CSOs only
-- `SyncExportTaskProcessor` — uses `ExportProgressInfo` callback with phase tracking (`ExportPhase` enum)
+- `SyncImportTaskProcessor`: updates throughout import phases (importing, deletions, references, saving)
+- `SyncFullSyncTaskProcessor`: sets totals at start, increments per-object and at page boundaries
+- `SyncDeltaSyncTaskProcessor`: same pattern for modified CSOs only
+- `SyncExportTaskProcessor`: uses `ExportProgressInfo` callback with phase tracking (`ExportPhase` enum)
 
 ### API Endpoints
-- `GET /api/v1/activities/{id}` — returns `ObjectsToProcess`, `ObjectsProcessed`, `Message` during execution
-- `GET /api/v1/activities/{id}/stats` — detailed RPEI-based execution statistics
-- `GET /api/v1/schedule-executions/{id}` — step-level progress for schedule executions
+- `GET /api/v1/activities/{id}`: returns `ObjectsToProcess`, `ObjectsProcessed`, `Message` during execution
+- `GET /api/v1/activities/{id}/stats`: detailed RPEI-based execution statistics
+- `GET /api/v1/schedule-executions/{id}`: step-level progress for schedule executions
 
 ### PowerShell Progress
-- `Start-JIMRunProfile -Wait` — uses `Write-Progress` with determinate/indeterminate modes, polling every 2 seconds
-- `Start-JIMSchedule -Wait` — uses `Write-Progress` with step-level progress, polling every 5 seconds
+- `Start-JIMRunProfile -Wait`: uses `Write-Progress` with determinate/indeterminate modes, polling every 2 seconds
+- `Start-JIMSchedule -Wait`: uses `Write-Progress` with step-level progress, polling every 5 seconds
 - Both cmdlets handle timeout, authentication refresh, and terminal status detection
 
 ### Blazor UI Polling
-- `OperationsQueueTab` — 1-second `Task.Run` polling loop with change detection, `MudProgressLinear` bars
-- `OperationsHistoryTab` — 5-second polling with fingerprint-based change detection
-- `ExampleDataTemplateDetail` — 2-second `System.Threading.Timer` (tagged `POLLING_TO_REPLACE`)
-- `Logs` — 5-second auto-refresh timer
+- `OperationsQueueTab`: 1-second `Task.Run` polling loop with change detection, `MudProgressLinear` bars
+- `OperationsHistoryTab`: 5-second polling with fingerprint-based change detection
+- `ExampleDataTemplateDetail`: 2-second `System.Threading.Timer` (tagged `POLLING_TO_REPLACE`)
+- `Logs`: 5-second auto-refresh timer
 
 ## What's Outstanding
 
@@ -58,9 +58,9 @@ The original plan proposed Redis as an ephemeral progress store. After review, P
 | **Operational complexity** | Zero | Memory tuning, monitoring, TTL config |
 
 **Key reasons for this decision:**
-- JIM is single-worker architecture — Redis scaling arguments don't apply
-- Progress data is already written to PostgreSQL via `UpdateActivityMessageAsync()` — we just need to notify listeners that it changed
-- The 8KB NOTIFY payload limit is irrelevant — we send only the activity ID; clients fetch fresh state
+- JIM is single-worker architecture; Redis scaling arguments don't apply
+- Progress data is already written to PostgreSQL via `UpdateActivityMessageAsync()`; we just need to notify listeners that it changed
+- The 8KB NOTIFY payload limit is irrelevant; we send only the activity ID; clients fetch fresh state
 - No new Docker container, NuGet package, or environment variables needed
 - Aligns with JIM's principle of maximising use of existing infrastructure before adding new components
 - The original concern about "database load from progress writes" was addressed by the Phase 5 worker performance work (bulk RPEI inserts, change tracker clearing); the Activity UPDATEs are single-row and negligible
@@ -116,7 +116,7 @@ The original plan proposed Redis as an ephemeral progress store. After review, P
 
 ### Why PowerShell Keeps Polling
 
-PowerShell is an external HTTP client — it cannot subscribe to SignalR or PostgreSQL notifications. The existing `Write-Progress` with 2-second polling is the idiomatic PowerShell pattern and provides a good user experience. The Worker updates the Activity at regular intervals regardless of the notification mechanism, so polling the Activity API gives accurate, timely progress.
+PowerShell is an external HTTP client; it cannot subscribe to SignalR or PostgreSQL notifications. The existing `Write-Progress` with 2-second polling is the idiomatic PowerShell pattern and provides a good user experience. The Worker updates the Activity at regular intervals regardless of the notification mechanism, so polling the Activity API gives accurate, timely progress.
 
 If sub-second CLI updates are ever needed, a Server-Sent Events (SSE) endpoint (`GET /api/v1/activities/{id}/progress/stream`) could be added, backed by the same SignalR infrastructure. This is low priority given the current experience is already good.
 
@@ -130,7 +130,7 @@ If sub-second CLI updates are ever needed, a Server-Sent Events (SSE) endpoint (
 - Use `WHEN (OLD.* IS DISTINCT FROM NEW.*)` or column-specific checks to avoid spurious notifications
 
 **NotificationListenerService** (`IHostedService` in JIM.Web):
-- Opens a dedicated `NpgsqlConnection` (not from the pool — required for LISTEN)
+- Opens a dedicated `NpgsqlConnection` (not from the pool; required for LISTEN)
 - Executes `LISTEN activity_progress`
 - Loops on `WaitAsync()` with cancellation token support
 - Reconnects on connection failure with exponential backoff
@@ -149,10 +149,10 @@ If sub-second CLI updates are ever needed, a Server-Sent Events (SSE) endpoint (
 
 **Blazor component migration:**
 - Create a shared `ActivityProgressSubscription` service/component that wraps SignalR subscription
-- Migrate `OperationsQueueTab` — replace 1-second polling loop with hub subscription
-- Migrate `OperationsHistoryTab` — replace 5-second polling loop with hub subscription
-- Migrate `ExampleDataTemplateDetail` — replace timer (remove `POLLING_TO_REPLACE` tag)
-- Migrate `Logs` page — replace auto-refresh timer (if applicable)
+- Migrate `OperationsQueueTab`: replace 1-second polling loop with hub subscription
+- Migrate `OperationsHistoryTab`: replace 5-second polling loop with hub subscription
+- Migrate `ExampleDataTemplateDetail`: replace timer (remove `POLLING_TO_REPLACE` tag)
+- Migrate `Logs` page: replace auto-refresh timer (if applicable)
 - Keep polling as fallback: if SignalR connection drops, revert to timer-based polling until reconnected
 
 **Testing:**
@@ -173,7 +173,7 @@ If sub-second CLI updates are ever needed, a Server-Sent Events (SSE) endpoint (
 Npgsql requires a non-pooled connection for `LISTEN`/`WaitAsync()`. The `NotificationListenerService` should open its own connection using the same connection string but with `Pooling=false` or a separate `NpgsqlDataSource`. This connection stays open for the lifetime of the service.
 
 ### Notification Deduplication
-Multiple rapid Activity UPDATEs (e.g., during fast batch processing) may generate many notifications. The listener should debounce — collect notifications over a short window (~200ms) and push unique activity IDs to SignalR. This prevents UI thrashing during high-throughput processing.
+Multiple rapid Activity UPDATEs (e.g., during fast batch processing) may generate many notifications. The listener should debounce: collect notifications over a short window (~200ms) and push unique activity IDs to SignalR. This prevents UI thrashing during high-throughput processing.
 
 ### Blazor Server Circuit
 Since JIM uses Blazor Server, the SignalR circuit for Blazor is already established. The `ActivityProgressHub` can be a separate hub on the same connection, or notifications can be pushed through the Blazor circuit using `IJSRuntime` or a scoped service. The separate hub approach is cleaner and allows non-Blazor consumers in the future.
@@ -196,7 +196,7 @@ If the LISTEN connection drops or the trigger is missing (e.g., database restore
 **Mitigation**: `NotificationListenerService` implements health checks and automatic reconnection with exponential backoff. Falls back to polling if reconnection fails.
 
 **Risk**: High-frequency notifications during large imports overwhelm SignalR
-**Mitigation**: Debounce notifications (~200ms window). Send only activity IDs, not full payloads — clients fetch state on demand.
+**Mitigation**: Debounce notifications (~200ms window). Send only activity IDs, not full payloads; clients fetch state on demand.
 
 **Risk**: PostgreSQL connection limit pressure from dedicated LISTEN connection
 **Mitigation**: Single additional connection. JIM's single-worker architecture means at most 1 extra connection.

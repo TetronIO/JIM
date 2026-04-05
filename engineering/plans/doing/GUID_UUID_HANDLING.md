@@ -241,9 +241,9 @@ Implemented as part of OpenLDAP integration support.
 
 - Post-create fetch correctly handles `entryUUID` as a string for non-AD directories
 - AD/Samba export continues to use `IdentifierParser.FromMicrosoftBytes()` for binary `objectGUID`
-- **Note:** Binary RFC 4122 UUID export for custom attributes deferred to Phase 5 — OpenLDAP's standard identifier (`entryUUID`) is string-based, so no binary byte order conversion is needed in practice
+- **Note:** Binary RFC 4122 UUID export for custom attributes deferred to Phase 5; OpenLDAP's standard identifier (`entryUUID`) is string-based, so no binary byte order conversion is needed in practice
 
-**4.3 `GuidByteOrder` metadata** — deferred to Phase 5
+**4.3 `GuidByteOrder` metadata**: deferred to Phase 5
 
 Not needed for OpenLDAP (string-based identifiers). Will be implemented when SQL/database connectors introduce binary UUID columns that require explicit byte order configuration.
 
@@ -276,20 +276,20 @@ When importing/exporting `uuid` columns via a PostgreSQL database connector:
 **5.3 Oracle connector RAW(16) handling**
 
 When importing/exporting `RAW(16)` columns via an Oracle database connector:
-- Import: Use `IdentifierParser.FromRfc4122Bytes()` — Oracle uses big-endian (RFC 4122-like) byte order
+- Import: Use `IdentifierParser.FromRfc4122Bytes()`: Oracle uses big-endian (RFC 4122-like) byte order
 - Export: Use `IdentifierParser.ToRfc4122Bytes()` for writing RAW(16) values
 
 **5.4 SQL Server connector uniqueidentifier handling**
 
 When importing/exporting `uniqueidentifier` columns via a SQL Server database connector:
-- Import: Use `IdentifierParser.FromMicrosoftBytes()` — SQL Server uses Microsoft byte order (same as .NET `Guid`)
-- Export: Use `Guid.ToByteArray()` / `IdentifierParser.ToMicrosoftBytes()` — no conversion needed
+- Import: Use `IdentifierParser.FromMicrosoftBytes()`: SQL Server uses Microsoft byte order (same as .NET `Guid`)
+- Export: Use `Guid.ToByteArray()` / `IdentifierParser.ToMicrosoftBytes()`: no conversion needed
 
 **5.5 MySQL connector UUID handling**
 
 MySQL stores UUIDs in varying formats:
-- `CHAR(36)`: String representation — no binary handling needed
-- `BINARY(16)`: Byte order varies by application convention — use `GuidByteOrder` metadata to determine the correct conversion
+- `CHAR(36)`: String representation; no binary handling needed
+- `BINARY(16)`: Byte order varies by application convention; use `GuidByteOrder` metadata to determine the correct conversion
 
 ---
 

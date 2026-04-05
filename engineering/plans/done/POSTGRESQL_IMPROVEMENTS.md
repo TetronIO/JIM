@@ -22,7 +22,7 @@
 
 | # | Severity | Finding |
 |---|----------|---------|
-| 1 | Medium | Limited custom indexes — only 2 explicit indexes defined |
+| 1 | Medium | Limited custom indexes; only 2 explicit indexes defined |
 | 2 | Low | No explicit connection pooling configuration (Npgsql defaults used) |
 | 3 | Low | No query timeout protection (`statement_timeout` not set) |
 | 4 | Low | No container health check on PostgreSQL container |

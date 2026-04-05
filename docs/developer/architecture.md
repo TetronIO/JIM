@@ -12,7 +12,7 @@ JIM implements an enterprise identity management system using the metaverse patt
 
 ## Layered Architecture
 
-JIM follows a strict N-tier layered architecture. Upper layers depend on lower layers — never the reverse.
+JIM follows a strict N-tier layered architecture. Upper layers depend on lower layers, never the reverse.
 
 | Layer | Project | Responsibility |
 |-------|---------|---------------|
@@ -24,9 +24,9 @@ JIM follows a strict N-tier layered architecture. Upper layers depend on lower l
 
 **Rules:**
 
-- Respect layer boundaries — the UI/API layer must only call `JimApplication`, never repository classes directly
+- Respect layer boundaries: the UI/API layer must only call `JimApplication`, never repository classes directly
 - The application layer depends on `IRepository`, not concrete implementations
-- All models and POCOs live in `JIM.Models` — never inline in service files
+- All models and POCOs live in `JIM.Models`, never inline in service files
 
 ## Container Diagram
 
@@ -34,12 +34,12 @@ JIM follows a strict N-tier layered architecture. Upper layers depend on lower l
 
 ## Metaverse Pattern
 
-The metaverse is the authoritative identity repository at the centre of JIM's architecture. All identity operations flow through the metaverse — there is never a direct sync between connected systems.
+The metaverse is the authoritative identity repository at the centre of JIM's architecture. All identity operations flow through the metaverse; there is never a direct sync between connected systems.
 
-- **MetaverseObject** — Central identity entity (users, groups, custom types)
-- **ConnectedSystem** — External system synchronised with the metaverse
-- **SyncRule** — Bidirectional mappings between connected systems and the metaverse
-- **Staging Areas** — Import/export staging for transactional integrity
+- **MetaverseObject:** Central identity entity (users, groups, custom types)
+- **ConnectedSystem:** External system synchronised with the metaverse
+- **SyncRule:** Bidirectional mappings between connected systems and the metaverse
+- **Staging Areas:** Import/export staging for transactional integrity
 
 ```mermaid
 flowchart LR
@@ -122,8 +122,8 @@ The Worker is the engine that processes all synchronisation operations. Its desi
 
 ### Core Interfaces
 
-- **`ISyncEngine`** — Stateless domain engine with methods for join resolution, projection, attribute flow, scoping, and more. Zero I/O dependencies; receives all data as parameters and returns results. Fully unit-testable without mocks.
-- **`ISyncRepository`** — Data access boundary with approximately 80 methods. Production implementation: `JIM.PostgresData.Repositories.SyncRepository`. Test implementation: `JIM.InMemoryData.SyncRepository`.
+- **`ISyncEngine`:** Stateless domain engine with methods for join resolution, projection, attribute flow, scoping, and more. Zero I/O dependencies; receives all data as parameters and returns results. Fully unit-testable without mocks.
+- **`ISyncRepository`:** Data access boundary with approximately 80 methods. Production implementation: `JIM.PostgresData.Repositories.SyncRepository`. Test implementation: `JIM.InMemoryData.SyncRepository`.
 
 ### Dependency Injection
 
@@ -131,15 +131,15 @@ The Worker and Scheduler use `IJimApplicationFactory` and `IConnectorFactory` fo
 
 ### Bulk Write Performance
 
-- **`ParallelBatchWriter`** — Splits bulk writes across N concurrent PostgreSQL connections
-- **COPY binary protocol** — Used for high-volume inserts (CSO creates, MVO creates, RPEIs, sync outcomes) via Npgsql's binary COPY API
+- **`ParallelBatchWriter`:** Splits bulk writes across N concurrent PostgreSQL connections
+- **COPY binary protocol:** Used for high-volume inserts (CSO creates, MVO creates, RPEIs, sync outcomes) via Npgsql's binary COPY API
 
 ### Export Parallelism
 
 Export parallelism operates on two independent axes:
 
-1. **LDAP Connector Pipelining** — Multiple LDAP operations execute concurrently within a single export batch using `SemaphoreSlim`-based throttling
-2. **Parallel Batch Processing** — Multiple export batches process concurrently with separate `IRepository` and `IConnector` instances per batch, gated by the `SupportsParallelExport` connector capability
+1. **LDAP Connector Pipelining:** Multiple LDAP operations execute concurrently within a single export batch using `SemaphoreSlim`-based throttling
+2. **Parallel Batch Processing:** Multiple export batches process concurrently with separate `IRepository` and `IConnector` instances per batch, gated by the `SupportsParallelExport` connector capability
 
 ## Process Diagrams
 
@@ -147,22 +147,22 @@ Detailed Mermaid diagrams document the runtime behaviour of JIM's synchronisatio
 
 ### Synchronisation
 
-- [Full Sync CSO Processing](diagrams/FULL_SYNC_CSO_PROCESSING.md) — Core per-CSO decision tree (scoping, join, projection, attribute flow, drift detection)
-- [Delta Sync Flow](diagrams/DELTA_SYNC_FLOW.md) — How delta sync differs from full sync (watermark, early exit, CSO selection)
-- [Full Import Flow](diagrams/FULL_IMPORT_FLOW.md) — Object import, duplicate detection, deletion detection, pending export reconciliation
+- [Full Sync CSO Processing](diagrams/FULL_SYNC_CSO_PROCESSING.md): Core per-CSO decision tree (scoping, join, projection, attribute flow, drift detection)
+- [Delta Sync Flow](diagrams/DELTA_SYNC_FLOW.md): How delta sync differs from full sync (watermark, early exit, CSO selection)
+- [Full Import Flow](diagrams/FULL_IMPORT_FLOW.md): Object import, duplicate detection, deletion detection, pending export reconciliation
 
 ### Export
 
-- [Export Execution Flow](diagrams/EXPORT_EXECUTION_FLOW.md) — Batching, parallelism, deferred reference resolution, retry with backoff
-- [Pending Export Lifecycle](diagrams/PENDING_EXPORT_LIFECYCLE.md) — Full lifecycle from creation through execution to confirmation
+- [Export Execution Flow](diagrams/EXPORT_EXECUTION_FLOW.md): Batching, parallelism, deferred reference resolution, retry with backoff
+- [Pending Export Lifecycle](diagrams/PENDING_EXPORT_LIFECYCLE.md): Full lifecycle from creation through execution to confirmation
 
 ### Worker and Scheduling
 
-- [Worker Task Lifecycle](diagrams/WORKER_TASK_LIFECYCLE.md) — Polling, dispatch, heartbeat, cancellation, SafeFailActivityAsync fallback
-- [Schedule Execution Lifecycle](diagrams/SCHEDULE_EXECUTION_LIFECYCLE.md) — Step groups, worker-driven advancement, recovery mechanisms
+- [Worker Task Lifecycle](diagrams/WORKER_TASK_LIFECYCLE.md): Polling, dispatch, heartbeat, cancellation, SafeFailActivityAsync fallback
+- [Schedule Execution Lifecycle](diagrams/SCHEDULE_EXECUTION_LIFECYCLE.md): Step groups, worker-driven advancement, recovery mechanisms
 
 ### Supporting Concepts
 
-- [Connector Lifecycle](diagrams/CONNECTOR_LIFECYCLE.md) — Interface hierarchy, resolution, import/export open/close lifecycles
-- [Activity and RPEI Flow](diagrams/ACTIVITY_AND_RPEI_FLOW.md) — Activity creation, RPEI accumulation, status determination
-- [MVO Deletion and Grace Period](diagrams/MVO_DELETION_AND_GRACE_PERIOD.md) — Deletion rules, grace periods, housekeeping cleanup
+- [Connector Lifecycle](diagrams/CONNECTOR_LIFECYCLE.md): Interface hierarchy, resolution, import/export open/close lifecycles
+- [Activity and RPEI Flow](diagrams/ACTIVITY_AND_RPEI_FLOW.md): Activity creation, RPEI accumulation, status determination
+- [MVO Deletion and Grace Period](diagrams/MVO_DELETION_AND_GRACE_PERIOD.md): Deletion rules, grace periods, housekeeping cleanup

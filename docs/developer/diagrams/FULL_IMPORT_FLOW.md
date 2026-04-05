@@ -1,12 +1,12 @@
 # Full Import Flow
 
-> Last updated: 2026-04-01 — JIM v0.8.0
+> Last updated: 2026-04-01, JIM v0.8.0
 
 This diagram shows how objects are imported from a connected system into JIM's connector space. Both Full Import and Delta Import use the same processor (`SyncImportTaskProcessor`); the connector handles delta filtering internally via watermark/persisted data.
 
 Since v0.7.1, the import processor uses `ISyncServer` for orchestration (settings, caching, reconciliation) and `ISyncRepository` for dedicated bulk data access (CSO writes, RPEIs).
 
-Since v0.8.0, LDAP connectors for OpenLDAP/Generic directories import using **parallel connections** — each container+objectType combination runs on its own dedicated `LdapConnection`, bypassing RFC 2696 paging cookie limitations (#72). CSO persistence uses **two-phase parallel writes** when writing large batches (#427). Run profiles can optionally **target a specific partition**, filtering which containers are imported (#353).
+Since v0.8.0, LDAP connectors for OpenLDAP/Generic directories import using **parallel connections**: each container+objectType combination runs on its own dedicated `LdapConnection`, bypassing RFC 2696 paging cookie limitations (#72). CSO persistence uses **two-phase parallel writes** when writing large batches (#427). Run profiles can optionally **target a specific partition**, filtering which containers are imported (#353).
 
 ## Overall Import Flow
 
@@ -140,9 +140,9 @@ flowchart TD
 
 ## Parallel LDAP Import (#72)
 
-For OpenLDAP and Generic LDAP directories, RFC 2696 paging cookies are connection-scoped — starting a new search on the same connection invalidates all outstanding paging cursors. To work around this, the LDAP connector gives each container+objectType combination its own dedicated `LdapConnection` and runs them concurrently, capped by the Import Concurrency setting (default 4, max 8). Each connection fully drains all pages for its combo before being disposed.
+For OpenLDAP and Generic LDAP directories, RFC 2696 paging cookies are connection-scoped; starting a new search on the same connection invalidates all outstanding paging cursors. To work around this, the LDAP connector gives each container+objectType combination its own dedicated `LdapConnection` and runs them concurrently, capped by the Import Concurrency setting (default 4, max 8). Each connection fully drains all pages for its combo before being disposed.
 
-AD directories are unaffected — they support multiple concurrent paged searches on a single connection and continue to use the original multi-combo-per-page logic.
+AD directories are unaffected; they support multiple concurrent paged searches on a single connection and continue to use the original multi-combo-per-page logic.
 
 ```mermaid
 flowchart TD
@@ -159,7 +159,7 @@ flowchart TD
 
     ComboTask --> WaitAll[Task.WaitAll<br/>with cancellation support]
     WaitAll --> Merge[Merge ImportObjects<br/>from all combo results]
-    Merge --> Done([Return combined result<br/>No pagination tokens —<br/>processor sees single-page result])
+    Merge --> Done([Return combined result<br/>No pagination tokens;<br/>processor sees single-page result])
 ```
 
 **Key properties**: Each combo runs independently with its own paging cursor. The import processor receives the merged result as a single page (no cross-call pagination tokens). If any combo fails, the exception propagates and the import is aborted.
@@ -227,8 +227,8 @@ flowchart TD
 
 - **PendingProvisioning transition**: CSOs created during export (provisioning) start with `PendingProvisioning` status. The confirming import transitions them to `Normal` when the object is confirmed to exist in the target system.
 
-- **Parallel LDAP connections (#72)**: OpenLDAP/Generic directories use connection-scoped RFC 2696 paging cookies, so each container+objectType combo gets its own `LdapConnection`. Concurrency is capped by the Import Concurrency setting (default 4, max 8). AD directories are unaffected — they multiplex paged searches on a single connection. When the connection factory is unavailable or concurrency is 1, the connector falls back to sequential single-connection processing.
+- **Parallel LDAP connections (#72)**: OpenLDAP/Generic directories use connection-scoped RFC 2696 paging cookies, so each container+objectType combo gets its own `LdapConnection`. Concurrency is capped by the Import Concurrency setting (default 4, max 8). AD directories are unaffected; they multiplex paged searches on a single connection. When the connection factory is unavailable or concurrency is 1, the connector falls back to sequential single-connection processing.
 
-- **Two-phase parallel write (#427)**: CSO persistence splits INSERT into two committed phases — CSO rows first, then attribute values — so that cross-partition FK references (ReferenceValueId pointing to a CSO on a different parallel connection) succeed without post-hoc fixup. Small batches (< parallelism x 50) bypass this and write on a single connection. Write parallelism defaults to `Environment.ProcessorCount` (minimum 2) and is tuneable via `JIM_WRITE_PARALLELISM`.
+- **Two-phase parallel write (#427)**: CSO persistence splits INSERT into two committed phases (CSO rows first, then attribute values) so that cross-partition FK references (ReferenceValueId pointing to a CSO on a different parallel connection) succeed without post-hoc fixup. Small batches (< parallelism x 50) bypass this and write on a single connection. Write parallelism defaults to `Environment.ProcessorCount` (minimum 2) and is tuneable via `JIM_WRITE_PARALLELISM`.
 
 - **Partition-scoped imports (#353)**: Run profiles can target a specific partition via `GetTargetPartitions()`. When set, only containers within that partition are imported; otherwise all selected partitions are included. This applies to both the import data collection and deletion detection scope.

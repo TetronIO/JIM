@@ -11,27 +11,27 @@ JIM's sync pipeline cannot process environments with more than ~50,000 identity 
 
 Two root causes have been empirically identified:
 
-1. **EF Core change tracker accumulation** — A single `DbContext` lives for the entire sync run. Every entity touched (CSOs, MVOs, attribute values, RPEIs) remains tracked. At 100K objects with ~5 entities each, the tracker grows to 500K+ entries, consuming multiple GB and slowing every subsequent `SaveChanges` call.
+1. **EF Core change tracker accumulation**: A single `DbContext` lives for the entire sync run. Every entity touched (CSOs, MVOs, attribute values, RPEIs) remains tracked. At 100K objects with ~5 entities each, the tracker grows to 500K+ entries, consuming multiple GB and slowing every subsequent `SaveChanges` call.
 
-2. **Export evaluation cache** — `BuildExportEvaluationCacheAsync` loads ALL connected system objects and their attribute values for every target system into memory before processing begins. For a deployment with 100K objects and 2 target systems, this is ~200K CSOs + attribute values loaded upfront.
+2. **Export evaluation cache**: `BuildExportEvaluationCacheAsync` loads ALL connected system objects and their attribute values for every target system into memory before processing begins. For a deployment with 100K objects and 2 target systems, this is ~200K CSOs + attribute values loaded upfront.
 
-Together, these cause superlinear memory growth — doubling the object count more than doubles memory consumption. The current architecture has no mechanism to bound memory usage regardless of dataset size.
+Together, these cause superlinear memory growth; doubling the object count more than doubles memory consumption. The current architecture has no mechanism to bound memory usage regardless of dataset size.
 
 ## Goals
 
 - JIM must be able to Full Sync 100,000+ identity objects without crashing
-- Memory consumption during sync must be bounded — proportional to page size, not total dataset size
+- Memory consumption during sync must be bounded, proportional to page size, not total dataset size
 - No regression in sync correctness (attribute flow, reference resolution, export evaluation, change tracking)
 - No regression in sync performance for deployments under 50K objects
 - Existing integration tests (Scenarios 1-8, all templates up to Large) must continue to pass
 
 ## Non-Goals
 
-- Horizontal scaling / multi-worker parallelism — that is a separate future initiative
-- Intra-page parallelism (processing multiple CSOs concurrently within a page) — the sync engine's two-pass design and reference resolution ordering make this complex; defer
-- Replacing the `JimApplication` facade — Option A already extracted `ISyncEngine` and `ISyncRepository`; the facade can be simplified later
-- Changing the sync page size or processing order — these are orthogonal tunables
-- Delta Sync optimisation — Delta Sync processes small changesets by nature and is not memory-constrained; however, the same architectural patterns should apply for consistency
+- Horizontal scaling / multi-worker parallelism: that is a separate future initiative
+- Intra-page parallelism (processing multiple CSOs concurrently within a page): the sync engine's two-pass design and reference resolution ordering make this complex; defer
+- Replacing the `JimApplication` facade: Option A already extracted `ISyncEngine` and `ISyncRepository`; the facade can be simplified later
+- Changing the sync page size or processing order: these are orthogonal tunables
+- Delta Sync optimisation: Delta Sync processes small changesets by nature and is not memory-constrained; however, the same architectural patterns should apply for consistency
 
 ## User Stories
 
@@ -84,7 +84,7 @@ Together, these cause superlinear memory growth — doubling the object count mo
 
 **Given**: An MVO on page 50 has export rules targeting 2 connected systems
 **When**: Export evaluation runs for this MVO
-**Then**: The correct target CSOs are found and attribute changes are evaluated identically to the current architecture — no missing exports, no phantom exports
+**Then**: The correct target CSOs are found and attribute changes are evaluated identically to the current architecture, with no missing exports, no phantom exports
 
 ### Scenario 4: Cross-Page Reference Resolution
 
@@ -101,7 +101,7 @@ Together, these cause superlinear memory growth — doubling the object count mo
 ## Constraints
 
 - Must preserve the `ISyncEngine` / `ISyncRepository` boundary established by Option A
-- Must not break the in-memory test repository (`JIM.InMemoryData`) — unit and workflow tests must continue to work
+- Must not break the in-memory test repository (`JIM.InMemoryData`); unit and workflow tests must continue to work
 - Must not add EF Core migrations (this is a runtime behaviour change, not a schema change)
 - The worker must remain a single-process, single-threaded-per-task design (horizontal scaling is a separate initiative)
 - Must use British English throughout
@@ -110,17 +110,17 @@ Together, these cause superlinear memory growth — doubling the object count mo
 
 | Area | Impact |
 |------|--------|
-| Worker | `SyncFullSyncTaskProcessor` — scoped DbContext per page, restructured page loop |
-| Worker | `SyncDeltaSyncTaskProcessor` — same treatment as Full Sync for consistency |
-| Application | `ExportEvaluationServer.BuildExportEvaluationCacheAsync` — paged/streaming cache |
-| Application | `SyncServer` — may need new methods for page-scoped repository creation |
-| Data | `ISyncRepository` — may need factory/scope methods for per-page context |
-| PostgresData | `PostgresDataRepository` — DbContext lifecycle changes |
+| Worker | `SyncFullSyncTaskProcessor`: scoped DbContext per page, restructured page loop |
+| Worker | `SyncDeltaSyncTaskProcessor`: same treatment as Full Sync for consistency |
+| Application | `ExportEvaluationServer.BuildExportEvaluationCacheAsync`: paged/streaming cache |
+| Application | `SyncServer`: may need new methods for page-scoped repository creation |
+| Data | `ISyncRepository`: may need factory/scope methods for per-page context |
+| PostgresData | `PostgresDataRepository`: DbContext lifecycle changes |
 | Tests | New unit tests for bounded memory behaviour; existing tests must pass |
 
 ## Dependencies
 
-- Option A (Surgical Refactor) must be complete — it is (#394, #422, #430)
+- Option A (Surgical Refactor) must be complete (it is: #394, #422, #430)
 - No external dependencies
 
 ## Open Questions
@@ -149,7 +149,7 @@ Together, these cause superlinear memory growth — doubling the object count mo
 
 ## Additional Context
 
-- **Empirical memory findings (April 2026)**: Documented in [`docs/plans/done/WORKER_REDESIGN_OPTIONS.md`](../plans/done/WORKER_REDESIGN_OPTIONS.md) — XLarge OOM at 15.8 GB, root causes confirmed via investigation
+- **Empirical memory findings (April 2026)**: Documented in [`docs/plans/done/WORKER_REDESIGN_OPTIONS.md`](../plans/done/WORKER_REDESIGN_OPTIONS.md): XLarge OOM at 15.8 GB, root causes confirmed via investigation
 - **Option A completion**: The surgical refactor (#394, #422, #430) extracted `ISyncEngine`, `ISyncRepository`, and `SyncServer`, providing clean boundaries for this work
-- **Issue #383**: Worker performance optimisations — subtask 3.1 (streaming/paged sync queries) was deferred to this initiative; subtasks 3.2, 3.3 were discounted; subtask 3.4 (O(1) removal check) was implemented
+- **Issue #383**: Worker performance optimisations: subtask 3.1 (streaming/paged sync queries) was deferred to this initiative; subtasks 3.2, 3.3 were discounted; subtask 3.4 (O(1) removal check) was implemented
 - **Current architecture**: Single DbContext per sync run, 13 batch collections flushed per page, export evaluation cache loaded once at start, change tracker only cleared after MVO deletions

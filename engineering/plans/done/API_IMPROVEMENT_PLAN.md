@@ -1,7 +1,7 @@
 # JIM API Improvement Plan
 
 - **Status:** Done
-- **Note:** Phases 1-7 complete. Phase 6.4 (Rate Limiting), Phase 8.1 (Integration Tests), and Phase 8.2 (PowerShell Module) will not be done under this plan — tracked separately in GitHub Issues #137 and #138.
+- **Note:** Phases 1-7 complete. Phase 6.4 (Rate Limiting), Phase 8.1 (Integration Tests), and Phase 8.2 (PowerShell Module) will not be done under this plan; tracked separately in GitHub Issues #137 and #138.
 
 > **Goal**: Build a standards-compliant RESTful API suitable for PowerShell module consumption.
 >

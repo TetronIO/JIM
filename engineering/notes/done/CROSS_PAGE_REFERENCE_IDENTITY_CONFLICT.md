@@ -41,7 +41,7 @@ Activity → RunProfileExecutionItems → ConnectedSystemObject → MetaverseObj
 ## Architecture Constraints
 
 - **Mocked DbContext in tests**: Unit tests use `Mock<JimDbContext>` where `Entry()`, `ChangeTracker`, and `ChangeTracker.TrackGraph` are not available (throw `NullReferenceException`). All production-path fixes must use try/catch with fallback to original behaviour for test compatibility.
-- **Shadow FK for MetaverseObject.Type**: No explicit `TypeId` property — EF uses a shadow property. Setting `Entry(mvo).State = Modified` preserves the FK independently of the `Type` navigation property.
+- **Shadow FK for MetaverseObject.Type**: No explicit `TypeId` property; EF uses a shadow property. Setting `Entry(mvo).State = Modified` preserves the FK independently of the `Type` navigation property.
 - **`IsKeySet` property**: For `MetaverseObjectAttributeValue`, `IsKeySet` distinguishes existing (Modified) from new (Added) attribute values.
 
 ## Error Progression Timeline
@@ -78,7 +78,7 @@ The error manifests at different points in the cross-page resolution flow depend
 
 **Problem**: `DeletePendingExportsAsync` loads PE entities via query with Include chains, creating fresh MetaverseAttribute instances that conflict with instances already tracked from the cross-page CSO query.
 
-**Fix**: New method `DeletePendingExportsByConnectedSystemObjectIdsAsync` uses raw SQL `DELETE` by CSO IDs — never loads entities into the change tracker.
+**Fix**: New method `DeletePendingExportsByConnectedSystemObjectIdsAsync` uses raw SQL `DELETE` by CSO IDs; never loads entities into the change tracker.
 
 ### Fix 4: MetaverseRepository.UpdateMetaverseObjectsAsync ✅ RESOLVED Stage 3 (with Attempts 5-11)
 
@@ -92,7 +92,7 @@ The error manifests at different points in the cross-page resolution flow depend
 
 ### Attempt 1: Remove `.ThenInclude(mvo => mvo!.Type)` from cross-page query ❌
 
-**File**: `ConnectedSystemRepository.cs` — `GetConnectedSystemObjectsForReferenceResolutionAsync`
+**File**: `ConnectedSystemRepository.cs`: `GetConnectedSystemObjectsForReferenceResolutionAsync`
 
 **Rationale**: Don't load `Type` navigation, so graph traversal can't reach it.
 
@@ -120,7 +120,7 @@ The error manifests at different points in the cross-page resolution flow depend
 
 **Rationale**: Use `TrackGraph` callback to set `MetaverseObjectType`/`MetaverseAttribute` to `Unchanged` instead of `Modified`, preventing join table re-insertion.
 
-**Result**: Failed. `TrackGraph` still visits the nodes — when MVO #2 shares the same `MetaverseAttribute` as MVO #1, the second `TrackGraph` call finds an already-tracked entity and throws the identity conflict error.
+**Result**: Failed. `TrackGraph` still visits the nodes; when MVO #2 shares the same `MetaverseAttribute` as MVO #1, the second `TrackGraph` call finds an already-tracked entity and throws the identity conflict error.
 
 ### Attempt 5: `Entry().State` on MVO + individual AttributeValues ❌
 
@@ -140,9 +140,9 @@ The error manifests at different points in the cross-page resolution flow depend
 
 **Problem discovered**: The detach was applied unconditionally, breaking the normal per-page sync path (where MVOs are already tracked). Workflow test `DeltaSync_AfterDeltaImportWithMembershipChange_ProcessesChangedCsoAsync` failed because detaching MetaverseAttribute entities prevented EF from correctly persisting new attribute values that reference those attributes.
 
-**Fix**: Added `anyDetached` check — only use the special Entry().State + detach path when MVOs are actually detached (post-ClearChangeTracker). Normal per-page sync uses standard `UpdateRange`.
+**Fix**: Added `anyDetached` check; only use the special Entry().State + detach path when MVOs are actually detached (post-ClearChangeTracker). Normal per-page sync uses standard `UpdateRange`.
 
-**Result**: Integration test still failed at "(106 / 106) - saving changes". Detaching MetaverseAttribute/MetaverseObjectType from the tracker only helps for the `SaveChangesAsync` in `UpdateMetaverseObjectsAsync`. Subsequent `SaveChangesAsync` calls in the flush sequence (e.g. `UpdateActivityAsync`) re-discover MetaverseAttribute via navigation properties in `MetaverseObjectChange` entities added by `CreatePendingMvoChangeObjectsAsync`. The detach is not persistent — `DetectChanges` re-traverses navigation properties on every `SaveChangesAsync`.
+**Result**: Integration test still failed at "(106 / 106) - saving changes". Detaching MetaverseAttribute/MetaverseObjectType from the tracker only helps for the `SaveChangesAsync` in `UpdateMetaverseObjectsAsync`. Subsequent `SaveChangesAsync` calls in the flush sequence (e.g. `UpdateActivityAsync`) re-discover MetaverseAttribute via navigation properties in `MetaverseObjectChange` entities added by `CreatePendingMvoChangeObjectsAsync`. The detach is not persistent; `DetectChanges` re-traverses navigation properties on every `SaveChangesAsync`.
 
 ### Attempt 7: `Entry().State` + `AutoDetectChangesEnabled = false` for entire flush ❌
 
@@ -150,9 +150,9 @@ The error manifests at different points in the cross-page resolution flow depend
 
 **Rationale**: Disable `AutoDetectChangesEnabled` for the entire flush sequence to prevent `DetectChanges` from discovering conflicting instances.
 
-**Result**: Integration test still failed. **Stack trace revealed the error was NOT in the flush sequence** — it was at `SyncTaskProcessorBase.cs:line 1310` in `UpdateActivityMessageAsync` which was called BEFORE the `SetAutoDetectChangesEnabled(false)` call. The activity status message update ("saving changes") triggers `SaveChangesAsync` → `DetectChanges` while the tracker already contains conflicting MetaverseAttribute instances accumulated during batch processing.
+**Result**: Integration test still failed. **Stack trace revealed the error was NOT in the flush sequence**: it was at `SyncTaskProcessorBase.cs:line 1310` in `UpdateActivityMessageAsync` which was called BEFORE the `SetAutoDetectChangesEnabled(false)` call. The activity status message update ("saving changes") triggers `SaveChangesAsync` → `DetectChanges` while the tracker already contains conflicting MetaverseAttribute instances accumulated during batch processing.
 
-**Key learning**: The stack trace is essential — the error location was NOT where we expected. The `AutoDetectChangesEnabled = false` was correctly placed around the flush, but the status message update BEFORE it was the actual failure point.
+**Key learning**: The stack trace is essential; the error location was NOT where we expected. The `AutoDetectChangesEnabled = false` was correctly placed around the flush, but the status message update BEFORE it was the actual failure point.
 
 ### Attempt 8: Move `AutoDetectChangesEnabled = false` before status message update ❌
 
@@ -160,7 +160,7 @@ The error manifests at different points in the cross-page resolution flow depend
 
 **Rationale**: Based on the stack trace from Attempt 7, the error was at `UpdateActivityMessageAsync` before the disable. Moving `SetAutoDetectChangesEnabled(false)` earlier covers the status update too.
 
-**Result**: Integration test still failed. **Stack trace revealed the error moved AGAIN** — now at `SyncFullSyncTaskProcessor.cs:line 212`, which is `UpdateActivityAsync` called AFTER `ResolveCrossPageReferencesAsync` returns. The `finally` block restores `AutoDetectChangesEnabled = true`, but the tracker still contains conflicting MetaverseAttribute instances from the cross-page resolution. The next `SaveChangesAsync` in the caller's flow triggers the conflict.
+**Result**: Integration test still failed. **Stack trace revealed the error moved AGAIN**: now at `SyncFullSyncTaskProcessor.cs:line 212`, which is `UpdateActivityAsync` called AFTER `ResolveCrossPageReferencesAsync` returns. The `finally` block restores `AutoDetectChangesEnabled = true`, but the tracker still contains conflicting MetaverseAttribute instances from the cross-page resolution. The next `SaveChangesAsync` in the caller's flow triggers the conflict.
 
 **Key learning**: Disabling `AutoDetectChangesEnabled` only helps during the disabled period. Once restored, the tracker's polluted state persists and the next `SaveChangesAsync` fails. The tracker needs to be CLEANED after cross-page resolution, not just temporarily blinded.
 
@@ -186,13 +186,13 @@ The error manifests at different points in the cross-page resolution flow depend
 
 **File**: `ConnectedSystemRepository.cs`
 
-**Rationale**: Same pattern as Activity and MVO fixes — use `Entry().State = Modified` for detached ConnectedSystem to avoid graph traversal through CSO → MVO → Type → Attributes.
+**Rationale**: Same pattern as Activity and MVO fixes; use `Entry().State = Modified` for detached ConnectedSystem to avoid graph traversal through CSO → MVO → Type → Attributes.
 
-**Result**: Full Sync cross-page resolution now completes successfully. However, a DIFFERENT activity ("Target Delta Confirming Import") fails with a `ConnectedSystemObjectTypeAttribute` identity conflict at `UpdateUntrackedPendingExportsAsync`. This is a separate code path unrelated to `ClearChangeTracker` — see Fix 5 below.
+**Result**: Full Sync cross-page resolution now completes successfully. However, a DIFFERENT activity ("Target Delta Confirming Import") fails with a `ConnectedSystemObjectTypeAttribute` identity conflict at `UpdateUntrackedPendingExportsAsync`. This is a separate code path unrelated to `ClearChangeTracker`: see Fix 5 below.
 
 ### Fix 5: UpdateUntrackedPendingExportsAsync graph traversal ✅ RESOLVED
 
-**File**: `ConnectedSystemRepository.cs` — `UpdateUntrackedPendingExportsAsync`
+**File**: `ConnectedSystemRepository.cs`: `UpdateUntrackedPendingExportsAsync`
 
 **Problem**: When an untracked `PendingExport` (loaded via `AsNoTracking()`) is not found in the change tracker, `Update(untrackedExport)` traverses the full graph: PendingExport → AttributeValueChanges → Attribute (ConnectedSystemObjectTypeAttribute). Multiple PendingExports sharing the same `ConnectedSystemObjectTypeAttribute` cause identity conflicts. Same issue for `Update(attrChange)` on untracked `PendingExportAttributeValueChange` entities.
 
@@ -208,13 +208,13 @@ The error manifests at different points in the cross-page resolution flow depend
 
 | Method | Graph Traversal | Shared Entity Handling |
 |--------|----------------|----------------------|
-| `Update()` / `UpdateRange()` | Full graph — marks everything as Modified/Added | Throws if same entity reached twice from different roots |
-| `TrackGraph()` | Full graph — calls callback per node | Throws if same entity already tracked (even with Unchanged state) |
-| `Entry().State = X` | **None** — attaches only that single entity | Safe — never visits navigation properties |
+| `Update()` / `UpdateRange()` | Full graph; marks everything as Modified/Added | Throws if same entity reached twice from different roots |
+| `TrackGraph()` | Full graph; calls callback per node | Throws if same entity already tracked (even with Unchanged state) |
+| `Entry().State = X` | **None**: attaches only that single entity | Safe; never visits navigation properties |
 
 ### Shadow FKs and `AsNoTracking()`
 
-When using `Entry().State = Modified` on entities loaded via `AsNoTracking()`, shadow FK values are NOT preserved. Shadow properties (FKs without explicit C# properties) are only maintained by the change tracker — `AsNoTracking()` discards them. Must manually set shadow FKs via `Entry(entity).Property("FkName").CurrentValue = value`.
+When using `Entry().State = Modified` on entities loaded via `AsNoTracking()`, shadow FK values are NOT preserved. Shadow properties (FKs without explicit C# properties) are only maintained by the change tracker; `AsNoTracking()` discards them. Must manually set shadow FKs via `Entry(entity).Property("FkName").CurrentValue = value`.
 
 **Affected entity**: `PendingExportAttributeValueChange.PendingExportId` (shadow FK to `PendingExport`).
 
@@ -254,11 +254,11 @@ UpdateActivityAsync()                          ← [FIXED] uses Entry().State on
 
 These were documented during debugging but are no longer needed since the combination of Fixes 1-5 + Attempts 5-11 resolved all issues.
 
-- **A: Second ClearChangeTracker before persist** — Not needed; `AutoDetectChangesEnabled = false` + `Entry().State` avoids conflicts without clearing.
-- **B: Detach specific conflicting entities** — Incorporated into Attempt 6, superseded by `AutoDetectChangesEnabled` approach.
-- **C: Separate DbContext for cross-page resolution** — Not needed; too architecturally invasive.
-- **D: Raw SQL for MVO attribute value updates** — Not needed; `Entry().State` with `AutoDetectChangesEnabled = false` works.
-- **E: Investigate MetaverseAttribute loading paths** — Moot; `AutoDetectChangesEnabled = false` prevents traversal regardless of how entities were loaded.
+- **A: Second ClearChangeTracker before persist**: Not needed; `AutoDetectChangesEnabled = false` + `Entry().State` avoids conflicts without clearing.
+- **B: Detach specific conflicting entities**: Incorporated into Attempt 6, superseded by `AutoDetectChangesEnabled` approach.
+- **C: Separate DbContext for cross-page resolution**: Not needed; too architecturally invasive.
+- **D: Raw SQL for MVO attribute value updates**: Not needed; `Entry().State` with `AutoDetectChangesEnabled = false` works.
+- **E: Investigate MetaverseAttribute loading paths**: Moot; `AutoDetectChangesEnabled = false` prevents traversal regardless of how entities were loaded.
 
 ## Files Modified (All Changes)
 
@@ -284,6 +284,6 @@ These were documented during debugging but are no longer needed since the combin
 ## Performance Impact
 
 Verified on Medium template (1000 users, 118 groups, 23300 memberships):
-- **FullImport**: -47% (2.6s avg, down from 5.0s) — raw SQL PE deletes in reconciliation
-- **Export**: -58% (4.0s avg, down from 9.7s) — reduced change tracker overhead
-- **FullSync**: +11% (7.3s avg, up from 6.6s) — small overhead from `Entry().State` + `AutoDetectChangesEnabled` logic, acceptable trade-off for correctness
+- **FullImport**: -47% (2.6s avg, down from 5.0s); raw SQL PE deletes in reconciliation
+- **Export**: -58% (4.0s avg, down from 9.7s); reduced change tracker overhead
+- **FullSync**: +11% (7.3s avg, up from 6.6s); small overhead from `Entry().State` + `AutoDetectChangesEnabled` logic, acceptable trade-off for correctness

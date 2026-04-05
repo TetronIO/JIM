@@ -111,10 +111,10 @@ Choose a template based on your testing goals:
 - **Medium**: 1,000 users, 100 groups - **< 2 min** - Medium enterprise, CI/CD pipelines
 - **MediumLarge**: 5,000 users, 250 groups - **< 5 min** - Large medium enterprise, performance validation
 - **Large**: 10,000 users, 500 groups - **< 15 min** - Large enterprise, performance baselines
-- **XLarge**: 100,000 users, 50 groups - **< 2 hours** - Very large enterprise, stress testing (**requires 20+ GB host RAM** — see note below)
+- **XLarge**: 100,000 users, 50 groups - **< 2 hours** - Very large enterprise, stress testing (**requires 20+ GB host RAM**; see note below)
 - **XXLarge**: 1,000,000 users, 70 groups - **TBD** - Global enterprise, scale limits (**requires 32+ GB host RAM**)
 
-> **Memory requirements for large templates:** The XLarge and XXLarge templates require significantly more memory than smaller templates. The worker loads all imported objects into memory during processing — a 100K object import produces a worker peak working set of approximately 2.3 GB, plus 1–2 GB for the database during bulk inserts. **A 16 GB machine is not sufficient for XLarge** — the worker will be OOM-killed during the save phase even without IDE overhead. In a GitHub Codespace (16 GB total), the problem is worse because the IDE and dev tools consume additional memory. Run XLarge tests on a machine with at least 20–24 GB total RAM. See the [Deployment Guide — Memory Scaling](../DEPLOYMENT_GUIDE.md#memory-scaling-by-identity-object-count) for detailed requirements.
+> **Memory requirements for large templates:** The XLarge and XXLarge templates require significantly more memory than smaller templates. The worker loads all imported objects into memory during processing; a 100K object import produces a worker peak working set of approximately 2.3 GB, plus 1–2 GB for the database during bulk inserts. **A 16 GB machine is not sufficient for XLarge**; the worker will be OOM-killed during the save phase even without IDE overhead. In a GitHub Codespace (16 GB total), the problem is worse because the IDE and dev tools consume additional memory. Run XLarge tests on a machine with at least 20–24 GB total RAM. See the [Deployment Guide - Memory Scaling](../DEPLOYMENT_GUIDE.md#memory-scaling-by-identity-object-count) for detailed requirements.
 
 See [Data Scale Templates](#data-scale-templates) for detailed template specifications.
 
@@ -341,7 +341,7 @@ Each scenario script supports a `-Step` parameter that controls which test case 
 - `-WaitSeconds <N>` - Override default wait time between steps (default: 60)
 - `-TriggerRunProfile` - Automatically trigger JIM Run Profile after data changes
 
-**Export performance parameters** (accepted by Scenarios 1, 2, 6, 8 — scenarios with LDAP exports):
+**Export performance parameters** (accepted by Scenarios 1, 2, 6, 8, i.e. scenarios with LDAP exports):
 - `-ExportConcurrency <N>` - LDAP connector pipelining concurrency (1-8, omit for JIM default of 1)
 - `-MaxExportParallelism <N>` - Parallel export batch processing (1-16, omit for JIM default of 1)
 - These are only passed through to scenarios when explicitly provided to the test runner
@@ -788,7 +788,7 @@ These scenarios test group management capabilities - a core ILM function where t
 
 #### Deferred: Entitlement Management - JIM to AD ⏸️
 
-> **Status**: ⏸️ **DEFERRED** - This scenario requires proper design and implementation of Internally-managed MVOs (Metaverse Objects created within JIM rather than imported from a Connected System). Deferred until Internal MVO support is designed and implemented. No scenario number assigned — will be allocated when work begins.
+> **Status**: ⏸️ **DEFERRED** - This scenario requires proper design and implementation of Internally-managed MVOs (Metaverse Objects created within JIM rather than imported from a Connected System). Deferred until Internal MVO support is designed and implemented. No scenario number assigned; will be allocated when work begins.
 
 **Purpose**: Validate JIM as the authoritative source for entitlement groups, provisioning them to AD with membership derived from person attributes.
 
@@ -818,7 +818,7 @@ These scenarios test group management capabilities - a core ILM function where t
 
 #### Deferred: Entitlement Management - Convert AD Group Authority to JIM ⏸️
 
-> **Status**: ⏸️ **DEFERRED** - This scenario requires proper design and implementation of Internally-managed MVOs. After import, groups would need to be marked as JIM-authoritative (Internal origin), which requires the same Internal MVO support as the scenario above. Deferred until Internal MVO support is designed and implemented. No scenario number assigned — will be allocated when work begins.
+> **Status**: ⏸️ **DEFERRED** - This scenario requires proper design and implementation of Internally-managed MVOs. After import, groups would need to be marked as JIM-authoritative (Internal origin), which requires the same Internal MVO support as the scenario above. Deferred until Internal MVO support is designed and implemented. No scenario number assigned; will be allocated when work begins.
 
 **Purpose**: Validate importing existing AD groups into JIM and converting authority so JIM becomes the authoritative source. After conversion, any changes made directly in AD are overwritten by JIM.
 
@@ -1592,7 +1592,7 @@ The diagnostics infrastructure uses `System.Diagnostics.ActivitySource` (the .NE
 
 ## Samba AD Snapshot Images
 
-For larger templates (XLarge, XXLarge), populating Samba AD with test data (users, groups, memberships) can take **many hours**. To avoid repeating this on every test run, the framework supports **snapshot images** — pre-populated Docker images that start in seconds.
+For larger templates (XLarge, XXLarge), populating Samba AD with test data (users, groups, memberships) can take **many hours**. To avoid repeating this on every test run, the framework supports **snapshot images**: pre-populated Docker images that start in seconds.
 
 ### How Snapshots Work
 
@@ -1647,10 +1647,10 @@ The images are restored with their original tags and labels. The integration tes
 
 ### Important Notes
 
-- Snapshots are **preserved during post-test Docker cleanup** — the runner's prune step filters by the `jim.samba.snapshot-hash` label
-- Snapshots are **per-scenario and per-size** — an XLarge snapshot is not used for a Small run
+- Snapshots are **preserved during post-test Docker cleanup**; the runner's prune step filters by the `jim.samba.snapshot-hash` label
+- Snapshots are **per-scenario and per-size**; an XLarge snapshot is not used for a Small run
 - If you delete the devcontainer or run `docker system prune -a` inside it, the snapshots are lost
-- `docker save`/`docker load` are single-threaded — exporting a 2.7GB image takes a few minutes
+- `docker save`/`docker load` are single-threaded; exporting a 2.7GB image takes a few minutes
 
 ---
 
@@ -1710,7 +1710,7 @@ Get-ChildItem /connector-files/test-data/
 
 **Delta import finds zero changes after modifications were made:**
 
-The OpenLDAP accesslog database uses MDB (Lightning Memory-Mapped Database) with a fixed maximum map size (`olcDbMaxSize`). When the map file reaches this limit, OpenLDAP **silently stops recording changes** — no error, no warning. Delta imports then find zero modifications because the changes were never logged.
+The OpenLDAP accesslog database uses MDB (Lightning Memory-Mapped Database) with a fixed maximum map size (`olcDbMaxSize`). When the map file reaches this limit, OpenLDAP **silently stops recording changes** (no error, no warning). Delta imports then find zero modifications because the changes were never logged.
 
 **Symptoms:**
 - Delta import reports `Total objects: 0` despite changes being present in the directory
@@ -1734,7 +1734,7 @@ If the file size matches `olcDbMaxSize`, the map is full.
 
 Increase the map size in `test/integration/docker/openldap/scripts/01-add-second-suffix.sh` and rebuild the OpenLDAP container. Current setting: 4 GB (sufficient for XLarge / 100K objects). For larger templates, estimate ~10 MB per 1,000 objects for initial population plus additional capacity for sync cycles.
 
-The map size cannot be reliably increased on a running instance — it requires a container rebuild.
+The map size cannot be reliably increased on a running instance; it requires a container rebuild.
 
 ### Scenario Failures
 
@@ -1860,14 +1860,14 @@ JIM/
 | PowerShell Module | ✅ Complete | All cmdlets for scenarios 1, 2, and 8 |
 | Scenario 1 | ✅ Complete | All 6 tests passing (Joiner, Mover, Mover-Rename, Mover-Move, Leaver, Reconnection) |
 | Scenario 2 | ✅ Complete | All 4 tests passing (Provision, ForwardSync, TargetImport, Conflict) |
-| Scenario 3 | ⏳ Pending | Stub script exists — not yet implemented |
+| Scenario 3 | ⏳ Pending | Stub script exists, not yet implemented |
 | Scenario 4 | ✅ Complete | Deletion rules (SyncDelete, AsyncDelete, ManualRule, InternalProtection). AuthoritativeSourceDisconnected deferred pending attribute precedence. |
-| Scenario 5 | ✅ Complete | Matching rules — 4/5 tests passing, MultipleRules run separately |
+| Scenario 5 | ✅ Complete | Matching rules: 4/5 tests passing, MultipleRules run separately |
 | Scenario 6 | ✅ Complete | Scheduler service (Create, ManualTrigger, AutoTrigger, Overlap, MultiStep, Parallel) |
 | Scenario 8 | ✅ Complete | All 6 tests (InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup) |
 | Entitlement (JIM-to-AD) | ⏸️ Deferred | Requires Internal MVO design |
 | Entitlement (Convert Authority) | ⏸️ Deferred | Requires Internal MVO design |
-| Scenarios 9-11 | ⏳ Post-MVP | Database scenarios — requires Database Connector (#170) |
+| Scenarios 9-11 | ⏳ Post-MVP | Database scenarios: requires Database Connector (#170) |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
 
 ### Scenario 8 Complete (2026-01-20)
@@ -1950,7 +1950,7 @@ See full plan: [`docs/plans/done/SCENARIO_8_CROSS_DOMAIN_ENTITLEMENT_SYNC.md`](p
 
 ### Remaining Work
 
-1. **Complete Scenario 3** - GALSYNC (AD to CSV export) — stub script exists but not implemented
+1. **Complete Scenario 3** - GALSYNC (AD to CSV export); stub script exists but not implemented
 2. **Create GitHub Actions workflow** - `.github/workflows/integration-tests.yml` for CI/CD automation
 3. **Post-MVP: Entitlement Management** - Internal MVO design required (deferred scenarios above)
 4. **Post-MVP: Scenarios 9-11** - Database connector testing (SQL Server, PostgreSQL, Oracle, MySQL)

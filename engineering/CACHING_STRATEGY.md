@@ -10,7 +10,7 @@ This document describes the Connected System Object (CSO) lookup cache used by t
 
 ## Overview
 
-When the Worker imports objects from a connected system, it must determine whether each imported object matches an existing CSO in JIM (update) or is new (create). Without caching, this requires a database query per imported object — an O(N) problem that becomes the dominant bottleneck at scale.
+When the Worker imports objects from a connected system, it must determine whether each imported object matches an existing CSO in JIM (update) or is new (create). Without caching, this requires a database query per imported object, an O(N) problem that becomes the dominant bottleneck at scale.
 
 The CSO lookup cache is an in-memory index that maps external ID values to CSO GUIDs, enabling O(1) lookups instead of per-object database queries.
 
@@ -65,8 +65,8 @@ Provisioning           Confirming Import         Normal Operation
 
 When JIM provisions a new object to a connected system (e.g. creating a user in LDAP), the CSO is created with status `PendingProvisioning`. At this point:
 
-- The **primary** external ID (e.g. `objectGUID`) is unknown — it's assigned by the connected system during export
-- The **secondary** external ID (e.g. `distinguishedName`) is known — JIM computed it from export rules
+- The **primary** external ID (e.g. `objectGUID`) is unknown; it's assigned by the connected system during export
+- The **secondary** external ID (e.g. `distinguishedName`) is known; JIM computed it from export rules
 
 The CSO is cached by its secondary external ID so that the subsequent **confirming import** can find it via cache lookup instead of a per-object database query.
 
@@ -122,11 +122,11 @@ Cache entries are evicted whenever the external ID value they index changes or b
 
 ### Why eviction on value change matters
 
-External ID values can change in the connected system. The most common example is an LDAP `distinguishedName` (DN) rename — when a user's OU changes or their name changes, the DN changes. Without eviction, the old DN cache entry remains orphaned. While a lookup with the _new_ DN will miss the cache harmlessly and self-populate from the database, the stale entry becomes dangerous if a _different_ object is later assigned the old DN value: it would incorrectly resolve to the wrong CSO.
+External ID values can change in the connected system. The most common example is an LDAP `distinguishedName` (DN) rename: when a user's OU changes or their name changes, the DN changes. Without eviction, the old DN cache entry remains orphaned. While a lookup with the _new_ DN will miss the cache harmlessly and self-populate from the database, the stale entry becomes dangerous if a _different_ object is later assigned the old DN value: it would incorrectly resolve to the wrong CSO.
 
 ## Thread Safety
 
-- `IMemoryCache.Set()` provides upsert semantics — no explicit locking required
+- `IMemoryCache.Set()` provides upsert semantics; no explicit locking required
 - `IMemoryCache.TryGetValue()` is safe for concurrent reads
 - The cache is shared across all `JimApplication` instances in the Worker process
 
@@ -152,15 +152,15 @@ With cache (PK lookups at ~1ms each, or cache-hit at ~0.1ms):
 
 ## Related Documentation
 
-- [Worker Database Performance Optimisation](plans/done/WORKER_DATABASE_PERFORMANCE_OPTIMISATION.md) — original design and future phases (full entity cache, MVO join-attribute cache)
-- [PostgreSQL Improvements](plans/done/POSTGRESQL_IMPROVEMENTS.md) — database-level cache sizing (`effective_cache_size`)
+- [Worker Database Performance Optimisation](plans/done/WORKER_DATABASE_PERFORMANCE_OPTIMISATION.md): original design and future phases (full entity cache, MVO join-attribute cache)
+- [PostgreSQL Improvements](plans/done/POSTGRESQL_IMPROVEMENTS.md): database-level cache sizing (`effective_cache_size`)
 
 ## Key Source Files
 
 | File | Purpose |
 |---|---|
 | `src/JIM.Application/Servers/ConnectedSystemServer.cs` | Cache operations: `BuildCsoCacheKey`, `GetCsoWithCacheLookupAsync`, `AddCsoToCache`, `EvictCsoFromCache`, `WarmCsoCacheAsync` |
-| `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` | `GetAllCsoExternalIdMappingsAsync` — bulk-loads primary and secondary ID mappings for cache warming |
+| `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` | `GetAllCsoExternalIdMappingsAsync`: bulk-loads primary and secondary ID mappings for cache warming |
 | `src/JIM.Worker/Worker.cs` | Cache initialisation (`IMemoryCache`) and startup warming |
 | `src/JIM.Worker/Processors/SyncImportTaskProcessor.cs` | Cache population after import, cache key swap on PendingProvisioning → Normal, eviction on external ID value changes |
 | `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs` | Cache population after provisioning CSO batch creation |

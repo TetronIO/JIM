@@ -4,7 +4,7 @@
 |---|---|
 | **Version** | 1.16 |
 | **Last Updated** | 2026-02-20 |
-| **Status** | MVP Complete (100%) — Post-MVP enhancements in progress |
+| **Status** | MVP Complete (100%); Post-MVP enhancements in progress |
 
 ---
 
@@ -48,12 +48,12 @@ Full plan: `docs/plans/EXPORT_PERFORMANCE_OPTIMISATION.md`
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| Phase 1 | Batch database operations — eliminated per-object DB round-trips | Complete (PR #334) |
+| Phase 1 | Batch database operations; eliminated per-object DB round-trips | Complete (PR #334) |
 | Phase 2 | LDAP connector async pipelining with configurable concurrency | Complete (PR #335) |
 | Phase 3 | Parallel batch export with per-system MaxExportParallelism | Complete (PR #337) |
 | Phase 3b | MaxExportParallelism as per-Connected System setting with UI/API/PowerShell | Complete (PR #337) |
 | Phase 4 | Parallel schedule step execution for concurrent multi-system operations | Complete |
-| Phase 5 | Queue-all-steps-upfront — eliminate ~120s of scheduler polling overhead | In Progress |
+| Phase 5 | Queue-all-steps-upfront; eliminate ~120s of scheduler polling overhead | In Progress |
 
 **Key outcomes:**
 - ~50% reduction in export time from Phase 1 alone
@@ -63,43 +63,43 @@ Full plan: `docs/plans/EXPORT_PERFORMANCE_OPTIMISATION.md`
 
 ### Scheduler Improvements
 
-- **Step failure detection (#332)** — Scheduler now correctly detects step failures and respects ContinueOnFailure setting (previously showed false success)
-- **Granular activity statistics** — Replaced aggregate stats with per-change-type fields (creates, updates, deletes, renames)
-- **Queue-all-steps-upfront** (Phase 5, in progress) — Near-instant step transitions by pre-queuing all schedule steps with `WaitingForPreviousStep` status
+- **Step failure detection (#332)**: Scheduler now correctly detects step failures and respects ContinueOnFailure setting (previously showed false success)
+- **Granular activity statistics**: Replaced aggregate stats with per-change-type fields (creates, updates, deletes, renames)
+- **Queue-all-steps-upfront** (Phase 5, in progress); Near-instant step transitions by pre-queuing all schedule steps with `WaitingForPreviousStep` status
 
 ### Operational Resilience
 
-- **Worker crash recovery** — Heartbeat-based stale task detection automatically recovers from worker crashes
-- **OAuth token refresh** — Transparent 401 retry with token refresh, preventing database OOM from expired tokens
-- **Progress tracking** — Added progress tracking for import Resolving References phase
-- **Disconnected RPEI** — Records separate Run Profile Execution Item when processing source deletions
-- **Operational vs unhandled errors** — Differentiated operational errors from unhandled exceptions in activity reporting
+- **Worker crash recovery**: Heartbeat-based stale task detection automatically recovers from worker crashes
+- **OAuth token refresh**: Transparent 401 retry with token refresh, preventing database OOM from expired tokens
+- **Progress tracking**: Added progress tracking for import Resolving References phase
+- **Disconnected RPEI**: Records separate Run Profile Execution Item when processing source deletions
+- **Operational vs unhandled errors**: Differentiated operational errors from unhandled exceptions in activity reporting
 
 ### UI/UX Improvements
 
-- **Theme system** — Navy theme with refined light and dark mode support, plus additional theme options (purple, black, blended-nav, future-minimal)
-- **Operations Queue** — Grouped queue table with collapsible schedule headers, step progress, worker status chips, animated worker processing bar
-- **Text normalisation** — Consistent text sizing across Activity Detail, API Key Detail, Change History modal, and Activity Item Details pages
-- **Thousand separators** — Culture-aware number formatting across all statistics displays
-- **Table standardisation** — Outlined dense search boxes, toolbar-integrated create buttons, nested table styling
-- **Connected System detail** — Decomposed into 7 child components for maintainability
-- **Schema pages** — Consolidated to MudTabs navigation
-- **Application version** — Displayed in page footer
-- **Demo mode** — Query-string-activated demo mode for Operations Queue
+- **Theme system**: Navy theme with refined light and dark mode support, plus additional theme options (purple, black, blended-nav, future-minimal)
+- **Operations Queue**: Grouped queue table with collapsible schedule headers, step progress, worker status chips, animated worker processing bar
+- **Text normalisation**: Consistent text sizing across Activity Detail, API Key Detail, Change History modal, and Activity Item Details pages
+- **Thousand separators**: Culture-aware number formatting across all statistics displays
+- **Table standardisation**: Outlined dense search boxes, toolbar-integrated create buttons, nested table styling
+- **Connected System detail**: Decomposed into 7 child components for maintainability
+- **Schema pages**: Consolidated to MudTabs navigation
+- **Application version**: Displayed in page footer
+- **Demo mode**: Query-string-activated demo mode for Operations Queue
 
 ### Repository Restructure
 
-- **Source projects moved to `src/`** — All 10 source projects relocated from repo root to `src/` directory for cleaner repository layout
+- **Source projects moved to `src/`**: All 10 source projects relocated from repo root to `src/` directory for cleaner repository layout
 - **Docker build context** updated to use repo root so VERSION file is included
 
 ### Documentation & Tooling
 
-- **Security documentation** — Added `docs/COMPLIANCE_MAPPING.md` and security development guidelines
-- **PostgreSQL tuning** — Added tuning section to Developer Guide with shared memory scaling guidance
-- **CLAUDE.md restructured** — Slimmed from 49k to 22k characters with subdirectory files
-- **`jim-test-all` alias** — Comprehensive test runner for unit + workflow + Pester tests with summary output
-- **Dependabot review skill** — Claude Code skill for reviewing dependency PRs against supply chain security requirements
-- **Integration test performance** — 10x faster integration tests with automatic Docker cleanup
+- **Security documentation**: Added `docs/COMPLIANCE_MAPPING.md` and security development guidelines
+- **PostgreSQL tuning**: Added tuning section to Developer Guide with shared memory scaling guidance
+- **CLAUDE.md restructured**: Slimmed from 49k to 22k characters with subdirectory files
+- **`jim-test-all` alias**: Comprehensive test runner for unit + workflow + Pester tests with summary output
+- **Dependabot review skill**: Claude Code skill for reviewing dependency PRs against supply chain security requirements
+- **Integration test performance**: 10x faster integration tests with automatic Docker cleanup
 
 ### Recently Completed (MVP) ✓
 - ~~Scheduler Service (#168)~~ - Full scheduling system with cron/interval triggers, multi-step execution, REST API, Blazor UI, PowerShell cmdlets, and integration tests

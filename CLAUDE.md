@@ -31,26 +31,26 @@ Always use Context7 MCP when you need library/API documentation, code generation
 
 **YOU MUST FOLLOW TEST-DRIVEN DEVELOPMENT (TDD):**
 
-JIM uses TDD as the standard development workflow. Tests are written **before** implementation — not after.
+JIM uses TDD as the standard development workflow. Tests are written **before** implementation, not after.
 
 **TDD Workflow (Red → Green → Refactor):**
-1. **Write the test first** — write a failing test that describes the expected behaviour
-2. **Confirm it fails (Red)** — run the test and verify it fails for the right reason (not just a compile error)
-3. **Implement the fix or feature (Green)** — write the minimum code to make the test pass
-4. **Verify it passes** — run the test again and confirm it is green
-5. **Refactor if needed** — clean up without breaking the test
+1. **Write the test first**: write a failing test that describes the expected behaviour
+2. **Confirm it fails (Red)**: run the test and verify it fails for the right reason (not just a compile error)
+3. **Implement the fix or feature (Green)**: write the minimum code to make the test pass
+4. **Verify it passes**: run the test again and confirm it is green
+5. **Refactor if needed**: clean up without breaking the test
 
 **For bug fixes specifically:**
 1. Write a test that **reproduces the bug** (it must fail before your fix)
 2. Implement the fix
-3. Run the test — it must now pass
+3. Run the test; it must now pass
 4. This proves the fix is correct and guards against regression
 
 **Rules:**
 1. **ALWAYS** write the test before implementing new classes, methods, or logic
-2. **ALWAYS** write a failing test before fixing a bug — the test must fail first to be meaningful
+2. **ALWAYS** write a failing test before fixing a bug; the test must fail first to be meaningful
 3. **ALWAYS** write tests for new API endpoints, extension methods, and utilities
-4. **NEVER** implement a fix and then retrofit a test — that is not TDD
+4. **NEVER** implement a fix and then retrofit a test; that is not TDD
 5. **NEVER** commit new functionality without corresponding tests
 6. Tests should cover: happy path, edge cases, error conditions
 
@@ -72,8 +72,8 @@ JIM uses TDD as the standard development workflow. Tests are written **before** 
 **YOU MUST PLAN BEFORE BUILDING:**
 
 1. **ALWAYS** enter plan mode for any non-trivial task (3+ steps or architectural decisions)
-2. Use plan mode for verification steps, not just building — plan how you will prove it works
-3. **If you've spent more than 2–3 attempts fixing an issue without progress, STOP.** Do not keep pushing down the same path. Step back, re-enter plan mode, review the problem from scratch, and consider whether you are missing something or there is a better approach. If still stuck, ask the user — they have deep developer experience and can often see what you are missing.
+2. Use plan mode for verification steps, not just building; plan how you will prove it works
+3. **If you've spent more than 2-3 attempts fixing an issue without progress, STOP.** Do not keep pushing down the same path. Step back, re-enter plan mode, review the problem from scratch, and consider whether you are missing something or there is a better approach. If still stuck, ask the user; they have deep developer experience and can often see what you are missing.
 4. **NEVER** mark a task complete without proving it works (build passes, tests pass, behaviour verified)
 5. When relevant, diff behaviour between `main` and your changes to confirm correctness
 
@@ -82,8 +82,8 @@ JIM uses TDD as the standard development workflow. Tests are written **before** 
 1. **Simplicity First**: Make every change as simple as possible. Impact minimal code.
 2. **Find Root Causes**: No temporary fixes, no workarounds, no band-aids. Diagnose the actual problem and fix it properly. Senior developer standards.
 3. For non-trivial changes, pause and ask: "Is there a more elegant way to do this?"
-4. If a fix feels hacky, step back and implement the clean solution — knowing everything you now know
-5. Skip this for simple, obvious fixes — don't over-engineer
+4. If a fix feels hacky, step back and implement the clean solution, knowing everything you now know
+5. Skip this for simple, obvious fixes; don't over-engineer
 6. Before presenting work, ask yourself: "Would a staff engineer approve this?"
 
 **Test project locations:**
@@ -102,7 +102,7 @@ If you cannot build/test locally due to environment constraints, you MUST:
 
 - Use subagents liberally to keep the main context window clean
 - Offload research, exploration, and parallel analysis to subagents
-- For complex problems, throw more compute at it — use multiple subagents in parallel
+- For complex problems, throw more compute at it: use multiple subagents in parallel
 - One task per subagent for focused execution
 
 ## Synchronisation Integrity
@@ -161,10 +161,14 @@ When creating ASCII diagrams in documentation or code comments, use only reliabl
 **Key rules (always apply):**
 - Use async/await for all I/O operations (method suffix: `Async`)
 - Use constructor injection for all dependencies
-- **CRITICAL: Use British English (en-GB) for ALL text** — "authorisation", "synchronisation", "behaviour", "colour", etc.
-- Use `DateTime.UtcNow` — NEVER `DateTime.Now`
+- **CRITICAL: Use British English (en-GB) for ALL text**: "authorisation", "synchronisation", "behaviour", "colour", etc.
+- Use `DateTime.UtcNow`, NEVER `DateTime.Now`
+- **NEVER use em dashes (`—`)** in documentation, comments, or UI text. Use traditional separators instead:
+  - In sentences: semicolons, commas, or colons (e.g. "JIM takes a different approach; it deploys..." not "JIM takes a different approach — it deploys...")
+  - In bullet points: colons to separate a label from its description (e.g. "Attribute Writeback: Keep HR systems current" not "Attribute Writeback — Keep HR systems current")
+  - In parenthetical asides: commas or parentheses
 - One class per file, file names match class names exactly
-- All models/POCOs live in `src/JIM.Models/` — never inline in service files
+- All models/POCOs live in `src/JIM.Models/`; never inline in service files
 
 > **Full conventions (DateTime handling, raw SQL parameters, file organisation, naming patterns, UI sizing, MudBlazor tabs):** See `src/CLAUDE.md`
 
@@ -250,7 +254,7 @@ Prefer: Microsoft-maintained packages > established corporate-backed packages > 
 
 ## Architecture Quick Reference
 
-**Layer Dependencies:** JIM.Web -> JIM.Application -> JIM.Models -> JIM.Data/JIM.PostgresData. **NEVER bypass layers** — UI/API must only call `JimApplication`, never `Jim.Repository.*` directly.
+**Layer Dependencies:** JIM.Web -> JIM.Application -> JIM.Models -> JIM.Data/JIM.PostgresData. **NEVER bypass layers**: UI/API must only call `JimApplication`, never `Jim.Repository.*` directly.
 
 **Metaverse Pattern:** All operations flow through the metaverse (MetaverseObject <-> SyncRule <-> ConnectedSystemObject). Never direct system-to-system.
 
@@ -289,7 +293,7 @@ The project uses [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format
 
 **Audience and tone:**
 The changelog is a **customer-facing product document**. The audience is administrators and decision-makers wanting to know what's new. Entries should make JIM appear useful, reliable, sophisticated, and exciting.
-- Write entries as product changes, not developer notes — focus on the benefit or outcome, not the implementation detail
+- Write entries as product changes, not developer notes: focus on the benefit or outcome, not the implementation detail
 - Use a leading emoji per entry to add energy and visual scanning context (e.g. ✨ for new features, 🐛 for fixes, ⚡ for performance, 🔒 for security)
 - Do NOT include: internal refactoring, test changes, developer tooling, CI/CD tweaks, or anything that has no user-facing impact
 - Trivial changes (renamed a CSS class, moved a file, updated a comment) do NOT belong in the changelog
@@ -307,18 +311,18 @@ The changelog is a **customer-facing product document**. The audience is adminis
 - Trivial UI tweaks with no meaningful user impact
 
 **Categories (use as applicable):**
-- **Added** — new features or capabilities
-- **Changed** — modifications to existing behaviour
-- **Fixed** — bug fixes
-- **Performance** — optimisations and performance improvements
-- **Removed** — removed features (use sparingly)
+- **Added**: new features or capabilities
+- **Changed**: modifications to existing behaviour
+- **Fixed**: bug fixes
+- **Performance**: optimisations and performance improvements
+- **Removed**: removed features (use sparingly)
 
 **Formatting conventions (match existing style):**
 - Use `####` subheadings to group related entries under a larger feature (e.g., `#### Scheduler Service (#168)`)
 - Reference GitHub issue numbers where applicable (e.g., `(#123)`)
-- Keep entries concise — one line per change, describe what changed from the user's perspective
+- Keep entries concise: one line per change, describe what changed from the user's perspective
 - Lead each entry with an appropriate emoji (✨ new, 🐛 fix, ⚡ performance, 🔄 changed, 🗑️ removed, 🔒 security, 📦 deployment/infrastructure, 🖥️ UI/UX)
-- Use imperative mood is not required — describe what was added/changed/fixed naturally
+- Use imperative mood is not required; describe what was added/changed/fixed naturally
 
 **At release time:** Move all `[Unreleased]` entries to a new version section and update comparison links at the bottom of the file. See Release Process below.
 
@@ -332,7 +336,7 @@ The `VERSION` file is the single source of truth for JIM's version number. It fe
 - PowerShell module version (updated at release time)
 - Diagram metadata (via `export-diagrams.js`)
 
-**Versioning scheme:** [Semantic Versioning](https://semver.org/) — `X.Y.Z` with optional prerelease suffix (e.g., `0.3.0-alpha`).
+**Versioning scheme:** [Semantic Versioning](https://semver.org/), `X.Y.Z` with optional prerelease suffix (e.g., `0.3.0-alpha`).
 
 **What triggers a version bump:**
 - New feature releases
@@ -347,7 +351,7 @@ The `VERSION` file is the single source of truth for JIM's version number. It fe
 - Development tooling changes
 - Refactoring without user-facing changes
 
-**To create a release:** Use `/release <version>` — the skill handles VERSION, CHANGELOG, PowerShell manifest, documentation review, commit, tag, and push.
+**To create a release:** Use `/release <version>`; the skill handles VERSION, CHANGELOG, PowerShell manifest, documentation review, commit, tag, and push.
 
 > **Full release process, air-gapped deployment, and Docker image details:** See `engineering/RELEASE_PROCESS.md`
 

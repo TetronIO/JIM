@@ -1,6 +1,6 @@
 # Connector Lifecycle
 
-> Last updated: 2026-03-26 — JIM v0.7.1 (`00907431`)
+> Last updated: 2026-03-26, JIM v0.7.1 (`00907431`)
 
 This diagram shows how connectors are resolved, configured, opened, used, and closed across import and export operations. Connectors implement capability interfaces that determine their lifecycle shape.
 
@@ -136,7 +136,7 @@ flowchart TD
 
 - **Watermark consistency**: During paginated delta imports, the *original* persisted connector data is passed to every page. The new watermark from the first page is only saved after all pages complete, ensuring the connector sees a consistent view across pages.
 
-- **Parallel connector isolation**: Each parallel export batch gets its own connector instance created via factory. This avoids shared connection state between concurrent batches — critical for connectors like LDAP that maintain stateful connections.
+- **Parallel connector isolation**: Each parallel export batch gets its own connector instance created via factory. This avoids shared connection state between concurrent batches, which is critical for connectors like LDAP that maintain stateful connections.
 
 - **CloseExportConnection in finally**: The export connection is always closed, even if an exception occurs during export. This prevents connection leaks in long-running worker processes.
 

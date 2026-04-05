@@ -1,6 +1,6 @@
 # Export Execution Flow
 
-> Last updated: 2026-04-02 — JIM v0.8.1
+> Last updated: 2026-04-02, JIM v0.8.1
 
 This diagram shows how pending exports are executed against connected systems via connectors. The export processor (`SyncExportTaskProcessor`) uses `ISyncServer` to delegate to `ExportExecutionServer` for the core execution logic, and `ISyncRepository` for bulk data access. Supports batching, parallelism, deferred reference resolution, and retry with backoff.
 
@@ -161,7 +161,7 @@ flowchart TD
 
 ## Key Design Decisions
 
-- **Pre-export CREATE→DELETE reconciliation** (#218): Before fetching executable exports, `ReconcileCreateDeletePairsAsync` scans all pending exports for contradictory pairs targeting the same CSO. CREATE+DELETE pairs cancel both (object was never exported), UPDATE+DELETE cancels the UPDATE (deletion makes it redundant). This catches pairs persisted across different sync runs — the flush-time reconciliation in `SyncTaskProcessorBase` handles same-page pairs.
+- **Pre-export CREATE→DELETE reconciliation** (#218): Before fetching executable exports, `ReconcileCreateDeletePairsAsync` scans all pending exports for contradictory pairs targeting the same CSO. CREATE+DELETE pairs cancel both (object was never exported), UPDATE+DELETE cancels the UPDATE (deletion makes it redundant). This catches pairs persisted across different sync runs; the flush-time reconciliation in `SyncTaskProcessorBase` handles same-page pairs.
 
 - **Two-pass export**: Exports without unresolved references are executed first (immediate). Exports with unresolved MVO references are deferred, with references bulk-resolved in a single query, then executed in a second pass.
 
@@ -179,4 +179,4 @@ flowchart TD
 
 - **LDAP consolidation**: Multiple changes to the same attribute with the same operation type (e.g., 200 individual "member Add" operations) are consolidated into a single `DirectoryAttributeModification` before sending to the directory server. This is the correct RFC 4511 pattern and dramatically reduces the number of LDAP modify requests.
 
-- **LDAP chunking**: Consolidated modifications that exceed the configurable batch size (default: 100) are split into multiple `ModifyRequest` objects sent sequentially. This prevents LDAP server rejection of oversized requests — important for large group membership changes.
+- **LDAP chunking**: Consolidated modifications that exceed the configurable batch size (default: 100) are split into multiple `ModifyRequest` objects sent sequentially. This prevents LDAP server rejection of oversized requests, which is important for large group membership changes.

@@ -251,7 +251,7 @@ This is fundamentally an **I/O latency problem**, not a compute problem. The CPU
 
 ---
 
-### Phase 5: Queue-All-Steps-Upfront — Schedule Execution Pipeline (Moderate Risk, High Impact) - IMPLEMENTED
+### Phase 5: Queue-All-Steps-Upfront; Schedule Execution Pipeline (Moderate Risk, High Impact) - IMPLEMENTED
 
 **Status:** Implemented.
 
@@ -297,13 +297,13 @@ This is fundamentally an **I/O latency problem**, not a compute problem. The CPU
    - `WorkerTaskHeader` extended with `ScheduleExecutionId`, `ScheduleExecutionName`, `ScheduleStepIndex`
 
 **Key files:**
-- `TaskingServer.cs` — New `TryAdvanceScheduleExecutionAsync`, modified `CompleteWorkerTaskAsync`
-- `SchedulerServer.cs` — `StartScheduleExecutionAsync` queues all steps, safety-net recovery
-- `TaskingRepository.cs` — New repository methods, ordering change, header enrichment
-- `Scheduler.cs` — Simplified main loop
-- `ScheduleExecutionsController.cs` — Cancel handles `WaitingForPreviousStep`
-- `OperationsQueueTab.razor` — Grouped/collapsible display
-- `Enums.cs`, `WorkerTask.cs`, `WorkerTaskHeader.cs` — Model changes
+- `TaskingServer.cs`: New `TryAdvanceScheduleExecutionAsync`, modified `CompleteWorkerTaskAsync`
+- `SchedulerServer.cs`: `StartScheduleExecutionAsync` queues all steps, safety-net recovery
+- `TaskingRepository.cs`: New repository methods, ordering change, header enrichment
+- `Scheduler.cs`: Simplified main loop
+- `ScheduleExecutionsController.cs`: Cancel handles `WaitingForPreviousStep`
+- `OperationsQueueTab.razor`: Grouped/collapsible display
+- `Enums.cs`, `WorkerTask.cs`, `WorkerTaskHeader.cs`: Model changes
 
 **Estimated Impact:** Eliminates ~120 seconds of idle time from a 9-step schedule. Step transitions become near-instant (limited only by worker's 2-second idle poll). Future-compatible with task insertion and schedule pause/resume.
 

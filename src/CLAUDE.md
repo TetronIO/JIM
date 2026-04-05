@@ -46,13 +46,13 @@
 - NEVER use `(object?)value ?? DBNull.Value` as a parameter to `ExecuteSqlRawAsync` or `ExecuteSqlInterpolatedAsync`
 - EF Core cannot infer the PostgreSQL type from bare `DBNull.Value`, causing: `InvalidOperationException: The current provider doesn't have a store type mapping for properties of type 'DBNull'`
 - ALWAYS wrap nullable parameters with a typed `NpgsqlParameter`: `NullableParam(value, NpgsqlTypes.NpgsqlDbType.Text)` (see helper method in `ConnectedSystemRepository`, `ActivitiesRepository`, `MetaverseRepository`)
-- This applies to ALL nullable columns in raw SQL INSERT/UPDATE statements — string, int, Guid, DateTime, bool, etc.
+- This applies to ALL nullable columns in raw SQL INSERT/UPDATE statements: string, int, Guid, DateTime, bool, etc.
 
 **File Organisation:**
 - One class per file - each class should have its own `.cs` file named after the class
 - Exception: Enums are grouped into a single file per area/folder (e.g., `ConnectedSystemEnums.cs`, `PendingExportEnums.cs`)
 - File names must match the class/interface name exactly (e.g., `MetaverseObject.cs` for `class MetaverseObject`)
-- **Model placement**: All model/POCO/result classes MUST live in `JIM.Models/` — NEVER define them inline in service or server files in `JIM.Application` or other projects
+- **Model placement**: All model/POCO/result classes MUST live in `JIM.Models/`; NEVER define them inline in service or server files in `JIM.Application` or other projects
   - Exceptions: UI-specific models may live in `JIM.Web/Models/`, and API DTOs in `JIM.Web/Models/Api/`
   - If a service method needs a result type, create it as its own file in the appropriate `JIM.Models/` subdirectory
 
@@ -62,7 +62,7 @@
 - Properties: PascalCase with nullable reference types enabled
 
 **Tabs:**
-- Use `<NavigableMudTabs>` instead of `<MudTabs>` for all top-level page tabs — it syncs the active tab with a `?t=slug` query string, enabling browser back/forward navigation
+- Use `<NavigableMudTabs>` instead of `<MudTabs>` for all top-level page tabs; it syncs the active tab with a `?t=slug` query string, enabling browser back/forward navigation
 - Use plain `<MudTabs>` only for tabs inside dialogs or nested sub-tabs where URL navigation is not needed
 
 **UI Element Sizing:**
@@ -153,7 +153,7 @@ var schedule = await Jim.Scheduler.GetScheduleAsync(id);
 4. Test: `dotnet ef database update --project src/JIM.PostgresData`
 5. Commit migration files
 
-**CRITICAL: NEVER flatten, squash, delete, or reset EF Core migrations.** Migrations are append-only. Deployed instances track applied migrations by name in `__EFMigrationsHistory` — removing old migrations and replacing them with a combined migration will break every existing deployment.
+**CRITICAL: NEVER flatten, squash, delete, or reset EF Core migrations.** Migrations are append-only. Deployed instances track applied migrations by name in `__EFMigrationsHistory`; removing old migrations and replacing them with a combined migration will break every existing deployment.
 
 **Updating Architecture Diagrams:**
 

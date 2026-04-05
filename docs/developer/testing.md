@@ -4,24 +4,24 @@ title: Testing
 
 # Testing
 
-JIM follows Test-Driven Development (TDD) as the standard development practice. Tests are written **before** the implementation they cover — not after.
+JIM follows Test-Driven Development (TDD) as the standard development practice. Tests are written **before** the implementation they cover, not after.
 
 ## TDD Workflow
 
 The Red, Green, Refactor cycle:
 
-1. **Red** — Write a failing test that describes the expected behaviour. Run it and confirm it fails (not just fails to compile — it must execute and fail the assertion).
-2. **Green** — Write the minimum production code needed to make the test pass. Run the test and confirm it passes.
-3. **Refactor** — Clean up the implementation and tests without breaking anything.
+1. **Red:** Write a failing test that describes the expected behaviour. Run it and confirm it fails (not just fails to compile; it must execute and fail the assertion).
+2. **Green:** Write the minimum production code needed to make the test pass. Run the test and confirm it passes.
+3. **Refactor:** Clean up the implementation and tests without breaking anything.
 
 ### Bug Fix Workflow
 
-1. Write a test that **reproduces the bug** — it must fail before any fix is applied
+1. Write a test that **reproduces the bug**; it must fail before any fix is applied
 2. Implement the fix
-3. Run the test — it must now pass
+3. Run the test; it must now pass
 4. Commit both the test and the fix together
 
-A test written after a fix cannot prove the fix was necessary — it could pass even on the broken code. The failing test is the evidence that the fix works.
+A test written after a fix cannot prove the fix was necessary; it could pass even on the broken code. The failing test is the evidence that the fix works.
 
 ## Test Framework
 
@@ -141,10 +141,10 @@ Workflow tests sit between unit tests and integration tests. They test multi-ste
 
 ### Benefits
 
-- **Fast execution** — seconds rather than minutes for integration tests
-- **State snapshots** — capture state after each step for diagnostics
-- **Reproducible** — configurable fake data with no external dependencies
-- **Self-contained** — no LDAP, Active Directory, or other external systems required
+- **Fast execution:** seconds rather than minutes for integration tests
+- **State snapshots:** capture state after each step for diagnostics
+- **Reproducible:** configurable fake data with no external dependencies
+- **Self-contained:** no LDAP, Active Directory, or other external systems required
 
 ### Example
 
