@@ -12,6 +12,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
+using Microsoft.EntityFrameworkCore;
 using Serilog;
 using JIM.Worker.Models;
 
@@ -31,6 +32,7 @@ public class SyncImportTaskProcessor
     private readonly string? _initiatedByName;
     private readonly JIM.Models.Activities.Activity _activity;
     private readonly List<ActivityRunProfileExecutionItem> _activityRunProfileExecutionItems;
+    private readonly IDbContextFactory<JIM.PostgresData.JimDbContext>? _dbContextFactory;
     // Lightweight RPEI lookup for reconciliation. Populated during the update-phase flush
     // so that ReconcilePendingExportsAsync can merge outcomes onto already-persisted RPEIs.
     // Only contains RPEIs for updated CSOs (not created CSOs, which can't have pending exports).
@@ -75,7 +77,8 @@ public class SyncImportTaskProcessor
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile connectedSystemRunProfile,
         WorkerTask workerTask,
-        CancellationTokenSource cancellationTokenSource)
+        CancellationTokenSource cancellationTokenSource,
+        IDbContextFactory<JIM.PostgresData.JimDbContext>? dbContextFactory = null)
     {
         _jim = jimApplication;
         _syncRepo = syncRepository;
@@ -89,6 +92,7 @@ public class SyncImportTaskProcessor
         _initiatedById = workerTask.InitiatedById;
         _initiatedByName = workerTask.InitiatedByName;
         _activity = workerTask.Activity;
+        _dbContextFactory = dbContextFactory;
 
         // RPEIs are maintained separately during processing and flushed incrementally via raw SQL bulk insert
         // at natural boundaries (after CSO creates, updates, and reconciliation). This avoids accumulating
@@ -132,6 +136,25 @@ public class SyncImportTaskProcessor
             }
             Log.Information("PerformImportAsync: Pre-fetched {Count} CSO external ID mappings for connected system {ConnectedSystemId}.",
                 _csoExternalIdLookup.Count, _connectedSystem.Id);
+        }
+
+        // Pre-load pending exports in the background while import processing runs.
+        // Uses a separate DbContext (via IDbContextFactory) to avoid thread-safety issues
+        // with the main DbContext used by import processing. The query is independent of
+        // import processing and takes several seconds at scale; by starting it now, the data
+        // is typically ready by the time reconciliation begins.
+        Task<Dictionary<Guid, PendingExport>>? pendingExportsTask = null;
+        if (!_csIsEmpty && _dbContextFactory != null)
+        {
+            var connectedSystemId = _connectedSystem.Id;
+            Log.Debug("PerformImportAsync: Starting background pre-load of pending exports for connected system {ConnectedSystemId}", connectedSystemId);
+            pendingExportsTask = Task.Run(async () =>
+            {
+                using var bgContext = await _dbContextFactory.CreateDbContextAsync();
+                var bgRepo = new JIM.PostgresData.PostgresDataRepository(bgContext);
+                var bgSyncRepo = new JIM.PostgresData.Repositories.SyncRepository(bgRepo);
+                return await bgSyncRepo.GetPendingExportsLightweightByConnectedSystemIdAsync(connectedSystemId);
+            });
         }
 
         // Load sync outcome tracking level once at start of import
@@ -676,7 +699,7 @@ public class SyncImportTaskProcessor
         var reconcileSw = System.Diagnostics.Stopwatch.StartNew();
         using (Diagnostics.Sync.StartSpan("ReconcilePendingExports"))
         {
-            await ReconcilePendingExportsAsync(connectedSystemObjectsToBeUpdated, importRpeisByCsoId, _connectedSystem.Id);
+            await ReconcilePendingExportsAsync(connectedSystemObjectsToBeUpdated, importRpeisByCsoId, _connectedSystem.Id, pendingExportsTask);
         }
         reconcileSw.Stop();
         Log.Information("PerformImportAsync: PHASE TIMING — Reconciliation: {ReconcileSeconds:F1}s ({UpdateCount} CSOs)",
@@ -2527,20 +2550,33 @@ public class SyncImportTaskProcessor
     private async Task ReconcilePendingExportsAsync(
         IReadOnlyCollection<ConnectedSystemObject> updatedCsos,
         Dictionary<Guid, ActivityRunProfileExecutionItem> importRpeisByCsoId,
-        int connectedSystemId)
+        int connectedSystemId,
+        Task<Dictionary<Guid, PendingExport>>? preLoadedPendingExportsTask = null)
     {
         if (updatedCsos.Count == 0)
             return;
 
-        // Bulk-load ALL pending exports for this connected system in a single query.
-        // This replaces the previous approach of N per-page WHERE IN queries, which was the
-        // primary bottleneck at scale (6+ seconds per page × 200+ pages = 20+ minutes).
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling pending exports - loading pending exports");
+        // Use pre-loaded pending exports if available (loaded in parallel during import processing
+        // on a separate DbContext). Otherwise, fall back to loading them now.
         Dictionary<Guid, PendingExport> allPendingExportsByCsoId;
-        using (Diagnostics.Sync.StartSpan("BulkLoadPendingExports"))
+        if (preLoadedPendingExportsTask != null)
         {
-            allPendingExportsByCsoId = await _syncRepo
-                .GetPendingExportsLightweightByConnectedSystemIdAsync(connectedSystemId);
+            await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling pending exports - awaiting pre-loaded data");
+            using (Diagnostics.Sync.StartSpan("AwaitPreLoadedPendingExports"))
+            {
+                allPendingExportsByCsoId = await preLoadedPendingExportsTask;
+            }
+            Log.Information("ReconcilePendingExportsAsync: Using pre-loaded pending exports ({Count} loaded in background)",
+                allPendingExportsByCsoId.Count);
+        }
+        else
+        {
+            await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling pending exports - loading pending exports");
+            using (Diagnostics.Sync.StartSpan("BulkLoadPendingExports"))
+            {
+                allPendingExportsByCsoId = await _syncRepo
+                    .GetPendingExportsLightweightByConnectedSystemIdAsync(connectedSystemId);
+            }
         }
 
         if (allPendingExportsByCsoId.Count == 0)
