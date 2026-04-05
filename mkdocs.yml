@@ -155,6 +155,12 @@ nav:
           - Attribute Mappings: api/sync-rules/mappings.md
           - Scoping Criteria: api/sync-rules/scoping-criteria.md
           - Object Matching Rules: api/sync-rules/matching-rules.md
+      - Metaverse:
+          - api/metaverse/index.md
+          - Object Types: api/metaverse/object-types.md
+          - Attributes: api/metaverse/attributes.md
+          - Objects: api/metaverse/objects.md
+          - Pending Deletions: api/metaverse/pending-deletions.md
   - PowerShell Module:
       - powershell/index.md
       - Cmdlet Reference: powershell/cmdlets.md

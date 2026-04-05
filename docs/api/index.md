@@ -46,10 +46,10 @@ https://jim.example.com/api/v1/
 
 | Resource | Description |
 |----------|-------------|
-| Object Types | Schema definitions for metaverse objects |
-| Attributes | Metaverse attribute definitions and object type associations |
-| Objects | Identity objects stored in the metaverse |
-| Pending Deletions | Metaverse objects awaiting deletion after grace period |
+| [Object Types](metaverse/object-types.md) | Schema definitions for metaverse objects |
+| [Attributes](metaverse/attributes.md) | Metaverse attribute definitions and object type associations |
+| [Objects](metaverse/objects.md) | Identity objects stored in the metaverse |
+| [Pending Deletions](metaverse/pending-deletions.md) | Metaverse objects awaiting deletion after grace period |
 
 ### Scheduling
 
