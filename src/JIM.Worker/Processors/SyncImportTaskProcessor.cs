@@ -134,16 +134,6 @@ public class SyncImportTaskProcessor
                 _csoExternalIdLookup.Count, _connectedSystem.Id);
         }
 
-        // Pre-load pending exports in the background while import processing runs.
-        // This query is independent of import processing and takes several seconds at scale.
-        // By starting it now, the data is typically ready by the time reconciliation begins.
-        Task<Dictionary<Guid, PendingExport>>? pendingExportsTask = null;
-        if (!_csIsEmpty)
-        {
-            Log.Debug("PerformImportAsync: Starting background pre-load of pending exports for connected system {ConnectedSystemId}", _connectedSystem.Id);
-            pendingExportsTask = _syncRepo.GetPendingExportsLightweightByConnectedSystemIdAsync(_connectedSystem.Id);
-        }
-
         // Load sync outcome tracking level once at start of import
         _syncOutcomeTrackingLevel = await _syncServer.GetSyncOutcomeTrackingLevelAsync();
 
@@ -686,7 +676,7 @@ public class SyncImportTaskProcessor
         var reconcileSw = System.Diagnostics.Stopwatch.StartNew();
         using (Diagnostics.Sync.StartSpan("ReconcilePendingExports"))
         {
-            await ReconcilePendingExportsAsync(connectedSystemObjectsToBeUpdated, importRpeisByCsoId, pendingExportsTask);
+            await ReconcilePendingExportsAsync(connectedSystemObjectsToBeUpdated, importRpeisByCsoId, _connectedSystem.Id);
         }
         reconcileSw.Stop();
         Log.Information("PerformImportAsync: PHASE TIMING — Reconciliation: {ReconcileSeconds:F1}s ({UpdateCount} CSOs)",
@@ -2537,31 +2527,26 @@ public class SyncImportTaskProcessor
     private async Task ReconcilePendingExportsAsync(
         IReadOnlyCollection<ConnectedSystemObject> updatedCsos,
         Dictionary<Guid, ActivityRunProfileExecutionItem> importRpeisByCsoId,
-        Task<Dictionary<Guid, PendingExport>>? pendingExportsTask)
+        int connectedSystemId)
     {
         if (updatedCsos.Count == 0)
             return;
 
-        // Await the pre-loaded pending exports. This task was started at the beginning of the
-        // import run, so the data is typically already available by now (loaded in parallel with
-        // import processing). If the connected system was empty at import start, there are no PEs.
+        // Bulk-load ALL pending exports for this connected system in a single query.
+        // This replaces the previous approach of N per-page WHERE IN queries, which was the
+        // primary bottleneck at scale (6+ seconds per page × 200+ pages = 20+ minutes).
+        await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling pending exports - loading pending exports");
         Dictionary<Guid, PendingExport> allPendingExportsByCsoId;
-        if (pendingExportsTask != null)
+        using (Diagnostics.Sync.StartSpan("BulkLoadPendingExports"))
         {
-            await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling pending exports - awaiting pending export data");
-            using (Diagnostics.Sync.StartSpan("AwaitPendingExports"))
-            {
-                allPendingExportsByCsoId = await pendingExportsTask;
-            }
-        }
-        else
-        {
-            allPendingExportsByCsoId = new Dictionary<Guid, PendingExport>();
+            allPendingExportsByCsoId = await _syncRepo
+                .GetPendingExportsLightweightByConnectedSystemIdAsync(connectedSystemId);
         }
 
         if (allPendingExportsByCsoId.Count == 0)
         {
-            Log.Debug("ReconcilePendingExportsAsync: No pending exports found. Skipping reconciliation");
+            Log.Debug("ReconcilePendingExportsAsync: No pending exports found for connected system {ConnectedSystemId}. Skipping reconciliation",
+                connectedSystemId);
 
             // Mark progress as complete so the UI doesn't stay stuck at "0 / N"
             _activity.ObjectsProcessed = _activity.ObjectsToProcess;
