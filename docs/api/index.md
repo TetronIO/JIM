@@ -40,7 +40,7 @@ https://jim.example.com/api/v1/
 |----------|-------------|
 | [Connected Systems](connected-systems/index.md) | External identity stores that synchronise with the JIM metaverse |
 | [Run Profiles](run-profiles/index.md) | Import, sync, and export operations for connected systems |
-| Sync Rules | Attribute mappings, scoping, and join logic between connected systems and the metaverse |
+| [Sync Rules](sync-rules/index.md) | Attribute mappings, scoping, and join logic between connected systems and the metaverse |
 
 ### Metaverse
 

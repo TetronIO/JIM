@@ -145,6 +145,16 @@ nav:
           - Execution Statistics: api/activities/stats.md
           - Execution Items: api/activities/items.md
           - Child Activities: api/activities/children.md
+      - Sync Rules:
+          - api/sync-rules/index.md
+          - List: api/sync-rules/list.md
+          - Create: api/sync-rules/create.md
+          - Retrieve: api/sync-rules/retrieve.md
+          - Update: api/sync-rules/update.md
+          - Delete: api/sync-rules/delete.md
+          - Attribute Mappings: api/sync-rules/mappings.md
+          - Scoping Criteria: api/sync-rules/scoping-criteria.md
+          - Object Matching Rules: api/sync-rules/matching-rules.md
   - PowerShell Module:
       - powershell/index.md
       - Cmdlet Reference: powershell/cmdlets.md
