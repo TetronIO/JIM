@@ -4,7 +4,7 @@ title: Attribute Mappings
 
 # Attribute Mappings
 
-Attribute mappings define how individual attributes flow between a connected system and the metaverse. Each mapping has a target attribute and one or more sources, which can be direct attribute references or expressions.
+Attribute mappings define how individual attributes flow between a connected system and the metaverse, or vice versa. Each mapping has a target attribute and one or more sources, which can be direct attribute references or expressions.
 
 ### The Mapping Object
 
