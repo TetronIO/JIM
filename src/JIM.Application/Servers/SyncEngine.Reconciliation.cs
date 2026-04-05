@@ -58,14 +58,17 @@ public partial class SyncEngine
         {
             var confirmed = IsAttributeChangeConfirmed(connectedSystemObject, attrChange);
 
-            Log.Verbose("ReconcileCsoAgainstPendingExport: Comparing attribute {AttrName} (ChangeType: {ChangeType}) for CSO {CsoId}. " +
-                "Expected: '{ExpectedValue}', Found: '{ActualValue}', Confirmed: {Confirmed}",
-                attrChange.Attribute?.Name ?? "unknown",
-                attrChange.ChangeType,
-                connectedSystemObject.Id,
-                GetExpectedValueAsString(attrChange),
-                GetImportedValueAsString(connectedSystemObject, attrChange),
-                confirmed);
+            if (Log.IsEnabled(Serilog.Events.LogEventLevel.Verbose))
+            {
+                Log.Verbose("ReconcileCsoAgainstPendingExport: Comparing attribute {AttrName} (ChangeType: {ChangeType}) for CSO {CsoId}. " +
+                    "Expected: '{ExpectedValue}', Found: '{ActualValue}', Confirmed: {Confirmed}",
+                    attrChange.Attribute?.Name ?? "unknown",
+                    attrChange.ChangeType,
+                    connectedSystemObject.Id,
+                    GetExpectedValueAsString(attrChange),
+                    GetImportedValueAsString(connectedSystemObject, attrChange),
+                    confirmed);
+            }
 
             if (confirmed)
             {
