@@ -48,6 +48,17 @@ Attributes exist independently of object types. The `objectTypeIds` field on cre
 | `Reference` | Reference to another metaverse object |
 | `Binary` | Binary data |
 
+### Data Integrity Rules
+
+JIM enforces the following rules to protect data integrity:
+
+- **An attribute cannot be deleted** if it has values stored on any metaverse objects. Remove the values first.
+- **An attribute cannot be deleted** if it is referenced by any sync rule mappings, scoping criteria, or object matching rules. Remove the references first.
+- **An object type mapping cannot be removed** from an attribute if metaverse objects of that type have values stored for the attribute. Remove the values first.
+- **Built-in attributes** cannot be deleted or have their type changed.
+
+These rules ensure that schema changes never silently destroy data or break synchronisation configuration.
+
 ---
 
 ## List Attributes
@@ -114,6 +125,8 @@ GET /api/v1/metaverse/attributes/{id}
 
 ## Create an Attribute
 
+Creates a new attribute and optionally maps it to one or more object types.
+
 ```
 POST /api/v1/metaverse/attributes
 ```
@@ -142,6 +155,15 @@ POST /api/v1/metaverse/attributes
         "objectTypeIds": [1, 2]
       }'
 
+    # Create an attribute with no object type mappings (add them later)
+    curl -X POST https://jim.example.com/api/v1/metaverse/attributes \
+      -H "X-Api-Key: jim_xxxxxxxxxxxx" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "badgeNumber",
+        "type": "Text"
+      }'
+
     # Create a multi-valued reference attribute
     curl -X POST https://jim.example.com/api/v1/metaverse/attributes \
       -H "X-Api-Key: jim_xxxxxxxxxxxx" \
@@ -162,6 +184,9 @@ POST /api/v1/metaverse/attributes
     # Create a text attribute mapped to person and group
     New-JIMMetaverseAttribute -Name "costCentre" -Type Text -ObjectTypeIds @(1, 2)
 
+    # Create an attribute with no mappings
+    New-JIMMetaverseAttribute -Name "badgeNumber" -Type Text
+
     # Create a multi-valued reference attribute
     New-JIMMetaverseAttribute -Name "directReports" `
         -Type Reference -AttributePlurality MultiValued `
@@ -171,6 +196,14 @@ POST /api/v1/metaverse/attributes
 ### Response
 
 Returns `201 Created` with the attribute object.
+
+### Errors
+
+| Status | Code | Description |
+|--------|------|-------------|
+| `400` | `VALIDATION_ERROR` | Invalid fields (e.g. name already exists, invalid data type) |
+| `401` | `UNAUTHORISED` | Authentication required |
+| `403` | `FORBIDDEN` | Insufficient permissions (Administrator role required) |
 
 ---
 
@@ -189,31 +222,54 @@ PUT /api/v1/metaverse/attributes/{id}
 | `name` | string | No | New name (1-200 characters) |
 | `type` | string | No | New data type |
 | `attributePlurality` | string | No | `SingleValued` or `MultiValued` |
-| `objectTypeIds` | array | No | Replace object type mappings (replaces the full set; include all desired type IDs) |
+| `objectTypeIds` | array | No | Replace all object type mappings (see below) |
+
+### Managing Object Type Mappings
+
+The `objectTypeIds` field **replaces** all existing mappings with the provided set. To manage mappings:
+
+- **Add a mapping**: include all existing type IDs plus the new one
+- **Remove a mapping**: include all existing type IDs except the one to remove
+- **Clear all mappings**: pass an empty array `[]`
 
 !!! warning
-    The `objectTypeIds` field **replaces** all existing mappings. To add a new object type mapping, include all existing type IDs plus the new one. Removing a type ID from the list removes the mapping. You cannot remove an object type mapping if metaverse objects of that type have values stored for this attribute.
+    You cannot remove an object type mapping if metaverse objects of that type have values stored for this attribute. The API returns a `400 VALIDATION_ERROR` indicating which type cannot be removed and how many objects are affected. Remove the attribute values first (e.g. by removing the sync rule mapping that flows data into this attribute, then running a full sync).
 
 ### Examples
 
 === "curl"
 
     ```bash
-    # Rename and map to both person and group
+    # Map attribute to person and group
     curl -X PUT https://jim.example.com/api/v1/metaverse/attributes/20 \
       -H "X-Api-Key: jim_xxxxxxxxxxxx" \
       -H "Content-Type: application/json" \
       -d '{
-        "name": "costCentreCode",
         "objectTypeIds": [1, 2]
       }'
 
-    # Add a third object type mapping (must include all existing IDs)
+    # Add a third object type mapping (include all existing IDs)
     curl -X PUT https://jim.example.com/api/v1/metaverse/attributes/20 \
       -H "X-Api-Key: jim_xxxxxxxxxxxx" \
       -H "Content-Type: application/json" \
       -d '{
         "objectTypeIds": [1, 2, 3]
+      }'
+
+    # Remove the group mapping (only if no group objects have values)
+    curl -X PUT https://jim.example.com/api/v1/metaverse/attributes/20 \
+      -H "X-Api-Key: jim_xxxxxxxxxxxx" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "objectTypeIds": [1, 3]
+      }'
+
+    # Rename the attribute
+    curl -X PUT https://jim.example.com/api/v1/metaverse/attributes/20 \
+      -H "X-Api-Key: jim_xxxxxxxxxxxx" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "costCentreCode"
       }'
     ```
 
@@ -222,18 +278,26 @@ PUT /api/v1/metaverse/attributes/{id}
     ```powershell
     Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
 
-    # Rename and map to both person and group
-    Set-JIMMetaverseAttribute -Id 20 -Name "costCentreCode" -ObjectTypeIds @(1, 2)
+    # Map attribute to person and group
+    Set-JIMMetaverseAttribute -Id 20 -ObjectTypeIds @(1, 2)
 
     # Add a third object type mapping
     Set-JIMMetaverseAttribute -Id 20 -ObjectTypeIds @(1, 2, 3)
+
+    # Remove the group mapping (only if no group objects have values)
+    Set-JIMMetaverseAttribute -Id 20 -ObjectTypeIds @(1, 3)
+
+    # Rename the attribute
+    Set-JIMMetaverseAttribute -Id 20 -Name "costCentreCode"
     ```
 
 ### Errors
 
 | Status | Code | Description |
 |--------|------|-------------|
-| `400` | `VALIDATION_ERROR` | Invalid change (e.g. modifying a built-in attribute's type, or removing an object type mapping when objects of that type have values for this attribute) |
+| `400` | `VALIDATION_ERROR` | Invalid change: built-in attribute modification, or removing an object type mapping when objects of that type have values stored for this attribute |
+| `401` | `UNAUTHORISED` | Authentication required |
+| `403` | `FORBIDDEN` | Insufficient permissions (Administrator role required) |
 | `404` | `NOT_FOUND` | Attribute does not exist |
 
 ---
@@ -245,6 +309,8 @@ Permanently deletes an attribute. An attribute cannot be deleted if:
 - It is a built-in attribute
 - It has values stored on any metaverse objects
 - It is referenced by any sync rule mappings, scoping criteria, or object matching rules
+
+To delete an attribute that is in use, first remove all references to it from sync rule configuration, then ensure no metaverse objects have values for it (e.g. by running a full sync after removing the sync rule mappings).
 
 ```
 DELETE /api/v1/metaverse/attributes/{id}
@@ -275,5 +341,7 @@ Returns `204 No Content` on success.
 
 | Status | Code | Description |
 |--------|------|-------------|
-| `400` | `BAD_REQUEST` | Cannot delete: attribute is built-in, has stored values on metaverse objects, or is referenced by sync rule configuration |
+| `400` | `VALIDATION_ERROR` | Cannot delete: attribute is built-in, has stored values on metaverse objects (error includes affected object count), or is referenced by sync rule configuration (error lists the referencing sync rules) |
+| `401` | `UNAUTHORISED` | Authentication required |
+| `403` | `FORBIDDEN` | Insufficient permissions (Administrator role required) |
 | `404` | `NOT_FOUND` | Attribute does not exist |
