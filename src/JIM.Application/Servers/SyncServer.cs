@@ -184,7 +184,14 @@ public class SyncServer : ISyncServer
         // PendingAttributeValueAdditions/Removals after building change history records.
         // The repository needs these lists to persist attribute value inserts/deletes.
         var pendingAdditions = connectedSystemObjects
-            .SelectMany(cso => cso.PendingAttributeValueAdditions.Select(av => (CsoId: cso.Id, Value: av)))
+            .SelectMany(cso => cso.PendingAttributeValueAdditions.Select(av =>
+            {
+                // Ensure new attribute values have a generated ID for raw SQL bulk insert.
+                // EF Core would auto-generate these, but raw SQL requires explicit IDs.
+                if (av.Id == Guid.Empty)
+                    av.Id = Guid.NewGuid();
+                return (CsoId: cso.Id, Value: av);
+            }))
             .ToList();
         var pendingRemovals = connectedSystemObjects
             .SelectMany(cso => cso.PendingAttributeValueRemovals)
