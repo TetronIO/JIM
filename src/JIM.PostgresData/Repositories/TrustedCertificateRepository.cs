@@ -31,12 +31,13 @@ public class TrustedCertificateRepository : ITrustedCertificateRepository
     public async Task<TrustedCertificate?> GetByIdAsync(Guid id)
     {
         return await Repository.Database.TrustedCertificates
-            .FirstOrDefaultAsync(c => c.Id == id);
+            .FindAsync(id);
     }
 
     public async Task<TrustedCertificate?> GetByThumbprintAsync(string thumbprint)
     {
         return await Repository.Database.TrustedCertificates
+            .OrderBy(c => c.Id)
             .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint);
     }
 
@@ -53,7 +54,7 @@ public class TrustedCertificateRepository : ITrustedCertificateRepository
     public async Task UpdateAsync(TrustedCertificate certificate)
     {
         var existing = await Repository.Database.TrustedCertificates
-            .FirstOrDefaultAsync(c => c.Id == certificate.Id);
+            .FindAsync(certificate.Id);
 
         if (existing == null)
             throw new InvalidOperationException($"Certificate with ID {certificate.Id} not found.");
@@ -69,7 +70,7 @@ public class TrustedCertificateRepository : ITrustedCertificateRepository
     public async Task DeleteAsync(Guid id)
     {
         var certificate = await Repository.Database.TrustedCertificates
-            .FirstOrDefaultAsync(c => c.Id == id);
+            .FindAsync(id);
 
         if (certificate == null)
             throw new InvalidOperationException($"Certificate with ID {id} not found.");
