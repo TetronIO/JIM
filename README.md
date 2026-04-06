@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/TetronIO/JIM/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/TetronIO/JIM/actions/workflows/ci.yml)
 &nbsp;
-[![.NET 9.0](https://img.shields.io/badge/.NET-9.0-512BD4)](https://dotnet.microsoft.com/)
+[![.NET 10.0](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
 &nbsp;
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791)](https://www.postgresql.org/)
 &nbsp;
@@ -31,7 +31,7 @@ JIM is a modern Identity Management system designed for organisations with compl
 - Docker healthchecks on Worker and Scheduler for reliable orchestration
 - Single Sign-On (SSO) using OpenID Connect
 
-![A screenshot of JIM running](https://tetron.io/images/jim/0.7.1/homepage-dark.png "JIM Screenshot")
+![A screenshot of JIM running](https://tetron.io/images/jim/0.8.0/homepage-dark.png "JIM Screenshot")
 
 <p align="center">
   <strong>📖 <a href="https://tetronio.github.io/JIM/">Read the full documentation</a></strong>
@@ -113,7 +113,7 @@ This downloads everything you need, walks you through configuration, and starts 
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/TetronIO/JIM?devcontainer_path=.devcontainer/devcontainer.json)
 
-The devcontainer includes everything pre-configured — .NET 9.0, PostgreSQL, Keycloak IdP with test users, shell aliases, and VS Code extensions. Or clone locally and open with the [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension. See the [Developer Guide](https://tetronio.github.io/JIM/developer/) for details.
+The devcontainer includes everything pre-configured; .NET 10.0, PostgreSQL, Keycloak IdP with test users, shell aliases, and VS Code extensions. Or clone locally and open with the [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension. See the [Developer Guide](https://tetronio.github.io/JIM/developer/) for details.
 
 ### Automate
 

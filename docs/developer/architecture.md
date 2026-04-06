@@ -80,8 +80,8 @@ flowchart LR
 
 | Category | Technology |
 |----------|-----------|
-| Runtime | .NET 9.0, C# 13 |
-| Database | PostgreSQL 18 via Npgsql and EF Core 9.0 |
+| Runtime | .NET 10.0, C# 14 |
+| Database | PostgreSQL 18 via Npgsql and EF Core 10.0 |
 | Web UI | Blazor Server with MudBlazor 8.x |
 | Authentication | OpenID Connect (OIDC) with PKCE |
 | Logging | Serilog (structured logging) |

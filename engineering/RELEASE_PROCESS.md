@@ -79,7 +79,7 @@ git push origin main --tags
 1. **Review pinned Docker dependencies**: Check that base image digests and apt package versions are up to date. If Dependabot PRs for Docker digests have been merged since the last release, verify the pinned apt versions still match. If not, update them:
    ```bash
    # Check available versions in the current base image
-   docker run --rm mcr.microsoft.com/dotnet/aspnet:9.0@sha256:<current-digest> bash -c \
+   docker run --rm mcr.microsoft.com/dotnet/aspnet:10.0@sha256:<current-digest> bash -c \
      "apt-get update -qq && apt-cache policy libldap-common libldap-2.5-0 cifs-utils"
    ```
 

@@ -554,7 +554,7 @@
     private bool _selectedObjectTypeHasReadOnlyAttributes;
     private IReadOnlyCollection<AttributeWritability> _selectedSchemaWritabilities = new List<AttributeWritability>();
     private string _schemaSearchString = "";
-    private IEnumerable<string> AttributeClassFilterSelectedValues { get; set; } = new HashSet<string>();
+    private IReadOnlyCollection<string> AttributeClassFilterSelectedValues { get; set; } = new HashSet<string>();
     private bool _attributeSelectedFilter;
     private string? _attributeSelectionCsv;
     private IReadOnlyCollection<AttributeDataType> _selectedSchemaTypes = new List<AttributeDataType>();
@@ -710,7 +710,7 @@
     private static bool SchemaFilterFunc(
         ConnectedSystemObjectTypeAttribute element,
         string searchString,
-        IEnumerable<string> attributeClassFilterSelectedValues,
+        IReadOnlyCollection<string> attributeClassFilterSelectedValues,
         bool attributeSelectedFilter,
         IReadOnlyCollection<AttributeDataType> selectedTypes,
         IReadOnlyCollection<AttributePlurality> selectedPluralites,

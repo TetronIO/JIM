@@ -122,7 +122,7 @@ All dependency updates from Dependabot require human review before merging - the
 ## Environment Setup
 
 **Required:**
-- .NET 9.0 SDK
+- .NET 10.0 SDK
 - PostgreSQL 18 (via Docker)
 - Docker & Docker Compose
 
@@ -141,7 +141,7 @@ All dependency updates from Dependabot require human review before merging - the
 ## Troubleshooting
 
 **Build fails:**
-- Check .NET 9.0 SDK installed: `dotnet --version`
+- Check .NET 10.0 SDK installed: `dotnet --version`
 - Restore packages: `dotnet restore JIM.sln`
 
 **Tests fail:**

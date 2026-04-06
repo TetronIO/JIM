@@ -19,7 +19,7 @@
 | **Product** | JIM - Junctional Identity Manager |
 | **Company** | Tetron |
 | **Type** | Enterprise Identity Lifecycle Management (ILM) |
-| **Stack** | .NET 9.0, EF Core, PostgreSQL, Blazor Server |
+| **Stack** | .NET 10.0, EF Core, PostgreSQL, Blazor Server |
 | **UI Framework** | MudBlazor (Material Design) |
 | **Auth** | OpenID Connect (OIDC) with PKCE |
 | **Deployment** | Docker containers, air-gapped capable |

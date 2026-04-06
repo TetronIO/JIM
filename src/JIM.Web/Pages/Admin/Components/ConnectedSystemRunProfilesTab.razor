@@ -358,7 +358,7 @@
         if (ConnectedSystem.RunProfiles == null)
             return;
 
-        var confirmationResult = await DialogService.ShowMessageBox(
+        var confirmationResult = await DialogService.ShowMessageBoxAsync(
             "Delete Run Profile",
             $"Are you sure you want to delete the run profile '{connectedSystemRunProfile.Name}'? This action cannot be undone.",
             yesText: "Delete",

@@ -4,7 +4,7 @@ title: Development Environment
 
 # Development Environment
 
-JIM provides a fully configured development environment through GitHub Codespaces and VS Code devcontainers. All dependencies (.NET 9.0 SDK, Docker, PostgreSQL, VS Code extensions, and shell aliases) are pre-installed and ready to use.
+JIM provides a fully configured development environment through GitHub Codespaces and VS Code devcontainers. All dependencies (.NET 10.0 SDK, Docker, PostgreSQL, VS Code extensions, and shell aliases) are pre-installed and ready to use.
 
 ## GitHub Codespaces
 

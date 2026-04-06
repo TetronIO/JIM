@@ -21,7 +21,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
+using Scalar.AspNetCore;
 using MudBlazor;
 using MudBlazor.Services;
 using Serilog;
@@ -179,6 +180,12 @@ try
             options.UsePkce = true;
             options.Scope.Add("profile");
 
+            // Disable Pushed Authorization Requests (PAR), enabled by default in .NET 10.
+            // JIM must work with any OIDC provider; PAR support varies widely (e.g. Entra ID
+            // does not support PAR at all). Standard authorization code flow with PKCE provides
+            // sufficient security for JIM's deployment scenarios.
+            options.PushedAuthorizationBehavior = PushedAuthorizationBehavior.Disable;
+
             // Preserve standard OIDC claim names (sub, name, email, etc.) instead of mapping them
             // to Microsoft's legacy XML-based claim URIs. This makes JIM IDP-agnostic.
             options.MapInboundClaims = false;
@@ -302,82 +309,70 @@ try
     // Fetch OIDC discovery document to get IDP-agnostic authorization endpoints
     var oidcConfig = await FetchOidcDiscoveryDocumentAsync(authority!);
 
-    // Setup Swagger with OAuth2 support for testing authenticated API endpoints
-    builder.Services.AddSwaggerGen(options =>
+    // Setup OpenAPI with OAuth2 + API Key security schemes for API documentation
+    builder.Services.AddOpenApi("v1", options =>
     {
-        options.SwaggerDoc("v1", new OpenApiInfo
+        options.AddDocumentTransformer((document, _, _) =>
         {
-            Title = "JIM API",
-            Version = "v1",
-            Description = "JIM (Junctional Identity Manager) REST API for managing identity synchronisation.",
-            Contact = new OpenApiContact
+            document.Info = new OpenApiInfo
             {
-                Name = "Tetron",
-                Url = new Uri("https://github.com/TetronIO/JIM")
-            }
-        });
-
-        // Include XML comments for API documentation
-        var xmlFilename = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
-        var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFilename);
-        if (File.Exists(xmlPath))
-        {
-            options.IncludeXmlComments(xmlPath);
-        }
-
-        // OAuth2 security scheme for SSO authentication
-        options.AddSecurityDefinition("oauth2", new OpenApiSecurityScheme
-        {
-            Type = SecuritySchemeType.OAuth2,
-            Flows = new OpenApiOAuthFlows
-            {
-                AuthorizationCode = new OpenApiOAuthFlow
+                Title = "JIM API",
+                Version = "v1",
+                Description = "JIM (Junctional Identity Manager) REST API for managing identity synchronisation.",
+                Contact = new OpenApiContact
                 {
-                    AuthorizationUrl = new Uri(oidcConfig.AuthorizationEndpoint),
-                    TokenUrl = new Uri(oidcConfig.TokenEndpoint),
-                    Scopes = new Dictionary<string, string>
+                    Name = "Tetron",
+                    Url = new Uri("https://github.com/TetronIO/JIM")
+                }
+            };
+
+            // OAuth2 security scheme for SSO authentication
+            var oauth2Scheme = new OpenApiSecurityScheme
+            {
+                Type = SecuritySchemeType.OAuth2,
+                Flows = new OpenApiOAuthFlows
+                {
+                    AuthorizationCode = new OpenApiOAuthFlow
                     {
-                        { "openid", "OpenID Connect" },
-                        { apiScope!, "Access JIM API" }
+                        AuthorizationUrl = new Uri(oidcConfig.AuthorizationEndpoint),
+                        TokenUrl = new Uri(oidcConfig.TokenEndpoint),
+                        Scopes = new Dictionary<string, string>
+                        {
+                            { "openid", "OpenID Connect" },
+                            { apiScope!, "Access JIM API" }
+                        }
                     }
                 }
-            }
-        });
+            };
 
-        // API Key security scheme for non-interactive authentication
-        options.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
-        {
-            Type = SecuritySchemeType.ApiKey,
-            In = ParameterLocation.Header,
-            Name = "X-API-Key",
-            Description = "API key for non-interactive authentication. Format: jim_ak_<random>"
-        });
+            // API Key security scheme for non-interactive authentication
+            var apiKeyScheme = new OpenApiSecurityScheme
+            {
+                Type = SecuritySchemeType.ApiKey,
+                In = ParameterLocation.Header,
+                Name = "X-API-Key",
+                Description = "API key for non-interactive authentication. Format: jim_ak_<random>"
+            };
 
-        // Both authentication methods are valid - API will accept either
-        options.AddSecurityRequirement(new OpenApiSecurityRequirement
-        {
+            var components = document.Components ??= new OpenApiComponents();
+            var schemes = components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
+            schemes.Add("OAuth2", oauth2Scheme);
+            schemes.Add("ApiKey", apiKeyScheme);
+
+            // Both authentication methods are valid; API will accept either
+            (document.Security ??= []).Add(new OpenApiSecurityRequirement
             {
-                new OpenApiSecurityScheme
                 {
-                    Reference = new OpenApiReference
-                    {
-                        Type = ReferenceType.SecurityScheme,
-                        Id = "oauth2"
-                    }
+                    new OpenApiSecuritySchemeReference("OAuth2"),
+                    new List<string> { "openid", apiScope! }
                 },
-                new[] { "openid", apiScope! }
-            },
-            {
-                new OpenApiSecurityScheme
                 {
-                    Reference = new OpenApiReference
-                    {
-                        Type = ReferenceType.SecurityScheme,
-                        Id = "ApiKey"
-                    }
-                },
-                Array.Empty<string>()
-            }
+                    new OpenApiSecuritySchemeReference("ApiKey"),
+                    new List<string>()
+                }
+            });
+
+            return Task.CompletedTask;
         });
     });
 
@@ -403,17 +398,17 @@ try
         app.UseHsts();
     }
 
-    // Swagger UI available at /api/swagger in development
+    // API documentation available at /api/reference in development
     if (app.Environment.IsDevelopment())
     {
-        app.UseSwagger(c => c.RouteTemplate = "api/swagger/{documentName}/swagger.json");
-        app.UseSwaggerUI(options =>
-        {
-            options.SwaggerEndpoint("/api/swagger/v1/swagger.json", "JIM API v1");
-            options.RoutePrefix = "api/swagger";
-            options.OAuthClientId(clientId);
-            options.OAuthUsePkce();
-        });
+        app.MapOpenApi("/api/openapi/{documentName}.json");
+        app.MapScalarApiReference("/api/reference", options => options
+            .AddPreferredSecuritySchemes("OAuth2", "ApiKey")
+            .AddAuthorizationCodeFlow("OAuth2", flow =>
+            {
+                flow.ClientId = clientId!;
+                flow.Pkce = Pkce.Sha256;
+            }));
     }
 
     app.UseHttpsRedirection();

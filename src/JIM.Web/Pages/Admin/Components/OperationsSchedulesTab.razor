@@ -304,7 +304,7 @@
             return;
         }
 
-        var confirmed = await DialogService.ShowMessageBox(
+        var confirmed = await DialogService.ShowMessageBoxAsync(
             "Run Schedule Now",
             $"Are you sure you want to run '{schedule.Name}' now? This will queue all steps for execution.",
             yesText: "Run Now",
@@ -344,7 +344,7 @@
 
     private async Task HandleDeleteAsync(Schedule schedule)
     {
-        var confirmed = await DialogService.ShowMessageBox(
+        var confirmed = await DialogService.ShowMessageBoxAsync(
             "Delete Schedule",
             $"Are you sure you want to delete '{schedule.Name}'? This action cannot be undone.",
             yesText: "Delete",

@@ -3,7 +3,7 @@
 
 ARG VERSION=dev
 
-FROM mcr.microsoft.com/dotnet/runtime:9.0@sha256:83adbb0751275745e215d86a8263fc782a67e35ce42cea91e7bfd67477cdcb3c AS base
+FROM mcr.microsoft.com/dotnet/runtime:10.0-noble@sha256:260c4d478b25ccb5a84be74dc5ea5a772fb4fb520e9226ca8f1cb57bf1425fb1 AS base
 ARG VERSION
 
 LABEL org.opencontainers.image.title="JIM Scheduler"
@@ -14,7 +14,14 @@ LABEL org.opencontainers.image.source="https://github.com/TetronIO/JIM"
 LABEL org.opencontainers.image.licenses="See https://tetron.io/jim/#licensing"
 WORKDIR /app
 
-FROM mcr.microsoft.com/dotnet/sdk:9.0@sha256:0cbece2e210d064199e7ab3bb9ac695c5ed8bfb35b31eee8d80e051abfbef22b AS build
+# Create data directories writable by non-root user before switching
+RUN mkdir -p /var/log/jim \
+    && chown -R app:app /var/log/jim
+
+# Run as non-root for security (built-in 'app' user, UID 1654)
+USER app
+
+FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:f061e5a7532b36fa1d1b684857fe1f504ba92115b9934f154643266613c44c62 AS build
 WORKDIR /src
 COPY ["Directory.Build.props", "./"]
 COPY ["VERSION", "./"]

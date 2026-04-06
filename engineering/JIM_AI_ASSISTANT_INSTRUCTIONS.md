@@ -23,7 +23,7 @@ JIM is a self-hosted, container-native identity management platform that synchro
 
 ## Technical Stack
 
-- .NET 9.0, C# 13, Entity Framework Core
+- .NET 10.0, C# 14, Entity Framework Core
 - PostgreSQL 18
 - Blazor Server with MudBlazor
 - REST API at /api/ with OpenAPI/Swagger

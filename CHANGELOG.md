@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### .NET 10 Migration (#174)
+
+- ✨ Migrated from .NET 9.0 (STS) to .NET 10.0 (LTS), extending support from November 2026 to November 2028
+- ✨ Upgraded all NuGet packages to .NET 10-compatible versions, including EF Core 10, MudBlazor 9, and Humanizer 3
+- ✨ Replaced Swashbuckle with built-in `Microsoft.AspNetCore.OpenApi` + Scalar for modern API documentation UI
+- 🔒 All Docker containers now run as non-root (`USER app`, UID 1654), improving security posture for enterprise deployments
+- 📦 Docker images migrated from Debian Bookworm to Ubuntu 24.04 Noble base with pinned SHA256 digests
+- 📦 Added `global.json` to pin .NET 10 SDK version across all environments
+
 #### Service Settings REST API & PowerShell Cmdlets
 
 - ✨ New REST API for managing service settings (`GET/PUT/DELETE /api/v1/service-settings`) — enables automation of change tracking, sync page size, history retention, and other operational settings

@@ -386,7 +386,7 @@ else
         if (workerTaskHeader == null)
             return;
 
-        var result = await DialogService.ShowMessageBox(
+        var result = await DialogService.ShowMessageBoxAsync(
             "Cancel Task",
             $"Are you sure you want to cancel the task '{workerTaskHeader.Name}'?",
             yesText: "Cancel Task",
@@ -407,7 +407,7 @@ else
             .Select(t => t.ScheduleExecutionName)
             .FirstOrDefault() ?? "this schedule execution";
 
-        var result = await DialogService.ShowMessageBox(
+        var result = await DialogService.ShowMessageBoxAsync(
             "Cancel Schedule Execution",
             $"Are you sure you want to cancel '{scheduleName}'? All tasks will be cancelled immediately, including any that are currently processing.",
             yesText: "Cancel Execution",
