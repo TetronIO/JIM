@@ -20,7 +20,7 @@
                            Dense="true" Clearable="true" MultiSelection="true"
                            SelectedValues="_filterConnectedSystems"
                            SelectedValuesChanged="OnConnectedSystemFilterChanged"
-                           MultiSelectionTextFunc="@(new Func<List<string>, string>(GetMultiSelectText))">
+                           MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
                     @if (_filterOptions != null)
                     {
                         @foreach (var cs in _filterOptions.ConnectedSystems)
@@ -35,7 +35,7 @@
                            Dense="true" Clearable="true" MultiSelection="true"
                            SelectedValues="_filterRunProfiles"
                            SelectedValuesChanged="OnRunProfileFilterChanged"
-                           MultiSelectionTextFunc="@(new Func<List<string>, string>(GetMultiSelectText))">
+                           MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
                     @if (_filterOptions != null)
                     {
                         @foreach (var rp in _filterOptions.RunProfiles)
@@ -50,7 +50,7 @@
                            Dense="true" Clearable="true" MultiSelection="true"
                            SelectedValues="_filterStatuses"
                            SelectedValuesChanged="OnStatusFilterChanged"
-                           MultiSelectionTextFunc="@(new Func<List<string>, string>(GetMultiSelectText))">
+                           MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
                     <MudSelectItem T="ActivityStatus" Value="ActivityStatus.InProgress">In Progress</MudSelectItem>
                     <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Complete">Complete</MudSelectItem>
                     <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithWarning">Complete With Warning</MudSelectItem>
@@ -717,9 +717,9 @@
 
     // Filter state
     private ActivityFilterOptions? _filterOptions;
-    private IEnumerable<string> _filterConnectedSystems = [];
-    private IEnumerable<string> _filterRunProfiles = [];
-    private IEnumerable<ActivityStatus> _filterStatuses = [];
+    private IReadOnlyCollection<string> _filterConnectedSystems = [];
+    private IReadOnlyCollection<string> _filterRunProfiles = [];
+    private IReadOnlyCollection<ActivityStatus> _filterStatuses = [];
     private string? _filterInitiatedBy;
     private bool _filterHasChildren;
 
@@ -858,19 +858,19 @@
             $"{a.Id}:{a.Status}:{a.ObjectsProcessed},{a.ObjectsToProcess},{a.TotalAdded},{a.TotalUpdated},{a.TotalDeleted},{a.TotalProjected},{a.TotalJoined},{a.TotalAttributeFlows},{a.TotalDisconnected},{a.TotalDriftCorrections},{a.TotalProvisioned},{a.TotalExported},{a.TotalDeprovisioned},{a.TotalErrors}"));
     }
 
-    private void OnConnectedSystemFilterChanged(IEnumerable<string> values)
+    private void OnConnectedSystemFilterChanged(IReadOnlyCollection<string> values)
     {
         _filterConnectedSystems = values;
         _table?.ReloadServerData();
     }
 
-    private void OnRunProfileFilterChanged(IEnumerable<string> values)
+    private void OnRunProfileFilterChanged(IReadOnlyCollection<string> values)
     {
         _filterRunProfiles = values;
         _table?.ReloadServerData();
     }
 
-    private void OnStatusFilterChanged(IEnumerable<ActivityStatus> values)
+    private void OnStatusFilterChanged(IReadOnlyCollection<ActivityStatus> values)
     {
         _filterStatuses = values;
         _table?.ReloadServerData();
@@ -888,7 +888,7 @@
         _table?.ReloadServerData();
     }
 
-    private static string GetMultiSelectText(List<string> selectedValues)
+    private static string GetMultiSelectText(IReadOnlyList<string> selectedValues)
     {
         return selectedValues.Count switch
         {

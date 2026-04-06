@@ -124,12 +124,13 @@
             RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-3"
             HelperText="A friendly name for this certificate (e.g., 'Corp Root CA')" />
         <MudFileUpload T="IBrowserFile" FilesChanged="HandleFileSelected" Accept=".pem,.crt,.cer,.der">
-            <ActivatorContent>
+            <CustomContent>
                 <MudButton Variant="Variant.Outlined" Color="Color.Primary"
-                    StartIcon="@Icons.Material.Filled.AttachFile" Class="mt-5">
+                    StartIcon="@Icons.Material.Filled.AttachFile" Class="mt-5"
+                    OnClick="@context.OpenFilePickerAsync">
                     @(_uploadFile != null ? _uploadFile.Name : "Select Certificate File")
                 </MudButton>
-            </ActivatorContent>
+            </CustomContent>
         </MudFileUpload>
         <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
             Supported formats: PEM (.pem, .crt) or DER (.cer, .der)
@@ -509,7 +510,7 @@ new("Certificates", href: null, disabled: true)
 
     private async Task HandleDeleteAsync(TrustedCertificate certificate)
     {
-        var result = await DialogService.ShowMessageBox(
+        var result = await DialogService.ShowMessageBoxAsync(
         "Delete Certificate",
         $"Are you sure you want to delete the certificate '{certificate.Name}'? This action cannot be undone.",
         yesText: "Delete",

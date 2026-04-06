@@ -30,7 +30,7 @@
                    Dense="true" Clearable="true" MultiSelection="true"
                    SelectedValues="_filterOperations"
                    SelectedValuesChanged="OnOperationFilterChanged"
-                   MultiSelectionTextFunc="@(new Func<List<string>, string>(GetMultiSelectText))">
+                   MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
             <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Create">Create</MudSelectItem>
             <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Read">Read</MudSelectItem>
             <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Update">Update</MudSelectItem>
@@ -47,7 +47,7 @@
                    Dense="true" Clearable="true" MultiSelection="true"
                    SelectedValues="_filterOutcomes"
                    SelectedValuesChanged="OnOutcomeFilterChanged"
-                   MultiSelectionTextFunc="@(new Func<List<string>, string>(GetMultiSelectText))">
+                   MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
             <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Added">Added</MudSelectItem>
             <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Updated">Updated</MudSelectItem>
             <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Deleted">Deleted</MudSelectItem>
@@ -69,7 +69,7 @@
                    Dense="true" Clearable="true" MultiSelection="true"
                    SelectedValues="_filterTypes"
                    SelectedValuesChanged="OnTypeFilterChanged"
-                   MultiSelectionTextFunc="@(new Func<List<string>, string>(GetMultiSelectText))">
+                   MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ConnectedSystem">Connected System</MudSelectItem>
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ConnectedSystemRunProfile">Connected System Run Profile</MudSelectItem>
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.SyncRule">Sync Rule</MudSelectItem>
@@ -87,7 +87,7 @@
                    Dense="true" Clearable="true" MultiSelection="true"
                    SelectedValues="_filterStatuses"
                    SelectedValuesChanged="OnStatusFilterChanged"
-                   MultiSelectionTextFunc="@(new Func<List<string>, string>(GetMultiSelectText))">
+                   MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
             <MudSelectItem T="ActivityStatus" Value="ActivityStatus.InProgress">In Progress</MudSelectItem>
             <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Complete">Complete</MudSelectItem>
             <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithWarning">Complete With Warning</MudSelectItem>
@@ -478,12 +478,12 @@
     private string? _lastDataFingerprint;
 
     // Filter state
-    private IEnumerable<ActivityTargetOperationType> _filterOperations = [];
-    private IEnumerable<ActivityOutcomeType> _filterOutcomes = [];
-    private IEnumerable<ActivityTargetType> _filterTypes = Enum.GetValues<ActivityTargetType>()
+    private IReadOnlyCollection<ActivityTargetOperationType> _filterOperations = [];
+    private IReadOnlyCollection<ActivityOutcomeType> _filterOutcomes = [];
+    private IReadOnlyCollection<ActivityTargetType> _filterTypes = Enum.GetValues<ActivityTargetType>()
         .Where(t => t != ActivityTargetType.NotSet && t != ActivityTargetType.ConnectedSystemRunProfile)
         .ToList();
-    private IEnumerable<ActivityStatus> _filterStatuses = [];
+    private IReadOnlyCollection<ActivityStatus> _filterStatuses = [];
     private bool _filterHasChildren;
 
     protected override async Task OnInitializedAsync()
@@ -741,25 +741,25 @@
             || activity.TotalErrors > 0;
     }
 
-    private void OnOperationFilterChanged(IEnumerable<ActivityTargetOperationType> values)
+    private void OnOperationFilterChanged(IReadOnlyCollection<ActivityTargetOperationType> values)
     {
         _filterOperations = values;
         _table?.ReloadServerData();
     }
 
-    private void OnOutcomeFilterChanged(IEnumerable<ActivityOutcomeType> values)
+    private void OnOutcomeFilterChanged(IReadOnlyCollection<ActivityOutcomeType> values)
     {
         _filterOutcomes = values;
         _table?.ReloadServerData();
     }
 
-    private void OnTypeFilterChanged(IEnumerable<ActivityTargetType> values)
+    private void OnTypeFilterChanged(IReadOnlyCollection<ActivityTargetType> values)
     {
         _filterTypes = values;
         _table?.ReloadServerData();
     }
 
-    private void OnStatusFilterChanged(IEnumerable<ActivityStatus> values)
+    private void OnStatusFilterChanged(IReadOnlyCollection<ActivityStatus> values)
     {
         _filterStatuses = values;
         _table?.ReloadServerData();
@@ -771,7 +771,7 @@
         _table?.ReloadServerData();
     }
 
-    private static string GetMultiSelectText(List<string> selectedValues)
+    private static string GetMultiSelectText(IReadOnlyList<string> selectedValues)
     {
         return selectedValues.Count switch
         {

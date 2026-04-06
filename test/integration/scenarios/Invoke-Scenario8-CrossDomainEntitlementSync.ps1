@@ -305,6 +305,7 @@ try {
             Set-Content -Path $ldifPath -Value $ldif -NoNewline
             try {
                 $result = bash -c "cat '$ldifPath' | docker exec -i $($Config.ContainerName) ldapmodify -x -H 'ldap://localhost:$($Config.LdapSearchPort)' -D '$($Config.BindDN)' -w '$($Config.BindPassword)' -c" 2>&1
+                if ($LASTEXITCODE -ne 0) { throw "ldapmodify failed (exit code $LASTEXITCODE): $result" }
                 return $result
             }
             finally {
@@ -338,6 +339,7 @@ try {
             Set-Content -Path $ldifPath -Value $ldif -NoNewline
             try {
                 $result = bash -c "cat '$ldifPath' | docker exec -i $($Config.ContainerName) ldapmodify -x -H 'ldap://localhost:$($Config.LdapSearchPort)' -D '$($Config.BindDN)' -w '$($Config.BindPassword)' -c" 2>&1
+                if ($LASTEXITCODE -ne 0) { throw "ldapmodify failed (exit code $LASTEXITCODE): $result" }
                 return $result
             }
             finally {
@@ -364,6 +366,7 @@ try {
             Set-Content -Path $ldifPath -Value $ldif -NoNewline
             try {
                 $result = bash -c "cat '$ldifPath' | docker exec -i $($Config.ContainerName) ldapadd -x -H 'ldap://localhost:$($Config.LdapSearchPort)' -D '$($Config.BindDN)' -w '$($Config.BindPassword)' -c" 2>&1
+                if ($LASTEXITCODE -ne 0) { throw "ldapadd failed (exit code $LASTEXITCODE): $result" }
                 return $result
             }
             finally {
@@ -859,6 +862,10 @@ try {
         $driftGroup1Members = @()
         $driftGroup2Members = @()
 
+        # For OpenLDAP groupOfNames, removing the last member is rejected (MUST have at least one).
+        # driftGroup2 is used for member removal, so it needs >1 member on OpenLDAP.
+        $minMembersForRemoval = if ($isOpenLDAP) { 2 } else { 1 }
+
         foreach ($grp in $testGroups) {
             $grpName = $grp.Trim()
             $memberList = @(Get-DirectoryGroupMembers -GroupName $grpName -Config $targetConfig)
@@ -867,7 +874,7 @@ try {
                     $driftGroup1 = $grpName
                     $driftGroup1Members = $memberList
                 }
-                elseif (-not $driftGroup2 -and $grpName -ne $driftGroup1) {
+                elseif (-not $driftGroup2 -and $grpName -ne $driftGroup1 -and $memberList.Count -ge $minMembersForRemoval) {
                     $driftGroup2 = $grpName
                     $driftGroup2Members = $memberList
                     break

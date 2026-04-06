@@ -8,7 +8,7 @@ This page covers building JIM from source, managing database migrations, and wor
 
 ## Prerequisites
 
-- **.NET 9.0 SDK:** [Download](https://dotnet.microsoft.com/download/dotnet/9.0)
+- **.NET 10.0 SDK:** [Download](https://dotnet.microsoft.com/download/dotnet/10.0)
 - **Docker and Docker Compose:** Required for the database and containerised services
 
 Both are pre-installed in the devcontainer environment. See [Development Environment](dev-environment.md) for setup.

@@ -4,7 +4,7 @@ title: Developer Guide
 
 # Developer Guide
 
-JIM (Junctional Identity Manager) is an enterprise-grade identity management system built on .NET 9.0. The project is open for contribution under a source-available licence.
+JIM (Junctional Identity Manager) is an enterprise-grade identity management system built on .NET 10.0. The project is open for contribution under a source-available licence.
 
 This guide covers everything you need to get started as a contributor: setting up your development environment, understanding the architecture, building and testing the code, and writing new connectors.
 

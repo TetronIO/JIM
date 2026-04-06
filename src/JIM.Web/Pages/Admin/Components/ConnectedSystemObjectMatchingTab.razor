@@ -69,7 +69,7 @@ else
     else
     {
         @* Multiple object types - use tabs for navigation *@
-        <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" PanelClass="pt-4" Outlined="true" @bind-ActivePanelIndex="_selectedMatchingRuleTabIndex">
+        <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" TabPanelsClass="pt-4" Outlined="true" @bind-ActivePanelIndex="_selectedMatchingRuleTabIndex">
             @foreach (var objectType in selectedObjectTypes)
             {
                 <MudTabPanel Text="@objectType.Name" Tag="@objectType">
@@ -213,7 +213,7 @@ else
 
     private async Task HandleDeleteMatchingRuleAsync(ObjectMatchingRule rule, ConnectedSystemObjectType objectType)
     {
-        var confirmationResult = await DialogService.ShowMessageBox(
+        var confirmationResult = await DialogService.ShowMessageBoxAsync(
             "Delete Matching Rule",
             $"Are you sure you want to delete this matching rule? This action cannot be undone.",
             yesText: "Delete",

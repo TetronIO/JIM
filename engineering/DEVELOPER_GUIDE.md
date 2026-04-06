@@ -74,10 +74,10 @@ Detailed Mermaid diagrams document the runtime behaviour of JIM's synchronisatio
 ## Technology Stack
 
 ### Core Technologies (Required)
-- **.NET 9.0**: All projects target `net9.0`
+- **.NET 10.0**: All projects target `net10.0`
 - **C# 13**: Language features, nullable reference types enabled
 - **ASP.NET Core**: Web framework for Blazor and API
-- **Entity Framework Core 9.0**: ORM for data persistence
+- **Entity Framework Core 10.0**: ORM for data persistence
 - **PostgreSQL 18**: Primary database (via Npgsql)
 
 ### UI & Frontend
@@ -647,7 +647,7 @@ finally
 JIM uses GitHub Codespaces to provide a fully configured development environment with all dependencies pre-installed.
 
 **Features**:
-- Pre-installed .NET 9.0 SDK
+- Pre-installed .NET 10.0 SDK
 - Docker and Docker Compose
 - PostgreSQL 18 with optimised memory settings
 - VS Code with recommended extensions
@@ -1204,7 +1204,7 @@ Invoke-JIMApiRequest -Method Delete -Endpoint "api/v1/connected-systems/$id"
 ## Troubleshooting
 
 **Build Errors**:
-- Ensure .NET 9.0 SDK installed: `dotnet --version` (should show 9.0.x)
+- Ensure .NET 10.0 SDK installed: `dotnet --version` (should show 10.0.x)
 - Restore NuGet packages: `dotnet restore JIM.sln` or use `jim-compile` alias
 - Clean build: `dotnet clean && dotnet build JIM.sln`
 
@@ -1259,4 +1259,4 @@ Invoke-JIMApiRequest -Method Delete -Endpoint "api/v1/connected-systems/$id"
 
 **Last Updated**: 2026-02-09
 **Version**: 1.4
-**Applies to**: JIM v1.x (NET 9.0)
+**Applies to**: JIM v1.x (NET 10.0)

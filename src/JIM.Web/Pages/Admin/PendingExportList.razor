@@ -186,7 +186,7 @@ else
     private MudTable<PendingExportHeader>? _table;
     private ConnectedSystemHeader? _connectedSystemHeader;
     private string _searchString = "";
-    private IEnumerable<PendingExportStatus> _statusFilters = new HashSet<PendingExportStatus>();
+    private IReadOnlyCollection<PendingExportStatus> _statusFilters = new HashSet<PendingExportStatus>();
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private bool _loading;
     private int _rowsPerPage = 10;
@@ -275,7 +275,7 @@ else
         _table?.ReloadServerData();
     }
 
-    private string GetStatusFilterText(List<string> selectedValues)
+    private string GetStatusFilterText(IReadOnlyList<string> selectedValues)
     {
         if (selectedValues == null || selectedValues.Count == 0)
             return "All";
@@ -286,7 +286,7 @@ else
         return $"{selectedValues.Count} selected";
     }
 
-    private void OnStatusFiltersChanged(IEnumerable<PendingExportStatus> newFilters)
+    private void OnStatusFiltersChanged(IReadOnlyCollection<PendingExportStatus> newFilters)
     {
         _statusFilters = newFilters;
         _table?.ReloadServerData();

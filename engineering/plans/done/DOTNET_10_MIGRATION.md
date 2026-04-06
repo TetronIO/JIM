@@ -1,6 +1,6 @@
 # .NET 10 Migration
 
-- **Status:** Planned
+- **Status:** Done
 - **GitHub Issue:** [#174](https://github.com/TetronIO/JIM/issues/174)
 - **Created:** 2026-03-11
 
