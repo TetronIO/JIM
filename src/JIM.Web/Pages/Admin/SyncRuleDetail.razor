@@ -33,7 +33,7 @@
 }
 else if (_syncRule != null)
 {
-    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" PanelClass="pt-5" Class="mt-2" Outlined="true">
+    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" TabPanelsClass="pt-5" Class="mt-2" Outlined="true">
         <MudTabPanel Text="Details">
             <MudPaper Class="pa-4" Outlined="true">
                 <MudForm @bind-IsValid="@_isDetailsFormValid" @bind-Errors="@_detailsFormErrors">
@@ -1116,7 +1116,7 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/sync-rules/")
         if (_syncRule == null)
             return;
 
-        var confirmationResult = await DialogService.ShowMessageBox("Warning", "Are you sure you want to remove this Matching Rule?", yesText: "Remove!", cancelText: "Cancel");
+        var confirmationResult = await DialogService.ShowMessageBoxAsync("Warning", "Are you sure you want to remove this Matching Rule?", yesText: "Remove!", cancelText: "Cancel");
         if (confirmationResult.HasValue && confirmationResult.Value)
         {
             _syncRule.ObjectMatchingRules.Remove(objectMatchingRule);
@@ -1396,7 +1396,7 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/sync-rules/")
         if (_syncRule == null)
             return;
 
-        var confirmationResult = await DialogService.ShowMessageBox("Warning", "Are you sure you want to remove this Attribute Mapping?", yesText: "Remove!", cancelText: "Cancel");
+        var confirmationResult = await DialogService.ShowMessageBoxAsync("Warning", "Are you sure you want to remove this Attribute Mapping?", yesText: "Remove!", cancelText: "Cancel");
         if (confirmationResult.HasValue && confirmationResult.Value)
         {
             _syncRule.AttributeFlowRules.Remove(attributeFlowRule);
@@ -1494,7 +1494,7 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/sync-rules/")
         if (_syncRule == null)
             return;
 
-        var confirmationResult = await DialogService.ShowMessageBox("Warning", "Are you sure you want to delete this Synchronisation Rule?", yesText: "Delete!", cancelText: "Cancel");
+        var confirmationResult = await DialogService.ShowMessageBoxAsync("Warning", "Are you sure you want to delete this Synchronisation Rule?", yesText: "Delete!", cancelText: "Cancel");
         if (confirmationResult.HasValue && confirmationResult.Value)
         {
             // attribute the operation to the signed-in user

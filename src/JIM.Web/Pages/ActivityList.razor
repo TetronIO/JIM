@@ -478,12 +478,12 @@
     private string? _lastDataFingerprint;
 
     // Filter state
-    private IEnumerable<ActivityTargetOperationType> _filterOperations = [];
-    private IEnumerable<ActivityOutcomeType> _filterOutcomes = [];
-    private IEnumerable<ActivityTargetType> _filterTypes = Enum.GetValues<ActivityTargetType>()
+    private IReadOnlyCollection<ActivityTargetOperationType> _filterOperations = [];
+    private IReadOnlyCollection<ActivityOutcomeType> _filterOutcomes = [];
+    private IReadOnlyCollection<ActivityTargetType> _filterTypes = Enum.GetValues<ActivityTargetType>()
         .Where(t => t != ActivityTargetType.NotSet && t != ActivityTargetType.ConnectedSystemRunProfile)
         .ToList();
-    private IEnumerable<ActivityStatus> _filterStatuses = [];
+    private IReadOnlyCollection<ActivityStatus> _filterStatuses = [];
     private bool _filterHasChildren;
 
     protected override async Task OnInitializedAsync()
@@ -741,25 +741,25 @@
             || activity.TotalErrors > 0;
     }
 
-    private void OnOperationFilterChanged(IEnumerable<ActivityTargetOperationType> values)
+    private void OnOperationFilterChanged(IReadOnlyCollection<ActivityTargetOperationType> values)
     {
         _filterOperations = values;
         _table?.ReloadServerData();
     }
 
-    private void OnOutcomeFilterChanged(IEnumerable<ActivityOutcomeType> values)
+    private void OnOutcomeFilterChanged(IReadOnlyCollection<ActivityOutcomeType> values)
     {
         _filterOutcomes = values;
         _table?.ReloadServerData();
     }
 
-    private void OnTypeFilterChanged(IEnumerable<ActivityTargetType> values)
+    private void OnTypeFilterChanged(IReadOnlyCollection<ActivityTargetType> values)
     {
         _filterTypes = values;
         _table?.ReloadServerData();
     }
 
-    private void OnStatusFilterChanged(IEnumerable<ActivityStatus> values)
+    private void OnStatusFilterChanged(IReadOnlyCollection<ActivityStatus> values)
     {
         _filterStatuses = values;
         _table?.ReloadServerData();

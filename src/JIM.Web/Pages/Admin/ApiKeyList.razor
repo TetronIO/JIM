@@ -115,7 +115,7 @@
                 {
                     <MudTooltip Text="@context.ExpiresAt.Value.ToLocalTime().ToFriendlyDate()"
                         Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">@((context.ExpiresAt.Value - DateTime.UtcNow).Humanize(precision: 2, minUnit: Humanizer.Localisation.TimeUnit.Minute))</MudChip>
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">@((context.ExpiresAt.Value - DateTime.UtcNow).Humanize(precision: 2, minUnit: Humanizer.TimeUnit.Minute))</MudChip>
                     </MudTooltip>
                 }
                 else
@@ -481,7 +481,7 @@
 
     private async Task HandleDeleteAsync(ApiKey apiKey)
     {
-        var result = await DialogService.ShowMessageBox(
+        var result = await DialogService.ShowMessageBoxAsync(
         "Delete API Key",
         $"Are you sure you want to delete the API key '{apiKey.Name}'? Any requests using this key will immediately fail.",
         yesText: "Delete",

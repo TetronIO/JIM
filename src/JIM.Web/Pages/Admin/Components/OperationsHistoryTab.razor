@@ -717,9 +717,9 @@
 
     // Filter state
     private ActivityFilterOptions? _filterOptions;
-    private IEnumerable<string> _filterConnectedSystems = [];
-    private IEnumerable<string> _filterRunProfiles = [];
-    private IEnumerable<ActivityStatus> _filterStatuses = [];
+    private IReadOnlyCollection<string> _filterConnectedSystems = [];
+    private IReadOnlyCollection<string> _filterRunProfiles = [];
+    private IReadOnlyCollection<ActivityStatus> _filterStatuses = [];
     private string? _filterInitiatedBy;
     private bool _filterHasChildren;
 
@@ -858,19 +858,19 @@
             $"{a.Id}:{a.Status}:{a.ObjectsProcessed},{a.ObjectsToProcess},{a.TotalAdded},{a.TotalUpdated},{a.TotalDeleted},{a.TotalProjected},{a.TotalJoined},{a.TotalAttributeFlows},{a.TotalDisconnected},{a.TotalDriftCorrections},{a.TotalProvisioned},{a.TotalExported},{a.TotalDeprovisioned},{a.TotalErrors}"));
     }
 
-    private void OnConnectedSystemFilterChanged(IEnumerable<string> values)
+    private void OnConnectedSystemFilterChanged(IReadOnlyCollection<string> values)
     {
         _filterConnectedSystems = values;
         _table?.ReloadServerData();
     }
 
-    private void OnRunProfileFilterChanged(IEnumerable<string> values)
+    private void OnRunProfileFilterChanged(IReadOnlyCollection<string> values)
     {
         _filterRunProfiles = values;
         _table?.ReloadServerData();
     }
 
-    private void OnStatusFilterChanged(IEnumerable<ActivityStatus> values)
+    private void OnStatusFilterChanged(IReadOnlyCollection<ActivityStatus> values)
     {
         _filterStatuses = values;
         _table?.ReloadServerData();

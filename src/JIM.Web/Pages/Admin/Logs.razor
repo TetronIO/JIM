@@ -250,7 +250,7 @@
     private List<LogEntry>? _logEntries;
     private string? _selectedService;
     private DateTime? _selectedDate;
-    private IEnumerable<string> _selectedLevels = [];
+    private IReadOnlyCollection<string> _selectedLevels = [];
     private string? _searchText;
     private bool _loading = true;
     private bool _autoRefresh;

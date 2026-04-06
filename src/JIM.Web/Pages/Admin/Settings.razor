@@ -253,7 +253,7 @@
         var result = GetDecryptedValue(setting);
         if (result.Error)
         {
-            await DialogService.ShowMessageBox(
+            await DialogService.ShowMessageBoxAsync(
                 "Decryption Failed",
                 "Unable to decrypt this value. The encryption key may have changed or been deleted (e.g. after a environment reset). Edit and re-save this setting to re-encrypt it with the current key.",
                 yesText: "OK");
@@ -316,7 +316,7 @@
 
     private async Task HandleRevertAsync(ServiceSetting setting)
     {
-        var confirm = await DialogService.ShowMessageBox(
+        var confirm = await DialogService.ShowMessageBoxAsync(
             "Revert to Default",
             $"Are you sure you want to revert '{setting.DisplayName}' to its default value?",
             yesText: "Revert", cancelText: "Cancel");
