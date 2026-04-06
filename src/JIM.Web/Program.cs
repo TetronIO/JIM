@@ -180,6 +180,12 @@ try
             options.UsePkce = true;
             options.Scope.Add("profile");
 
+            // Disable Pushed Authorization Requests (PAR), enabled by default in .NET 10.
+            // JIM must work with any OIDC provider; PAR support varies widely (e.g. Entra ID
+            // does not support PAR at all). Standard authorization code flow with PKCE provides
+            // sufficient security for JIM's deployment scenarios.
+            options.PushedAuthorizationBehavior = PushedAuthorizationBehavior.Disable;
+
             // Preserve standard OIDC claim names (sub, name, email, etc.) instead of mapping them
             // to Microsoft's legacy XML-based claim URIs. This makes JIM IDP-agnostic.
             options.MapInboundClaims = false;
