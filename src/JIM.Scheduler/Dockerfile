@@ -3,7 +3,9 @@
 
 ARG VERSION=dev
 
-FROM mcr.microsoft.com/dotnet/runtime:9.0@sha256:83adbb0751275745e215d86a8263fc782a67e35ce42cea91e7bfd67477cdcb3c AS base
+# Chiseled image: no shell, no package manager, non-root by default (UID 1654), ~50% smaller
+# Uses noble-chiseled-extra variant for globalisation support (TimeZoneInfo, CultureInfo)
+FROM mcr.microsoft.com/dotnet/runtime:10.0-noble-chiseled-extra@sha256:de131c0b15a10b90ee797a9be1632adb330ffae49136bfc560edc2e3427ecdca AS base
 ARG VERSION
 
 LABEL org.opencontainers.image.title="JIM Scheduler"
@@ -14,7 +16,7 @@ LABEL org.opencontainers.image.source="https://github.com/TetronIO/JIM"
 LABEL org.opencontainers.image.licenses="See https://tetron.io/jim/#licensing"
 WORKDIR /app
 
-FROM mcr.microsoft.com/dotnet/sdk:9.0@sha256:0cbece2e210d064199e7ab3bb9ac695c5ed8bfb35b31eee8d80e051abfbef22b AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:f061e5a7532b36fa1d1b684857fe1f504ba92115b9934f154643266613c44c62 AS build
 WORKDIR /src
 COPY ["Directory.Build.props", "./"]
 COPY ["VERSION", "./"]

@@ -3,7 +3,7 @@
 
 ARG VERSION=dev
 
-FROM mcr.microsoft.com/dotnet/aspnet:9.0@sha256:cec7519c080fff418bcce2e07c44141e4eba866f9801e2b35ef7567f487b207b AS base
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:ccdca44cd4f256d50187f920dc8ccc2a9ea7a8a4597ac1d51e08fddb2e3b3205 AS base
 ARG VERSION
 
 LABEL org.opencontainers.image.title="JIM Web"
@@ -18,17 +18,25 @@ EXPOSE 443
 
 # Pin functional dependency versions for reproducible builds
 # Update these versions when bumping base image digests
+# Note: libldap-2.5-0 was renamed to libldap2 in Ubuntu Noble (OpenLDAP 2.6)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        libldap-common=2.5.13+dfsg-5 \
-        libldap-2.5-0=2.5.13+dfsg-5 \
-        cifs-utils=2:7.0-2 \
+        libldap-common=2.6.7+dfsg-1~exp1ubuntu8 \
+        libldap2=2.6.7+dfsg-1~exp1ubuntu8 \
+        cifs-utils=2:7.0-2build1 \
     && apt-get install -y --no-install-recommends \
         iputils-ping \
         curl \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    # Symlink for System.DirectoryServices.Protocols compatibility
+    # .NET 10 managed LDAP code loads libldap-2.5.so.0 by name; Noble ships libldap.so.2
+    # See: https://github.com/dotnet/runtime/issues/123676
+    && ln -sf /usr/lib/$(uname -m)-linux-gnu/libldap.so.2 /usr/lib/$(uname -m)-linux-gnu/libldap-2.5.so.0
 
-FROM mcr.microsoft.com/dotnet/sdk:9.0@sha256:0cbece2e210d064199e7ab3bb9ac695c5ed8bfb35b31eee8d80e051abfbef22b AS build
+# Run as non-root for security (built-in 'app' user, UID 1654)
+USER app
+
+FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:f061e5a7532b36fa1d1b684857fe1f504ba92115b9934f154643266613c44c62 AS build
 WORKDIR /src
 COPY ["Directory.Build.props", "./"]
 COPY ["VERSION", "./"]
