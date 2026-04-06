@@ -396,7 +396,7 @@ try
     if (app.Environment.IsDevelopment())
     {
         app.MapOpenApi("/api/openapi/{documentName}.json");
-        app.MapScalarApiReference("/api/reference/{documentName}", options => options
+        app.MapScalarApiReference("/api/reference", options => options
             .AddPreferredSecuritySchemes("OAuth2", "ApiKey")
             .AddAuthorizationCodeFlow("OAuth2", flow =>
             {
