@@ -3,9 +3,7 @@
 
 ARG VERSION=dev
 
-# Chiseled image: no shell, no package manager, non-root by default (UID 1654), ~50% smaller
-# Uses noble-chiseled-extra variant for globalisation support (TimeZoneInfo, CultureInfo)
-FROM mcr.microsoft.com/dotnet/runtime:10.0-noble-chiseled-extra@sha256:de131c0b15a10b90ee797a9be1632adb330ffae49136bfc560edc2e3427ecdca AS base
+FROM mcr.microsoft.com/dotnet/runtime:10.0-noble@sha256:260c4d478b25ccb5a84be74dc5ea5a772fb4fb520e9226ca8f1cb57bf1425fb1 AS base
 ARG VERSION
 
 LABEL org.opencontainers.image.title="JIM Scheduler"
@@ -15,6 +13,13 @@ LABEL org.opencontainers.image.vendor="Tetron"
 LABEL org.opencontainers.image.source="https://github.com/TetronIO/JIM"
 LABEL org.opencontainers.image.licenses="See https://tetron.io/jim/#licensing"
 WORKDIR /app
+
+# Create data directories writable by non-root user before switching
+RUN mkdir -p /var/log/jim \
+    && chown -R app:app /var/log/jim
+
+# Run as non-root for security (built-in 'app' user, UID 1654)
+USER app
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:f061e5a7532b36fa1d1b684857fe1f504ba92115b9934f154643266613c44c62 AS build
 WORKDIR /src
