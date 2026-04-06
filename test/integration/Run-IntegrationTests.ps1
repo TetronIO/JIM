@@ -2161,7 +2161,7 @@ if ($SetupOnly) {
     foreach ($timing in $sortedTimings) {
         $seconds = [math]::Round($timing.Value.TotalSeconds, 1)
         $totalSeconds += $seconds
-        $bar = "█" * [math]::Min(50, [math]::Floor($seconds / 2))
+        $bar = "█" * [math]::Max(0, [math]::Min(50, [math]::Floor($seconds / 2)))
         Write-Host ("  {0,-25} {1,6}s  {2}" -f $timing.Name, $seconds, $bar) -ForegroundColor $(if ($seconds -gt 60) { "Yellow" } elseif ($seconds -gt 30) { "Cyan" } else { "Green" })
     }
 
@@ -2677,7 +2677,7 @@ $totalSeconds = 0
 foreach ($timing in $sortedTimings) {
     $seconds = [math]::Round($timing.Value.TotalSeconds, 1)
     $totalSeconds += $seconds
-    $bar = "█" * [math]::Min(50, [math]::Floor($seconds / 2))
+    $bar = "█" * [math]::Max(0, [math]::Min(50, [math]::Floor($seconds / 2)))
     Write-Host ("  {0,-25} {1,6}s  {2}" -f $timing.Name, $seconds, $bar) -ForegroundColor $(if ($seconds -gt 60) { "Yellow" } elseif ($seconds -gt 30) { "Cyan" } else { "Green" })
 }
 
