@@ -660,7 +660,10 @@ public interface IConnectedSystemRepository
     public Task UpdateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);
     public Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile);
     public Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject);
-    public Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
+    public Task UpdateConnectedSystemObjectsAsync(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)>? pendingAdditions = null,
+        List<Guid>? pendingRemovalIds = null);
 
     /// <summary>
     /// Batch updates only the join-related columns (JoinType, DateJoined, MetaverseObjectId) on

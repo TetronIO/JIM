@@ -1805,7 +1805,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         await Repository.Database.SaveChangesAsync();
     }
 
-    public async Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
+    public async Task UpdateConnectedSystemObjectsAsync(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)>? pendingAdditions = null,
+        List<Guid>? pendingRemovalIds = null)
     {
         if (connectedSystemObjects.Count == 0)
             return;
@@ -1813,50 +1816,39 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Use raw SQL for parent CSO row updates (bypasses change tracker entirely).
         await BulkUpdateConnectedSystemObjectsRawAsync(connectedSystemObjects);
 
-        // Handle attribute value additions and removals explicitly using the CSO's pending
-        // change lists. This works regardless of whether CSOs are tracked or untracked
-        // (AsNoTracking is used during import hydration to prevent tracker bloat).
-        var removalsToDelete = connectedSystemObjects
-            .SelectMany(cso => cso.PendingAttributeValueRemovals)
-            .Where(av => av.Id != Guid.Empty) // Only delete persisted values (have a real ID)
-            .ToList();
+        // Handle attribute value additions and removals using pre-captured pending changes.
+        // The caller snapshots these before LinkUpdateChangeRecords clears the CSO's pending lists.
+        Log.Information("UpdateConnectedSystemObjectsAsync: {CsoCount} CSOs, {Additions} pending additions, {Removals} pending removals",
+            connectedSystemObjects.Count, pendingAdditions?.Count ?? 0, pendingRemovalIds?.Count ?? 0);
 
-        if (removalsToDelete.Count > 0)
+        if (pendingRemovalIds is { Count: > 0 })
         {
-            var removalIds = removalsToDelete.Select(av => av.Id).ToList();
             if (Repository.Database.Database.IsRelational())
             {
                 await Repository.Database.ConnectedSystemObjectAttributeValues
-                    .Where(av => removalIds.Contains(av.Id))
+                    .Where(av => pendingRemovalIds.Contains(av.Id))
                     .ExecuteDeleteAsync();
             }
             else
             {
-                // InMemory provider: load and remove
                 var entities = await Repository.Database.ConnectedSystemObjectAttributeValues
-                    .Where(av => removalIds.Contains(av.Id))
+                    .Where(av => pendingRemovalIds.Contains(av.Id))
                     .ToListAsync();
                 Repository.Database.ConnectedSystemObjectAttributeValues.RemoveRange(entities);
                 await Repository.Database.SaveChangesAsync();
             }
         }
 
-        var additionsWithCsoId = connectedSystemObjects
-            .SelectMany(cso => cso.PendingAttributeValueAdditions.Select(av => (CsoId: cso.Id, Value: av)))
-            .ToList();
-
-        if (additionsWithCsoId.Count > 0)
+        if (pendingAdditions is { Count: > 0 })
         {
             if (Repository.Database.Database.IsRelational())
             {
-                await BulkInsertCsoAttributeValuesRawAsync(additionsWithCsoId);
+                await BulkInsertCsoAttributeValuesRawAsync(pendingAdditions);
             }
             else
             {
-                // InMemory provider: set navigation properties and use EF Add
-                foreach (var (csoId, av) in additionsWithCsoId)
+                foreach (var (csoId, av) in pendingAdditions)
                 {
-                    // Set the FK via EF's Entry API (shadow property)
                     Repository.Database.ConnectedSystemObjectAttributeValues.Add(av);
                     Repository.Database.Entry(av).Property("ConnectedSystemObjectId").CurrentValue = csoId;
                 }

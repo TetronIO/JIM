@@ -180,10 +180,22 @@ public class SyncServer : ISyncServer
         List<ConnectedSystemObject> connectedSystemObjects,
         List<ActivityRunProfileExecutionItem> rpeis)
     {
+        // Snapshot pending attribute changes BEFORE LinkUpdateChangeRecords, which clears
+        // PendingAttributeValueAdditions/Removals after building change history records.
+        // The repository needs these lists to persist attribute value inserts/deletes.
+        var pendingAdditions = connectedSystemObjects
+            .SelectMany(cso => cso.PendingAttributeValueAdditions.Select(av => (CsoId: cso.Id, Value: av)))
+            .ToList();
+        var pendingRemovals = connectedSystemObjects
+            .SelectMany(cso => cso.PendingAttributeValueRemovals)
+            .Where(av => av.Id != Guid.Empty)
+            .Select(av => av.Id)
+            .ToList();
+
         var changeTrackingEnabled = await GetCsoChangeTrackingEnabledAsync();
         _jim.ConnectedSystems.LinkUpdateChangeRecords(connectedSystemObjects, rpeis, changeTrackingEnabled);
 
-        await _syncRepo.UpdateConnectedSystemObjectsAsync(connectedSystemObjects);
+        await _syncRepo.UpdateConnectedSystemObjectsAsync(connectedSystemObjects, pendingAdditions, pendingRemovals);
     }
 
     public async Task DeleteConnectedSystemObjectsAsync(

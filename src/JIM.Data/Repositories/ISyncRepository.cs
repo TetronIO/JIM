@@ -202,7 +202,10 @@ public interface ISyncRepository
     /// Bulk updates CSOs with their attribute values.
     /// Uses raw SQL bulk operations in production for performance.
     /// </summary>
-    Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
+    Task UpdateConnectedSystemObjectsAsync(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)>? pendingAdditions = null,
+        List<Guid>? pendingRemovalIds = null);
 
     /// <summary>
     /// Updates only the join state fields (MetaverseObjectId, JoinType, Status) on CSOs

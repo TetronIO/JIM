@@ -140,8 +140,11 @@ public partial class SyncRepository : ISyncRepository
     // CreateConnectedSystemObjectsAsync is an owned implementation in
     // SyncRepository.CsOperations.cs — uses parallel multi-connection writes.
 
-    public Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
-        => _repo.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjects);
+    public Task UpdateConnectedSystemObjectsAsync(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)>? pendingAdditions = null,
+        List<Guid>? pendingRemovalIds = null)
+        => _repo.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjects, pendingAdditions, pendingRemovalIds);
 
     public Task UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects)
         => _repo.ConnectedSystems.UpdateConnectedSystemObjectJoinStatesAsync(connectedSystemObjects);
