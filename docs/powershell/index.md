@@ -8,7 +8,7 @@ The JIM PowerShell module provides a cross-platform command-line interface for m
 
 ## Requirements
 
-- **PowerShell 7.0 or later** (cross-platform: Windows, macOS, and Linux)
+- **[PowerShell 7.0 or later](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell)** (cross-platform: Windows, macOS, and Linux)
 
 ## Installation
 
