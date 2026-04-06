@@ -23,15 +23,15 @@ flowchart LR
 
 The following diagram shows JIM in the context of the systems and users it interacts with:
 
-<img class="diagram-light" alt="JIM System Context" src="../diagrams/images/light/jim-structurizr-1-SystemContext.svg">
-<img class="diagram-dark" alt="JIM System Context" src="../diagrams/images/dark/jim-structurizr-1-SystemContext.svg">
+<img class="diagram-light" alt="JIM System Context" src="../../diagrams/images/light/jim-structurizr-1-SystemContext.svg">
+<img class="diagram-dark" alt="JIM System Context" src="../../diagrams/images/dark/jim-structurizr-1-SystemContext.svg">
 
 ## Containers
 
 JIM is deployed as a set of Docker containers, each with a distinct responsibility:
 
-<img class="diagram-light" alt="JIM Containers" src="../diagrams/images/light/jim-structurizr-1-Containers.svg">
-<img class="diagram-dark" alt="JIM Containers" src="../diagrams/images/dark/jim-structurizr-1-Containers.svg">
+<img class="diagram-light" alt="JIM Containers" src="../../diagrams/images/light/jim-structurizr-1-Containers.svg">
+<img class="diagram-dark" alt="JIM Containers" src="../../diagrams/images/dark/jim-structurizr-1-Containers.svg">
 
 ### JIM.Web
 
@@ -76,8 +76,8 @@ flowchart TD
 
 **JIM.Application** -- contains the core business logic ("Servers") that orchestrate operations. This includes the sync engine, import/export processing, run profile execution, and all domain workflows. The UI and API never access the database directly; they always go through the Application layer.
 
-<img class="diagram-light" alt="Application Layer" src="../diagrams/images/light/jim-structurizr-1-AppLayerComponents.svg">
-<img class="diagram-dark" alt="Application Layer" src="../diagrams/images/dark/jim-structurizr-1-AppLayerComponents.svg">
+<img class="diagram-light" alt="Application Layer" src="../../diagrams/images/light/jim-structurizr-1-AppLayerComponents.svg">
+<img class="diagram-dark" alt="Application Layer" src="../../diagrams/images/dark/jim-structurizr-1-AppLayerComponents.svg">
 
 ### Domain Layer
 
