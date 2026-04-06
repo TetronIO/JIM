@@ -255,11 +255,36 @@ Write-Host ""
 
 $baseImage = "ghcr.io/tetronio/jim-openldap:primary"
 
-# Ensure base image exists
-docker image inspect $baseImage 2>&1 | Out-Null
+# Compute expected build hash for the base image from the files that affect it.
+# This must match the hash computed by Build-OpenLdapImage.ps1 (same file list).
+$baseFilesToHash = @(
+    "$scriptRoot/docker/openldap/Dockerfile",
+    "$scriptRoot/docker/openldap/scripts/01-add-second-suffix.sh",
+    "$scriptRoot/docker/openldap/bootstrap/01-base-ous-yellowstone.ldif"
+)
+$baseCombinedContent = ($baseFilesToHash | ForEach-Object { Get-Content -Path $_ -Raw }) -join ""
+$expectedBuildHash = [System.BitConverter]::ToString(
+    [System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes($baseCombinedContent))
+).Replace("-", "").Substring(0, 16).ToLower()
+
+# Check if base image exists and is current (build hash matches).
+# A stale base image contains outdated init scripts (e.g. wrong MDB map sizes)
+# that silently cause test failures even though the snapshot hash appears correct.
+$needsBaseRebuild = $false
+$baseInspect = docker image inspect $baseImage --format '{{index .Config.Labels "jim.openldap.build-hash"}}' 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "  Base image $baseImage not found locally — building..." -ForegroundColor Yellow
+    $needsBaseRebuild = $true
+} elseif ("$baseInspect" -ne $expectedBuildHash) {
+    Write-Host "  Base image $baseImage is stale (build hash $baseInspect != $expectedBuildHash) — rebuilding..." -ForegroundColor Yellow
+    $needsBaseRebuild = $true
+}
+
+if ($needsBaseRebuild) {
     & "$scriptRoot/docker/openldap/Build-OpenLdapImage.ps1"
+    if ($LASTEXITCODE -ne 0) { throw "Failed to build base OpenLDAP image" }
+    # Force snapshot rebuild since the base image changed
+    $Force = $true
 }
 
 $scenariosToProcess = if ($Scenario -eq "All") { @("General", "Scenario8") } else { @($Scenario) }

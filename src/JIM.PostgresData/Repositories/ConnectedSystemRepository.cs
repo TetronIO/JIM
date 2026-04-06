@@ -1504,6 +1504,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .AsSplitQuery()
             .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.Attribute)
+            .Include(cso => cso.AttributeValues)
+                .ThenInclude(av => av.ReferenceValue)
             .Where(cso => cso.ConnectedSystemId == connectedSystemId && idList.Contains(cso.Id))
             .ToListAsync();
     }

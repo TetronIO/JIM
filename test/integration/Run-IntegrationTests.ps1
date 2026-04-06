@@ -332,11 +332,39 @@ function Get-OpenLDAPSnapshotImageTag {
     return "jim-openldap:${Role}-$($Size.ToLower())"
 }
 
+function Get-OpenLDAPBaseBuildHash {
+    # Compute expected build hash for the base OpenLDAP image from the files that affect it.
+    # Must match the hash computed by Build-OpenLdapImage.ps1 (same file list).
+    $filesToHash = @(
+        "$scriptRoot/docker/openldap/Dockerfile",
+        "$scriptRoot/docker/openldap/scripts/01-add-second-suffix.sh",
+        "$scriptRoot/docker/openldap/bootstrap/01-base-ous-yellowstone.ldif"
+    )
+    $combinedContent = ($filesToHash | ForEach-Object { Get-Content -Path $_ -Raw }) -join ""
+    return [System.BitConverter]::ToString(
+        [System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes($combinedContent))
+    ).Replace("-", "").Substring(0, 16).ToLower()
+}
+
 function Test-OpenLDAPSnapshotAvailable {
     param([string]$ImageTag, [string]$ExpectedHash)
     $inspect = docker image inspect $ImageTag --format '{{index .Config.Labels "jim.openldap.snapshot-hash"}}' 2>&1
     if ($LASTEXITCODE -ne 0) { return $false }
-    return "$inspect" -eq $ExpectedHash
+    if ("$inspect" -ne $ExpectedHash) { return $false }
+
+    # Also verify the base image is current. A snapshot built from a stale base image
+    # contains outdated init scripts (e.g. wrong MDB map sizes) even if the snapshot
+    # hash matches, because the hash is computed from files on disk, not the image contents.
+    $baseImage = "ghcr.io/tetronio/jim-openldap:primary"
+    $baseBuildHash = docker image inspect $baseImage --format '{{index .Config.Labels "jim.openldap.build-hash"}}' 2>&1
+    if ($LASTEXITCODE -ne 0) { return $false }
+    $expectedBuildHash = Get-OpenLDAPBaseBuildHash
+    if ("$baseBuildHash" -ne $expectedBuildHash) {
+        Write-Host "  ${YELLOW}OpenLDAP base image is stale (build hash $baseBuildHash != $expectedBuildHash) — snapshot needs rebuild${NC}"
+        return $false
+    }
+
+    return $true
 }
 
 # Interactive scenario selection function
