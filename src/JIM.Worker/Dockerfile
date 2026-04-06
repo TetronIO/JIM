@@ -27,6 +27,10 @@ RUN apt-get update \
     # See: https://github.com/dotnet/runtime/issues/123676
     && ln -sf /usr/lib/$(uname -m)-linux-gnu/libldap.so.2 /usr/lib/$(uname -m)-linux-gnu/libldap-2.5.so.0
 
+# Create data directories writable by non-root user before switching
+RUN mkdir -p /data/keys /var/log/jim \
+    && chown -R app:app /data/keys /var/log/jim
+
 # Run as non-root for security (built-in 'app' user, UID 1654)
 USER app
 
