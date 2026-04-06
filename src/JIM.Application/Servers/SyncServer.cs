@@ -186,10 +186,13 @@ public class SyncServer : ISyncServer
         var pendingAdditions = connectedSystemObjects
             .SelectMany(cso => cso.PendingAttributeValueAdditions.Select(av =>
             {
-                // Ensure new attribute values have a generated ID for raw SQL bulk insert.
-                // EF Core would auto-generate these, but raw SQL requires explicit IDs.
+                // Ensure new attribute values have generated IDs and resolved FKs for raw SQL
+                // bulk insert. EF Core would auto-generate IDs and resolve navigation→FK mappings,
+                // but raw SQL requires all values set explicitly.
                 if (av.Id == Guid.Empty)
                     av.Id = Guid.NewGuid();
+                if (av.AttributeId == 0 && av.Attribute != null)
+                    av.AttributeId = av.Attribute.Id;
                 return (CsoId: cso.Id, Value: av);
             }))
             .ToList();
