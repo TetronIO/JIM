@@ -20,7 +20,7 @@
                            Dense="true" Clearable="true" MultiSelection="true"
                            SelectedValues="_filterConnectedSystems"
                            SelectedValuesChanged="OnConnectedSystemFilterChanged"
-                           MultiSelectionTextFunc="@(new Func<List<string>, string>(GetMultiSelectText))">
+                           MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
                     @if (_filterOptions != null)
                     {
                         @foreach (var cs in _filterOptions.ConnectedSystems)
@@ -35,7 +35,7 @@
                            Dense="true" Clearable="true" MultiSelection="true"
                            SelectedValues="_filterRunProfiles"
                            SelectedValuesChanged="OnRunProfileFilterChanged"
-                           MultiSelectionTextFunc="@(new Func<List<string>, string>(GetMultiSelectText))">
+                           MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
                     @if (_filterOptions != null)
                     {
                         @foreach (var rp in _filterOptions.RunProfiles)
@@ -50,7 +50,7 @@
                            Dense="true" Clearable="true" MultiSelection="true"
                            SelectedValues="_filterStatuses"
                            SelectedValuesChanged="OnStatusFilterChanged"
-                           MultiSelectionTextFunc="@(new Func<List<string>, string>(GetMultiSelectText))">
+                           MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
                     <MudSelectItem T="ActivityStatus" Value="ActivityStatus.InProgress">In Progress</MudSelectItem>
                     <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Complete">Complete</MudSelectItem>
                     <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithWarning">Complete With Warning</MudSelectItem>
@@ -888,7 +888,7 @@
         _table?.ReloadServerData();
     }
 
-    private static string GetMultiSelectText(List<string> selectedValues)
+    private static string GetMultiSelectText(IReadOnlyList<string> selectedValues)
     {
         return selectedValues.Count switch
         {
