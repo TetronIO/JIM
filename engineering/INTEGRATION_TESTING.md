@@ -1732,7 +1732,7 @@ If the file size matches `olcDbMaxSize`, the map is full.
 
 **Fix:**
 
-Increase the map size in `test/integration/docker/openldap/scripts/01-add-second-suffix.sh` and rebuild the OpenLDAP container. Current setting: 4 GB (sufficient for XLarge / 100K objects). For larger templates, estimate ~10 MB per 1,000 objects for initial population plus additional capacity for sync cycles.
+Increase the map size in `test/integration/docker/openldap/scripts/01-add-second-suffix.sh` and rebuild the OpenLDAP container. Current setting: 8 GB (sufficient for XLarge / 100K objects with large group membership operations). For larger templates, estimate ~10 MB per 1,000 objects for initial population plus additional capacity for sync cycles and group membership writes.
 
 The map size cannot be reliably increased on a running instance; it requires a container rebuild.
 
