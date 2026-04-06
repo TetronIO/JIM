@@ -98,6 +98,9 @@ public partial class SyncRepository : ISyncRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
         => _repo.ConnectedSystems.GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds);
 
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectsByIdsNoTrackingAsync(connectedSystemId, csoIds);
+
     public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(
         int connectedSystemId, int attributeId, IEnumerable<string> attributeValues)
         => _repo.ConnectedSystems.GetConnectedSystemObjectsByAttributeValuesAsync(connectedSystemId, attributeId, attributeValues);
@@ -137,8 +140,11 @@ public partial class SyncRepository : ISyncRepository
     // CreateConnectedSystemObjectsAsync is an owned implementation in
     // SyncRepository.CsOperations.cs — uses parallel multi-connection writes.
 
-    public Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
-        => _repo.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjects);
+    public Task UpdateConnectedSystemObjectsAsync(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)>? pendingAdditions = null,
+        List<Guid>? pendingRemovalIds = null)
+        => _repo.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjects, pendingAdditions, pendingRemovalIds);
 
     public Task UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects)
         => _repo.ConnectedSystems.UpdateConnectedSystemObjectJoinStatesAsync(connectedSystemObjects);
@@ -298,6 +304,40 @@ public partial class SyncRepository : ISyncRepository
 
     public void SetAutoDetectChangesEnabled(bool enabled)
         => _repo.SetAutoDetectChangesEnabled(enabled);
+
+    /// <summary>
+    /// Selectively detaches schema/type entities from the change tracker without affecting
+    /// CSOs or their AttributeValues. This prevents tracker bloat during import processing
+    /// while preserving the in-memory attribute modifications needed by the save phase.
+    /// </summary>
+    public void DetachSchemaEntitiesFromTracker()
+    {
+        var wasEnabled = _context.ChangeTracker.AutoDetectChangesEnabled;
+        _context.ChangeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            var detachCount = 0;
+            foreach (var entry in _context.ChangeTracker.Entries().ToList())
+            {
+                var type = entry.Entity.GetType();
+                // Detach schema entities that are loaded via Include chains but not needed
+                // after import processing. Keep CSOs and their AttributeValues tracked.
+                if (type == typeof(JIM.Models.Staging.ConnectedSystemObjectType) ||
+                    type == typeof(JIM.Models.Staging.ConnectedSystemObjectTypeAttribute) ||
+                    type == typeof(JIM.Models.Core.MetaverseAttribute))
+                {
+                    entry.State = EntityState.Detached;
+                    detachCount++;
+                }
+            }
+            if (detachCount > 0)
+                Log.Debug("DetachSchemaEntitiesFromTracker: Detached {Count} schema entities", detachCount);
+        }
+        finally
+        {
+            _context.ChangeTracker.AutoDetectChangesEnabled = wasEnabled;
+        }
+    }
 
     #endregion
 

@@ -145,12 +145,12 @@ else
 dn: $ACCESSLOG_DB_DN
 changetype: modify
 replace: olcDbMaxSize
-olcDbMaxSize: 4294967296
+olcDbMaxSize: 8589934592
 -
 add: olcSizeLimit
 olcSizeLimit: unlimited
 ALMODIFY
-    echo "[openldap-init] Accesslog database configured (mapsize=4GB, sizeLimit=unlimited)"
+    echo "[openldap-init] Accesslog database configured (mapsize=8GB, sizeLimit=unlimited)"
 fi
 
 # Stop slapd (Bitnami will restart it after all init scripts)

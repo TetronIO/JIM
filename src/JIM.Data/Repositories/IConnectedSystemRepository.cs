@@ -85,6 +85,11 @@ public interface IConnectedSystemRepository
     /// </summary>
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
 
+    /// <summary>
+    /// Loads CSOs by ID with AttributeValues using AsNoTracking, for reconciliation comparisons.
+    /// </summary>
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
+
     public Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem);
 
     /// <summary>
@@ -655,7 +660,10 @@ public interface IConnectedSystemRepository
     public Task UpdateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);
     public Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile);
     public Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject);
-    public Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
+    public Task UpdateConnectedSystemObjectsAsync(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)>? pendingAdditions = null,
+        List<Guid>? pendingRemovalIds = null);
 
     /// <summary>
     /// Batch updates only the join-related columns (JoinType, DateJoined, MetaverseObjectId) on

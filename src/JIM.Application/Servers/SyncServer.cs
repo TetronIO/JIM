@@ -180,10 +180,32 @@ public class SyncServer : ISyncServer
         List<ConnectedSystemObject> connectedSystemObjects,
         List<ActivityRunProfileExecutionItem> rpeis)
     {
+        // Snapshot pending attribute changes BEFORE LinkUpdateChangeRecords, which clears
+        // PendingAttributeValueAdditions/Removals after building change history records.
+        // The repository needs these lists to persist attribute value inserts/deletes.
+        var pendingAdditions = connectedSystemObjects
+            .SelectMany(cso => cso.PendingAttributeValueAdditions.Select(av =>
+            {
+                // Ensure new attribute values have generated IDs and resolved FKs for raw SQL
+                // bulk insert. EF Core would auto-generate IDs and resolve navigation→FK mappings,
+                // but raw SQL requires all values set explicitly.
+                if (av.Id == Guid.Empty)
+                    av.Id = Guid.NewGuid();
+                if (av.AttributeId == 0 && av.Attribute != null)
+                    av.AttributeId = av.Attribute.Id;
+                return (CsoId: cso.Id, Value: av);
+            }))
+            .ToList();
+        var pendingRemovals = connectedSystemObjects
+            .SelectMany(cso => cso.PendingAttributeValueRemovals)
+            .Where(av => av.Id != Guid.Empty)
+            .Select(av => av.Id)
+            .ToList();
+
         var changeTrackingEnabled = await GetCsoChangeTrackingEnabledAsync();
         _jim.ConnectedSystems.LinkUpdateChangeRecords(connectedSystemObjects, rpeis, changeTrackingEnabled);
 
-        await _syncRepo.UpdateConnectedSystemObjectsAsync(connectedSystemObjects);
+        await _syncRepo.UpdateConnectedSystemObjectsAsync(connectedSystemObjects, pendingAdditions, pendingRemovals);
     }
 
     public async Task DeleteConnectedSystemObjectsAsync(

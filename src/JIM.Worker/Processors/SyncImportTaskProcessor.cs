@@ -665,6 +665,16 @@ public class SyncImportTaskProcessor
                         _syncServer.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), updatedCso.Id);
                 }
 
+                // Clear the change tracker after each update batch. The batch has been fully persisted
+                // (raw SQL for parent rows + SaveChangesAsync for attribute changes), so tracked
+                // entities are no longer needed. This prevents tracker bloat from accumulating
+                // across 50+ batches of 2000 CSOs each.
+                // NOTE: this clears navigation properties on the batch CSOs, but those CSOs have
+                // already been saved. Reconciliation uses pre-loaded PendingExports (not CSO nav
+                // props) for the comparison data, and rebuilds CSO attribute lookups from a fresh
+                // database query if needed.
+                _syncRepo.ClearChangeTracker();
+
                 _activity.ObjectsProcessed = createdCount + batchStart + batchSize;
                 await _syncRepo.UpdateActivityMessageAsync(_activity,
                     $"Saving changes — updating ({batchStart + batchSize:N0} / {totalToUpdate:N0})" +
@@ -693,16 +703,13 @@ public class SyncImportTaskProcessor
             return;
         }
 
-        // Clear the change tracker before reconciliation. The import phase has fully persisted
-        // all CSO creates/updates, so tracked entities are no longer needed. Without this, the
-        // reconciliation batch persist methods (DeleteUntrackedPendingExportsAsync,
-        // UpdateUntrackedPendingExportsAsync) must scan 100K+ tracked entities via
-        // DetachTrackedChildEntities/DetachTrackedEntities for each pending export operation,
-        // turning O(1) deletes into O(n) scans.
-        var trackerCount = _syncRepo.GetChangeTrackerEntityCount();
-        Log.Information("PerformImportAsync: Clearing change tracker before reconciliation ({TrackerCount} entities)",
-            trackerCount);
-        _syncRepo.ClearChangeTracker();
+        // Note: we intentionally do NOT clear the change tracker here. The import phase leaves
+        // 100K+ tracked CSO entities whose AttributeValues navigation properties are populated.
+        // ClearChangeTracker() detaches entities and EF Core's fixup clears navigation collections,
+        // which would empty AttributeValues on the in-memory CSOs and break reconciliation
+        // (every attribute comparison would see "(no values)" and mark changes as not confirmed).
+        // The batch persist now uses raw SQL (COPY binary + UPDATE FROM), so tracker bloat no
+        // longer causes performance issues during reconciliation.
 
         _activity.ObjectsToProcess = connectedSystemObjectsToBeUpdated.Count;
         _activity.ObjectsProcessed = 0;
@@ -1457,16 +1464,8 @@ public class SyncImportTaskProcessor
                         throughput.FormatThroughput(importIndex + 1, totalObjectsInBatch));
                 }
 
-                // Clear the change tracker periodically to prevent entity accumulation.
-                // HydrateCsoAsync loads each CSO with full Include chains, tracking all entities.
-                // Without clearing, the tracker grows to 1M+ entities at 100K objects, causing
-                // progressive throughput degradation (231 obj/s → 26 obj/s).
-                // The CSOs in create/update lists are held by CLR references — detaching from
-                // the tracker doesn't null them. They'll be re-attached during batch persistence.
-                if ((importIndex + 1) % 1000 == 0)
-                {
-                    _syncRepo.ClearChangeTracker();
-                }
+                // No periodic ClearChangeTracker needed. HydrateCsoAsync now uses AsNoTracking,
+                // so loaded CSOs and their navigation entities do not enter the change tracker.
             }
         }
 
@@ -2636,7 +2635,14 @@ public class SyncImportTaskProcessor
 
         for (var page = 0; page < totalPages; page++)
         {
-            var pageCsos = csoList.Skip(page * pageSize).Take(pageSize).ToList();
+            var pageCsoIds = csoList.Skip(page * pageSize).Take(pageSize).Select(c => c.Id).ToList();
+
+            // Reload CSOs with fresh AttributeValues from the database for this page.
+            // The in-memory CSOs may have stale/empty AttributeValues if the change tracker
+            // was cleared between save-phase batches (which detaches entities and EF fixup
+            // clears navigation collections). AsNoTracking avoids polluting the tracker.
+            var pageCsos = await _syncRepo.GetConnectedSystemObjectsByIdsNoTrackingAsync(
+                _connectedSystem.Id, pageCsoIds);
 
             // Thread-safe batch collections for deferred database operations (per page)
             var pendingExportsToDelete = new System.Collections.Concurrent.ConcurrentBag<JIM.Models.Transactional.PendingExport>();
@@ -2645,7 +2651,7 @@ public class SyncImportTaskProcessor
             var pageExecutionItems = new System.Collections.Concurrent.ConcurrentBag<ActivityRunProfileExecutionItem>();
 
             // Process CSOs in parallel - reconciliation is pure in-memory comparison.
-            // All pending exports are already loaded; no database queries in this loop.
+            // All pending exports are already loaded; no database queries per CSO in this loop.
             // Thread safety:
             // - allPendingExportsByCsoId: read-only dictionary (concurrent reads are safe)
             // - Each CSO gets its own PendingExportReconciliationResult (no sharing)
@@ -2873,6 +2879,7 @@ public class SyncImportTaskProcessor
             // Batch persist pending export changes for this page.
             // Uses ID-based and tracker-aware methods to avoid conflicts with entities
             // already tracked from the per-CSO processing phase (AsNoTracking loads separate instances).
+            var flushSw = isFirstPage ? Stopwatch.StartNew() : null;
             using (Diagnostics.Sync.StartSpan("FlushPendingExportChanges")
                 .SetTag("deleteCount", pendingExportsToDelete.Count)
                 .SetTag("updateCount", pendingExportsToUpdate.Count)
@@ -2881,22 +2888,32 @@ public class SyncImportTaskProcessor
                 if (pendingExportsToDelete.Count > 0)
                 {
                     await _syncRepo.DeleteUntrackedPendingExportsAsync(pendingExportsToDelete);
-                    Log.Verbose("ReconcilePendingExportsAsync: Page {Page}: Batch deleted {Count} confirmed pending exports", page + 1, pendingExportsToDelete.Count);
+                    if (isFirstPage)
+                        Log.Information("ReconcilePendingExportsAsync: Page 1 flush — DeletePEs: {ElapsedMs:F0}ms ({Count} PEs)",
+                            flushSw!.ElapsedMilliseconds, pendingExportsToDelete.Count);
                 }
 
                 // Delete confirmed attribute changes before updating (AsNoTracking requires explicit child deletion)
                 if (confirmedAttrChangesToDelete.Count > 0)
                 {
+                    var attrSw = isFirstPage ? Stopwatch.StartNew() : null;
                     await _syncRepo.DeleteUntrackedPendingExportAttributeValueChangesAsync(confirmedAttrChangesToDelete);
-                    Log.Verbose("ReconcilePendingExportsAsync: Page {Page}: Batch deleted {Count} confirmed attribute value changes", page + 1, confirmedAttrChangesToDelete.Count);
+                    if (isFirstPage)
+                        Log.Information("ReconcilePendingExportsAsync: Page 1 flush — DeleteAttrChanges: {ElapsedMs:F0}ms ({Count} changes)",
+                            attrSw!.ElapsedMilliseconds, confirmedAttrChangesToDelete.Count);
                 }
 
                 if (pendingExportsToUpdate.Count > 0)
                 {
+                    var updateSw = isFirstPage ? Stopwatch.StartNew() : null;
                     await _syncRepo.UpdateUntrackedPendingExportsAsync(pendingExportsToUpdate);
-                    Log.Verbose("ReconcilePendingExportsAsync: Page {Page}: Batch updated {Count} pending exports", page + 1, pendingExportsToUpdate.Count);
+                    if (isFirstPage)
+                        Log.Information("ReconcilePendingExportsAsync: Page 1 flush — UpdatePEs: {ElapsedMs:F0}ms ({Count} PEs, tracker: {TrackerCount})",
+                            updateSw!.ElapsedMilliseconds, pendingExportsToUpdate.Count, _syncRepo.GetChangeTrackerEntityCount());
                 }
             }
+            if (isFirstPage)
+                Log.Information("ReconcilePendingExportsAsync: Page 1 flush total: {ElapsedMs:F0}ms", flushSw!.ElapsedMilliseconds);
 
             // Update activity progress after each page
             await _syncRepo.UpdateActivityMessageAsync(_activity,

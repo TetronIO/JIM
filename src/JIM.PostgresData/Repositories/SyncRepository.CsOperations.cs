@@ -3,6 +3,7 @@ using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using Serilog;
 
@@ -570,57 +571,187 @@ public partial class SyncRepository
         if (exportList.Count == 0)
             return;
 
-        foreach (var untrackedExport in exportList)
+        if (!_context.Database.IsRelational())
         {
-            // Find the tracked instance if one exists, otherwise attach the untracked entity
-            var trackedEntry = _context.ChangeTracker.Entries<PendingExport>()
-                .FirstOrDefault(e => e.Entity.Id == untrackedExport.Id);
-
-            if (trackedEntry != null)
+            // InMemory provider (tests): use EF Core change tracker approach
+            foreach (var pe in exportList)
             {
-                // Copy scalar properties from the untracked entity to the tracked one
-                trackedEntry.Entity.Status = untrackedExport.Status;
-                trackedEntry.Entity.ChangeType = untrackedExport.ChangeType;
-                trackedEntry.Entity.ErrorCount = untrackedExport.ErrorCount;
-                trackedEntry.Entity.MaxRetries = untrackedExport.MaxRetries;
-                trackedEntry.Entity.LastAttemptedAt = untrackedExport.LastAttemptedAt;
-                trackedEntry.Entity.NextRetryAt = untrackedExport.NextRetryAt;
-                trackedEntry.Entity.LastErrorMessage = untrackedExport.LastErrorMessage;
-                trackedEntry.Entity.LastErrorStackTrace = untrackedExport.LastErrorStackTrace;
-                trackedEntry.Entity.HasUnresolvedReferences = untrackedExport.HasUnresolvedReferences;
-                trackedEntry.State = EntityState.Modified;
-            }
-            else
-            {
-                // Use detach-safe update to avoid graph traversal through
-                // AttributeValueChanges → Attribute → ConnectedSystemObjectTypeAttribute.
-                _repo.UpdateDetachedSafe(untrackedExport);
-            }
-
-            // Update attribute value changes that remain (those not deleted)
-            foreach (var attrChange in untrackedExport.AttributeValueChanges)
-            {
-                var trackedAttrEntry = _context.ChangeTracker.Entries<PendingExportAttributeValueChange>()
-                    .FirstOrDefault(e => e.Entity.Id == attrChange.Id);
-
-                if (trackedAttrEntry != null)
+                var tracked = await _context.PendingExports.FindAsync(pe.Id);
+                if (tracked != null)
                 {
-                    trackedAttrEntry.Entity.Status = attrChange.Status;
-                    trackedAttrEntry.Entity.LastImportedValue = attrChange.LastImportedValue;
-                    trackedAttrEntry.Entity.ExportAttemptCount = attrChange.ExportAttemptCount;
-                    trackedAttrEntry.Entity.LastExportedAt = attrChange.LastExportedAt;
-                    trackedAttrEntry.State = EntityState.Modified;
+                    tracked.Status = pe.Status;
+                    tracked.ChangeType = pe.ChangeType;
+                    tracked.ErrorCount = pe.ErrorCount;
+                    tracked.MaxRetries = pe.MaxRetries;
+                    tracked.LastAttemptedAt = pe.LastAttemptedAt;
+                    tracked.NextRetryAt = pe.NextRetryAt;
+                    tracked.LastErrorMessage = pe.LastErrorMessage;
+                    tracked.LastErrorStackTrace = pe.LastErrorStackTrace;
+                    tracked.HasUnresolvedReferences = pe.HasUnresolvedReferences;
                 }
+
+                foreach (var attrChange in pe.AttributeValueChanges)
+                {
+                    var trackedAttr = await _context.PendingExportAttributeValueChanges.FindAsync(attrChange.Id);
+                    if (trackedAttr != null)
+                    {
+                        trackedAttr.Status = attrChange.Status;
+                        trackedAttr.LastImportedValue = attrChange.LastImportedValue;
+                        trackedAttr.ExportAttemptCount = attrChange.ExportAttemptCount;
+                        trackedAttr.LastExportedAt = attrChange.LastExportedAt;
+                    }
+                }
+            }
+            await _context.SaveChangesAsync();
+            return;
+        }
+
+        // Relational databases: use COPY binary + UPDATE FROM for bulk updates.
+        // This bypasses the change tracker entirely, avoiding O(n) tracker scans per entity
+        // that caused multi-minute stalls at 100K scale.
+        var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
+        if (npgsqlConn.State != System.Data.ConnectionState.Open)
+            await npgsqlConn.OpenAsync();
+
+        var npgsqlTx = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
+
+        // 1. Bulk update PendingExports
+        await using (var createCmd = new NpgsqlCommand { Connection = npgsqlConn, Transaction = npgsqlTx })
+        {
+            createCmd.CommandText = """
+                CREATE TEMP TABLE IF NOT EXISTS _pe_bulk_update (
+                    "Id" uuid NOT NULL,
+                    "Status" int,
+                    "ChangeType" int,
+                    "ErrorCount" int,
+                    "MaxRetries" int,
+                    "LastAttemptedAt" timestamptz,
+                    "NextRetryAt" timestamptz,
+                    "LastErrorMessage" text,
+                    "LastErrorStackTrace" text,
+                    "HasUnresolvedReferences" boolean
+                ) ON COMMIT PRESERVE ROWS
+                """;
+            await createCmd.ExecuteNonQueryAsync();
+        }
+
+        await using (var writer = await npgsqlConn.BeginBinaryImportAsync(
+            """COPY _pe_bulk_update ("Id", "Status", "ChangeType", "ErrorCount", "MaxRetries", "LastAttemptedAt", "NextRetryAt", "LastErrorMessage", "LastErrorStackTrace", "HasUnresolvedReferences") FROM STDIN (FORMAT binary)"""))
+        {
+            foreach (var pe in exportList)
+            {
+                await writer.StartRowAsync();
+                await writer.WriteAsync(pe.Id, NpgsqlTypes.NpgsqlDbType.Uuid);
+                await writer.WriteAsync((int)pe.Status, NpgsqlTypes.NpgsqlDbType.Integer);
+                await writer.WriteAsync((int)pe.ChangeType, NpgsqlTypes.NpgsqlDbType.Integer);
+                await writer.WriteAsync(pe.ErrorCount, NpgsqlTypes.NpgsqlDbType.Integer);
+                await writer.WriteAsync(pe.MaxRetries, NpgsqlTypes.NpgsqlDbType.Integer);
+                if (pe.LastAttemptedAt.HasValue)
+                    await writer.WriteAsync(pe.LastAttemptedAt.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
                 else
+                    await writer.WriteNullAsync();
+                if (pe.NextRetryAt.HasValue)
+                    await writer.WriteAsync(pe.NextRetryAt.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+                else
+                    await writer.WriteNullAsync();
+                if (pe.LastErrorMessage is not null)
+                    await writer.WriteAsync(pe.LastErrorMessage, NpgsqlTypes.NpgsqlDbType.Text);
+                else
+                    await writer.WriteNullAsync();
+                if (pe.LastErrorStackTrace is not null)
+                    await writer.WriteAsync(pe.LastErrorStackTrace, NpgsqlTypes.NpgsqlDbType.Text);
+                else
+                    await writer.WriteNullAsync();
+                await writer.WriteAsync(pe.HasUnresolvedReferences, NpgsqlTypes.NpgsqlDbType.Boolean);
+            }
+            await writer.CompleteAsync();
+        }
+
+        await using (var updateCmd = new NpgsqlCommand { Connection = npgsqlConn, Transaction = npgsqlTx })
+        {
+            updateCmd.CommandText = """
+                UPDATE "PendingExports" t
+                SET "Status" = v."Status",
+                    "ChangeType" = v."ChangeType",
+                    "ErrorCount" = v."ErrorCount",
+                    "MaxRetries" = v."MaxRetries",
+                    "LastAttemptedAt" = v."LastAttemptedAt",
+                    "NextRetryAt" = v."NextRetryAt",
+                    "LastErrorMessage" = v."LastErrorMessage",
+                    "LastErrorStackTrace" = v."LastErrorStackTrace",
+                    "HasUnresolvedReferences" = v."HasUnresolvedReferences"
+                FROM _pe_bulk_update v
+                WHERE t."Id" = v."Id"
+                """;
+            await updateCmd.ExecuteNonQueryAsync();
+        }
+
+        // 2. Bulk update PendingExportAttributeValueChanges
+        var allAttrChanges = exportList
+            .SelectMany(pe => pe.AttributeValueChanges)
+            .ToList();
+
+        if (allAttrChanges.Count > 0)
+        {
+            await using (var createCmd = new NpgsqlCommand { Connection = npgsqlConn, Transaction = npgsqlTx })
+            {
+                createCmd.CommandText = """
+                    CREATE TEMP TABLE IF NOT EXISTS _peavc_bulk_update (
+                        "Id" uuid NOT NULL,
+                        "Status" int,
+                        "LastImportedValue" text,
+                        "ExportAttemptCount" int,
+                        "LastExportedAt" timestamptz
+                    ) ON COMMIT PRESERVE ROWS
+                    """;
+                await createCmd.ExecuteNonQueryAsync();
+            }
+
+            await using (var writer = await npgsqlConn.BeginBinaryImportAsync(
+                """COPY _peavc_bulk_update ("Id", "Status", "LastImportedValue", "ExportAttemptCount", "LastExportedAt") FROM STDIN (FORMAT binary)"""))
+            {
+                foreach (var avc in allAttrChanges)
                 {
-                    // Ensure the parent FK is set before attaching.
-                    attrChange.PendingExportId = untrackedExport.Id;
-                    _repo.UpdateDetachedSafe(attrChange);
+                    await writer.StartRowAsync();
+                    await writer.WriteAsync(avc.Id, NpgsqlTypes.NpgsqlDbType.Uuid);
+                    await writer.WriteAsync((int)avc.Status, NpgsqlTypes.NpgsqlDbType.Integer);
+                    if (avc.LastImportedValue is not null)
+                        await writer.WriteAsync(avc.LastImportedValue, NpgsqlTypes.NpgsqlDbType.Text);
+                    else
+                        await writer.WriteNullAsync();
+                    await writer.WriteAsync(avc.ExportAttemptCount, NpgsqlTypes.NpgsqlDbType.Integer);
+                    if (avc.LastExportedAt.HasValue)
+                        await writer.WriteAsync(avc.LastExportedAt.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+                    else
+                        await writer.WriteNullAsync();
                 }
+                await writer.CompleteAsync();
+            }
+
+            await using (var updateCmd = new NpgsqlCommand { Connection = npgsqlConn, Transaction = npgsqlTx })
+            {
+                updateCmd.CommandText = """
+                    UPDATE "PendingExportAttributeValueChanges" t
+                    SET "Status" = v."Status",
+                        "LastImportedValue" = v."LastImportedValue",
+                        "ExportAttemptCount" = v."ExportAttemptCount",
+                        "LastExportedAt" = v."LastExportedAt"
+                    FROM _peavc_bulk_update v
+                    WHERE t."Id" = v."Id"
+                    """;
+                await updateCmd.ExecuteNonQueryAsync();
             }
         }
 
-        await _context.SaveChangesAsync();
+        // Clean up temp tables
+        await using (var dropCmd = new NpgsqlCommand { Connection = npgsqlConn, Transaction = npgsqlTx })
+        {
+            dropCmd.CommandText = """
+                DROP TABLE IF EXISTS _pe_bulk_update;
+                DROP TABLE IF EXISTS _peavc_bulk_update
+                """;
+            await dropCmd.ExecuteNonQueryAsync();
+        }
     }
 
     public async Task DeleteUntrackedPendingExportAttributeValueChangesAsync(IEnumerable<PendingExportAttributeValueChange> untrackedAttributeValueChanges)

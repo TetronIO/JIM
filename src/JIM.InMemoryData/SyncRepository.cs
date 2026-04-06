@@ -299,6 +299,9 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
+        => GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds);
+
     public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(
         int connectedSystemId, int attributeId, IEnumerable<string> attributeValues)
     {
@@ -447,8 +450,15 @@ public class SyncRepository : ISyncRepository
             await onBatchPersisted(connectedSystemObjects.Count);
     }
 
-    public Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
+    public Task UpdateConnectedSystemObjectsAsync(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)>? pendingAdditions = null,
+        List<Guid>? pendingRemovalIds = null)
     {
+        // In the InMemory provider, import processing already modified cso.AttributeValues
+        // in-memory (adds/removes). The pendingAdditions/RemovalIds snapshot is for the
+        // relational path where AsNoTracking prevents EF from detecting these changes.
+        // We just need to persist the CSOs to the in-memory store.
         foreach (var cso in connectedSystemObjects)
         {
             FixupCsoNavigationProperties(cso);
@@ -1132,6 +1142,11 @@ public class SyncRepository : ISyncRepository
     }
 
     public int GetChangeTrackerEntityCount() => 0; // No EF change tracker in memory
+
+    public void DetachSchemaEntitiesFromTracker()
+    {
+        // No-op — no EF change tracker in memory
+    }
 
     public void SetAutoDetectChangesEnabled(bool enabled)
     {

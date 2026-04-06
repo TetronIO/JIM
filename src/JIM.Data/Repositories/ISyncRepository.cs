@@ -122,6 +122,11 @@ public interface ISyncRepository
     Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
 
     /// <summary>
+    /// Loads CSOs by ID with AttributeValues using AsNoTracking, for reconciliation comparisons.
+    /// </summary>
+    Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
+
+    /// <summary>
     /// Gets multiple CSOs by their external ID attribute values (batch lookup).
     /// Returns a dictionary keyed by the string representation of the attribute value.
     /// Used during import to batch-match incoming objects.
@@ -197,7 +202,10 @@ public interface ISyncRepository
     /// Bulk updates CSOs with their attribute values.
     /// Uses raw SQL bulk operations in production for performance.
     /// </summary>
-    Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
+    Task UpdateConnectedSystemObjectsAsync(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)>? pendingAdditions = null,
+        List<Guid>? pendingRemovalIds = null);
 
     /// <summary>
     /// Updates only the join state fields (MetaverseObjectId, JoinType, Status) on CSOs
@@ -482,6 +490,12 @@ public interface ISyncRepository
     /// Used for diagnostics to detect entity accumulation across pages.
     /// </summary>
     int GetChangeTrackerEntityCount();
+
+    /// <summary>
+    /// Selectively detaches schema/type entities from the change tracker without affecting
+    /// CSOs or their AttributeValues. Prevents tracker bloat during import processing.
+    /// </summary>
+    void DetachSchemaEntitiesFromTracker();
 
     /// <summary>
     /// Controls whether SaveChangesAsync automatically calls DetectChanges.

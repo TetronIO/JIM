@@ -1281,6 +1281,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(x =>
                 x.ConnectedSystem.Id == connectedSystemId &&
                 x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue.ToLower() == lowerAttributeValue))
+            .OrderBy(x => x.Id)
             .ToListAsync();
 
         if (allMatches.Count > 1)
@@ -1308,6 +1309,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(cso =>
                 cso.ConnectedSystem.Id == connectedSystemId &&
                 cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.IntValue == attributeValue))
+            .OrderBy(cso => cso.Id)
             .ToListAsync();
 
         if (allMatches.Count > 1)
@@ -1335,6 +1337,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(cso =>
                 cso.ConnectedSystem.Id == connectedSystemId &&
                 cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.LongValue == attributeValue))
+            .OrderBy(cso => cso.Id)
             .ToListAsync();
 
         if (allMatches.Count > 1)
@@ -1362,6 +1365,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(x =>
                 x.ConnectedSystem.Id == connectedSystemId &&
                 x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.GuidValue == attributeValue))
+            .OrderBy(x => x.Id)
             .ToListAsync();
 
         if (allMatches.Count > 1)
@@ -1464,9 +1468,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (idList.Count == 0)
             return new List<ConnectedSystemObject>();
 
-        // Same Include chain as GetConnectedSystemObjectByAttributeAsync — callers need the full
-        // entity graph for attribute diffing during import processing.
+        // Load CSOs with AsNoTracking to prevent change tracker bloat. Schema entities (Type,
+        // Type.Attributes, AttributeValue.Attribute) are shared across all CSOs and cause O(n)
+        // identity resolution slowdown when accumulated in the tracker (317ms → 5.6s per CSO
+        // at 100K scale). AsNoTracking bypasses identity resolution entirely.
+        // The save phase uses raw SQL for parent CSO rows and explicit add/remove for attribute
+        // values, so change tracking is not required during import processing.
         return await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
             .AsSplitQuery()
             .Include(cso => cso.Type)
             .ThenInclude(t => t.Attributes)
@@ -1475,6 +1484,26 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.ReferenceValue)
             .ThenInclude(refCso => refCso!.Type)
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId && idList.Contains(cso.Id))
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Loads CSOs by ID with AttributeValues for reconciliation, using AsNoTracking to avoid
+    /// polluting the change tracker. Only loads AttributeValues (not Type or ReferenceValues)
+    /// since reconciliation only needs attribute data for comparison.
+    /// </summary>
+    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
+    {
+        var idList = csoIds.ToList();
+        if (idList.Count == 0)
+            return new List<ConnectedSystemObject>();
+
+        return await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(cso => cso.AttributeValues)
+                .ThenInclude(av => av.Attribute)
             .Where(cso => cso.ConnectedSystemId == connectedSystemId && idList.Contains(cso.Id))
             .ToListAsync();
     }
@@ -1776,28 +1805,56 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         await Repository.Database.SaveChangesAsync();
     }
 
-    public async Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
+    public async Task UpdateConnectedSystemObjectsAsync(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)>? pendingAdditions = null,
+        List<Guid>? pendingRemovalIds = null)
     {
         if (connectedSystemObjects.Count == 0)
             return;
 
-        // Use raw SQL for the parent CSO row updates (bypasses change tracker overhead for the
-        // parent rows). Then call SaveChangesAsync to let the change tracker handle child entity
-        // operations: attribute value additions (Added) and removals (Deleted) that were queued
-        // by ProcessConnectedSystemObjectAttributeValueChanges modifying CSO.AttributeValues.
+        // Use raw SQL for parent CSO row updates (bypasses change tracker entirely).
         await BulkUpdateConnectedSystemObjectsRawAsync(connectedSystemObjects);
 
-        // Mark CSOs as Unchanged to prevent SaveChangesAsync from re-updating them
-        // (the raw SQL already wrote the correct values)
-        foreach (var cso in connectedSystemObjects)
+        // Handle attribute value additions and removals using pre-captured pending changes.
+        // The caller snapshots these before LinkUpdateChangeRecords clears the CSO's pending lists.
+        Log.Information("UpdateConnectedSystemObjectsAsync: {CsoCount} CSOs, {Additions} pending additions, {Removals} pending removals",
+            connectedSystemObjects.Count, pendingAdditions?.Count ?? 0, pendingRemovalIds?.Count ?? 0);
+
+        if (pendingRemovalIds is { Count: > 0 })
         {
-            var entry = Repository.Database.Entry(cso);
-            if (entry.State == EntityState.Modified)
-                entry.State = EntityState.Unchanged;
+            if (Repository.Database.Database.IsRelational())
+            {
+                await Repository.Database.ConnectedSystemObjectAttributeValues
+                    .Where(av => pendingRemovalIds.Contains(av.Id))
+                    .ExecuteDeleteAsync();
+            }
+            else
+            {
+                var entities = await Repository.Database.ConnectedSystemObjectAttributeValues
+                    .Where(av => pendingRemovalIds.Contains(av.Id))
+                    .ToListAsync();
+                Repository.Database.ConnectedSystemObjectAttributeValues.RemoveRange(entities);
+                await Repository.Database.SaveChangesAsync();
+            }
         }
 
-        // Flush pending child entity changes (attribute value adds/deletes)
-        await Repository.Database.SaveChangesAsync();
+        if (pendingAdditions is { Count: > 0 })
+        {
+            if (Repository.Database.Database.IsRelational())
+            {
+                await BulkInsertCsoAttributeValuesRawAsync(pendingAdditions);
+            }
+            else
+            {
+                foreach (var (csoId, av) in pendingAdditions)
+                {
+                    Repository.Database.ConnectedSystemObjectAttributeValues.Add(av);
+                    Repository.Database.Entry(av).Property("ConnectedSystemObjectId").CurrentValue = csoId;
+                }
+                await Repository.Database.SaveChangesAsync();
+            }
+        }
     }
 
     /// <inheritdoc />
