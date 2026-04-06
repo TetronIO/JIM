@@ -23,7 +23,6 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libldap-common=2.6.7+dfsg-1~exp1ubuntu8 \
         libldap2=2.6.7+dfsg-1~exp1ubuntu8 \
-        cifs-utils=2:7.0-2build1 \
     && apt-get install -y --no-install-recommends \
         iputils-ping \
         curl \

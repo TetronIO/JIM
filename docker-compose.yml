@@ -13,9 +13,13 @@ services:
     volumes:
       - jim-logs-volume:/var/log/jim
       - jim-keys-volume:/data/keys
-    cap_add:
-      - DAC_READ_SEARCH
-      - SYS_ADMIN
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     build:
       context: .
       dockerfile: src/JIM.Web/Dockerfile
@@ -48,6 +52,17 @@ services:
     volumes:
       - jim-logs-volume:/var/log/jim
       - jim-keys-volume:/data/keys
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    cap_add:
+      # Required for CIFS/SMB file share mounting (file-based connectors)
+      - DAC_READ_SEARCH
+      - SYS_ADMIN
+    security_opt:
+      - no-new-privileges:true
     build:
       context: .
       dockerfile: src/JIM.Worker/Dockerfile
@@ -77,6 +92,13 @@ services:
       - JIM_LOG_PATH=/var/log/jim
     volumes:
       - jim-logs-volume:/var/log/jim
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     build:
       context: .
       dockerfile: src/JIM.Scheduler/Dockerfile
