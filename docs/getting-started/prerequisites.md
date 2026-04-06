@@ -47,7 +47,7 @@ JIM uses PostgreSQL as its database. You have two options:
 
 If you are contributing to JIM or building custom connectors, the development environment is fully self-contained:
 
-- **GitHub Codespaces:** One-click setup with everything pre-configured (.NET 9.0, PostgreSQL, shell aliases, VS Code extensions).
+- **GitHub Codespaces:** One-click setup with everything pre-configured (.NET 10.0, PostgreSQL, shell aliases, VS Code extensions).
 - **Local devcontainer:** Clone the repository and open it in VS Code with the Dev Containers extension. The devcontainer will set up the full environment automatically.
 
 No additional prerequisites are needed when using the devcontainer; it includes all build tools, a PostgreSQL instance, and a bundled Keycloak identity provider for testing.

@@ -1,6 +1,6 @@
 # JIM Development Quick Reference
 
-> Identity Management System - .NET 9.0, EF Core, PostgreSQL, Blazor
+> Identity Management System - .NET 10.0, EF Core, PostgreSQL, Blazor
 
 ## Context7 MCP
 
@@ -380,7 +380,7 @@ The `VERSION` file is the single source of truth for JIM's version number. It fe
 - **Docs site conventions (diagrams, MkDocs internals)**: `docs/CLAUDE.md`
 - **Repository**: https://github.com/TetronIO/JIM
 - **Documentation**: `README.md`
-- **.NET 9 Docs**: https://learn.microsoft.com/dotnet/
+- **.NET 10 Docs**: https://learn.microsoft.com/dotnet/
 - **EF Core**: https://learn.microsoft.com/ef/core/
 - **Blazor**: https://learn.microsoft.com/aspnet/core/blazor/
 - **MudBlazor**: https://mudblazor.com/

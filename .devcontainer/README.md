@@ -24,7 +24,7 @@ This directory contains the configuration for GitHub Codespaces and VS Code Dev 
 
 ### Pre-installed Tools
 
-- **.NET 9.0 SDK** - Latest .NET framework
+- **.NET 10.0 SDK** - Latest .NET framework
 - **dotnet-ef** - Entity Framework Core CLI tools
 - **Docker-in-Docker** - Run docker-compose inside the container
 - **GitHub CLI (gh)** - GitHub operations from terminal

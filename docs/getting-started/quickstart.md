@@ -76,7 +76,7 @@ For production hardening (TLS, reverse proxy, upgrades, monitoring), see the [De
 
 ### GitHub Codespaces (One Click)
 
-The fastest way to get a development environment. Everything is pre-configured: .NET 9.0, PostgreSQL, shell aliases, and VS Code extensions.
+The fastest way to get a development environment. Everything is pre-configured: .NET 10.0, PostgreSQL, shell aliases, and VS Code extensions.
 
 Once the Codespace is ready, open a terminal and run:
 
