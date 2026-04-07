@@ -32,7 +32,7 @@ internal class ThroughputTracker
     }
 
     /// <summary>
-    /// Formats the final throughput for a completion message, e.g. " in 3 min 12 sec (312 obj/s)".
+    /// Formats the final throughput for a completion message, e.g. " in 3 min 12 sec (avg 312 obj/s)".
     /// </summary>
     /// <param name="processed">Total objects processed.</param>
     public string FormatCompletion(int processed)
@@ -42,7 +42,7 @@ internal class ThroughputTracker
             return string.Empty;
 
         var rate = processed / elapsed.TotalSeconds;
-        return $" in {FormatDuration(elapsed.TotalSeconds)} ({rate:N0} obj/s)";
+        return $" in {FormatDuration(elapsed.TotalSeconds)} (avg {rate:N0} obj/s)";
     }
 
     private static string FormatDuration(double totalSeconds)
