@@ -21,6 +21,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libldap-common=2.6.7+dfsg-1~exp1ubuntu8 \
         libldap2=2.6.7+dfsg-1~exp1ubuntu8 \
+        libgssapi-krb5-2=1.20.1-6ubuntu2.6 \
     && rm -rf /var/lib/apt/lists/* \
     # Symlink for System.DirectoryServices.Protocols compatibility
     # .NET 10 managed LDAP code loads libldap-2.5.so.0 by name; Noble ships libldap.so.2
