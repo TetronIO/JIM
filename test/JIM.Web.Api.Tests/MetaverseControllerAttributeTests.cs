@@ -6,9 +6,11 @@ using System.Threading.Tasks;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
 using JIM.Application;
+using JIM.Application.Exceptions;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -76,6 +78,14 @@ public class MetaverseControllerAttributeTests
         {
             HttpContext = new DefaultHttpContext { User = principal }
         };
+
+        // Default: no sync rule references and no stored values (so existing delete tests pass)
+        _mockMetaverseRepo.Setup(r => r.GetSyncRulesReferencingAttributeAsync(It.IsAny<int>()))
+            .ReturnsAsync(new List<SyncRuleReference>());
+        _mockMetaverseRepo.Setup(r => r.GetAttributeValueObjectCountAsync(It.IsAny<int>()))
+            .ReturnsAsync(0);
+        _mockMetaverseRepo.Setup(r => r.GetAttributeValueObjectCountByTypeAsync(It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync(0);
     }
 
     #region CreateAttributeAsync tests
@@ -464,6 +474,114 @@ public class MetaverseControllerAttributeTests
         await _controller.DeleteAttributeAsync(1);
 
         _mockMetaverseRepo.Verify(r => r.DeleteMetaverseAttributeAsync(attribute), Times.Once);
+    }
+
+    #endregion
+
+    #region DeleteAttributeAsync validation error tests
+
+    [Test]
+    public async Task DeleteAttributeAsync_WithSyncRuleReferences_ReturnsValidationError()
+    {
+        var attribute = new MetaverseAttribute
+        {
+            Id = 1,
+            Name = "costCentre",
+            BuiltIn = false
+        };
+
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(1))
+            .ReturnsAsync(attribute);
+
+        var syncRuleRefs = new List<SyncRuleReference>
+        {
+            new() { Id = 10, Name = "Import Users from LDAP" },
+            new() { Id = 20, Name = "Export Users to LDAP" }
+        };
+        _mockMetaverseRepo.Setup(r => r.GetSyncRulesReferencingAttributeAsync(1))
+            .ReturnsAsync(syncRuleRefs);
+
+        var result = await _controller.DeleteAttributeAsync(1);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        var badRequest = (BadRequestObjectResult)result;
+        var error = badRequest.Value as ApiErrorResponse;
+        Assert.That(error, Is.Not.Null);
+        Assert.That(error!.Code, Is.EqualTo(ApiErrorCodes.ValidationError));
+        Assert.That(error.Message, Does.Contain("costCentre"));
+        Assert.That(error.Message, Does.Contain("sync rule(s)"));
+    }
+
+    [Test]
+    public async Task DeleteAttributeAsync_WithStoredValues_ReturnsValidationError()
+    {
+        var attribute = new MetaverseAttribute
+        {
+            Id = 1,
+            Name = "costCentre",
+            BuiltIn = false
+        };
+
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(1))
+            .ReturnsAsync(attribute);
+
+        _mockMetaverseRepo.Setup(r => r.GetSyncRulesReferencingAttributeAsync(1))
+            .ReturnsAsync(new List<SyncRuleReference>());
+
+        _mockMetaverseRepo.Setup(r => r.GetAttributeValueObjectCountAsync(1))
+            .ReturnsAsync(1523);
+
+        var result = await _controller.DeleteAttributeAsync(1);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        var badRequest = (BadRequestObjectResult)result;
+        var error = badRequest.Value as ApiErrorResponse;
+        Assert.That(error, Is.Not.Null);
+        Assert.That(error!.Code, Is.EqualTo(ApiErrorCodes.ValidationError));
+        Assert.That(error.Message, Does.Contain("costCentre"));
+        Assert.That(error.Message, Does.Contain("1,523"));
+    }
+
+    #endregion
+
+    #region UpdateAttributeAsync validation error tests
+
+    [Test]
+    public async Task UpdateAttributeAsync_RemovingObjectTypeWithValues_ReturnsValidationError()
+    {
+        var personType = new MetaverseObjectType { Id = 1, Name = "person" };
+        var groupType = new MetaverseObjectType { Id = 2, Name = "group" };
+        var attribute = new MetaverseAttribute
+        {
+            Id = 1,
+            Name = "costCentre",
+            BuiltIn = false,
+            MetaverseObjectTypes = new List<MetaverseObjectType> { personType, groupType }
+        };
+
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeWithObjectTypesAsync(1))
+            .ReturnsAsync(attribute);
+
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, false))
+            .ReturnsAsync(personType);
+
+        _mockMetaverseRepo.Setup(r => r.GetAttributeValueObjectCountByTypeAsync(1, 1))
+            .ReturnsAsync(450);
+
+        var request = new UpdateMetaverseAttributeRequest
+        {
+            ObjectTypeIds = new List<int> { 2 } // Removing personType (1)
+        };
+
+        var result = await _controller.UpdateAttributeAsync(1, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        var badRequest = (BadRequestObjectResult)result;
+        var error = badRequest.Value as ApiErrorResponse;
+        Assert.That(error, Is.Not.Null);
+        Assert.That(error!.Code, Is.EqualTo(ApiErrorCodes.ValidationError));
+        Assert.That(error.Message, Does.Contain("person"));
+        Assert.That(error.Message, Does.Contain("costCentre"));
     }
 
     #endregion

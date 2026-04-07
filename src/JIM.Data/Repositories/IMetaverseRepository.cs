@@ -279,5 +279,30 @@ public interface IMetaverseRepository
     /// </summary>
     /// <param name="attribute">The attribute to delete.</param>
     public Task DeleteMetaverseAttributeAsync(MetaverseAttribute attribute);
+
+    /// <summary>
+    /// Counts the number of distinct metaverse objects that have at least one value
+    /// stored for the specified attribute.
+    /// </summary>
+    /// <param name="attributeId">The unique identifier of the attribute.</param>
+    /// <returns>The count of distinct metaverse objects with values for this attribute.</returns>
+    public Task<int> GetAttributeValueObjectCountAsync(int attributeId);
+
+    /// <summary>
+    /// Counts the number of distinct metaverse objects of a specific type that have
+    /// at least one value stored for the specified attribute.
+    /// </summary>
+    /// <param name="attributeId">The unique identifier of the attribute.</param>
+    /// <param name="metaverseObjectTypeId">The unique identifier of the object type to filter by.</param>
+    /// <returns>The count of distinct metaverse objects of the given type with values for this attribute.</returns>
+    public Task<int> GetAttributeValueObjectCountByTypeAsync(int attributeId, int metaverseObjectTypeId);
+
+    /// <summary>
+    /// Gets the sync rules that reference the specified metaverse attribute via
+    /// sync rule mappings, mapping sources, object matching rules, or scoping criteria.
+    /// </summary>
+    /// <param name="attributeId">The unique identifier of the attribute.</param>
+    /// <returns>A list of sync rule references (ID and Name) that use this attribute.</returns>
+    public Task<List<SyncRuleReference>> GetSyncRulesReferencingAttributeAsync(int attributeId);
     #endregion
 }

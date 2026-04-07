@@ -3,6 +3,7 @@ using Asp.Versioning;
 using JIM.Web.Extensions.Api;
 using JIM.Web.Models.Api;
 using JIM.Application;
+using JIM.Application.Exceptions;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Security;
@@ -281,6 +282,17 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         // Update object type associations if specified
         if (request.ObjectTypeIds != null)
         {
+            // Validate that removing object types won't orphan stored attribute values
+            try
+            {
+                await _application.Metaverse.ValidateObjectTypeRemovalAsync(attribute, request.ObjectTypeIds);
+            }
+            catch (MetaverseAttributeInUseException ex)
+            {
+                _logger.LogWarning("Cannot update attribute {Id} object types: {Message}", id, ex.Message);
+                return BadRequest(ApiErrorResponse.ValidationError(ex.Message));
+            }
+
             // Collection is loaded from the query when ObjectTypeIds is specified
             attribute.MetaverseObjectTypes.Clear();
             foreach (var objectTypeId in request.ObjectTypeIds)
@@ -331,12 +343,23 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         if (attribute.BuiltIn)
             return BadRequest(ApiErrorResponse.BadRequest("Cannot delete built-in attributes."));
 
-        // Get the current API key for Activity attribution
-        var apiKey = await GetCurrentApiKeyAsync();
-        if (apiKey != null)
-            await _application.Metaverse.DeleteMetaverseAttributeAsync(attribute, apiKey);
-        else
-            await _application.Metaverse.DeleteMetaverseAttributeAsync(attribute, (MetaverseObject?)null);
+        try
+        {
+            // Get the current API key for Activity attribution
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.Metaverse.DeleteMetaverseAttributeAsync(attribute, apiKey);
+            else
+                await _application.Metaverse.DeleteMetaverseAttributeAsync(attribute, (MetaverseObject?)null);
+        }
+        catch (MetaverseAttributeInUseException ex)
+        {
+            _logger.LogWarning("Cannot delete attribute {Id}: {Message}", id, ex.Message);
+            var error = ApiErrorResponse.ValidationError(ex.Message);
+            if (ex.ReferencingSyncRules.Count > 0)
+                error.Details = System.Text.Json.JsonSerializer.Serialize(ex.ReferencingSyncRules);
+            return BadRequest(error);
+        }
 
         _logger.LogInformation("Deleted metaverse attribute: {Id}", id);
 
