@@ -24,7 +24,7 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
         # JIM System
         jim = softwareSystem "JIM" "Central identity hub implementing the metaverse pattern. Synchronises identities across enterprise systems with bidirectional data flow and transformation" {
 
-            webApp = container "Web Application" "Provides interactive admin UI and REST API endpoints" "ASP.NET Core 9.0, Blazor Server, MudBlazor" "Web Browser" {
+            webApp = container "Web Application" "Provides interactive admin UI and REST API endpoints" "ASP.NET Core 10.0, Blazor Server, MudBlazor" "Web Browser" {
                 blazorPages = component "Blazor Pages" "Interactive admin UI - Dashboard, Activities, Connected Systems, Sync Rules, Schedules, Types" "Blazor Server Components"
                 apiControllers = component "API Controllers" "REST endpoints for metaverse, synchronisation, schedules, activities, security, and more" "ASP.NET Core Controllers"
                 authMiddleware = component "Authentication Middleware" "OIDC/SSO authentication and API key validation" "ASP.NET Core Middleware"
@@ -55,7 +55,7 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
                 syncRepository = component "ISyncRepository" "Dedicated data access for sync operations - bulk CSO/MVO writes, pending exports, RPEIs. Implemented by PostgresData.SyncRepository" "Repository Interface"
             }
 
-            worker = container "Worker Service" "Processes queued synchronisation tasks - import, sync, export operations" ".NET 9.0 Background Service" {
+            worker = container "Worker Service" "Processes queued synchronisation tasks - import, sync, export operations" ".NET 10.0 Background Service" {
                 workerHost = component "Worker Host" "Main processing loop, polls for tasks, manages execution" ".NET BackgroundService"
                 importProcessor = component "SyncImportTaskProcessor" "Imports data from connectors into staging area (full and delta)" "C# Task Processor"
                 fullSyncProcessor = component "SyncFullSyncTaskProcessor" "Full synchronisation - processes all CSOs, applies attribute flows, projects to metaverse" "C# Task Processor"
@@ -70,7 +70,7 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
                 scimConnector = component "SCIM 2.0 Connector" "Cloud application provisioning via SCIM protocol" "IConnector Implementation" "Planned"
             }
 
-            scheduler = container "Scheduler Service" "Evaluates schedule due times, triggers synchronisation jobs, and recovers stuck executions" ".NET 9.0 Background Service" {
+            scheduler = container "Scheduler Service" "Evaluates schedule due times, triggers synchronisation jobs, and recovers stuck executions" ".NET 10.0 Background Service" {
                 schedulerHost = component "Scheduler Host" "Polling loop that evaluates due schedules, starts executions, and performs crash recovery" ".NET BackgroundService"
             }
 

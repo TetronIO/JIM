@@ -143,6 +143,12 @@
 
     Runs Scenario 1 with Large template, reduced logging (Warning level), and
     change tracking disabled for maximum throughput during large-scale testing.
+
+.EXAMPLE
+    ./Run-IntegrationTests.ps1 -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP XLarge
+
+    Runs all scenarios against both directory types with different template sizes.
+    Samba AD uses Medium (faster population), OpenLDAP uses XLarge.
 #>
 
 param(
@@ -189,7 +195,15 @@ param(
     [string]$LogLevel,
 
     [Parameter(Mandatory=$false)]
-    [switch]$DisableChangeTracking
+    [switch]$DisableChangeTracking,
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "XLarge", "XXLarge")]
+    [string]$TemplateSambaAD,
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "XLarge", "XXLarge")]
+    [string]$TemplateOpenLDAP
 )
 
 Set-StrictMode -Version Latest
@@ -951,10 +965,9 @@ if ($DirectoryType -eq "All") {
     $selfScript = Join-Path $PSScriptRoot "Run-IntegrationTests.ps1"
     $directoryTypesToRun = @("SambaAD", "OpenLDAP")
 
-    # Build common parameters to pass through (excluding DirectoryType)
+    # Build common parameters to pass through (excluding DirectoryType and Template)
     $passThruParams = @{}
     if ($Scenario)   { $passThruParams.Scenario = $Scenario }
-    if ($Template)   { $passThruParams.Template = $Template }
     if ($Step -ne "All") { $passThruParams.Step = $Step }
     if ($PSBoundParameters.ContainsKey('ExportConcurrency'))    { $passThruParams.ExportConcurrency = $ExportConcurrency }
     if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) { $passThruParams.MaxExportParallelism = $MaxExportParallelism }
@@ -963,6 +976,11 @@ if ($DirectoryType -eq "All") {
     if ($IgnoreSnapshots)                                       { $passThruParams.IgnoreSnapshots = $true }
     if ($LogLevel)                                              { $passThruParams.LogLevel = $LogLevel }
     if ($DisableChangeTracking)                                 { $passThruParams.DisableChangeTracking = $true }
+
+    # Resolve per-directory-type templates. -TemplateSambaAD/-TemplateOpenLDAP
+    # override the base -Template for the respective directory type.
+    $templateForSambaAD  = if ($TemplateSambaAD)  { $TemplateSambaAD }  else { $Template }
+    $templateForOpenLDAP = if ($TemplateOpenLDAP) { $TemplateOpenLDAP } else { $Template }
 
     $allStart = Get-Date
     $allResults = @()
@@ -974,20 +992,27 @@ if ($DirectoryType -eq "All") {
     Write-Host "${CYAN}$("=" * 65)${NC}"
     Write-Host ""
     Write-Host "${GRAY}Scenario:  ${CYAN}$($Scenario ?? 'All')${NC}"
-    Write-Host "${GRAY}Template:  ${CYAN}$Template${NC}"
+    if ($templateForSambaAD -eq $templateForOpenLDAP) {
+        Write-Host "${GRAY}Template:  ${CYAN}$templateForSambaAD${NC}"
+    } else {
+        Write-Host "${GRAY}Template:  ${CYAN}SambaAD=$templateForSambaAD, OpenLDAP=$templateForOpenLDAP${NC}"
+    }
     Write-Host "${GRAY}Directory: ${CYAN}SambaAD → OpenLDAP${NC}"
     Write-Host ""
 
     foreach ($dt in $directoryTypesToRun) {
         $dtStart = Get-Date
 
+        # Select the template for this directory type
+        $dtTemplate = if ($dt -eq "SambaAD") { $templateForSambaAD } else { $templateForOpenLDAP }
+
         Write-Host ""
         Write-Host "${CYAN}$("=" * 65)${NC}"
-        Write-Host "${CYAN}  Directory Type: $dt${NC}"
+        Write-Host "${CYAN}  Directory Type: $dt (Template: $dtTemplate)${NC}"
         Write-Host "${CYAN}$("=" * 65)${NC}"
         Write-Host ""
 
-        & $selfScript @passThruParams -DirectoryType $dt
+        & $selfScript @passThruParams -DirectoryType $dt -Template $dtTemplate
         $dtExitCode = $LASTEXITCODE
         $dtDuration = (Get-Date) - $dtStart
 

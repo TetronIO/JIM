@@ -43,7 +43,7 @@ public interface ISyncRepository
     /// Gets the total number of CSOs for a connected system.
     /// Used to calculate page count at sync start.
     /// </summary>
-    Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId);
+    Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? partitionId = null);
 
     /// <summary>
     /// Gets the count of CSOs modified since the specified date.
@@ -143,22 +143,22 @@ public interface ISyncRepository
     /// Gets all external ID attribute values of type int for a connected system and object type.
     /// Used during import to build the full set of known external IDs for deletion detection.
     /// </summary>
-    Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId);
+    Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
 
     /// <summary>
     /// Gets all external ID attribute values of type string.
     /// </summary>
-    Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId);
+    Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
 
     /// <summary>
     /// Gets all external ID attribute values of type Guid.
     /// </summary>
-    Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int objectTypeId);
+    Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
 
     /// <summary>
     /// Gets all external ID attribute values of type long.
     /// </summary>
-    Task<List<long>> GetAllExternalIdAttributeValuesOfTypeLongAsync(int connectedSystemId, int objectTypeId);
+    Task<List<long>> GetAllExternalIdAttributeValuesOfTypeLongAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
 
     /// <summary>
     /// Loads CSOs by ID for cross-page reference resolution.

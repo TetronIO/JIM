@@ -364,15 +364,18 @@ public class SyncImportTaskProcessor
         // note: if it's expected that 0 imported objects means all objects were deleted, then an admin will have to clear the Connected System manually to achieve the same result.
         if (totalObjectsImported > 0 && _connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport)
         {
-            // Get count of existing CSOs to determine how many we need to check for deletions
-            var existingCsoCount = await _syncRepo.GetConnectedSystemObjectCountAsync(_connectedSystem.Id);
+            // Get count of existing CSOs to determine how many we need to check for deletions.
+            // Scope to the run profile's partition so that partition-scoped full imports only
+            // check their own CSOs, not CSOs from other partitions (which would be false deletions).
+            var deletionPartitionId = _connectedSystemRunProfile.Partition?.Id;
+            var existingCsoCount = await _syncRepo.GetConnectedSystemObjectCountAsync(_connectedSystem.Id, deletionPartitionId);
             _activity.ObjectsToProcess = existingCsoCount;
             _activity.ObjectsProcessed = 0;
             await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing deletions");
             var deletionsSw = System.Diagnostics.Stopwatch.StartNew();
             using (Diagnostics.Sync.StartSpan("ProcessDeletions"))
             {
-                await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeUpdated);
+                await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeUpdated, deletionPartitionId);
             }
             deletionsSw.Stop();
             Log.Information("PerformImportAsync: PHASE TIMING — Deletion detection: {DeletionSeconds:F1}s ({ExistingCount} existing CSOs checked)",
@@ -766,7 +769,7 @@ public class SyncImportTaskProcessor
         importSpan.SetSuccess();
     }
 
-    private async Task ProcessConnectedSystemObjectDeletionsAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
+    private async Task ProcessConnectedSystemObjectDeletionsAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, int? partitionId)
     {
         if (_connectedSystem.ObjectTypes == null)
             return;
@@ -787,7 +790,7 @@ public class SyncImportTaskProcessor
                 case AttributeDataType.Number:
                 {
                     // get the int connected system object external ids for this object type
-                    var connectedSystemObjectExternalIdsOfTypeInt = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeIntAsync(_connectedSystem.Id, selectedObjectType.Id);
+                    var connectedSystemObjectExternalIdsOfTypeInt = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeIntAsync(_connectedSystem.Id, selectedObjectType.Id, partitionId);
 
                     // get the int import object external ids for this object type
                     var connectedSystemIntExternalIdValues = externalIdsImported
@@ -805,7 +808,7 @@ public class SyncImportTaskProcessor
                 case AttributeDataType.Text:
                 {
                     // get the string connected system object external ids for this object type
-                    var connectedSystemObjectExternalIdsOfTypeString = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeStringAsync(_connectedSystem.Id, selectedObjectType.Id);
+                    var connectedSystemObjectExternalIdsOfTypeString = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeStringAsync(_connectedSystem.Id, selectedObjectType.Id, partitionId);
 
                     // get the string import object external ids for this object type
                     var connectedSystemStringExternalIdValues = externalIdsImported
@@ -823,7 +826,7 @@ public class SyncImportTaskProcessor
                 case AttributeDataType.Guid:
                 {
                     // get the guid connected system object external ids for this object type
-                    var connectedSystemObjectExternalIdsOfTypeGuid = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeGuidAsync(_connectedSystem.Id, selectedObjectType.Id);
+                    var connectedSystemObjectExternalIdsOfTypeGuid = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeGuidAsync(_connectedSystem.Id, selectedObjectType.Id, partitionId);
 
                     // get the guid import object external ids for this object type
                     var connectedSystemGuidExternalIdValues = externalIdsImported
@@ -841,7 +844,7 @@ public class SyncImportTaskProcessor
                 case AttributeDataType.LongNumber:
                 {
                     // get the long connected system object external ids for this object type
-                    var connectedSystemObjectExternalIdsOfTypeLong = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeLongAsync(_connectedSystem.Id, selectedObjectType.Id);
+                    var connectedSystemObjectExternalIdsOfTypeLong = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeLongAsync(_connectedSystem.Id, selectedObjectType.Id, partitionId);
 
                     // get the long import object external ids for this object type
                     var connectedSystemLongExternalIdValues = externalIdsImported
@@ -1383,6 +1386,11 @@ public class SyncImportTaskProcessor
                         statusTransitioned = true;
                     }
 
+                    // Backfill PartitionId for CSOs created before partition tracking was added.
+                    // This ensures deletion detection can scope correctly on subsequent imports.
+                    if (connectedSystemObject.PartitionId == null && _connectedSystemRunProfile.Partition != null)
+                        connectedSystemObject.PartitionId = _connectedSystemRunProfile.Partition.Id;
+
                     // Pre-load a dictionary of referenced CSO external IDs via direct SQL.
                     // This provides a reliable fallback when EF's AsSplitQuery() fails to materialise
                     // ReferenceValue navigations (dotnet/efcore#33826), preventing spurious
@@ -1651,7 +1659,8 @@ public class SyncImportTaskProcessor
             ConnectedSystemId = _connectedSystem.Id,
             ExternalIdAttributeId = connectedSystemObjectType.Attributes.First(a => a.IsExternalId).Id,
             Type = connectedSystemObjectType,
-            TypeId = connectedSystemObjectType.Id
+            TypeId = connectedSystemObjectType.Id,
+            PartitionId = _connectedSystemRunProfile.Partition?.Id
         };
 
         // not every system uses a secondary external id attribute, but some do, i.e. LDAP

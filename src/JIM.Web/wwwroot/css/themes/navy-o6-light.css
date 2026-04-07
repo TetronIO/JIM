@@ -29,11 +29,11 @@ html[lang] {
     --mud-palette-secondary-lighten: #2a4e7a;
     --mud-palette-secondary-text: #ffffffff;
 
-    /* === Tertiary Palette (muted teal) === */
-    --mud-palette-tertiary: #3a8070;
-    --mud-palette-tertiary-rgb: 58,128,112;
-    --mud-palette-tertiary-darken: #2c6858;
-    --mud-palette-tertiary-lighten: #4a9a8a;
+    /* === Tertiary Palette (slate blue-grey) === */
+    --mud-palette-tertiary: #5A7A94;
+    --mud-palette-tertiary-rgb: 90,122,148;
+    --mud-palette-tertiary-darken: #4A6A82;
+    --mud-palette-tertiary-lighten: #6E8EA6;
     --mud-palette-tertiary-text: #ffffffff;
 
     /* === Semantic Colours (WCAG AA accessible on white) === */

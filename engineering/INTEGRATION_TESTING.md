@@ -133,6 +133,10 @@ See [Data Scale Templates](#data-scale-templates) for detailed template specific
 # Run against both directory types (full cross-directory regression)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario All -Template Small -DirectoryType All
 
+# Run against both directory types with different template sizes
+# (useful when Samba AD population is too slow for large templates)
+./test/integration/Run-IntegrationTests.ps1 -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP XLarge
+
 # Run a specific scenario against both directory types
 ./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory -DirectoryType All
 ```
@@ -338,6 +342,8 @@ Each scenario script supports a `-Step` parameter that controls which test case 
 **Common parameters across all scenario scripts**:
 - `-Step <StepName>` - Execute a specific test step (or `All` for full sequence)
 - `-Template <Size>` - Data scale template (Nano, Micro, Small, Medium, Large, XLarge, XXLarge)
+- `-TemplateSambaAD <Size>` - Override `-Template` for Samba AD when using `-DirectoryType All`
+- `-TemplateOpenLDAP <Size>` - Override `-Template` for OpenLDAP when using `-DirectoryType All`
 - `-WaitSeconds <N>` - Override default wait time between steps (default: 60)
 - `-TriggerRunProfile` - Automatically trigger JIM Run Profile after data changes
 

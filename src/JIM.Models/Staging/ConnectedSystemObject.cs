@@ -19,6 +19,15 @@ public class ConnectedSystemObject
     public int ConnectedSystemId { get; set; }
 
     /// <summary>
+    /// The partition this CSO was imported from. Nullable for CSOs created before
+    /// partition tracking was added, or for connected systems without partitions.
+    /// Used to scope deletion detection during partition-scoped full imports,
+    /// and as a prerequisite for future partition-scoped sync (#437) and export (#438).
+    /// </summary>
+    public ConnectedSystemPartition? Partition { get; set; }
+    public int? PartitionId { get; set; }
+
+    /// <summary>
     /// Backlink for Entity Framework navigation. Do not use.
     /// </summary>
     public List<ActivityRunProfileExecutionItem> ActivityRunProfileExecutionItems { get; } = new();

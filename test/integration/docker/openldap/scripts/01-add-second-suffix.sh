@@ -68,6 +68,7 @@ olcDbIndex: objectClass eq
 olcDbIndex: uid eq
 olcDbIndex: cn eq
 olcDbIndex: entryUUID eq
+olcSizeLimit: unlimited
 olcAccess: {0}to * by dn.exact="cn=admin,dc=glitterband,dc=local" manage by * read
 LDIF
 

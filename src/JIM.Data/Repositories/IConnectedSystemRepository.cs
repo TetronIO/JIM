@@ -609,7 +609,7 @@ public interface IConnectedSystemRepository
     /// Returns the count of Connected System Objects for a particular Connected System.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to find the object count for.</param>s
-    public Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId);
+    public Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? partitionId = null);
 
     /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System, where the status is Obosolete.
@@ -639,10 +639,10 @@ public interface IConnectedSystemRepository
     public Task<int> GetUnresolvedReferenceCountAsync(int connectedSystemId);
 
     public int GetConnectedSystemCount();
-    public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId);
-    public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId);
-    public Task<List<long>> GetAllExternalIdAttributeValuesOfTypeLongAsync(int connectedSystemId, int objectTypeId);
-    public Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int objectTypeId);
+    public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
+    public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
+    public Task<List<long>> GetAllExternalIdAttributeValuesOfTypeLongAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
+    public Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
 
 
     public Task CreateConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile);

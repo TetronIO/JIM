@@ -15,8 +15,10 @@ LABEL org.opencontainers.image.licenses="See https://tetron.io/jim/#licensing"
 WORKDIR /app
 
 # Create data directories writable by non-root user before switching
-RUN mkdir -p /var/log/jim \
-    && chown -R app:app /var/log/jim
+# Note: no LDAP/Kerberos packages needed; Scheduler only queues WorkerTasks,
+# it never communicates with connected systems directly.
+RUN mkdir -p /data/keys /var/log/jim \
+    && chown -R app:app /data/keys /var/log/jim
 
 # Run as non-root for security (built-in 'app' user, UID 1654)
 USER app

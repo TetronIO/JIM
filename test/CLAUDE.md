@@ -140,6 +140,9 @@ cd /workspaces/JIM
 # Run against BOTH directory types (full cross-directory regression)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario All -Template Small -DirectoryType All
 
+# Run against BOTH directory types with different template sizes per directory
+./test/integration/Run-IntegrationTests.ps1 -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP XLarge
+
 # Run only a specific test step (Joiner, Mover, Leaver, Reconnection, etc.)
 ./test/integration/Run-IntegrationTests.ps1 -Step Joiner
 

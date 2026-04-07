@@ -1659,9 +1659,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// Returns the count of Connected System Objects for a particular Connected System.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to find the object count for.</param>s
-    public async Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId)
+    public async Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? partitionId = null)
     {
-        return await Repository.Database.ConnectedSystemObjects.CountAsync(cso => cso.ConnectedSystemId == connectedSystemId);
+        var query = Repository.Database.ConnectedSystemObjects
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId);
+        if (partitionId != null)
+            query = query.Where(cso => cso.PartitionId == partitionId);
+        return await query.CountAsync();
     }
 
     /// <summary>
@@ -1933,17 +1937,25 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             allNewValues.Count, updates.Count);
     }
 
-    public async Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    /// <summary>
+    /// Builds the base CSO query for deletion detection, filtering by connected system, object type,
+    /// and optionally by partition. Excludes PendingProvisioning CSOs as they don't have external IDs
+    /// yet and would be incorrectly marked as obsolete.
+    /// </summary>
+    private IQueryable<ConnectedSystemObject> BuildDeletionDetectionQuery(int connectedSystemId, int objectTypeId, int? partitionId)
     {
-        // Exclude PendingProvisioning CSOs as they don't have external IDs yet (they haven't been created
-        // in the connected system). Including them would cause the deletion logic to incorrectly mark them
-        // as obsolete because their external ID wouldn't be in the import results.
-        //
-        // Note: this query structure is designed for unit-test mocking compatibility.
-        return (await Repository.Database.ConnectedSystemObjects.Where(cso =>
-                cso.ConnectedSystemId == connectedSystemId &&
-                cso.Type.Id == connectedSystemObjectTypeId &&
-                cso.Status != ConnectedSystemObjectStatus.PendingProvisioning)
+        var query = Repository.Database.ConnectedSystemObjects.Where(cso =>
+            cso.ConnectedSystemId == connectedSystemId &&
+            cso.Type.Id == objectTypeId &&
+            cso.Status != ConnectedSystemObjectStatus.PendingProvisioning);
+        if (partitionId != null)
+            query = query.Where(cso => cso.PartitionId == partitionId);
+        return query;
+    }
+
+    public async Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int connectedSystemObjectTypeId, int? partitionId = null)
+    {
+        return (await BuildDeletionDetectionQuery(connectedSystemId, connectedSystemObjectTypeId, partitionId)
             .SelectMany(q =>
                 q.AttributeValues.Where(av =>
                         av.Attribute.Type == AttributeDataType.Text &&
@@ -1951,16 +1963,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         av.StringValue != null)
                     .Select(av => av.StringValue)).ToListAsync())!;
     }
-    
-    public async Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+
+    public async Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int connectedSystemObjectTypeId, int? partitionId = null)
     {
-        // Exclude PendingProvisioning CSOs as they don't have external IDs yet (they haven't been created
-        // in the connected system). Including them would cause the deletion logic to incorrectly mark them
-        // as obsolete because their external ID wouldn't be in the import results.
-        return await Repository.Database.ConnectedSystemObjects.Where(cso =>
-                cso.ConnectedSystemId == connectedSystemId &&
-                cso.Type.Id == connectedSystemObjectTypeId &&
-                cso.Status != ConnectedSystemObjectStatus.PendingProvisioning)
+        return await BuildDeletionDetectionQuery(connectedSystemId, connectedSystemObjectTypeId, partitionId)
             .SelectMany(q =>
                 q.AttributeValues.Where(av =>
                         av.Attribute.Type == AttributeDataType.Number &&
@@ -1968,16 +1974,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         av.IntValue.HasValue)
                     .Select(av => av.IntValue!.Value)).ToListAsync();
     }
-    
-    public async Task<List<long>> GetAllExternalIdAttributeValuesOfTypeLongAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+
+    public async Task<List<long>> GetAllExternalIdAttributeValuesOfTypeLongAsync(int connectedSystemId, int connectedSystemObjectTypeId, int? partitionId = null)
     {
-        // Exclude PendingProvisioning CSOs as they don't have external IDs yet (they haven't been created
-        // in the connected system). Including them would cause the deletion logic to incorrectly mark them
-        // as obsolete because their external ID wouldn't be in the import results.
-        return await Repository.Database.ConnectedSystemObjects.Where(cso =>
-                cso.ConnectedSystemId == connectedSystemId &&
-                cso.Type.Id == connectedSystemObjectTypeId &&
-                cso.Status != ConnectedSystemObjectStatus.PendingProvisioning)
+        return await BuildDeletionDetectionQuery(connectedSystemId, connectedSystemObjectTypeId, partitionId)
             .SelectMany(q =>
                 q.AttributeValues.Where(av =>
                         av.Attribute.Type == AttributeDataType.LongNumber &&
@@ -1986,15 +1986,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     .Select(av => av.LongValue!.Value)).ToListAsync();
     }
 
-    public async Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int connectedSystemObjectTypeId)
+    public async Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int connectedSystemObjectTypeId, int? partitionId = null)
     {
-        // Exclude PendingProvisioning CSOs as they don't have external IDs yet (they haven't been created
-        // in the connected system). Including them would cause the deletion logic to incorrectly mark them
-        // as obsolete because their external ID wouldn't be in the import results.
-        return await Repository.Database.ConnectedSystemObjects.Where(cso =>
-                cso.ConnectedSystemId == connectedSystemId &&
-                cso.Type.Id == connectedSystemObjectTypeId &&
-                cso.Status != ConnectedSystemObjectStatus.PendingProvisioning)
+        return await BuildDeletionDetectionQuery(connectedSystemId, connectedSystemObjectTypeId, partitionId)
             .SelectMany(q =>
                 q.AttributeValues.Where(av =>
                         av.Attribute.Type == AttributeDataType.Guid &&

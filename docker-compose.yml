@@ -92,6 +92,7 @@ services:
       - JIM_LOG_PATH=/var/log/jim
     volumes:
       - jim-logs-volume:/var/log/jim
+      - jim-keys-volume:/data/keys
     read_only: true
     tmpfs:
       - /tmp
