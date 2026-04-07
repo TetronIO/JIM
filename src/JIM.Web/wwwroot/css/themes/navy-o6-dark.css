@@ -30,11 +30,11 @@ html[lang] {
     --mud-palette-secondary-lighten: #84a0c0;
     --mud-palette-secondary-text: #0a1018;
 
-    /* === Tertiary Palette (teal — cool complement to blue) === */
-    --mud-palette-tertiary: #61aea6;
-    --mud-palette-tertiary-rgb: 97,174,166;
-    --mud-palette-tertiary-darken: #4e9a92;
-    --mud-palette-tertiary-lighten: #7ec2bb;
+    /* === Tertiary Palette (slate blue-grey) === */
+    --mud-palette-tertiary: #7FA8C4;
+    --mud-palette-tertiary-rgb: 127,168,196;
+    --mud-palette-tertiary-darken: #6B94B0;
+    --mud-palette-tertiary-lighten: #95BCD8;
     --mud-palette-tertiary-text: #0a1018;
 
     /* === Semantic Colours (bright for dark backgrounds) === */
