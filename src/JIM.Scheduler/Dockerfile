@@ -14,15 +14,9 @@ LABEL org.opencontainers.image.source="https://github.com/TetronIO/JIM"
 LABEL org.opencontainers.image.licenses="See https://tetron.io/jim/#licensing"
 WORKDIR /app
 
-# Install LDAP/Kerberos system dependencies (required by System.DirectoryServices.Protocols)
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        libldap-common=2.6.7+dfsg-1~exp1ubuntu8 \
-        libldap2=2.6.7+dfsg-1~exp1ubuntu8 \
-    && rm -rf /var/lib/apt/lists/* \
-    && ln -sf /usr/lib/$(uname -m)-linux-gnu/libldap.so.2 /usr/lib/$(uname -m)-linux-gnu/libldap-2.5.so.0
-
 # Create data directories writable by non-root user before switching
+# Note: no LDAP/Kerberos packages needed; Scheduler only queues WorkerTasks,
+# it never communicates with connected systems directly.
 RUN mkdir -p /data/keys /var/log/jim \
     && chown -R app:app /data/keys /var/log/jim
 
