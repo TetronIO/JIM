@@ -158,10 +158,12 @@ public class SyncRepository : ISyncRepository
 
     #region Connected System Object — Reads
 
-    public Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId)
+    public Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? partitionId = null)
     {
-        var count = _csosByConnectedSystem.TryGetValue(connectedSystemId, out var ids) ? ids.Count : 0;
-        return Task.FromResult(count);
+        var csos = GetCsosForSystem(connectedSystemId);
+        if (partitionId != null)
+            csos = csos.Where(c => c.PartitionId == partitionId);
+        return Task.FromResult(csos.Count());
     }
 
     public Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
@@ -336,10 +338,12 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
-    public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId)
+    public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
     {
-        var values = GetCsosForSystem(connectedSystemId)
-            .Where(c => c.TypeId == objectTypeId)
+        var csos = GetCsosForSystem(connectedSystemId).Where(c => c.TypeId == objectTypeId);
+        if (partitionId != null)
+            csos = csos.Where(c => c.PartitionId == partitionId);
+        var values = csos
             .Select(c => c.AttributeValues.FirstOrDefault(av => av.AttributeId == c.ExternalIdAttributeId))
             .Where(av => av?.IntValue != null)
             .Select(av => av!.IntValue!.Value)
@@ -347,10 +351,12 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(values);
     }
 
-    public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId)
+    public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
     {
-        var values = GetCsosForSystem(connectedSystemId)
-            .Where(c => c.TypeId == objectTypeId)
+        var csos = GetCsosForSystem(connectedSystemId).Where(c => c.TypeId == objectTypeId);
+        if (partitionId != null)
+            csos = csos.Where(c => c.PartitionId == partitionId);
+        var values = csos
             .Select(c => c.AttributeValues.FirstOrDefault(av => av.AttributeId == c.ExternalIdAttributeId))
             .Where(av => av?.StringValue != null)
             .Select(av => av!.StringValue!)
@@ -358,10 +364,12 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(values);
     }
 
-    public Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int objectTypeId)
+    public Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
     {
-        var values = GetCsosForSystem(connectedSystemId)
-            .Where(c => c.TypeId == objectTypeId)
+        var csos = GetCsosForSystem(connectedSystemId).Where(c => c.TypeId == objectTypeId);
+        if (partitionId != null)
+            csos = csos.Where(c => c.PartitionId == partitionId);
+        var values = csos
             .Select(c => c.AttributeValues.FirstOrDefault(av => av.AttributeId == c.ExternalIdAttributeId))
             .Where(av => av?.GuidValue != null)
             .Select(av => av!.GuidValue!.Value)
@@ -369,10 +377,12 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(values);
     }
 
-    public Task<List<long>> GetAllExternalIdAttributeValuesOfTypeLongAsync(int connectedSystemId, int objectTypeId)
+    public Task<List<long>> GetAllExternalIdAttributeValuesOfTypeLongAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
     {
-        var values = GetCsosForSystem(connectedSystemId)
-            .Where(c => c.TypeId == objectTypeId)
+        var csos = GetCsosForSystem(connectedSystemId).Where(c => c.TypeId == objectTypeId);
+        if (partitionId != null)
+            csos = csos.Where(c => c.PartitionId == partitionId);
+        var values = csos
             .Select(c => c.AttributeValues.FirstOrDefault(av => av.AttributeId == c.ExternalIdAttributeId))
             .Where(av => av?.LongValue != null)
             .Select(av => av!.LongValue!.Value)

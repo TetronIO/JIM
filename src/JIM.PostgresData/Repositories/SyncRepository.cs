@@ -56,8 +56,8 @@ public partial class SyncRepository : ISyncRepository
 
     #region Connected System Object — Reads
 
-    public Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId)
-        => _repo.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId);
+    public Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? partitionId = null)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId, partitionId);
 
     public Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
         => _repo.ConnectedSystems.GetConnectedSystemObjectModifiedSinceCountAsync(connectedSystemId, modifiedSince);
@@ -109,17 +109,17 @@ public partial class SyncRepository : ISyncRepository
         int connectedSystemId, IEnumerable<string> secondaryExternalIdValues)
         => _repo.ConnectedSystems.GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(connectedSystemId, secondaryExternalIdValues);
 
-    public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId)
-        => _repo.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeIntAsync(connectedSystemId, objectTypeId);
+    public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
+        => _repo.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeIntAsync(connectedSystemId, objectTypeId, partitionId);
 
-    public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId)
-        => _repo.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeStringAsync(connectedSystemId, objectTypeId);
+    public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
+        => _repo.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeStringAsync(connectedSystemId, objectTypeId, partitionId);
 
-    public Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int objectTypeId)
-        => _repo.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeGuidAsync(connectedSystemId, objectTypeId);
+    public Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
+        => _repo.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeGuidAsync(connectedSystemId, objectTypeId, partitionId);
 
-    public Task<List<long>> GetAllExternalIdAttributeValuesOfTypeLongAsync(int connectedSystemId, int objectTypeId)
-        => _repo.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeLongAsync(connectedSystemId, objectTypeId);
+    public Task<List<long>> GetAllExternalIdAttributeValuesOfTypeLongAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
+        => _repo.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeLongAsync(connectedSystemId, objectTypeId, partitionId);
 
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsForReferenceResolutionAsync(IList<Guid> csoIds)
         => _repo.ConnectedSystems.GetConnectedSystemObjectsForReferenceResolutionAsync(csoIds);
