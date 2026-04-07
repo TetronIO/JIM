@@ -1,6 +1,6 @@
 # Delta Sync Flow
 
-> Last updated: 2026-03-26, JIM v0.7.1 (`00907431`)
+> Last updated: 2026-04-07, JIM v0.9.0
 
 This diagram shows how Delta Synchronisation differs from Full Synchronisation. Both use identical per-CSO processing logic; the only difference is CSO selection and a few lifecycle steps.
 
@@ -8,7 +8,7 @@ This diagram shows how Delta Synchronisation differs from Full Synchronisation. 
 
 | Aspect | Full Sync | Delta Sync |
 |--------|-----------|------------|
-| CSO Selection | ALL CSOs | Only CSOs with `LastUpdated > watermark` |
+| CSO Selection | ALL CSOs (or partition-scoped) | Only CSOs with `LastUpdated > watermark` (partition-scoped filtering supported since v0.8.0) |
 | Early Exit | Never | Yes, if 0 modified CSOs |
 | Pending Export Surfacing | Yes (creates RPEIs for operator visibility) | No |
 | Per-page pipeline | Identical | Identical |
@@ -34,6 +34,8 @@ flowchart TD
 
     PageLoop -->|Yes| LoadPage[Load page of modified CSOs<br/>WHERE LastUpdated > watermark]
     LoadPage --> CsoLoop{More CSOs<br/>in page?}
+
+    %% Partition-scoped filtering supported since v0.8.0: CSO selection respects TargetPartitionId
 
     CsoLoop -->|Yes| CheckCancel{Cancellation<br/>requested?}
     CheckCancel -->|Yes| Return([Return])
@@ -92,3 +94,5 @@ flowchart TD
 - **No pending export surfacing**: Delta sync skips `SurfacePendingExportsAsExecutionItems()` since it's a lightweight incremental operation. Full sync surfaces pending exports as RPEIs so operators can see what changes are staged for the next export run.
 
 - **Cross-page reference resolution**: Both full and delta sync perform cross-page reference resolution after all pages are processed. CSOs with reference attributes that couldn't be resolved during page processing (because the referenced CSO was on a different page) are reloaded and resolved once all MVOs exist. The standard flush pipeline runs again for the resolved references.
+
+- **Partition-scoped filtering (v0.8.0, #353)**: Both full and delta sync support partition-scoped CSO selection via `TargetPartitionId` on the run profile. When set, CSO counting and page loading are filtered to only that partition's scope.

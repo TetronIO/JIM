@@ -1,6 +1,6 @@
 # Full Synchronisation - CSO Processing Flow
 
-> Last updated: 2026-04-01, JIM v0.8.0
+> Last updated: 2026-04-07, JIM v0.9.0
 
 This diagram shows the core decision tree for processing a single Connected System Object (CSO) during Full or Delta Synchronisation. This is the central flow of JIM's identity management engine.
 
@@ -24,7 +24,8 @@ flowchart TD
     LoadPage --> CsoLoop{More CSOs<br/>in page?}
 
     CsoLoop -->|Yes| CheckCancel{Cancellation<br/>requested?}
-    CheckCancel -->|Yes| Return([Return - activity<br/>finalised by caller])
+    CheckCancel -->|Yes| FlushBeforeCancel[Complete current page flush<br/>before stopping]
+    FlushBeforeCancel --> Return([Return - activity<br/>finalised by caller])
     CheckCancel -->|No| ProcessCso[ProcessConnectedSystemObjectAsync<br/>See Per-CSO Processing below]
     ProcessCso --> IncrProgress[Increment ObjectsProcessed]
     IncrProgress --> CsoLoop
@@ -37,7 +38,8 @@ flowchart TD
     FlushPE --> FlushCSO[Flush obsolete CSO deletions]
     FlushCSO --> FlushMVO[Flush pending MVO deletions<br/>0-grace-period only]
     FlushMVO --> UpdateProgress[Update activity progress<br/>in database]
-    UpdateProgress --> PageLoop
+    UpdateProgress --> ClearCache[Clear export evaluation cache<br/>and change tracker at page boundary]
+    ClearCache --> PageLoop
 
     PageLoop -->|No| CrossPage[Cross-page reference resolution<br/>Reload CSOs with unresolved references<br/>Resolve MVO references across page boundaries<br/>Re-run flush pipeline for resolved references]
     CrossPage --> Watermark[Update delta sync watermark<br/>LastSyncCompletedAt = UtcNow]
@@ -116,7 +118,8 @@ flowchart TD
 
     AttrFlow --> QueueRef[Queue CSO for deferred<br/>reference attribute processing<br/>Pass 2 at end of page]
     QueueRef --> ApplyChanges[ISyncEngine.ApplyPendingAttributeChanges<br/>Apply pending attribute<br/>additions and removals to MVO]
-    ApplyChanges --> QueueMvo[Queue MVO for batch<br/>persist and export evaluation]
+    ApplyChanges --> ValidateIntegrity[Data integrity validation<br/>on metaverse attribute operations]
+    ValidateIntegrity --> QueueMvo[Queue MVO for batch<br/>persist and export evaluation]
     QueueMvo --> DriftDetect[Drift Detection<br/>Compare CSO values against<br/>expected MVO state<br/>Create corrective pending exports<br/>for EnforceState export rules]
     DriftDetect --> Result([Return change result:<br/>Projected / Joined / AttributeFlow / NoChanges])
 
@@ -144,3 +147,9 @@ flowchart TD
 - **Partition-scoped imports (v0.8.0, #353)**: When a run profile specifies a `TargetPartitionId`, CSO counting and page loading are filtered to only that partition's scope. This allows large connected systems to be synchronised in targeted slices rather than processing the entire CSO population every time.
 
 - **Error isolation**: Each CSO is processed within its own try/catch. Errors create RPEIs but do not halt processing of remaining CSOs.
+
+- **Cancellation safety**: `CheckCancel` completes the current page flush before stopping. This ensures all in-progress MVOs, pending exports, and RPEIs are persisted; no work is lost on cancellation.
+
+- **Per-page cache loading**: The export evaluation cache is loaded per-page and cleared at page boundaries. This keeps memory consumption bounded regardless of total CSO count, preventing out-of-memory conditions on large connected systems.
+
+- **Data integrity validation (v0.9.0, #465)**: Metaverse attribute operations are validated for data integrity before being applied. This prevents silent corruption from malformed attribute values reaching the metaverse.

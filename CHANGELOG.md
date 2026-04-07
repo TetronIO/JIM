@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-04-07
+
 ### Added
+
+#### 100K Object Scale (#451, #437, #438)
+
+JIM now supports deployments of 100,000+ objects, validated by XLarge integration tests across the full import, sync, and export pipeline. A bounded memory architecture ensures stable, predictable resource usage regardless of dataset size.
+
+- ✨ Bounded memory sync and export pipelines: change tracker cleared at every page boundary and caches loaded per-page instead of upfront, enabling 100K+ object operations without out-of-memory crashes
+- ✨ Partition-scoped deletion detection for full imports: deletion detection is now scoped to the imported partition, preventing CSOs from other partitions being incorrectly marked as obsolete during large-scale imports
+- 🖥️ Import processing now displays throughput (objects/sec) and ETA in progress messages, completing progress tracking coverage across all long-running phases
 
 #### .NET 10 Migration (#174)
 
@@ -22,37 +32,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Service Settings REST API & PowerShell Cmdlets
 
-- ✨ New REST API for managing service settings (`GET/PUT/DELETE /api/v1/service-settings`) — enables automation of change tracking, sync page size, history retention, and other operational settings
-- ✨ New PowerShell cmdlets: `Get-JIMServiceSetting`, `Set-JIMServiceSetting`, `Reset-JIMServiceSetting` — manage service settings from the command line or automation scripts
+- ✨ New REST API for managing service settings (`GET/PUT/DELETE /api/v1/service-settings`), enabling automation of change tracking, sync page size, history retention, and other operational settings
+- ✨ New PowerShell cmdlets: `Get-JIMServiceSetting`, `Set-JIMServiceSetting`, `Reset-JIMServiceSetting` for managing service settings from the command line or automation scripts
+
+#### Data Integrity Validation (#465)
+
+- 🔒 Metaverse attribute operations now validate data integrity before executing: deleting attributes with stored values, deleting attributes referenced by sync rules, and removing object type mappings with existing data all return structured validation errors instead of silently corrupting state
+
+#### PowerShell Module Enhancements
+
+- ✨ `-Name` parameter added to six `Get-JIM*` cmdlets (`Get-JIMRunProfile`, `Get-JIMSyncRule`, `Get-JIMApiKey`, `Get-JIMCertificate`, `Get-JIMRole`, `Get-JIMConnectorDefinition`), enabling direct filtering without `Where-Object`
+- ✨ New `Get-JIMPendingDeletion` cmdlet with List, Count, and Summary parameter sets for monitoring objects awaiting deletion
+- ✨ New `Get-JIMActivityChildren` cmdlet for retrieving child activities of a parent activity
 
 #### Integration Test Runner Enhancements
 
-- ✨ `-LogLevel` parameter for integration test runner — override log verbosity (Verbose/Debug/Information/Warning/Error/Fatal) for the test run without permanently modifying `.env`
-- ✨ `-DisableChangeTracking` switch for integration test runner — disable CSO and MVO change tracking during large-scale tests to reduce database writes and improve throughput
+- ✨ `-LogLevel` parameter for integration test runner: override log verbosity (Verbose/Debug/Information/Warning/Error/Fatal) for the test run without permanently modifying `.env`
+- ✨ `-DisableChangeTracking` switch for integration test runner: disable CSO and MVO change tracking during large-scale tests to reduce database writes and improve throughput
 - 🖥️ Interactive menus for log level and change tracking selection when running tests without explicit parameters
 
 ### Fixed
 
-- 🔒 Safe cancellation for sync operations (#339) — when an admin cancels a running Full Sync or Delta Sync, the current page's flush pipeline now completes before exiting. Previously, cancellation could leave orphaned metaverse objects without corresponding pending exports, causing target systems to silently miss updates.
-- 🐛 Fixed import tasks continuing to process after cancellation (#339) — cancelling a Full Import or Delta Import from the Operations Queue now stops the import between pages and skips persistence. Previously, the import processor ignored the cancellation signal and ran to completion.
-- 🐛 Fixed cancelled tasks having their status overwritten to Completed or Failed — the Worker now correctly preserves the Cancelled activity status instead of overwriting it when the processor finishes.
-- 🐛 Fixed sync progress bar showing inflated object counts (CSOs + pending exports) instead of just CSOs — progress percentage and ETA are now accurate for Full Sync and Delta Sync
+- 🔒 Safe cancellation for sync operations (#339): when an admin cancels a running Full Sync or Delta Sync, the current page's flush pipeline now completes before exiting. Previously, cancellation could leave orphaned metaverse objects without corresponding pending exports, causing target systems to silently miss updates.
+- 🐛 Fixed import tasks continuing to process after cancellation (#339); cancelling a Full Import or Delta Import from the Operations Queue now stops the import between pages and skips persistence. Previously, the import processor ignored the cancellation signal and ran to completion.
+- 🐛 Fixed cancelled tasks having their status overwritten to Completed or Failed; the Worker now correctly preserves the Cancelled activity status instead of overwriting it when the processor finishes.
+- 🐛 Fixed sync progress bar showing inflated object counts (CSOs + pending exports) instead of just CSOs; progress percentage and ETA are now accurate for Full Sync and Delta Sync
 
 ### Changed
 
-- ⚡ LDAP export concurrency is now auto-tuned based on the detected directory server type — AD DS and OpenLDAP default to 16 concurrent operations (up from 4), while Samba AD and unknown directories remain at 4 for compatibility. Administrators who have manually configured the value will not be affected.
+- ⚡ LDAP export concurrency is now auto-tuned based on the detected directory server type; AD DS and OpenLDAP default to 16 concurrent operations (up from 4), while Samba AD and unknown directories remain at 4 for compatibility. Administrators who have manually configured the value will not be affected.
 
 ### Performance
 
-- ⚡ Selective attribute loading for full sync — unchanged CSOs (based on watermark comparison) skip attribute value loading and attribute flow entirely, dramatically reducing I/O for large-scale repeat syncs
-- ⚡ Eliminated redundant per-page COUNT queries during sync — total count is now passed from sync start, removing 200+ unnecessary full-table scans at 100K objects
-- ⚡ Default sync page size increased from 500 to 1000 — halves the number of database round-trips per sync run
+- ⚡ Selective attribute loading for full sync: unchanged CSOs (based on watermark comparison) skip attribute value loading and attribute flow entirely, dramatically reducing I/O for large-scale repeat syncs
+- ⚡ Eliminated redundant per-page COUNT queries during sync; total count is now passed from sync start, removing 200+ unnecessary full-table scans at 100K objects
+- ⚡ Default sync page size increased from 500 to 1,000, halving the number of database round-trips per sync run
 - ⚡ Sync progress updates now use direct SQL instead of EF Core change tracker, reducing per-page overhead
-- ⚡ Removed explicit RepeatableRead transactions from sync page loading — PostgreSQL MVCC provides sufficient consistency without the round-trip overhead
-- ⚡ Pending Exports table on CSO detail page now uses server-side paging — pages with thousands of pending changes (e.g. 10K member adds) load instantly instead of rendering all rows at once
-- ⚡ Bounded memory sync pipeline — change tracker cleared at every page boundary and export evaluation cache loaded per-page instead of upfront, enabling sync of 100K+ objects without out-of-memory crashes (#451)
+- ⚡ Removed explicit RepeatableRead transactions from sync page loading; PostgreSQL MVCC provides sufficient consistency without the round-trip overhead
+- ⚡ Pending Exports table on CSO detail page now uses server-side paging; pages with thousands of pending changes (e.g. 10K member adds) load instantly instead of rendering all rows at once
 - ⚡ All export evaluation and pending export cache queries now use `AsNoTracking`, eliminating unnecessary entity tracking overhead during sync
-- ⚡ Per-page memory diagnostics logging — administrators can monitor memory usage across sync pages to verify bounded memory behaviour
+- ⚡ Per-page memory diagnostics logging: administrators can monitor memory usage across sync pages to verify bounded memory behaviour
 
 ## [0.8.1] - 2026-04-02
 
@@ -577,7 +596,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Air-gapped deployment bundle support
 - PowerShell Gallery publishing
 
-[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/TetronIO/JIM/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/TetronIO/JIM/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/TetronIO/JIM/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/TetronIO/JIM/compare/v0.7.0...v0.7.1

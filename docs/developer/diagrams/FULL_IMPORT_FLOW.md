@@ -1,6 +1,6 @@
 # Full Import Flow
 
-> Last updated: 2026-04-01, JIM v0.8.0
+> Last updated: 2026-04-07, JIM v0.9.0
 
 This diagram shows how objects are imported from a connected system into JIM's connector space. Both Full Import and Delta Import use the same processor (`SyncImportTaskProcessor`); the connector handles delta filtering internally via watermark/persisted data.
 
@@ -36,9 +36,13 @@ flowchart TD
     CaptureWatermark -->|No| ProcessPage
     SaveWatermark --> ProcessPage[ProcessImportObjectsAsync<br/>See Per-Object Processing below]
     ProcessPage --> PassTokens[Pass pagination tokens<br/>for next page]
-    PassTokens --> PageLoop
+    PassTokens --> ClearTracker[ClearChangeTracker<br/>at page boundary]
+    ClearTracker --> PageLoop
 
     PageLoop -->|No| UpdatePersistedData{New watermark<br/>captured?}
+
+    %% Cancellation safety: when cancelled, the current page flush completes before exiting (no data loss)
+    %% Per-page change tracker clearing: ClearChangeTracker is called at page boundaries to keep memory bounded
     UpdatePersistedData -->|Yes| PersistWatermark[Update ConnectedSystem<br/>PersistedConnectorData]
     UpdatePersistedData -->|No| CloseConn
     PersistWatermark --> CloseConn[CloseImportConnection]
@@ -53,7 +57,7 @@ flowchart TD
     CloseConn --> PostImport{Full Import<br/>and objects > 0?}
 
     %% --- Deletion detection ---
-    PostImport -->|Yes| DeletionDetection[Deletion Detection<br/>For each selected object type:<br/>Compare imported ext IDs<br/>against existing CSO ext IDs<br/>Mark missing CSOs as Obsolete]
+    PostImport -->|Yes| DeletionDetection[Deletion Detection<br/>For each selected object type:<br/>Compare imported ext IDs<br/>against existing CSO ext IDs<br/>Mark missing CSOs as Obsolete<br/>Scoped to target partition if set]
     PostImport -->|No, Delta Import<br/>or 0 objects| RefResolution
 
     DeletionDetection --> RefResolution[Reference Resolution<br/>Resolve unresolved reference strings<br/>into CSO links by external ID]
@@ -231,4 +235,8 @@ flowchart TD
 
 - **Two-phase parallel write (#427)**: CSO persistence splits INSERT into two committed phases (CSO rows first, then attribute values) so that cross-partition FK references (ReferenceValueId pointing to a CSO on a different parallel connection) succeed without post-hoc fixup. Small batches (< parallelism x 50) bypass this and write on a single connection. Write parallelism defaults to `Environment.ProcessorCount` (minimum 2) and is tuneable via `JIM_WRITE_PARALLELISM`.
 
-- **Partition-scoped imports (#353)**: Run profiles can target a specific partition via `GetTargetPartitions()`. When set, only containers within that partition are imported; otherwise all selected partitions are included. This applies to both the import data collection and deletion detection scope.
+- **Partition-scoped imports (#353)**: Run profiles can target a specific partition via `GetTargetPartitions()`. When set, only containers within that partition are imported; otherwise all selected partitions are included. This applies to both the import data collection and deletion detection scope. Deletion detection is scoped to the target partition, so CSOs in other partitions are not incorrectly marked as obsolete.
+
+- **Cancellation safety**: When a cancellation is requested, the current page flush completes before exiting. This ensures no data loss; partially processed pages are fully persisted before the operation stops.
+
+- **Per-page change tracker clearing**: `ClearChangeTracker` is called at page boundaries to detach processed entities from the EF Core change tracker, keeping memory consumption bounded regardless of total import size.

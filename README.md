@@ -22,12 +22,19 @@ JIM is a modern Identity Management system designed for organisations with compl
 
 - Hub-and-spoke architecture using a central metaverse for identity correlation
 - Bidirectional synchronisation of Users, Groups, and custom object types (e.g., Departments, Roles, Computers)
-- Multi-directory LDAP support — Active Directory, OpenLDAP, 389 Directory Server, and other RFC 4512-compliant directories
+- Multi-directory LDAP support: Active Directory, OpenLDAP, 389 Directory Server, and other RFC 4512-compliant directories
+- Tested at 100K+ object scale with bounded memory pipelines
 - Transform data using expressions with built-in functions for common identity operations
 - Extensible with custom connectors (fully unit-testable)
 - Modern Web Portal and REST API with OpenAPI documentation
+- Service Settings REST API and PowerShell automation for scripted configuration
 - Activity monitoring with auto-refresh and run profile editing
+- Safe cancellation for synchronisation and import operations with no data loss
+- Partition-scoped deletion detection for precise object lifecycle management
+- Data integrity validation for metaverse attribute operations
+- LDAP export concurrency auto-tuning by directory type
 - Object type icons for visual clarity across the portal
+- Docker container hardening: non-root execution, read-only root filesystem, dropped capabilities
 - Docker healthchecks on Worker and Scheduler for reliable orchestration
 - Single Sign-On (SSO) using OpenID Connect
 
@@ -41,7 +48,7 @@ JIM is a modern Identity Management system designed for organisations with compl
 
 ## What Makes JIM Different
 
-Enterprise identity synchronisation typically requires cloud connectivity, complex infrastructure, or expensive licensing. JIM takes a different approach — it deploys as a single Docker stack, runs entirely on-premises, and works in air-gapped networks with no external dependencies. Source-available code means you can inspect, audit, and verify everything JIM does with your identity data.
+Enterprise identity synchronisation typically requires cloud connectivity, complex infrastructure, or expensive licensing. JIM takes a different approach; it deploys as a single Docker stack, runs entirely on-premises, and works in air-gapped networks with no external dependencies. Source-available code means you can inspect, audit, and verify everything JIM does with your identity data.
 
 | Capability | JIM |
 |---|---|

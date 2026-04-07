@@ -16,6 +16,7 @@ JIM uses a tag-based release workflow. When we push a tag like `v0.2.0`, the Git
 
 | Version | Date | Notes |
 |---------|------|-------|
+| `0.9.0` | 2026-04-07 | 100K object scale with bounded memory pipelines and XLarge integration test validation, .NET 10.0 LTS migration, Docker container hardening (non-root, read-only rootfs, dropped capabilities), Service Settings REST API and PowerShell cmdlets, data integrity validation for metaverse attributes, partition-scoped deletion detection, safe cancellation for sync/import operations, LDAP export concurrency auto-tuning, PowerShell module enhancements (3 new cmdlets, -Name filtering on 6 cmdlets), 9 performance optimisations. |
 | `0.8.1` | 2026-04-02 | Pre-export CREATE→DELETE reconciliation, export rule evaluation and AD schema discovery performance improvements, entity tracking fix for large-scale cross-page reference resolution, error message cleanup, context-aware breadcrumbs, CWE-117 log injection fix. |
 | `0.8.0` | 2026-04-01 | OpenLDAP/RFC 4512 LDAP connector support, Worker redesign (ISyncEngine/ISyncRepository/ParallelBatchWriter), bundled Keycloak IdP for development, O(1) import matching, COPY binary bulk inserts, cross-batch fixup elimination, object type icons, pending export management, activity auto-refresh, run profile editing, Docker healthchecks, MVA→SVA attribute flow, partition-scoped imports, 9 bug fixes. |
 | `0.7.1` | 2026-03-19 | Navy O6 theme sidebar background fix for visual consistency. |

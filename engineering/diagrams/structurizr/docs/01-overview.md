@@ -23,7 +23,7 @@ External systems (Active Directory, HR databases, CSV files, etc.) connect to JI
 3. **Export**: Push pending changes to target connected systems
 
 ### Automation
-JIM provides a **PowerShell module** with 35+ cmdlets and a **REST API** for automation and scripting. CI/CD pipelines and administrators can manage connected systems, trigger synchronisation, and query the metaverse programmatically.
+JIM provides a **PowerShell module** with 80+ cmdlets and a **REST API** for automation and scripting. CI/CD pipelines and administrators can manage connected systems, trigger synchronisation, and query the metaverse programmatically.
 
 ## Architecture
 
