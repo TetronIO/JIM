@@ -7,7 +7,7 @@
     based on the specified template scale
 
 .PARAMETER Template
-    Data scale template (Nano, Micro, Small, Medium, Large, XLarge, XXLarge)
+    Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100K, Scale200K, Scale500K, Scale750K, Scale1M)
 
 .PARAMETER Instance
     Which Samba AD instance to populate (Primary, Source, Target)
@@ -18,7 +18,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "XLarge", "XXLarge")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]
@@ -154,7 +154,7 @@ $usersOU = "OU=TestUsers,$domainDN"
 # sAMAccountName "amelia.sullivan1" would collide with a JIM-provisioned user in OU=Corp
 # with the same sAMAccountName. The CSV generator (Generate-TestCSV.ps1) uses indices 1..N,
 # so we offset AD users by 500,000 to guarantee non-overlapping names at all template sizes
-# (XXLarge = 200K users).
+# (Scale1M = 1M users).
 $adIndexOffset = 500000
 
 # Windows FILETIME epoch: January 1, 1601 00:00:00 UTC

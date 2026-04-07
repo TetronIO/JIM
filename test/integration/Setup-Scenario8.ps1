@@ -22,7 +22,7 @@
     API key for authentication
 
 .PARAMETER Template
-    Data scale template (Nano, Micro, Small, Medium, Large, XLarge, XXLarge)
+    Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100K, Scale200K, Scale500K, Scale750K, Scale1M)
 
 .EXAMPLE
     ./Setup-Scenario8.ps1 -ApiKey "jim_abc123..."
@@ -39,7 +39,7 @@ param(
     [string]$ApiKey,
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "XLarge", "XXLarge")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
     [string]$Template = "Nano",
 
     [Parameter(Mandatory=$false)]

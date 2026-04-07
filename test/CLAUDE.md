@@ -131,7 +131,7 @@ cd /workspaces/JIM
 # Run a specific scenario directly
 ./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory
 
-# Run with a specific template size (Nano, Micro, Small, Medium, Large, XLarge, XXLarge)
+# Run with a specific template size (Nano, Micro, Small, Medium, Large, Scale100K, Scale200K, Scale500K, Scale750K, Scale1M)
 ./test/integration/Run-IntegrationTests.ps1 -Template Small
 
 # Run against OpenLDAP instead of Samba AD
@@ -141,7 +141,7 @@ cd /workspaces/JIM
 ./test/integration/Run-IntegrationTests.ps1 -Scenario All -Template Small -DirectoryType All
 
 # Run against BOTH directory types with different template sizes per directory
-./test/integration/Run-IntegrationTests.ps1 -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP XLarge
+./test/integration/Run-IntegrationTests.ps1 -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Scale100K
 
 # Run only a specific test step (Joiner, Mover, Leaver, Reconnection, etc.)
 ./test/integration/Run-IntegrationTests.ps1 -Step Joiner
@@ -189,10 +189,10 @@ These flags are for human developer iteration only. Claude must not use them bec
 - **Small**: 100 users, 20 groups (~2 min) - Small business scenarios
 - **Medium**: 1,000 users, 100 groups (~2 min) - Medium enterprise
 - **Large**: 10,000 users, 500 groups (~15 min) - Large enterprise
-- **XLarge**: 100,000 users, 50 groups - Requires 20+ GB host RAM (OOM-killed on 16 GB machines; a 16 GB Codespace is not sufficient)
+- **Scale100K**: 100,000 users, 50 groups - Requires 20+ GB host RAM (OOM-killed on 16 GB machines; a 16 GB Codespace is not sufficient)
 
 **OpenLDAP accesslog MDB map size (IMPORTANT for large templates):**
 
 The OpenLDAP accesslog database uses an MDB storage engine with a fixed maximum map size (`olcDbMaxSize`). When the map is full, OpenLDAP **silently stops recording changes**; delta imports will find zero modifications and sync changes will be lost. There is no error message; the writes just stop.
 
-The map size is configured in `test/integration/docker/openldap/scripts/01-add-second-suffix.sh`. Current setting: **8 GB** (sufficient for XLarge / 100K objects with large group membership operations). If adding templates beyond XLarge (e.g. XXLarge / 1M objects), increase the accesslog `olcDbMaxSize` proportionally (estimate ~10 MB per 1,000 objects for the initial population, plus additional capacity for sync cycles and group membership writes).
+The map size is configured in `test/integration/docker/openldap/scripts/01-add-second-suffix.sh`. Current setting: **8 GB** (sufficient for Scale100K / 100K objects with large group membership operations). If adding templates beyond Scale100K (e.g. Scale1M / 1M objects), increase the accesslog `olcDbMaxSize` proportionally (estimate ~10 MB per 1,000 objects for the initial population, plus additional capacity for sync cycles and group membership writes).

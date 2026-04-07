@@ -109,8 +109,11 @@ pwsh test/integration/Invoke-IntegrationTests.ps1 -ScenariosOnly
 | **Medium** | 1,000 | 100 | 8 | Medium enterprise, CI/CD |
 | **MediumLarge** | 5,000 | 250 | 9 | Growing enterprise |
 | **Large** | 10,000 | 500 | 10 | Large enterprise, baselines |
-| **XLarge** | 100,000 | 2,000 | 12 | Very large enterprise |
-| **XXLarge** | 1,000,000 | 10,000 | 15 | Global enterprise, performance testing |
+| **Scale100K** | 100,000 | 50 | 12 | 100K scale testing |
+| **Scale200K** | 200,000 | 55 | 12 | 200K scale testing |
+| **Scale500K** | 500,000 | 65 | 13 | 500K scale testing |
+| **Scale750K** | 750,000 | 70 | 14 | 750K scale testing |
+| **Scale1M** | 1,000,000 | 80 | 15 | 1M scale, stress testing |
 
 > **Note**: For GitHub Codespaces or resource-constrained environments, use **Nano** or **Micro** templates.
 

@@ -7,7 +7,7 @@
 
 ## Problem Statement
 
-JIM's sync pipeline cannot process environments with more than ~50,000 identity objects. A Full Sync of 100,000 objects (XLarge integration template) crashes with an out-of-memory error on a 15.8 GB worker, despite objects being processed in pages of 500.
+JIM's sync pipeline cannot process environments with more than ~50,000 identity objects. A Full Sync of 100,000 objects (Scale100K integration template) crashes with an out-of-memory error on a 15.8 GB worker, despite objects being processed in pages of 500.
 
 Two root causes have been empirically identified:
 
@@ -68,7 +68,7 @@ Together, these cause superlinear memory growth; doubling the object count more 
 
 ## Examples and Scenarios
 
-### Scenario 1: XLarge Full Sync Completes
+### Scenario 1: Scale100K Full Sync Completes
 
 **Given**: A JIM deployment with 100,000 users and 50 groups across 2 connected systems, worker allocated 8 GB RAM
 **When**: A Full Sync is triggered on the source system
@@ -135,13 +135,13 @@ Together, these cause superlinear memory growth; doubling the object count more 
 
 ## Acceptance Criteria
 
-- [ ] Full Sync of XLarge template (100K objects) completes without OOM on 8 GB worker
+- [ ] Full Sync of Scale100K template (100K objects) completes without OOM on 8 GB worker
 - [ ] Memory usage measured at page 1 and final page shows bounded growth (< 20% increase)
 - [ ] All existing unit tests pass without modification
 - [ ] All existing workflow tests pass without modification
 - [ ] Integration tests Scenario 1-8 pass on Small template with identical outcomes
 - [ ] Integration test Scenario 8 passes on Large template (10K objects)
-- [ ] Integration test Scenario 8 passes on XLarge template (100K objects)
+- [ ] Integration test Scenario 8 passes on Scale100K template (100K objects)
 - [ ] Export evaluation produces identical results for a reference deployment (diff sync outcomes before/after)
 - [ ] Cross-page reference resolution works correctly for groups with members spanning multiple pages
 - [ ] No new NuGet packages introduced
@@ -149,7 +149,7 @@ Together, these cause superlinear memory growth; doubling the object count more 
 
 ## Additional Context
 
-- **Empirical memory findings (April 2026)**: Documented in [`docs/plans/done/WORKER_REDESIGN_OPTIONS.md`](../plans/done/WORKER_REDESIGN_OPTIONS.md): XLarge OOM at 15.8 GB, root causes confirmed via investigation
+- **Empirical memory findings (April 2026)**: Documented in [`docs/plans/done/WORKER_REDESIGN_OPTIONS.md`](../plans/done/WORKER_REDESIGN_OPTIONS.md): Scale100K OOM at 15.8 GB, root causes confirmed via investigation
 - **Option A completion**: The surgical refactor (#394, #422, #430) extracted `ISyncEngine`, `ISyncRepository`, and `SyncServer`, providing clean boundaries for this work
 - **Issue #383**: Worker performance optimisations: subtask 3.1 (streaming/paged sync queries) was deferred to this initiative; subtasks 3.2, 3.3 were discounted; subtask 3.4 (O(1) removal check) was implemented
 - **Current architecture**: Single DbContext per sync run, 13 batch collections flushed per page, export evaluation cache loaded once at start, change tracker only cleared after MVO deletions

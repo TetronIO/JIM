@@ -127,9 +127,9 @@ echo "[openldap-init] Glitterband base entries loaded"
 # Configure the accesslog database for production-like usage:
 # 1. Increase MDB mapsize from default (~10MB) to 4GB. Without this, the
 #    accesslog silently stops logging once the MDB map is full (MDB_MAP_FULL),
-#    causing delta imports to miss changes. At XLarge scale (100K+ objects),
+#    causing delta imports to miss changes. At Scale100K and above (100K+ objects),
 #    the initial population alone generates ~100K accesslog entries that exhaust
-#    smaller limits. 4GB accommodates XLarge with multiple sync cycles.
+#    smaller limits. 4GB accommodates Scale100K with multiple sync cycles.
 # 2. Set unlimited size limit so delta import queries are not truncated by the
 #    default olcSizeLimit (500). OpenLDAP enforces olcSizeLimit as a hard cap
 #    even with paging controls for non-rootDN clients.

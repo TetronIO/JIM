@@ -58,7 +58,7 @@ function Get-Scenario8GroupScale {
     #>
     param(
         [Parameter(Mandatory=$true)]
-        [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "XLarge", "XXLarge")]
+        [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
         [string]$Template
     )
 
@@ -112,11 +112,11 @@ function Get-Scenario8GroupScale {
             TotalGroups = 530
             Users = 10000
         }
-        # XLarge/XXLarge: Capped group counts to keep total memberships under ~500K.
+        # Scale templates: Capped group counts to keep total memberships manageable.
         # samba-tool group addmembers holds an LDB write lock per call, so millions
         # of membership writes are impractical. Fewer groups with varied sizes gives
-        # better test coverage (50–50K members) without the combinatorial explosion.
-        XLarge = @{
+        # better test coverage without the combinatorial explosion.
+        Scale100K = @{
             Companies = 5
             Departments = 10
             Locations = 5
@@ -124,7 +124,31 @@ function Get-Scenario8GroupScale {
             TotalGroups = 50
             Users = 100000
         }
-        XXLarge = @{
+        Scale200K = @{
+            Companies = 5
+            Departments = 10
+            Locations = 5
+            Projects = 35
+            TotalGroups = 55
+            Users = 200000
+        }
+        Scale500K = @{
+            Companies = 5
+            Departments = 10
+            Locations = 5
+            Projects = 45
+            TotalGroups = 65
+            Users = 500000
+        }
+        Scale750K = @{
+            Companies = 5
+            Departments = 10
+            Locations = 5
+            Projects = 50
+            TotalGroups = 70
+            Users = 750000
+        }
+        Scale1M = @{
             Companies = 5
             Departments = 10
             Locations = 5
@@ -428,7 +452,7 @@ function New-Scenario8GroupSet {
     #>
     param(
         [Parameter(Mandatory=$true)]
-        [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "XLarge", "XXLarge")]
+        [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
         [string]$Template,
 
         [Parameter(Mandatory=$false)]
