@@ -783,7 +783,7 @@ docker compose / Kubernetes:
 
 ### Empirical Memory Ceiling (April 2026)
 
-> **Finding:** Scenario 8 (cross-domain entitlement sync) XLarge template (100K users, 50 groups) OOM-killed the worker during Full Sync on a Docker Desktop VM with 15.8 GB RAM. The worker successfully processed all 100,050 objects (projections + attribute flows) but crashed during the post-page-processing phase (pending export flush / cross-page reference resolution).
+> **Finding:** Scenario 8 (cross-domain entitlement sync) Scale100K template (100K users, 50 groups) OOM-killed the worker during Full Sync on a Docker Desktop VM with 15.8 GB RAM. The worker successfully processed all 100,050 objects (projections + attribute flows) but crashed during the post-page-processing phase (pending export flush / cross-page reference resolution).
 
 **Root causes (two major memory consumers):**
 
@@ -799,7 +799,7 @@ docker compose / Kubernetes:
 |----------|---------|--------------|--------|
 | Medium | ~1,100 | 15.8 GB | Passes (~9s Full Sync) |
 | Large | ~10,500 | 15.8 GB | Not yet tested |
-| XLarge | ~100,050 | 15.8 GB | **OOM kill** during Full Sync |
+| Scale100K | ~100,050 | 15.8 GB | **OOM kill** during Full Sync |
 
 ### Risk Analysis
 

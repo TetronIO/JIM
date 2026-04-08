@@ -178,7 +178,7 @@ function Get-TemplateScale {
     #>
     param(
         [Parameter(Mandatory=$true)]
-        [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "XLarge", "XXLarge")]
+        [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
         [string]$Template
     )
 
@@ -213,16 +213,31 @@ function Get-TemplateScale {
             Groups = 500
             AvgMemberships = 10
         }
-        # XLarge/XXLarge: Capped group counts to keep total memberships under ~500K.
+        # Scale templates: Capped group counts to keep total memberships manageable.
         # samba-tool holds an LDB write lock per call, making millions of membership
         # writes impractical. Fewer groups with higher avg memberships gives better
         # coverage without the population time explosion.
-        XLarge = @{
+        Scale100K = @{
             Users = 100000
             Groups = 50
             AvgMemberships = 12
         }
-        XXLarge = @{
+        Scale200K = @{
+            Users = 200000
+            Groups = 55
+            AvgMemberships = 12
+        }
+        Scale500K = @{
+            Users = 500000
+            Groups = 65
+            AvgMemberships = 13
+        }
+        Scale750K = @{
+            Users = 750000
+            Groups = 70
+            AvgMemberships = 14
+        }
+        Scale1M = @{
             Users = 1000000
             Groups = 80
             AvgMemberships = 15

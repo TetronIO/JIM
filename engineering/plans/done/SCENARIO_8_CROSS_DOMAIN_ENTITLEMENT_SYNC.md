@@ -19,7 +19,7 @@
   - `Invoke-Scenario8-CrossDomainEntitlementSync.ps1` - Test scenario runner
   - `Test-GroupHelpers.ps1` - Group helper functions for test data generation
   - OU structure creation for both Source (Corp) and Target (CorpManaged)
-  - Support for Nano through XXLarge templates
+  - Support for Nano through Scale1M templates
 
 - **Phase 2: JIM Configuration** - Implemented
   - Source LDAP Connected System (Panoply APAC)
@@ -287,8 +287,11 @@ Groups follow a hierarchical naming model for realistic enterprise representatio
 | Medium | 5 | 8 | 5 | 100 | 118 | 1,000 |
 | MediumLarge | 5 | 10 | 8 | 250 | 273 | 5,000 |
 | Large | 8 | 12 | 10 | 500 | 530 | 10,000 |
-| XLarge | 10 | 15 | 15 | 2,000 | 2,040 | 100,000 |
-| XXLarge | 15 | 20 | 20 | 10,000 | 10,055 | 1,000,000 |
+| Scale100K | 10 | 15 | 15 | 2,000 | 2,040 | 100,000 |
+| Scale200K | 12 | 17 | 17 | 3,000 | 3,046 | 200,000 |
+| Scale500K | 13 | 18 | 18 | 5,000 | 5,049 | 500,000 |
+| Scale750K | 14 | 19 | 19 | 7,500 | 7,552 | 750,000 |
+| Scale1M | 15 | 20 | 20 | 10,000 | 10,055 | 1,000,000 |
 
 ### Group Type and Mail Enablement Distribution
 

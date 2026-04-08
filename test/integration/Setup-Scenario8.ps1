@@ -22,7 +22,7 @@
     API key for authentication
 
 .PARAMETER Template
-    Data scale template (Nano, Micro, Small, Medium, Large, XLarge, XXLarge)
+    Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100K, Scale200K, Scale500K, Scale750K, Scale1M)
 
 .EXAMPLE
     ./Setup-Scenario8.ps1 -ApiKey "jim_abc123..."
@@ -39,7 +39,7 @@ param(
     [string]$ApiKey,
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "XLarge", "XXLarge")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
     [string]$Template = "Nano",
 
     [Parameter(Mandatory=$false)]
@@ -100,10 +100,10 @@ $groupTypeName = $groupObjectClass   # "group" for AD, "groupOfNames" for OpenLD
 # Attribute lists differ by directory type
 if ($isOpenLDAP) {
     # OpenLDAP uses entryUUID (auto-set by connector), uid, departmentNumber
-    # No userAccountControl, extensionAttribute1, userPrincipalName, company, groupType, managedBy
+    # No userAccountControl, extensionAttribute1, userPrincipalName, groupType, managedBy
     $requiredUserAttributes = @(
         'entryUUID', 'uid', 'givenName', 'sn', 'displayName', 'cn',
-        'mail', 'title', 'departmentNumber', 'employeeNumber', 'distinguishedName'
+        'mail', 'title', 'departmentNumber', 'employeeNumber', 'o', 'employeeType', 'distinguishedName'
     )
     $requiredGroupAttributes = @(
         'entryUUID', 'cn', 'description', 'member', 'distinguishedName'
@@ -131,6 +131,8 @@ if ($isOpenLDAP) {
         @{ LdapAttr = "mail"; MvAttr = "Email" }
         @{ LdapAttr = "title"; MvAttr = "Job Title" }
         @{ LdapAttr = "departmentNumber"; MvAttr = "Department" }
+        @{ LdapAttr = "o"; MvAttr = "Company" }
+        @{ LdapAttr = "employeeType"; MvAttr = "Status" }
     )
     $userExportMappings = @(
         @{ MvAttr = "Account Name"; LdapAttr = "uid" }
@@ -142,6 +144,7 @@ if ($isOpenLDAP) {
         @{ MvAttr = "Email"; LdapAttr = "mail" }
         @{ MvAttr = "Job Title"; LdapAttr = "title" }
         @{ MvAttr = "Department"; LdapAttr = "departmentNumber" }
+        @{ MvAttr = "Company"; LdapAttr = "o" }
     )
 
     # Group attribute mappings for OpenLDAP

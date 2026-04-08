@@ -145,10 +145,10 @@
     change tracking disabled for maximum throughput during large-scale testing.
 
 .EXAMPLE
-    ./Run-IntegrationTests.ps1 -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP XLarge
+    ./Run-IntegrationTests.ps1 -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Scale100K
 
     Runs all scenarios against both directory types with different template sizes.
-    Samba AD uses Medium (faster population), OpenLDAP uses XLarge.
+    Samba AD uses Medium (faster population), OpenLDAP uses Scale100K.
 #>
 
 param(
@@ -156,7 +156,7 @@ param(
     [string]$Scenario,
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "XLarge", "XXLarge")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
     [string]$Template = "Nano",
 
     [Parameter(Mandatory=$false)]
@@ -198,11 +198,11 @@ param(
     [switch]$DisableChangeTracking,
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "XLarge", "XXLarge")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
     [string]$TemplateSambaAD,
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "XLarge", "XXLarge")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
     [string]$TemplateOpenLDAP
 )
 
@@ -591,18 +591,39 @@ function Show-TemplateMenu {
             Time = "~15 min"
         }
         @{
-            Name = "XLarge"
+            Name = "Scale100K"
             Users = 100000
             Groups = 50
-            Description = "Very large enterprise"
+            Description = "100K users"
             Time = "~1 hour"
         }
         @{
-            Name = "XXLarge"
-            Users = 1000000
+            Name = "Scale200K"
+            Users = 200000
+            Groups = 55
+            Description = "200K users"
+            Time = "~2 hours"
+        }
+        @{
+            Name = "Scale500K"
+            Users = 500000
+            Groups = 65
+            Description = "500K users"
+            Time = "~3 hours"
+        }
+        @{
+            Name = "Scale750K"
+            Users = 750000
             Groups = 70
-            Description = "Stress testing"
+            Description = "750K users"
             Time = "~4 hours"
+        }
+        @{
+            Name = "Scale1M"
+            Users = 1000000
+            Groups = 80
+            Description = "1M users, stress testing"
+            Time = "~6 hours"
         }
     )
 
@@ -1872,7 +1893,7 @@ if ($Scenario -like "*Scenario8*" -and $DirectoryType -ne "OpenLDAP") {
     # Scale Samba container memory for larger templates (ldbadd is memory-intensive —
     # it loads the full LDB into memory, so memory needs grow with user count)
     # Only needed when NOT using snapshots (snapshots don't run ldbadd)
-    if (-not $script:UsingSnapshots -and $Template -in @("XLarge", "XXLarge")) {
+    if (-not $script:UsingSnapshots -and $Template -in @("Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")) {
         $env:SAMBA_SOURCE_MEMORY = "8G"
         $env:SAMBA_TARGET_MEMORY = "4G"
         Write-Host "  Samba source memory scaled to 8G for $Template template" -ForegroundColor Gray
@@ -2324,7 +2345,7 @@ Write-Section "Step 6: Capturing Performance Metrics"
 # Skip detailed metrics capture for large templates - parsing the worker logs becomes
 # prohibitively expensive (CPU and memory) due to the volume of DiagnosticListener lines.
 # Use -CaptureMetrics to force capture regardless of template size.
-$metricsSkippedTemplates = @("MediumLarge", "Large", "XLarge", "XXLarge")
+$metricsSkippedTemplates = @("MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")
 if ($Template -in $metricsSkippedTemplates -and -not $CaptureMetrics) {
     Write-Warning "Skipping detailed performance metrics for '$Template' template (log volume too large for efficient parsing)"
     Write-Step "Use -CaptureMetrics to force capture (this will be slow)"

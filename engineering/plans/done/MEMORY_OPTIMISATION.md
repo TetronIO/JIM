@@ -16,7 +16,7 @@ Enterprise deployments synchronising 100K+ objects can exhaust container memory 
 
 ## Memory Requirements
 
-Measured from XLarge integration tests (100K objects, 20 attributes each):
+Measured from Scale100K integration tests (100K objects, 20 attributes each):
 
 | Import Phase | GC Heap | Working Set | Notes |
 |-------------|---------|-------------|-------|
@@ -33,9 +33,9 @@ Measured from XLarge integration tests (100K objects, 20 attributes each):
 | 50,000 - 100,000 objects | 20 GB | 24 GB |
 | 100,000+ objects | 24 GB | 32 GB |
 
-**Verified:** A 16 GB machine (GitHub Codespace) is **not sufficient** for 100K object imports; the worker is OOM-killed during the save phase. Total stack consumption at 100K objects reaches 8–10 GB (worker 2.3 GB peak + database 1–2 GB under bulk inserts + web/scheduler/OS overhead), but Linux memory management requires headroom beyond the sum of working sets.
+**Verified:** A 16 GB machine (GitHub Codespace) is **not sufficient** for Scale100K object imports; the worker is OOM-killed during the save phase. Total stack consumption at 100K objects reaches 8–10 GB (worker 2.3 GB peak + database 1–2 GB under bulk inserts + web/scheduler/OS overhead), but Linux memory management requires headroom beyond the sum of working sets.
 
-**Development environments:** Use a 32 GB Codespace or dedicated test machine for XLarge tests.
+**Development environments:** Use a 32 GB Codespace or dedicated test machine for Scale100K tests.
 
 ## Findings
 
@@ -160,7 +160,7 @@ Only pursue if subsequent full imports of 100K+ objects cause issues.
 - ✅ Imports up to 10K objects complete reliably on 4-8 GB host RAM
 - ✅ Save phase memory is bounded by batch size (2000 CSOs), not total object count
 - ✅ No regression in sync performance (wall clock time)
-- ⬚ XLarge integration tests (100K objects); requires 20+ GB host RAM (OOM-killed on 16 GB machine)
+- ⬚ Scale100K integration tests (100K objects); requires 20+ GB host RAM (OOM-killed on 16 GB machine)
 
 ## Benefits
 

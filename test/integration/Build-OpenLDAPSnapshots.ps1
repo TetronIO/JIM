@@ -20,7 +20,7 @@
     Which scenario to build snapshots for (General, Scenario8, All)
 
 .PARAMETER Template
-    Data size template (Nano, Micro, Small, Medium, MediumLarge, Large, XLarge, XXLarge)
+    Data size template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100K, Scale200K, Scale500K, Scale750K, Scale1M)
 
 .PARAMETER Registry
     Container registry prefix (default: local, no registry prefix)
@@ -44,7 +44,7 @@ param(
     [string]$Scenario = "All",
 
     [Parameter(Mandatory = $true)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "XLarge", "XXLarge")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
     [string]$Template,
 
     [Parameter(Mandatory = $false)]

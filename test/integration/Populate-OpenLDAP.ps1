@@ -12,7 +12,7 @@
     Users are split: odd indices go to Yellowstone, even indices go to Glitterband.
 
 .PARAMETER Template
-    Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, XLarge, XXLarge)
+    Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100K, Scale200K, Scale500K, Scale750K, Scale1M)
 
 .EXAMPLE
     ./Populate-OpenLDAP.ps1 -Template Micro
@@ -20,7 +20,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "XLarge", "XXLarge")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]
@@ -161,7 +161,7 @@ foreach ($suffixName in @("Yellowstone", "Glitterband")) {
     # The CSV generator uses indices 0..N, so seeded OpenLDAP users at index 500,001+
     # will never produce the same uid (e.g., alice.smith1 vs alice.smith500001).
     # This matches the Samba AD approach in Populate-SambaAD.ps1 ($adIndexOffset = 500000)
-    # and scales across all templates (XXLarge = 200K users).
+    # and scales across all templates (Scale1M = 1M users).
     # Within the offset range, Yellowstone and Glitterband get distinct index ranges
     # so users are unique across suffixes.
     $ldapIndexOffset = 500000

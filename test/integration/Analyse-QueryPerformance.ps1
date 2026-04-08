@@ -52,7 +52,7 @@
 param(
     [string]$Scenario = "Scenario8-CrossDomainEntitlementSync",
 
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "XLarge", "XXLarge")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
     [string]$Template = "Medium",
 
     [ValidateSet("SambaAD", "OpenLDAP")]

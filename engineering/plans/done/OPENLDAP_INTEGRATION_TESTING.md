@@ -6,13 +6,13 @@
 
 ## Overview
 
-Introduce OpenLDAP as a second LDAP backend for integration testing. At large scales (XLarge: 100K users), Samba AD cannot handle JIM's I/O demands; tests take excessively long. OpenLDAP is significantly faster for concurrent read/write workloads and represents a real-world deployment target that JIM must support.
+Introduce OpenLDAP as a second LDAP backend for integration testing. At large scales (Scale100K: 100K users), Samba AD cannot handle JIM's I/O demands; tests take excessively long. OpenLDAP is significantly faster for concurrent read/write workloads and represents a real-world deployment target that JIM must support.
 
 This plan covers everything needed to run existing LDAP integration test scenarios against OpenLDAP as an alternative to Samba AD: Docker infrastructure, test data population, test framework parameterisation, and connector code fixes.
 
 ## Business Value
 
-- **Performance at scale**: OpenLDAP handles concurrent LDAP operations far better than Samba AD, unblocking XLarge/XXLarge integration tests
+- **Performance at scale**: OpenLDAP handles concurrent LDAP operations far better than Samba AD, unblocking Scale100K/Scale1M integration tests
 - **Broader compatibility**: Customers deploy JIM against OpenLDAP, 389DS, and other RFC-compliant directories; not just Active Directory
 - **Earlier bug detection**: Exercising the non-AD code paths (changelog delta import, RFC schema discovery, `entryUUID` handling) that exist in the connector but have never been tested against a real directory
 - **Confidence**: Proves JIM works correctly with pure LDAP directories, not just AD-compatible ones
@@ -184,7 +184,7 @@ member: uid=john.smith,ou=People,dc=yellowstone,dc=local
 
 ### Performance Considerations
 
-Population at scale is extremely slow. For reference, populating the Samba AD XLarge image (100K users + 50 groups with varied memberships) via `ldbadd` (direct backend write bypassing the LDAP protocol) takes several hours. Group counts were capped from the original 2,000 to 50 to keep total memberships under ~500K (samba-tool holds an LDB write lock per call, making millions of membership writes impractical). OpenLDAP's `ldapadd` goes through the full LDAP protocol stack and will be at least as slow, potentially slower.
+Population at scale is extremely slow. For reference, populating the Samba AD Scale100K image (100K users + 50 groups with varied memberships) via `ldbadd` (direct backend write bypassing the LDAP protocol) takes several hours. Group counts were capped from the original 2,000 to 50 to keep total memberships under ~500K (samba-tool holds an LDB write lock per call, making millions of membership writes impractical). OpenLDAP's `ldapadd` goes through the full LDAP protocol stack and will be at least as slow, potentially slower.
 
 **Pre-populated snapshot images are essential for Medium and above.** The same approach used for Samba AD (`Build-SambaSnapshots.ps1` / `docker commit`) must be used for OpenLDAP:
 
@@ -199,11 +199,11 @@ For Nano/Micro/Small templates, live population via `ldapadd` is fast enough (se
 
 | Strategy | Method | Speed | Availability |
 |----------|--------|-------|--------------|
-| `ldapadd` | LDAP protocol, entries processed one by one | Slowest; potentially days at XLarge | Always available |
+| `ldapadd` | LDAP protocol, entries processed one by one | Slowest; potentially days at Scale100K | Always available |
 | `slapadd` | Offline backend load, bypasses LDAP stack | Much faster; similar to Samba's `ldbadd` | Requires `slapd` to be stopped; may not be in bitnami image |
 | MDB bulk import | Direct LMDB database write | Fastest | Would require custom tooling |
 
-**Recommendation**: Investigate whether the `bitnami/openldap` image includes `slapadd`. If so, the snapshot build script should: stop `slapd` -> run `slapadd` with the LDIF -> restart `slapd` -> `docker commit`. This could reduce XLarge population from days to hours. If `slapadd` is not available, fall back to `ldapadd` and accept that XLarge snapshot builds will be a multi-day operation (run once, commit, reuse).
+**Recommendation**: Investigate whether the `bitnami/openldap` image includes `slapadd`. If so, the snapshot build script should: stop `slapd` -> run `slapadd` with the LDIF -> restart `slapd` -> `docker commit`. This could reduce Scale100K population from days to hours. If `slapadd` is not available, fall back to `ldapadd` and accept that Scale100K snapshot builds will be a multi-day operation (run once, commit, reuse).
 
 ## Test Framework Changes
 
@@ -516,10 +516,10 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 |------|--------|------------|--------|------------|
 | Schema discovery rewrite is complex | High | High | ✅ Resolved | RFC 4512 parser implemented with 37 unit tests. Handles all standard object classes and attribute types. |
 | OpenLDAP changelog overlay hard to configure | Medium | Medium | ✅ Resolved | Implemented accesslog-based delta import using `cn=accesslog` with `reqStart` timestamps. Works with Bitnami's `LDAP_ENABLE_ACCESSLOG=yes`. |
-| `bitnami/openldap` doesn't support `slapadd` for bulk loading | Medium | Medium | ✅ Resolved | Using `ldapadd` via stdin piping. Works at Nano/Micro/Small scales. Pre-built images needed for XLarge. |
+| `bitnami/openldap` doesn't support `slapadd` for bulk loading | Medium | Medium | ✅ Resolved | Using `ldapadd` via stdin piping. Works at Nano/Micro/Small scales. Pre-built images needed for Scale100K. |
 | `groupOfNames` empty group constraint breaks export | Medium | High | ✅ Resolved | Connector handles placeholder member transparently (configurable DN, default `cn=placeholder`). 21 unit tests. Refint error handling for directories with referential integrity overlay. |
 | Paged results cookie invalid on multi-type imports | Medium | High | ✅ Resolved | OpenLDAP's RFC 2696 cursor is connection-scoped; unrelated searches between paged calls invalidate it. Fix: skip completed container+objectType combos on subsequent pages. |
-| Performance regression at XLarge if OpenLDAP population is slow | Low | Medium | ✅ Resolved | Pre-populated snapshot images implemented (`Build-OpenLDAPSnapshots.ps1`) with content-hash staleness detection, matching Samba AD pattern |
+| Performance regression at Scale100K if OpenLDAP population is slow | Low | Medium | ✅ Resolved | Pre-populated snapshot images implemented (`Build-OpenLDAPSnapshots.ps1`) with content-hash staleness detection, matching Samba AD pattern |
 | Samba AD regression from connector changes | Medium | Low | ✅ Verified | Full regression (8/8 scenarios, Small template) passed on Samba AD. All connector changes gated behind `LdapDirectoryType` checks. |
 
 ## Success Criteria

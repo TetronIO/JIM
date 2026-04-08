@@ -17,7 +17,7 @@
     - ou=Entitlements (empty — JIM provisions groups here)
 
 .PARAMETER Template
-    Data scale template (Nano, Micro, Small, Medium, Large, XLarge, XXLarge)
+    Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100K, Scale200K, Scale500K, Scale750K, Scale1M)
 
 .PARAMETER Instance
     Which suffix to populate (Source or Target)
@@ -33,7 +33,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "XLarge", "XXLarge")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
     [string]$Template = "Nano",
 
     [Parameter(Mandatory=$false)]
@@ -172,7 +172,11 @@ for ($i = 0; $i -lt $groupScale.Users; $i++) {
     [void]$userLdifBuilder.AppendLine("mail: $mail")
     [void]$userLdifBuilder.AppendLine("title: $title")
     [void]$userLdifBuilder.AppendLine("departmentNumber: $department")
+    [void]$userLdifBuilder.AppendLine("o: $company")
     [void]$userLdifBuilder.AppendLine("employeeNumber: S8-$i")
+    # employeeType: 90% Active, 10% Archived (matching Samba AD userAccountControl distribution)
+    $employeeType = if ($i -eq 0) { "Archived" } elseif (($i % 10) -eq 9) { "Archived" } else { "Active" }
+    [void]$userLdifBuilder.AppendLine("employeeType: $employeeType")
     [void]$userLdifBuilder.AppendLine("userPassword: Test@123!")
     [void]$userLdifBuilder.AppendLine("")
 
