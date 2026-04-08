@@ -136,7 +136,7 @@
         @* TODO: When editable, add Add/Remove buttons and search-to-add dialog *@
         <MudText Typo="Typo.subtitle2" Class="mb-2">
             <div class="d-flex align-center justify-space-between">
-                <span>@group.AttributeName (@group.TotalCount)</span>
+                <span>@group.AttributeName (@group.TotalCount.ToString("N0"))</span>
                 @RenderViewModeToggle(group, "table")
             </div>
         </MudText>
@@ -262,7 +262,7 @@
         @* TODO: When editable, add remove button per item and Add button at bottom *@
         <MudText Typo="Typo.subtitle2" Class="mb-1">
             <div class="d-flex align-center justify-space-between">
-                <span>@group.AttributeName (@group.TotalCount)</span>
+                <span>@group.AttributeName (@group.TotalCount.ToString("N0"))</span>
                 @RenderViewModeToggle(group, "list")
             </div>
         </MudText>
