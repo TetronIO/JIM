@@ -19,9 +19,14 @@
 @if (_isInitialised && _preferencesLoaded && PredefinedSearch != null)
 {
     <MudTable @ref="_table" T="MetaverseObjectHeader" ServerData="ServerReload" @bind-CurrentPage="_currentPage" RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged" Hover="true"
-        Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0" OnRowClick="HandleRowClick"
+        Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="@(_dense ? "mt-5 dense-body-only" : "mt-5")" Outlined="true" Elevation="0" OnRowClick="HandleRowClick"
         RowClass="cursor-pointer" Loading="@_loading" LoadingProgressColor="Color.Primary">
         <ToolBarContent>
+            <MudTooltip Text="@(_dense ? "Normal row spacing" : "Compact row spacing")" Placement="Placement.Top">
+                <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="OnToggleDense"
+                           StartIcon="@(_dense ? Icons.Material.Filled.DensitySmall : Icons.Material.Filled.DensityMedium)"
+                           Color="Color.Default" />
+            </MudTooltip>
             <MudSpacer />
             <MudTextField T="string" ValueChanged="@(s => OnSearch(s))" Variant="Variant.Outlined" Placeholder="Search..." Margin="Margin.Dense"
                 Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium"
@@ -80,6 +85,7 @@ else if (_isInitialised)
     private bool _preferencesLoaded;
     private bool _loading;
     private bool _isInitialised;
+    private bool _dense;
     private int _currentPage;
 
     private MetaverseObjectType? MetaverseObjectType { get; set; }
@@ -155,6 +161,7 @@ else if (_isInitialised)
             {
                 var preferredSize = await PreferenceService.GetRowsPerPageAsync();
                 _rowsPerPage = preferredSize;
+                _dense = await PreferenceService.GetTableDenseAsync() == true;
                 _preferencesLoaded = true;
                 StateHasChanged(); // Re-render to show the table now that preference is loaded
             }
@@ -191,7 +198,7 @@ else if (_isInitialised)
             UpdateUrlWithPage(page);
 
             using var jim = JimFactory.Create();
-            var result = await jim.Metaverse.GetMetaverseObjectsOfTypeAsync(
+            var result = await jim.Metaverse.GetMetaverseObjectHeadersPagedAsync(
                 PredefinedSearch,
                 page,
                 state.PageSize,
@@ -238,6 +245,12 @@ else if (_isInitialised)
         if (int.TryParse(pageStr, out var page) && page > 0)
             return page;
         return 1; // Default to page 1
+    }
+
+    private async Task OnToggleDense()
+    {
+        _dense = !_dense;
+        await PreferenceService.SetTableDenseAsync(_dense);
     }
 
     private void HandleRowClick(TableRowClickEventArgs<MetaverseObjectHeader> args)

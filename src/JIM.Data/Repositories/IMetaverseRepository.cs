@@ -78,6 +78,25 @@ public interface IMetaverseRepository
         bool sortDescending = true);
 
     /// <summary>
+    /// Gets a paginated list of lightweight metaverse object headers with only the attributes defined
+    /// in the PredefinedSearch projected directly in SQL. No EF Include chain is used — attribute values
+    /// are projected inline for optimum performance at scale (100k+ objects).
+    /// </summary>
+    /// <param name="predefinedSearch">The predefined search defining the object type, criteria groups, and display attributes.</param>
+    /// <param name="page">The page number (1-based).</param>
+    /// <param name="pageSize">The number of items per page (max 100).</param>
+    /// <param name="searchQuery">Optional search query to filter across all string attribute values.</param>
+    /// <param name="sortBy">Optional attribute name to sort by.</param>
+    /// <param name="sortDescending">Whether to sort in descending order.</param>
+    public Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectHeadersPagedAsync(
+        PredefinedSearch predefinedSearch,
+        int page,
+        int pageSize,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true);
+
+    /// <summary>
     /// Gets a paginated list of metaverse objects with optional filtering by type, search query, or specific attribute value.
     /// </summary>
     /// <param name="page">The page number (1-based).</param>
