@@ -85,7 +85,7 @@
                     @if (context.Direction == SyncRuleDirection.Import)
                     {
                         @* Inbound: CS -> MV *@
-                        <MudChip T="string">
+                        <MudChip T="string" Size="Size.Medium">
                             <AvatarContent>
                                 <MudTooltip Text="Connected System Object Type" Arrow="true" Placement="Placement.Top">
                                     <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
@@ -94,7 +94,7 @@
                             <ChildContent>@context.ConnectedSystemObjectTypeName</ChildContent>
                         </MudChip>
                         <MudIcon Icon="@Icons.Material.Filled.TrendingFlat" Class="mud-text-secondary" />
-                        <MudChip T="string">
+                        <MudChip T="string" Size="Size.Medium">
                             <AvatarContent>
                                 <MudTooltip Text="Metaverse Object Type" Arrow="true" Placement="Placement.Top">
                                     <MudAvatar Color="Color.Primary">MV</MudAvatar>
@@ -106,7 +106,7 @@
                     else
                     {
                         @* Outbound: MV -> CS *@
-                        <MudChip T="string">
+                        <MudChip T="string" Size="Size.Medium">
                             <AvatarContent>
                                 <MudTooltip Text="Metaverse Object Type" Arrow="true" Placement="Placement.Top">
                                     <MudAvatar Color="Color.Primary">MV</MudAvatar>
@@ -115,7 +115,7 @@
                             <ChildContent>@context.MetaverseObjectTypeName</ChildContent>
                         </MudChip>
                         <MudIcon Icon="@Icons.Material.Filled.TrendingFlat" Class="mud-text-secondary" />
-                        <MudChip T="string">
+                        <MudChip T="string" Size="Size.Medium">
                             <AvatarContent>
                                 <MudTooltip Text="Connected System Object Type" Arrow="true" Placement="Placement.Top">
                                     <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
