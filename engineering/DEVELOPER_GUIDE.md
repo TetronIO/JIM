@@ -677,6 +677,7 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 
 **Docker Builds** (rebuild and start services):
 - `jim-build` - Build all services + start
+- `jim-build-light` - Start db + Keycloak, run JIM.Web natively
 - `jim-build-web` - Build jim.web + start
 - `jim-build-worker` - Build jim.worker + start
 - `jim-build-scheduler` - Build jim.scheduler + start
@@ -688,7 +689,7 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 - `jim-prd` - Create a new PRD from template (prompts for feature name)
 
 **Development Workflows**:
-1. **Local Debugging** (Recommended): Use `jim-db` to start database, then F5 to debug services locally
+1. **Local Debugging** (Recommended): Use `jim-build-light` to start db + Keycloak and run JIM.Web natively, then F5 to debug
 2. **Full Stack**: Use `jim-stack` to run all services in containers
 
 **Development URLs** (Docker stack):

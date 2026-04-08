@@ -37,6 +37,7 @@
 
 **Docker Builds (rebuild and start services):**
 - `jim-build` - Build all services + start
+- `jim-build-light` - Start db + Keycloak containers, run JIM.Web natively
 - `jim-build-web` - Build jim.web + start
 - `jim-build-worker` - Build jim.worker + start
 - `jim-build-scheduler` - Build jim.scheduler + start
@@ -106,10 +107,9 @@ All dependency updates from Dependabot require human review before merging - the
 **Choose one of two workflows:**
 
 **Workflow 1 - Local Debugging (Recommended):**
-1. Start database: `jim-db`
-2. Press F5 in VS Code or run: `jim-web`
-3. Debug with breakpoints and hot reload
-4. Services: Web + API (https://localhost:7000), Swagger at `/api/swagger`
+1. Run `jim-build-light` (starts db + Keycloak, waits for readiness, launches JIM.Web natively)
+2. Debug with breakpoints and hot reload
+3. Services: Web + API (https://localhost:7000), Swagger at `/api/swagger`
 
 **Workflow 2 - Full Docker Stack:**
 1. Start all services: `jim-stack`

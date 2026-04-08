@@ -141,6 +141,7 @@ Sync operations are the core of JIM. Customers depend on JIM to synchronise thei
 **Quick reference:**
 - `jim-compile` / `jim-test` / `jim-test-all` - Build and test
 - `jim-db` / `jim-stack` - Start database / full Docker stack
+- `jim-build-light` - Start db + Keycloak, run JIM.Web natively
 - `jim-build-web` / `jim-build-worker` / `jim-build-scheduler` - Rebuild containers after code changes
 
 ## MkDocs Documentation Style

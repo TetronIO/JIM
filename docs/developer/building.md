@@ -60,6 +60,7 @@ jim-build-web        # Rebuild and restart jim.web
 jim-build-worker     # Rebuild and restart jim.worker
 jim-build-scheduler  # Rebuild and restart jim.scheduler
 jim-build            # Rebuild and restart all services
+jim-build-light      # Start db + Keycloak, run JIM.Web natively
 ```
 
 !!! warning "Container rebuilds required"
