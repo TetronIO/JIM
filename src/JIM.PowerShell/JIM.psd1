@@ -104,6 +104,7 @@
 
         # Metaverse
         'Get-JIMMetaverseObject',
+        'Search-JIMMetaverseObject',
         'Get-JIMMetaverseObjectType',
         'Set-JIMMetaverseObjectType',
         'Get-JIMMetaverseAttribute',

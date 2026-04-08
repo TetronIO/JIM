@@ -431,6 +431,57 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
+    /// Searches for metaverse objects using a predefined search, returning lightweight headers
+    /// with only the attributes defined in the search. Optimised for fast response at scale (100k+ objects).
+    /// </summary>
+    /// <remarks>
+    /// This endpoint uses raw SQL queries optimised for large datasets. It returns only the attributes
+    /// configured in the predefined search definition, making it significantly faster than the general
+    /// objects endpoint for list views. Use the general GET /objects endpoint when you need full object
+    /// details or custom attribute selection.
+    /// </remarks>
+    /// <param name="predefinedSearchUri">The URI identifier of the predefined search (e.g. "users", "groups").</param>
+    /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection).</param>
+    /// <param name="search">Optional search query to filter across all string attribute values (case-insensitive).</param>
+    /// <returns>A paginated list of metaverse object headers with the predefined search attributes.</returns>
+    [HttpGet("objects/search/{predefinedSearchUri}", Name = "SearchObjects")]
+    [ProducesResponseType(typeof(PaginatedResponse<MetaverseObjectHeaderDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SearchObjectsAsync(
+        [FromRoute] string predefinedSearchUri,
+        [FromQuery] PaginationRequest pagination,
+        [FromQuery] string? search = null)
+    {
+        _logger.LogDebug("Searching metaverse objects via predefined search (Uri: {Uri}, Page: {Page}, PageSize: {PageSize}, Search: {Search})",
+            LogSanitiser.Sanitise(predefinedSearchUri), pagination.Page, pagination.PageSize, LogSanitiser.Sanitise(search));
+
+        var predefinedSearch = await _application.Search.GetPredefinedSearchAsync(predefinedSearchUri);
+        if (predefinedSearch == null)
+            return NotFound(ApiErrorResponse.NotFound($"Predefined search '{predefinedSearchUri}' not found."));
+
+        var result = await _application.Metaverse.GetMetaverseObjectHeadersPagedAsync(
+            predefinedSearch,
+            page: pagination.Page,
+            pageSize: pagination.PageSize,
+            searchQuery: search,
+            sortBy: pagination.SortBy,
+            sortDescending: pagination.IsDescending);
+
+        var headers = result.Results.Select(MetaverseObjectHeaderDto.FromHeader);
+
+        var response = new PaginatedResponse<MetaverseObjectHeaderDto>
+        {
+            Items = headers,
+            TotalCount = result.TotalResults,
+            Page = result.CurrentPage,
+            PageSize = result.PageSize
+        };
+
+        return Ok(response);
+    }
+
+    /// <summary>
     /// Gets a specific metaverse object by ID.
     /// </summary>
     /// <param name="id">The unique identifier (GUID) of the metaverse object.</param>
