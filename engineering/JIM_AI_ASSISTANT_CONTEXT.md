@@ -4,9 +4,9 @@
 >
 > **Repository**: https://github.com/TetronIO/JIM
 >
-> **Document Version**: 1.4
+> **Document Version**: 1.5
 >
-> **Last Updated**: 2026-04-02
+> **Last Updated**: 2026-04-08
 >
 > **Note**: This is a snapshot. For current implementation details, check the repository or ask the user to provide updated code/docs.
 
@@ -24,7 +24,7 @@
 | **Auth** | OpenID Connect (OIDC) with PKCE |
 | **Deployment** | Docker containers, air-gapped capable |
 | **License** | Source-available (free non-production, commercial for production) |
-| **Status** | Active development, approaching v0.9 stabilisation |
+| **Status** | Active development, v0.9.0 released |
 | **Language** | British English (en-GB) for all text |
 
 ---
@@ -381,6 +381,16 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 - ✅ **MVA to SVA Flow** (#435) - Attribute flow support for multi-valued to single-valued attribute mappings
 - ✅ **Case-Insensitive Expression Lookups** (#341) - Expression attribute lookups are now case-insensitive, matching expected behaviour
 - ✅ **PE Reconciliation for All Data Types** (#263) - Pending export reconciliation extended to cover all attribute data types
+
+### Recent Enhancements (v0.9.0)
+
+- ✅ **100K Object Scale** (#451, #437, #438) - Bounded memory sync/export pipelines, partition-scoped deletion detection, and throughput/ETA progress tracking for 100K+ object deployments
+- ✅ **.NET 10 Migration** (#174) - Migrated to .NET 10.0 (LTS), non-root Docker containers, read-only filesystem hardening, Ubuntu 24.04 base images
+- ✅ **Service Settings REST API** - New `GET/PUT/DELETE /api/v1/service-settings` endpoints with PowerShell cmdlets for managing operational settings
+- ✅ **Data Integrity Validation** (#465) - Structured validation errors for metaverse attribute operations that would corrupt state
+- ✅ **PowerShell Module Enhancements** - `-Name` parameter on six `Get-JIM*` cmdlets, `Get-JIMPendingDeletion`, `Get-JIMActivityChildren`
+- ✅ **Safe Cancellation** (#339) - Full Sync/Delta Sync cancellation now completes the current flush pipeline before exiting
+- ✅ **LDAP Export Auto-Tuning** - Export concurrency auto-tuned based on detected directory server type
 
 ### Recent Enhancements (v0.8.1)
 

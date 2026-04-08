@@ -311,6 +311,60 @@ Get-JIMMetaverseAttribute -Name "Legacy Code" | Remove-JIMMetaverseAttribute -Fo
 
 ## Objects
 
+### Search-JIMMetaverseObject
+
+Searches for metaverse objects using a predefined search definition, returning lightweight headers with only the attributes configured in the search. Optimised for fast responses at scale (100k+ objects).
+
+Use this cmdlet for fast list views and searches. Use `Get-JIMMetaverseObject` when you need full object details or custom attribute selection.
+
+#### Syntax
+
+```powershell
+# List (default)
+Search-JIMMetaverseObject -PredefinedSearchUri <string> [-Search <string>] [-SortBy <string>]
+    [-SortDirection <string>] [-Page <int>] [-PageSize <int>]
+
+# ListAll
+Search-JIMMetaverseObject -PredefinedSearchUri <string> [-Search <string>] [-SortBy <string>]
+    [-SortDirection <string>] [-PageSize <int>] -All
+```
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `PredefinedSearchUri` | `string` | Yes | | URI identifier of the predefined search (e.g. `users`, `groups`) |
+| `Search` | `string` | No | | Search query to filter across all string attribute values (case-insensitive, partial match) |
+| `SortBy` | `string` | No | | Attribute name to sort results by (defaults to creation date) |
+| `SortDirection` | `string` | No | `desc` | Sort direction: `asc` or `desc` |
+| `All` | `switch` | No | `false` | Automatically paginate through all results |
+| `Page` | `int` | No | `1` | Page number for paginated results (cannot be used with `-All`) |
+| `PageSize` | `int` | No | `100` | Number of items per page (maximum 100) |
+
+#### Output
+
+Lightweight metaverse object headers including ID, display name, object type, and the attributes defined in the predefined search.
+
+#### Examples
+
+```powershell title="Search for users"
+Search-JIMMetaverseObject -PredefinedSearchUri "users"
+```
+
+```powershell title="Search with a query"
+Search-JIMMetaverseObject -PredefinedSearchUri "users" -Search "Smith"
+```
+
+```powershell title="Get all users with auto-pagination"
+Search-JIMMetaverseObject -PredefinedSearchUri "users" -All
+```
+
+```powershell title="Sort groups by display name"
+Search-JIMMetaverseObject -PredefinedSearchUri "groups" -SortBy "Display Name" -SortDirection asc
+```
+
+---
+
 ### Get-JIMMetaverseObject
 
 Retrieves metaverse objects. Supports searching by ID, object type, attribute values, and wildcard patterns.

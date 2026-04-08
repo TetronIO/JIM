@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-04-08
+
+### Added
+
+#### Search Objects API (#482, #488)
+
+- ✨ New `GET /api/v1/metaverse/objects/search/{predefinedSearchUri}` endpoint for fast, lightweight object searches optimised for 100K+ object deployments
+- ✨ New `Search-JIMMetaverseObject` PowerShell cmdlet with predefined search support, sorting, filtering, and auto-pagination
+
+### Performance
+
+#### Paginated List Optimisation (#482, #485)
+
+- ⚡ Metaverse object list sorting now uses a pre-computed cached display name column, eliminating expensive per-query subqueries for display name resolution
+- ⚡ New composite index on metaverse attribute values for faster attribute-based sorting and filtering
+- ⚡ Paginated list queries for metaverse objects and connected system objects rewritten to use keyset pagination with optimised sort subqueries
+
+### Fixed
+
+- 🖥️ Fixed oversized text on avatar chips in sync rule list and detail pages
+- 🖥️ Multi-valued attribute value counts on metaverse object detail pages now display with thousand separators for readability
+
 ## [0.9.0] - 2026-04-07
 
 ### Added
@@ -596,7 +618,8 @@ JIM now supports deployments of 100,000+ objects, validated by Scale100K integra
 - Air-gapped deployment bundle support
 - PowerShell Gallery publishing
 
-[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/TetronIO/JIM/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/TetronIO/JIM/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/TetronIO/JIM/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/TetronIO/JIM/compare/v0.7.1...v0.8.0
