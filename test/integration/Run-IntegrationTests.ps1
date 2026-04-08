@@ -1359,13 +1359,17 @@ if ($Scenario -eq "All") {
     }
 
     $regressionResults = @{
-        Mode           = "FullRegression"
-        DirectoryType  = $DirectoryType
-        Template       = $Template
-        StartTime      = $allStart.ToString("yyyy-MM-dd HH:mm:ss")
-        Duration       = $allDuration.ToString('hh\:mm\:ss')
-        OverallSuccess = (-not $anyFailed)
-        Scenarios      = @($results | ForEach-Object {
+        Mode              = "FullRegression"
+        DirectoryType     = $DirectoryType
+        Template          = $Template
+        Step              = $Step
+        LogLevel          = if ($LogLevel) { $LogLevel } else { "(from .env)" }
+        ChangeTracking    = if ($DisableChangeTracking) { "Disabled" } else { "Enabled" }
+        ExportConcurrency = if ($PSBoundParameters.ContainsKey('ExportConcurrency')) { $ExportConcurrency } else { $null }
+        StartTime         = $allStart.ToString("yyyy-MM-dd HH:mm:ss")
+        Duration          = $allDuration.ToString('hh\:mm\:ss')
+        OverallSuccess    = (-not $anyFailed)
+        Scenarios         = @($results | ForEach-Object {
             @{
                 Name     = $_.Name
                 Success  = $_.Success
@@ -2295,6 +2299,52 @@ $scenarioLogFile = Join-Path $logDir "$Scenario-$Template-$logTimestamp.log"
 Start-Transcript -Path $scenarioLogFile -Append | Out-Null
 $transcriptActive = $true
 try {
+
+# Log resolved configuration so the transcript is self-contained and reviewable
+Write-Host ""
+Write-Host "-----------------------------------------------------------------"
+Write-Host "  Test Configuration (resolved)"
+Write-Host "-----------------------------------------------------------------"
+Write-Host ""
+Write-Host "  Scenario:                $Scenario"
+if ($templateRelevant) {
+    Write-Host "  Template:                $Template"
+} else {
+    Write-Host "  Template:                N/A (scenario uses fixed test data)"
+}
+Write-Host "  Step:                    $Step"
+Write-Host "  Directory Type:          $DirectoryType"
+Write-Host "  Skip Reset:              $SkipReset"
+Write-Host "  Skip Build:              $SkipBuild"
+Write-Host "  Setup Only:              $SetupOnly"
+if ($PSBoundParameters.ContainsKey('ExportConcurrency')) {
+    Write-Host "  LDAP Export Concurrency: $ExportConcurrency"
+} else {
+    Write-Host "  LDAP Export Concurrency: (JIM default: 4)"
+}
+if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) {
+    Write-Host "  Max Export Parallelism:  $MaxExportParallelism"
+} else {
+    Write-Host "  Max Export Parallelism:  (JIM default: 1)"
+}
+Write-Host "  Service Timeout:         ${TimeoutSeconds}s"
+if ($LogLevel) {
+    Write-Host "  Log Level:               $LogLevel"
+} else {
+    Write-Host "  Log Level:               (from .env)"
+}
+if ($DisableChangeTracking) {
+    Write-Host "  Change Tracking:         Disabled"
+} else {
+    Write-Host "  Change Tracking:         Enabled"
+}
+if ($CaptureMetrics) {
+    Write-Host "  Capture Metrics:         Yes"
+}
+if ($IgnoreSnapshots) {
+    Write-Host "  Ignore Snapshots:        Yes"
+}
+Write-Host ""
 
 # Build scenario invocation params — only pass export tuning params to scenarios that accept them
 $scenarioParams = @{
