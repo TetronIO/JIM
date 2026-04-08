@@ -83,19 +83,26 @@ public class MetaverseObject
     /// </summary>
     public List<ConnectedSystemObject> ConnectedSystemObjects { get; set; } = new ();
 
+    /// <summary>
+    /// Performance cache of the Display Name attribute value, used for efficient sorting at scale.
+    /// Do not write directly; updated automatically by the sync engine via ApplyPendingAttributeChanges().
+    /// The canonical Display Name value lives in <see cref="AttributeValues"/>.
+    /// </summary>
+    public string? CachedDisplayName { get; set; }
+
     [NotMapped]
     public string? DisplayName
     {
         get
         {
             if (AttributeValues.Count == 0)
-                return null;
+                return CachedDisplayName;
 
             var av = AttributeValues.SingleOrDefault(q => q.Attribute?.Name == Constants.BuiltInAttributes.DisplayName);
             if (av != null && !string.IsNullOrEmpty(av.StringValue))
                 return av.StringValue;
 
-            return null;
+            return CachedDisplayName;
         }
     }
 

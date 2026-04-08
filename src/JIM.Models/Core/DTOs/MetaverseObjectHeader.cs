@@ -22,18 +22,23 @@ public class MetaverseObjectHeader
 
     public MetaverseObjectStatus Status { get; set; }
 
+    /// <summary>
+    /// Performance cache of the Display Name attribute value, used for efficient sorting at scale.
+    /// </summary>
+    public string? CachedDisplayName { get; set; }
+
     public string? DisplayName
     {
         get
         {
             if (AttributeValues.Count == 0)
-                return null;
+                return CachedDisplayName;
 
             var av = AttributeValues.SingleOrDefault(q => q.Attribute?.Name == Constants.BuiltInAttributes.DisplayName);
             if (av != null && ! string.IsNullOrEmpty(av.StringValue))
                 return av.StringValue;
 
-            return null;
+            return CachedDisplayName;
         }
     }
 

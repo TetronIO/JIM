@@ -201,7 +201,7 @@ public partial class SyncRepository
             COPY "MetaverseObjects" (
                 "Id", "Created", "LastUpdated", "TypeId", "Status", "Origin",
                 "LastConnectorDisconnectedDate", "DeletionInitiatedByType",
-                "DeletionInitiatedById", "DeletionInitiatedByName"
+                "DeletionInitiatedById", "DeletionInitiatedByName", "CachedDisplayName"
             ) FROM STDIN (FORMAT binary)
             """);
 
@@ -228,6 +228,10 @@ public partial class SyncRepository
                 await writer.WriteNullAsync();
             if (mvo.DeletionInitiatedByName is not null)
                 await writer.WriteAsync(mvo.DeletionInitiatedByName, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            if (mvo.CachedDisplayName is not null)
+                await writer.WriteAsync(mvo.CachedDisplayName, NpgsqlTypes.NpgsqlDbType.Text);
             else
                 await writer.WriteNullAsync();
         }
@@ -312,20 +316,20 @@ public partial class SyncRepository
     /// </summary>
     private async Task BulkInsertMvosViaEfAsync(List<MetaverseObject> objects)
     {
-        const int columnsPerRow = 10;
+        const int columnsPerRow = 11;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(objects, chunkSize))
         {
             var sql = new StringBuilder();
-            sql.Append(@"INSERT INTO ""MetaverseObjects"" (""Id"", ""Created"", ""LastUpdated"", ""TypeId"", ""Status"", ""Origin"", ""LastConnectorDisconnectedDate"", ""DeletionInitiatedByType"", ""DeletionInitiatedById"", ""DeletionInitiatedByName"") VALUES ");
+            sql.Append(@"INSERT INTO ""MetaverseObjects"" (""Id"", ""Created"", ""LastUpdated"", ""TypeId"", ""Status"", ""Origin"", ""LastConnectorDisconnectedDate"", ""DeletionInitiatedByType"", ""DeletionInitiatedById"", ""DeletionInitiatedByName"", ""CachedDisplayName"") VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}})");
+                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}})");
 
                 var mvo = chunk[i];
                 parameters.Add(mvo.Id);
@@ -338,6 +342,7 @@ public partial class SyncRepository
                 parameters.Add((int)mvo.DeletionInitiatedByType);
                 parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionInitiatedById, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionInitiatedByName, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(mvo.CachedDisplayName, NpgsqlTypes.NpgsqlDbType.Text));
             }
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());

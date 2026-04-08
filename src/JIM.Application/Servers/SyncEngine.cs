@@ -226,6 +226,12 @@ public partial class SyncEngine : ISyncEngine
         mvo.PendingAttributeValueRemovals.Clear();
         mvo.PendingAttributeValueAdditions.Clear();
 
+        // Keep the denormalised CachedDisplayName in sync with the canonical attribute value.
+        // This cached column enables efficient sorting at scale without correlated subqueries.
+        var displayNameAv = mvo.AttributeValues
+            .SingleOrDefault(av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName);
+        mvo.CachedDisplayName = displayNameAv?.StringValue;
+
         Log.Verbose("ApplyPendingAttributeChanges: Applied {AddCount} additions and {RemoveCount} removals to MVO {MvoId}",
             addCount, removeCount, mvo.Id);
     }
