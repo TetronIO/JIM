@@ -311,6 +311,15 @@ public class ExampleDataServer
         // ensure that attribute population percentage values are respected
         // do this by assigning all attributes with values (done), then go and randomly delete the required amount
         RemoveUnnecessaryAttributeValues(template, metaverseObjectsToCreate, random);
+
+        // Populate CachedDisplayName from the generated attribute values
+        foreach (var mvo in metaverseObjectsToCreate)
+        {
+            var displayNameAv = mvo.AttributeValues
+                .SingleOrDefault(av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName);
+            mvo.CachedDisplayName = displayNameAv?.StringValue;
+        }
+
         Log.Information($"ExecuteTemplateAsync: Generated {metaverseObjectsToCreate.Count:N0} objects");
         objectPreparationStopwatch.Stop();
 

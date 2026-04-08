@@ -820,8 +820,6 @@ public class MetaverseRepository : IMetaverseRepository
         string? sortBy = null,
         bool sortDescending = true)
     {
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
 
@@ -906,44 +904,51 @@ public class MetaverseRepository : IMetaverseRepository
             grossCount = (int)(await countCmd.ExecuteScalarAsync())!;
         }
 
-        Log.Debug("[PERF] GetMetaverseObjectHeadersPagedAsync count: {ElapsedMs}ms (count {Count})", sw.ElapsedMilliseconds, grossCount);
-
         // Page ID query — get the IDs for the current page with sorting
         string orderClause;
         NpgsqlParameter? sortParam = null;
         if (!string.IsNullOrWhiteSpace(sortBy))
         {
-            // Pre-resolve the sort attribute name to its ID to avoid a JOIN to MetaverseAttributes
-            // in the correlated subquery. Check PredefinedSearch attributes first, then fall back to DB.
-            var sortAttrId = predefinedSearch.Attributes
-                .FirstOrDefault(a => string.Equals(a.MetaverseAttribute.Name, sortBy, StringComparison.OrdinalIgnoreCase))
-                ?.MetaverseAttribute.Id;
-
-            if (sortAttrId == null)
-            {
-                await using var lookupCmd = connection.CreateCommand();
-                lookupCmd.CommandText = """SELECT "Id" FROM "MetaverseAttributes" WHERE "Name" = @name LIMIT 1""";
-                lookupCmd.Parameters.Add(new NpgsqlParameter("name", sortBy));
-                var result = await lookupCmd.ExecuteScalarAsync();
-                sortAttrId = result as int?;
-            }
-
-            if (sortAttrId != null)
+            // DisplayName sort uses the denormalised CachedDisplayName column directly,
+            // avoiding the correlated subquery that causes ~300ms latency at 100k scale.
+            if (string.Equals(sortBy, Constants.BuiltInAttributes.DisplayName, StringComparison.OrdinalIgnoreCase))
             {
                 var direction = sortDescending ? "DESC" : "ASC";
-                orderClause = $"""
-                    (SELECT av."StringValue" FROM "MetaverseObjectAttributeValues" av
-                     WHERE av."MetaverseObjectId" = m."Id" AND av."AttributeId" = @sortAttrId
-                     LIMIT 1) {direction} NULLS LAST
-                    """;
-                sortParam = new NpgsqlParameter("sortAttrId", sortAttrId.Value);
+                orderClause = $"""m."CachedDisplayName" {direction} NULLS LAST""";
             }
             else
             {
-                // Unknown attribute name — fall back to default sort
-                orderClause = sortDescending
-                    ? """m."Created" DESC"""
-                    : """m."Created" ASC""";
+                // Other attributes: pre-resolve name to ID, use correlated subquery
+                var sortAttrId = predefinedSearch.Attributes
+                    .FirstOrDefault(a => string.Equals(a.MetaverseAttribute.Name, sortBy, StringComparison.OrdinalIgnoreCase))
+                    ?.MetaverseAttribute.Id;
+
+                if (sortAttrId == null)
+                {
+                    await using var lookupCmd = connection.CreateCommand();
+                    lookupCmd.CommandText = """SELECT "Id" FROM "MetaverseAttributes" WHERE "Name" = @name LIMIT 1""";
+                    lookupCmd.Parameters.Add(new NpgsqlParameter("name", sortBy));
+                    var result = await lookupCmd.ExecuteScalarAsync();
+                    sortAttrId = result as int?;
+                }
+
+                if (sortAttrId != null)
+                {
+                    var direction = sortDescending ? "DESC" : "ASC";
+                    orderClause = $"""
+                        (SELECT av."StringValue" FROM "MetaverseObjectAttributeValues" av
+                         WHERE av."MetaverseObjectId" = m."Id" AND av."AttributeId" = @sortAttrId
+                         LIMIT 1) {direction} NULLS LAST
+                        """;
+                    sortParam = new NpgsqlParameter("sortAttrId", sortAttrId.Value);
+                }
+                else
+                {
+                    // Unknown attribute name — fall back to default sort
+                    orderClause = sortDescending
+                        ? """m."Created" DESC"""
+                        : """m."Created" ASC""";
+                }
             }
         }
         else
@@ -974,13 +979,11 @@ public class MetaverseRepository : IMetaverseRepository
                 pageObjectIds.Add(reader.GetGuid(0));
         }
 
-        Log.Debug("[PERF] GetMetaverseObjectHeadersPagedAsync page IDs: {ElapsedMs}ms ({Count} IDs)", sw.ElapsedMilliseconds, pageObjectIds.Count);
-
         // Object header query — fetch the base fields for the page objects
         var headerMap = new Dictionary<Guid, MetaverseObjectHeader>();
         await using var headerCmd = connection.CreateCommand();
         headerCmd.CommandText = """
-            SELECT m."Id", m."Created", m."Status", m."TypeId", t."Name" AS "TypeName", t."PluralName" AS "TypePluralName"
+            SELECT m."Id", m."Created", m."Status", m."TypeId", t."Name" AS "TypeName", t."PluralName" AS "TypePluralName", m."CachedDisplayName"
             FROM "MetaverseObjects" m
             INNER JOIN "MetaverseObjectTypes" t ON m."TypeId" = t."Id"
             WHERE m."Id" = ANY(@objectIds)
@@ -999,6 +1002,7 @@ public class MetaverseRepository : IMetaverseRepository
                     TypeId = reader.GetInt32(3),
                     TypeName = reader.GetString(4),
                     TypePluralName = reader.GetString(5),
+                    CachedDisplayName = reader.IsDBNull(6) ? null : reader.GetString(6),
                     AttributeValues = []
                 };
                 headerMap[header.Id] = header;
@@ -1052,9 +1056,6 @@ public class MetaverseRepository : IMetaverseRepository
             .Where(id => headerMap.ContainsKey(id))
             .Select(id => headerMap[id])
             .ToList();
-
-        Log.Debug("[PERF] GetMetaverseObjectHeadersPagedAsync total: {ElapsedMs}ms (page {Page}, count {Count}, results {ResultCount})",
-            sw.ElapsedMilliseconds, page, grossCount, results.Count);
 
         var pagedResultSet = new PagedResultSet<MetaverseObjectHeader>
         {
