@@ -158,6 +158,108 @@ Returns `200 OK` with a paginated list. Each item includes `displayName` (always
 
 ---
 
+## Search Objects
+
+Searches for metaverse objects using a predefined search, returning lightweight headers with only the attributes configured in the search definition. Optimised for fast responses at scale (100k+ objects).
+
+Use this endpoint for list views and searches where speed matters. Use [List Objects](#list-objects) when you need custom attribute selection or [Retrieve an Object](#retrieve-an-object) for full object details.
+
+```
+GET /api/v1/metaverse/objects/search/{predefinedSearchUri}
+```
+
+### Path Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `predefinedSearchUri` | string | URI identifier of the predefined search (e.g. `users`, `groups`) |
+
+### Query Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `page` | integer | No | `1` | Page number |
+| `pageSize` | integer | No | `25` | Items per page (max 100) |
+| `search` | string | No | | Search across all string attribute values (partial, case-insensitive) |
+| `sortBy` | string | No | | Attribute name to sort by (defaults to creation date) |
+| `sortDirection` | string | No | `desc` | Sort direction: `asc` or `desc` |
+
+### Examples
+
+=== "curl"
+
+    ```bash
+    # Search users
+    curl "https://jim.example.com/api/v1/metaverse/objects/search/users" \
+      -H "X-Api-Key: jim_xxxxxxxxxxxx"
+
+    # Search with a query
+    curl "https://jim.example.com/api/v1/metaverse/objects/search/users?search=Smith&pageSize=10" \
+      -H "X-Api-Key: jim_xxxxxxxxxxxx"
+
+    # Sort by display name
+    curl "https://jim.example.com/api/v1/metaverse/objects/search/users?sortBy=Display+Name&sortDirection=asc" \
+      -H "X-Api-Key: jim_xxxxxxxxxxxx"
+    ```
+
+=== "PowerShell"
+
+    ```powershell
+    Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
+
+    # Search users
+    Search-JIMMetaverseObject -PredefinedSearchUri "users"
+
+    # Search with a query
+    Search-JIMMetaverseObject -PredefinedSearchUri "users" -Search "Smith"
+
+    # Get all users (auto-paginate)
+    Search-JIMMetaverseObject -PredefinedSearchUri "users" -All
+
+    # Sort by display name
+    Search-JIMMetaverseObject -PredefinedSearchUri "groups" -SortBy "Display Name" -SortDirection asc
+    ```
+
+### Response
+
+Returns `200 OK` with a paginated list. Each item includes `displayName` (always) plus the attributes defined in the predefined search in the `attributes` dictionary.
+
+```json
+{
+  "items": [
+    {
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "created": "2026-01-15T10:00:00Z",
+      "displayName": "Jane Smith",
+      "status": "Normal",
+      "typeId": 1,
+      "typeName": "person",
+      "attributes": {
+        "Job Title": "Software Engineer",
+        "Department": "Engineering",
+        "Company": "Acme Corp",
+        "Email": "jane.smith@example.com"
+      }
+    }
+  ],
+  "totalCount": 100001,
+  "page": 1,
+  "pageSize": 25,
+  "totalPages": 4001,
+  "hasNextPage": true,
+  "hasPreviousPage": false
+}
+```
+
+### Errors
+
+| Code | Description |
+|------|-------------|
+| `404` | Predefined search not found |
+| `401` | Authentication required |
+
+---
+
 ## Retrieve an Object
 
 Returns the full details of a metaverse object, including all attribute values and linked connector space objects.
