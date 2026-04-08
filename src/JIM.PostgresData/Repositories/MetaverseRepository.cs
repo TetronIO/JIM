@@ -913,14 +913,38 @@ public class MetaverseRepository : IMetaverseRepository
         NpgsqlParameter? sortParam = null;
         if (!string.IsNullOrWhiteSpace(sortBy))
         {
-            var direction = sortDescending ? "DESC" : "ASC";
-            orderClause = $"""
-                (SELECT av."StringValue" FROM "MetaverseObjectAttributeValues" av
-                 INNER JOIN "MetaverseAttributes" ma ON av."AttributeId" = ma."Id"
-                 WHERE av."MetaverseObjectId" = m."Id" AND ma."Name" = @sortAttr
-                 LIMIT 1) {direction} NULLS LAST
-                """;
-            sortParam = new NpgsqlParameter("sortAttr", sortBy);
+            // Pre-resolve the sort attribute name to its ID to avoid a JOIN to MetaverseAttributes
+            // in the correlated subquery. Check PredefinedSearch attributes first, then fall back to DB.
+            var sortAttrId = predefinedSearch.Attributes
+                .FirstOrDefault(a => string.Equals(a.MetaverseAttribute.Name, sortBy, StringComparison.OrdinalIgnoreCase))
+                ?.MetaverseAttribute.Id;
+
+            if (sortAttrId == null)
+            {
+                await using var lookupCmd = connection.CreateCommand();
+                lookupCmd.CommandText = """SELECT "Id" FROM "MetaverseAttributes" WHERE "Name" = @name LIMIT 1""";
+                lookupCmd.Parameters.Add(new NpgsqlParameter("name", sortBy));
+                var result = await lookupCmd.ExecuteScalarAsync();
+                sortAttrId = result as int?;
+            }
+
+            if (sortAttrId != null)
+            {
+                var direction = sortDescending ? "DESC" : "ASC";
+                orderClause = $"""
+                    (SELECT av."StringValue" FROM "MetaverseObjectAttributeValues" av
+                     WHERE av."MetaverseObjectId" = m."Id" AND av."AttributeId" = @sortAttrId
+                     LIMIT 1) {direction} NULLS LAST
+                    """;
+                sortParam = new NpgsqlParameter("sortAttrId", sortAttrId.Value);
+            }
+            else
+            {
+                // Unknown attribute name — fall back to default sort
+                orderClause = sortDescending
+                    ? """m."Created" DESC"""
+                    : """m."Created" ASC""";
+            }
         }
         else
         {

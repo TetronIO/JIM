@@ -58,14 +58,14 @@ else if (_syncRule != null)
                     <MudDivider Vertical="true" FlexItem="true" />
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                         <MudText Typo="Typo.body1" Class="mud-text-secondary">Object Types:</MudText>
-                        <MudChip T="string">
+                        <MudChip T="string" Size="Size.Medium">
                             <AvatarContent>
                                 <MudAvatar Color="Color.Primary">MV</MudAvatar>
                             </AvatarContent>
                             <ChildContent>@_syncRule.MetaverseObjectType?.Name</ChildContent>
                         </MudChip>
                         <MudText Class="mud-text-secondary">→</MudText>
-                        <MudChip T="string">
+                        <MudChip T="string" Size="Size.Medium">
                             <AvatarContent>
                                 <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
                             </AvatarContent>
@@ -274,7 +274,7 @@ else if (_syncRule != null)
                                         <MudText Typo="Typo.overline">POSITION: @(objectMatchingRule.Order + 1)</MudText>
                                     </MudItem>
                                     <MudItem xs="12" Class="d-flex align-center">
-                                        <MudChip T="string">
+                                        <MudChip T="string" Size="Size.Medium">
                                             <AvatarContent>
                                                 <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
                                                     <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
@@ -282,10 +282,10 @@ else if (_syncRule != null)
                                             </AvatarContent>
                                             <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
                                         </MudChip>
-                                        <MudChip T="string">
+                                        <MudChip T="string" Size="Size.Medium">
                                             <MudIcon Icon="@Icons.Material.Filled.DragHandle"></MudIcon>
                                         </MudChip>
-                                        <MudChip T="string">
+                                        <MudChip T="string" Size="Size.Medium">
                                             <AvatarContent>
                                                 <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
                                                     <MudAvatar Color="Color.Primary">MV</MudAvatar>
@@ -583,7 +583,7 @@ else if (_syncRule != null)
                         if (_syncRule.Direction == SyncRuleDirection.Import && source.ConnectedSystemAttribute != null)
                         {
                             <MudTooltip Text="@($"Connected System: {source.ConnectedSystemAttribute.Type.ToString().SplitOnCapitalLetters()}, {(source.ConnectedSystemAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string">
+                                <MudChip T="string" Size="Size.Medium">
                                     <AvatarContent>
                                         <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
                                     </AvatarContent>
@@ -594,7 +594,7 @@ else if (_syncRule != null)
                         else if (_syncRule.Direction == SyncRuleDirection.Export && source.MetaverseAttribute != null)
                         {
                             <MudTooltip Text="@($"Metaverse: {source.MetaverseAttribute.Type.ToString().SplitOnCapitalLetters()}, {(source.MetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string">
+                                <MudChip T="string" Size="Size.Medium">
                                     <AvatarContent>
                                         <MudAvatar Color="Color.Primary">MV</MudAvatar>
                                     </AvatarContent>
@@ -605,7 +605,7 @@ else if (_syncRule != null)
                         else if (!string.IsNullOrWhiteSpace(source.Expression))
                         {
                             <MudTooltip Text="@source.Expression" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Class="jim-expr-chip">
+                                <MudChip T="string" Size="Size.Medium" Class="jim-expr-chip">
                                     <AvatarContent>
                                         <MudAvatar Color="Color.Secondary">Ex</MudAvatar>
                                     </AvatarContent>
@@ -620,7 +620,7 @@ else if (_syncRule != null)
                     @if (_syncRule.Direction == SyncRuleDirection.Import && context.TargetMetaverseAttribute != null)
                     {
                         <MudTooltip Text="@($"Metaverse: {context.TargetMetaverseAttribute.Type.ToString().SplitOnCapitalLetters()}, {(context.TargetMetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
-                            <MudChip T="string">
+                            <MudChip T="string" Size="Size.Medium">
                                 <AvatarContent>
                                     <MudAvatar Color="Color.Primary">MV</MudAvatar>
                                 </AvatarContent>
@@ -631,7 +631,7 @@ else if (_syncRule != null)
                     else if (_syncRule.Direction == SyncRuleDirection.Export && context.TargetConnectedSystemAttribute != null)
                     {
                         <MudTooltip Text="@($"Connected System: {context.TargetConnectedSystemAttribute.Type.ToString().SplitOnCapitalLetters()}, {(context.TargetConnectedSystemAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
-                            <MudChip T="string">
+                            <MudChip T="string" Size="Size.Medium">
                                 <AvatarContent>
                                     <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
                                 </AvatarContent>
@@ -791,7 +791,7 @@ else if (_syncRule != null)
                 @if (_syncRule.Direction == SyncRuleDirection.Import)
                 {
                     <div class="d-flex align-center flex-wrap">
-                        <MudChip T="string">
+                        <MudChip T="string" Size="Size.Medium">
                             <AvatarContent>
                                 <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
                                     <MudAvatar Color="Color.Primary">MV</MudAvatar>
@@ -806,7 +806,7 @@ else if (_syncRule != null)
                         {
                             if (source.ConnectedSystemAttribute != null)
                             {
-                                <MudChip T="string">
+                                <MudChip T="string" Size="Size.Medium">
                                     <AvatarContent>
                                         <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
                                             <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
@@ -817,7 +817,7 @@ else if (_syncRule != null)
                             }
                             else if (!string.IsNullOrWhiteSpace(source.Expression))
                             {
-                                <MudChip T="string">
+                                <MudChip T="string" Size="Size.Medium">
                                     <AvatarContent>
                                         <MudTooltip Text="Expression" Arrow="true" Placement="Placement.Top">
                                             <MudAvatar Color="Color.Secondary">Ex</MudAvatar>
@@ -838,7 +838,7 @@ else if (_syncRule != null)
                         {
                             if (source.MetaverseAttribute != null)
                             {
-                                <MudChip T="string">
+                                <MudChip T="string" Size="Size.Medium">
                                     <AvatarContent>
                                         <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
                                             <MudAvatar Color="Color.Primary">MV</MudAvatar>
@@ -849,7 +849,7 @@ else if (_syncRule != null)
                             }
                             else if (!string.IsNullOrWhiteSpace(source.Expression))
                             {
-                                <MudChip T="string">
+                                <MudChip T="string" Size="Size.Medium">
                                     <AvatarContent>
                                         <MudTooltip Text="Expression" Arrow="true" Placement="Placement.Top">
                                             <MudAvatar Color="Color.Secondary">Ex</MudAvatar>
@@ -864,7 +864,7 @@ else if (_syncRule != null)
 
                         <MudText Class="mud-text-secondary mx-1">→</MudText>
 
-                        <MudChip T="string">
+                        <MudChip T="string" Size="Size.Medium">
                             <AvatarContent>
                                 <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
                                     <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
