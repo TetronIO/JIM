@@ -386,6 +386,14 @@ public class JimDbContext : DbContext
             .HasIndex(moav => new { moav.AttributeId, moav.StringValue })
             .HasDatabaseName("IX_MetaverseObjectAttributeValues_AttributeId_StringValue");
 
+        // MetaverseObjectAttributeValue: composite index for MVO attribute lookups
+        // Mirrors IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId for CSOs.
+        // Accelerates: sort-by-attribute subqueries, criteria filter EXISTS subqueries,
+        // and attribute value bulk fetches in GetMetaverseObjectHeadersPagedAsync.
+        modelBuilder.Entity<MetaverseObjectAttributeValue>()
+            .HasIndex("MetaverseObjectId", "AttributeId")
+            .HasDatabaseName("IX_MetaverseObjectAttributeValues_MvoId_AttributeId");
+
         // ConnectedSystemObjectAttributeValue: composite index for CSO attribute lookups
         // Uses shadow property "ConnectedSystemObjectId" created by EF convention
         modelBuilder.Entity<ConnectedSystemObjectAttributeValue>()
