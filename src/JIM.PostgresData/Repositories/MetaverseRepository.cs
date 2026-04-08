@@ -746,9 +746,15 @@ public class MetaverseRepository : IMetaverseRepository
         // Get total count from the lean base query (no Includes, no sorting overhead)
         var grossCount = await baseQuery.CountAsync();
 
-        // Now build the data query. No Include chain needed — we project only the required
-        // attributes in the Select clause below, which EF Core translates to a targeted SQL subquery.
-        var objects = baseQuery;
+        // Now build the data query with Includes for materialisation.
+        // The Include chain is needed because the projection materialises MetaverseObjectAttributeValue
+        // entities whose Attribute navigation must be populated (used by MetaverseObjectHeader.DisplayName).
+        // The SQL-side WHERE filter on predefinedSearchAttributeIds in the Select clause still ensures
+        // only the 3-5 display attributes are loaded, not all attributes.
+        var objects = baseQuery
+            .AsSplitQuery()
+            .Include(mo => mo.AttributeValues)
+            .ThenInclude(av => av.Attribute);
 
         // Apply sorting - sort by attribute value if specified, otherwise by Created date
         // The sortBy parameter corresponds to the attribute name
