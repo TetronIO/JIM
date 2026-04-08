@@ -671,15 +671,12 @@ public class MetaverseRepository : IMetaverseRepository
         if (pageSize > 100)
             pageSize = 100;
 
-        // construct the base query.
-        // No AsSplitQuery: the query is paginated (max 100 rows) so cartesian explosion is bounded,
-        // and AsSplitQuery can fail to correlate split queries correctly at scale.
-        var objects = from o in Repository.Database.MetaverseObjects.
-                Include(mo => mo.Type).
-                Include(mo => mo.AttributeValues).
-                ThenInclude(av => av.Attribute).
-                Where(q => q.Type.Id == predefinedSearch.MetaverseObjectType.Id)
-            select o;
+        // Build a lean base query without Includes for filtering and counting.
+        // The Where clauses on AttributeValues.Any() translate to SQL EXISTS subqueries
+        // and don't need Include chains — those are only needed for data materialisation.
+        var baseQuery = Repository.Database.MetaverseObjects
+            .AsNoTracking()
+            .Where(q => q.Type.Id == predefinedSearch.MetaverseObjectType.Id);
 
         // is there criteria to use in the predefined search criteria groups?
         foreach (var group in predefinedSearch.CriteriaGroups)
@@ -689,22 +686,22 @@ public class MetaverseRepository : IMetaverseRepository
                 switch (criteria.ComparisonType)
                 {
                     case SearchComparisonType.Equals:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && av.StringValue == criteria.StringValue));
+                        baseQuery = baseQuery.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && av.StringValue == criteria.StringValue));
                         break;
                     case SearchComparisonType.NotEquals:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && av.StringValue != criteria.StringValue));
+                        baseQuery = baseQuery.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && av.StringValue != criteria.StringValue));
                         break;
                     case SearchComparisonType.StartsWith:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && av.StringValue != null && av.StringValue.StartsWith(criteria.StringValue)));
+                        baseQuery = baseQuery.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && av.StringValue != null && av.StringValue.StartsWith(criteria.StringValue)));
                         break;
                     case SearchComparisonType.NotStartsWith:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && (av.StringValue == null || !av.StringValue.StartsWith(criteria.StringValue))));
+                        baseQuery = baseQuery.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && (av.StringValue == null || !av.StringValue.StartsWith(criteria.StringValue))));
                         break;
                     case SearchComparisonType.EndsWith:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && av.StringValue != null && av.StringValue.EndsWith(criteria.StringValue)));
+                        baseQuery = baseQuery.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && av.StringValue != null && av.StringValue.EndsWith(criteria.StringValue)));
                         break;
                     case SearchComparisonType.NotEndsWith:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && (av.StringValue == null || !av.StringValue.EndsWith(criteria.StringValue))));
+                        baseQuery = baseQuery.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && (av.StringValue == null || !av.StringValue.EndsWith(criteria.StringValue))));
                         break;
 
                     case SearchComparisonType.Contains: // need to lookup if we need to handle contains different with postgres
@@ -735,16 +732,31 @@ public class MetaverseRepository : IMetaverseRepository
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
             var searchPattern = $"%{searchQuery}%";
-            objects = objects.Where(o => o.AttributeValues.Any(av =>
+            baseQuery = baseQuery.Where(o => o.AttributeValues.Any(av =>
                 av.StringValue != null && EF.Functions.ILike(av.StringValue, searchPattern)));
         }
 
+        // Pre-compute the set of attribute IDs we need for the projection.
+        // Only these attributes will be materialised from the database, rather than loading all attributes
+        // and filtering in-memory.
+        var predefinedSearchAttributeIds = predefinedSearch.Attributes
+            .Select(a => a.MetaverseAttribute.Id)
+            .ToList();
+
+        // Get total count from the lean base query (no Includes, no sorting overhead)
+        var grossCount = await baseQuery.CountAsync();
+
+        // Now build the data query. No Include chain needed — we project only the required
+        // attributes in the Select clause below, which EF Core translates to a targeted SQL subquery.
+        var objects = baseQuery;
+
         // Apply sorting - sort by attribute value if specified, otherwise by Created date
         // The sortBy parameter corresponds to the attribute name
+        IOrderedQueryable<MetaverseObject> sortedObjects;
         if (!string.IsNullOrWhiteSpace(sortBy))
         {
             // Sort by the specified attribute's string value
-            objects = sortDescending
+            sortedObjects = sortDescending
                 ? objects.OrderByDescending(o => o.AttributeValues
                     .Where(av => av.Attribute.Name == sortBy)
                     .Select(av => av.StringValue)
@@ -757,26 +769,16 @@ public class MetaverseRepository : IMetaverseRepository
         else
         {
             // Default sort by Created date
-            objects = sortDescending
+            sortedObjects = sortDescending
                 ? objects.OrderByDescending(q => q.Created)
                 : objects.OrderBy(q => q.Created);
         }
-
-        // Get total count for pagination
-        var grossCount = await objects.CountAsync();
         var offset = (page - 1) * pageSize;
 
-        // Materialise a page of full entities so that AsSplitQuery Include chains are honoured
-        // (Include is ignored when projecting via .Select(), leaving navigation properties null).
-        // Max page size is 100 so the overhead of loading full entities is negligible.
-        var predefinedSearchAttributeIds = predefinedSearch.Attributes
-            .Select(a => a.MetaverseAttribute.Id)
-            .ToHashSet();
-
-        var pageEntities = await objects.Skip(offset).Take(pageSize).ToListAsync();
-
-        // Project to headers in memory where Attribute navigations are populated
-        var results = pageEntities.Select(d => new MetaverseObjectHeader
+        // select just the attributes we need into a header and just enough objects for the desired page.
+        // The attribute filtering is pushed into SQL via the Where clause on predefinedSearchAttributeIds,
+        // so only the 3-5 display attributes are materialised rather than every attribute on every object.
+        var results = await sortedObjects.Skip(offset).Take(pageSize).Select(d => new MetaverseObjectHeader
         {
             Id = d.Id,
             Created = d.Created,
@@ -787,7 +789,7 @@ public class MetaverseRepository : IMetaverseRepository
             AttributeValues = d.AttributeValues
                 .Where(av => predefinedSearchAttributeIds.Contains(av.Attribute.Id))
                 .ToList()
-        }).ToList();
+        }).ToListAsync();
 
         // now with all the ids we know how many total results there are and so can populate paging info
         var pagedResultSet = new PagedResultSet<MetaverseObjectHeader>
