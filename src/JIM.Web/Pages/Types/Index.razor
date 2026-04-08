@@ -23,9 +23,8 @@
         RowClass="cursor-pointer" Loading="@_loading" LoadingProgressColor="Color.Primary">
         <ToolBarContent>
             <MudTooltip Text="@(_dense ? "Normal row spacing" : "Compact row spacing")" Placement="Placement.Top">
-                <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="OnToggleDense"
-                           StartIcon="@(_dense ? Icons.Material.Filled.DensitySmall : Icons.Material.Filled.DensityMedium)"
-                           Color="Color.Default" />
+                <MudIconButton Icon="@(_dense ? Icons.Material.Filled.DensitySmall : Icons.Material.Filled.DensityMedium)"
+                               Variant="Variant.Filled" Color="Color.Default" Size="Size.Small" OnClick="OnToggleDense" />
             </MudTooltip>
             <MudSpacer />
             <MudTextField T="string" ValueChanged="@(s => OnSearch(s))" Variant="Variant.Outlined" Placeholder="Search..." Margin="Margin.Dense"
