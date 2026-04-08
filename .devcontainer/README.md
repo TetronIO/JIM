@@ -166,6 +166,7 @@ jim-restart        # Recreate stack (re-reads .env, no rebuild)
 ### Docker Builds (rebuild + start)
 ```bash
 jim-build          # Rebuild all services + start
+jim-build-light    # Start db + Keycloak, run JIM.Web natively
 jim-build-web      # Rebuild jim.web + start
 jim-build-worker   # Rebuild jim.worker + start
 jim-build-scheduler # Rebuild jim.scheduler + start
@@ -195,10 +196,9 @@ JIM supports two different development workflows. Choose the one that fits your 
 
 **Use when:** You want to actively debug code with breakpoints and hot reload.
 
-1. Start the database: `jim-db`
-2. Press `F5` in VS Code and select a debug configuration
-3. Set breakpoints and debug your code
-4. Services run locally on your machine with full debugging support
+1. Run `jim-build-light` (starts db + Keycloak, waits for readiness, launches JIM.Web natively)
+2. Set breakpoints and debug your code
+3. Services run locally on your machine with full debugging support
 
 **Advantages:**
 - Full debugging capabilities (breakpoints, step-through, watch variables)

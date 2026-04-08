@@ -723,6 +723,22 @@ public class MetaverseServer
     }
 
     /// <summary>
+    /// Gets a paginated list of lightweight metaverse object headers with only the attributes defined
+    /// in the PredefinedSearch projected directly in SQL for optimum performance at scale.
+    /// </summary>
+    public async Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectHeadersPagedAsync(
+        PredefinedSearch predefinedSearch,
+        int page = 1,
+        int pageSize = 20,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectHeadersPagedAsync(
+            predefinedSearch, page, pageSize, searchQuery, sortBy, sortDescending);
+    }
+
+    /// <summary>
     /// Gets a paginated list of metaverse objects with optional filtering by type, search query, or specific attribute value.
     /// </summary>
     /// <param name="page">The page number (1-based).</param>

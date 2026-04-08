@@ -75,6 +75,14 @@
 - Only use smaller sizes (`Typo.body2`, `Size.Small`, etc.) when explicitly requested by the user
 - Users prefer readable, appropriately-sized UI elements by default
 
+**MudTable Row Density:**
+- All new data tables should include a density toggle allowing users to switch between normal and compact row spacing
+- Use `Dense="@_dense"` and `Class="@(_dense ? "dense-body-only" : "")"` on the `MudTable`; the `dense-body-only` CSS class keeps header rows at normal height while body rows are compact
+- Add a `MudButton` with `StartIcon` (not `MudIconButton`, which renders circular) in the `ToolBarContent` to toggle density, using `Icons.Material.Filled.DensitySmall` / `DensityMedium`
+- Persist the preference via `IUserPreferenceService.GetTableDenseAsync()` / `SetTableDenseAsync()` (stored in browser localStorage under a single shared key, so the setting applies globally across all pages)
+- Default to normal spacing (`_dense = false`); load the saved preference in `OnAfterRenderAsync`
+- See `Pages/Types/Index.razor` for the reference implementation
+
 ## Architecture Quick Reference
 
 **Metaverse Pattern:**

@@ -80,18 +80,51 @@
             </MudItem>
     </MudStack>
 
-    <MudTable @ref="_table" T="Activity" ServerData="ServerReload" @bind-CurrentPage="_currentPage"
-              RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged"
+    @* Top pager *@
+    <div class="d-flex justify-space-between align-center flex-wrap pa-2"
+         style="border: 1px solid var(--mud-palette-table-lines); border-bottom: none; border-radius: var(--mud-default-borderradius) var(--mud-default-borderradius) 0 0;">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Rows per page:</MudText>
+            <MudSelect T="int" Value="@_rowsPerPage" ValueChanged="OnRowsPerPageChanged"
+                       Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense"
+                       Style="width: 70px;" Class="mt-0">
+                <MudSelectItem T="int" Value="10">10</MudSelectItem>
+                <MudSelectItem T="int" Value="25">25</MudSelectItem>
+                <MudSelectItem T="int" Value="50">50</MudSelectItem>
+                <MudSelectItem T="int" Value="100">100</MudSelectItem>
+            </MudSelect>
+        </MudStack>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                @{ var topFirst = _totalItems == 0 ? 0 : _currentPage * _rowsPerPage + 1; }
+                @{ var topLast = Math.Min((_currentPage + 1) * _rowsPerPage, _totalItems); }
+                @topFirst-@topLast of @_totalItems
+            </MudText>
+            <MudPagination Selected="@(_currentPage + 1)"
+                           SelectedChanged="OnPageChanged"
+                           Count="@TotalPages"
+                           BoundaryCount="1" MiddleCount="3"
+                           ShowFirstButton="true" ShowLastButton="true"
+                           Rectangular="true" DropShadow="false" Size="Size.Small" />
+        </MudStack>
+    </div>
+
+    <MudTable T="Activity" Items="@_items"
               Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
-              Loading="@false"
-              Class="no-loading-bar"
-              Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer">
+              Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer"
+              Class="dense-body-only no-border-radius">
         <HeaderContent>
             <MudTh>
-                <MudText Typo="Typo.button">Connected System</MudText>
+                <MudTableSortLabel SortLabel="connectedsystem" T="Activity"
+                                   SortBy="@(new Func<Activity, object>(_ => 0))"
+                                   SortDirectionChanged="@(dir => OnSortChanged("connectedsystem", dir))">
+                    <MudText Typo="Typo.button">Connected System</MudText>
+                </MudTableSortLabel>
             </MudTh>
             <MudTh>
-                <MudTableSortLabel SortLabel="target" T="Activity">
+                <MudTableSortLabel SortLabel="target" T="Activity"
+                                   SortBy="@(new Func<Activity, object>(_ => 0))"
+                                   SortDirectionChanged="@(dir => OnSortChanged("target", dir))">
                     <MudText Typo="Typo.button">Run Profile</MudText>
                 </MudTableSortLabel>
             </MudTh>
@@ -99,22 +132,31 @@
                 <MudText Typo="Typo.button">Outcomes</MudText>
             </MudTh>
             <MudTh>
-                <MudTableSortLabel SortLabel="initiatedby" T="Activity">
+                <MudTableSortLabel SortLabel="initiatedby" T="Activity"
+                                   SortBy="@(new Func<Activity, object>(_ => 0))"
+                                   SortDirectionChanged="@(dir => OnSortChanged("initiatedby", dir))">
                     <MudText Typo="Typo.button">Initiated By</MudText>
                 </MudTableSortLabel>
             </MudTh>
             <MudTh>
-                <MudTableSortLabel SortLabel="status" T="Activity">
+                <MudTableSortLabel SortLabel="status" T="Activity"
+                                   SortBy="@(new Func<Activity, object>(_ => 0))"
+                                   SortDirectionChanged="@(dir => OnSortChanged("status", dir))">
                     <MudText Typo="Typo.button">Status</MudText>
                 </MudTableSortLabel>
             </MudTh>
             <MudTh>
-                <MudTableSortLabel SortLabel="created" T="Activity" InitialDirection="SortDirection.Descending">
+                <MudTableSortLabel SortLabel="created" T="Activity"
+                                   InitialDirection="SortDirection.Descending"
+                                   SortBy="@(new Func<Activity, object>(_ => 0))"
+                                   SortDirectionChanged="@(dir => OnSortChanged("created", dir))">
                     <MudText Typo="Typo.button">Executed</MudText>
                 </MudTableSortLabel>
             </MudTh>
             <MudTh>
-                <MudTableSortLabel SortLabel="executiontime" T="Activity">
+                <MudTableSortLabel SortLabel="executiontime" T="Activity"
+                                   SortBy="@(new Func<Activity, object>(_ => 0))"
+                                   SortDirectionChanged="@(dir => OnSortChanged("executiontime", dir))">
                     <MudText Typo="Typo.button">Duration</MudText>
                 </MudTableSortLabel>
             </MudTh>
@@ -364,10 +406,36 @@
         <NoRecordsContent>
             No execution history to display.
         </NoRecordsContent>
-        <PagerContent>
-            <MudTablePager />
-        </PagerContent>
     </MudTable>
+
+    @* Bottom pager *@
+    <div class="d-flex justify-space-between align-center flex-wrap pa-2"
+         style="border: 1px solid var(--mud-palette-table-lines); border-top: none; border-radius: 0 0 var(--mud-default-borderradius) var(--mud-default-borderradius);">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Rows per page:</MudText>
+            <MudSelect T="int" Value="@_rowsPerPage" ValueChanged="OnRowsPerPageChanged"
+                       Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense"
+                       Style="width: 70px;" Class="mt-0">
+                <MudSelectItem T="int" Value="10">10</MudSelectItem>
+                <MudSelectItem T="int" Value="25">25</MudSelectItem>
+                <MudSelectItem T="int" Value="50">50</MudSelectItem>
+                <MudSelectItem T="int" Value="100">100</MudSelectItem>
+            </MudSelect>
+        </MudStack>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                @{ var bottomFirst = _totalItems == 0 ? 0 : _currentPage * _rowsPerPage + 1; }
+                @{ var bottomLast = Math.Min((_currentPage + 1) * _rowsPerPage, _totalItems); }
+                @bottomFirst-@bottomLast of @_totalItems
+            </MudText>
+            <MudPagination Selected="@(_currentPage + 1)"
+                           SelectedChanged="OnPageChanged"
+                           Count="@TotalPages"
+                           BoundaryCount="1" MiddleCount="3"
+                           ShowFirstButton="true" ShowLastButton="true"
+                           Rectangular="true" DropShadow="false" Size="Size.Small" />
+        </MudStack>
+    </div>
 }
 
 @* Activity Detail Panel with Overlay *@
@@ -700,7 +768,6 @@
 </div>
 
 @code {
-    private MudTable<Activity>? _table;
     private int _currentPage;
     private int _rowsPerPage = 10;
     private bool _preferencesLoaded;
@@ -709,11 +776,14 @@
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
     private bool _pollingPaused;
 
+    // Table data managed directly (no ServerData) to avoid MudTable's internal loading flicker
+    private List<Activity> _items = [];
+    private int _totalItems;
+    private string _currentSortLabel = "created";
+    private bool _currentSortDescending = true;
+
     // Snapshot of last-displayed data for change detection during polling
     private string? _lastDataFingerprint;
-
-    // Cached polling result to avoid ReloadServerData() flicker
-    private TableData<Activity>? _pollingCache;
 
     // Filter state
     private ActivityFilterOptions? _filterOptions;
@@ -723,13 +793,24 @@
     private string? _filterInitiatedBy;
     private bool _filterHasChildren;
 
+    private int TotalPages => _totalItems == 0 ? 1 : (int)Math.Ceiling((double)_totalItems / _rowsPerPage);
+
     protected override async Task OnInitializedAsync()
     {
-        // Load filter options (distinct connected systems and run profiles)
+        // Restore sort state from URL query string (e.g. ?sort=status&dir=asc)
+        var uri = new Uri(NavManager.Uri);
+        var queryParams = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        if (!string.IsNullOrEmpty(queryParams["sort"]))
+        {
+            _currentSortLabel = queryParams["sort"]!;
+            _currentSortDescending = queryParams["dir"] != "asc";
+        }
+
+        // Load filter options (data load deferred until preferences are loaded in OnAfterRenderAsync)
         using var jim = JimFactory.Create();
         _filterOptions = await jim.Activities.GetWorkerTaskActivityFilterOptionsAsync();
 
-        // Setup polling for auto-refresh, only reloading when data has actually changed
+        // Setup polling for auto-refresh, only updating when data has actually changed
         var token = _pollingCancellationTokenSource.Token;
         _ = Task.Run(async () =>
         {
@@ -740,7 +821,7 @@
                     await Task.Delay(TimeSpan.FromSeconds(1), token);
 
                     // Only auto-refresh when on page 1, panel is closed, and not paused
-                    if (_table == null || _currentPage != 0 || _panelOpen || _pollingPaused)
+                    if (_currentPage != 0 || _panelOpen || _pollingPaused)
                         continue;
 
                     // Fetch current data and compare with what's displayed
@@ -751,19 +832,17 @@
 
                     using var pollJim = JimFactory.Create();
                     var result = await pollJim.Activities.GetWorkerTaskActivitiesAsync(
-                        1, _rowsPerPage, connectedSystems, runProfiles, statuses, initiatedBy, "created", true,
+                        1, _rowsPerPage, connectedSystems, runProfiles, statuses, initiatedBy,
+                        _currentSortLabel, _currentSortDescending,
                         _filterHasChildren ? true : null);
 
                     var fingerprint = BuildFingerprint(result.Results);
                     if (fingerprint != _lastDataFingerprint)
                     {
                         _lastDataFingerprint = fingerprint;
-                        _pollingCache = new TableData<Activity>
-                        {
-                            TotalItems = result.TotalResults,
-                            Items = result.Results
-                        };
-                        await InvokeAsync(() => _table!.ReloadServerData());
+                        _items = result.Results;
+                        _totalItems = result.TotalResults;
+                        await InvokeAsync(StateHasChanged);
                     }
                 }
                 catch (TaskCanceledException)
@@ -787,6 +866,7 @@
                 var preferredSize = await PreferenceService.GetRowsPerPageAsync();
                 _rowsPerPage = preferredSize;
                 _preferencesLoaded = true;
+                await LoadDataAsync();
                 StateHasChanged();
             }
             catch
@@ -801,50 +881,64 @@
         _pollingCancellationTokenSource.Cancel();
     }
 
-    private async Task OnRowsPerPageChanged(int newSize)
+    private async Task LoadDataAsync()
     {
-        _rowsPerPage = newSize;
-        await PreferenceService.SetRowsPerPageAsync(newSize);
-    }
-
-    private async Task<TableData<Activity>> ServerReload(TableState state, CancellationToken token)
-    {
-        // If the polling loop already fetched fresh data, use it directly to avoid flicker
-        if (_pollingCache != null)
-        {
-            var cached = _pollingCache;
-            _pollingCache = null;
-            return cached;
-        }
-
-        using var jim = JimFactory.Create();
-        var page = state.Page + 1;
-        var sortDescending = state.SortDirection == SortDirection.Descending;
-
-        // Get activities filtered for worker tasks
         var connectedSystems = _filterConnectedSystems.Any() ? _filterConnectedSystems : null;
         var runProfiles = _filterRunProfiles.Any() ? _filterRunProfiles : null;
         var statuses = _filterStatuses.Any() ? _filterStatuses : null;
         var initiatedBy = string.IsNullOrWhiteSpace(_filterInitiatedBy) ? null : _filterInitiatedBy;
 
+        using var jim = JimFactory.Create();
         var result = await jim.Activities.GetWorkerTaskActivitiesAsync(
-            page,
-            state.PageSize,
+            _currentPage + 1,
+            _rowsPerPage,
             connectedSystems,
             runProfiles,
             statuses,
             initiatedBy,
-            state.SortLabel,
-            sortDescending,
+            _currentSortLabel,
+            _currentSortDescending,
             _filterHasChildren ? true : null);
 
+        _items = result.Results;
+        _totalItems = result.TotalResults;
         _lastDataFingerprint = BuildFingerprint(result.Results);
 
-        return new TableData<Activity>
+        // Clamp page if it exceeds available pages (e.g. after a filter reduces results)
+        if (_currentPage > 0 && _currentPage >= TotalPages)
         {
-            TotalItems = result.TotalResults,
-            Items = result.Results
-        };
+            _currentPage = Math.Max(0, TotalPages - 1);
+            await LoadDataAsync();
+        }
+    }
+
+    private async Task OnPageChanged(int page)
+    {
+        _currentPage = page - 1; // MudPagination is 1-based, we use 0-based
+        await LoadDataAsync();
+    }
+
+    private async Task OnRowsPerPageChanged(int newSize)
+    {
+        _rowsPerPage = newSize;
+        _currentPage = 0;
+        await PreferenceService.SetRowsPerPageAsync(newSize);
+        await LoadDataAsync();
+    }
+
+    private async Task OnSortChanged(string sortLabel, SortDirection direction)
+    {
+        _currentSortLabel = sortLabel;
+        _currentSortDescending = direction == SortDirection.Descending;
+        _currentPage = 0;
+        await LoadDataAsync();
+
+        // Persist sort state in URL query string so it survives page reload
+        var uri = new Uri(NavManager.Uri);
+        var queryParams = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        queryParams["sort"] = sortLabel;
+        queryParams["dir"] = _currentSortDescending ? "desc" : "asc";
+        NavManager.NavigateTo($"{uri.AbsolutePath}?{queryParams}", replace: true);
     }
 
     /// <summary>
@@ -858,34 +952,39 @@
             $"{a.Id}:{a.Status}:{a.ObjectsProcessed},{a.ObjectsToProcess},{a.TotalAdded},{a.TotalUpdated},{a.TotalDeleted},{a.TotalProjected},{a.TotalJoined},{a.TotalAttributeFlows},{a.TotalDisconnected},{a.TotalDriftCorrections},{a.TotalProvisioned},{a.TotalExported},{a.TotalDeprovisioned},{a.TotalErrors}"));
     }
 
-    private void OnConnectedSystemFilterChanged(IReadOnlyCollection<string> values)
+    private async Task OnConnectedSystemFilterChanged(IReadOnlyCollection<string> values)
     {
         _filterConnectedSystems = values;
-        _table?.ReloadServerData();
+        _currentPage = 0;
+        await LoadDataAsync();
     }
 
-    private void OnRunProfileFilterChanged(IReadOnlyCollection<string> values)
+    private async Task OnRunProfileFilterChanged(IReadOnlyCollection<string> values)
     {
         _filterRunProfiles = values;
-        _table?.ReloadServerData();
+        _currentPage = 0;
+        await LoadDataAsync();
     }
 
-    private void OnStatusFilterChanged(IReadOnlyCollection<ActivityStatus> values)
+    private async Task OnStatusFilterChanged(IReadOnlyCollection<ActivityStatus> values)
     {
         _filterStatuses = values;
-        _table?.ReloadServerData();
+        _currentPage = 0;
+        await LoadDataAsync();
     }
 
-    private void OnInitiatedByFilterChanged(string text)
+    private async Task OnInitiatedByFilterChanged(string text)
     {
         _filterInitiatedBy = text;
-        _table?.ReloadServerData();
+        _currentPage = 0;
+        await LoadDataAsync();
     }
 
-    private void OnHasChildrenFilterChanged(bool value)
+    private async Task OnHasChildrenFilterChanged(bool value)
     {
         _filterHasChildren = value;
-        _table?.ReloadServerData();
+        _currentPage = 0;
+        await LoadDataAsync();
     }
 
     private static string GetMultiSelectText(IReadOnlyList<string> selectedValues)

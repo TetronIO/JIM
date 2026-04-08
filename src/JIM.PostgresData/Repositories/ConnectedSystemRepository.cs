@@ -449,7 +449,18 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (pageSize > 100)
             pageSize = 100;
 
+        // Pre-resolve displayName attribute IDs for this connected system to avoid repeated
+        // ILike string comparisons in the search, sort, and projection clauses.
+        // Each object type in the connected system may have its own "displayname" attribute.
+        var displayNameAttributeIds = await Repository.Database.ConnectedSystemAttributes
+            .AsNoTracking()
+            .Where(a => a.ConnectedSystemObjectType.ConnectedSystem.Id == connectedSystemId &&
+                        EF.Functions.ILike(a.Name, "displayname"))
+            .Select(a => a.Id)
+            .ToListAsync();
+
         var query = Repository.Database.ConnectedSystemObjects
+            .AsNoTracking() // Read-only query, no change tracking needed
             .Where(cso => cso.ConnectedSystem.Id == connectedSystemId);
 
         // Apply status filter if specified
@@ -488,9 +499,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         {
             var searchPattern = $"%{searchQuery}%";
             query = query.Where(cso =>
-                // Search display name
+                // Search display name (using pre-resolved attribute IDs instead of ILike on name)
                 cso.AttributeValues.Any(av =>
-                    EF.Functions.ILike(av.Attribute.Name, "displayname") &&
+                    displayNameAttributeIds.Contains(av.AttributeId) &&
                     av.StringValue != null &&
                     EF.Functions.ILike(av.StringValue, searchPattern)) ||
                 // Search external ID (primary)
@@ -529,11 +540,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     .FirstOrDefault()),
             "displayname" => sortDescending
                 ? query.OrderByDescending(cso => cso.AttributeValues
-                    .Where(av => EF.Functions.ILike(av.Attribute.Name, "displayname"))
+                    .Where(av => displayNameAttributeIds.Contains(av.AttributeId))
                     .Select(av => av.StringValue)
                     .FirstOrDefault())
                 : query.OrderBy(cso => cso.AttributeValues
-                    .Where(av => EF.Functions.ILike(av.Attribute.Name, "displayname"))
+                    .Where(av => displayNameAttributeIds.Contains(av.AttributeId))
                     .Select(av => av.StringValue)
                     .FirstOrDefault()),
             "type" => sortDescending
@@ -577,9 +588,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 Status = cso.Status,
                 TypeId = cso.Type.Id,
                 TypeName = cso.Type.Name,
-                DisplayName = cso.AttributeValues.Any(av => EF.Functions.ILike(av.Attribute.Name, "displayname"))
-                    ? cso.AttributeValues.Single(av => EF.Functions.ILike(av.Attribute.Name, "displayname")).StringValue
-                    : null,
+                // Use pre-resolved attribute IDs and single FirstOrDefault instead of Any+Single
+                DisplayName = cso.AttributeValues
+                    .Where(av => displayNameAttributeIds.Contains(av.AttributeId))
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault(),
                 ExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.ExternalIdAttributeId),
                 ExternalIdAttributeName = cso.AttributeValues.Where(av => av.Attribute.Id == cso.ExternalIdAttributeId).Select(av => av.Attribute.Name).FirstOrDefault(),
                 SecondaryExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.SecondaryExternalIdAttributeId),
@@ -587,9 +600,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 // Pending export info - only show if CSO doesn't already have a confirmed value
                 HasPendingExport = pe != null,
                 PendingExportId = pe != null ? pe.Id : null,
-                PendingDisplayName = pe != null && !cso.AttributeValues.Any(av => EF.Functions.ILike(av.Attribute.Name, "displayname"))
+                PendingDisplayName = pe != null && !cso.AttributeValues.Any(av => displayNameAttributeIds.Contains(av.AttributeId))
                     ? pe.AttributeValueChanges
-                        .Where(avc => EF.Functions.ILike(avc.Attribute.Name, "displayname") || EF.Functions.ILike(avc.Attribute.Name, "cn"))
+                        .Where(avc => displayNameAttributeIds.Contains(avc.AttributeId) || EF.Functions.ILike(avc.Attribute.Name, "cn"))
                         .Select(avc => avc.StringValue)
                         .FirstOrDefault()
                     : null,

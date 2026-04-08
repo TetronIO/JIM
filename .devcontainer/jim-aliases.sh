@@ -39,6 +39,7 @@ Docker Stack Management (auto-kills local JIM processes):
 
 Docker Builds (auto-kills local JIM processes, rebuild + start):
   jim-build          - Rebuild all services + start
+  jim-build-light    - Start db + Keycloak, run JIM.Web natively
   jim-build-web      - Rebuild jim.web + start
   jim-build-worker   - Rebuild jim.worker + start
   jim-build-scheduler - Rebuild jim.scheduler + start
@@ -203,6 +204,27 @@ _jim_keycloak_bridge() {
   fi
 }
 
+# Wait for the Keycloak container to report healthy (used by jim-build-light).
+# Polls docker health status rather than curling a port because Keycloak's
+# health endpoint (port 9000) is not exposed to the host.
+_jim_wait_keycloak() {
+  echo "Waiting for Keycloak to be ready..."
+  local attempts=0
+  while [ $attempts -lt 60 ]; do
+    local health_status
+    health_status=$(docker inspect --format='{{.State.Health.Status}}' jim.keycloak 2>/dev/null || echo "not found")
+    if [ "$health_status" = "healthy" ]; then
+      echo "Keycloak is ready."
+      return 0
+    fi
+    attempts=$((attempts + 1))
+    sleep 2
+  done
+  echo "WARNING: Keycloak did not become healthy within 120 seconds. JIM.Web may fail to start."
+  echo "Check logs with: jim-keycloak-logs"
+  return 1
+}
+
 # Kill any locally-running JIM .NET processes (jim-web, jim-worker, jim-scheduler)
 # so they don't hold ports that Docker containers need to bind
 _jim_kill_local() {
@@ -216,7 +238,7 @@ _jim_kill_local() {
 }
 
 # Clear any previous aliases before defining functions (zsh cannot redefine alias as function)
-unalias jim-stack jim-stack-logs jim-stack-down jim-restart jim-build jim-build-web jim-build-worker jim-build-scheduler jim-cleanup jim-reset jim-db jim-db-stop jim-db-logs jim-keycloak jim-keycloak-stop jim-keycloak-logs 2>/dev/null || true
+unalias jim-stack jim-stack-logs jim-stack-down jim-restart jim-build jim-build-light jim-build-web jim-build-worker jim-build-scheduler jim-cleanup jim-reset jim-db jim-db-stop jim-db-logs jim-keycloak jim-keycloak-stop jim-keycloak-logs 2>/dev/null || true
 
 # Docker stack management
 jim-stack() {
@@ -263,6 +285,13 @@ jim-build-scheduler() {
   _jim_kill_local
   local vs="$(_jim_version_suffix)"
   VERSION_SUFFIX="$vs" docker compose $(_jim_compose) build jim.scheduler && VERSION_SUFFIX="$vs" docker compose $(_jim_compose) up -d jim.scheduler
+}
+jim-build-light() {
+  _jim_kill_local
+  docker compose $(_jim_compose) up -d jim.database jim.keycloak
+  _jim_keycloak_bridge
+  _jim_wait_keycloak
+  jim-web
 }
 
 # Cleanup orphaned Docker resources to free disk space

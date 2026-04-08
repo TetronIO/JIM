@@ -3,6 +3,10 @@ site_url: https://tetronio.github.io/JIM
 repo_url: https://github.com/TetronIO/JIM
 repo_name: TetronIO/JIM
 
+exclude_docs: |
+  diagrams/structurizr/node_modules/
+  CLAUDE.md
+
 theme:
   name: material
   custom_dir: docs/overrides

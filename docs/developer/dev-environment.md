@@ -95,6 +95,7 @@ Rebuild and restart services after code changes:
 | Alias | Description |
 |-------|-------------|
 | `jim-build` | Build all services and start |
+| `jim-build-light` | Start db + Keycloak, run JIM.Web natively |
 | `jim-build-web` | Build jim.web and start |
 | `jim-build-worker` | Build jim.worker and start |
 | `jim-build-scheduler` | Build jim.scheduler and start |
@@ -115,10 +116,8 @@ Choose one of two workflows depending on your task:
 
 Best for active development with breakpoints and hot reload.
 
-1. Start the database: `jim-db`
-2. Start Keycloak (if needed): `jim-keycloak`
-3. Press **F5** in VS Code to launch with the debugger
-4. Access JIM at `https://localhost:7000`, Swagger at `/api/swagger`
+1. Run `jim-build-light` (starts db + Keycloak, waits for readiness, launches JIM.Web natively)
+2. Press **F5** in VS Code to launch with the debugger, or access JIM at `https://localhost:7000`, Swagger at `/api/swagger`
 
 ### Workflow 2: Full Docker Stack
 

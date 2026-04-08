@@ -959,22 +959,46 @@ static async Task UpdateUserAttributesFromClaimsAsync(JimApplication jim, Metave
 /// <summary>
 /// Fetches the OIDC discovery document from the authority's well-known endpoint.
 /// This provides IDP-agnostic endpoint discovery for any OIDC-compliant provider.
+/// Retries with exponential backoff to handle slow-starting identity providers (e.g. Keycloak).
 /// </summary>
 static async Task<OidcDiscoveryDocument> FetchOidcDiscoveryDocumentAsync(string authority)
 {
-    using var httpClient = new HttpClient();
+    const int maxRetries = 5;
+    const int baseDelayMs = 2000;
+
+    using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
     var discoveryUrl = $"{authority.TrimEnd('/')}/.well-known/openid-configuration";
 
     Log.Information("Fetching OIDC discovery document from {Url}", discoveryUrl);
 
-    var response = await httpClient.GetStringAsync(discoveryUrl);
-    var doc = JsonSerializer.Deserialize<OidcDiscoveryDocument>(response)
-        ?? throw new ApplicationException("Failed to parse OIDC discovery document");
+    var attempt = 0;
+    while (true)
+    {
+        try
+        {
+            var response = await httpClient.GetAsync(discoveryUrl);
+            response.EnsureSuccessStatusCode();
+            var content = await response.Content.ReadAsStringAsync();
+            var doc = JsonSerializer.Deserialize<OidcDiscoveryDocument>(content)
+                ?? throw new ApplicationException("Failed to parse OIDC discovery document");
 
-    Log.Information("OIDC discovery complete. Authorization endpoint: {AuthEndpoint}", doc.AuthorizationEndpoint);
-
-    return doc;
+            Log.Information("OIDC discovery complete. Authorisation endpoint: {AuthEndpoint}", doc.AuthorizationEndpoint);
+            return doc;
+        }
+        catch (Exception ex) when (IsTransientHttpError(ex) && attempt < maxRetries)
+        {
+            attempt++;
+            var delay = baseDelayMs * (int)Math.Pow(2, attempt - 1);
+            Log.Warning(
+                "OIDC discovery attempt {Attempt}/{MaxRetries} failed: {Message}. Retrying in {Delay}ms...",
+                attempt, maxRetries, ex.Message, delay);
+            await Task.Delay(delay);
+        }
+    }
 }
+
+static bool IsTransientHttpError(Exception ex) =>
+    ex is HttpRequestException or TaskCanceledException;
 
 /// <summary>
 /// Extracts the API audience from an OAuth scope.

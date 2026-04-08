@@ -122,6 +122,24 @@
 }
 
 /* ========================================
+   Quick Start navigation cards
+   ======================================== */
+
+.quickstart-cards {
+  margin-bottom: 2rem;
+}
+
+.quickstart-cards > ul > li {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.quickstart-cards > ul > li:hover {
+  border-color: var(--md-accent-fg-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* ========================================
    Theme-aware diagram switching
    ======================================== */
 

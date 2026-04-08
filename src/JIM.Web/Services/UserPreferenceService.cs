@@ -84,6 +84,18 @@ public interface IUserPreferenceService
     Task SetMvoDetailViewModeAsync(string viewMode);
 
     /// <summary>
+    /// Gets the user's preferred table density setting.
+    /// </summary>
+    /// <returns>True if the user prefers dense rows, false for normal spacing, null if no preference (default to normal).</returns>
+    Task<bool?> GetTableDenseAsync();
+
+    /// <summary>
+    /// Sets the user's preferred table density setting.
+    /// </summary>
+    /// <param name="isDense">Whether dense rows are enabled.</param>
+    Task SetTableDenseAsync(bool isDense);
+
+    /// <summary>
     /// Gets the expanded state for an attribute category panel on the MVO detail page.
     /// </summary>
     /// <param name="objectTypeId">The metaverse object type ID (stable across renames).</param>
@@ -110,6 +122,7 @@ public class UserPreferenceService : IUserPreferenceService
     private const string DarkModeKey = "darkMode";
     private const string DrawerPinnedKey = "drawerPinned";
     private const string MvoDetailViewModeKey = "mvoDetailViewMode";
+    private const string TableDenseKey = "tableDense";
     private const int DefaultRowsPerPage = 10;
 
     /// <summary>
@@ -383,6 +396,48 @@ public class UserPreferenceService : IUserPreferenceService
         try
         {
             await _jsRuntime.InvokeVoidAsync("jimPreferences.set", MvoDetailViewModeKey, viewMode);
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, ignore
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), ignore
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<bool?> GetTableDenseAsync()
+    {
+        try
+        {
+            var value = await _jsRuntime.InvokeAsync<string?>("jimPreferences.get", TableDenseKey);
+            return value switch
+            {
+                "true" => true,
+                "false" => false,
+                _ => null // No preference saved - default to normal
+            };
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, return default
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), return default
+        }
+
+        return null;
+    }
+
+    /// <inheritdoc />
+    public async Task SetTableDenseAsync(bool isDense)
+    {
+        try
+        {
+            await _jsRuntime.InvokeVoidAsync("jimPreferences.set", TableDenseKey, isDense ? "true" : "false");
         }
         catch (JSDisconnectedException)
         {

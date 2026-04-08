@@ -82,10 +82,18 @@ html[lang] a.mud-link.mud-primary-text:visited:hover {
     padding-top: 0;
 }
 
-/* Hide the built-in MudTable loading progress bar on tables that use polling-based refresh,
-   preventing a visible flicker every time the table silently reloads data. */
-.no-loading-bar .mud-table-loading {
-    display: none !important;
+/* Dense body rows with normal-height header: override the reduced padding Dense applies to thead cells */
+.dense-body-only.mud-table-dense .mud-table-head .mud-table-cell {
+    padding-top: 16px;
+    padding-bottom: 16px;
+}
+
+/* Strip all border-radius from MudTable when sandwiched between external pager bars */
+.mud-table.no-border-radius,
+.mud-table.no-border-radius .mud-table-container,
+.mud-table.no-border-radius .mud-table-head .mud-table-cell:first-child,
+.mud-table.no-border-radius .mud-table-head .mud-table-cell:last-child {
+    border-radius: 0 !important;
 }
 
 .mud-table-empty-row {

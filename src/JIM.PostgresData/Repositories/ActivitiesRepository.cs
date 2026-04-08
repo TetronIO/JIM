@@ -162,6 +162,9 @@ public class ActivityRepository : IActivityRepository
         // Apply sorting
         query = sortBy?.ToLower() switch
         {
+            "targetcontext" or "connectedsystem" => sortDescending
+                ? query.OrderByDescending(a => a.TargetContext)
+                : query.OrderBy(a => a.TargetContext),
             "targettype" or "type" => sortDescending
                 ? query.OrderByDescending(a => a.TargetType)
                 : query.OrderBy(a => a.TargetType),
@@ -295,6 +298,9 @@ public class ActivityRepository : IActivityRepository
         // Apply sorting
         query = sortBy?.ToLower() switch
         {
+            "targetcontext" or "connectedsystem" => sortDescending
+                ? query.OrderByDescending(a => a.TargetContext)
+                : query.OrderBy(a => a.TargetContext),
             "targettype" or "type" => sortDescending
                 ? query.OrderByDescending(a => a.TargetType)
                 : query.OrderBy(a => a.TargetType),

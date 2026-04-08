@@ -7,6 +7,26 @@ description: Deploy JIM using automated setup, manual Docker Compose, air-gapped
 
 This page covers all the ways to get JIM up and running. Choose the option that best fits your environment.
 
+<div class="grid cards quickstart-cards" markdown>
+
+-   :material-server:{ .lg .middle } **For Administrators**
+
+    ---
+
+    Deploy JIM in your environment using automated setup, Docker Compose, or air-gapped installation.
+
+    [:octicons-arrow-down-16: Jump to Administrator options](#for-administrators)
+
+-   :material-code-braces:{ .lg .middle } **For Developers**
+
+    ---
+
+    Get a full development environment with GitHub Codespaces (one click) or a local devcontainer.
+
+    [:octicons-arrow-down-16: Jump to Developer options](#for-developers)
+
+</div>
+
 ## For Administrators
 
 ### Option 1: Automated Setup (Recommended)
