@@ -3250,7 +3250,15 @@ public class ConnectedSystemServer
         activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
 
         foreach (var attributeValue in connectedSystemObject.AttributeValues)
+        {
+            // Skip attribute values without a loaded Attribute navigation property.
+            // This occurs for provisioning CSOs where attribute values have AttributeId set
+            // but the navigation property is not loaded (e.g., after bulk persistence with AsNoTracking).
+            if (attributeValue.Attribute == null)
+                continue;
+
             AddChangeAttributeValueObject(change, attributeValue, ValueChangeType.Add);
+        }
     }
 
     /// <summary>
