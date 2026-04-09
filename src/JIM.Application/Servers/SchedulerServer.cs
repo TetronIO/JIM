@@ -38,11 +38,6 @@ public class SchedulerServer
         return await Application.Repository.Scheduling.GetScheduleWithStepsAsync(id);
     }
 
-    public async Task<Schedule?> GetScheduleWithStepsAsNoTrackingAsync(Guid id)
-    {
-        return await Application.Repository.Scheduling.GetScheduleWithStepsAsNoTrackingAsync(id);
-    }
-
     public async Task<List<Schedule>> GetAllSchedulesAsync()
     {
         return await Application.Repository.Scheduling.GetAllSchedulesAsync();

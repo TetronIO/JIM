@@ -453,14 +453,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // ILike string comparisons in the search, sort, and projection clauses.
         // Each object type in the connected system may have its own "displayname" attribute.
         var displayNameAttributeIds = await Repository.Database.ConnectedSystemAttributes
-            .AsNoTracking()
             .Where(a => a.ConnectedSystemObjectType.ConnectedSystem.Id == connectedSystemId &&
                         EF.Functions.ILike(a.Name, "displayname"))
             .Select(a => a.Id)
             .ToListAsync();
 
         var query = Repository.Database.ConnectedSystemObjects
-            .AsNoTracking() // Read-only query, no change tracking needed
             .Where(cso => cso.ConnectedSystem.Id == connectedSystemId);
 
         // Apply status filter if specified
@@ -1116,7 +1114,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id)
     {
+        // AsTracking required: Include path CSO -> AttributeValues -> ReferenceValue(CSO) creates a
+        // self-referencing cycle that EF Core forbids in no-tracking queries.
         return await Repository.Database.ConnectedSystemObjects
+            .AsTracking()
             .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
             .Include(cso => cso.Type)
             .Include(cso => cso.AttributeValues)
@@ -1188,7 +1189,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ToHashSet();
 
         // Load all SVA values (including referenced CSO display info for bounded set)
+        // AsTracking required: Include path AttributeValue -> ReferenceValue(CSO) -> AttributeValues creates a cycle.
         var svaValues = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
+            .AsTracking()
             .AsSplitQuery()
             .Where(av => av.ConnectedSystemObject.Id == id && !multiValuedAttributeIds.Contains(av.AttributeId))
             .Include(av => av.Attribute)
@@ -1203,7 +1206,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var cappedMvaValues = new List<ConnectedSystemObjectAttributeValue>();
         foreach (var attrId in multiValuedAttributeIds)
         {
+            // AsTracking required: Include path AttributeValue -> ReferenceValue(CSO) -> AttributeValues creates a cycle.
             var values = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
+                .AsTracking()
                 .AsSplitQuery()
                 .Where(av => av.ConnectedSystemObject.Id == id && av.AttributeId == attrId)
                 .OrderBy(av => av.Id)
@@ -1253,7 +1258,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         var totalCount = await query.CountAsync();
 
+        // AsTracking required: Include path AttributeValue -> ReferenceValue(CSO) -> AttributeValues creates a cycle.
         var values = await query
+            .AsTracking()
             .AsSplitQuery()
             .OrderBy(av => av.Id)
             .Skip((page - 1) * pageSize)
@@ -1406,7 +1413,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // - Secondary external ID (for PendingProvisioning CSOs awaiting confirming import)
         // Using AsNoTracking since this is read-only data for the cache index.
         var csos = await Repository.Database.ConnectedSystemObjects
-            .AsNoTracking()
             .Include(cso => cso.AttributeValues)
             .Where(cso => cso.ConnectedSystemId == connectedSystemId)
             .Select(cso => new
@@ -1488,7 +1494,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // The save phase uses raw SQL for parent CSO rows and explicit add/remove for attribute
         // values, so change tracking is not required during import processing.
         return await Repository.Database.ConnectedSystemObjects
-            .AsNoTracking()
             .AsSplitQuery()
             .Include(cso => cso.Type)
             .ThenInclude(t => t.Attributes)
@@ -1513,7 +1518,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return new List<ConnectedSystemObject>();
 
         return await Repository.Database.ConnectedSystemObjects
-            .AsNoTracking()
             .AsSplitQuery()
             .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.Attribute)
@@ -2160,6 +2164,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // in the application layer), otherwise use the passed-in entity.
         // This avoids identity conflicts when the caller's entity came from a different context.
         var tracked = await Repository.Database.ConnectedSystemRunProfiles
+            .AsTracking()
             .FirstOrDefaultAsync(q => q.Id == runProfile.Id);
 
         if (tracked == null)
@@ -2174,6 +2179,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Re-fetch the tracked entity to handle callers that use a different DbContext
         // (e.g. Blazor pages that create a fresh JimApplication per action).
         var tracked = await Repository.Database.ConnectedSystemRunProfiles
+            .AsTracking()
             .FirstOrDefaultAsync(q => q.Id == runProfile.Id);
 
         if (tracked == null)
@@ -2232,7 +2238,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // EvaluatePendingExportConfirmation are persisted through separate batch methods
         // (DeletePendingExportsAsync, UpdatePendingExportsAsync), not EF change tracking.
         return await Repository.Database.PendingExports
-            .AsNoTracking()
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)
@@ -2251,7 +2256,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var now = DateTime.UtcNow;
 
         return await Repository.Database.PendingExports
-            .AsNoTracking()
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)
@@ -2281,7 +2285,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take)
     {
         return await ExecutableExportsQuery(connectedSystemId)
-            .AsNoTracking()
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)
@@ -2385,7 +2388,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return [];
 
         return await Repository.Database.PendingExports
-            .AsNoTracking()
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)
@@ -2932,9 +2934,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         // Lightweight query: only load AttributeValueChanges with Attribute (needed for reconciliation comparison).
         // Skip ConnectedSystemObject (caller already has CSOs in memory), ConnectedSystem, and SourceMetaverseObject.
-        // AsNoTracking avoids identity resolution overhead against the large tracked entity graph from the import phase.
         var pendingExports = await Repository.Database.PendingExports
-            .AsNoTracking()
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)
             .Where(pe => pe.ConnectedSystemObjectId != null && csoIdList.Contains(pe.ConnectedSystemObjectId.Value))
@@ -3003,7 +3003,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Single bulk query: load ALL pending exports for this connected system in one round-trip.
         // Far more efficient than per-page WHERE IN queries for large-scale reconciliation (100K+ CSOs).
         var pendingExports = await Repository.Database.PendingExports
-            .AsNoTracking()
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)
             .Where(pe => pe.ConnectedSystemId == connectedSystemId && pe.ConnectedSystemObjectId != null)
@@ -3065,7 +3064,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId)
     {
         var csoIdsWithExports = await Repository.Database.PendingExports
-            .AsNoTracking()
             .Where(pe => pe.ConnectedSystemId == connectedSystemId && pe.ConnectedSystemObjectId != null)
             .Select(pe => pe.ConnectedSystemObjectId!.Value)
             .Distinct()
@@ -3108,10 +3106,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return new Dictionary<Guid, ConnectedSystemObject>();
 
         // AsNoTracking: these CSOs are used for reference resolution display (snapshot/causality
-        // tree). Tracking them would cause identity conflicts during cross-page reference
+        // tree). Not tracking them avoids identity conflicts during cross-page reference
         // resolution when the same CSO is loaded by multiple flush operations.
         var csos = await Repository.Database.ConnectedSystemObjects
-            .AsNoTracking()
             .Include(cso => cso.Type)
             .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.Attribute)
@@ -3145,9 +3142,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         // AsNoTracking: these entities are used for read-only cache lookups during export evaluation.
         // They are never modified via SaveChanges — any CSO mutations go through separate batch methods.
-        // Avoiding tracking prevents these entities from accumulating in the change tracker across pages.
         var csos = await Repository.Database.ConnectedSystemObjects
-            .AsNoTracking()
             .Where(cso => cso.MetaverseObjectId.HasValue && systemIds.Contains(cso.ConnectedSystemId))
             .ToListAsync();
 
@@ -3171,7 +3166,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return new Dictionary<(Guid, int), ConnectedSystemObject>();
 
         var csos = await Repository.Database.ConnectedSystemObjects
-            .AsNoTracking()
             .Where(cso => cso.MetaverseObjectId.HasValue
                 && mvoIdList.Contains(cso.MetaverseObjectId.Value)
                 && systemIds.Contains(cso.ConnectedSystemId))
@@ -3195,10 +3189,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return [];
 
         // AsNoTracking: these entities are used for read-only no-net-change detection during export evaluation.
-        // They are never modified via SaveChanges. Avoiding tracking prevents accumulation in the change tracker.
+        // They are never modified via SaveChanges.
         return await Repository.Database.ConnectedSystemObjectAttributeValues
-            .AsNoTracking()
-            .Include(av => av.ConnectedSystemObject) // Required with AsNoTracking — EF won't auto-populate from tracked CSOs
+            .Include(av => av.ConnectedSystemObject)
             .Include(av => av.Attribute)
             .Include(av => av.ReferenceValue) // Include referenced CSO for no-net-change detection on reference attributes
             .Where(av => ids.Contains(av.ConnectedSystemObject.Id))

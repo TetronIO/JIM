@@ -54,7 +54,8 @@ public class TrustedCertificateRepository : ITrustedCertificateRepository
     public async Task UpdateAsync(TrustedCertificate certificate)
     {
         var existing = await Repository.Database.TrustedCertificates
-            .FindAsync(certificate.Id);
+            .AsTracking()
+            .SingleOrDefaultAsync(c => c.Id == certificate.Id);
 
         if (existing == null)
             throw new InvalidOperationException($"Certificate with ID {certificate.Id} not found.");
@@ -70,7 +71,8 @@ public class TrustedCertificateRepository : ITrustedCertificateRepository
     public async Task DeleteAsync(Guid id)
     {
         var certificate = await Repository.Database.TrustedCertificates
-            .FindAsync(id);
+            .AsTracking()
+            .SingleOrDefaultAsync(c => c.Id == id);
 
         if (certificate == null)
             throw new InvalidOperationException($"Certificate with ID {id} not found.");

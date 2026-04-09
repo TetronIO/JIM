@@ -61,7 +61,6 @@ public class TaskingRepository : ITaskingRepository
     {
         var workerTaskHeaders = new List<WorkerTaskHeader>();
         var workerTasks = await Repository.Database.WorkerTasks
-            .AsNoTracking()
             .Include(st => st.Activity)
             .Include(st => st.ScheduleExecution)
             .OrderByDescending(q => q.Timestamp)
@@ -157,7 +156,7 @@ public class TaskingRepository : ITaskingRepository
         {
             case ExampleDataTemplateWorkerTask dataGenerationTemplateWorkerTask:
             {
-                var dbExampleDataTemplateWorkerTask = await Repository.Database.ExampleDataTemplateWorkerTasks.Include(st => st.Activity).SingleOrDefaultAsync(q => q.Id == workerTask.Id);
+                var dbExampleDataTemplateWorkerTask = await Repository.Database.ExampleDataTemplateWorkerTasks.Include(st => st.Activity).AsTracking().SingleOrDefaultAsync(q => q.Id == workerTask.Id);
                 if (dbExampleDataTemplateWorkerTask == null)
                 {
                     Log.Error("UpdateWorkerTaskAsync: Could not retrieve a ExampleDataTemplateWorkerTask object to update.");
@@ -170,7 +169,7 @@ public class TaskingRepository : ITaskingRepository
             }
             case SynchronisationWorkerTask synchronisationWorkerTask:
             {
-                var dbSynchronisationWorkerTask = await Repository.Database.SynchronisationWorkerTasks.Include(st => st.Activity).SingleOrDefaultAsync(q => q.Id == workerTask.Id);
+                var dbSynchronisationWorkerTask = await Repository.Database.SynchronisationWorkerTasks.Include(st => st.Activity).AsTracking().SingleOrDefaultAsync(q => q.Id == workerTask.Id);
                 if (dbSynchronisationWorkerTask == null)
                 {
                     Log.Error("UpdateWorkerTaskAsync: Could not retrieve a SynchronisationWorkerTask object to update.");
@@ -189,7 +188,7 @@ public class TaskingRepository : ITaskingRepository
     public async Task DeleteWorkerTaskAsync(WorkerTask workerTask)
     {
         // re-retrieve the worker task to avoid issues with EF
-        var localWorkerTask = await Repository.Database.WorkerTasks.SingleOrDefaultAsync(q => q.Id == workerTask.Id);
+        var localWorkerTask = await Repository.Database.WorkerTasks.AsTracking().SingleOrDefaultAsync(q => q.Id == workerTask.Id);
         if (localWorkerTask != null)
         {
             Repository.Database.WorkerTasks.Remove(localWorkerTask);
@@ -248,6 +247,7 @@ public class TaskingRepository : ITaskingRepository
         // Fail the activities for all waiting tasks before deleting them
         var waitingTasks = await Repository.Database.WorkerTasks
             .Include(st => st.Activity)
+            .AsTracking()
             .Where(st => st.ScheduleExecutionId == scheduleExecutionId
                          && st.Status == WorkerTaskStatus.WaitingForPreviousStep)
             .ToListAsync();
@@ -331,7 +331,7 @@ public class TaskingRepository : ITaskingRepository
         {
             workerTask.Status = WorkerTaskStatus.Processing;
             workerTask.LastHeartbeat = DateTime.UtcNow;
-            var dbWorkerTask = await Repository.Database.WorkerTasks.SingleOrDefaultAsync(q => q.Id == workerTask.Id);
+            var dbWorkerTask = await Repository.Database.WorkerTasks.AsTracking().SingleOrDefaultAsync(q => q.Id == workerTask.Id);
             if (dbWorkerTask == null)
                 continue;
 

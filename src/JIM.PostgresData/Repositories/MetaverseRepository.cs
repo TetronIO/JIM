@@ -397,7 +397,9 @@ public class MetaverseRepository : IMetaverseRepository
             .ToHashSet();
 
         // Load all SVA values
+        // AsTracking required: Include path AttributeValue -> ReferenceValue(MVO) -> AttributeValues creates a cycle.
         var svaValues = await Repository.Database.Set<MetaverseObjectAttributeValue>()
+            .AsTracking()
             .AsSplitQuery()
             .Where(av => av.MetaverseObject.Id == id && !multiValuedAttributeIds.Contains(av.AttributeId))
             .Include(av => av.Attribute)
@@ -412,7 +414,9 @@ public class MetaverseRepository : IMetaverseRepository
         var cappedMvaValues = new List<MetaverseObjectAttributeValue>();
         foreach (var attrId in multiValuedAttributeIds)
         {
+            // AsTracking required: Include path AttributeValue -> ReferenceValue(MVO) -> AttributeValues creates a cycle.
             var values = await Repository.Database.Set<MetaverseObjectAttributeValue>()
+                .AsTracking()
                 .AsSplitQuery()
                 .Where(av => av.MetaverseObject.Id == id && av.AttributeId == attrId)
                 .OrderBy(av => av.Id)
@@ -552,7 +556,10 @@ public class MetaverseRepository : IMetaverseRepository
 
     public async Task<MetaverseObject?> GetMetaverseObjectByTypeAndAttributeAsync(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, string attributeValue)
     {
+        // AsTracking required: the Include path MetaverseObjectAttributeValue -> MetaverseObject -> AttributeValues
+        // creates a cycle that EF Core forbids in no-tracking queries (no identity resolution to break the cycle).
         var av = await Repository.Database.MetaverseObjectAttributeValues
+            .AsTracking()
             .Include(q => q.MetaverseObject)
             .ThenInclude(mo => mo.AttributeValues)
             .ThenInclude(av => av.Attribute)
@@ -675,7 +682,6 @@ public class MetaverseRepository : IMetaverseRepository
         // No AsSplitQuery: the query is paginated (max 100 rows) so cartesian explosion is bounded,
         // and AsSplitQuery can fail to correlate split queries correctly at scale.
         var objects = from o in Repository.Database.MetaverseObjects.
-                AsNoTracking(). // Read-only query, no change tracking needed
                 Include(mo => mo.Type).
                 Include(mo => mo.AttributeValues).
                 ThenInclude(av => av.Attribute).
@@ -1765,7 +1771,9 @@ public class MetaverseRepository : IMetaverseRepository
 
         var totalCount = await query.CountAsync();
 
+        // AsTracking required: Include path AttributeValue -> ReferenceValue(MVO) -> AttributeValues creates a cycle.
         var values = await query
+            .AsTracking()
             .AsSplitQuery()
             .OrderBy(av => av.Id)
             .Skip((page - 1) * pageSize)

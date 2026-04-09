@@ -81,7 +81,7 @@ public class ActivityRepository : IActivityRepository
             pageSize = 100;
 
         var query = Repository.Database.Activities
-            .AsNoTracking()
+
             .Where(a => a.ParentActivityId == null)
             .AsQueryable();
 
@@ -222,7 +222,7 @@ public class ActivityRepository : IActivityRepository
     public async Task<List<Activity>> GetChildActivitiesAsync(Guid parentActivityId)
     {
         return await Repository.Database.Activities
-            .AsNoTracking()
+
             .Where(a => a.ParentActivityId == parentActivityId)
             .OrderBy(a => a.Created)
             .ToListAsync();
@@ -232,7 +232,7 @@ public class ActivityRepository : IActivityRepository
     {
         var ids = activityIds.ToList();
         return await Repository.Database.Activities
-            .AsNoTracking()
+
             .Where(a => a.ParentActivityId != null && ids.Contains(a.ParentActivityId.Value))
             .GroupBy(a => a.ParentActivityId!.Value)
             .Select(g => new { ParentId = g.Key, Count = g.Count() })
@@ -397,7 +397,7 @@ public class ActivityRepository : IActivityRepository
         };
 
         return Repository.Database.Activities
-            .AsNoTracking()
+
             .Where(a => a.ParentActivityId == null)
             .Where(a => workerTaskTargetTypes.Contains(a.TargetType) && workerTaskOperations.Contains(a.TargetOperationType))
             .AsQueryable();
@@ -410,7 +410,7 @@ public class ActivityRepository : IActivityRepository
     public async Task<List<Activity>> GetActivitiesByScheduleExecutionAsync(Guid scheduleExecutionId)
     {
         return await Repository.Database.Activities
-            .AsNoTracking()
+
             .Where(a => a.ScheduleExecutionId == scheduleExecutionId)
             .OrderBy(a => a.ScheduleStepIndex)
             .ThenBy(a => a.Created)
@@ -420,7 +420,7 @@ public class ActivityRepository : IActivityRepository
     public async Task<List<Activity>> GetActivitiesByScheduleExecutionStepAsync(Guid scheduleExecutionId, int stepIndex)
     {
         return await Repository.Database.Activities
-            .AsNoTracking()
+
             .Where(a => a.ScheduleExecutionId == scheduleExecutionId && a.ScheduleStepIndex == stepIndex)
             .OrderBy(a => a.Created)
             .ToListAsync();
@@ -433,7 +433,7 @@ public class ActivityRepository : IActivityRepository
     public async Task<DateTime?> GetLastHistoryCleanupTimeAsync()
     {
         return await Repository.Database.Activities
-            .AsNoTracking()
+
             .Where(a => a.TargetType == ActivityTargetType.HistoryRetentionCleanup)
             .OrderByDescending(a => a.Created)
             .Select(a => (DateTime?)a.Created)
@@ -827,7 +827,10 @@ public class ActivityRepository : IActivityRepository
 
     public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id)
     {
+        // AsTracking required: multiple Include paths create cycles through ReferenceValue navigations
+        // (e.g. CSO -> AttributeValues -> ReferenceValue(CSO) -> AttributeValues).
         return await Repository.Database.ActivityRunProfileExecutionItems
+            .AsTracking()
             .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
             // CSO includes
             .Include(q => q.ConnectedSystemObject)

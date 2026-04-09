@@ -152,6 +152,7 @@ public class JimDbContext : DbContext
             // See issue #408 for the tracking item.
             // Transient failures are handled at the API level by GlobalExceptionHandler (HTTP 503).
             optionsBuilder.UseNpgsql(_connectionString)
+                .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
                 .ConfigureWarnings(warnings => warnings.Ignore(
                     Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning,
                     Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.MultipleCollectionIncludeWarning));

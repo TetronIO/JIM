@@ -59,7 +59,7 @@ public class ExampleDataRepository : IExampleDataRepository
 
     public async Task DeleteExampleDataSetAsync(int exampleDataSetId)
     {
-        var exampleDataSet = await Repository.Database.ExampleDataSets.Include(q => q.Values).SingleOrDefaultAsync(q => q.Id == exampleDataSetId);
+        var exampleDataSet = await Repository.Database.ExampleDataSets.Include(q => q.Values).AsTracking().SingleOrDefaultAsync(q => q.Id == exampleDataSetId);
         if (exampleDataSet == null)
         {
             Log.Warning("DeleteExampleDataSetAsync: No such ExampleDetaSet found to delete.");
@@ -210,6 +210,7 @@ public class ExampleDataRepository : IExampleDataRepository
         var template = await Repository.Database.ExampleDataTemplates.
             Include(t => t.ObjectTypes).
             ThenInclude(ot => ot.TemplateAttributes).
+            AsTracking().
             SingleOrDefaultAsync(t => t.Id == templateId);
         if (template == null)
         {

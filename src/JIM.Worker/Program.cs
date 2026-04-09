@@ -26,6 +26,7 @@ var host = Host.CreateDefaultBuilder(args)
         // DbContextFactory — each CreateDbContext() call gets a fresh connection (no concurrency issues)
         services.AddDbContextFactory<JimDbContext>(options =>
             options.UseNpgsql(connectionString)
+                .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
                 .ConfigureWarnings(warnings => warnings.Ignore(
                     Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning,
                     Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.MultipleCollectionIncludeWarning)));
