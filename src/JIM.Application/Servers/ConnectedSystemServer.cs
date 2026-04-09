@@ -3108,6 +3108,20 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Creates an "Added" change record for a single CSO linked to a specific RPEI.
+    /// Used for provisioning CSOs where the RPEI-to-CSO relationship is resolved externally
+    /// (e.g., via MVO ID lookup) rather than via <c>rpei.ConnectedSystemObject</c>.
+    /// </summary>
+    public void CreateChangeRecordForCso(
+        ConnectedSystemObject cso,
+        ActivityRunProfileExecutionItem rpei,
+        bool changeTrackingEnabled)
+    {
+        rpei.ConnectedSystemObjectId = cso.Id;
+        AddConnectedSystemObjectChange(cso, rpei, changeTrackingEnabled);
+    }
+
+    /// <summary>
     /// Links RPEI change records to CSOs before update. Pure business logic — no data access.
     /// Called by SyncServer before persisting CSO updates via ISyncRepository.
     /// </summary>

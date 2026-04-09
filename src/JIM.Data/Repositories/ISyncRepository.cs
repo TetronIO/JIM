@@ -515,6 +515,13 @@ public interface ISyncRepository
     /// </summary>
     Task CreateMetaverseObjectChangeDirectAsync(MetaverseObjectChange change);
 
+    /// <summary>
+    /// Persists pending MVO change records (and their attribute and value children) via raw SQL.
+    /// Used by sync processors to persist changes collected during page processing, bypassing the
+    /// EF change tracker which is cleared at page boundaries.
+    /// </summary>
+    Task PersistPendingMvoChangesAsync(List<MetaverseObjectChange> mvoChanges);
+
     #endregion
 
     #region Connected System Object — Singular Convenience Methods

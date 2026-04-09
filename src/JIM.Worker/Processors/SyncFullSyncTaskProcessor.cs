@@ -256,6 +256,9 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // Flush this page's RPEIs via bulk insert before updating progress
                 await FlushRpeisAsync();
 
+                // Persist MVO change records via raw SQL before clearing the change tracker
+                await FlushPendingMvoChangesAsync();
+
                 // Clear the change tracker unconditionally at every page boundary to prevent
                 // memory accumulation from tracked entities across pages. Without this, the tracker
                 // grows linearly with total object count (500K+ entries at 100K objects), causing OOM.
@@ -265,7 +268,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // held in CLR fields — detaching does not null their populated navigation properties.
                 _syncRepo.ClearChangeTracker();
 
-                // Update progress with page completion - this persists ObjectsProcessed to database (including MVO changes)
+                // Update progress with page completion
                 using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
                 {
                     var message = $"Syncing — {_activity.ObjectsProcessed:N0} of {totalObjectsToProcess:N0}" +

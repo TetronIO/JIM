@@ -193,53 +193,54 @@ else
             <!-- Aggregated Summary (shown when more than 1 change) -->
             @if (_selectedChange.AttributeChanges.Count > 1)
             {
-                <MudPaper Class="pa-3 mb-4" Outlined="true" Style="background-color: var(--mud-palette-background-grey);">
-                    <MudText Typo="Typo.button" Class="mud-text-secondary mb-2">Summary</MudText>
-                    <MudGrid Spacing="2">
-                        @foreach (var summary in GetAggregatedSummary(_selectedChange))
-                        {
-                            <MudItem xs="12" sm="6" md="4">
-                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                                    <MudText Class="mud-text-secondary" Style="min-width: 120px;">
-                                        @summary.AttributeName
-                                    </MudText>
-                                    @* SVA terminology: Set, Updated, Removed *@
-                                    @if (summary.SetCount > 0)
-                                    {
-                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Success">
-                                            Set
-                                        </MudChip>
-                                    }
-                                    @if (summary.UpdateCount > 0)
-                                    {
-                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Info">
-                                            Updated
-                                        </MudChip>
-                                    }
-                                    @if (summary.RemovedCount > 0)
-                                    {
-                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Error">
-                                            Removed
-                                        </MudChip>
-                                    }
-                                    @* MVA terminology: Add (+count), Remove (-count) *@
-                                    @if (summary.AddCount > 0)
-                                    {
-                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Success">
-                                            +@summary.AddCount
-                                        </MudChip>
-                                    }
-                                    @if (summary.RemoveCount > 0)
-                                    {
-                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Error">
-                                            -@summary.RemoveCount
-                                        </MudChip>
-                                    }
-                                </MudStack>
-                            </MudItem>
-                        }
-                    </MudGrid>
-                </MudPaper>
+                <MudExpansionPanels Elevation="0" Class="mb-4">
+                    <MudExpansionPanel Text="Summary">
+                        <MudGrid Spacing="2">
+                            @foreach (var summary in GetAggregatedSummary(_selectedChange))
+                            {
+                                <MudItem xs="12" sm="6" md="4">
+                                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                        <MudText Class="mud-text-secondary" Style="min-width: 120px;">
+                                            @summary.AttributeName
+                                        </MudText>
+                                        @* SVA terminology: Set, Updated, Removed *@
+                                        @if (summary.SetCount > 0)
+                                        {
+                                            <MudChip T="string" Variant="Variant.Text" Color="Color.Success">
+                                                Set
+                                            </MudChip>
+                                        }
+                                        @if (summary.UpdateCount > 0)
+                                        {
+                                            <MudChip T="string" Variant="Variant.Text" Color="Color.Info">
+                                                Updated
+                                            </MudChip>
+                                        }
+                                        @if (summary.RemovedCount > 0)
+                                        {
+                                            <MudChip T="string" Variant="Variant.Text" Color="Color.Error">
+                                                Removed
+                                            </MudChip>
+                                        }
+                                        @* MVA terminology: Add (+count), Remove (-count) *@
+                                        @if (summary.AddCount > 0)
+                                        {
+                                            <MudChip T="string" Variant="Variant.Text" Color="Color.Success">
+                                                +@summary.AddCount
+                                            </MudChip>
+                                        }
+                                        @if (summary.RemoveCount > 0)
+                                        {
+                                            <MudChip T="string" Variant="Variant.Text" Color="Color.Error">
+                                                -@summary.RemoveCount
+                                            </MudChip>
+                                        }
+                                    </MudStack>
+                                </MudItem>
+                            }
+                        </MudGrid>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
             }
         }
         @if (_selectedChange?.AttributeChanges.Any() == true)

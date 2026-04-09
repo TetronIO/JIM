@@ -107,6 +107,10 @@ public abstract class SyncTaskProcessorBase
     // RPEI links MVO changes to the Activity for initiator context (User, ApiKey, etc.)
     protected readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> Additions, List<MetaverseObjectAttributeValue> Removals, ObjectChangeType ChangeType, ActivityRunProfileExecutionItem Rpei)> _pendingMvoChanges = [];
 
+    // MVO change records created by CreatePendingMvoChangeObjectsAsync, awaiting explicit persistence
+    // via FlushPendingMvoChangesAsync before ClearChangeTracker discards them.
+    private readonly List<MetaverseObjectChange> _pendingMvoChangesToPersist = [];
+
     // Batch collection for deferred reference attribute processing.
     // Reference attributes must be processed AFTER all CSOs in the page have been processed (joined/projected)
     // because group member references may point to user CSOs that come later in the processing order.
@@ -1981,6 +1985,9 @@ public abstract class SyncTaskProcessorBase
                 // Flush any RPEIs generated during the flush sequence
                 await FlushRpeisAsync();
 
+                // Persist MVO change records via raw SQL before clearing the change tracker
+                await FlushPendingMvoChangesAsync();
+
                 // Update activity progress
                 await _syncRepo.UpdateActivityAsync(_activity);
             }
@@ -2131,6 +2138,10 @@ public abstract class SyncTaskProcessorBase
                         _syncServer.AddCsoToCache(cso.ConnectedSystemId, cso.SecondaryExternalIdAttributeId.Value, secondaryIdValue.StringValue, cso.Id);
                 }
             }
+
+            // Create "Added" change records for provisioned CSOs.
+            // Provisioning CSOs don't have dedicated RPEIs; resolve via MVO ID lookup.
+            await _syncServer.CreateProvisioningCsoChangeRecordsAsync(_provisioningCsosToCreate, _mvoIdToRpei);
 
             Log.Verbose("FlushPendingExportOperationsAsync: Created {Count} provisioning CSOs in batch", _provisioningCsosToCreate.Count);
             _provisioningCsosToCreate.Clear();
@@ -2435,12 +2446,27 @@ public abstract class SyncTaskProcessorBase
                 AddMvoChangeAttributeValueObject(change, removal, ValueChangeType.Remove);
             }
 
-            // Add to MVO's Changes collection - will be persisted when Activity is saved (MVO already tracked)
-            mvo.Changes.Add(change);
+            // Collect for explicit persistence via FlushPendingMvoChangesAsync.
+            // Previously added to mvo.Changes relying on EF change tracker, but
+            // ClearChangeTracker at page boundaries discarded them before SaveChangesAsync.
+            _pendingMvoChangesToPersist.Add(change);
         }
 
         _pendingMvoChanges.Clear();
         span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Persists pending MVO change records via raw SQL bulk insert.
+    /// Must be called after CreatePendingMvoChangeObjectsAsync and before ClearChangeTracker.
+    /// </summary>
+    protected async Task FlushPendingMvoChangesAsync()
+    {
+        if (_pendingMvoChangesToPersist.Count == 0)
+            return;
+
+        await _syncRepo.PersistPendingMvoChangesAsync(_pendingMvoChangesToPersist);
+        _pendingMvoChangesToPersist.Clear();
     }
 
     /// <summary>

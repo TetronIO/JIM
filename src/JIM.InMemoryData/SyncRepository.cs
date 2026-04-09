@@ -1216,6 +1216,36 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    public Task PersistPendingMvoChangesAsync(List<MetaverseObjectChange> mvoChanges)
+    {
+        foreach (var change in mvoChanges)
+        {
+            if (change.Id == Guid.Empty)
+                change.Id = Guid.NewGuid();
+
+            foreach (var attrChange in change.AttributeChanges)
+            {
+                if (attrChange.Id == Guid.Empty)
+                    attrChange.Id = Guid.NewGuid();
+
+                foreach (var valueChange in attrChange.ValueChanges)
+                {
+                    if (valueChange.Id == Guid.Empty)
+                        valueChange.Id = Guid.NewGuid();
+                }
+            }
+
+            _mvoChanges[change.Id] = change;
+
+            // Mirror EF Core behaviour: add to the MVO's navigation property so in-memory
+            // tests can query mvo.Changes the same way production code would after a reload.
+            if (change.MetaverseObject != null && !change.MetaverseObject.Changes.Contains(change))
+                change.MetaverseObject.Changes.Add(change);
+        }
+
+        return Task.CompletedTask;
+    }
+
     #endregion
 
     #region Connected System Object — Singular Convenience Methods

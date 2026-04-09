@@ -218,6 +218,24 @@ public class SyncServer : ISyncServer
         await _syncRepo.DeleteConnectedSystemObjectsAsync(connectedSystemObjects);
     }
 
+    public async Task CreateProvisioningCsoChangeRecordsAsync(
+        List<ConnectedSystemObject> provisioningCsos,
+        Dictionary<Guid, ActivityRunProfileExecutionItem> mvoIdToRpei)
+    {
+        var changeTrackingEnabled = await GetCsoChangeTrackingEnabledAsync();
+        if (!changeTrackingEnabled)
+            return;
+
+        // Provisioning CSOs don't have dedicated RPEIs; the originating RPEI references the
+        // source CSO (the import CSO that triggered export evaluation), not the provisioning CSO.
+        // Resolve the correct RPEI via MVO ID lookup and create change records directly.
+        foreach (var cso in provisioningCsos)
+        {
+            if (cso.MetaverseObjectId.HasValue && mvoIdToRpei.TryGetValue(cso.MetaverseObjectId.Value, out var rpei))
+                _jim.ConnectedSystems.CreateChangeRecordForCso(cso, rpei, changeTrackingEnabled);
+        }
+    }
+
     #endregion
 
     #region Scoping Evaluation

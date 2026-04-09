@@ -382,6 +382,18 @@ public class MetaverseServer
                 changeInitiatorType);
         }
 
+        // Keep the denormalised CachedDisplayName in sync if DisplayName was affected.
+        // Callers apply additions/removals to AttributeValues before calling this method,
+        // so re-deriving from the current collection handles SET, UPDATE, and DELETE cases.
+        var displayNameChanged = (additions?.Any(av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName) ?? false)
+            || (removals?.Any(av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName) ?? false);
+        if (displayNameChanged)
+        {
+            metaverseObject.CachedDisplayName = metaverseObject.AttributeValues
+                .SingleOrDefault(av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName)
+                ?.StringValue;
+        }
+
         await Application.Repository.Metaverse.UpdateMetaverseObjectAsync(metaverseObject);
     }
 
@@ -556,6 +568,11 @@ public class MetaverseServer
                 ObjectChangeType.Created,
                 changeInitiatorType);
         }
+
+        // Keep the denormalised CachedDisplayName in sync with the canonical attribute value.
+        metaverseObject.CachedDisplayName = metaverseObject.AttributeValues
+            .SingleOrDefault(av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName)
+            ?.StringValue;
 
         await Application.Repository.Metaverse.CreateMetaverseObjectAsync(metaverseObject);
     }

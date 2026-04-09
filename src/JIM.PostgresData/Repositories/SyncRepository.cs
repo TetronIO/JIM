@@ -346,6 +346,9 @@ public partial class SyncRepository : ISyncRepository
     public Task CreateMetaverseObjectChangeDirectAsync(MetaverseObjectChange change)
         => _repo.Metaverse.CreateMetaverseObjectChangeDirectAsync(change);
 
+    // PersistPendingMvoChangesAsync is an owned implementation in
+    // SyncRepository.MvoChangeOperations.cs — not a delegate.
+
     #endregion
 
     #region Connected System Object — Singular Convenience Methods

@@ -231,6 +231,9 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 // Flush this page's RPEIs via bulk insert before updating progress
                 await FlushRpeisAsync();
 
+                // Persist MVO change records via raw SQL before clearing the change tracker
+                await FlushPendingMvoChangesAsync();
+
                 // Clear the change tracker unconditionally at every page boundary.
                 // See SyncFullSyncTaskProcessor for detailed explanation.
                 _syncRepo.ClearChangeTracker();
