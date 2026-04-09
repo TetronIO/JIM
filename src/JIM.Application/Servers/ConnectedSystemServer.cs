@@ -3983,6 +3983,18 @@ public class ConnectedSystemServer
     /// <summary>
     /// Checks if any run profile types are not supported by the connectors capabilities.
     /// </summary>
+    /// <summary>
+    /// Clears navigation properties on a new SyncRule that reference existing entities,
+    /// so that EF Core's Add() graph traversal does not attempt to insert them as duplicates.
+    /// The FK IDs (ConnectedSystemId, ConnectedSystemObjectTypeId, MetaverseObjectTypeId) remain set.
+    /// </summary>
+    private static void ClearSyncRuleNavigationProperties(SyncRule syncRule)
+    {
+        syncRule.ConnectedSystem = null!;
+        syncRule.ConnectedSystemObjectType = null!;
+        syncRule.MetaverseObjectType = null!;
+    }
+
     private static bool AreRunProfilesValid(ConnectedSystem connectedSystem)
     {
         if (connectedSystem == null)
@@ -4288,6 +4300,9 @@ public class ConnectedSystemServer
             activity.TargetOperationType = ActivityTargetOperationType.Create;
             AuditHelper.SetCreated(syncRule, initiatedBy);
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+            // Clear navigation properties that reference existing entities before Add() to prevent
+            // EF Core graph traversal from inserting them as duplicates. FKs are already set.
+            ClearSyncRuleNavigationProperties(syncRule);
             await Application.Repository.ConnectedSystems.CreateSyncRuleAsync(syncRule);
         }
         else
@@ -4360,6 +4375,9 @@ public class ConnectedSystemServer
             activity.TargetOperationType = ActivityTargetOperationType.Create;
             AuditHelper.SetCreated(syncRule, initiatedByApiKey);
             await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+            // Clear navigation properties that reference existing entities before Add() to prevent
+            // EF Core graph traversal from inserting them as duplicates. FKs are already set.
+            ClearSyncRuleNavigationProperties(syncRule);
             await Application.Repository.ConnectedSystems.CreateSyncRuleAsync(syncRule);
         }
         else
