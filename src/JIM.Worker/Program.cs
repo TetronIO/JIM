@@ -26,7 +26,11 @@ var host = Host.CreateDefaultBuilder(args)
         // DbContextFactory — each CreateDbContext() call gets a fresh connection (no concurrency issues)
         services.AddDbContextFactory<JimDbContext>(options =>
             options.UseNpgsql(connectionString)
-                .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
+                // Worker uses TrackAll (not NoTracking) because sync operations load overlapping
+                // entity graphs across multiple queries and rely on EF Core identity fixup to
+                // maintain single instances per entity. NoTracking produces duplicate instances
+                // that conflict when write operations later track them.
+                .UseQueryTrackingBehavior(QueryTrackingBehavior.TrackAll)
                 .ConfigureWarnings(warnings => warnings.Ignore(
                     Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning,
                     Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.MultipleCollectionIncludeWarning)));

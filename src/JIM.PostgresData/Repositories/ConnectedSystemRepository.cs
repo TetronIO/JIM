@@ -900,7 +900,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // - Created > watermark: Captures newly created CSOs that haven't been modified yet
         // - LastUpdated > watermark: Captures existing CSOs that have been modified
         // Order by Id for consistent pagination.
+        // AsTracking: CSOs are modified during sync processing, and the included Attribute entities
+        // must identity-fix with already-tracked instances from the connected system/sync rule queries.
         var csoQuery = Repository.Database.ConnectedSystemObjects
+            .AsTracking()
             .Include(cso => cso.Type)
             .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.Attribute)
