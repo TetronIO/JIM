@@ -14,6 +14,7 @@ using JIM.Models.Logic.DTOs;
 using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
+using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Tasking;
 using JIM.Utilities;
@@ -484,6 +485,31 @@ public class SynchronisationController(
         return Ok(count);
     }
 
+    /// <summary>
+    /// Gets the count of Connected System Objects in the connector space with optional filtering.
+    /// </summary>
+    /// <remarks>
+    /// Returns a simple integer count. Optimised for fast counting without loading entity data.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <param name="partitionId">Optional partition ID to filter by.</param>
+    /// <returns>The count of matching Connected System Objects.</returns>
+    [HttpGet("connected-systems/{connectedSystemId:int}/connector-space/count", Name = "GetConnectorSpaceCount")]
+    [ProducesResponseType(typeof(int), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectorSpaceCountAsync(
+        int connectedSystemId,
+        [FromQuery] int? objectTypeId = null,
+        [FromQuery] int? partitionId = null)
+    {
+        _logger.LogDebug("Getting connector space count for connected system {ConnectedSystemId} (TypeId: {TypeId}, PartitionId: {PartitionId})",
+            connectedSystemId, objectTypeId, partitionId);
+        var count = await _application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync(
+            connectedSystemId, objectTypeId, partitionId);
+        return Ok(count);
+    }
+
     #region Pending Exports
 
     /// <summary>
@@ -521,6 +547,31 @@ public class SynchronisationController(
             Page = result.CurrentPage,
             PageSize = result.PageSize
         });
+    }
+
+    /// <summary>
+    /// Gets the count of Pending Exports for a Connected System with optional filtering.
+    /// </summary>
+    /// <remarks>
+    /// Returns a simple integer count. Optimised for fast counting without loading entity data.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="changeType">Optional change type to filter by (Create = 0, Update = 1, Delete = 2).</param>
+    /// <param name="status">Optional status to filter by (Pending = 0, ExportNotConfirmed = 1, Executing = 2, Failed = 3, Exported = 4).</param>
+    /// <returns>The count of matching Pending Export objects.</returns>
+    [HttpGet("connected-systems/{connectedSystemId:int}/pending-exports/count", Name = "GetPendingExportsCount")]
+    [ProducesResponseType(typeof(int), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetPendingExportsCountAsync(
+        int connectedSystemId,
+        [FromQuery] PendingExportChangeType? changeType = null,
+        [FromQuery] PendingExportStatus? status = null)
+    {
+        _logger.LogDebug("Getting pending exports count for connected system {ConnectedSystemId} (ChangeType: {ChangeType}, Status: {Status})",
+            connectedSystemId, changeType, status);
+        var count = await _application.Repository.ConnectedSystems.GetPendingExportsFilteredCountAsync(
+            connectedSystemId, changeType, status);
+        return Ok(count);
     }
 
     /// <summary>

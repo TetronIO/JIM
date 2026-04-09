@@ -65,6 +65,21 @@ public interface IMetaverseRepository
 
     public Task<int> GetMetaverseObjectOfTypeCountAsync(int metaverseObjectTypeId);
 
+    /// <summary>
+    /// Gets the count of metaverse objects with optional filtering by type, search query, or specific attribute value.
+    /// Optimised for fast counting without loading entity data.
+    /// </summary>
+    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <param name="searchQuery">Optional search query to filter by display name (partial match, case-insensitive).</param>
+    /// <param name="filterAttributeName">Optional attribute name to filter by (must be used with filterAttributeValue).</param>
+    /// <param name="filterAttributeValue">Optional attribute value to filter by (exact match, case-insensitive).</param>
+    /// <returns>The count of matching metaverse objects.</returns>
+    public Task<int> GetMetaverseObjectsCountAsync(
+        int? objectTypeId = null,
+        string? searchQuery = null,
+        string? filterAttributeName = null,
+        string? filterAttributeValue = null);
+
     public Task<PagedResultSet<MetaverseObject>> GetMetaverseObjectsOfTypeAsync(
         int metaverseObjectTypeId,
         int page,

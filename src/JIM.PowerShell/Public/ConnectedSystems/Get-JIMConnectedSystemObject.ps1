@@ -57,6 +57,21 @@ function Get-JIMConnectedSystemObject {
 
         Searches "member" attribute values containing "admin".
 
+    .EXAMPLE
+        Get-JIMConnectedSystemObject -ConnectedSystemId 1 -Count
+
+        Gets the total count of objects in the connector space for Connected System 1.
+
+    .EXAMPLE
+        Get-JIMConnectedSystemObject -ConnectedSystemId 1 -Count -ObjectTypeId 2
+
+        Gets the count of objects of type 2 in Connected System 1.
+
+    .EXAMPLE
+        Get-JIMConnectedSystemObject -ConnectedSystemId 1 -Count -PartitionId 5
+
+        Gets the count of objects in partition 5 of Connected System 1.
+
     .LINK
         Get-JIMConnectedSystem
         Get-JIMPendingExport
@@ -65,9 +80,12 @@ function Get-JIMConnectedSystemObject {
     [OutputType([PSCustomObject])]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'Count', ValueFromPipelineByPropertyName)]
         [int]$ConnectedSystemId,
 
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'AttributeValues', ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'AttributeValuesAll', ValueFromPipelineByPropertyName)]
         [guid]$Id,
 
         [Parameter(Mandatory, ParameterSetName = 'AttributeValues')]
@@ -89,11 +107,42 @@ function Get-JIMConnectedSystemObject {
         [int]$PageSize = 50,
 
         [Parameter(Mandatory, ParameterSetName = 'AttributeValuesAll')]
-        [switch]$All
+        [switch]$All,
+
+        [Parameter(Mandatory, ParameterSetName = 'Count')]
+        [switch]$Count,
+
+        [Parameter(ParameterSetName = 'Count')]
+        [int]$ObjectTypeId,
+
+        [Parameter(ParameterSetName = 'Count')]
+        [int]$PartitionId
     )
 
     process {
         switch ($PSCmdlet.ParameterSetName) {
+            'Count' {
+                Write-Verbose "Getting connector space count for Connected System $ConnectedSystemId"
+
+                $queryParams = @()
+
+                if ($PSBoundParameters.ContainsKey('ObjectTypeId')) {
+                    $queryParams += "objectTypeId=$ObjectTypeId"
+                }
+
+                if ($PSBoundParameters.ContainsKey('PartitionId')) {
+                    $queryParams += "partitionId=$PartitionId"
+                }
+
+                $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/connector-space/count"
+                if ($queryParams.Count -gt 0) {
+                    $endpoint += "?" + ($queryParams -join '&')
+                }
+
+                $result = Invoke-JIMApi -Endpoint $endpoint
+                $result
+            }
+
             'ById' {
                 Write-Verbose "Getting Connected System Object $Id from Connected System $ConnectedSystemId"
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/connector-space/$Id"

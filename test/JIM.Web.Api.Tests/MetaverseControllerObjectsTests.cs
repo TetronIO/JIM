@@ -318,4 +318,74 @@ public class MetaverseControllerObjectsTests
     }
 
     #endregion
+
+    #region GetObjectsCountAsync tests
+
+    [Test]
+    public async Task GetObjectsCountAsync_ReturnsOkWithIntAsync()
+    {
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectsCountAsync(
+                It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .ReturnsAsync(42);
+
+        var result = await _controller.GetObjectsCountAsync();
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = (OkObjectResult)result;
+        Assert.That(okResult.Value, Is.EqualTo(42));
+    }
+
+    [Test]
+    public async Task GetObjectsCountAsync_WithObjectTypeFilter_PassesTypeIdToRepositoryAsync()
+    {
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectsCountAsync(
+                It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .ReturnsAsync(10);
+
+        await _controller.GetObjectsCountAsync(objectTypeId: 5);
+
+        _mockMetaverseRepo.Verify(r => r.GetMetaverseObjectsCountAsync(
+            5, It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>()), Times.Once);
+    }
+
+    [Test]
+    public async Task GetObjectsCountAsync_WithSearch_PassesSearchToRepositoryAsync()
+    {
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectsCountAsync(
+                It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .ReturnsAsync(3);
+
+        await _controller.GetObjectsCountAsync(search: "john");
+
+        _mockMetaverseRepo.Verify(r => r.GetMetaverseObjectsCountAsync(
+            It.IsAny<int?>(), "john", It.IsAny<string?>(), It.IsAny<string?>()), Times.Once);
+    }
+
+    [Test]
+    public async Task GetObjectsCountAsync_WithAttributeFilter_PassesFilterToRepositoryAsync()
+    {
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectsCountAsync(
+                It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .ReturnsAsync(7);
+
+        await _controller.GetObjectsCountAsync(filterAttributeName: "Department", filterAttributeValue: "IT");
+
+        _mockMetaverseRepo.Verify(r => r.GetMetaverseObjectsCountAsync(
+            It.IsAny<int?>(), It.IsAny<string?>(), "Department", "IT"), Times.Once);
+    }
+
+    [Test]
+    public async Task GetObjectsCountAsync_NoFilters_ReturnsZeroForEmptyMetaverseAsync()
+    {
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectsCountAsync(
+                It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .ReturnsAsync(0);
+
+        var result = await _controller.GetObjectsCountAsync() as OkObjectResult;
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Value, Is.EqualTo(0));
+    }
+
+    #endregion
 }

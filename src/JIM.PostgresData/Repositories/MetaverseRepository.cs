@@ -1628,6 +1628,42 @@ public class MetaverseRepository : IMetaverseRepository
         };
     }
 
+    /// <inheritdoc />
+    public async Task<int> GetMetaverseObjectsCountAsync(
+        int? objectTypeId = null,
+        string? searchQuery = null,
+        string? filterAttributeName = null,
+        string? filterAttributeValue = null)
+    {
+        // Build a lean count query: no Includes, no AsSplitQuery, no Select projections.
+        var query = Repository.Database.MetaverseObjects.AsQueryable();
+
+        if (objectTypeId.HasValue)
+        {
+            query = query.Where(mo => mo.Type.Id == objectTypeId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            query = query.Where(mo =>
+                mo.AttributeValues.Any(av =>
+                    av.Attribute.Name == Constants.BuiltInAttributes.DisplayName &&
+                    av.StringValue != null &&
+                    EF.Functions.ILike(av.StringValue, $"%{searchQuery}%")));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filterAttributeName) && filterAttributeValue != null)
+        {
+            query = query.Where(mo =>
+                mo.AttributeValues.Any(av =>
+                    av.Attribute.Name == filterAttributeName &&
+                    av.StringValue != null &&
+                    EF.Functions.ILike(av.StringValue, filterAttributeValue)));
+        }
+
+        return await query.CountAsync();
+    }
+
     public async Task<int> GetMetaverseObjectsPendingDeletionCountAsync(int? objectTypeId = null)
     {
         var query = Repository.Database.MetaverseObjects

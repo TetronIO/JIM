@@ -178,6 +178,19 @@ public interface IConnectedSystemRepository
     public Task<int> GetPendingExportsCountAsync(int connectedSystemId);
 
     /// <summary>
+    /// Retrieves the count of Pending Export objects for a Connected System with optional filtering
+    /// by change type and status. Optimised for fast counting without loading entity data.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
+    /// <param name="changeType">Optional change type to filter by (Create, Update, Delete).</param>
+    /// <param name="status">Optional status to filter by (Pending, Failed, etc.).</param>
+    /// <returns>The count of matching Pending Export objects.</returns>
+    public Task<int> GetPendingExportsFilteredCountAsync(
+        int connectedSystemId,
+        PendingExportChangeType? changeType = null,
+        PendingExportStatus? status = null);
+
+    /// <summary>
     /// Deletes a Pending Export object.
     /// </summary>
     /// <param name="pendingExport">The Pending Export to delete.</param>
@@ -635,8 +648,18 @@ public interface IConnectedSystemRepository
     /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System.
     /// </summary>
-    /// <param name="connectedSystemId">The unique identifier for the Connected System to find the object count for.</param>s
+    /// <param name="connectedSystemId">The unique identifier for the Connected System to find the object count for.</param>
     public Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? partitionId = null);
+
+    /// <summary>
+    /// Returns the count of Connected System Objects for a particular Connected System with optional filtering
+    /// by object type and partition. Optimised for fast counting without loading entity data.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
+    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <param name="partitionId">Optional partition ID to filter by.</param>
+    /// <returns>The count of matching Connected System Objects.</returns>
+    public Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? objectTypeId, int? partitionId);
 
     /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System, where the status is Obosolete.
