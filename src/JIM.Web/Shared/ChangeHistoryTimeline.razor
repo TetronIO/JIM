@@ -78,11 +78,10 @@ else
                                     @if (changeGroup.AttributeChanges.Any())
                                     {
                                         <MudDivider />
-                                        <div class="change-summary">
+                                        <div class="change-summary" style="display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 4px 8px;">
                                             @foreach (var change in GetVisibleDisplayChanges(changeGroup))
                                             {
-                                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mb-1">
-                                                    <MudText Class="mud-text-secondary" Style="min-width: 120px;">
+                                                    <MudText Class="mud-text-secondary" Style="white-space: nowrap;">
                                                         @change.AttributeName
                                                     </MudText>
                                                     <MudChip T="string" Variant="Variant.Text" Color="@GetDisplayChangeTypeColor(change)">
@@ -127,7 +126,6 @@ else
                                                                             }
                                                                         }
                                                                     </div>
-                                                                </MudStack>
                                                             }
                                                             @if (ShouldShowMoreIndicatorForDisplay(changeGroup))
                                                             {
@@ -165,20 +163,19 @@ else
                                     <MudText Typo="Typo.h6">
                                         @_selectedChange?.ChangeType
                                         @if (_selectedChange?.ChangeType == ObjectChangeType.Joined &&
-                                                            !string.IsNullOrEmpty(_selectedChange?.CsoExternalId))
+                                            !string.IsNullOrEmpty(_selectedChange?.CsoExternalId))
                                         {
-                                            @if (_selectedChange?.CsoId.HasValue == true && _selectedChange?.ConnectedSystemId.HasValue == true)
+                                            @(" ")@if (_selectedChange?.CsoId.HasValue == true && _selectedChange?.ConnectedSystemId.HasValue == true)
                                             {
                                                 <MudLink
-                                                    Href="@Utilities.GetConnectedSystemObjectHref(_selectedChange.ConnectedSystemId!.Value, _selectedChange.CsoId!.Value)">
-                                                    @_selectedChange.CsoExternalId</MudLink>
-                                                }
-                        else
-                                                {
-                                                    @_selectedChange?.CsoExternalId
-                                                }
+                                                    Href="@Utilities.GetConnectedSystemObjectHref(_selectedChange.ConnectedSystemId!.Value, _selectedChange.CsoId!.Value)">@_selectedChange.CsoExternalId</MudLink>
                                             }
-                                        </MudText>
+                                            else
+                                            {
+                                                @_selectedChange?.CsoExternalId
+                                            }
+                                        }
+                                    </MudText>
                                         <MudText Class="mud-text-secondary">
                                             @_selectedChange?.ChangeTime.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss")
                                         </MudText>
@@ -190,39 +187,39 @@ else
                                 {
                                     <!-- Initiator Context Section: Who | How | Activity -->
                                     <MudPaper Class="pa-3 mb-4" Outlined="true">
-                                        <MudGrid Spacing="2">
+                                        <div style="display: flex; flex-wrap: wrap; gap: 24px;">
                                             <!-- Initiated By (Who) - the principal that triggered the change -->
-                                            <MudItem xs="12" sm="4">
+                                            <div>
                                                 <MudText Typo="Typo.button" Class="mud-text-secondary">Initiated By</MudText>
                                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                                     @GetModalPrincipalIcon(_selectedChange)
                                                     @GetModalPrincipalText(_selectedChange)
                                                 </MudStack>
-                                            </MudItem>
+                                            </div>
 
                                             <!-- Mechanism (How) - how the change was triggered -->
-                                            <MudItem xs="12" sm="4">
+                                            <div>
                                                 <MudText Typo="Typo.button" Class="mud-text-secondary">Mechanism</MudText>
                                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                                     @GetModalMechanismIcon(_selectedChange)
                                                     @GetModalMechanismText(_selectedChange)
                                                 </MudStack>
-                                            </MudItem>
+                                            </div>
 
                                             <!-- Activity Link -->
                                             @if (_selectedChange.ActivityRunProfileExecutionItemId != null)
                                             {
-                                                <MudItem xs="12" sm="4">
+                                                <div>
                                                     <MudText Typo="Typo.button" Class="mud-text-secondary">Activity</MudText>
                                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                                         <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Class="mud-text-secondary" />
                                                         <MudLink Href="@($"/activity/item/{_selectedChange.ActivityRunProfileExecutionItemId}")">View
                                                             Activity</MudLink>
-                                                        </MudStack>
-                                                    </MudItem>
-                                                }
-                                            </MudGrid>
-                                        </MudPaper>
+                                                    </MudStack>
+                                                </div>
+                                            }
+                                        </div>
+                                    </MudPaper>
 
                                         <!-- Aggregated Summary (shown when more than 1 change) -->
                                         @if (_selectedChange.AttributeChanges.Count > 1)
@@ -426,10 +423,16 @@ else
                                                     </PagerContent>
                                                 </MudTable>
                                             }
-        else
+                                            else if (_selectedChange?.ChangeType == ObjectChangeType.Deleted)
                                             {
                                                 <MudText Class="mud-text-secondary">
                                                     Object was deleted. Final attribute values were not captured.
+                                                </MudText>
+                                            }
+                                            else
+                                            {
+                                                <MudText Class="mud-text-secondary">
+                                                    No attribute changes were recorded for this operation.
                                                 </MudText>
                                             }
                                         </DialogContent>
