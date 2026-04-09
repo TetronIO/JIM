@@ -285,6 +285,12 @@ public abstract class SyncTaskProcessorBase
         // Returns true if raw SQL was used, false if EF fallback was used.
         var usedRawSql = await _syncRepo.BulkInsertRpeisAsync(pageRpeis);
 
+        // Persist CSO change records separately. BulkInsertRpeisAsync only inserts RPEI scalar
+        // columns; the ConnectedSystemObjectChange navigation graph requires its own persistence.
+        // This covers change records created during sync (e.g., provisioning CSO "Added" records).
+        if (_csoChangeTrackingEnabled)
+            await _syncRepo.PersistRpeiCsoChangesAsync(pageRpeis);
+
         if (usedRawSql)
         {
             // Production: accumulate summary stats from this batch before clearing RPEIs.
