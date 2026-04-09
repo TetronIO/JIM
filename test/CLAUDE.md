@@ -177,6 +177,14 @@ cd /workspaces/JIM
 
 **For detailed integration testing guide, see:** [`docs/INTEGRATION_TESTING.md`](docs/INTEGRATION_TESTING.md)
 
+**Metrics streaming** (optional): Set `JIM_METRICS_API_URL` and `JIM_METRICS_API_KEY` environment variables to stream performance metrics to a central Metrics API during test runs. When set, the runner automatically:
+- Captures a host fingerprint at the start of the run
+- Streams diagnostic log lines to the API in the background (no post-run processing overhead)
+- Submits a final summary with pass/fail, duration, and host profile
+- Prints a Grafana dashboard URL for the run
+
+When not set, tests run normally with local-only results. See `test/integration/README.md` for full details.
+
 **CRITICAL: Always use default runner behaviour, no `-SkipReset` or `-SkipBuild` flags.**
 These flags are for human developer iteration only. Claude must not use them because:
 - `-SkipBuild` can run stale container images that don't reflect the current code, masking real bugs

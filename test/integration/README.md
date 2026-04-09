@@ -98,6 +98,11 @@ pwsh test/integration/Invoke-IntegrationTests.ps1 -ScenariosOnly
 | `Generate-TestCSV.ps1` | test/integration/ | Generate HR CSV files |
 | `Setup-Scenario1.ps1` | test/integration/ | Configure JIM for Scenario 1 |
 | `Invoke-Scenario1-HRToIdentityDirectory.ps1` | test/integration/scenarios/ | Run Scenario 1 tests (Joiner, Mover, Leaver, Reconnection) |
+| `Get-HostFingerprint.ps1` | test/integration/ | Capture hardware profile for cross-host performance comparison |
+| `Stream-WorkerLogs.ps1` | test/integration/ | Stream diagnostic logs to Metrics API during test runs (background job) |
+| `Submit-TestResults.ps1` | test/integration/ | Submit end-of-run summary to Metrics API |
+| `Show-PerformanceTree.ps1` | test/integration/ | Display hierarchical performance tree from most recent results |
+| `Analyse-QueryPerformance.ps1` | test/integration/ | Capture and analyse PostgreSQL query statistics |
 
 ## Data Scale Templates
 
@@ -116,6 +121,47 @@ pwsh test/integration/Invoke-IntegrationTests.ps1 -ScenariosOnly
 | **Scale1M** | 1,000,000 | 80 | 15 | 1M scale, stress testing |
 
 > **Note**: For GitHub Codespaces or resource-constrained environments, use **Nano** or **Micro** templates.
+
+## Metrics Streaming
+
+Integration test results can be automatically streamed to a central Metrics API for Grafana dashboards, enabling historical trending, cross-host comparison, and throughput profiling.
+
+### Enabling Metrics Streaming
+
+Set two environment variables (in `.env` or export them in your shell):
+
+```bash
+export JIM_METRICS_API_URL=https://metrics.tetron.io
+export JIM_METRICS_API_KEY=your-api-key
+```
+
+When set, the test runner will:
+1. Capture a host fingerprint (CPU, RAM, disk, swap, CPU utilisation)
+2. Start a background job that streams diagnostic log lines to the API during the test
+3. Submit a final summary (pass/fail, duration, host profile) when the test completes
+4. Print a Grafana dashboard URL for the run
+
+When not set, tests run normally with local-only results. Metrics streaming is purely additive and never affects test execution or results.
+
+### What Gets Streamed
+
+| Data | Log Level Required | Description |
+|------|-------------------|-------------|
+| MetricsCheckpoints | Information (always present) | Throughput progress markers: cumulative objects processed and elapsed time |
+| DiagnosticListener spans | Debug | Full operation tree with per-page/batch timing and tags |
+| Host fingerprint | N/A | Hardware profile and resource availability at test start |
+| Run summary | N/A | Scenario, template, pass/fail, exit code, wall-clock duration |
+
+### Host Fingerprinting
+
+`Get-HostFingerprint.ps1` captures hardware and resource availability at the start of each test run:
+
+- CPU model, core count, utilisation at start
+- RAM total and free
+- Disk type (SSD/HDD), size, and free space
+- Swap size and free
+- GitHub username (for identifying who ran the test)
+- Derived `host_class` label (e.g. `4c-8g-ssd`) for fair cross-host grouping
 
 ### Test Data Quality
 
