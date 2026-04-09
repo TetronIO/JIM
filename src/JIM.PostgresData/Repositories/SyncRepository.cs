@@ -267,11 +267,11 @@ public partial class SyncRepository : ISyncRepository
 
     #region Sync Rules and Configuration
 
-    public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabled)
-        => _repo.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, includeDisabled);
+    public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabled, bool withChangeTracking = false)
+        => _repo.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, includeDisabled, withChangeTracking);
 
-    public Task<List<SyncRule>> GetAllSyncRulesAsync()
-        => _repo.ConnectedSystems.GetSyncRulesAsync();
+    public Task<List<SyncRule>> GetAllSyncRulesAsync(bool withChangeTracking = false)
+        => _repo.ConnectedSystems.GetSyncRulesAsync(withChangeTracking);
 
     public Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);

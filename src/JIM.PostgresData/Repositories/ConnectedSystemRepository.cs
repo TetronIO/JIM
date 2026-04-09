@@ -3373,9 +3373,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     #endregion
 
     #region Sync Rules
-    public async Task<List<SyncRule>> GetSyncRulesAsync()
+    public async Task<List<SyncRule>> GetSyncRulesAsync(bool withChangeTracking = false)
     {
-        return await Repository.Database.SyncRules
+        IQueryable<SyncRule> allQuery = Repository.Database.SyncRules
             .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
             .Include(sr => sr.AttributeFlowRules)
             .ThenInclude(afr => afr.TargetConnectedSystemAttribute)
@@ -3423,8 +3423,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(g => g.ChildGroups)
             .ThenInclude(cg => cg.Criteria)
             .ThenInclude(c => c.MetaverseAttribute)
-            .OrderBy(x => x.Name)
-            .ToListAsync();
+            .OrderBy(x => x.Name);
+
+        if (withChangeTracking)
+            allQuery = allQuery.AsTracking();
+
+        return await allQuery.ToListAsync();
     }
 
     /// <summary>
@@ -3432,7 +3436,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
     /// <param name="includeDisabledSyncRules">Controls whether to return sync rules that are disabled</param>
-    public async Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules)
+    /// <param name="withChangeTracking">When true, enables EF Core change tracking for write operations.</param>
+    public async Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules, bool withChangeTracking = false)
     {
         var query = Repository.Database.SyncRules
             .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
@@ -3462,6 +3467,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         if (!includeDisabledSyncRules)
             query = query.Where(sr => sr.Enabled);
+
+        if (withChangeTracking)
+            query = query.AsTracking();
 
         return await query.ToListAsync();
     }

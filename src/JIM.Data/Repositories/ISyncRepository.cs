@@ -455,13 +455,13 @@ public interface ISyncRepository
     /// Gets sync rules for a connected system.
     /// When <paramref name="includeDisabled"/> is false, only active rules are returned.
     /// </summary>
-    Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabled);
+    Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabled, bool withChangeTracking = false);
 
     /// <summary>
     /// Gets all sync rules across all connected systems.
     /// Used to build the drift detection cache which needs rules from all systems.
     /// </summary>
-    Task<List<SyncRule>> GetAllSyncRulesAsync();
+    Task<List<SyncRule>> GetAllSyncRulesAsync(bool withChangeTracking = false);
 
     /// <summary>
     /// Gets the object types (schema) for a connected system.

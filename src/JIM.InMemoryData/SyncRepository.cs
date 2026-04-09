@@ -1098,7 +1098,7 @@ public class SyncRepository : ISyncRepository
 
     #region Sync Rules and Configuration
 
-    public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabled)
+    public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabled, bool withChangeTracking = false)
     {
         var rules = _syncRules.Values
             .Where(r => r.ConnectedSystemId == connectedSystemId)
@@ -1107,7 +1107,7 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(rules);
     }
 
-    public Task<List<SyncRule>> GetAllSyncRulesAsync()
+    public Task<List<SyncRule>> GetAllSyncRulesAsync(bool withChangeTracking = false)
     {
         return Task.FromResult(_syncRules.Values.ToList());
     }

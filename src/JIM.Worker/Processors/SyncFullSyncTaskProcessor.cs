@@ -62,7 +62,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         List<SyncRule> activeSyncRules;
         using (Diagnostics.Sync.StartSpan("LoadSyncRules"))
         {
-            activeSyncRules = await _syncRepo.GetSyncRulesAsync(_connectedSystem.Id, false);
+            activeSyncRules = await _syncRepo.GetSyncRulesAsync(_connectedSystem.Id, false, withChangeTracking: true);
         }
 
         // Load ALL sync rules from ALL systems for drift detection import mapping cache.
@@ -71,7 +71,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         List<SyncRule> allSyncRules;
         using (Diagnostics.Sync.StartSpan("LoadAllSyncRulesForDriftDetection"))
         {
-            allSyncRules = await _syncRepo.GetAllSyncRulesAsync();
+            allSyncRules = await _syncRepo.GetAllSyncRulesAsync(withChangeTracking: true);
         }
 
         // Build drift detection cache (import mapping cache + export rules with EnforceState=true)

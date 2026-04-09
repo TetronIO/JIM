@@ -446,14 +446,14 @@ public interface IConnectedSystemRepository
     /// <param name="container">The container to update.</param>
     Task UpdateConnectedSystemContainerAsync(ConnectedSystemContainer container);
     public Task<IList<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync();
-    public Task<List<SyncRule>> GetSyncRulesAsync();
+    public Task<List<SyncRule>> GetSyncRulesAsync(bool withChangeTracking = false);
 
     /// <summary>
     /// Retrieves all the sync rules for a given Connected System.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
     /// <param name="includeDisabledSyncRules">Controls whether to return sync rules that are disabled</param>
-    public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules);
+    public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules, bool withChangeTracking = false);
 
     public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync();
 
