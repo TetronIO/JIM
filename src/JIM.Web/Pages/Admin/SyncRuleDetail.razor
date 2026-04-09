@@ -337,7 +337,7 @@ else if (_syncRule != null)
                             {
                                 <MudSelect T="MetaverseAttribute" @bind-Value="_matchingRuleMapping.TargetMetaverseAttribute"
                                     Label="Metaverse Attribute" Placeholder="Please select a Metaverse attribute" Required="true" Class="mt-5"
-                                    Variant="Variant.Outlined">
+                                    Variant="Variant.Outlined" ToStringFunc="@(a => a?.Name ?? string.Empty)">
                                     @foreach (var metaverseAttribute in _syncRule.MetaverseObjectType.Attributes.Where(a => a.AttributePlurality
                                                 == AttributePlurality.SingleValued).OrderBy(a => a.Name))
                                     {
@@ -696,7 +696,7 @@ else if (_syncRule != null)
                             {
                                 <MudSelect T="MetaverseAttribute" @bind-Value="_attributeFlowMappingSource.MetaverseAttribute"
                                     Label="Metaverse Attribute" Placeholder="Please select the source Metaverse attribute" Required="true"
-                                    Class="mt-5" Variant="Variant.Outlined">
+                                    Class="mt-5" Variant="Variant.Outlined" ToStringFunc="@(a => a?.Name ?? string.Empty)">
                                     @foreach (var metaverseAttribute in _syncRule.MetaverseObjectType.Attributes)
                                     {
                                         <MudSelectItem Value="@metaverseAttribute">@metaverseAttribute.Name <span
@@ -725,7 +725,7 @@ else if (_syncRule != null)
                     {
                         <MudSelect T="MetaverseAttribute" @bind-Value="_attributeFlowMapping.TargetMetaverseAttribute"
                             Label="Metaverse Attribute" Placeholder="Please select the target Metaverse attribute" Required="true"
-                            Class="mt-5" Variant="Variant.Outlined">
+                            Class="mt-5" Variant="Variant.Outlined" ToStringFunc="@(a => a?.Name ?? string.Empty)">
                             @foreach (var metaverseAttribute in _syncRule.MetaverseObjectType.Attributes.Where(q =>
                                         !_syncRule.AttributeFlowRules.Any(afr => afr != _attributeFlowMapping &&
                                         afr.TargetMetaverseAttribute != null &&

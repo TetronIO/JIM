@@ -67,4 +67,9 @@ public class MetaverseAttribute : IAuditable
     public List<MetaverseObjectType> MetaverseObjectTypes { get; set; } = null!;
 
     public List<PredefinedSearchAttribute> PredefinedSearchAttributes { get; set; } = null!;
+
+    public override string ToString()
+    {
+        return Name;
+    }
 }
