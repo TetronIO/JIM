@@ -1,4 +1,7 @@
-﻿namespace JIM.Models.Utility;
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+namespace JIM.Models.Utility;
 
 /// <summary>
 /// Describes the validity status of a JIM object.

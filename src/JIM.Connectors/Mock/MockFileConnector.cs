@@ -1,4 +1,7 @@
-﻿using JIM.Models.Interfaces;
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using Serilog;
 namespace JIM.Connectors.Mock;

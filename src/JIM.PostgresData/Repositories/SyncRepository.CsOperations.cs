@@ -1,3 +1,6 @@
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
 using System.Text;
 using JIM.Models.Core;
 using JIM.Models.Staging;

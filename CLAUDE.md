@@ -190,6 +190,19 @@ When creating ASCII diagrams in documentation or code comments, use only reliabl
 - One class per file, file names match class names exactly
 - All models/POCOs live in `src/JIM.Models/`; never inline in service files
 
+**Copyright Headers (MANDATORY on all new files):**
+Every new source file MUST include a copyright header as the very first content. The `.editorconfig` enforces this for `.cs` files via `IDE0073`.
+
+| File type | Header |
+|-----------|--------|
+| `.cs` | `// Copyright (c) Tetron Limited. All rights reserved.`<br>`// Licensed under the Tetron Commercial License. See LICENSE file in the project root.` |
+| `.razor` | `@* Copyright (c) Tetron Limited. All rights reserved. *@`<br>`@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@` |
+| `.ps1` | `# Copyright (c) Tetron Limited. All rights reserved.`<br>`# Licensed under the Tetron Commercial License. See LICENSE file in the project root.` |
+
+- For `.cs` and `.ps1` files: place the header at line 1, followed by a blank line, then the file content
+- For `.razor` files: place the header **after** all `@` directives (`@page`, `@using`, `@inject`, etc.), followed by a blank line before the markup. Razor requires directives at the start of the file. Do NOT add headers to `_Imports.razor`.
+- Do NOT add headers to auto-generated files (EF migrations, `.Designer.cs`, `.g.cs`, `.AssemblyInfo.cs`)
+
 > **Full conventions (DateTime handling, raw SQL parameters, file organisation, naming patterns, UI sizing, MudBlazor tabs):** See `src/CLAUDE.md`
 
 ## Testing

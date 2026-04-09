@@ -1,4 +1,7 @@
-﻿using JIM.Connectors.File;
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
 using JIM.Models.Activities;
 using JIM.Models.Core;

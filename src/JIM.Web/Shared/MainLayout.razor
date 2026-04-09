@@ -4,6 +4,9 @@
 @inject IUserPreferenceService PreferenceService
 @inject JIM.Web.Models.ThemeSettings ThemeSettings
 @inject NavigationManager NavigationManager
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 <MudThemeProvider @bind-IsDarkMode="@IsDarkMode" Theme="_theme" @ref="@_mudThemeProvider" />
 <MudPopoverProvider />
 <MudDialogProvider />

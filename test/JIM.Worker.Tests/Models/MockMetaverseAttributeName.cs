@@ -1,4 +1,7 @@
-﻿namespace JIM.Worker.Tests.Models;
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+namespace JIM.Worker.Tests.Models;
 
 /// <summary>
 /// This is used to give a standard set of ids to metaverse attributes in unit-tests.

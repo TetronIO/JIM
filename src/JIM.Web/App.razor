@@ -1,4 +1,7 @@
-﻿<CascadingAuthenticationState>
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+<CascadingAuthenticationState>
     <Router AppAssembly="@typeof(App).Assembly">
         <Found Context="routeData">
              <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">

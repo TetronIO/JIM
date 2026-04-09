@@ -1,3 +1,6 @@
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
 using Asp.Versioning;
 using JIM.Application.Services;
 using JIM.Models.Utility;

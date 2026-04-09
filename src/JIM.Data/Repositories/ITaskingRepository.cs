@@ -1,4 +1,7 @@
-﻿using JIM.Models.Tasking;
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+using JIM.Models.Tasking;
 using JIM.Models.Tasking.DTOs;
 namespace JIM.Data.Repositories;
 

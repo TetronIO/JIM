@@ -1,4 +1,7 @@
-﻿namespace JIM.Connectors.File;
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+namespace JIM.Connectors.File;
 
 /// <summary>
 /// Encapsulates all the information needed to determine the Object Type of a row in a file.

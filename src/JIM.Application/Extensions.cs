@@ -1,4 +1,7 @@
-﻿namespace JIM.Application;
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+namespace JIM.Application;
 
 public static class Extensions
 {

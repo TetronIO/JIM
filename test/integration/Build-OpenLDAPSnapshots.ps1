@@ -1,3 +1,6 @@
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
 <#
 .SYNOPSIS
     Build pre-populated OpenLDAP snapshot images for fast integration test startup

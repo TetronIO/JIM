@@ -1,4 +1,7 @@
-﻿using System.Net;
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+using System.Net;
 using System.Text;
 using JIM.Application;
 using JIM.Models.Activities;

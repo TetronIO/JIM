@@ -1,3 +1,6 @@
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
 # designed to run on Windows desktops, i.e. 10, 11, etc.
 # server requires the use of different cmdlets.
 Add-WindowsCapability -Online -Name 'ADLDS'

@@ -9,6 +9,9 @@
 @inject ISnackbar Snackbar
 @inject IUserPreferenceService PreferenceService
 
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
 <PageTitle>Metaverse Object Type: @_metaverseObjectType?.Name</PageTitle>
 <MudText Typo="Typo.h4"><MudIcon Icon="@Helpers.ResolveObjectTypeIcon(_metaverseObjectType?.Icon)" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Metaverse Object Type:</span> <span class="mud-primary-text">@_metaverseObjectType?.Name</span></MudText>
 <div class="d-flex justify-space-between align-center">

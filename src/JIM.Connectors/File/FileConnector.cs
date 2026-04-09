@@ -1,4 +1,7 @@
-﻿using CsvHelper;
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+using CsvHelper;
 using CsvHelper.Configuration;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;

@@ -1,4 +1,7 @@
-﻿using JIM.Models.Activities;
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+using JIM.Models.Activities;
 using JIM.Models.ExampleData;
 using JIM.Models.Interfaces;
 using JIM.Models.Search;
