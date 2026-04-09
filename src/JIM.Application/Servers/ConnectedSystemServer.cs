@@ -101,39 +101,40 @@ public class ConnectedSystemServer
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
 
-        // Resolve the ConnectorDefinition from the FK if only the ID was set (e.g. when callers
-        // avoid setting the navigation property to prevent EF Core graph traversal issues).
-        if (connectedSystem.ConnectorDefinition == null)
-        {
-            connectedSystem.ConnectorDefinition = await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(connectedSystem.ConnectorDefinitionId)
-                ?? throw new ArgumentException($"ConnectorDefinition with ID {connectedSystem.ConnectorDefinitionId} not found.");
-        }
+        // Fetch the ConnectorDefinition with change tracking so that EF Core recognises
+        // it and its Settings as existing entities. Without tracking, EF graph traversal
+        // during Add() would treat them as new and attempt duplicate inserts.
+        var connectorDefinition = connectedSystem.ConnectorDefinition
+            ?? await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(connectedSystem.ConnectorDefinitionId, withChangeTracking: true)
+            ?? throw new ArgumentException($"ConnectorDefinition with ID {connectedSystem.ConnectorDefinitionId} not found.");
 
-        if (connectedSystem.ConnectorDefinition.Settings == null || connectedSystem.ConnectorDefinition.Settings.Count == 0)
+        connectedSystem.ConnectorDefinition = connectorDefinition;
+
+        if (connectorDefinition.Settings == null || connectorDefinition.Settings.Count == 0)
             throw new ArgumentException("connectedSystem.ConnectorDefinition has no settings. Cannot construct a valid connectedSystem object!");
 
         if (!AreRunProfilesValid(connectedSystem))
             throw new ArgumentException("connectedSystem.RunProfiles has some of a run type that is not supported by the Connector.");
 
         // create the connected system setting value objects from the connected system definition settings
-        foreach (var connectedSystemDefinitionSetting in connectedSystem.ConnectorDefinition.Settings)
+        foreach (var definitionSetting in connectorDefinition.Settings)
         {
             var settingValue = new ConnectedSystemSettingValue {
-                Setting = connectedSystemDefinitionSetting
+                Setting = definitionSetting
             };
 
-            if (connectedSystemDefinitionSetting is { Type: ConnectedSystemSettingType.CheckBox, DefaultCheckboxValue: not null })
-                settingValue.CheckboxValue = connectedSystemDefinitionSetting.DefaultCheckboxValue.Value;
+            if (definitionSetting is { Type: ConnectedSystemSettingType.CheckBox, DefaultCheckboxValue: not null })
+                settingValue.CheckboxValue = definitionSetting.DefaultCheckboxValue.Value;
 
             // Apply default string values for String, DropDown, and File settings
-            if ((connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.String ||
-                 connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.DropDown ||
-                 connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.File) &&
-                !string.IsNullOrEmpty(connectedSystemDefinitionSetting.DefaultStringValue))
-                settingValue.StringValue = connectedSystemDefinitionSetting.DefaultStringValue.Trim();
+            if ((definitionSetting.Type == ConnectedSystemSettingType.String ||
+                 definitionSetting.Type == ConnectedSystemSettingType.DropDown ||
+                 definitionSetting.Type == ConnectedSystemSettingType.File) &&
+                !string.IsNullOrEmpty(definitionSetting.DefaultStringValue))
+                settingValue.StringValue = definitionSetting.DefaultStringValue.Trim();
 
-            if (connectedSystemDefinitionSetting is { Type: ConnectedSystemSettingType.Integer, DefaultIntValue: not null })
-                settingValue.IntValue = connectedSystemDefinitionSetting.DefaultIntValue.Value;
+            if (definitionSetting is { Type: ConnectedSystemSettingType.Integer, DefaultIntValue: not null })
+                settingValue.IntValue = definitionSetting.DefaultIntValue.Value;
 
             connectedSystem.SettingValues.Add(settingValue);
         }
@@ -161,39 +162,40 @@ public class ConnectedSystemServer
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
 
-        // Resolve the ConnectorDefinition from the FK if only the ID was set (e.g. when callers
-        // avoid setting the navigation property to prevent EF Core graph traversal issues).
-        if (connectedSystem.ConnectorDefinition == null)
-        {
-            connectedSystem.ConnectorDefinition = await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(connectedSystem.ConnectorDefinitionId)
-                ?? throw new ArgumentException($"ConnectorDefinition with ID {connectedSystem.ConnectorDefinitionId} not found.");
-        }
+        // Fetch the ConnectorDefinition with change tracking so that EF Core recognises
+        // it and its Settings as existing entities. Without tracking, EF graph traversal
+        // during Add() would treat them as new and attempt duplicate inserts.
+        var connectorDefinition = connectedSystem.ConnectorDefinition
+            ?? await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(connectedSystem.ConnectorDefinitionId, withChangeTracking: true)
+            ?? throw new ArgumentException($"ConnectorDefinition with ID {connectedSystem.ConnectorDefinitionId} not found.");
 
-        if (connectedSystem.ConnectorDefinition.Settings == null || connectedSystem.ConnectorDefinition.Settings.Count == 0)
+        connectedSystem.ConnectorDefinition = connectorDefinition;
+
+        if (connectorDefinition.Settings == null || connectorDefinition.Settings.Count == 0)
             throw new ArgumentException("connectedSystem.ConnectorDefinition has no settings. Cannot construct a valid connectedSystem object!");
 
         if (!AreRunProfilesValid(connectedSystem))
             throw new ArgumentException("connectedSystem.RunProfiles has some of a run type that is not supported by the Connector.");
 
         // create the connected system setting value objects from the connected system definition settings
-        foreach (var connectedSystemDefinitionSetting in connectedSystem.ConnectorDefinition.Settings)
+        foreach (var definitionSetting in connectorDefinition.Settings)
         {
             var settingValue = new ConnectedSystemSettingValue {
-                Setting = connectedSystemDefinitionSetting
+                Setting = definitionSetting
             };
 
-            if (connectedSystemDefinitionSetting is { Type: ConnectedSystemSettingType.CheckBox, DefaultCheckboxValue: not null })
-                settingValue.CheckboxValue = connectedSystemDefinitionSetting.DefaultCheckboxValue.Value;
+            if (definitionSetting is { Type: ConnectedSystemSettingType.CheckBox, DefaultCheckboxValue: not null })
+                settingValue.CheckboxValue = definitionSetting.DefaultCheckboxValue.Value;
 
             // Apply default string values for String, DropDown, and File settings
-            if ((connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.String ||
-                 connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.DropDown ||
-                 connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.File) &&
-                !string.IsNullOrEmpty(connectedSystemDefinitionSetting.DefaultStringValue))
-                settingValue.StringValue = connectedSystemDefinitionSetting.DefaultStringValue.Trim();
+            if ((definitionSetting.Type == ConnectedSystemSettingType.String ||
+                 definitionSetting.Type == ConnectedSystemSettingType.DropDown ||
+                 definitionSetting.Type == ConnectedSystemSettingType.File) &&
+                !string.IsNullOrEmpty(definitionSetting.DefaultStringValue))
+                settingValue.StringValue = definitionSetting.DefaultStringValue.Trim();
 
-            if (connectedSystemDefinitionSetting is { Type: ConnectedSystemSettingType.Integer, DefaultIntValue: not null })
-                settingValue.IntValue = connectedSystemDefinitionSetting.DefaultIntValue.Value;
+            if (definitionSetting is { Type: ConnectedSystemSettingType.Integer, DefaultIntValue: not null })
+                settingValue.IntValue = definitionSetting.DefaultIntValue.Value;
 
             connectedSystem.SettingValues.Add(settingValue);
         }
