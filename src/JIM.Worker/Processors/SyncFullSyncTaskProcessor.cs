@@ -123,6 +123,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         processCsosSpan.SetTag("totalPages", totalCsoPages);
 
         var throughput = new ThroughputTracker();
+        var csoPhaseStopwatch = System.Diagnostics.Stopwatch.StartNew();
         await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing Connected System Objects");
 
         for (var i = 1; i <= totalCsoPages; i++)
@@ -140,7 +141,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             // (built at sync start) rather than per-page, since we need target system CSO attributes not source CSO attributes.
 
             int processedInPage = 0;
-            using (Diagnostics.Sync.StartSpan("ProcessCsoLoop").SetTag("csoCount", csoPagedResult.Results.Count))
+            using (Diagnostics.Sync.StartSpan("ProcessCsoLoop")
+                .SetTag("csoCount", csoPagedResult.Results.Count)
+                .SetTag("cumulativeObjectCount", _activity.ObjectsProcessed + csoPagedResult.Results.Count)
+                .SetTag("wallClockOffsetMs", csoPhaseStopwatch.Elapsed.TotalMilliseconds))
             {
                 // Two-pass processing ensures all CSO disconnections are recorded before any join attempts.
                 // Without this, GUID-based page ordering could cause a new CSO to be processed before an
@@ -181,6 +185,9 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                     }
                 }
             }
+
+            Log.Information("MetricsCheckpoint: FullSync processed={ObjectsProcessed} elapsed={ElapsedMs}ms total={TotalObjects} cs={ConnectedSystemName}",
+                _activity.ObjectsProcessed, (long)csoPhaseStopwatch.Elapsed.TotalMilliseconds, totalCsosToProcess, _connectedSystem.Name);
 
             // Process deferred reference attributes after all CSOs in this page have been processed.
             // Reference attributes (e.g., group members) may point to CSOs that are processed later in the same page.

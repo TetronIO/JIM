@@ -233,12 +233,18 @@ public class SyncImportTaskProcessor
                         ? $"Importing objects from connected system (page {pageNumber + 1})"
                         : "Importing objects from connected system";
                     await _syncRepo.UpdateActivityMessageAsync(_activity, fetchMessage);
-                    using (Diagnostics.Connector.StartSpan("ImportPage").SetTag("pageNumber", pageNumber))
+                    using (Diagnostics.Connector.StartSpan("ImportPage")
+                        .SetTag("pageNumber", pageNumber)
+                        .SetTag("cumulativeObjectCount", totalObjectsImported)
+                        .SetTag("wallClockOffsetMs", importPhaseSw.Elapsed.TotalMilliseconds))
                     {
                         result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, originalPersistedData, Log.Logger, _cancellationTokenSource.Token);
                     }
                     pageNumber++;
                     totalObjectsImported += result.ImportObjects.Count;
+
+                    Log.Information("MetricsCheckpoint: Import processed={ObjectsProcessed} elapsed={ElapsedMs}ms cs={ConnectedSystemName}",
+                        totalObjectsImported, (long)importPhaseSw.Elapsed.TotalMilliseconds, _connectedSystem.Name);
 
                     // Update progress - for paginated imports we don't know the total, but we track objects imported so far
                     _activity.ObjectsProcessed = totalObjectsImported;

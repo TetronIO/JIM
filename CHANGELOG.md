@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Performance
+
+- ⚡ Enriched diagnostic spans with cumulative object count and wall-clock offset tags for throughput profiling (#476)
+- ⚡ Added MetricsCheckpoint log lines for guaranteed throughput tracking at any log level (#476)
+
+### Added
+
+- ✨ Automated integration test metrics streaming to central tracking system with Grafana dashboards (#476)
+- ✨ Host fingerprinting for fair cross-environment performance comparison (#476)
+- ✨ Cross-repo sync workflow to keep metrics infrastructure aligned with span contract changes (#476)
+
 ## [0.9.1] - 2026-04-08
 
 ### Added
