@@ -831,7 +831,8 @@ public class ConnectedSystemDeletionTests
         };
 
         _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
-        _mockCsRepo.Setup(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, It.IsAny<bool>())).Returns(Task.CompletedTask);
+        _mockCsRepo.Setup(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, It.IsAny<bool>()))
+            .ReturnsAsync(new ClearConnectedSystemResult());
 
         // Act
         await _jim.ConnectedSystems.ClearConnectedSystemObjectsAsync(1);
@@ -885,7 +886,8 @@ public class ConnectedSystemDeletionTests
         };
 
         _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
-        _mockCsRepo.Setup(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, true)).Returns(Task.CompletedTask);
+        _mockCsRepo.Setup(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, true))
+            .ReturnsAsync(new ClearConnectedSystemResult());
 
         // Act
         await _jim.ConnectedSystems.ClearConnectedSystemObjectsAsync(1, deleteChangeHistory: true);
@@ -906,13 +908,43 @@ public class ConnectedSystemDeletionTests
         };
 
         _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
-        _mockCsRepo.Setup(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, false)).Returns(Task.CompletedTask);
+        _mockCsRepo.Setup(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, false))
+            .ReturnsAsync(new ClearConnectedSystemResult());
 
         // Act
         await _jim.ConnectedSystems.ClearConnectedSystemObjectsAsync(1, deleteChangeHistory: false);
 
         // Assert
         _mockCsRepo.Verify(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, false), Times.Once);
+    }
+
+    [Test]
+    public async Task ClearConnectedSystemObjectsAsync_ReturnsRemovalStatsAsync()
+    {
+        // Arrange
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test System",
+            Status = ConnectedSystemStatus.Active
+        };
+
+        var expectedResult = new ClearConnectedSystemResult
+        {
+            PendingExportsRemoved = 42,
+            ConnectedSystemObjectsRemoved = 150
+        };
+
+        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, true))
+            .ReturnsAsync(expectedResult);
+
+        // Act
+        var result = await _jim.ConnectedSystems.ClearConnectedSystemObjectsAsync(1);
+
+        // Assert
+        Assert.That(result.PendingExportsRemoved, Is.EqualTo(42));
+        Assert.That(result.ConnectedSystemObjectsRemoved, Is.EqualTo(150));
     }
 
     #endregion

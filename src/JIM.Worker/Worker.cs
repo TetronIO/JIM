@@ -399,9 +399,13 @@ public class Worker : BackgroundService
                                         try
                                         {
                                             // initiate clearing the connected system
-                                            await taskJim.ConnectedSystems.ClearConnectedSystemObjectsAsync(
+                                            var clearResult = await taskJim.ConnectedSystems.ClearConnectedSystemObjectsAsync(
                                                 clearConnectedSystemObjectsTask.ConnectedSystemId,
                                                 clearConnectedSystemObjectsTask.DeleteChangeHistory);
+
+                                            // store removal stats on the activity before completing
+                                            newWorkerTask.Activity.ClearedPendingExportCount = clearResult.PendingExportsRemoved;
+                                            newWorkerTask.Activity.ClearedConnectedSystemObjectCount = clearResult.ConnectedSystemObjectsRemoved;
 
                                             // task completed successfully, complete the activity
                                             await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);

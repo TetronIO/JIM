@@ -95,7 +95,7 @@ public class SynchronisationControllerClearTests
         };
 
         _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
-        _mockConnectedSystemRepo.Setup(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, true)).Returns(Task.CompletedTask);
+        _mockConnectedSystemRepo.Setup(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, true)).ReturnsAsync(new ClearConnectedSystemResult());
 
         // Act
         var result = await _controller.ClearConnectorSpaceAsync(1, deleteChangeHistory: true);
@@ -117,7 +117,7 @@ public class SynchronisationControllerClearTests
         };
 
         _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
-        _mockConnectedSystemRepo.Setup(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, false)).Returns(Task.CompletedTask);
+        _mockConnectedSystemRepo.Setup(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, false)).ReturnsAsync(new ClearConnectedSystemResult());
 
         // Act
         var result = await _controller.ClearConnectorSpaceAsync(1, deleteChangeHistory: false);
@@ -139,7 +139,7 @@ public class SynchronisationControllerClearTests
         };
 
         _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
-        _mockConnectedSystemRepo.Setup(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, true)).Returns(Task.CompletedTask);
+        _mockConnectedSystemRepo.Setup(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, true)).ReturnsAsync(new ClearConnectedSystemResult());
 
         // Act — call without specifying deleteChangeHistory, should default to true
         var result = await _controller.ClearConnectorSpaceAsync(1);
