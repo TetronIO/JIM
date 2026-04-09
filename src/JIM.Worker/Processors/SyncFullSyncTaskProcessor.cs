@@ -65,7 +65,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         List<SyncRule> activeSyncRules;
         using (Diagnostics.Sync.StartSpan("LoadSyncRules"))
         {
-            activeSyncRules = await _syncRepo.GetSyncRulesAsync(_connectedSystem.Id, false);
+            activeSyncRules = await _syncRepo.GetSyncRulesAsync(_connectedSystem.Id, false, withChangeTracking: true);
         }
 
         // Load ALL sync rules from ALL systems for drift detection import mapping cache.
@@ -74,7 +74,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         List<SyncRule> allSyncRules;
         using (Diagnostics.Sync.StartSpan("LoadAllSyncRulesForDriftDetection"))
         {
-            allSyncRules = await _syncRepo.GetAllSyncRulesAsync();
+            allSyncRules = await _syncRepo.GetAllSyncRulesAsync(withChangeTracking: true);
         }
 
         // Build drift detection cache (import mapping cache + export rules with EnforceState=true)
@@ -85,11 +85,9 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // Object types with reference attribute rules need full attribute loading even when unchanged.
         BuildReferenceObjectTypeCache(activeSyncRules);
 
-        // get the schema for all object types upfront in this Connected System, so we can retrieve lightweight CSOs without this data.
-        using (Diagnostics.Sync.StartSpan("LoadObjectTypes"))
-        {
-            _objectTypes = await _syncRepo.GetObjectTypesAsync(_connectedSystem.Id);
-        }
+        // Use object types already loaded on the connected system (with matching rules and attributes)
+        // to avoid creating duplicate entity instances that conflict with EF Core's change tracker.
+        _objectTypes = _connectedSystem.ObjectTypes!;
 
         // load all pending exports once upfront and index by CSO ID for O(1) lookup
         // this avoids O(n²) behaviour from loading all pending exports for every CSO
@@ -126,6 +124,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         processCsosSpan.SetTag("totalPages", totalCsoPages);
 
         var throughput = new ThroughputTracker();
+        var csoPhaseStopwatch = System.Diagnostics.Stopwatch.StartNew();
         await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing Connected System Objects");
 
         for (var i = 1; i <= totalCsoPages; i++)
@@ -143,7 +142,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             // (built at sync start) rather than per-page, since we need target system CSO attributes not source CSO attributes.
 
             int processedInPage = 0;
-            using (Diagnostics.Sync.StartSpan("ProcessCsoLoop").SetTag("csoCount", csoPagedResult.Results.Count))
+            using (Diagnostics.Sync.StartSpan("ProcessCsoLoop")
+                .SetTag("csoCount", csoPagedResult.Results.Count)
+                .SetTag("cumulativeObjectCount", _activity.ObjectsProcessed + csoPagedResult.Results.Count)
+                .SetTag("wallClockOffsetMs", csoPhaseStopwatch.Elapsed.TotalMilliseconds))
             {
                 // Two-pass processing ensures all CSO disconnections are recorded before any join attempts.
                 // Without this, GUID-based page ordering could cause a new CSO to be processed before an
@@ -184,6 +186,9 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                     }
                 }
             }
+
+            Log.Information("MetricsCheckpoint: FullSync processed={ObjectsProcessed} elapsed={ElapsedMs}ms total={TotalObjects} cs={ConnectedSystemName}",
+                _activity.ObjectsProcessed, (long)csoPhaseStopwatch.Elapsed.TotalMilliseconds, totalCsosToProcess, _connectedSystem.Name);
 
             // Process deferred reference attributes after all CSOs in this page have been processed.
             // Reference attributes (e.g., group members) may point to CSOs that are processed later in the same page.
@@ -254,6 +259,9 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // Flush this page's RPEIs via bulk insert before updating progress
                 await FlushRpeisAsync();
 
+                // Persist MVO change records via raw SQL before clearing the change tracker
+                await FlushPendingMvoChangesAsync();
+
                 // Clear the change tracker unconditionally at every page boundary to prevent
                 // memory accumulation from tracked entities across pages. Without this, the tracker
                 // grows linearly with total object count (500K+ entries at 100K objects), causing OOM.
@@ -263,7 +271,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // held in CLR fields — detaching does not null their populated navigation properties.
                 _syncRepo.ClearChangeTracker();
 
-                // Update progress with page completion - this persists ObjectsProcessed to database (including MVO changes)
+                // Update progress with page completion
                 using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
                 {
                     var message = $"Syncing — {_activity.ObjectsProcessed:N0} of {totalObjectsToProcess:N0}" +

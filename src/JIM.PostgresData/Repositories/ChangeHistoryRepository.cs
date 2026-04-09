@@ -26,6 +26,7 @@ public class ChangeHistoryRepository : IChangeHistoryRepository
     public async Task<int> DeleteExpiredCsoChangesAsync(DateTime olderThan, int maxRecords)
     {
         var recordsToDelete = await _database.ConnectedSystemObjectChanges
+            .AsTracking()
             .Where(c => c.ChangeTime < olderThan)
             .OrderBy(c => c.ChangeTime)
             .Take(maxRecords)
@@ -49,6 +50,7 @@ public class ChangeHistoryRepository : IChangeHistoryRepository
     public async Task<int> DeleteExpiredMvoChangesAsync(DateTime olderThan, int maxRecords)
     {
         var recordsToDelete = await _database.MetaverseObjectChanges
+            .AsTracking()
             .Where(c => c.ChangeTime < olderThan)
             .OrderBy(c => c.ChangeTime)
             .Take(maxRecords)
@@ -72,6 +74,7 @@ public class ChangeHistoryRepository : IChangeHistoryRepository
     public async Task<int> DeleteExpiredActivitiesAsync(DateTime olderThan, int maxRecords)
     {
         var recordsToDelete = await _database.Activities
+            .AsTracking()
             .Where(a => a.Created < olderThan)
             .OrderBy(a => a.Created)
             .Take(maxRecords)

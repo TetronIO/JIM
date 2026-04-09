@@ -91,7 +91,7 @@
     private async Task LoadConnectedSystemAsync()
     {
         using var jim = JimFactory.Create();
-        _connectedSystem = await jim.ConnectedSystems.GetConnectedSystemAsync(Id);
+        _connectedSystem = await jim.ConnectedSystems.GetConnectedSystemAsync(Id, withChangeTracking: true);
         if (_connectedSystem == null)
         {
             NavManager.NavigateTo("../");

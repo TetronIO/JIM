@@ -37,11 +37,11 @@ public class SecurityRepository : ISecurityRepository
 
     public async Task AddObjectToRoleAsync(Guid objectId, string roleName)
     {
-        var dbRole = await Repository.Database.Roles.Include(role => role.StaticMembers).SingleOrDefaultAsync(r => r.Name == roleName);
+        var dbRole = await Repository.Database.Roles.Include(role => role.StaticMembers).AsTracking().SingleOrDefaultAsync(r => r.Name == roleName);
         if (dbRole == null)
             throw new ArgumentException($"No such role found: {roleName}");
 
-        var dbObject = await Repository.Database.MetaverseObjects.SingleOrDefaultAsync(mo => mo.Id == objectId);
+        var dbObject = await Repository.Database.MetaverseObjects.AsTracking().SingleOrDefaultAsync(mo => mo.Id == objectId);
         if (dbObject == null)
             throw new ArgumentException($"No such object found: {objectId}");
 

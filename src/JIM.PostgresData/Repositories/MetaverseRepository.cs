@@ -68,7 +68,7 @@ public class MetaverseRepository : IMetaverseRepository
     {
         if (includeChildObjects)
             return await Repository.Database.MetaverseObjectTypes.Include(q => q.Attributes).SingleOrDefaultAsync(x => x.Id == id);
-            
+
         return await Repository.Database.MetaverseObjectTypes.SingleOrDefaultAsync(x => x.Id == id);
     }
 
@@ -194,26 +194,49 @@ public class MetaverseRepository : IMetaverseRepository
         };
     }
 
-    public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id)
+    public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id, bool withChangeTracking = false)
     {
-        return await Repository.Database.MetaverseAttributes.SingleOrDefaultAsync(x => x.Id == id);
+        var query = Repository.Database.MetaverseAttributes.AsQueryable();
+        if (withChangeTracking)
+            query = query.AsTracking();
+
+        return await query.SingleOrDefaultAsync(x => x.Id == id);
     }
 
-    public async Task<MetaverseAttribute?> GetMetaverseAttributeWithObjectTypesAsync(int id)
+    public async Task<MetaverseAttribute?> GetMetaverseAttributeWithObjectTypesAsync(int id, bool withChangeTracking = false)
     {
-        return await Repository.Database.MetaverseAttributes
+        var query = Repository.Database.MetaverseAttributes
             .Include(a => a.MetaverseObjectTypes)
-            .SingleOrDefaultAsync(x => x.Id == id);
+            .AsQueryable();
+
+        if (withChangeTracking)
+            query = query.AsTracking();
+
+        return await query.SingleOrDefaultAsync(x => x.Id == id);
     }
 
-    public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(string name)
+    public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(string name, bool withChangeTracking = false)
     {
-        return await Repository.Database.MetaverseAttributes.SingleOrDefaultAsync(x => x.Name == name);
+        var query = Repository.Database.MetaverseAttributes.AsQueryable();
+        if (withChangeTracking)
+            query = query.AsTracking();
+
+        return await query.SingleOrDefaultAsync(x => x.Name == name);
     }
 
     public async Task CreateMetaverseAttributeAsync(MetaverseAttribute attribute)
     {
-        Repository.Database.MetaverseAttributes.Add(attribute);
+        // Attach existing MetaverseObjectTypes so EF recognises them as existing entities
+        // and only creates join table entries (not duplicate object type rows).
+        foreach (var objectType in attribute.MetaverseObjectTypes)
+        {
+            if (Repository.Database.Entry(objectType).State == EntityState.Detached)
+                Repository.Database.MetaverseObjectTypes.Attach(objectType);
+        }
+
+        // Use Entry().State instead of Add() to avoid graph traversal that would
+        // override the Unchanged state of the attached object types back to Added.
+        Repository.Database.Entry(attribute).State = EntityState.Added;
         await Repository.Database.SaveChangesAsync();
     }
 
@@ -400,7 +423,9 @@ public class MetaverseRepository : IMetaverseRepository
             .ToHashSet();
 
         // Load all SVA values
+        // AsTracking required: Include path AttributeValue -> ReferenceValue(MVO) -> AttributeValues creates a cycle.
         var svaValues = await Repository.Database.Set<MetaverseObjectAttributeValue>()
+            .AsTracking()
             .AsSplitQuery()
             .Where(av => av.MetaverseObject.Id == id && !multiValuedAttributeIds.Contains(av.AttributeId))
             .Include(av => av.Attribute)
@@ -415,7 +440,9 @@ public class MetaverseRepository : IMetaverseRepository
         var cappedMvaValues = new List<MetaverseObjectAttributeValue>();
         foreach (var attrId in multiValuedAttributeIds)
         {
+            // AsTracking required: Include path AttributeValue -> ReferenceValue(MVO) -> AttributeValues creates a cycle.
             var values = await Repository.Database.Set<MetaverseObjectAttributeValue>()
+                .AsTracking()
                 .AsSplitQuery()
                 .Where(av => av.MetaverseObject.Id == id && av.AttributeId == attrId)
                 .OrderBy(av => av.Id)
@@ -479,7 +506,23 @@ public class MetaverseRepository : IMetaverseRepository
 
     public async Task CreateMetaverseObjectAsync(MetaverseObject metaverseObject)
     {
-        Repository.Database.MetaverseObjects.Add(metaverseObject);
+        // Attach existing entities referenced by nav properties so EF recognises them
+        // as existing and doesn't attempt to insert them as new rows.
+        if (metaverseObject.Type != null && Repository.Database.Entry(metaverseObject.Type).State == EntityState.Detached)
+            Repository.Database.MetaverseObjectTypes.Attach(metaverseObject.Type);
+
+        foreach (var av in metaverseObject.AttributeValues)
+        {
+            if (av.Attribute != null && Repository.Database.Entry(av.Attribute).State == EntityState.Detached)
+                Repository.Database.MetaverseAttributes.Attach(av.Attribute);
+        }
+
+        // Use Entry().State instead of Add() to avoid graph traversal that would
+        // override the Unchanged state of attached entities (Type, Attributes) to Added.
+        Repository.Database.Entry(metaverseObject).State = EntityState.Added;
+        foreach (var av in metaverseObject.AttributeValues)
+            Repository.Database.Entry(av).State = EntityState.Added;
+
         await Repository.Database.SaveChangesAsync();
     }
 
@@ -555,7 +598,10 @@ public class MetaverseRepository : IMetaverseRepository
 
     public async Task<MetaverseObject?> GetMetaverseObjectByTypeAndAttributeAsync(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, string attributeValue)
     {
+        // AsTracking required: the Include path MetaverseObjectAttributeValue -> MetaverseObject -> AttributeValues
+        // creates a cycle that EF Core forbids in no-tracking queries (no identity resolution to break the cycle).
         var av = await Repository.Database.MetaverseObjectAttributeValues
+            .AsTracking()
             .Include(q => q.MetaverseObject)
             .ThenInclude(mo => mo.AttributeValues)
             .ThenInclude(av => av.Attribute)
@@ -678,7 +724,6 @@ public class MetaverseRepository : IMetaverseRepository
         // No AsSplitQuery: the query is paginated (max 100 rows) so cartesian explosion is bounded,
         // and AsSplitQuery can fail to correlate split queries correctly at scale.
         var objects = from o in Repository.Database.MetaverseObjects.
-                AsNoTracking(). // Read-only query, no change tracking needed
                 Include(mo => mo.Type).
                 Include(mo => mo.AttributeValues).
                 ThenInclude(av => av.Attribute).
@@ -1768,7 +1813,9 @@ public class MetaverseRepository : IMetaverseRepository
 
         var totalCount = await query.CountAsync();
 
+        // AsTracking required: Include path AttributeValue -> ReferenceValue(MVO) -> AttributeValues creates a cycle.
         var values = await query
+            .AsTracking()
             .AsSplitQuery()
             .OrderBy(av => av.Id)
             .Skip((page - 1) * pageSize)

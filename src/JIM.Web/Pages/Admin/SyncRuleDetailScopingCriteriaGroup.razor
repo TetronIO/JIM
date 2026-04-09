@@ -14,7 +14,9 @@
             <MudText Typo="Typo.overline"><span class="mud-text-secondary">CRITERIA GROUP. LOGIC TYPE:</span> @SyncRuleScopingCriteriaGroup.Type.ToString().SplitOnCapitalLetters().ToUpper()</MudText>
         </MudItem>
         <MudItem xs="6" Class="d-flex align-center justify-end">
-            <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Outlined" DropShadow="false" aria-label="delete" OnClick="@(() => HandleScopingCriteriaGroupDeleteClick(SyncRuleScopingCriteriaGroup))"></MudIconButton>
+            <MudTooltip Text="Delete group" Arrow="true" Placement="Placement.Top">
+                <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error" Size="Size.Small" DropShadow="false" aria-label="delete" OnClick="@(() => HandleScopingCriteriaGroupDeleteClick(SyncRuleScopingCriteriaGroup))"></MudIconButton>
+            </MudTooltip>
         </MudItem>
     </MudGrid>
 
@@ -56,13 +58,14 @@
             </MudChip>
             <MudChip T="string">@criteria.ComparisonType.ToString().SplitOnCapitalLetters()</MudChip>
             <MudChip T="string">@criteria.ToString()</MudChip>
-            <MudIconButton
-                Icon="@Icons.Material.Outlined.Delete"
-                Variant="Variant.Outlined"
-                DropShadow="false"
-               
-                aria-label="delete"
-                OnClick="@(() => HandleDeleteCriteria(criteria))"></MudIconButton>
+            <MudTooltip Text="Delete criteria" Arrow="true" Placement="Placement.Top">
+                <MudIconButton
+                    Icon="@Icons.Material.Outlined.Delete"
+                    Size="Size.Small"
+                    DropShadow="false"
+                    aria-label="delete"
+                    OnClick="@(() => HandleDeleteCriteria(criteria))"></MudIconButton>
+            </MudTooltip>
         </div>
     }
 
@@ -120,7 +123,8 @@
                            Placeholder="Please select a Metaverse attribute"
                            Required="true"
                            Class="mt-5"
-                           Variant="Variant.Outlined">
+                           Variant="Variant.Outlined"
+                           ToStringFunc="@(a => a?.Name ?? string.Empty)">
                     @foreach (var metaverseAttribute in SyncRule.MetaverseObjectType.Attributes)
                     {
                         <MudSelectItem Value="@metaverseAttribute">@(metaverseAttribute.Name)</MudSelectItem>

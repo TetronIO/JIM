@@ -383,6 +383,7 @@ public class ExportExecutionServer
                 var deferredExports = new List<PendingExport>();
                 var processedCount = 0;
                 var processedIds = new HashSet<Guid>();
+                var exportPhaseStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                 while (true)
                 {
@@ -465,7 +466,9 @@ public class ExportExecutionServer
                         // Execute batch via connector
                         List<ConnectedSystemExportResult> exportResults;
                         using (Diagnostics.Diagnostics.Connector.StartSpan("ExportBatch")
-                            .SetTag("batchSize", immediateExports.Count))
+                            .SetTag("batchSize", immediateExports.Count)
+                            .SetTag("cumulativeObjectCount", processedCount + immediateExports.Count)
+                            .SetTag("wallClockOffsetMs", exportPhaseStopwatch.Elapsed.TotalMilliseconds))
                         {
                             exportResults = await connector.ExportAsync(immediateExports, cancellationToken);
                         }
@@ -479,6 +482,9 @@ public class ExportExecutionServer
                         }
 
                         processedCount += immediateExports.Count;
+
+                        Log.Information("MetricsCheckpoint: Export processed={ObjectsProcessed} elapsed={ElapsedMs}ms total={TotalObjects} cs={ConnectedSystemName}",
+                            processedCount, (long)exportPhaseStopwatch.Elapsed.TotalMilliseconds, result.TotalPendingExports, connectedSystem.Name);
 
                         // Stream processed items to caller per-batch instead of accumulating across
                         // the entire run. At 100K exports this prevents ~125 MB of retained entity data.

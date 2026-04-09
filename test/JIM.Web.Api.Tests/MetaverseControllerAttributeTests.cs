@@ -251,9 +251,9 @@ public class MetaverseControllerAttributeTests
             BuiltIn = false
         };
 
-        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(1))
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(1, It.IsAny<bool>()))
             .ReturnsAsync(attribute);
-        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync("NewName"))
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync("NewName", It.IsAny<bool>()))
             .ReturnsAsync((MetaverseAttribute?)null);
 
         var request = new UpdateMetaverseAttributeRequest { Name = "NewName" };
@@ -265,7 +265,7 @@ public class MetaverseControllerAttributeTests
     [Test]
     public async Task UpdateAttributeAsync_WithNonExistentAttribute_ReturnsNotFound()
     {
-        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(999))
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(999, It.IsAny<bool>()))
             .ReturnsAsync((MetaverseAttribute?)null);
 
         var request = new UpdateMetaverseAttributeRequest { Name = "NewName" };
@@ -284,7 +284,7 @@ public class MetaverseControllerAttributeTests
             BuiltIn = true
         };
 
-        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(1))
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(1, It.IsAny<bool>()))
             .ReturnsAsync(builtInAttribute);
 
         var request = new UpdateMetaverseAttributeRequest { Name = "NewName" };
@@ -308,9 +308,9 @@ public class MetaverseControllerAttributeTests
             Name = "Attribute2"
         };
 
-        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(1))
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(1, It.IsAny<bool>()))
             .ReturnsAsync(attribute);
-        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync("Attribute2"))
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync("Attribute2", It.IsAny<bool>()))
             .ReturnsAsync(conflictingAttribute);
 
         var request = new UpdateMetaverseAttributeRequest { Name = "Attribute2" };
@@ -329,9 +329,9 @@ public class MetaverseControllerAttributeTests
             BuiltIn = false
         };
 
-        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(1))
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(1, It.IsAny<bool>()))
             .ReturnsAsync(attribute);
-        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync("NewName"))
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync("NewName", It.IsAny<bool>()))
             .ReturnsAsync((MetaverseAttribute?)null);
 
         var request = new UpdateMetaverseAttributeRequest { Name = "NewName" };
@@ -352,7 +352,7 @@ public class MetaverseControllerAttributeTests
             BuiltIn = false
         };
 
-        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(1))
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(1, It.IsAny<bool>()))
             .ReturnsAsync(attribute);
 
         var request = new UpdateMetaverseAttributeRequest { Type = AttributeDataType.Number };
@@ -372,7 +372,7 @@ public class MetaverseControllerAttributeTests
             BuiltIn = false
         };
 
-        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(1))
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(1, It.IsAny<bool>()))
             .ReturnsAsync(attribute);
 
         var request = new UpdateMetaverseAttributeRequest { AttributePlurality = AttributePlurality.MultiValued };
@@ -395,12 +395,12 @@ public class MetaverseControllerAttributeTests
         };
 
         // When ObjectTypeIds is specified, the controller uses GetMetaverseAttributeWithObjectTypesAsync
-        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeWithObjectTypesAsync(1))
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeWithObjectTypesAsync(1, It.IsAny<bool>()))
             .ReturnsAsync(attribute);
         _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(2, false))
             .ReturnsAsync(objectType2);
         // The controller also fetches the updated attribute for the response
-        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(1))
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(1, It.IsAny<bool>()))
             .ReturnsAsync(attribute);
 
         var request = new UpdateMetaverseAttributeRequest { ObjectTypeIds = new List<int> { 2 } };
@@ -562,7 +562,7 @@ public class MetaverseControllerAttributeTests
             MetaverseObjectTypes = new List<MetaverseObjectType> { personType, groupType }
         };
 
-        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeWithObjectTypesAsync(1))
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeWithObjectTypesAsync(1, It.IsAny<bool>()))
             .ReturnsAsync(attribute);
 
         _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, false))

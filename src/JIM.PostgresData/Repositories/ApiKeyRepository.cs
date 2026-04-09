@@ -48,6 +48,7 @@ public class ApiKeyRepository : IApiKeyRepository
         {
             var roleIds = apiKey.Roles.Select(r => r.Id).ToList();
             var existingRoles = await Repository.Database.Roles
+                .AsTracking()
                 .Where(r => roleIds.Contains(r.Id))
                 .ToListAsync();
             apiKey.Roles = existingRoles;
@@ -62,6 +63,7 @@ public class ApiKeyRepository : IApiKeyRepository
     {
         var existingKey = await Repository.Database.ApiKeys
             .Include(ak => ak.Roles)
+            .AsTracking()
             .SingleOrDefaultAsync(ak => ak.Id == apiKey.Id)
             ?? throw new ArgumentException($"API key not found: {apiKey.Id}");
 
@@ -76,6 +78,7 @@ public class ApiKeyRepository : IApiKeyRepository
         {
             var roleIds = apiKey.Roles.Select(r => r.Id).ToList();
             var newRoles = await Repository.Database.Roles
+                .AsTracking()
                 .Where(r => roleIds.Contains(r.Id))
                 .ToListAsync();
             existingKey.Roles.AddRange(newRoles);
@@ -88,6 +91,7 @@ public class ApiKeyRepository : IApiKeyRepository
     public async Task DeleteAsync(Guid id)
     {
         var apiKey = await Repository.Database.ApiKeys
+            .AsTracking()
             .SingleOrDefaultAsync(ak => ak.Id == id)
             ?? throw new ArgumentException($"API key not found: {id}");
 
@@ -98,6 +102,7 @@ public class ApiKeyRepository : IApiKeyRepository
     public async Task RecordUsageAsync(Guid id, string? ipAddress)
     {
         var apiKey = await Repository.Database.ApiKeys
+            .AsTracking()
             .SingleOrDefaultAsync(ak => ak.Id == id);
 
         if (apiKey != null)

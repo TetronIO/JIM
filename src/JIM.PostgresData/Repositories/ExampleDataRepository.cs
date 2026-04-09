@@ -39,9 +39,13 @@ public class ExampleDataRepository : IExampleDataRepository
         return datasetHeaders;
     }
 
-    public async Task<ExampleDataSet?> GetExampleDataSetAsync(string name, string culture)
+    public async Task<ExampleDataSet?> GetExampleDataSetAsync(string name, string culture, bool withChangeTracking = false)
     {
-        return await Repository.Database.ExampleDataSets.Include(q => q.Values).SingleOrDefaultAsync(q => q.Name == name && q.Culture == culture);
+        IQueryable<ExampleDataSet> query = Repository.Database.ExampleDataSets.Include(q => q.Values);
+        if (withChangeTracking)
+            query = query.AsTracking();
+
+        return await query.SingleOrDefaultAsync(q => q.Name == name && q.Culture == culture);
     }
 
     public async Task<ExampleDataSet?> GetExampleDataSetAsync(int id)
@@ -62,7 +66,7 @@ public class ExampleDataRepository : IExampleDataRepository
 
     public async Task DeleteExampleDataSetAsync(int exampleDataSetId)
     {
-        var exampleDataSet = await Repository.Database.ExampleDataSets.Include(q => q.Values).SingleOrDefaultAsync(q => q.Id == exampleDataSetId);
+        var exampleDataSet = await Repository.Database.ExampleDataSets.Include(q => q.Values).AsTracking().SingleOrDefaultAsync(q => q.Id == exampleDataSetId);
         if (exampleDataSet == null)
         {
             Log.Warning("DeleteExampleDataSetAsync: No such ExampleDetaSet found to delete.");
@@ -213,6 +217,7 @@ public class ExampleDataRepository : IExampleDataRepository
         var template = await Repository.Database.ExampleDataTemplates.
             Include(t => t.ObjectTypes).
             ThenInclude(ot => ot.TemplateAttributes).
+            AsTracking().
             SingleOrDefaultAsync(t => t.Id == templateId);
         if (template == null)
         {

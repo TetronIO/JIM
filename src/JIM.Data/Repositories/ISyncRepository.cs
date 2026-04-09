@@ -458,13 +458,13 @@ public interface ISyncRepository
     /// Gets sync rules for a connected system.
     /// When <paramref name="includeDisabled"/> is false, only active rules are returned.
     /// </summary>
-    Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabled);
+    Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabled, bool withChangeTracking = false);
 
     /// <summary>
     /// Gets all sync rules across all connected systems.
     /// Used to build the drift detection cache which needs rules from all systems.
     /// </summary>
-    Task<List<SyncRule>> GetAllSyncRulesAsync();
+    Task<List<SyncRule>> GetAllSyncRulesAsync(bool withChangeTracking = false);
 
     /// <summary>
     /// Gets the object types (schema) for a connected system.
@@ -517,6 +517,13 @@ public interface ISyncRepository
     /// Used for deletion change records where the MVO is about to be removed.
     /// </summary>
     Task CreateMetaverseObjectChangeDirectAsync(MetaverseObjectChange change);
+
+    /// <summary>
+    /// Persists pending MVO change records (and their attribute and value children) via raw SQL.
+    /// Used by sync processors to persist changes collected during page processing, bypassing the
+    /// EF change tracker which is cleared at page boundaries.
+    /// </summary>
+    Task PersistPendingMvoChangesAsync(List<MetaverseObjectChange> mvoChanges);
 
     #endregion
 

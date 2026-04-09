@@ -818,6 +818,14 @@ html[lang] .mud-dialog .mud-paper-outlined {
     background-color: var(--jim-dialog-inner-surface, transparent) !important;
 }
 
+/* Fix double scrollbar on MudSelect dropdown popovers.
+   Both the popover container and the inner mud-list have overflow-y: auto by default,
+   producing two nested scrollbars. Let the popover handle scrolling alone. */
+.mud-popover.mud-popover-open > .mud-list {
+    overflow-y: unset;
+    max-height: unset;
+}
+
 /* Remove drop shadows from all MudBlazor buttons */
 .mud-button-root {
     box-shadow: none !important;

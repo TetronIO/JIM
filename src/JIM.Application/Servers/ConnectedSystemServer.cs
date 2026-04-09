@@ -37,14 +37,14 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectorDefinitionHeadersAsync();
     }
 
-    public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id)
+    public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id, bool withChangeTracking = false)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(id);
+        return await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(id, withChangeTracking);
     }
 
-    public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name)
+    public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name, bool withChangeTracking = false)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(name);
+        return await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(name, withChangeTracking);
     }
 
     public async Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
@@ -84,9 +84,9 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemHeadersAsync();
     }
 
-    public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id)
+    public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id, bool withChangeTracking = false)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(id);
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(id, withChangeTracking);
     }
 
     public async Task<ConnectedSystemHeader?> GetConnectedSystemHeaderAsync(int id)
@@ -104,34 +104,40 @@ public class ConnectedSystemServer
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
 
-        if (connectedSystem.ConnectorDefinition == null)
-            throw new ArgumentException("connectedSystem.ConnectorDefinition is null!");
+        // Fetch the ConnectorDefinition with change tracking so that EF Core recognises
+        // it and its Settings as existing entities. Without tracking, EF graph traversal
+        // during Add() would treat them as new and attempt duplicate inserts.
+        var connectorDefinition = connectedSystem.ConnectorDefinition
+            ?? await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(connectedSystem.ConnectorDefinitionId, withChangeTracking: true)
+            ?? throw new ArgumentException($"ConnectorDefinition with ID {connectedSystem.ConnectorDefinitionId} not found.");
 
-        if (connectedSystem.ConnectorDefinition.Settings == null || connectedSystem.ConnectorDefinition.Settings.Count == 0)
+        connectedSystem.ConnectorDefinition = connectorDefinition;
+
+        if (connectorDefinition.Settings == null || connectorDefinition.Settings.Count == 0)
             throw new ArgumentException("connectedSystem.ConnectorDefinition has no settings. Cannot construct a valid connectedSystem object!");
 
         if (!AreRunProfilesValid(connectedSystem))
             throw new ArgumentException("connectedSystem.RunProfiles has some of a run type that is not supported by the Connector.");
 
         // create the connected system setting value objects from the connected system definition settings
-        foreach (var connectedSystemDefinitionSetting in connectedSystem.ConnectorDefinition.Settings)
+        foreach (var definitionSetting in connectorDefinition.Settings)
         {
             var settingValue = new ConnectedSystemSettingValue {
-                Setting = connectedSystemDefinitionSetting
+                Setting = definitionSetting
             };
 
-            if (connectedSystemDefinitionSetting is { Type: ConnectedSystemSettingType.CheckBox, DefaultCheckboxValue: not null })
-                settingValue.CheckboxValue = connectedSystemDefinitionSetting.DefaultCheckboxValue.Value;
+            if (definitionSetting is { Type: ConnectedSystemSettingType.CheckBox, DefaultCheckboxValue: not null })
+                settingValue.CheckboxValue = definitionSetting.DefaultCheckboxValue.Value;
 
             // Apply default string values for String, DropDown, and File settings
-            if ((connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.String ||
-                 connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.DropDown ||
-                 connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.File) &&
-                !string.IsNullOrEmpty(connectedSystemDefinitionSetting.DefaultStringValue))
-                settingValue.StringValue = connectedSystemDefinitionSetting.DefaultStringValue.Trim();
+            if ((definitionSetting.Type == ConnectedSystemSettingType.String ||
+                 definitionSetting.Type == ConnectedSystemSettingType.DropDown ||
+                 definitionSetting.Type == ConnectedSystemSettingType.File) &&
+                !string.IsNullOrEmpty(definitionSetting.DefaultStringValue))
+                settingValue.StringValue = definitionSetting.DefaultStringValue.Trim();
 
-            if (connectedSystemDefinitionSetting is { Type: ConnectedSystemSettingType.Integer, DefaultIntValue: not null })
-                settingValue.IntValue = connectedSystemDefinitionSetting.DefaultIntValue.Value;
+            if (definitionSetting is { Type: ConnectedSystemSettingType.Integer, DefaultIntValue: not null })
+                settingValue.IntValue = definitionSetting.DefaultIntValue.Value;
 
             connectedSystem.SettingValues.Add(settingValue);
         }
@@ -159,34 +165,40 @@ public class ConnectedSystemServer
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
 
-        if (connectedSystem.ConnectorDefinition == null)
-            throw new ArgumentException("connectedSystem.ConnectorDefinition is null!");
+        // Fetch the ConnectorDefinition with change tracking so that EF Core recognises
+        // it and its Settings as existing entities. Without tracking, EF graph traversal
+        // during Add() would treat them as new and attempt duplicate inserts.
+        var connectorDefinition = connectedSystem.ConnectorDefinition
+            ?? await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(connectedSystem.ConnectorDefinitionId, withChangeTracking: true)
+            ?? throw new ArgumentException($"ConnectorDefinition with ID {connectedSystem.ConnectorDefinitionId} not found.");
 
-        if (connectedSystem.ConnectorDefinition.Settings == null || connectedSystem.ConnectorDefinition.Settings.Count == 0)
+        connectedSystem.ConnectorDefinition = connectorDefinition;
+
+        if (connectorDefinition.Settings == null || connectorDefinition.Settings.Count == 0)
             throw new ArgumentException("connectedSystem.ConnectorDefinition has no settings. Cannot construct a valid connectedSystem object!");
 
         if (!AreRunProfilesValid(connectedSystem))
             throw new ArgumentException("connectedSystem.RunProfiles has some of a run type that is not supported by the Connector.");
 
         // create the connected system setting value objects from the connected system definition settings
-        foreach (var connectedSystemDefinitionSetting in connectedSystem.ConnectorDefinition.Settings)
+        foreach (var definitionSetting in connectorDefinition.Settings)
         {
             var settingValue = new ConnectedSystemSettingValue {
-                Setting = connectedSystemDefinitionSetting
+                Setting = definitionSetting
             };
 
-            if (connectedSystemDefinitionSetting is { Type: ConnectedSystemSettingType.CheckBox, DefaultCheckboxValue: not null })
-                settingValue.CheckboxValue = connectedSystemDefinitionSetting.DefaultCheckboxValue.Value;
+            if (definitionSetting is { Type: ConnectedSystemSettingType.CheckBox, DefaultCheckboxValue: not null })
+                settingValue.CheckboxValue = definitionSetting.DefaultCheckboxValue.Value;
 
             // Apply default string values for String, DropDown, and File settings
-            if ((connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.String ||
-                 connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.DropDown ||
-                 connectedSystemDefinitionSetting.Type == ConnectedSystemSettingType.File) &&
-                !string.IsNullOrEmpty(connectedSystemDefinitionSetting.DefaultStringValue))
-                settingValue.StringValue = connectedSystemDefinitionSetting.DefaultStringValue.Trim();
+            if ((definitionSetting.Type == ConnectedSystemSettingType.String ||
+                 definitionSetting.Type == ConnectedSystemSettingType.DropDown ||
+                 definitionSetting.Type == ConnectedSystemSettingType.File) &&
+                !string.IsNullOrEmpty(definitionSetting.DefaultStringValue))
+                settingValue.StringValue = definitionSetting.DefaultStringValue.Trim();
 
-            if (connectedSystemDefinitionSetting is { Type: ConnectedSystemSettingType.Integer, DefaultIntValue: not null })
-                settingValue.IntValue = connectedSystemDefinitionSetting.DefaultIntValue.Value;
+            if (definitionSetting is { Type: ConnectedSystemSettingType.Integer, DefaultIntValue: not null })
+                settingValue.IntValue = definitionSetting.DefaultIntValue.Value;
 
             connectedSystem.SettingValues.Add(settingValue);
         }
@@ -3099,6 +3111,20 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Creates an "Added" change record for a single CSO linked to a specific RPEI.
+    /// Used for provisioning CSOs where the RPEI-to-CSO relationship is resolved externally
+    /// (e.g., via MVO ID lookup) rather than via <c>rpei.ConnectedSystemObject</c>.
+    /// </summary>
+    public void CreateChangeRecordForCso(
+        ConnectedSystemObject cso,
+        ActivityRunProfileExecutionItem rpei,
+        bool changeTrackingEnabled)
+    {
+        rpei.ConnectedSystemObjectId = cso.Id;
+        AddConnectedSystemObjectChange(cso, rpei, changeTrackingEnabled);
+    }
+
+    /// <summary>
     /// Links RPEI change records to CSOs before update. Pure business logic — no data access.
     /// Called by SyncServer before persisting CSO updates via ISyncRepository.
     /// </summary>
@@ -3227,7 +3253,15 @@ public class ConnectedSystemServer
         activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
 
         foreach (var attributeValue in connectedSystemObject.AttributeValues)
+        {
+            // Skip attribute values without a loaded Attribute navigation property.
+            // This occurs for provisioning CSOs where attribute values have AttributeId set
+            // but the navigation property is not loaded (e.g., after bulk persistence with AsNoTracking).
+            if (attributeValue.Attribute == null)
+                continue;
+
             AddChangeAttributeValueObject(change, attributeValue, ValueChangeType.Add);
+        }
     }
 
     /// <summary>
@@ -3484,9 +3518,9 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionsAsync(connectedSystem);
     }
 
-    public async Task<ConnectedSystemPartition?> GetConnectedSystemPartitionAsync(int id)
+    public async Task<ConnectedSystemPartition?> GetConnectedSystemPartitionAsync(int id, bool withChangeTracking = false)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionAsync(id);
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionAsync(id, withChangeTracking);
     }
 
     public async Task UpdateConnectedSystemPartitionAsync(ConnectedSystemPartition partition)
@@ -3681,6 +3715,7 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
         AuditHelper.SetCreated(mapping, initiatedBy);
+        ClearMappingNavigationProperties(mapping);
         await Application.Repository.ConnectedSystems.CreateSyncRuleMappingAsync(mapping);
 
         await Application.Activities.CompleteActivityAsync(activity);
@@ -3710,6 +3745,7 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
         AuditHelper.SetCreated(mapping, initiatedByApiKey);
+        ClearMappingNavigationProperties(mapping);
         await Application.Repository.ConnectedSystems.CreateSyncRuleMappingAsync(mapping);
 
         await Application.Activities.CompleteActivityAsync(activity);
@@ -3974,6 +4010,40 @@ public class ConnectedSystemServer
     /// <summary>
     /// Checks if any run profile types are not supported by the connectors capabilities.
     /// </summary>
+    /// <summary>
+    /// Clears navigation properties on a new SyncRule that reference existing entities,
+    /// so that EF Core's Add() graph traversal does not attempt to insert them as duplicates.
+    /// The FK IDs (ConnectedSystemId, ConnectedSystemObjectTypeId, MetaverseObjectTypeId) remain set.
+    /// </summary>
+    private static void ClearSyncRuleNavigationProperties(SyncRule syncRule)
+    {
+        syncRule.ConnectedSystem = null!;
+        syncRule.ConnectedSystemObjectType = null!;
+        syncRule.MetaverseObjectType = null!;
+    }
+
+    /// <summary>
+    /// Clears navigation properties on a new SyncRuleMapping (and its sources) that reference
+    /// existing entities, so that EF Core's Add() graph traversal does not attempt to insert them
+    /// as duplicates. FK IDs remain set.
+    /// </summary>
+    private static void ClearMappingNavigationProperties(SyncRuleMapping mapping)
+    {
+        // Clear SyncRule nav property (SyncRuleId FK is set)
+        mapping.SyncRule = null;
+
+        // Clear target attribute nav properties (FK IDs are set)
+        mapping.TargetMetaverseAttribute = null;
+        mapping.TargetConnectedSystemAttribute = null;
+
+        // Clear source attribute nav properties (FK IDs are set)
+        foreach (var source in mapping.Sources)
+        {
+            source.ConnectedSystemAttribute = null;
+            source.MetaverseAttribute = null;
+        }
+    }
+
     private static bool AreRunProfilesValid(ConnectedSystem connectedSystem)
     {
         if (connectedSystem == null)
@@ -4279,6 +4349,9 @@ public class ConnectedSystemServer
             activity.TargetOperationType = ActivityTargetOperationType.Create;
             AuditHelper.SetCreated(syncRule, initiatedBy);
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+            // Clear navigation properties that reference existing entities before Add() to prevent
+            // EF Core graph traversal from inserting them as duplicates. FKs are already set.
+            ClearSyncRuleNavigationProperties(syncRule);
             await Application.Repository.ConnectedSystems.CreateSyncRuleAsync(syncRule);
         }
         else
@@ -4351,6 +4424,9 @@ public class ConnectedSystemServer
             activity.TargetOperationType = ActivityTargetOperationType.Create;
             AuditHelper.SetCreated(syncRule, initiatedByApiKey);
             await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+            // Clear navigation properties that reference existing entities before Add() to prevent
+            // EF Core graph traversal from inserting them as duplicates. FKs are already set.
+            ClearSyncRuleNavigationProperties(syncRule);
             await Application.Repository.ConnectedSystems.CreateSyncRuleAsync(syncRule);
         }
         else

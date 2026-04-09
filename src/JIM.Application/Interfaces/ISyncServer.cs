@@ -167,6 +167,15 @@ public interface ISyncServer
         List<ConnectedSystemObject> connectedSystemObjects,
         List<ActivityRunProfileExecutionItem> rpeis);
 
+    /// <summary>
+    /// Creates "Added" change tracking records for provisioned CSOs.
+    /// Provisioning CSOs are created during export evaluation and don't have dedicated RPEIs;
+    /// the originating RPEI is resolved via MVO ID lookup.
+    /// </summary>
+    Task CreateProvisioningCsoChangeRecordsAsync(
+        List<ConnectedSystemObject> provisioningCsos,
+        Dictionary<Guid, ActivityRunProfileExecutionItem> mvoIdToRpei);
+
     #endregion
 
     #region Scoping Evaluation

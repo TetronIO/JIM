@@ -15,7 +15,7 @@ namespace JIM.Data.Repositories;
 
 public interface IConnectedSystemRepository
 {
-    public Task<ConnectedSystem?> GetConnectedSystemAsync(int id);
+    public Task<ConnectedSystem?> GetConnectedSystemAsync(int id, bool withChangeTracking = false);
     public Task<ConnectedSystemHeader?> GetConnectedSystemHeaderAsync(int id);
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id);
 
@@ -66,8 +66,8 @@ public interface IConnectedSystemRepository
     public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(int connectedSystemId, IEnumerable<string> secondaryExternalIdValues);
 
     public Task<ConnectedSystemRunProfileHeader?> GetConnectedSystemRunProfileHeaderAsync(int connectedSystemRunProfileId);
-    public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id);
-    public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name);
+    public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id, bool withChangeTracking = false);
+    public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name, bool withChangeTracking = false);
     public Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue);
 
     /// <summary>
@@ -429,7 +429,7 @@ public interface IConnectedSystemRepository
     /// Gets a Connected System Partition by ID.
     /// </summary>
     /// <param name="id">The unique identifier of the partition.</param>
-    Task<ConnectedSystemPartition?> GetConnectedSystemPartitionAsync(int id);
+    Task<ConnectedSystemPartition?> GetConnectedSystemPartitionAsync(int id, bool withChangeTracking = false);
 
     /// <summary>
     /// Updates a Connected System Partition.
@@ -449,14 +449,14 @@ public interface IConnectedSystemRepository
     /// <param name="container">The container to update.</param>
     Task UpdateConnectedSystemContainerAsync(ConnectedSystemContainer container);
     public Task<IList<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync();
-    public Task<List<SyncRule>> GetSyncRulesAsync();
+    public Task<List<SyncRule>> GetSyncRulesAsync(bool withChangeTracking = false);
 
     /// <summary>
     /// Retrieves all the sync rules for a given Connected System.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
     /// <param name="includeDisabledSyncRules">Controls whether to return sync rules that are disabled</param>
-    public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules);
+    public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules, bool withChangeTracking = false);
 
     public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync();
 

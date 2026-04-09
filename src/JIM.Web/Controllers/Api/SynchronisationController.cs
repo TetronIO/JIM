@@ -649,8 +649,8 @@ public class SynchronisationController(
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
-        // Get the partition
-        var partition = await _application.ConnectedSystems.GetConnectedSystemPartitionAsync(partitionId);
+        // Get the partition with change tracking since we modify and save it
+        var partition = await _application.ConnectedSystems.GetConnectedSystemPartitionAsync(partitionId, withChangeTracking: true);
         if (partition == null || partition.ConnectedSystem?.Id != connectedSystemId)
             return NotFound(ApiErrorResponse.NotFound($"Partition with ID {partitionId} not found in connected system {connectedSystemId}."));
 
@@ -755,17 +755,18 @@ public class SynchronisationController(
             _logger.LogInformation("Connected system creation initiated via API key: {ApiKeyName}", LogSanitiser.Sanitise(GetApiKeyName()));
         }
 
-        // Get the connector definition
+        // Validate the connector definition exists
         var connectorDefinition = await _application.ConnectedSystems.GetConnectorDefinitionAsync(request.ConnectorDefinitionId);
         if (connectorDefinition == null)
             return BadRequest(ApiErrorResponse.BadRequest($"Connector definition with ID {request.ConnectorDefinitionId} not found."));
 
-        // Create the connected system
+        // Create the connected system using the FK ID (not the nav property) to avoid
+        // EF Core graph traversal inserting the untracked ConnectorDefinition as a new entity.
         var connectedSystem = new ConnectedSystem
         {
             Name = request.Name,
             Description = request.Description,
-            ConnectorDefinition = connectorDefinition
+            ConnectorDefinitionId = request.ConnectorDefinitionId
         };
 
         try
@@ -821,8 +822,8 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Get the existing connected system
-        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Get the existing connected system with change tracking since we modify and save it
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true);
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
@@ -915,8 +916,8 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Get the connected system
-        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Get the connected system with change tracking since schema import modifies and saves it
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true);
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
@@ -983,8 +984,8 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Get the connected system
-        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Get the connected system with change tracking since hierarchy import modifies and saves it
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true);
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
@@ -1804,10 +1805,12 @@ public class SynchronisationController(
         if (syncRule == null)
             return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
 
-        // Create the mapping
+        // Create the mapping using FK ID and nav property (nav property needed for validation;
+        // cleared before save by ClearMappingNavigationProperties)
         var mapping = new SyncRuleMapping
         {
-            SyncRule = syncRule
+            SyncRule = syncRule,
+            SyncRuleId = syncRule.Id
         };
 
         // Validate and set target attribute based on direction
@@ -3119,7 +3122,8 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Get the connected system with change tracking since matching mode switch modifies and saves it
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true);
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 

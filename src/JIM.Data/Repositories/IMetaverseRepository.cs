@@ -273,16 +273,17 @@ public interface IMetaverseRepository
         string? sortBy = null,
         bool sortDescending = false);
 
-    public Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id);
+    public Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id, bool withChangeTracking = false);
 
     /// <summary>
     /// Gets a Metaverse Attribute by ID including its associated object types.
     /// </summary>
     /// <param name="id">The unique identifier of the attribute.</param>
+    /// <param name="withChangeTracking">When true, enables EF Core change tracking for write operations.</param>
     /// <returns>The attribute with its associated object types, or null if not found.</returns>
-    public Task<MetaverseAttribute?> GetMetaverseAttributeWithObjectTypesAsync(int id);
+    public Task<MetaverseAttribute?> GetMetaverseAttributeWithObjectTypesAsync(int id, bool withChangeTracking = false);
 
-    public Task<MetaverseAttribute?> GetMetaverseAttributeAsync(string name);
+    public Task<MetaverseAttribute?> GetMetaverseAttributeAsync(string name, bool withChangeTracking = false);
 
     /// <summary>
     /// Creates a new Metaverse Attribute.

@@ -30,6 +30,9 @@ public class MetaverseRepositoryAttributeValueDeletionTests
     {
         TestUtilities.SetEnvironmentVariables();
 
+        // Note: InMemory provider does not support QueryTrackingBehavior.NoTracking correctly —
+        // it always tracks internally and produces identity conflicts when entities are re-attached.
+        // Production uses NoTracking by default (configured in Program.cs / JimDbContext).
         var options = new DbContextOptionsBuilder<JimDbContext>()
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .EnableSensitiveDataLogging()

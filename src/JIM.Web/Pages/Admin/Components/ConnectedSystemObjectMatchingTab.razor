@@ -399,6 +399,7 @@ else
                                @bind-Value="_newMatchingRuleTargetAttribute"
                                Label="Metaverse Attribute"
                                Variant="Variant.Outlined"
+                               ToStringFunc="@(a => a?.Name ?? string.Empty)"
                                HelperText="The Metaverse attribute to match against">
                         @if (MetaverseAttributes != null)
                         {

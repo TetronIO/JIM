@@ -88,7 +88,7 @@ public class MetaverseObject
 
     /// <summary>
     /// Performance cache of the Display Name attribute value, used for efficient sorting at scale.
-    /// Do not write directly; updated automatically by the sync engine via ApplyPendingAttributeChanges().
+    /// Updated automatically by MetaverseServer (Create/Update) and the sync engine (ApplyPendingAttributeChanges).
     /// The canonical Display Name value lives in <see cref="AttributeValues"/>.
     /// </summary>
     public string? CachedDisplayName { get; set; }

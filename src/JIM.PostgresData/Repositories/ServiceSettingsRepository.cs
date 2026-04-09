@@ -39,6 +39,7 @@ public class ServiceSettingsRepository : IServiceSettingsRepository
     public async Task UpdateServiceSettingsAsync(ServiceSettings serviceSettings)
     {
         var dbServiceSettings = await Repository.Database.ServiceSettings
+            .AsTracking()
             .OrderBy(s => s.Id)
             .FirstOrDefaultAsync();
         if (dbServiceSettings == null)
@@ -107,7 +108,7 @@ public class ServiceSettingsRepository : IServiceSettingsRepository
 
     public async Task UpdateSettingAsync(ServiceSetting setting)
     {
-        var existingSetting = await Repository.Database.ServiceSettingItems.FindAsync(setting.Key);
+        var existingSetting = await Repository.Database.ServiceSettingItems.AsTracking().SingleOrDefaultAsync(s => s.Key == setting.Key);
         if (existingSetting == null)
         {
             Log.Error("UpdateSettingAsync: Could not find ServiceSetting with key {Key} to update.", setting.Key);
