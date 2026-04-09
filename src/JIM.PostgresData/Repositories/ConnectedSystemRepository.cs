@@ -337,6 +337,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<ConnectedSystemObjectTypeAttribute?> GetAttributeAsync(int id)
     {
         return await Repository.Database.ConnectedSystemAttributes
+            .AsTracking() // Use tracking to return existing tracked instances and prevent duplicate tracking conflicts
             .Include(a => a.ConnectedSystemObjectType)
                 .ThenInclude(ot => ot.ConnectedSystem)
             .SingleOrDefaultAsync(a => a.Id == id);
@@ -352,6 +353,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return new Dictionary<int, ConnectedSystemObjectTypeAttribute>();
 
         var attributes = await Repository.Database.ConnectedSystemAttributes
+            .AsTracking() // Use tracking to return existing tracked instances and prevent duplicate tracking conflicts
             .Include(a => a.ConnectedSystemObjectType)
                 .ThenInclude(ot => ot.ConnectedSystem)
             .Where(a => idList.Contains(a.Id))
