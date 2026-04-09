@@ -220,6 +220,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         connectedSystem.ObjectTypes = types;
         connectedSystem.Partitions = partitions;
 
+        // With AsNoTracking, run profile Partition instances are separate from the partition
+        // instances loaded with Containers above. Wire them up so callers see Containers.
+        var partitionLookup = partitions.ToDictionary(p => p.Id);
+        foreach (var rp in runProfiles.Where(rp => rp.Partition != null))
+        {
+            if (partitionLookup.TryGetValue(rp.Partition!.Id, out var fullPartition))
+                rp.Partition = fullPartition;
+        }
+
         return connectedSystem;
     }
 
