@@ -101,8 +101,13 @@ public class ConnectedSystemServer
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
 
+        // Resolve the ConnectorDefinition from the FK if only the ID was set (e.g. when callers
+        // avoid setting the navigation property to prevent EF Core graph traversal issues).
         if (connectedSystem.ConnectorDefinition == null)
-            throw new ArgumentException("connectedSystem.ConnectorDefinition is null!");
+        {
+            connectedSystem.ConnectorDefinition = await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(connectedSystem.ConnectorDefinitionId)
+                ?? throw new ArgumentException($"ConnectorDefinition with ID {connectedSystem.ConnectorDefinitionId} not found.");
+        }
 
         if (connectedSystem.ConnectorDefinition.Settings == null || connectedSystem.ConnectorDefinition.Settings.Count == 0)
             throw new ArgumentException("connectedSystem.ConnectorDefinition has no settings. Cannot construct a valid connectedSystem object!");
@@ -156,8 +161,13 @@ public class ConnectedSystemServer
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
 
+        // Resolve the ConnectorDefinition from the FK if only the ID was set (e.g. when callers
+        // avoid setting the navigation property to prevent EF Core graph traversal issues).
         if (connectedSystem.ConnectorDefinition == null)
-            throw new ArgumentException("connectedSystem.ConnectorDefinition is null!");
+        {
+            connectedSystem.ConnectorDefinition = await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(connectedSystem.ConnectorDefinitionId)
+                ?? throw new ArgumentException($"ConnectorDefinition with ID {connectedSystem.ConnectorDefinitionId} not found.");
+        }
 
         if (connectedSystem.ConnectorDefinition.Settings == null || connectedSystem.ConnectorDefinition.Settings.Count == 0)
             throw new ArgumentException("connectedSystem.ConnectorDefinition has no settings. Cannot construct a valid connectedSystem object!");
