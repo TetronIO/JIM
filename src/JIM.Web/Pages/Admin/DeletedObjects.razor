@@ -528,6 +528,9 @@
                 SyncRuleId = change.SyncRuleId,
                 SyncRuleName = change.SyncRuleName,
                 ActivityRunProfileExecutionItemId = change.ActivityRunProfileExecutionItemId,
+                // CSO context for Joined changes (from RPEI snapshot)
+                CsoId = change.ActivityRunProfileExecutionItem?.ConnectedSystemObjectId,
+                CsoExternalId = change.ActivityRunProfileExecutionItem?.ExternalIdSnapshot,
                 AttributeChanges = change.AttributeChanges
                     .OrderBy(ac => ac.AttributeName)
                     .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange
