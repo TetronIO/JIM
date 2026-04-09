@@ -276,7 +276,9 @@ public class Worker : BackgroundService
                                             syncWorkerTask.ConnectedSystemRunProfileId, initiatedByDisplay);
                                     }
                                     {
-                                        var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(syncWorkerTask.ConnectedSystemId);
+                                        // Load with change tracking so EF Core identity-fixes overlapping entities
+                                        // across the multiple queries used during sync (object types, sync rules, etc.)
+                                        var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(syncWorkerTask.ConnectedSystemId, withChangeTracking: true);
                                         if (connectedSystem != null)
                                         {
                                             // Resolve the connector for this connected system's connector definition
@@ -384,7 +386,7 @@ public class Worker : BackgroundService
                                     else
                                     {
                                         // we need a little more information on the connected system, so retrieve it
-                                        var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(clearConnectedSystemObjectsTask.ConnectedSystemId);
+                                        var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(clearConnectedSystemObjectsTask.ConnectedSystemId, withChangeTracking: true);
                                         if (connectedSystem == null)
                                         {
                                             Log.Warning($"ExecuteAsync: Connected system id {clearConnectedSystemObjectsTask.ConnectedSystemId} doesn't exist. Cannot continue.");
@@ -436,7 +438,7 @@ public class Worker : BackgroundService
                                         // Reset Connected System status so deletion can be retried
                                         try
                                         {
-                                            var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(deleteConnectedSystemTask.ConnectedSystemId);
+                                            var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(deleteConnectedSystemTask.ConnectedSystemId, withChangeTracking: true);
                                             if (connectedSystem != null && connectedSystem.Status == ConnectedSystemStatus.Deleting)
                                             {
                                                 connectedSystem.Status = ConnectedSystemStatus.Active;
