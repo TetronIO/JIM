@@ -288,8 +288,18 @@ public abstract class SyncTaskProcessorBase
         // Persist CSO change records separately. BulkInsertRpeisAsync only inserts RPEI scalar
         // columns; the ConnectedSystemObjectChange navigation graph requires its own persistence.
         // This covers change records created during sync (e.g., provisioning CSO "Added" records).
+        // Update ActivityRunProfileExecutionItemId on each change to the now-assigned RPEI ID,
+        // because the change was created before FlushRpeisAsync assigned IDs.
         if (_csoChangeTrackingEnabled)
+        {
+            foreach (var rpei in pageRpeis)
+            {
+                if (rpei.ConnectedSystemObjectChange != null)
+                    rpei.ConnectedSystemObjectChange.ActivityRunProfileExecutionItemId = rpei.Id;
+            }
+
             await _syncRepo.PersistRpeiCsoChangesAsync(pageRpeis);
+        }
 
         if (usedRawSql)
         {
