@@ -82,11 +82,9 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // Object types with reference attribute rules need full attribute loading even when unchanged.
         BuildReferenceObjectTypeCache(activeSyncRules);
 
-        // get the schema for all object types upfront in this Connected System, so we can retrieve lightweight CSOs without this data.
-        using (Diagnostics.Sync.StartSpan("LoadObjectTypes"))
-        {
-            _objectTypes = await _syncRepo.GetObjectTypesAsync(_connectedSystem.Id);
-        }
+        // Use object types already loaded on the connected system (with matching rules and attributes)
+        // to avoid creating duplicate entity instances that conflict with EF Core's change tracker.
+        _objectTypes = _connectedSystem.ObjectTypes!;
 
         // load all pending exports once upfront and index by CSO ID for O(1) lookup
         // this avoids O(n²) behaviour from loading all pending exports for every CSO

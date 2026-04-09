@@ -95,11 +95,9 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         // This enables efficient drift detection during CSO processing
         BuildDriftDetectionCache(allSyncRules, activeSyncRules);
 
-        // Get the schema for all object types upfront
-        using (Diagnostics.Sync.StartSpan("LoadObjectTypes"))
-        {
-            _objectTypes = await _syncRepo.GetObjectTypesAsync(_connectedSystem.Id);
-        }
+        // Use object types already loaded on the connected system (with matching rules and attributes)
+        // to avoid creating duplicate entity instances that conflict with EF Core's change tracker.
+        _objectTypes = _connectedSystem.ObjectTypes!;
 
         // Load all pending exports once upfront and index by CSO ID for O(1) lookup
         using (Diagnostics.Sync.StartSpan("LoadPendingExports"))
