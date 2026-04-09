@@ -30,22 +30,11 @@
 
             <NavMenu DrawerOpen="@IsDrawerOpen" />
 
-            <div class="jim-drawer-footer mud-text-secondary @(IsDrawerOpen ? "jim-drawer-footer-expanded" : "")">
-                <MudTooltip Text="@(IsDrawerPinned? UnpinMenuText : PinMenuText)" Arrow="true"
-                            Placement="Placement.Top">
-                    <MudToggleIconButton Toggled="@IsDrawerPinned" ToggledChanged="@(_ => ToggleDrawerPinned())"
-                                         Icon="@Icons.Material.Outlined.PushPin" Color="@Color.Inherit"
-                                         ToggledIcon="@Icons.Material.Filled.PushPin" ToggledColor="@Color.Inherit" Size="@Size.Small" />
-                </MudTooltip>
-                <MudTooltip Text="@(IsDarkMode? LightModeText : DarkModeText)" Arrow="true" Placement="Placement.Top">
-                    <MudToggleIconButton @bind-Toggled="@IsDarkMode" Icon="@Icons.Material.Filled.WbSunny"
-                                         Color="@Color.Inherit" ToggledIcon="@Icons.Material.Filled.DarkMode"
-                                         ToggledColor="@Color.Inherit" Size="@Size.Small" />
-                </MudTooltip>
-                <MudTooltip Text="See us on GitHub" Arrow="true" Placement="Placement.Top">
-                    <MudIconButton Href="https://github.com/TetronIO/JIM" Target="_blank"
-                                   Icon="@Icons.Custom.Brands.GitHub" Color="@Color.Inherit" Size="@Size.Small" />
-                </MudTooltip>
+            <div class="jim-drawer-footer">
+                <DrawerUserMenu DrawerOpen="@IsDrawerOpen"
+                                @bind-IsDarkMode="@IsDarkMode"
+                                IsDrawerPinned="@IsDrawerPinned"
+                                OnTogglePinned="ToggleDrawerPinned" />
             </div>
 
 
@@ -119,10 +108,6 @@
 
     private LoggingErrorBoundary? _errorBoundary;
     private MudThemeProvider? _mudThemeProvider;
-    private const string LightModeText = "Switch to light mode";
-    private const string DarkModeText = "Switch to dark mode";
-    private const string PinMenuText = "Pin menu open";
-    private const string UnpinMenuText = "Unpin menu";
     // Minimum viewport width (in pixels) to have drawer open by default
     // 1400px is a common breakpoint for "large" screens
     private const int LargeScreenBreakpoint = 1400;

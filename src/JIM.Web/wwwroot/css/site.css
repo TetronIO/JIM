@@ -489,27 +489,81 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
 }
 
 .jim-drawer-footer {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
     margin: 0 6px;
     border-top-style: solid;
     border-top-width: 1px;
     border-top-color: var(--jim-drawer-border-color);
-    padding: 8px 0;
-    color: var(--mud-palette-drawer-icon) !important;
+    padding: 4px 0;
 }
 
-/* Ensure drawer footer icons use drawer colours, not content area colours */
-.jim-drawer-footer .mud-icon-root {
-    color: var(--mud-palette-drawer-icon) !important;
+/* === User Menu (drawer footer) === */
+
+.jim-user-menu {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background-color 0.15s ease;
+    width: 100%;
+    min-height: 48px;
 }
 
-/* When drawer is expanded, show buttons horizontally */
-.jim-drawer-footer.jim-drawer-footer-expanded {
-    flex-direction: row;
+.jim-user-menu:hover {
+    background-color: var(--jim-nav-hover-bg, rgba(0, 0, 0, 0.04));
+}
+
+/* Collapsed mode: centre the avatar */
+.jim-user-menu-collapsed {
     justify-content: center;
+    padding: 8px 0;
+}
+
+/* User info text container */
+.jim-user-info {
+    overflow: hidden;
+    min-width: 0;
+    flex: 1;
+}
+
+/* Display name: single line, ellipsis on overflow */
+.jim-user-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--mud-palette-drawer-text) !important;
+    font-weight: 500;
+    line-height: 1.3;
+}
+
+/* Username: dimmed, single line, ellipsis */
+.jim-user-username {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.75rem !important;
+    line-height: 1.3;
+}
+
+/* Avatar: prevent shrinking */
+.jim-user-avatar {
+    flex-shrink: 0;
+}
+
+/* Popover paper */
+.jim-user-popover-paper {
+    min-width: 220px;
+}
+
+/* Popover list items */
+.jim-user-popover-paper .mud-list-item {
+    font-size: 0.875rem;
+}
+
+/* Sign-out item: subtle emphasis */
+.jim-user-signout .mud-list-item-icon {
+    color: var(--mud-palette-error) !important;
 }
 
 .jim-nowrap {

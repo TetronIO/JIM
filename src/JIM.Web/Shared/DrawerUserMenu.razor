@@ -1,0 +1,161 @@
+@using System.Security.Claims
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IJimApplicationFactory JimFactory
+@inject IDialogService DialogService
+@inject NavigationManager NavigationManager
+
+@if (_loaded)
+{
+    <div class="jim-user-menu @(!DrawerOpen ? "jim-user-menu-collapsed" : "")" @onclick="TogglePopover" @onclick:stopPropagation="true">
+        @if (DrawerOpen)
+        {
+            <MudAvatar Color="Color.Primary" Size="Size.Small" Class="jim-user-avatar">@_initials</MudAvatar>
+            <div class="jim-user-info">
+                <MudText Typo="Typo.body2" Class="jim-user-name">@_displayName</MudText>
+                @if (!string.IsNullOrEmpty(_preferredUsername))
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary jim-user-username">@_preferredUsername</MudText>
+                }
+            </div>
+        }
+        else
+        {
+            <MudTooltip Text="@_displayName" Arrow="true" Placement="Placement.Right">
+                <MudAvatar Color="Color.Primary" Size="Size.Small" Class="jim-user-avatar">@_initials</MudAvatar>
+            </MudTooltip>
+        }
+    </div>
+
+    <MudPopover Open="@_popoverOpen" AnchorOrigin="Origin.TopCenter" TransformOrigin="Origin.BottomCenter"
+                Class="jim-user-popover">
+        <MudPaper Outlined="true" Elevation="8" Class="jim-user-popover-paper pa-1">
+            <MudList T="string" Dense="true" Class="py-0">
+                <MudListItem Icon="@(IsDrawerPinned ? Icons.Material.Filled.PushPin : Icons.Material.Outlined.PushPin)"
+                             OnClick="HandleTogglePin">
+                    @(IsDrawerPinned ? "Unpin menu" : "Pin menu open")
+                </MudListItem>
+                <MudListItem>
+                    <div class="d-flex align-center justify-space-between" style="width: 100%;">
+                        <div class="d-flex align-center gap-2">
+                            <MudIcon Icon="@(IsDarkMode ? Icons.Material.Filled.DarkMode : Icons.Material.Filled.WbSunny)"
+                                     Size="Size.Small" />
+                            <MudText Typo="Typo.body2">Dark mode</MudText>
+                        </div>
+                        <MudSwitch T="bool" Value="@IsDarkMode" ValueChanged="OnDarkModeToggled"
+                                   Color="Color.Primary" Size="Size.Small" Class="ma-0" />
+                    </div>
+                </MudListItem>
+                <MudListItem Icon="@Icons.Custom.Brands.GitHub"
+                             Href="https://github.com/TetronIO/JIM" Target="_blank"
+                             OnClick="ClosePopover">
+                    GitHub
+                </MudListItem>
+                @if (_showSignOut)
+                {
+                    <MudDivider Class="my-1" />
+                    <MudListItem Icon="@Icons.Material.Filled.Logout" OnClick="HandleSignOutAsync"
+                                 Class="jim-user-signout">
+                        Sign out
+                    </MudListItem>
+                }
+            </MudList>
+        </MudPaper>
+    </MudPopover>
+
+    @if (_popoverOpen)
+    {
+        <MudOverlay Visible="true" OnClick="ClosePopover"
+                    DarkBackground="false" LightBackground="false" />
+    }
+}
+
+@code
+{
+    [Parameter]
+    [EditorRequired]
+    public bool DrawerOpen { get; set; }
+
+    [Parameter]
+    public bool IsDarkMode { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> IsDarkModeChanged { get; set; }
+
+    [Parameter]
+    public bool IsDrawerPinned { get; set; }
+
+    [Parameter]
+    public EventCallback OnTogglePinned { get; set; }
+
+    private bool _popoverOpen;
+    private string? _displayName;
+    private string? _preferredUsername;
+    private string _initials = "?";
+    private bool _showSignOut;
+    private bool _loaded;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        _displayName = user.FindFirstValue("name");
+        _preferredUsername = user.FindFirstValue("preferred_username");
+        _initials = GetInitials(_displayName);
+
+        using var jim = JimFactory.Create();
+        var settings = await jim.ServiceSettings.GetServiceSettingsAsync();
+        _showSignOut = settings?.SSOEnableLogOut ?? true;
+
+        _loaded = true;
+    }
+
+    private void TogglePopover()
+    {
+        _popoverOpen = !_popoverOpen;
+    }
+
+    private void ClosePopover()
+    {
+        _popoverOpen = false;
+    }
+
+    private async Task HandleTogglePin()
+    {
+        ClosePopover();
+        await OnTogglePinned.InvokeAsync();
+    }
+
+    private async Task OnDarkModeToggled(bool value)
+    {
+        await IsDarkModeChanged.InvokeAsync(value);
+    }
+
+    private async Task HandleSignOutAsync()
+    {
+        ClosePopover();
+
+        var result = await DialogService.ShowMessageBoxAsync(
+            "Sign Out",
+            "Are you sure you want to sign out?",
+            yesText: "Sign out",
+            cancelText: "Cancel");
+
+        if (result.HasValue && result.Value)
+        {
+            NavigationManager.NavigateTo("/signout", forceLoad: true);
+        }
+    }
+
+    private static string GetInitials(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return "?";
+
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2)
+            return $"{char.ToUpperInvariant(parts[0][0])}{char.ToUpperInvariant(parts[^1][0])}";
+
+        return char.ToUpperInvariant(parts[0][0]).ToString();
+    }
+}
