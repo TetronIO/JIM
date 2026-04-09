@@ -82,7 +82,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         List<SyncRule> activeSyncRules;
         using (Diagnostics.Sync.StartSpan("LoadSyncRules"))
         {
-            activeSyncRules = await _syncRepo.GetSyncRulesAsync(_connectedSystem.Id, false);
+            activeSyncRules = await _syncRepo.GetSyncRulesAsync(_connectedSystem.Id, false, withChangeTracking: true);
         }
 
         // Load ALL sync rules from ALL systems for drift detection import mapping cache.
@@ -91,18 +91,16 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         List<SyncRule> allSyncRules;
         using (Diagnostics.Sync.StartSpan("LoadAllSyncRulesForDriftDetection"))
         {
-            allSyncRules = await _syncRepo.GetAllSyncRulesAsync();
+            allSyncRules = await _syncRepo.GetAllSyncRulesAsync(withChangeTracking: true);
         }
 
         // Build drift detection cache (import mapping cache + export rules with EnforceState=true)
         // This enables efficient drift detection during CSO processing
         BuildDriftDetectionCache(allSyncRules, activeSyncRules);
 
-        // Get the schema for all object types upfront
-        using (Diagnostics.Sync.StartSpan("LoadObjectTypes"))
-        {
-            _objectTypes = await _syncRepo.GetObjectTypesAsync(_connectedSystem.Id);
-        }
+        // Use object types already loaded on the connected system (with matching rules and attributes)
+        // to avoid creating duplicate entity instances that conflict with EF Core's change tracker.
+        _objectTypes = _connectedSystem.ObjectTypes!;
 
         // Load all pending exports once upfront and index by CSO ID for O(1) lookup
         using (Diagnostics.Sync.StartSpan("LoadPendingExports"))
@@ -235,6 +233,9 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
 
                 // Flush this page's RPEIs via bulk insert before updating progress
                 await FlushRpeisAsync();
+
+                // Persist MVO change records via raw SQL before clearing the change tracker
+                await FlushPendingMvoChangesAsync();
 
                 // Clear the change tracker unconditionally at every page boundary.
                 // See SyncFullSyncTaskProcessor for detailed explanation.

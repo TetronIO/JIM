@@ -60,6 +60,7 @@ public class SyncRuleMapping : IAuditable
     /// A backlink to the parent SynchronisationRule.
     /// </summary>
     public SyncRule? SyncRule { get; set; }
+    public int? SyncRuleId { get; set; }
 
     /// <summary>
     /// The sources that provide the value for the target attribute when the mapping is evaluated. 

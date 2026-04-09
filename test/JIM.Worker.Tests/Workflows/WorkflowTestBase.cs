@@ -36,6 +36,9 @@ public abstract class WorkflowTestBase
 
         // Create in-memory database for fast, isolated tests
         // Each test gets a unique database to ensure isolation
+        // Note: InMemory provider does not support QueryTrackingBehavior.NoTracking correctly —
+        // it always tracks internally and produces identity conflicts when entities are re-attached.
+        // Production uses NoTracking by default (configured in Program.cs / JimDbContext).
         var options = new DbContextOptionsBuilder<JimDbContext>()
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .EnableSensitiveDataLogging()

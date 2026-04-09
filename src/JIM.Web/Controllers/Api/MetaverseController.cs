@@ -255,10 +255,11 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     {
         _logger.LogInformation("Updating metaverse attribute: {Id}", id);
 
-        // If we're updating object type associations, include them in the query to properly manage the many-to-many relationship
+        // If we're updating object type associations, include them in the query to properly manage the many-to-many relationship.
+        // Use withChangeTracking: true because we modify and save the returned entity.
         var attribute = request.ObjectTypeIds != null
-            ? await _application.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(id)
-            : await _application.Metaverse.GetMetaverseAttributeAsync(id);
+            ? await _application.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(id, withChangeTracking: true)
+            : await _application.Metaverse.GetMetaverseAttributeAsync(id, withChangeTracking: true);
 
         if (attribute == null)
             return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {id} not found."));

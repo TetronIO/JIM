@@ -10,7 +10,7 @@ public interface IExampleDataRepository
 {
     public Task<List<ExampleDataSet>> GetExampleDataSetsAsync();
     public Task<List<ExampleDataSetHeader>> GetExampleDataSetHeadersAsync();
-    public Task<ExampleDataSet?> GetExampleDataSetAsync(string name, string culture);
+    public Task<ExampleDataSet?> GetExampleDataSetAsync(string name, string culture, bool withChangeTracking = false);
     public Task<ExampleDataSet?> GetExampleDataSetAsync(int id);
     public Task CreateExampleDataSetAsync(ExampleDataSet exampleDataSet);
     public Task UpdateExampleDataSetAsync(ExampleDataSet exampleDataSet);

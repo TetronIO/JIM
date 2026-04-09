@@ -643,7 +643,7 @@ internal class SeedingServer
         var updatedCount = 0;
         foreach (var (name, hint) in renderingHints)
         {
-            var attribute = await Application.Metaverse.GetMetaverseAttributeAsync(name);
+            var attribute = await Application.Metaverse.GetMetaverseAttributeAsync(name, withChangeTracking: true);
             if (attribute != null && attribute.RenderingHint != hint)
             {
                 attribute.RenderingHint = hint;
@@ -939,7 +939,7 @@ internal class SeedingServer
         var connectorCapabilities = (IConnectorCapabilities)connector;
         var connectorSettings = (IConnectorSettings)connector;
 
-        var existingDefinition = await Application.ConnectedSystems.GetConnectorDefinitionAsync(connector.Name);
+        var existingDefinition = await Application.ConnectedSystems.GetConnectorDefinitionAsync(connector.Name, withChangeTracking: true);
         if (existingDefinition == null)
         {
             Log.Debug($"SyncConnectorDefinitionAsync: Connector '{connector.Name}' not found in database, skipping sync (will be created during seeding)");
@@ -1097,7 +1097,7 @@ internal class SeedingServer
     private async Task<ExampleDataSet?> PrepareExampleDataSetAsync(string name, string culture, string resourceValues)
     {
         var changes = false;
-        var exampleDataSet = await Application.Repository.ExampleData.GetExampleDataSetAsync(name, culture);
+        var exampleDataSet = await Application.Repository.ExampleData.GetExampleDataSetAsync(name, culture, withChangeTracking: true);
         if (exampleDataSet == null)
         {
             exampleDataSet = new ExampleDataSet()

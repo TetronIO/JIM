@@ -133,6 +133,8 @@ All dependency updates from Dependabot require human review before merging - the
 
 **Optional Environment Variables:**
 - `JIM_ENCRYPTION_KEY_PATH` - Custom path for encryption key storage (default: `/data/keys` for Docker, or app data directory)
+- `JIM_METRICS_API_URL` - Metrics API base URL for integration test metrics streaming (see `test/integration/README.md`)
+- `JIM_METRICS_API_KEY` - API key for metrics streaming authentication
 
 **GitHub Codespaces:**
 - PostgreSQL memory settings automatically optimized

@@ -65,6 +65,10 @@
 - Use `<NavigableMudTabs>` instead of `<MudTabs>` for all top-level page tabs; it syncs the active tab with a `?t=slug` query string, enabling browser back/forward navigation
 - Use plain `<MudTabs>` only for tabs inside dialogs or nested sub-tabs where URL navigation is not needed
 
+**Tooltips:**
+- ALWAYS use `Arrow="true" Placement="Placement.Top"` on all `<MudTooltip>` components
+- This ensures tooltips appear above the element with a downward-pointing arrow, consistent across the entire UI
+
 **UI Element Sizing:**
 - ALWAYS use normal/default sizes for ALL UI elements when adding new components
 - Text: Use `Typo.body1` (default readable size)

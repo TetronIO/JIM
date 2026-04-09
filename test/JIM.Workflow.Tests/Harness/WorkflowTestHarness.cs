@@ -60,6 +60,9 @@ public class WorkflowTestHarness : IDisposable
         Environment.SetEnvironmentVariable("JIM_DB_PASSWORD", "test");
 
         // Create in-memory database for fast, isolated tests
+        // Note: InMemory provider does not support QueryTrackingBehavior.NoTracking correctly —
+        // it always tracks internally and produces identity conflicts when entities are re-attached.
+        // Production uses NoTracking by default (configured in Program.cs / JimDbContext).
         var options = new DbContextOptionsBuilder<JimDbContext>()
             .UseInMemoryDatabase(databaseName: $"WorkflowTest_{Guid.NewGuid()}")
             .EnableSensitiveDataLogging()

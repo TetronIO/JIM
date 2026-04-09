@@ -7,8 +7,9 @@
 
 .DESCRIPTION
     Creates users and entitlement groups in Source OpenLDAP (Yellowstone suffix) for
-    cross-domain group synchronisation testing. Groups use the groupOfNames object class,
-    which requires at least one member (RFC 4519 MUST constraint).
+    cross-domain group synchronisation testing. Groups use the jimGroup structural class
+    (SUP groupOfNames), which inherits the MUST member constraint and adds mail,
+    jimGroupType, and jimGroupStatus attributes.
 
     The Target suffix (Glitterband) gets only OU structure — JIM provisions groups there.
 
@@ -221,6 +222,10 @@ Write-TestStep "Step 3" "Creating $($groupScale.TotalGroups) groups"
 $createdGroups = @()
 $groupLdifBuilder = [System.Text.StringBuilder]::new()
 
+# Group status distribution: 80% Active, 10% Pending Review, 10% Archived (deterministic)
+$groupStatuses = @("Active", "Active", "Active", "Active", "Active", "Active", "Active", "Active", "Pending Review", "Archived")
+$groupIndex = 0
+
 # Company groups
 $companyCount = [Math]::Min($groupScale.Companies, $sortedCompanyKeys.Length)
 for ($g = 0; $g -lt $companyCount; $g++) {
@@ -228,14 +233,21 @@ for ($g = 0; $g -lt $companyCount; $g++) {
     $groupName = "Company-$companyKey"
     $dn = "cn=$groupName,$($config.GroupsOU)"
 
-    # Find first user in this company for initial member (groupOfNames MUST constraint)
+    # Find first user in this company for initial member (jimGroup inherits groupOfNames MUST constraint)
     $companyUsers = @($createdUsers | Where-Object { $_.CompanyKey -eq $companyKey })
     $initialMember = if ($companyUsers.Count -gt 0) { $companyUsers[0].DN } else { $createdUsers[0].DN }
 
+    $groupMail = "$($groupName.ToLower())@$($config.Domain)"
+    $groupStatus = $groupStatuses[$groupIndex % $groupStatuses.Length]
+    $groupIndex++
+
     [void]$groupLdifBuilder.AppendLine("dn: $dn")
-    [void]$groupLdifBuilder.AppendLine("objectClass: groupOfNames")
+    [void]$groupLdifBuilder.AppendLine("objectClass: jimGroup")
     [void]$groupLdifBuilder.AppendLine("cn: $groupName")
     [void]$groupLdifBuilder.AppendLine("description: Company group for $($scenario8CompanyNames[$companyKey])")
+    [void]$groupLdifBuilder.AppendLine("mail: $groupMail")
+    [void]$groupLdifBuilder.AppendLine("jimGroupType: Managed")
+    [void]$groupLdifBuilder.AppendLine("jimGroupStatus: $groupStatus")
     [void]$groupLdifBuilder.AppendLine("member: $initialMember")
     [void]$groupLdifBuilder.AppendLine("")
 
@@ -259,10 +271,17 @@ for ($g = 0; $g -lt $deptCount; $g++) {
     $deptUsers = @($createdUsers | Where-Object { $_.DeptKey -eq $deptKey })
     $initialMember = if ($deptUsers.Count -gt 0) { $deptUsers[0].DN } else { $createdUsers[0].DN }
 
+    $groupMail = "$($groupName.ToLower())@$($config.Domain)"
+    $groupStatus = $groupStatuses[$groupIndex % $groupStatuses.Length]
+    $groupIndex++
+
     [void]$groupLdifBuilder.AppendLine("dn: $dn")
-    [void]$groupLdifBuilder.AppendLine("objectClass: groupOfNames")
+    [void]$groupLdifBuilder.AppendLine("objectClass: jimGroup")
     [void]$groupLdifBuilder.AppendLine("cn: $groupName")
     [void]$groupLdifBuilder.AppendLine("description: Department group for $($scenario8DepartmentNames[$deptKey])")
+    [void]$groupLdifBuilder.AppendLine("mail: $groupMail")
+    [void]$groupLdifBuilder.AppendLine("jimGroupType: Managed")
+    [void]$groupLdifBuilder.AppendLine("jimGroupStatus: $groupStatus")
     [void]$groupLdifBuilder.AppendLine("member: $initialMember")
     [void]$groupLdifBuilder.AppendLine("")
 
@@ -288,10 +307,17 @@ for ($g = 0; $g -lt $locCount; $g++) {
     # Assign a subset of users to location groups
     $initialMember = $createdUsers[$g % $createdUsers.Count].DN
 
+    $groupMail = "$($groupName.ToLower())@$($config.Domain)"
+    $groupStatus = $groupStatuses[$groupIndex % $groupStatuses.Length]
+    $groupIndex++
+
     [void]$groupLdifBuilder.AppendLine("dn: $dn")
-    [void]$groupLdifBuilder.AppendLine("objectClass: groupOfNames")
+    [void]$groupLdifBuilder.AppendLine("objectClass: jimGroup")
     [void]$groupLdifBuilder.AppendLine("cn: $groupName")
     [void]$groupLdifBuilder.AppendLine("description: Location group for $locName")
+    [void]$groupLdifBuilder.AppendLine("mail: $groupMail")
+    [void]$groupLdifBuilder.AppendLine("jimGroupType: Managed")
+    [void]$groupLdifBuilder.AppendLine("jimGroupStatus: $groupStatus")
     [void]$groupLdifBuilder.AppendLine("member: $initialMember")
     [void]$groupLdifBuilder.AppendLine("")
 
@@ -314,10 +340,17 @@ for ($g = 0; $g -lt $groupScale.Projects; $g++) {
 
     $initialMember = $createdUsers[$g % $createdUsers.Count].DN
 
+    $groupMail = "$($groupName.ToLower())@$($config.Domain)"
+    $groupStatus = $groupStatuses[$groupIndex % $groupStatuses.Length]
+    $groupIndex++
+
     [void]$groupLdifBuilder.AppendLine("dn: $dn")
-    [void]$groupLdifBuilder.AppendLine("objectClass: groupOfNames")
+    [void]$groupLdifBuilder.AppendLine("objectClass: jimGroup")
     [void]$groupLdifBuilder.AppendLine("cn: $groupName")
     [void]$groupLdifBuilder.AppendLine("description: Project group for $projectName")
+    [void]$groupLdifBuilder.AppendLine("mail: $groupMail")
+    [void]$groupLdifBuilder.AppendLine("jimGroupType: Self-Service")
+    [void]$groupLdifBuilder.AppendLine("jimGroupStatus: $groupStatus")
     [void]$groupLdifBuilder.AppendLine("member: $initialMember")
     [void]$groupLdifBuilder.AppendLine("")
 

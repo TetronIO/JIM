@@ -476,10 +476,7 @@
 
         if (ScheduleId.HasValue)
         {
-            // Use AsNoTracking to prevent EF Core from tracking changes to _schedule and its steps.
-            // This avoids issues where adding/removing steps in the UI causes EF Core to cascade
-            // UPDATE/DELETE operations when we later save the schedule.
-            _schedule = await jim.Scheduler.GetScheduleWithStepsAsNoTrackingAsync(ScheduleId.Value);
+            _schedule = await jim.Scheduler.GetScheduleWithStepsAsync(ScheduleId.Value);
             if (_schedule != null)
             {
                 // Load schedule configuration from model fields
