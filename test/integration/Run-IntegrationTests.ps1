@@ -1499,6 +1499,15 @@ if ($DisableChangeTracking) {
 } else {
     Write-Host "  Change Tracking:         ${CYAN}Enabled${NC}"
 }
+
+# Metrics streaming status
+$metricsStreamingEnabled = $env:JIM_METRICS_API_URL -and $env:JIM_METRICS_API_KEY
+if ($metricsStreamingEnabled) {
+    Write-Host "  Metrics Streaming:       ${GREEN}Enabled${NC}"
+    Write-Host "                           ${GRAY}$($env:JIM_METRICS_API_URL)${NC}"
+} else {
+    Write-Host "  Metrics Streaming:       ${GRAY}Disabled (set JIM_METRICS_API_URL and JIM_METRICS_API_KEY to enable)${NC}"
+}
 Write-Host ""
 
 # Change to repository root
@@ -2341,6 +2350,10 @@ if ($DisableChangeTracking) {
 if ($CaptureMetrics) {
     Write-Host "  Capture Metrics:         Yes"
 }
+if ($metricsStreamingEnabled) {
+    Write-Host "  Metrics Streaming:       Enabled ($($env:JIM_METRICS_API_URL))"
+    Write-Host "  Metrics Run ID:          $metricsRunId"
+}
 if ($IgnoreSnapshots) {
     Write-Host "  Ignore Snapshots:        Yes"
 }
@@ -2370,6 +2383,39 @@ if ($scenarioNumber -and $scenariosAcceptingExportParams -contains $scenarioNumb
     if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) {
         $scenarioParams.MaxExportParallelism = $MaxExportParallelism
     }
+}
+
+# Start metrics streaming background job (if enabled)
+$metricsRunId = [Guid]::NewGuid().ToString()
+$metricsStreamJob = $null
+$metricsHostFingerprint = $null
+if ($metricsStreamingEnabled) {
+    Write-Step "Capturing host fingerprint..."
+    $metricsHostFingerprint = & "$scriptRoot/Get-HostFingerprint.ps1"
+
+    $workerLogPath = Join-Path $scriptRoot "results" "logs" "worker"
+    # Find the most recent worker log file (Serilog names files with date suffixes)
+    # The streaming script will wait for the file to appear if the container hasn't started writing yet
+    $workerLogFile = Get-ChildItem -Path $workerLogPath -Filter "jim.worker.*.log" -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($workerLogFile) {
+        $workerLogFilePath = $workerLogFile.FullName
+    } else {
+        # Construct expected path; the streaming script will wait for it to appear
+        $workerLogFilePath = Join-Path $workerLogPath "jim.worker.$(Get-Date -Format 'yyyyMMdd').log"
+    }
+
+    Write-Step "Starting metrics streaming to $($env:JIM_METRICS_API_URL)..."
+    $metricsStreamJob = Start-Job -FilePath "$scriptRoot/Stream-WorkerLogs.ps1" -ArgumentList @(
+        $workerLogFilePath,
+        $env:JIM_METRICS_API_URL,
+        $env:JIM_METRICS_API_KEY,
+        $metricsRunId,
+        $Scenario,
+        $Template,
+        $metricsHostFingerprint.hostClass
+    )
+    Write-Success "Metrics streaming started (Run ID: $metricsRunId)"
 }
 
 try {
@@ -2753,6 +2799,40 @@ else {
 } # end else (metrics not skipped)
 
 $timings["6. Capture Metrics"] = (Get-Date) - $step6Start
+
+# Stop metrics streaming and submit final results
+if ($metricsStreamJob) {
+    Write-Step "Stopping metrics streaming..."
+    Stop-Job $metricsStreamJob -ErrorAction SilentlyContinue
+    # Allow final flush to complete
+    $jobOutput = Receive-Job $metricsStreamJob -ErrorAction SilentlyContinue
+    if ($jobOutput) {
+        $jobOutput | ForEach-Object { Write-Host "  ${GRAY}$_${NC}" }
+    }
+    Remove-Job $metricsStreamJob -Force -ErrorAction SilentlyContinue
+
+    Write-Step "Submitting test results to Metrics API..."
+    $scenarioSuccess = ($scenarioExitCode -eq 0)
+    $testDurationMs = $timings["5. Run Tests"].TotalMilliseconds
+    try {
+        & "$scriptRoot/Submit-TestResults.ps1" `
+            -RunId $metricsRunId `
+            -Scenario $Scenario `
+            -Template $Template `
+            -Step $Step `
+            -DirectoryType $DirectoryType `
+            -Success $scenarioSuccess `
+            -ExitCode $scenarioExitCode `
+            -TestDurationMs $testDurationMs `
+            -HostFingerprint $metricsHostFingerprint `
+            -ApiUrl $env:JIM_METRICS_API_URL `
+            -ApiKey $env:JIM_METRICS_API_KEY `
+            -ResultFile $(if ($currentFile) { $currentFile } else { "" })
+    }
+    catch {
+        Write-Warning "MetricsSubmission: Failed to submit results: $($_.Exception.Message)"
+    }
+}
 
 # Restore original .env log level if we changed it
 if ($script:OriginalLogLevel) {

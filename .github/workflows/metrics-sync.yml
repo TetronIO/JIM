@@ -1,0 +1,61 @@
+name: Metrics Schema Sync
+
+# Notify the jim-metrics repo when JIM-side span enrichment, submission payload,
+# or host fingerprinting contracts change. The receiver workflow in jim-metrics
+# processes the change context and creates update PRs as needed.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/JIM.Worker/Processors/Sync*Processor.cs'
+      - 'src/JIM.Application/Servers/ExportExecutionServer.cs'
+      - 'test/integration/Submit-TestResults.ps1'
+      - 'test/integration/Get-HostFingerprint.ps1'
+      - 'test/integration/Stream-WorkerLogs.ps1'
+
+jobs:
+  notify-metrics-repo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Build change context
+        id: changes
+        run: |
+          # Get list of changed files matching our paths
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD -- \
+            'src/JIM.Worker/Processors/Sync*Processor.cs' \
+            'src/JIM.Application/Servers/ExportExecutionServer.cs' \
+            'test/integration/Submit-TestResults.ps1' \
+            'test/integration/Get-HostFingerprint.ps1' \
+            'test/integration/Stream-WorkerLogs.ps1' | jq -R -s -c 'split("\n") | map(select(length > 0))')
+
+          # Get diff summary for the changed files
+          DIFF_SUMMARY=$(git diff HEAD~1 HEAD -- \
+            'src/JIM.Worker/Processors/Sync*Processor.cs' \
+            'src/JIM.Application/Servers/ExportExecutionServer.cs' \
+            'test/integration/Submit-TestResults.ps1' \
+            'test/integration/Get-HostFingerprint.ps1' \
+            'test/integration/Stream-WorkerLogs.ps1' | head -200)
+
+          echo "changed_files=$CHANGED_FILES" >> "$GITHUB_OUTPUT"
+          # Write diff to file to avoid shell escaping issues
+          echo "$DIFF_SUMMARY" > /tmp/diff_summary.txt
+
+      - name: Dispatch to jim-metrics
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.METRICS_REPO_DISPATCH_TOKEN }}
+          repository: TetronIO/jim-metrics
+          event-type: jim-contract-changed
+          client-payload: |
+            {
+              "commit_sha": "${{ github.sha }}",
+              "commit_message": "${{ github.event.head_commit.message }}",
+              "changed_files": ${{ steps.changes.outputs.changed_files }},
+              "diff_summary_truncated": true
+            }
