@@ -503,7 +503,23 @@ public class MetaverseRepository : IMetaverseRepository
 
     public async Task CreateMetaverseObjectAsync(MetaverseObject metaverseObject)
     {
-        Repository.Database.MetaverseObjects.Add(metaverseObject);
+        // Attach existing entities referenced by nav properties so EF recognises them
+        // as existing and doesn't attempt to insert them as new rows.
+        if (metaverseObject.Type != null && Repository.Database.Entry(metaverseObject.Type).State == EntityState.Detached)
+            Repository.Database.MetaverseObjectTypes.Attach(metaverseObject.Type);
+
+        foreach (var av in metaverseObject.AttributeValues)
+        {
+            if (av.Attribute != null && Repository.Database.Entry(av.Attribute).State == EntityState.Detached)
+                Repository.Database.MetaverseAttributes.Attach(av.Attribute);
+        }
+
+        // Use Entry().State instead of Add() to avoid graph traversal that would
+        // override the Unchanged state of attached entities (Type, Attributes) to Added.
+        Repository.Database.Entry(metaverseObject).State = EntityState.Added;
+        foreach (var av in metaverseObject.AttributeValues)
+            Repository.Database.Entry(av).State = EntityState.Added;
+
         await Repository.Database.SaveChangesAsync();
     }
 
