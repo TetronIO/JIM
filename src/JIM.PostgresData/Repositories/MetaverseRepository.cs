@@ -231,7 +231,9 @@ public class MetaverseRepository : IMetaverseRepository
                 Repository.Database.MetaverseObjectTypes.Attach(objectType);
         }
 
-        Repository.Database.MetaverseAttributes.Add(attribute);
+        // Use Entry().State instead of Add() to avoid graph traversal that would
+        // override the Unchanged state of the attached object types back to Added.
+        Repository.Database.Entry(attribute).State = EntityState.Added;
         await Repository.Database.SaveChangesAsync();
     }
 
