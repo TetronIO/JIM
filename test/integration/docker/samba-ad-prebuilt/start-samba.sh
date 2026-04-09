@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 # Restore provisioned data if volumes are empty
 if [ ! -f /usr/local/samba/private/secrets.keytab ]; then
     echo "Restoring provisioned Samba data..."

@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 # Post-provisioning setup for Samba AD
 # This script runs after the domain is provisioned to add TLS and test OUs
 # Called by Build-SambaImages.ps1 after the container is running and healthy

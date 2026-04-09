@@ -10,6 +10,9 @@
 @inject IDialogService DialogService
 @inject IUserPreferenceService PreferenceService
 
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
 <MudAlert Severity="ConnectedSystem.ObjectTypes is { Count: > 0 } ? Severity.Warning : Severity.Info" Variant="Variant.Outlined">
     @if (ConnectedSystem.ObjectTypes == null || ConnectedSystem.ObjectTypes.Count == 0)
     {

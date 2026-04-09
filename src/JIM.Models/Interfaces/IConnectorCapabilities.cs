@@ -1,4 +1,7 @@
-﻿namespace JIM.Models.Interfaces;
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+namespace JIM.Models.Interfaces;
 
 /// <summary>
 /// Defines how a Connector can let JIM know what capabilities it supports.

@@ -1,4 +1,7 @@
-﻿using CPI.DirectoryServices;
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+using CPI.DirectoryServices;
 using JIM.Models.Staging;
 using Serilog;
 using System.DirectoryServices.Protocols;

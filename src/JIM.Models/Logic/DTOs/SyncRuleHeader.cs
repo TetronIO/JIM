@@ -1,4 +1,7 @@
-﻿namespace JIM.Models.Logic.DTOs;
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+namespace JIM.Models.Logic.DTOs;
 
 /// <summary>
 /// Lightweight representation of a SyncRule for list views.

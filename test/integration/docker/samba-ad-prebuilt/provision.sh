@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 # Pre-provision Samba AD domain at image build time
 # This script is retained for compatibility but is typically NOT used with
 # diegogslomp/samba-ad-dc as that image handles its own provisioning via init.sh.

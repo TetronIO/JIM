@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 # Add a second MDB database (dc=glitterband,dc=local) to the OpenLDAP instance.
 #
 # Bitnami runs scripts in /docker-entrypoint-initdb.d/ AFTER ldap_initialize()

@@ -6,6 +6,9 @@
 @inject ISnackbar Snackbar
 @inject IJSRuntime JSRuntime
 
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
 <MudAlert Severity="(ConnectedSystem.Partitions is { Count: > 0 } ? Severity.Warning : Severity.Info)" Variant="Variant.Outlined">
     @if (ConnectedSystem.Partitions == null || ConnectedSystem.Partitions.Count == 0)
     {

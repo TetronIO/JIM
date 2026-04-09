@@ -1,4 +1,7 @@
-﻿namespace JIM.Models.Search;
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+namespace JIM.Models.Search;
 
 /// <summary>
 /// Determines what type of logic a CriteriaGroup should apply to it's members. 

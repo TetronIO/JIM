@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 # JIM Setup Script
 # Downloads and configures JIM for production deployment.
 #

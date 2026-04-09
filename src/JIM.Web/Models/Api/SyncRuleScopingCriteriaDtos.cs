@@ -1,3 +1,6 @@
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
 using System.ComponentModel.DataAnnotations;
 using JIM.Models.Logic;
 using JIM.Models.Search;

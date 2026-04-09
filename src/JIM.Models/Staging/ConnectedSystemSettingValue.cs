@@ -1,4 +1,7 @@
-﻿namespace JIM.Models.Staging;
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+namespace JIM.Models.Staging;
 
 /// <summary>
 /// Defines an instance of a connector definition setting that JIM will ask an administrator to supply a value for when configuring a Connected System.

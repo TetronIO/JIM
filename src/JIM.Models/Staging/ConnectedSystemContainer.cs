@@ -1,4 +1,7 @@
-﻿using System.ComponentModel.DataAnnotations.Schema;
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+using System.ComponentModel.DataAnnotations.Schema;
 namespace JIM.Models.Staging;
 
 public class ConnectedSystemContainer

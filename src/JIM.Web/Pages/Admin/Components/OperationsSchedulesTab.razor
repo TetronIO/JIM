@@ -9,6 +9,9 @@
 @inject IUserPreferenceService PreferenceService
 
 @if (_preferencesLoaded)
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 {
     <MudTable @ref="_table" T="Schedule" ServerData="ServerReload"
               RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged"

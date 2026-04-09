@@ -1,4 +1,7 @@
-﻿using JIM.Data.Repositories;
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+using JIM.Data.Repositories;
 using JIM.Models.Core;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;

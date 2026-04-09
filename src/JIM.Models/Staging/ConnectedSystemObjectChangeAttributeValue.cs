@@ -1,4 +1,7 @@
-﻿using System.Globalization;
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+using System.Globalization;
 using JIM.Models.Enums;
 namespace JIM.Models.Staging;
 

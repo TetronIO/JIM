@@ -1,0 +1,5 @@
+root = true
+
+[*.cs]
+file_header_template = Copyright (c) Tetron Limited. All rights reserved.\nLicensed under the Tetron Commercial License. See LICENSE file in the project root.
+dotnet_diagnostic.IDE0073.severity = suggestion
