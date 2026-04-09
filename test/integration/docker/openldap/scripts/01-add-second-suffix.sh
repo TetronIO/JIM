@@ -49,6 +49,24 @@ for i in $(seq 1 30); do
     sleep 1
 done
 
+# Load custom JIM schema extensions.
+# Defines jimGroup (SUP groupOfNames STRUCTURAL) with additional MAY attributes:
+#   - mail (from cosine schema, already loaded by Bitnami)
+#   - jimGroupType (custom: group classification, e.g. "Managed", "Self-Service")
+#   - jimGroupStatus (custom: lifecycle status, e.g. "Active", "Archived")
+# OIDs use the 1.3.6.1.4.1.99999 test arc (integration tests only).
+# Schema is global (cn=config), so both Yellowstone and Glitterband suffixes can use jimGroup.
+echo "[openldap-init] Loading JIM schema extensions..."
+ldapadd -x -H "$LDAP_URI" -D "$CONFIG_ADMIN_DN" -w "$CONFIG_ADMIN_PW" <<SCHEMA
+dn: cn=jim-extensions,cn=schema,cn=config
+objectClass: olcSchemaConfig
+cn: jim-extensions
+olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.1 NAME 'jimGroupType' DESC 'Group type classification' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )
+olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.2 NAME 'jimGroupStatus' DESC 'Group lifecycle status' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )
+olcObjectClasses: ( 1.3.6.1.4.1.99999.1.2.1 NAME 'jimGroup' DESC 'Extended group with type, status, and mail' SUP groupOfNames STRUCTURAL MAY ( mail $ jimGroupType $ jimGroupStatus ) )
+SCHEMA
+echo "[openldap-init] JIM schema extensions loaded"
+
 # Hash the password for the new database's rootpw
 HASHED_PW=$($SLAPPASSWD -s "$DATA_ADMIN_PW")
 

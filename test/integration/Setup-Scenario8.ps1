@@ -93,9 +93,15 @@ $targetBaseDN      = $targetConfig.BaseDN
 $userObjectClass   = $sourceConfig.UserObjectClass
 $groupObjectClass  = $sourceConfig.GroupObjectClass
 
+# Scenario 8 OpenLDAP uses jimGroup (SUP groupOfNames) which adds mail, jimGroupType, jimGroupStatus.
+# Override here rather than in the global Get-DirectoryConfig to avoid affecting other scenarios.
+if ($isOpenLDAP) {
+    $groupObjectClass = "jimGroup"
+}
+
 # Object type names for schema lookup
 $userTypeName  = $userObjectClass    # "user" for AD, "inetOrgPerson" for OpenLDAP
-$groupTypeName = $groupObjectClass   # "group" for AD, "groupOfNames" for OpenLDAP
+$groupTypeName = $groupObjectClass   # "group" for AD, "jimGroup" for OpenLDAP
 
 # Attribute lists differ by directory type
 if ($isOpenLDAP) {
@@ -106,7 +112,8 @@ if ($isOpenLDAP) {
         'mail', 'title', 'departmentNumber', 'employeeNumber', 'o', 'employeeType', 'distinguishedName'
     )
     $requiredGroupAttributes = @(
-        'entryUUID', 'cn', 'description', 'member', 'distinguishedName'
+        'entryUUID', 'cn', 'description', 'member', 'mail',
+        'jimGroupType', 'jimGroupStatus', 'distinguishedName'
     )
 
     # Source container layout: ou=People, ou=Groups under suffix
@@ -147,17 +154,23 @@ if ($isOpenLDAP) {
         @{ MvAttr = "Company"; LdapAttr = "o" }
     )
 
-    # Group attribute mappings for OpenLDAP
+    # Group attribute mappings for OpenLDAP (jimGroup adds mail, jimGroupType, jimGroupStatus)
     $groupImportMappings = @(
         @{ LdapAttr = "cn"; MvAttr = "Account Name" }
         @{ LdapAttr = "cn"; MvAttr = "Common Name" }
         @{ LdapAttr = "cn"; MvAttr = "Display Name" }
         @{ LdapAttr = "description"; MvAttr = "Description" }
+        @{ LdapAttr = "mail"; MvAttr = "Email" }
+        @{ LdapAttr = "jimGroupType"; MvAttr = "Group Type" }
+        @{ LdapAttr = "jimGroupStatus"; MvAttr = "Status" }
         @{ LdapAttr = "member"; MvAttr = "Static Members" }
     )
     $groupExportMappings = @(
         @{ MvAttr = "Account Name"; LdapAttr = "cn" }
         @{ MvAttr = "Description"; LdapAttr = "description" }
+        @{ MvAttr = "Email"; LdapAttr = "mail" }
+        @{ MvAttr = "Group Type"; LdapAttr = "jimGroupType" }
+        @{ MvAttr = "Status"; LdapAttr = "jimGroupStatus" }
         @{ MvAttr = "Static Members"; LdapAttr = "member" }
     )
 
@@ -916,8 +929,8 @@ foreach ($mapping in $groupImportMappings) {
 }
 Write-Host "    ✓ Source group import mappings ($groupImportMappingsCreated new)" -ForegroundColor Green
 
-# Create expression-based import mappings for Group Type and Group Scope (AD only — derived from groupType flags)
-# OpenLDAP groupOfNames has no groupType attribute
+# Create expression-based import mappings for Group Type and Group Scope (AD only — derived from groupType flags).
+# OpenLDAP jimGroup flows Group Type directly via jimGroupType (not derived from flags).
 if (-not $isOpenLDAP) {
     Write-Host "  Configuring group type/scope expression mappings..." -ForegroundColor Gray
     $groupTypeAttr = $mvAttributes | Where-Object { $_.name -eq "Group Type" }

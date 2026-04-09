@@ -356,12 +356,14 @@ try {
             [Parameter(Mandatory)][string]$GroupName,
             [Parameter(Mandatory)][string]$Description,
             [Parameter(Mandatory)][hashtable]$Config,
-            [string]$InitialMemberDn  # Required for groupOfNames
+            [string]$InitialMemberDn  # Required for jimGroup (inherits groupOfNames MUST constraint)
         )
         if ($isOpenLDAP) {
             $groupDn = "cn=$GroupName,$($Config.GroupContainer)"
             $memberDn = if ($InitialMemberDn) { $InitialMemberDn } else { "cn=placeholder" }
-            $ldif = "dn: $groupDn`nobjectClass: groupOfNames`ncn: $GroupName`ndescription: $Description`nmember: $memberDn`n"
+            $domain = if ($Config.Domain) { $Config.Domain } else { "yellowstone.local" }
+            $groupMail = "$($GroupName.ToLower())@$domain"
+            $ldif = "dn: $groupDn`nobjectClass: jimGroup`ncn: $GroupName`ndescription: $Description`nmail: $groupMail`njimGroupType: Self-Service`njimGroupStatus: Active`nmember: $memberDn`n"
             $ldifPath = [System.IO.Path]::GetTempFileName()
             Set-Content -Path $ldifPath -Value $ldif -NoNewline
             try {
