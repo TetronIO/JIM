@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 # Restore provisioned OpenLDAP data if volumes are empty (snapshot startup).
 #
 # docker commit does not capture Docker volumes. During snapshot build, the
