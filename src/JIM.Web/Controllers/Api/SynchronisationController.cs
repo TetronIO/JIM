@@ -819,8 +819,8 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Get the existing connected system
-        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Get the existing connected system with change tracking since we modify and save it
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true);
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
@@ -913,8 +913,8 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Get the connected system
-        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Get the connected system with change tracking since schema import modifies and saves it
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true);
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
@@ -981,8 +981,8 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Get the connected system
-        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Get the connected system with change tracking since hierarchy import modifies and saves it
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true);
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
@@ -3117,7 +3117,8 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Get the connected system with change tracking since matching mode switch modifies and saves it
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true);
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
