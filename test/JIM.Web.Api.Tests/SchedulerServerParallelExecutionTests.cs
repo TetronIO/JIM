@@ -69,8 +69,8 @@ public class SchedulerServerParallelExecutionTests
             SupportsPartitions = false
         };
 
-        _mockConnectedSystemRepository.Setup(r => r.GetConnectedSystemAsync(It.IsAny<int>()))
-            .ReturnsAsync((int id) => new ConnectedSystem
+        _mockConnectedSystemRepository.Setup(r => r.GetConnectedSystemAsync(It.IsAny<int>(), It.IsAny<bool>()))
+            .ReturnsAsync((int id, bool _) => new ConnectedSystem
             {
                 Id = id,
                 Name = $"System {id}",

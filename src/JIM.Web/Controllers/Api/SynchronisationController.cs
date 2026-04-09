@@ -646,8 +646,8 @@ public class SynchronisationController(
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
-        // Get the partition
-        var partition = await _application.ConnectedSystems.GetConnectedSystemPartitionAsync(partitionId);
+        // Get the partition with change tracking since we modify and save it
+        var partition = await _application.ConnectedSystems.GetConnectedSystemPartitionAsync(partitionId, withChangeTracking: true);
         if (partition == null || partition.ConnectedSystem?.Id != connectedSystemId)
             return NotFound(ApiErrorResponse.NotFound($"Partition with ID {partitionId} not found in connected system {connectedSystemId}."));
 
@@ -752,17 +752,18 @@ public class SynchronisationController(
             _logger.LogInformation("Connected system creation initiated via API key: {ApiKeyName}", LogSanitiser.Sanitise(GetApiKeyName()));
         }
 
-        // Get the connector definition
+        // Validate the connector definition exists
         var connectorDefinition = await _application.ConnectedSystems.GetConnectorDefinitionAsync(request.ConnectorDefinitionId);
         if (connectorDefinition == null)
             return BadRequest(ApiErrorResponse.BadRequest($"Connector definition with ID {request.ConnectorDefinitionId} not found."));
 
-        // Create the connected system
+        // Create the connected system using the FK ID (not the nav property) to avoid
+        // EF Core graph traversal inserting the untracked ConnectorDefinition as a new entity.
         var connectedSystem = new ConnectedSystem
         {
             Name = request.Name,
             Description = request.Description,
-            ConnectorDefinition = connectorDefinition
+            ConnectorDefinitionId = request.ConnectorDefinitionId
         };
 
         try

@@ -34,14 +34,14 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectorDefinitionHeadersAsync();
     }
 
-    public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id)
+    public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id, bool withChangeTracking = false)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(id);
+        return await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(id, withChangeTracking);
     }
 
-    public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name)
+    public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name, bool withChangeTracking = false)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(name);
+        return await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(name, withChangeTracking);
     }
 
     public async Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
@@ -81,9 +81,9 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemHeadersAsync();
     }
 
-    public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id)
+    public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id, bool withChangeTracking = false)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(id);
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(id, withChangeTracking);
     }
 
     public async Task<ConnectedSystemHeader?> GetConnectedSystemHeaderAsync(int id)
@@ -3481,9 +3481,9 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionsAsync(connectedSystem);
     }
 
-    public async Task<ConnectedSystemPartition?> GetConnectedSystemPartitionAsync(int id)
+    public async Task<ConnectedSystemPartition?> GetConnectedSystemPartitionAsync(int id, bool withChangeTracking = false)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionAsync(id);
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionAsync(id, withChangeTracking);
     }
 
     public async Task UpdateConnectedSystemPartitionAsync(ConnectedSystemPartition partition)

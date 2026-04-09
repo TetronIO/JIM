@@ -59,7 +59,8 @@
     private async Task HandleValidSubmit()
     {
         using var jim = JimFactory.Create();
-        var connectorDefinition = await jim.ConnectedSystems.GetConnectorDefinitionAsync(int.Parse(_model.ConnectorId));
+        var connectorDefinitionId = int.Parse(_model.ConnectorId);
+        var connectorDefinition = await jim.ConnectedSystems.GetConnectorDefinitionAsync(connectorDefinitionId);
         if (connectorDefinition == null)
             return;
 
@@ -67,7 +68,7 @@
         {
             Name = _model.Name,
             Description = _model.Description,
-            ConnectorDefinition = connectorDefinition
+            ConnectorDefinitionId = connectorDefinitionId
         };
 
         // attribute the operation to the user

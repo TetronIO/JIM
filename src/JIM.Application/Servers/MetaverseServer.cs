@@ -88,19 +88,19 @@ public class MetaverseServer
             page, pageSize, searchQuery, sortBy, sortDescending);
     }
 
-    public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id)
+    public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id, bool withChangeTracking = false)
     {
-        return await Application.Repository.Metaverse.GetMetaverseAttributeAsync(id);
+        return await Application.Repository.Metaverse.GetMetaverseAttributeAsync(id, withChangeTracking);
     }
 
-    public async Task<MetaverseAttribute?> GetMetaverseAttributeWithObjectTypesAsync(int id)
+    public async Task<MetaverseAttribute?> GetMetaverseAttributeWithObjectTypesAsync(int id, bool withChangeTracking = false)
     {
-        return await Application.Repository.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(id);
+        return await Application.Repository.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(id, withChangeTracking);
     }
 
-    public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(string name)
+    public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(string name, bool withChangeTracking = false)
     {
-        return await Application.Repository.Metaverse.GetMetaverseAttributeAsync(name);
+        return await Application.Repository.Metaverse.GetMetaverseAttributeAsync(name, withChangeTracking);
     }
 
     /// <summary>

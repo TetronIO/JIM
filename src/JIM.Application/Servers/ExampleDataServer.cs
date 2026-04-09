@@ -36,9 +36,9 @@ public class ExampleDataServer
         return await Application.Repository.ExampleData.GetExampleDataSetHeadersAsync();
     }
 
-    public async Task<ExampleDataSet?> GetExampleDataSetAsync(string name, string culture)
+    public async Task<ExampleDataSet?> GetExampleDataSetAsync(string name, string culture, bool withChangeTracking = false)
     {
-        return await Application.Repository.ExampleData.GetExampleDataSetAsync(name, culture);
+        return await Application.Repository.ExampleData.GetExampleDataSetAsync(name, culture, withChangeTracking);
     }
 
     public async Task<ExampleDataSet?> GetExampleDataSetAsync(int id)

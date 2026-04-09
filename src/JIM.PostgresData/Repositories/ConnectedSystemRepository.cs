@@ -43,22 +43,30 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }).ToListAsync();
     }
 
-    public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id)
+    public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id, bool withChangeTracking = false)
     {
-        return await Repository.Database.ConnectorDefinitions
+        IQueryable<ConnectorDefinition> query = Repository.Database.ConnectorDefinitions
             .AsSplitQuery()
             .Include(cd => cd.Files)
-            .Include(cd => cd.Settings)
-            .SingleOrDefaultAsync(cd => cd.Id == id);
+            .Include(cd => cd.Settings);
+
+        if (withChangeTracking)
+            query = query.AsTracking();
+
+        return await query.SingleOrDefaultAsync(cd => cd.Id == id);
     }
 
-    public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name)
+    public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name, bool withChangeTracking = false)
     {
-        return await Repository.Database.ConnectorDefinitions
+        IQueryable<ConnectorDefinition> query = Repository.Database.ConnectorDefinitions
             .AsSplitQuery()
             .Include(x => x.Files)
-            .Include(x => x.Settings)
-            .SingleOrDefaultAsync(cd => cd.Name.Equals(name));
+            .Include(x => x.Settings);
+
+        if (withChangeTracking)
+            query = query.AsTracking();
+
+        return await query.SingleOrDefaultAsync(cd => cd.Name.Equals(name));
     }
 
     public async Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
@@ -135,23 +143,34 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }).SingleOrDefaultAsync(cs => cs.Id == id);
     }
 
-    public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id)
+    public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id, bool withChangeTracking = false)
     {
         // retrieve a complex connected system object. break the query down into three parts for optimal performance.
         // doing it in one giant include tree query will make it timeout.
 
-        var connectedSystem = await Repository.Database.ConnectedSystems.
-            Include(cs => cs.ConnectorDefinition).
-            Include(cs => cs.SettingValues).
-            ThenInclude(sv => sv.Setting).
-            SingleOrDefaultAsync(x => x.Id == id);
+        IQueryable<ConnectedSystem> csQuery = Repository.Database.ConnectedSystems
+            .Include(cs => cs.ConnectorDefinition)
+            .Include(cs => cs.SettingValues)
+            .ThenInclude(sv => sv.Setting);
+
+        if (withChangeTracking)
+            csQuery = csQuery.AsTracking();
+
+        var connectedSystem = await csQuery.SingleOrDefaultAsync(x => x.Id == id);
 
         if (connectedSystem == null)
             return null;
 
-        var runProfiles = await Repository.Database.ConnectedSystemRunProfiles.Include(q => q.Partition).Where(q => q.ConnectedSystemId == id).ToListAsync();
+        var rpQuery = Repository.Database.ConnectedSystemRunProfiles
+            .Include(q => q.Partition)
+            .Where(q => q.ConnectedSystemId == id);
 
-        var types = await Repository.Database.ConnectedSystemObjectTypes
+        if (withChangeTracking)
+            rpQuery = rpQuery.AsTracking();
+
+        var runProfiles = await rpQuery.ToListAsync();
+
+        var otQuery = Repository.Database.ConnectedSystemObjectTypes
             .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
             .Include(ot => ot.Attributes.OrderBy(a => a.Name))
             .Include(ot => ot.ObjectMatchingRules)
@@ -164,7 +183,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Include(ot => ot.ObjectMatchingRules)
                 .ThenInclude(omr => omr.MetaverseObjectType)
-            .Where(q => q.ConnectedSystemId == id).ToListAsync();
+            .Where(q => q.ConnectedSystemId == id);
+
+        if (withChangeTracking)
+            otQuery = otQuery.AsTracking();
+
+        var types = await otQuery.ToListAsync();
 
         // Load partitions with container hierarchy using a single joined query (no AsSplitQuery).
         // AsSplitQuery() was removed because it causes EF Core identity fixup issues with
@@ -172,7 +196,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // incorrectly during fixup, causing them to appear as duplicates at the partition root.
         // A single joined query avoids this because EF processes all results in one pass.
         // Supporting 11 levels deep (arbitrary; increase if admins need deeper hierarchies).
-        var partitions = await Repository.Database.ConnectedSystemPartitions
+        var partQuery = Repository.Database.ConnectedSystemPartitions
             .Include(p => p.Containers)!
             .ThenInclude(c => c.ChildContainers)
             .ThenInclude(c => c.ChildContainers)
@@ -184,7 +208,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(c => c.ChildContainers)
             .ThenInclude(c => c.ChildContainers)
             .ThenInclude(c => c.ChildContainers)
-            .Where(p => p.ConnectedSystem.Id == id).ToListAsync();
+            .Where(p => p.ConnectedSystem.Id == id);
+
+        if (withChangeTracking)
+            partQuery = partQuery.AsTracking();
+
+        var partitions = await partQuery.ToListAsync();
 
         // collect and merge data
         connectedSystem.RunProfiles = runProfiles;
@@ -2067,17 +2096,24 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task<IList<ConnectedSystemPartition>> GetConnectedSystemPartitionsAsync(ConnectedSystem connectedSystem)
     {
-        return await Repository.Database.ConnectedSystemPartitions.Include(csp => csp.Containers).Where(q => q.ConnectedSystem.Id == connectedSystem.Id).ToListAsync();
+        return await Repository.Database.ConnectedSystemPartitions
+            .Include(csp => csp.Containers)
+            .Where(q => q.ConnectedSystem.Id == connectedSystem.Id)
+            .ToListAsync();
     }
 
-    public async Task<ConnectedSystemPartition?> GetConnectedSystemPartitionAsync(int id)
+    public async Task<ConnectedSystemPartition?> GetConnectedSystemPartitionAsync(int id, bool withChangeTracking = false)
     {
-        return await Repository.Database.ConnectedSystemPartitions
+        IQueryable<ConnectedSystemPartition> query = Repository.Database.ConnectedSystemPartitions
             .AsSplitQuery()
             .Include(csp => csp.ConnectedSystem)
             .Include(csp => csp.Containers)
-            .OrderBy(csp => csp.Id)
-            .FirstOrDefaultAsync(csp => csp.Id == id);
+            .OrderBy(csp => csp.Id);
+
+        if (withChangeTracking)
+            query = query.AsTracking();
+
+        return await query.FirstOrDefaultAsync(csp => csp.Id == id);
     }
 
     public async Task UpdateConnectedSystemPartitionAsync(ConnectedSystemPartition partition)
@@ -2106,7 +2142,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem)
     {
-        return await Repository.Database.ConnectedSystemContainers.Where(q => q.ConnectedSystem != null && q.ConnectedSystem.Id == connectedSystem.Id).ToListAsync();
+        return await Repository.Database.ConnectedSystemContainers
+            .Where(q => q.ConnectedSystem != null && q.ConnectedSystem.Id == connectedSystem.Id)
+            .ToListAsync();
     }
 
     public async Task<ConnectedSystemContainer?> GetConnectedSystemContainerAsync(int id)

@@ -12,7 +12,7 @@ namespace JIM.Data.Repositories;
 
 public interface IConnectedSystemRepository
 {
-    public Task<ConnectedSystem?> GetConnectedSystemAsync(int id);
+    public Task<ConnectedSystem?> GetConnectedSystemAsync(int id, bool withChangeTracking = false);
     public Task<ConnectedSystemHeader?> GetConnectedSystemHeaderAsync(int id);
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id);
 
@@ -63,8 +63,8 @@ public interface IConnectedSystemRepository
     public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(int connectedSystemId, IEnumerable<string> secondaryExternalIdValues);
 
     public Task<ConnectedSystemRunProfileHeader?> GetConnectedSystemRunProfileHeaderAsync(int connectedSystemRunProfileId);
-    public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id);
-    public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name);
+    public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id, bool withChangeTracking = false);
+    public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name, bool withChangeTracking = false);
     public Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue);
 
     /// <summary>
@@ -426,7 +426,7 @@ public interface IConnectedSystemRepository
     /// Gets a Connected System Partition by ID.
     /// </summary>
     /// <param name="id">The unique identifier of the partition.</param>
-    Task<ConnectedSystemPartition?> GetConnectedSystemPartitionAsync(int id);
+    Task<ConnectedSystemPartition?> GetConnectedSystemPartitionAsync(int id, bool withChangeTracking = false);
 
     /// <summary>
     /// Updates a Connected System Partition.

@@ -36,9 +36,13 @@ public class ExampleDataRepository : IExampleDataRepository
         return datasetHeaders;
     }
 
-    public async Task<ExampleDataSet?> GetExampleDataSetAsync(string name, string culture)
+    public async Task<ExampleDataSet?> GetExampleDataSetAsync(string name, string culture, bool withChangeTracking = false)
     {
-        return await Repository.Database.ExampleDataSets.Include(q => q.Values).SingleOrDefaultAsync(q => q.Name == name && q.Culture == culture);
+        IQueryable<ExampleDataSet> query = Repository.Database.ExampleDataSets.Include(q => q.Values);
+        if (withChangeTracking)
+            query = query.AsTracking();
+
+        return await query.SingleOrDefaultAsync(q => q.Name == name && q.Culture == culture);
     }
 
     public async Task<ExampleDataSet?> GetExampleDataSetAsync(int id)

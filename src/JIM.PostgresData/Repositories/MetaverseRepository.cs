@@ -65,7 +65,7 @@ public class MetaverseRepository : IMetaverseRepository
     {
         if (includeChildObjects)
             return await Repository.Database.MetaverseObjectTypes.Include(q => q.Attributes).SingleOrDefaultAsync(x => x.Id == id);
-            
+
         return await Repository.Database.MetaverseObjectTypes.SingleOrDefaultAsync(x => x.Id == id);
     }
 
@@ -191,21 +191,34 @@ public class MetaverseRepository : IMetaverseRepository
         };
     }
 
-    public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id)
+    public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id, bool withChangeTracking = false)
     {
-        return await Repository.Database.MetaverseAttributes.SingleOrDefaultAsync(x => x.Id == id);
+        var query = Repository.Database.MetaverseAttributes.AsQueryable();
+        if (withChangeTracking)
+            query = query.AsTracking();
+
+        return await query.SingleOrDefaultAsync(x => x.Id == id);
     }
 
-    public async Task<MetaverseAttribute?> GetMetaverseAttributeWithObjectTypesAsync(int id)
+    public async Task<MetaverseAttribute?> GetMetaverseAttributeWithObjectTypesAsync(int id, bool withChangeTracking = false)
     {
-        return await Repository.Database.MetaverseAttributes
+        var query = Repository.Database.MetaverseAttributes
             .Include(a => a.MetaverseObjectTypes)
-            .SingleOrDefaultAsync(x => x.Id == id);
+            .AsQueryable();
+
+        if (withChangeTracking)
+            query = query.AsTracking();
+
+        return await query.SingleOrDefaultAsync(x => x.Id == id);
     }
 
-    public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(string name)
+    public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(string name, bool withChangeTracking = false)
     {
-        return await Repository.Database.MetaverseAttributes.SingleOrDefaultAsync(x => x.Name == name);
+        var query = Repository.Database.MetaverseAttributes.AsQueryable();
+        if (withChangeTracking)
+            query = query.AsTracking();
+
+        return await query.SingleOrDefaultAsync(x => x.Name == name);
     }
 
     public async Task CreateMetaverseAttributeAsync(MetaverseAttribute attribute)
