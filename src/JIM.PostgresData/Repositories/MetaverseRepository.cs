@@ -223,6 +223,14 @@ public class MetaverseRepository : IMetaverseRepository
 
     public async Task CreateMetaverseAttributeAsync(MetaverseAttribute attribute)
     {
+        // Attach existing MetaverseObjectTypes so EF recognises them as existing entities
+        // and only creates join table entries (not duplicate object type rows).
+        foreach (var objectType in attribute.MetaverseObjectTypes)
+        {
+            if (Repository.Database.Entry(objectType).State == EntityState.Detached)
+                Repository.Database.MetaverseObjectTypes.Attach(objectType);
+        }
+
         Repository.Database.MetaverseAttributes.Add(attribute);
         await Repository.Database.SaveChangesAsync();
     }
