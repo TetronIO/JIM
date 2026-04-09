@@ -3690,6 +3690,7 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
         AuditHelper.SetCreated(mapping, initiatedBy);
+        ClearMappingNavigationProperties(mapping);
         await Application.Repository.ConnectedSystems.CreateSyncRuleMappingAsync(mapping);
 
         await Application.Activities.CompleteActivityAsync(activity);
@@ -3719,6 +3720,7 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
         AuditHelper.SetCreated(mapping, initiatedByApiKey);
+        ClearMappingNavigationProperties(mapping);
         await Application.Repository.ConnectedSystems.CreateSyncRuleMappingAsync(mapping);
 
         await Application.Activities.CompleteActivityAsync(activity);
@@ -3993,6 +3995,33 @@ public class ConnectedSystemServer
         syncRule.ConnectedSystem = null!;
         syncRule.ConnectedSystemObjectType = null!;
         syncRule.MetaverseObjectType = null!;
+    }
+
+    /// <summary>
+    /// Clears navigation properties on a new SyncRuleMapping (and its sources) that reference
+    /// existing entities, so that EF Core's Add() graph traversal does not attempt to insert them
+    /// as duplicates. FK IDs remain set. The SyncRule nav property is kept (shadow FK) but its own
+    /// problematic nav properties are cleared.
+    /// </summary>
+    private static void ClearMappingNavigationProperties(SyncRuleMapping mapping)
+    {
+        // Clear target attribute nav properties (FK IDs are set)
+        mapping.TargetMetaverseAttribute = null;
+        mapping.TargetConnectedSystemAttribute = null;
+
+        // Clear source attribute nav properties (FK IDs are set)
+        foreach (var source in mapping.Sources)
+        {
+            source.ConnectedSystemAttribute = null;
+            source.MetaverseAttribute = null;
+        }
+
+        // The SyncRule nav property must stay (no explicit FK on the model), but clear
+        // its own nav properties that reference existing entities to prevent graph traversal.
+        if (mapping.SyncRule != null)
+        {
+            ClearSyncRuleNavigationProperties(mapping.SyncRule);
+        }
     }
 
     private static bool AreRunProfilesValid(ConnectedSystem connectedSystem)
