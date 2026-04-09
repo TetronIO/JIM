@@ -424,14 +424,14 @@ if ($MaxExportParallelism -gt 1) {
 Write-TestStep "Step 6" "Importing Connected System Schemas and Hierarchy"
 
 # Source schema
-$sourceObjectTypes = Get-JIMConnectedSystem -Id $sourceSystem.id -ObjectTypes
-if ($sourceObjectTypes -and $sourceObjectTypes.Count -gt 0) {
+$sourceObjectTypes = @(Get-JIMConnectedSystem -Id $sourceSystem.id -ObjectTypes)
+if ($sourceObjectTypes.Count -gt 0) {
     Write-Host "  Source schema already imported ($($sourceObjectTypes.Count) object types)" -ForegroundColor Gray
 }
 else {
     Write-Host "  Importing Source LDAP schema..." -ForegroundColor Gray
     Import-JIMConnectedSystemSchema -Id $sourceSystem.id -PassThru | Out-Null
-    $sourceObjectTypes = Get-JIMConnectedSystem -Id $sourceSystem.id -ObjectTypes
+    $sourceObjectTypes = @(Get-JIMConnectedSystem -Id $sourceSystem.id -ObjectTypes)
     Write-Host "  ✓ Source schema imported ($($sourceObjectTypes.Count) object types)" -ForegroundColor Green
 }
 
@@ -448,14 +448,14 @@ else {
 }
 
 # Target schema
-$targetObjectTypes = Get-JIMConnectedSystem -Id $targetSystem.id -ObjectTypes
-if ($targetObjectTypes -and $targetObjectTypes.Count -gt 0) {
+$targetObjectTypes = @(Get-JIMConnectedSystem -Id $targetSystem.id -ObjectTypes)
+if ($targetObjectTypes.Count -gt 0) {
     Write-Host "  Target schema already imported ($($targetObjectTypes.Count) object types)" -ForegroundColor Gray
 }
 else {
     Write-Host "  Importing Target LDAP schema..." -ForegroundColor Gray
     Import-JIMConnectedSystemSchema -Id $targetSystem.id -PassThru | Out-Null
-    $targetObjectTypes = Get-JIMConnectedSystem -Id $targetSystem.id -ObjectTypes
+    $targetObjectTypes = @(Get-JIMConnectedSystem -Id $targetSystem.id -ObjectTypes)
     Write-Host "  ✓ Target schema imported ($($targetObjectTypes.Count) object types)" -ForegroundColor Green
 }
 
