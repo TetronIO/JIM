@@ -4000,11 +4000,13 @@ public class ConnectedSystemServer
     /// <summary>
     /// Clears navigation properties on a new SyncRuleMapping (and its sources) that reference
     /// existing entities, so that EF Core's Add() graph traversal does not attempt to insert them
-    /// as duplicates. FK IDs remain set. The SyncRule nav property is kept (shadow FK) but its own
-    /// problematic nav properties are cleared.
+    /// as duplicates. FK IDs remain set.
     /// </summary>
     private static void ClearMappingNavigationProperties(SyncRuleMapping mapping)
     {
+        // Clear SyncRule nav property (SyncRuleId FK is set)
+        mapping.SyncRule = null;
+
         // Clear target attribute nav properties (FK IDs are set)
         mapping.TargetMetaverseAttribute = null;
         mapping.TargetConnectedSystemAttribute = null;
@@ -4014,13 +4016,6 @@ public class ConnectedSystemServer
         {
             source.ConnectedSystemAttribute = null;
             source.MetaverseAttribute = null;
-        }
-
-        // The SyncRule nav property must stay (no explicit FK on the model), but clear
-        // its own nav properties that reference existing entities to prevent graph traversal.
-        if (mapping.SyncRule != null)
-        {
-            ClearSyncRuleNavigationProperties(mapping.SyncRule);
         }
     }
 

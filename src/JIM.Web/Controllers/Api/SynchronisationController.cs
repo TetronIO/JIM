@@ -1802,10 +1802,12 @@ public class SynchronisationController(
         if (syncRule == null)
             return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
 
-        // Create the mapping
+        // Create the mapping using FK ID and nav property (nav property needed for validation;
+        // cleared before save by ClearMappingNavigationProperties)
         var mapping = new SyncRuleMapping
         {
-            SyncRule = syncRule
+            SyncRule = syncRule,
+            SyncRuleId = syncRule.Id
         };
 
         // Validate and set target attribute based on direction
