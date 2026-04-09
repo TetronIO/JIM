@@ -1076,7 +1076,7 @@ if ($DirectoryType -eq "All") {
     # Re-run Command
     Write-Host "${CYAN}Re-run Command:${NC}"
     Write-Host ""
-    $rerunParts = @("pwsh ./test/integration/Run-IntegrationTests.ps1")
+    $rerunParts = @("jim-reset && pwsh ./test/integration/Run-IntegrationTests.ps1")
     $rerunParts += "-Scenario `"$($Scenario ?? 'All')`""
     $rerunParts += "-Template $Template"
     if ($Step -ne "All") { $rerunParts += "-Step $Step" }
@@ -1389,7 +1389,7 @@ if ($Scenario -eq "All") {
     # Re-run Command
     Write-Host "${CYAN}Re-run Command:${NC}"
     Write-Host ""
-    $rerunParts = @("pwsh ./test/integration/Run-IntegrationTests.ps1")
+    $rerunParts = @("jim-reset && pwsh ./test/integration/Run-IntegrationTests.ps1")
     $rerunParts += "-Scenario All"
     $rerunParts += "-Template $Template"
     if ($Step -ne "All") { $rerunParts += "-Step $Step" }
@@ -2828,7 +2828,7 @@ if ($currentFile) {
 
 # Re-run Command
 Write-Section "Re-run Command"
-$rerunParts = @("pwsh ./test/integration/Run-IntegrationTests.ps1")
+$rerunParts = @("jim-reset && pwsh ./test/integration/Run-IntegrationTests.ps1")
 $rerunParts += "-Scenario `"$Scenario`""
 $rerunParts += "-Template $Template"
 if ($Step -ne "All") { $rerunParts += "-Step $Step" }
