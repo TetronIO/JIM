@@ -23,9 +23,9 @@ WORKDIR /app
 # Note: libldap-2.5-0 was renamed to libldap2 in Ubuntu Noble (OpenLDAP 2.6)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        libldap-common=2.6.7+dfsg-1~exp1ubuntu8 \
-        libldap2=2.6.7+dfsg-1~exp1ubuntu8 \
-        cifs-utils=2:7.0-2build1 \
+        libldap-common=2.6.10+dfsg-0ubuntu0.24.04.1 \
+        libldap2=2.6.10+dfsg-0ubuntu0.24.04.1 \
+        cifs-utils=2:7.0-2ubuntu0.2 \
         libgssapi-krb5-2=1.20.1-6ubuntu2.6 \
     && rm -rf /var/lib/apt/lists/* \
     # Symlink for System.DirectoryServices.Protocols compatibility

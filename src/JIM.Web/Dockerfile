@@ -25,8 +25,8 @@ EXPOSE 443
 # Note: libldap-2.5-0 was renamed to libldap2 in Ubuntu Noble (OpenLDAP 2.6)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        libldap-common=2.6.7+dfsg-1~exp1ubuntu8 \
-        libldap2=2.6.7+dfsg-1~exp1ubuntu8 \
+        libldap-common=2.6.10+dfsg-0ubuntu0.24.04.1 \
+        libldap2=2.6.10+dfsg-0ubuntu0.24.04.1 \
     && apt-get install -y --no-install-recommends \
         iputils-ping \
         curl \
