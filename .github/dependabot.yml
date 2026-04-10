@@ -51,23 +51,29 @@ updates:
           - "Microsoft.Azure.WebJobs*"
 
   # Docker base images (digest-pinned for reproducible builds)
-  # Dependabot will propose PRs to update digests when new images are published.
-  # IMPORTANT: When a digest update is merged, you must also update the pinned
-  # apt package versions in the corresponding Dockerfile to match the new base image.
-  # Run: docker run --rm <image>@<new-digest> bash -c "apt-get update -qq && apt-cache policy <pkg>"
   #
-  # Add new Dockerfile directories to the list below; Dependabot does not recurse.
+  # Each production Dockerfile has its own `package-ecosystem: docker` block
+  # below. This is intentional: the earlier `directories:` (plural) form with
+  # a single group was producing one PR per FROM line (six PRs per upstream
+  # rebuild) because of dependabot-core#10428, where the docker ecosystem
+  # intermittently fails to apply group configuration across multiple
+  # directories. Splitting into one block per Dockerfile sidesteps that bug
+  # and guarantees one grouped PR per Dockerfile. When #10428 is fixed, this
+  # can be collapsed back into a single block.
+  #
+  # IMPORTANT: When a digest update is merged, you must also update the pinned
+  # apt package versions in the corresponding Dockerfile to match the new base
+  # image. Run:
+  #   docker run --rm <image>@<new-digest> bash -c "apt-get update -qq && apt-cache policy <pkg>"
   #
   # Polled daily so that upstream base image rebuilds (Microsoft rebuilds .NET
   # images within 12 hours of an Ubuntu noble update, and on the second Tuesday
   # of each month for lower-severity CVEs) are picked up promptly. JIM's own
   # release cadence acts as the natural cooling-off window.
+
+  # JIM.Web Dockerfile (dotnet/aspnet + dotnet/sdk)
   - package-ecosystem: "docker"
-    directories:
-      - "/src/JIM.Web"
-      - "/src/JIM.Worker"
-      - "/src/JIM.Scheduler"
-      - "/.devcontainer"
+    directory: "/src/JIM.Web"
     schedule:
       interval: "daily"
       time: "09:00"
@@ -84,6 +90,63 @@ updates:
       dotnet-base-images:
         patterns:
           - "mcr.microsoft.com/dotnet/*"
+
+  # JIM.Worker Dockerfile (dotnet/runtime + dotnet/sdk)
+  - package-ecosystem: "docker"
+    directory: "/src/JIM.Worker"
+    schedule:
+      interval: "daily"
+      time: "09:00"
+      timezone: "Europe/London"
+    reviewers:
+      - "TetronIO/jim-maintainers"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      dotnet-base-images:
+        patterns:
+          - "mcr.microsoft.com/dotnet/*"
+
+  # JIM.Scheduler Dockerfile (dotnet/runtime + dotnet/sdk)
+  - package-ecosystem: "docker"
+    directory: "/src/JIM.Scheduler"
+    schedule:
+      interval: "daily"
+      time: "09:00"
+      timezone: "Europe/London"
+    reviewers:
+      - "TetronIO/jim-maintainers"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      dotnet-base-images:
+        patterns:
+          - "mcr.microsoft.com/dotnet/*"
+
+  # .devcontainer Dockerfile: single image (mcr.microsoft.com/devcontainers/dotnet);
+  # no group needed, and it does not match the dotnet-base-images pattern above.
+  - package-ecosystem: "docker"
+    directory: "/.devcontainer"
+    schedule:
+      interval: "daily"
+      time: "09:00"
+      timezone: "Europe/London"
+    reviewers:
+      - "TetronIO/jim-maintainers"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   # Docker Compose images (PostgreSQL)
   # The digest-pinned postgres image in docker-compose.yml is the single source of truth —
