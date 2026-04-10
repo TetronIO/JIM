@@ -17,9 +17,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
     - name: Setup .NET
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
       with:
         dotnet-version: 10.0.x
     - name: Restore dependencies
@@ -47,7 +47,7 @@ jobs:
         $config.TestResult.OutputFormat = "NUnitXml"
         Invoke-Pester -Configuration $config
     - name: Upload Pester Test Results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
       if: always()
       with:
         name: pester-test-results
@@ -65,7 +65,7 @@ jobs:
       matrix: ${{ steps.discover.outputs.matrix }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
     - name: Discover production base images and enforce digest-pinning
       id: discover
@@ -90,7 +90,7 @@ jobs:
       matrix: ${{ fromJSON(needs.discover-base-images.outputs.matrix) }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
     # Pull the base image into the local Docker daemon so Trivy can read it via
     # source="docker". Without this step, Trivy on GitHub-hosted runners was
@@ -114,7 +114,7 @@ jobs:
       # have no upstream fix available.
       env:
         TRIVY_IGNORE_UNFIXED: 'true'
-      uses: aquasecurity/trivy-action@0.35.0
+      uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # 0.35.0
       with:
         image-ref: ${{ matrix.image_ref }}
         format: 'sarif'
@@ -196,7 +196,7 @@ jobs:
 
     - name: Upload Trivy scan results to GitHub code scanning
       if: always() && hashFiles('trivy-results.sarif') != ''
-      uses: github/codeql-action/upload-sarif@v3
+      uses: github/codeql-action/upload-sarif@5c8a8a642e79153f5d047b10ec1cba1d1cc65699  # v3.35.1
       with:
         sarif_file: trivy-results.sarif
         category: trivy-base-image-${{ matrix.dockerfile }}-line${{ matrix.line }}

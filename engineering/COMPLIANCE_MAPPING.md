@@ -137,7 +137,7 @@ The UK Government's Software Security Code of Practice defines 14 principles acr
 
 | Principle | Requirement | JIM Alignment | Status |
 |-----------|-------------|---------------|--------|
-| 5 | Protect the build environment | GitHub Actions CI/CD, pinned action versions | Aligned |
+| 5 | Protect the build environment | GitHub Actions CI/CD with every action pinned by immutable 40-character commit SHA (not mutable version tags), preventing tag-rewrite supply chain attacks. Dependabot tracks SHA-pinned updates. See DEVELOPER_GUIDE.md "GitHub Actions" for the pinning procedure. | Aligned |
 | 6 | Secure the development tools and processes | Devcontainer with controlled toolchain, dependency pinning | Aligned |
 | 7 | Manage and secure third-party components | Dependency review policy, SBOM generation. Container base image vulnerability scanning runs on every push and PR with results surfaced to GitHub code scanning (SARIF). Digest-pinning of production base images is enforced by CI rather than by convention. | Aligned |
 

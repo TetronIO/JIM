@@ -976,9 +976,30 @@ The choice between options 1-4 depends on the specific CVE, its CVSS score, the 
 
 #### GitHub Actions
 
-- Actions are pinned by major version tag (e.g., `actions/checkout@v4`)
-- Dependabot proposes weekly PRs for patch and minor version updates
-- Before merging, review the action's changelog for any changes to inputs, outputs, or behaviour
+Every third-party and first-party action in `.github/workflows/*.yml` is pinned by its full 40-character commit SHA, with the human-readable version tag preserved as a trailing comment:
+
+```yaml
+- uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+```
+
+This protects against tag-rewrite attacks: the `v4` tag is mutable and can be silently moved to a malicious commit, but a 40-char commit SHA is immutable. SHA pinning is required for alignment with UK Software Security Code of Practice Principle 5 (Protect the build environment) and GitHub's own [security hardening for GitHub Actions](https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions) guidance.
+
+**Adding a new action:**
+
+1. Find the version tag you want to use (e.g., `v4.3.1`) on the action's repository.
+2. Resolve the tag to its commit SHA. For lightweight tags:
+   ```bash
+   git ls-remote --tags https://github.com/owner/repo.git v4.3.1
+   ```
+   For annotated tags, dereference with `^{}`:
+   ```bash
+   git ls-remote --tags https://github.com/owner/repo.git 'v4.3.1^{}'
+   ```
+   (If the first form returns a SHA and a `v4.3.1^{}` entry exists, the lightweight SHA is the tag object; use the dereferenced SHA as the commit.)
+3. Write the reference as `owner/repo@<40-char-sha>  # v4.3.1` (two spaces before the `#`, matching existing style).
+4. Pin to a tagged release, not to a moving major-version tag's tip. If a repo's major tag (e.g., `v3`) is ahead of the latest semver release, pin to the latest semver release instead; this is more auditable and matches what Dependabot will track.
+
+**Ongoing updates** are handled by Dependabot, which natively understands SHA-pinned actions. When a new version tag moves the underlying commit, Dependabot opens a PR that updates both the SHA and the version comment. Before merging, review the action's changelog for any changes to inputs, outputs, or behaviour.
 
 ### Migrations
 Apply migrations on first run:
