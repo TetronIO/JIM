@@ -92,6 +92,16 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    # Pull the base image into the local Docker daemon so Trivy can read it via
+    # source="docker". Without this step, Trivy on GitHub-hosted runners was
+    # exiting 1 after the "Detecting vulnerabilities" log line with no findings
+    # written to the SARIF file (phantom failure). Running the same Trivy version
+    # with the same env vars locally against a digest-pinned image always returned
+    # exit 0 with zero findings, confirming the root cause was image acquisition,
+    # not vulnerability detection. See PR #520 discussion.
+    - name: Pull base image
+      run: docker pull ${{ matrix.image_ref }}
+
     - name: Scan base image for vulnerabilities
       id: trivy
       uses: aquasecurity/trivy-action@0.35.0
@@ -99,15 +109,35 @@ jobs:
         image-ref: ${{ matrix.image_ref }}
         format: 'sarif'
         output: 'trivy-results.sarif'
-        exit-code: '1'
+        # Do not rely on trivy-action's exit-code mechanism: observed to exit 1
+        # without producing findings in the SARIF file (see docker pull step
+        # comment above). We evaluate SARIF findings explicitly in the next step.
+        exit-code: '0'
         severity: 'CRITICAL,HIGH'
         ignore-unfixed: true
-        # Disable Trivy's DB cache: cached vuln DBs have been observed to cause
-        # the scanner to exit 1 within ~12ms of "Detecting vulnerabilities" with
-        # no findings written to the SARIF file (phantom failure). A fresh DB
-        # download per run adds ~5-10s per matrix leg, which is acceptable for
-        # a security-critical scan. See PR #520 discussion.
         cache: 'false'
+
+    - name: Fail build on Trivy findings
+      shell: pwsh
+      run: |
+        if (-not (Test-Path 'trivy-results.sarif')) {
+          Write-Error "Trivy did not produce a SARIF file."
+          exit 1
+        }
+        $sarif = Get-Content 'trivy-results.sarif' -Raw | ConvertFrom-Json
+        $findings = 0
+        foreach ($run in $sarif.runs) {
+          if ($run.results) { $findings += @($run.results).Count }
+        }
+        Write-Host "Trivy reported $findings finding(s) for ${{ matrix.image_ref }}"
+        if ($findings -gt 0) {
+          Write-Host ''
+          Write-Host 'Fixable CRITICAL/HIGH vulnerabilities found. Failing build.'
+          Write-Host 'See the GitHub Security tab for details:'
+          Write-Host '  https://github.com/TetronIO/JIM/security/code-scanning'
+          exit 1
+        }
+        Write-Host 'No fixable CRITICAL/HIGH vulnerabilities found.'
 
     - name: Upload Trivy scan results to GitHub code scanning
       if: always() && hashFiles('trivy-results.sarif') != ''
