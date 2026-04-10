@@ -55,48 +55,14 @@ updates:
   # IMPORTANT: When a digest update is merged, you must also update the pinned
   # apt package versions in the corresponding Dockerfile to match the new base image.
   # Run: docker run --rm <image>@<new-digest> bash -c "apt-get update -qq && apt-cache policy <pkg>"
+  #
+  # Add new Dockerfile directories to the list below; Dependabot does not recurse.
   - package-ecosystem: "docker"
-    directory: "/JIM.Web"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
-      timezone: "Europe/London"
-    reviewers:
-      - "TetronIO/jim-maintainers"
-    commit-message:
-      prefix: "chore"
-      include: "scope"
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
-    groups:
-      dotnet-base-images:
-        patterns:
-          - "mcr.microsoft.com/dotnet/*"
-
-  - package-ecosystem: "docker"
-    directory: "/JIM.Worker"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
-      timezone: "Europe/London"
-    reviewers:
-      - "TetronIO/jim-maintainers"
-    commit-message:
-      prefix: "chore"
-      include: "scope"
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
-    groups:
-      dotnet-base-images:
-        patterns:
-          - "mcr.microsoft.com/dotnet/*"
-
-  - package-ecosystem: "docker"
-    directory: "/JIM.Scheduler"
+    directories:
+      - "/src/JIM.Web"
+      - "/src/JIM.Worker"
+      - "/src/JIM.Scheduler"
+      - "/.devcontainer"
     schedule:
       interval: "weekly"
       day: "monday"
