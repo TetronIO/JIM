@@ -26,13 +26,20 @@
         }
     </div>
 
-    <MudPopover Open="@_popoverOpen" AnchorOrigin="Origin.TopCenter" TransformOrigin="Origin.BottomCenter"
+    <MudPopover Open="@_popoverOpen" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter"
                 Class="jim-user-popover">
         <MudPaper Outlined="true" Elevation="8" Class="jim-user-popover-paper pa-1">
             <MudList T="string" Dense="true" Class="py-0">
-                <MudListItem Icon="@(IsDrawerPinned ? Icons.Material.Filled.PushPin : Icons.Material.Outlined.PushPin)"
-                             OnClick="HandleTogglePin">
-                    @(IsDrawerPinned ? "Unpin menu" : "Pin menu open")
+                <MudListItem>
+                    <div class="d-flex align-center justify-space-between" style="width: 100%;">
+                        <div class="d-flex align-center gap-2">
+                            <MudIcon Icon="@(IsDrawerPinned ? Icons.Material.Filled.PushPin : Icons.Material.Outlined.PushPin)"
+                                     Size="Size.Small" />
+                            <MudText Typo="Typo.body2">Pin menu open</MudText>
+                        </div>
+                        <MudSwitch T="bool" Value="@IsDrawerPinned" ValueChanged="OnPinToggled"
+                                   Color="Color.Primary" Size="Size.Small" Class="ma-0" />
+                    </div>
                 </MudListItem>
                 <MudListItem>
                     <div class="d-flex align-center justify-space-between" style="width: 100%;">
@@ -45,17 +52,14 @@
                                    Color="Color.Primary" Size="Size.Small" Class="ma-0" />
                     </div>
                 </MudListItem>
-                <MudListItem Icon="@Icons.Custom.Brands.GitHub"
-                             Href="https://github.com/TetronIO/JIM" Target="_blank"
-                             OnClick="ClosePopover">
-                    GitHub
-                </MudListItem>
                 @if (_showSignOut)
                 {
                     <MudDivider Class="my-1" />
-                    <MudListItem Icon="@Icons.Material.Filled.Logout" OnClick="HandleSignOutAsync"
-                                 Class="jim-user-signout">
-                        Sign out
+                    <MudListItem OnClick="HandleSignOutAsync">
+                        <div class="d-flex align-center gap-2">
+                            <MudIcon Icon="@Icons.Material.Filled.Logout" Size="Size.Small" />
+                            <MudText Typo="Typo.body2">Sign out</MudText>
+                        </div>
                     </MudListItem>
                 }
             </MudList>
@@ -120,10 +124,13 @@
         _popoverOpen = false;
     }
 
-    private async Task HandleTogglePin()
+    private async Task OnPinToggled(bool value)
     {
-        ClosePopover();
-        await OnTogglePinned.InvokeAsync();
+        // Only fire the callback if the state would actually change. The parent's
+        // ToggleDrawerPinned() method is parameterless and flips the current value,
+        // so we invoke it any time the switch is moved.
+        if (value != IsDrawerPinned)
+            await OnTogglePinned.InvokeAsync();
     }
 
     private async Task OnDarkModeToggled(bool value)

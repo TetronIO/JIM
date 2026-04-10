@@ -52,9 +52,23 @@
                         </ErrorContent>
                     </LoggingErrorBoundary>
 
-                    <div class="jim-page-footer">
-                        <MudText Align="Align.Center" Typo="Typo.body2" Class="mt-5 mud-text-secondary">
-                            &copy; Tetron Ltd | All rights reserved | v@(AppVersion)
+                    <div class="jim-page-footer mt-5">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary jim-page-footer-text">
+                            <span>&copy; @DateTime.UtcNow.Year</span>
+                            <MudLink Href="https://tetron.io" Target="_blank"
+                                     Color="Color.Inherit" Underline="Underline.Hover">
+                                Tetron
+                            </MudLink>
+                            <span class="jim-page-footer-sep">|</span>
+                            <span>All rights reserved</span>
+                            <span class="jim-page-footer-sep">|</span>
+                            <span>v@(AppVersion)</span>
+                            <span class="jim-page-footer-sep">|</span>
+                            <MudLink Href="https://github.com/TetronIO/JIM" Target="_blank"
+                                     Color="Color.Inherit" Underline="Underline.Hover" Class="jim-page-footer-github">
+                                <MudIcon Icon="@Icons.Custom.Brands.GitHub" Size="Size.Small" Class="jim-page-footer-github-icon" />
+                                <span>GitHub</span>
+                            </MudLink>
                         </MudText>
                     </div>
 
