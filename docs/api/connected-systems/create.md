@@ -18,7 +18,7 @@ POST /api/v1/synchronisation/connected-systems
 |-----------|------|----------|-------------|
 | `name` | string | Yes | Display name for the connected system (1-200 characters) |
 | `description` | string | No | Optional description (max 1000 characters) |
-| `connectorDefinitionId` | integer | Yes | ID of the connector type to use. Available connectors can be listed via the Swagger UI. |
+| `connectorDefinitionId` | integer | Yes | ID of the connector type to use. Available connectors can be listed via the Scalar API reference at `/api/reference` (development only). |
 
 ## Examples
 

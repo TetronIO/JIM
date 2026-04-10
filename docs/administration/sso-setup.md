@@ -84,15 +84,20 @@ This step creates the API scope that JIM uses for JWT Bearer token validation (f
     - **State**: Enabled
 5. Click **Add scope**
 
-### Step 5a: Configure Swagger UI Authentication (Optional)
+### Step 5a: Configure Scalar API Reference Authentication (Development only, Optional)
 
-To enable OAuth authentication in the Swagger UI:
+JIM's interactive [Scalar](https://scalar.com/) API reference is only exposed in development environments (it is disabled in production to reduce the attack surface), so this step is only relevant if you are configuring SSO against a non-production JIM instance where you want to use the Scalar "try it out" flow with OAuth.
+
+To enable OAuth authentication in the Scalar API reference:
 
 1. Go to **Authentication**
 2. Click **Add Redirect URI**
 3. Select **Single-page application**
-4. Add redirect URI: `https://your-jim-url/api/swagger/oauth2-redirect.html`
+4. Add redirect URI: `https://your-jim-dev-url/api/reference` (Scalar uses the API reference page itself as the OAuth redirect target; there is no separate `oauth2-redirect.html` handler)
 5. Click **Configure**
+
+!!! note
+    For production deployments, use the JIM PowerShell module for interactive API testing instead. See Step 5b below.
 
 ### Step 5b: Configure PowerShell Module Authentication (Optional but recommended)
 
@@ -451,10 +456,14 @@ You should see a JSON response with endpoints for `authorization_endpoint`, `tok
 !!! tip "Hiding the sign-out button"
     For deployments where users cannot realistically sign out of their enterprise-managed SSO session (for example, on domain-joined devices with seamless SSO), administrators can hide the sign-out button entirely by setting the `SSO.EnableLogOut` service setting to `false`. See [Service Settings](configuration.md#service-settings) in the configuration reference.
 
-### 5. Test the API (Swagger)
+### 5. Test the API
 
-1. Navigate to `https://your-jim-url/api/swagger`
-2. Click **Authorise**
+In production, the recommended way to test API access with SSO is via the JIM PowerShell module (see Step 6 below), which supports interactive browser-based authentication.
+
+If you are configuring SSO against a non-production JIM instance and completed Step 5a above, you can also test the API interactively via the Scalar API reference:
+
+1. Navigate to `https://your-jim-dev-url/api/reference`
+2. Select an endpoint and choose the **OAuth2** security scheme
 3. Log in with your identity provider
 4. Try an API endpoint (e.g. `GET /api/v1/health`)
 

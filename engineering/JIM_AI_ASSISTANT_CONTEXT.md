@@ -4,9 +4,9 @@
 >
 > **Repository**: https://github.com/TetronIO/JIM
 >
-> **Document Version**: 1.5
+> **Document Version**: 1.6
 >
-> **Last Updated**: 2026-04-08
+> **Last Updated**: 2026-04-10
 >
 > **Note**: This is a snapshot. For current implementation details, check the repository or ask the user to provide updated code/docs.
 
@@ -291,7 +291,7 @@ FormatDateTime(hireDate, "yyyy-MM-dd")
 | `GET /api/v1/logs` | Unified log viewer (app + PostgreSQL) |
 | `GET /api/v1/synchronisation/sync-rules/{id}/matching-rules` | Manage object matching rules |
 
-Full Swagger documentation available at `/api/swagger`.
+Full interactive Scalar API reference available at `/api/reference` (development only; disabled in production). The underlying OpenAPI JSON spec is served at `/api/openapi/v1.json`.
 
 ### PowerShell Module
 

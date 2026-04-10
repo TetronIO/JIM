@@ -233,7 +233,7 @@ builder.Services.AddSingleton<IConfiguration>(configuration);
 - Add `[ApiVersion("1.0")]` to mark controller version
 - Return `ActionResult<T>` for typed responses
 - Use DTOs for request/response bodies
-- Add XML comments for Swagger documentation
+- Add XML comments for OpenAPI documentation
 
 **Example**:
 ```csharp
@@ -774,7 +774,7 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 | URL | Description |
 |-----|-------------|
 | `http://localhost:5200` | JIM Web UI |
-| `http://localhost:5200/api/swagger` | Swagger API documentation |
+| `http://localhost:5200/api/reference` | Scalar API reference (development only) |
 | `http://localhost:5200/dev/error-pages` | Error page preview (Development only) |
 | `http://localhost:8181` | Keycloak admin console (`admin` / `admin`) |
 
@@ -849,7 +849,7 @@ JIM uses standard OIDC claims (`sub`, `name`, `given_name`, `family_name`, `pref
 ## Docker & Deployment
 
 ### Service Architecture
-- **jim.web**: Blazor Server UI with integrated REST API at `/api/` (port 5200 HTTP / 5201 HTTPS). Swagger available at `/api/swagger` in development.
+- **jim.web**: Blazor Server UI with integrated REST API at `/api/` (port 5200 HTTP / 5201 HTTPS). Interactive [Scalar](https://scalar.com/) API reference available at `/api/reference` in development (disabled in production).
 - **jim.worker**: Background task processor built on `ISyncEngine` / `ISyncRepository` separation (see [Background Processing](#7-background-processing)). Per-task DI isolation, `ParallelBatchWriter` for concurrent writes, and COPY binary protocol for bulk inserts. Supports parallel schedule step execution and configurable LDAP pipelining.
 - **jim.scheduler**: Schedule management service with 30-second polling cycle. Detects parallel step groups (steps sharing the same `StepIndex`) and queues them with `ExecutionMode = Parallel` for concurrent worker dispatch.
 - **jim.database**: PostgreSQL 18
@@ -1301,9 +1301,9 @@ Invoke-JIMApiRequest -Method Delete -Endpoint "api/v1/connected-systems/$id"
 ### Adding a New API Endpoint
 1. Add method to appropriate controller in `src/JIM.Web/Controllers/Api/`
 2. Use DTOs for request/response (in `src/JIM.Web/Models/Api/`)
-3. Add XML comments for Swagger
+3. Add XML comments for OpenAPI documentation
 4. Add authorisation attributes if needed
-5. Test via Swagger UI at `/api/swagger`
+5. Test via the Scalar API reference at `/api/reference` (development only)
 
 ### Modifying Database Schema
 1. Update entity classes in `src/JIM.Models/Models/`

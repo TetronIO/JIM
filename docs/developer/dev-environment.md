@@ -133,14 +133,14 @@ Choose one of two workflows depending on your task:
 Best for active development with breakpoints and hot reload.
 
 1. Run `jim-build-light` (starts db + Keycloak, waits for readiness, launches JIM.Web natively)
-2. Press **F5** in VS Code to launch with the debugger, or access JIM at `https://localhost:7000`, Swagger at `/api/swagger`
+2. Press **F5** in VS Code to launch with the debugger, or access JIM at `https://localhost:7000`, API reference at `/api/reference`
 
 ### Workflow 2: Full Docker Stack
 
 Best for integration testing or a production-like environment.
 
 1. Start all services: `jim-stack`
-2. Access JIM at `http://localhost:5200`, Swagger at `/api/swagger`
+2. Access JIM at `http://localhost:5200`, API reference at `/api/reference`
 
 !!! note "Rebuilding after code changes"
     When running the Docker stack, compiled code changes require a container rebuild. Use `jim-build-web`, `jim-build-worker`, or `jim-build-scheduler` to rebuild affected services. Simply refreshing the browser is not sufficient.
@@ -150,7 +150,7 @@ Best for integration testing or a production-like environment.
 | URL | Description |
 |-----|-------------|
 | `http://localhost:5200` | JIM Web UI (Docker stack) |
-| `http://localhost:5200/api/swagger` | Swagger API documentation |
+| `http://localhost:5200/api/reference` | Scalar API reference (development only) |
 | `http://localhost:8181` | Keycloak admin console (`admin` / `admin`) |
 | `https://localhost:7000` | JIM Web UI (local debugging) |
 | `http://localhost:8000` | MkDocs documentation preview |

@@ -117,7 +117,7 @@ JIM runs as a set of Docker services:
 
 | Service | Description |
 |---------|-------------|
-| **jim.web** | Blazor Server UI with integrated REST API at `/api/`. Port 5200 (HTTP) / 5201 (HTTPS). Swagger available at `/api/swagger` in development. |
+| **jim.web** | Blazor Server UI with integrated REST API at `/api/`. Port 5200 (HTTP) / 5201 (HTTPS). Interactive [Scalar](https://scalar.com/) API reference available at `/api/reference` in development. |
 | **jim.worker** | Background task processor. Polls the task queue, processes sync/import/export operations. Uses `ISyncEngine`/`ISyncRepository` separation for testability. |
 | **jim.scheduler** | Schedule management with a 30-second polling cycle. Detects parallel step groups and queues them for concurrent worker dispatch. |
 | **jim.database** | PostgreSQL 18 database. |

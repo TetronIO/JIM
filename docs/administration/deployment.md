@@ -71,7 +71,7 @@ flowchart TD
 
 | Service            | Description                                                                           |
 |--------------------|---------------------------------------------------------------------------------------|
-| **jim.web**        | Blazor Server UI and REST API (`/api/` with Swagger at `/api/swagger`)                |
+| **jim.web**        | Blazor Server UI and REST API (`/api/`)                                               |
 | **jim.worker**     | Processes import, synchronisation, and export tasks                                   |
 | **jim.scheduler**  | Triggers synchronisation runs on cron or interval schedules                           |
 | **jim.database**   | PostgreSQL 18 (optional bundled container)                                            |
