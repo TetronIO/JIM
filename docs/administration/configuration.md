@@ -82,6 +82,25 @@ These variables control how JIM maps authenticated users to metaverse objects, e
 
 ---
 
+## Service Settings
+
+Service settings are stored in the database and managed through the admin UI at **Admin > Service Settings** (`/admin/settings`). They can be changed at runtime by users with the Administrator role; most take effect immediately, without restarting the JIM containers.
+
+This differs from environment variables, which are applied at process startup and tend to be infrastructure-level concerns (database connection, OIDC authority, log paths). Service settings are the day-to-day operational knobs.
+
+The settings listed below are the ones most commonly adjusted; the full list is discoverable in the admin UI.
+
+| Key                          | Display name              | Category        | Description                                                                                                                                                                                                                                                      | Default       |
+|------------------------------|---------------------------|-----------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------|
+| `SSO.EnableLogOut`           | SSO enable log-out        | SSO             | Controls whether the sign-out button is shown in the JIM user menu. Set to `false` for deployments where users cannot realistically sign out of their enterprise-managed SSO session, for example on domain-joined devices with seamless SSO. | `true`        |
+| `Sync.PartitionValidationMode` | Run profile partition validation | Synchronisation | Controls how JIM behaves when a run profile is executed for a Connected System that supports partitions but has none selected. `Error` blocks execution; `Warning` allows execution but logs a warning.                                                         | `Error`       |
+| `History.RetentionPeriod`    | History retention period  | History         | The duration for which activity and audit history is retained. Format: `d.hh:mm:ss`. Longer periods increase database size and may affect performance.                                                                                                          | `90.00:00:00` (90 days) |
+
+!!! tip "Editing service settings"
+    Navigate to **Admin > Service Settings**, use the filter and search box to locate the setting by key or display name, and click the edit icon. Changes are audited: the settings page shows who last modified each value and when.
+
+---
+
 ## Logging
 
 | Variable           | Description                                                                        | Default         | Example          |

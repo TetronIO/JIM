@@ -39,6 +39,7 @@ JIM requires an OIDC-compliant identity provider for authentication. This guide 
         - Platform: **Web**
         - URI: `https://your-jim-url/signin-oidc`
 5. Click **Register**
+6. After registration, go to **Authentication** and add a second Web redirect URI for the sign-out callback: `https://your-jim-url/signout-callback-oidc`, then click **Save**. Entra ID validates the `post_logout_redirect_uri` parameter against the same Redirect URIs list as sign-in, so this entry is required for sign-out to work.
 
 ### Step 2: Note the Application Details
 
@@ -93,7 +94,9 @@ To enable OAuth authentication in the Swagger UI:
 4. Add redirect URI: `https://your-jim-url/api/swagger/oauth2-redirect.html`
 5. Click **Configure**
 
-### Step 5b: Configure PowerShell Module Authentication (Optional)
+### Step 5b: Configure PowerShell Module Authentication (Optional but recommended)
+
+Configuring the PowerShell module now means administrators and automation scripts can connect to JIM interactively with their SSO account, without needing to issue or manage API keys. You can skip this step if you don't plan to use the PowerShell module, but it only takes a moment and is worth doing up front.
 
 To enable interactive browser-based authentication for the JIM PowerShell module:
 
@@ -161,7 +164,8 @@ JIM_SSO_API_SCOPE=api://12345678-1234-1234-1234-123456789abc/access_as_user
 
 1. Note the **Client Identifier** (auto-generated GUID)
 2. Add the **Redirect URI**: `https://your-jim-url/signin-oidc`
-3. Click **Next**
+3. Add a second **Redirect URI** for the sign-out callback: `https://your-jim-url/signout-callback-oidc`. AD FS validates the `post_logout_redirect_uri` parameter against the same Redirect URIs list as sign-in, so this entry is required for sign-out to work.
+4. Click **Next**
 
 ### Step 3: Configure Access Control
 
@@ -173,7 +177,9 @@ JIM_SSO_API_SCOPE=api://12345678-1234-1234-1234-123456789abc/access_as_user
 1. Select **openid** and **profile** scopes
 2. Click **Next** and then **Close**
 
-### Step 4a: Configure PowerShell Module Authentication (Optional)
+### Step 4a: Configure PowerShell Module Authentication (Optional but recommended)
+
+Configuring the PowerShell module now means administrators and automation scripts can connect to JIM interactively with their SSO account, without needing to issue or manage API keys. You can skip this step if you don't plan to use the PowerShell module, but it only takes a moment and is worth doing up front.
 
 The JIM PowerShell module uses OAuth 2.0 with PKCE for interactive browser-based authentication. AD FS supports this through native applications.
 
@@ -336,7 +342,9 @@ If you need separate API clients for service-to-service communication:
 3. Click **Add client scope**
 4. Select `jim-api` and add as **Optional**
 
-### Step 6a: Configure PowerShell Module Authentication (Optional)
+### Step 6a: Configure PowerShell Module Authentication (Optional but recommended)
+
+Configuring the PowerShell module now means administrators and automation scripts can connect to JIM interactively with their SSO account, without needing to issue or manage API keys. You can skip this step if you don't plan to use the PowerShell module, but it only takes a moment and is worth doing up front.
 
 The JIM PowerShell module uses OAuth 2.0 with PKCE for interactive browser-based authentication. This requires creating a public client in Keycloak.
 
@@ -430,14 +438,27 @@ You should see a JSON response with endpoints for `authorization_endpoint`, `tok
     - `name` -- Your display name
     - `email` -- Your email address
 
-### 4. Test the API (Swagger)
+### 4. Test Sign-Out
+
+1. With an active JIM session, open the user menu in the navigation drawer (bottom-left)
+2. Click **Sign out** and confirm the dialog
+3. You should be redirected briefly to your identity provider's end-session endpoint, then returned to JIM
+4. You should end up signed out of JIM; reopening a protected page should redirect you to your identity provider to sign in again
+
+!!! info "Scope of sign-out"
+    Sign-out clears the JIM session cookie and notifies the identity provider via RP-initiated logout (OIDC [end_session_endpoint](https://openid.net/specs/openid-connect-rpinitiated-1_0.html)). Whether the user is also signed out of other applications that share the same identity provider session depends entirely on the identity provider's single sign-out configuration, not JIM.
+
+!!! tip "Hiding the sign-out button"
+    For deployments where users cannot realistically sign out of their enterprise-managed SSO session (for example, on domain-joined devices with seamless SSO), administrators can hide the sign-out button entirely by setting the `SSO.EnableLogOut` service setting to `false`. See [Service Settings](configuration.md#service-settings) in the configuration reference.
+
+### 5. Test the API (Swagger)
 
 1. Navigate to `https://your-jim-url/api/swagger`
 2. Click **Authorise**
 3. Log in with your identity provider
 4. Try an API endpoint (e.g. `GET /api/v1/health`)
 
-### 5. Test the PowerShell Module
+### 6. Test the PowerShell Module
 
 If you configured PowerShell module authentication:
 
@@ -459,6 +480,29 @@ Test-JIMConnection
 # Message        : Connection successful
 # TokenExpiresAt : <date/time>
 ```
+
+---
+
+## Sign-Out Troubleshooting
+
+Sign-out uses OIDC [RP-initiated logout](https://openid.net/specs/openid-connect-rpinitiated-1_0.html): JIM clears its local session cookie, then redirects the browser to the identity provider's `end_session_endpoint` with an `id_token_hint` and a `post_logout_redirect_uri`. The identity provider ends its session and redirects the browser back to JIM.
+
+The most common failure modes and how to fix them:
+
+**"AADSTS50011: The reply URL specified in the request does not match..."** (Entra ID)
+: The post-logout URI (`https://your-jim-url/signout-callback-oidc`) is not registered against the app. Add it to **Authentication** > **Platform configurations** > **Web** > **Redirect URIs** and save. See [Entra ID Step 1](#step-1-register-the-application).
+
+**"Invalid post_logout_redirect_uri"** or similar (AD FS, Keycloak)
+: Same root cause as above: the URI is not in the application's registered redirect URI list. For AD FS, add `https://your-jim-url/signout-callback-oidc` to the Web Application's Redirect URIs (see [AD FS Step 2](#step-2-configure-the-native-application)). For Keycloak, add it to **Valid post logout redirect URIs** on the client (see [Keycloak Step 2](#step-2-create-a-client-for-jim)).
+
+**"Missing parameters: id_token_hint"** (Keycloak and other strict providers)
+: Keycloak and other strict OIDC providers require `id_token_hint` on the end-session request per the OIDC specification. JIM persists the ID token during sign-in automatically so the middleware can include it on sign-out. If you see this error, verify your identity provider is actually issuing an ID token (the `openid` scope must be requested, which JIM does by default) and that your client configuration is not stripping it.
+
+**Sign-out appears to succeed, but refreshing the page keeps you signed in**
+: This usually means the identity provider still has an active single sign-on session and is silently re-authenticating JIM via the `prompt=none` flow (or cached browser credentials). This is working as designed for SSO. To test a full sign-out flow, use a private/incognito browser window, or sign out of the identity provider session directly.
+
+**The sign-out button is missing from the user menu**
+: The sign-out button is gated by the `SSO.EnableLogOut` service setting, which is enabled by default. See [Service Settings](configuration.md#service-settings) in the configuration reference.
 
 ---
 
