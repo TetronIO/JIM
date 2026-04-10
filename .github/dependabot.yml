@@ -57,6 +57,11 @@ updates:
   # Run: docker run --rm <image>@<new-digest> bash -c "apt-get update -qq && apt-cache policy <pkg>"
   #
   # Add new Dockerfile directories to the list below; Dependabot does not recurse.
+  #
+  # Polled daily so that upstream base image rebuilds (Microsoft rebuilds .NET
+  # images within 12 hours of an Ubuntu noble update, and on the second Tuesday
+  # of each month for lower-severity CVEs) are picked up promptly. JIM's own
+  # release cadence acts as the natural cooling-off window.
   - package-ecosystem: "docker"
     directories:
       - "/src/JIM.Web"
@@ -64,8 +69,7 @@ updates:
       - "/src/JIM.Scheduler"
       - "/.devcontainer"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "daily"
       time: "09:00"
       timezone: "Europe/London"
     reviewers:
@@ -84,11 +88,11 @@ updates:
   # Docker Compose images (PostgreSQL)
   # The digest-pinned postgres image in docker-compose.yml is the single source of truth —
   # Build-ReleaseBundle.ps1 reads it automatically, so updating here updates the bundle too.
+  # Polled daily for the same reason as the base images above.
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "daily"
       time: "09:00"
       timezone: "Europe/London"
     reviewers:
