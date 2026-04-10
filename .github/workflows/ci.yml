@@ -104,6 +104,16 @@ jobs:
 
     - name: Scan base image for vulnerabilities
       id: trivy
+      # Force the severity filter and ignore-unfixed flag via step-level env vars
+      # rather than trivy-action inputs. trivy-action's set_env_var_if_provided
+      # helper was observed to drop the severity filter in CI (12 LOW-severity
+      # openssl findings slipped through a CRITICAL,HIGH filter), while the same
+      # version running locally with identical flags correctly filtered them out.
+      # Trivy itself reads TRIVY_SEVERITY and TRIVY_IGNORE_UNFIXED directly, so
+      # setting them at the step env: level bypasses the action's wrapper logic.
+      env:
+        TRIVY_SEVERITY: CRITICAL,HIGH
+        TRIVY_IGNORE_UNFIXED: 'true'
       uses: aquasecurity/trivy-action@0.35.0
       with:
         image-ref: ${{ matrix.image_ref }}
@@ -113,8 +123,6 @@ jobs:
         # without producing findings in the SARIF file (see docker pull step
         # comment above). We evaluate SARIF findings explicitly in the next step.
         exit-code: '0'
-        severity: 'CRITICAL,HIGH'
-        ignore-unfixed: true
         cache: 'false'
 
     - name: Fail build on Trivy findings
