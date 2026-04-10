@@ -104,41 +104,88 @@ jobs:
 
     - name: Scan base image for vulnerabilities
       id: trivy
-      # Force the severity filter and ignore-unfixed flag via step-level env vars
-      # rather than trivy-action inputs. trivy-action's set_env_var_if_provided
-      # helper was observed to drop the severity filter in CI (12 LOW-severity
-      # openssl findings slipped through a CRITICAL,HIGH filter), while the same
-      # version running locally with identical flags correctly filtered them out.
-      # Trivy itself reads TRIVY_SEVERITY and TRIVY_IGNORE_UNFIXED directly, so
-      # setting them at the step env: level bypasses the action's wrapper logic.
+      # Scan with no severity filter: trivy-action's severity filter was
+      # observed to drop findings correctly locally but not in CI (LOW-severity
+      # CVEs leaked through despite severity=CRITICAL,HIGH). We instead let
+      # Trivy emit every finding into the SARIF and apply our own CVSS-based
+      # filter in the next step, which is both more reliable and more honest
+      # (uses the same CVSS score GitHub Code Scanning uses to classify alerts).
+      # We DO keep ignore-unfixed: there's no value in blocking on CVEs that
+      # have no upstream fix available.
       env:
-        TRIVY_SEVERITY: CRITICAL,HIGH
         TRIVY_IGNORE_UNFIXED: 'true'
       uses: aquasecurity/trivy-action@0.35.0
       with:
         image-ref: ${{ matrix.image_ref }}
         format: 'sarif'
         output: 'trivy-results.sarif'
-        # Do not rely on trivy-action's exit-code mechanism: observed to exit 1
-        # without producing findings in the SARIF file (see docker pull step
-        # comment above). We evaluate SARIF findings explicitly in the next step.
+        # Do not rely on trivy-action's exit-code mechanism: it was observed to
+        # exit 1 without producing findings in the SARIF file. We evaluate
+        # findings explicitly in the next step.
         exit-code: '0'
         cache: 'false'
 
-    - name: Fail build on Trivy findings
+    - name: Fail build on fixable HIGH/CRITICAL Trivy findings
       shell: pwsh
       run: |
         if (-not (Test-Path 'trivy-results.sarif')) {
           Write-Error "Trivy did not produce a SARIF file."
           exit 1
         }
+
         $sarif = Get-Content 'trivy-results.sarif' -Raw | ConvertFrom-Json
-        $findings = 0
-        foreach ($run in $sarif.runs) {
-          if ($run.results) { $findings += @($run.results).Count }
+
+        # Build a ruleId -> CVSS score map from the SARIF rules catalogue.
+        # Trivy writes the CVSS base score to rule.properties.'security-severity'
+        # as a decimal string (e.g. "7.5"). This is the same field GitHub Code
+        # Scanning reads to classify alerts as low/medium/high/critical.
+        $severityByRule = @{}
+        foreach ($r in $sarif.runs) {
+          foreach ($rule in $r.tool.driver.rules) {
+            $score = 0.0
+            $raw = $rule.properties.'security-severity'
+            if ($raw) { [void][double]::TryParse($raw, [ref]$score) }
+            $severityByRule[$rule.id] = $score
+          }
         }
-        Write-Host "Trivy reported $findings finding(s) for ${{ matrix.image_ref }}"
-        if ($findings -gt 0) {
+
+        # Walk results, classify by CVSS, and count only HIGH (>= 7.0) and
+        # CRITICAL (>= 9.0). Also collect a sample for the log.
+        $critical = 0
+        $high     = 0
+        $medium   = 0
+        $low      = 0
+        $blocking = @()
+        foreach ($r in $sarif.runs) {
+          foreach ($result in @($r.results)) {
+            if (-not $result) { continue }
+            $ruleId = $result.ruleId
+            $score  = [double]$severityByRule[$ruleId]
+            if ($score -ge 9.0) {
+              $critical++
+              $blocking += "$ruleId (CVSS $score)"
+            } elseif ($score -ge 7.0) {
+              $high++
+              $blocking += "$ruleId (CVSS $score)"
+            } elseif ($score -ge 4.0) {
+              $medium++
+            } else {
+              $low++
+            }
+          }
+        }
+
+        Write-Host "Trivy findings for ${{ matrix.image_ref }}:"
+        Write-Host "  CRITICAL: $critical"
+        Write-Host "  HIGH:     $high"
+        Write-Host "  MEDIUM:   $medium  (not blocking)"
+        Write-Host "  LOW:      $low  (not blocking)"
+        Write-Host ''
+
+        $blockingCount = $critical + $high
+        if ($blockingCount -gt 0) {
+          Write-Host "Blocking CVEs (CVSS >= 7.0):"
+          $blocking | Sort-Object -Unique | ForEach-Object { Write-Host "  $_" }
           Write-Host ''
           Write-Host 'Fixable CRITICAL/HIGH vulnerabilities found. Failing build.'
           Write-Host 'See the GitHub Security tab for details:'
