@@ -50,12 +50,28 @@ JIM ships a bundled Keycloak instance for development SSO, removing the need for
 | Admin console URL | `http://localhost:8181` |
 | Admin credentials | `admin` / `admin` |
 | Pre-configured realm | `jim` |
+| Pre-configured test users | `admin` / `admin`, `user` / `user` |
 
 Keycloak management aliases:
 
 - `jim-keycloak`: Start Keycloak only (for local debugging workflow)
 - `jim-keycloak-stop`: Stop Keycloak
 - `jim-keycloak-logs`: View Keycloak logs
+
+### Front-channel and back-channel URLs
+
+The bundled Keycloak is configured so that the browser and JIM.Web each see the right endpoint URLs for their network path, without JIM.Web having to rewrite URLs itself. This makes sign-in and sign-out work identically whether you run JIM.Web natively (`jim-build-light`) or inside the full Docker stack (`jim-build`).
+
+Three environment variables in [docker-compose.override.yml](https://github.com/TetronIO/JIM/blob/main/docker-compose.override.yml) make this work:
+
+| Variable | Value | Purpose |
+|----------|-------|---------|
+| `KC_HOSTNAME` | `http://localhost:8181` | The public, browser-facing URL. Advertised in the discovery document, `iss` claim, redirects, and the `end_session_endpoint`. |
+| `KC_HOSTNAME_STRICT` | `false` | Accept requests whose `Host` header doesn't match `KC_HOSTNAME`, so back-channel calls from inside the Docker network are not rejected. |
+| `KC_HOSTNAME_BACKCHANNEL_DYNAMIC` | `true` | Derive back-channel endpoint URLs (token, userinfo, JWKS) from each request's `Host` header, so JIM.Web in the Docker network receives `jim.keycloak:8080` endpoints while the browser receives `localhost:8181` endpoints. |
+
+!!! warning "Do not change these without reading the comment block"
+    The three `KC_HOSTNAME*` variables work as a set. Removing or changing any of them in isolation will break sign-in or sign-out (or both) in at least one of the three supported dev scenarios: Codespaces, devcontainer native debugging (`jim-build-light`), and devcontainer Docker stack (`jim-build`). See the inline comment in [docker-compose.override.yml](https://github.com/TetronIO/JIM/blob/main/docker-compose.override.yml) for the full rationale.
 
 ## Shell Aliases
 

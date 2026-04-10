@@ -1,15 +1,22 @@
 ﻿@page "/claims"
 @using System.Security.Claims
+@inject IJimApplicationFactory JimFactory
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Your Claims</PageTitle>
 <MudText Typo="Typo.h4">Your Claims</MudText>
+<MudText Typo="Typo.body1" Class="mt-2">
+    Claims are pieces of information about you that your identity provider has asserted during sign-in. JIM uses these
+    values to establish your identity, display your name, and determine what you are authorised to do. The table below
+    lists every claim present on your current session, which is useful for diagnosing sign-in, authorisation, or
+    identity mapping issues.
+</MudText>
 
 @if (User != null)
 {
-    <MudTable Items="@User.Claims.OrderBy(q=> q.Type)" Hover="true" Breakpoint="Breakpoint.Sm" HorizontalScrollbar="false" Class="mt-5">
+    <MudTable Items="@User.Claims.OrderBy(q=> q.Type)" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" HorizontalScrollbar="false" Class="mt-5">
         <HeaderContent>
             <MudTh><MudText Typo="Typo.button">Claim Type</MudText></MudTh>
             <MudTh><MudText Typo="Typo.button">Claim Value</MudText></MudTh>
@@ -19,12 +26,39 @@
             <MudTd DataLabel="Claim Value">@context.Value</MudTd>
         </RowTemplate>
     </MudTable>
+
+    <MudText Typo="Typo.h4" Class="mt-8">Identity Provider</MudText>
+    <MudText Typo="Typo.body1" Class="mt-2">
+        Non-sensitive details about the identity provider JIM is configured to trust, together with runtime information
+        about how your current session was authenticated. Secrets (client secret, tokens) are deliberately excluded.
+    </MudText>
+
+    <MudTable Items="@_idpInfo" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" HorizontalScrollbar="false" Class="mt-5">
+        <HeaderContent>
+            <MudTh><MudText Typo="Typo.button">Setting</MudText></MudTh>
+            <MudTh><MudText Typo="Typo.button">Value</MudText></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Setting">@context.Label</MudTd>
+            <MudTd DataLabel="Value">
+                @if (string.IsNullOrEmpty(context.Value))
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary"><em>(not set)</em></MudText>
+                }
+                else
+                {
+                    @context.Value
+                }
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
 }
 
 @code {
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
     private ClaimsPrincipal? User { get; set; }
+    private List<IdpInfoRow> _idpInfo = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -32,5 +66,27 @@
             return;
 
         User = (await AuthenticationStateTask).User;
+
+        using var jim = JimFactory.Create();
+        var settings = await jim.ServiceSettings.GetServiceSettingsAsync();
+
+        var identity = User.Identity as ClaimsIdentity;
+        var issuer = User.FindFirstValue("iss");
+
+        _idpInfo =
+        [
+            new IdpInfoRow("Authority", settings?.SSOAuthority),
+            new IdpInfoRow("Client ID", settings?.SSOClientId),
+            new IdpInfoRow("Unique identifier claim", settings?.SSOUniqueIdentifierClaimType),
+            new IdpInfoRow("Mapped metaverse attribute", settings?.SSOUniqueIdentifierMetaverseAttribute?.Name),
+            new IdpInfoRow("Sign-out enabled", settings is null ? null : settings.SSOEnableLogOut ? "Yes" : "No"),
+            new IdpInfoRow("Token issuer (iss)", issuer),
+            new IdpInfoRow("Authentication type", identity?.AuthenticationType),
+            new IdpInfoRow("Is authenticated", identity?.IsAuthenticated == true ? "Yes" : "No"),
+            new IdpInfoRow("Name claim type", identity?.NameClaimType),
+            new IdpInfoRow("Role claim type", identity?.RoleClaimType),
+        ];
     }
+
+    private sealed record IdpInfoRow(string Label, string? Value);
 }
