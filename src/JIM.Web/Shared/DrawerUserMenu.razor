@@ -1,8 +1,10 @@
 @using System.Security.Claims
+@using Microsoft.Extensions.Hosting
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IJimApplicationFactory JimFactory
 @inject IDialogService DialogService
 @inject NavigationManager NavigationManager
+@inject IWebHostEnvironment Environment
 
 @if (_loaded)
 {
@@ -52,6 +54,16 @@
                                    Color="Color.Primary" Size="Size.Small" Class="ma-0 jim-user-menu-switch" />
                     </div>
                 </MudListItem>
+                @if (_isDevelopment)
+                {
+                    <MudDivider Class="my-1" />
+                    <MudListItem OnClick="HandleViewClaims">
+                        <div class="d-flex align-center gap-2">
+                            <MudIcon Icon="@Icons.Material.Filled.Badge" Size="Size.Small" />
+                            <MudText Typo="Typo.body2">View claims</MudText>
+                        </div>
+                    </MudListItem>
+                }
                 @if (_showSignOut)
                 {
                     <MudDivider Class="my-1" />
@@ -96,6 +108,7 @@
     private string? _preferredUsername;
     private string _initials = "?";
     private bool _showSignOut;
+    private bool _isDevelopment;
     private bool _loaded;
 
     protected override async Task OnInitializedAsync()
@@ -110,6 +123,8 @@
         using var jim = JimFactory.Create();
         var settings = await jim.ServiceSettings.GetServiceSettingsAsync();
         _showSignOut = settings?.SSOEnableLogOut ?? true;
+
+        _isDevelopment = Environment.IsDevelopment();
 
         _loaded = true;
     }
@@ -132,6 +147,12 @@
     private async Task HandleToggleDarkMode()
     {
         await IsDarkModeChanged.InvokeAsync(!IsDarkMode);
+    }
+
+    private void HandleViewClaims()
+    {
+        ClosePopover();
+        NavigationManager.NavigateTo("/claims");
     }
 
     private async Task HandleSignOutAsync()
