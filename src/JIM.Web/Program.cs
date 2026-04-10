@@ -223,17 +223,6 @@ try
             // Exception: endpoints marked with [AllowAnonymous] should not trigger authentication
             options.Events.OnRedirectToIdentityProvider = async ctx =>
             {
-                // When the authority uses a back-channel-only hostname (e.g. jim.keycloak in
-                // Docker), the IdP advertises endpoints with that same unreachable host. Rewrite
-                // to the public-facing issuer from JIM_SSO_VALID_ISSUERS so the browser can
-                // actually reach it. No-op when authority is already browser-reachable.
-                if (Uri.TryCreate(ctx.ProtocolMessage.IssuerAddress, UriKind.Absolute, out var signInRedirect))
-                {
-                    var rewritten = RewriteToPublicIssuer(signInRedirect, authority, validIssuers);
-                    if (!ReferenceEquals(rewritten, signInRedirect))
-                        ctx.ProtocolMessage.IssuerAddress = rewritten.ToString();
-                }
-
                 if (ctx.Request.Path.StartsWithSegments("/api"))
                 {
                     // Check if the endpoint allows anonymous access
@@ -254,20 +243,6 @@ try
                     await ctx.Response.WriteAsJsonAsync(new { error = "Unauthorized", message = "Authentication required" });
                     ctx.HandleResponse(); // Mark response as handled
                 }
-            };
-
-            // Sign-out uses a separate OIDC event. The IdP's end-session endpoint comes from
-            // the discovery document, so when authority is back-channel-only (e.g. jim.keycloak),
-            // the redirect host needs the same rewrite as sign-in.
-            options.Events.OnRedirectToIdentityProviderForSignOut = ctx =>
-            {
-                if (Uri.TryCreate(ctx.ProtocolMessage.IssuerAddress, UriKind.Absolute, out var signOutRedirect))
-                {
-                    var rewritten = RewriteToPublicIssuer(signOutRedirect, authority, validIssuers);
-                    if (!ReferenceEquals(rewritten, signOutRedirect))
-                        ctx.ProtocolMessage.IssuerAddress = rewritten.ToString();
-                }
-                return Task.CompletedTask;
             };
         })
         .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
@@ -1070,63 +1045,6 @@ static string[] GetValidIssuers(string? authority)
 
     // For other IDPs, the issuer typically matches the authority
     return [authority];
-}
-
-/// <summary>
-/// Rewrites an OIDC redirect URL so that the host component points at a browser-reachable
-/// issuer. This is required when <c>JIM_SSO_AUTHORITY</c> uses a Docker-internal hostname
-/// (e.g. <c>jim.keycloak</c>) for back-channel OIDC discovery: the IdP then advertises
-/// endpoints with that same unreachable hostname, which breaks browser redirects for both
-/// sign-in and sign-out.
-/// <para>
-/// The rule: if the redirect host matches the configured <paramref name="authority"/> host
-/// (i.e. the IdP advertised an endpoint using the internal hostname), find the entry in
-/// <paramref name="validIssuers"/> whose host differs from the authority host and rewrite
-/// to that. This handles all deployment scenarios uniformly — dev (localhost), production
-/// with external IdP (no-op), and production with bundled Keycloak (customer hostname).
-/// </para>
-/// </summary>
-/// <returns>The rewritten URI, or the original <paramref name="redirectUri"/> if no rewrite applies.</returns>
-static Uri RewriteToPublicIssuer(Uri redirectUri, string? authority, string[] validIssuers)
-{
-    if (string.IsNullOrEmpty(authority) || validIssuers.Length == 0)
-        return redirectUri;
-
-    Uri authorityUri;
-    try
-    {
-        authorityUri = new Uri(authority);
-    }
-    catch (UriFormatException)
-    {
-        return redirectUri;
-    }
-
-    // Only rewrite when the IdP's advertised host matches the (internal) authority host.
-    if (!string.Equals(redirectUri.Host, authorityUri.Host, StringComparison.OrdinalIgnoreCase))
-        return redirectUri;
-
-    // Find the valid issuer whose host differs from the authority host — that's the
-    // public, browser-reachable one. If none is found (e.g. only one issuer configured),
-    // this is a no-op and we return the original URI unchanged.
-    foreach (var issuer in validIssuers)
-    {
-        if (!Uri.TryCreate(issuer, UriKind.Absolute, out var issuerUri))
-            continue;
-
-        if (!string.Equals(issuerUri.Host, authorityUri.Host, StringComparison.OrdinalIgnoreCase))
-        {
-            var rewritten = new UriBuilder(redirectUri)
-            {
-                Scheme = issuerUri.Scheme,
-                Host = issuerUri.Host,
-                Port = issuerUri.IsDefaultPort ? -1 : issuerUri.Port
-            };
-            return rewritten.Uri;
-        }
-    }
-
-    return redirectUri;
 }
 
 /// <summary>
