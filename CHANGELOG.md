@@ -15,9 +15,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ New user menu in the navigation drawer showing the signed-in user's avatar (with initials), display name and username, with pinning, dark mode and sign-out controls in a single polished popover (#49)
+- 🔒 Sign-out with identity provider, gated by the `SSOEnableLogOut` service setting, with a confirmation dialog to prevent accidental clicks (#49)
 - ✨ Automated integration test metrics streaming to central tracking system with Grafana dashboards (#476)
 - ✨ Host fingerprinting for fair cross-environment performance comparison (#476)
 - ✨ Cross-repo sync workflow to keep metrics infrastructure aligned with span contract changes (#476)
+
+### Fixed
+
+- 🐛 Sign-out with the bundled Keycloak no longer fails with "Missing parameters: id_token_hint"; JIM now persists the ID token during sign-in so the OIDC middleware can include it on the end-session request per the OIDC spec (#49)
+- 🐛 Keycloak hostname configuration corrected so that browsers and Docker back-channel clients each get the right endpoint URLs, fixing sign-in and sign-out for all four deployment scenarios (Codespaces, devcontainer native, devcontainer Docker, production) (#49)
+
+### Changed
+
+- 🖥️ Page footer now links the Tetron name to tetron.io and includes a GitHub link next to the version number (#49)
 
 ## [0.9.1] - 2026-04-08
 
