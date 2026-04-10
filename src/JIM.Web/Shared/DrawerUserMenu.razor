@@ -30,26 +30,26 @@
                 Class="jim-user-popover">
         <MudPaper Outlined="true" Elevation="8" Class="jim-user-popover-paper pa-1">
             <MudList T="string" Dense="true" Class="py-0">
-                <MudListItem>
-                    <div class="d-flex align-center justify-space-between" style="width: 100%;">
+                <MudListItem OnClick="HandleTogglePin">
+                    <div class="d-flex align-center justify-space-between jim-user-menu-row">
                         <div class="d-flex align-center gap-2">
                             <MudIcon Icon="@(IsDrawerPinned ? Icons.Material.Filled.PushPin : Icons.Material.Outlined.PushPin)"
                                      Size="Size.Small" />
                             <MudText Typo="Typo.body2">Pin menu open</MudText>
                         </div>
-                        <MudSwitch T="bool" Value="@IsDrawerPinned" ValueChanged="OnPinToggled"
-                                   Color="Color.Primary" Size="Size.Small" Class="ma-0" />
+                        <MudSwitch T="bool" Value="@IsDrawerPinned" ReadOnly="true"
+                                   Color="Color.Primary" Size="Size.Small" Class="ma-0 jim-user-menu-switch" />
                     </div>
                 </MudListItem>
-                <MudListItem>
-                    <div class="d-flex align-center justify-space-between" style="width: 100%;">
+                <MudListItem OnClick="HandleToggleDarkMode">
+                    <div class="d-flex align-center justify-space-between jim-user-menu-row">
                         <div class="d-flex align-center gap-2">
                             <MudIcon Icon="@(IsDarkMode ? Icons.Material.Filled.DarkMode : Icons.Material.Filled.WbSunny)"
                                      Size="Size.Small" />
                             <MudText Typo="Typo.body2">Dark mode</MudText>
                         </div>
-                        <MudSwitch T="bool" Value="@IsDarkMode" ValueChanged="OnDarkModeToggled"
-                                   Color="Color.Primary" Size="Size.Small" Class="ma-0" />
+                        <MudSwitch T="bool" Value="@IsDarkMode" ReadOnly="true"
+                                   Color="Color.Primary" Size="Size.Small" Class="ma-0 jim-user-menu-switch" />
                     </div>
                 </MudListItem>
                 @if (_showSignOut)
@@ -124,18 +124,14 @@
         _popoverOpen = false;
     }
 
-    private async Task OnPinToggled(bool value)
+    private async Task HandleTogglePin()
     {
-        // Only fire the callback if the state would actually change. The parent's
-        // ToggleDrawerPinned() method is parameterless and flips the current value,
-        // so we invoke it any time the switch is moved.
-        if (value != IsDrawerPinned)
-            await OnTogglePinned.InvokeAsync();
+        await OnTogglePinned.InvokeAsync();
     }
 
-    private async Task OnDarkModeToggled(bool value)
+    private async Task HandleToggleDarkMode()
     {
-        await IsDarkModeChanged.InvokeAsync(value);
+        await IsDarkModeChanged.InvokeAsync(!IsDarkMode);
     }
 
     private async Task HandleSignOutAsync()

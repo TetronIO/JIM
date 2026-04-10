@@ -561,6 +561,27 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     font-size: 0.875rem;
 }
 
+/* Switch-bearing rows: the whole row is clickable and toggles the bound value.
+   The switch inside is read-only (visual only) so clicks pass through to the
+   list item click handler. */
+.jim-user-menu-row {
+    width: 100%;
+}
+
+/* Let clicks on the switch bubble up to the list item so the whole row toggles
+   as one, instead of the switch intercepting the click. */
+.jim-user-menu-switch {
+    pointer-events: none;
+}
+
+/* Override MudBlazor's disabled-read-only switch greying so the switch still
+   looks enabled and animates when the row is clicked. */
+.jim-user-menu-switch.mud-switch .mud-switch-track,
+.jim-user-menu-switch.mud-switch .mud-switch-thumb,
+.jim-user-menu-switch.mud-switch .mud-button-root {
+    opacity: 1 !important;
+}
+
 /* Page footer: flex the whole line so text, separators and links (with icons) all centre vertically */
 .jim-page-footer-text {
     display: flex !important;
