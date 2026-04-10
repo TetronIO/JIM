@@ -41,10 +41,15 @@ Categorise each PR into one of three ecosystems:
      docker run --rm <image>@<new-digest> bash -c \
        "apt-get update -qq && apt-cache policy <package1> <package2> ..."
      ```
-  3. Current pinned packages across services:
-     - **JIM.Web** (aspnet base): `libldap-common`, `libldap-2.5-0`, `cifs-utils`
-     - **JIM.Worker** (runtime base): `libldap-common`, `libldap-2.5-0`
+  3. Current pinned packages across services (read the Dockerfiles to
+     confirm; this list can drift). As of April 2026:
+     - **JIM.Web** (aspnet base): `libldap-common`, `libldap2`
+     - **JIM.Worker** (runtime base): `libldap-common`, `libldap2`, `cifs-utils`
      - **JIM.Scheduler** (runtime base): No apt packages
+
+     Note: `libldap-2.5-0` was renamed to `libldap2` in Ubuntu Noble (OpenLDAP
+     2.6). The Dockerfiles symlink `libldap.so.2` back to `libldap-2.5.so.0`
+     because .NET 10 managed LDAP code loads the old name.
   4. If a pinned version is NO LONGER AVAILABLE: **Do NOT merge**. Report the version mismatch and the available versions so the user can decide whether to update the pin.
 
 ### NuGet Packages
