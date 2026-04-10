@@ -849,6 +849,18 @@ All production Dockerfiles pin their dependencies for reproducible, auditable bu
 - **Functional apt packages**: Libraries that JIM calls at runtime (libldap, cifs-utils) are pinned to exact versions (e.g., `libldap-2.5-0=2.5.13+dfsg-5`).
 - **Diagnostic utilities**: Tools like `curl` and `iputils-ping` are not pinned, as they are only used for health checks and debugging, not functional code paths.
 
+**The digest-pinning policy is machine-enforced.** Every production Dockerfile carries the directive `# jim-compliance: production-image` near the top of the file. The CI workflow (`.github/workflows/ci.yml`, `discover-base-images` job) scans the repository for Dockerfiles with this directive, parses every external `FROM` line, and fails the build if any of them is missing a `@sha256:` digest. The underlying script is [`.github/scripts/discover-base-images.ps1`](../.github/scripts/discover-base-images.ps1).
+
+Dockerfiles without the compliance directive (`.devcontainer/Dockerfile`, the integration test fixture images under `test/integration/docker/`) are deliberately out of scope. They are dev or test infrastructure, not customer-shipped artefacts, and are expected to track upstream tags rather than pinned digests. **Do not add the directive to a non-production Dockerfile, and do not remove it from a production one.**
+
+When adding a new production Dockerfile:
+
+1. Add `# jim-compliance: production-image` to the file (see `src/JIM.Web/Dockerfile` for the canonical format)
+2. Ensure every external `FROM` line uses `@sha256:` digest pinning
+3. That's it. The discovery script finds the new file automatically; no workflow or config update is required.
+
+Vulnerability scanning runs against every discovered production base image on every push and PR. Findings are surfaced in the GitHub Security tab via SARIF upload in addition to the Actions log, so they are visible to reviewers and auditable after the fact.
+
 **Why this matters**: `System.DirectoryServices.Protocols` (the .NET LDAP client) P/Invokes into the native `libldap` shared library at runtime. An incompatible libldap version could cause silent behavioural differences or crashes during LDAP/AD operations.
 
 Before merging a Docker digest update PR:

@@ -53,45 +53,59 @@ jobs:
         name: pester-test-results
         path: ./TestResults/pester-results.xml
 
-  scan-base-images:
-    # Scan pinned Docker base images for CRITICAL/HIGH CVEs
-    # This catches vulnerabilities early, before a release tag is created
+  discover-base-images:
+    # Discover production Dockerfiles and enforce the digest-pinning policy.
+    # Production Dockerfiles are identified by the "# jim-compliance: production-image"
+    # directive; unlabelled Dockerfiles (devcontainer, test fixtures) are out of scope.
+    # The job emits a matrix of unique base image references for scan-base-images to
+    # consume. Any production Dockerfile with a non-digest-pinned FROM line fails here.
+    # See .github/scripts/discover-base-images.ps1 and engineering/DEVELOPER_GUIDE.md.
     runs-on: ubuntu-latest
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: aspnet
-            dockerfile: src/JIM.Web/Dockerfile
-          - name: runtime
-            dockerfile: src/JIM.Worker/Dockerfile
-          - name: sdk
-            dockerfile: src/JIM.Worker/Dockerfile
+    outputs:
+      matrix: ${{ steps.discover.outputs.matrix }}
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Extract base image reference
-      id: base-image
-      run: |
-        if [ "${{ matrix.name }}" = "sdk" ]; then
-          # Extract the SDK (build stage) FROM line
-          IMAGE_REF=$(grep -E '^FROM.*sdk:.*@sha256:' "${{ matrix.dockerfile }}" | head -1 | awk '{print $2}')
-        else
-          # Extract the first (runtime/aspnet) FROM line
-          IMAGE_REF=$(grep -E '^FROM.*(aspnet|runtime):.*@sha256:' "${{ matrix.dockerfile }}" | head -1 | awk '{print $2}')
-        fi
-        # Strip " AS <alias>" suffix if present
-        IMAGE_REF=$(echo "$IMAGE_REF" | sed 's/ AS .*//')
-        echo "ref=$IMAGE_REF" >> "$GITHUB_OUTPUT"
-        echo "Scanning: $IMAGE_REF"
+    - name: Discover production base images and enforce digest-pinning
+      id: discover
+      shell: pwsh
+      run: ./.github/scripts/discover-base-images.ps1
 
-    - name: Scan ${{ matrix.name }} base image for vulnerabilities
+  scan-base-images:
+    # Scan each discovered production base image for CRITICAL/HIGH CVEs with a
+    # published fix. Emits SARIF so findings are surfaced in the GitHub Security tab,
+    # not just the Actions log. Catches vulnerabilities early, before a release tag
+    # is created. The matrix is generated dynamically by discover-base-images, so
+    # adding a new production Dockerfile requires zero changes to this workflow:
+    # just add the "# jim-compliance: production-image" directive to the new file.
+    needs: discover-base-images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write  # required to upload SARIF to code scanning
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.discover-base-images.outputs.matrix) }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Scan base image for vulnerabilities
+      id: trivy
       uses: aquasecurity/trivy-action@0.35.0
       with:
-        image-ref: ${{ steps.base-image.outputs.ref }}
-        format: 'table'
+        image-ref: ${{ matrix.image_ref }}
+        format: 'sarif'
+        output: 'trivy-results.sarif'
         exit-code: '1'
         severity: 'CRITICAL,HIGH'
         ignore-unfixed: true
+
+    - name: Upload Trivy scan results to GitHub code scanning
+      if: always() && hashFiles('trivy-results.sarif') != ''
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: trivy-results.sarif
+        category: trivy-base-image-${{ matrix.dockerfile }}-line${{ matrix.line }}
