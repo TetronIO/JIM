@@ -43,13 +43,8 @@
         // Code quality
         "editorconfig.editorconfig",
         "streetsidesoftware.code-spell-checker",
-        // Testing
-        "formulahendry.dotnet-test-explorer",
-        // Utilities
-        "humao.rest-client",
-        "eamodio.gitlens",
-        // CSV viewing and editing
-        "mechatroner.rainbow-csv",
+        // GitHub Actions workflow support
+        "github.vscode-github-actions",
         // Mermaid diagrams
         "MermaidChart.vscode-mermaid-chart"
       ],
