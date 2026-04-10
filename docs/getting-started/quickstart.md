@@ -96,21 +96,32 @@ For production hardening (TLS, reverse proxy, upgrades, monitoring), see the [De
 
 ### GitHub Codespaces (One Click)
 
-The fastest way to get a development environment. Everything is pre-configured: .NET 10.0, PostgreSQL, shell aliases, and VS Code extensions.
+The fastest way to get a development environment. Everything is pre-configured: .NET 10.0, PostgreSQL, Keycloak, shell aliases, and VS Code extensions.
 
-Once the Codespace is ready, open a terminal and run:
+Once the Codespace is ready, open a terminal and choose one of the following options:
+
+#### Option 1: Light stack (recommended for day-to-day development)
+
+`jim-build-light` starts PostgreSQL and Keycloak in Docker, then runs JIM.Web natively on the host. This is the fastest iteration loop; code changes rebuild and restart in seconds.
 
 ```bash
-jim-db    # Start PostgreSQL
-jim-web   # Start JIM (or press F5 to debug)
+jim-build-light
+```
+
+#### Option 2: Full stack
+
+`jim-build` builds and starts the entire stack in Docker: PostgreSQL, Keycloak, JIM.Web, JIM.Worker, and JIM.Scheduler. Use this when you need to exercise the worker or scheduler, or verify end-to-end behaviour in containers.
+
+```bash
+jim-build
 ```
 
 ### Local Devcontainer
 
-Clone the repository and open it in VS Code with the [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension. The devcontainer will set up the full development environment automatically.
+Clone the repository and open it in VS Code with the [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension. The devcontainer will set up the full development environment automatically, then use either `jim-build-light` or `jim-build` as above.
 
 !!! tip "No external identity provider needed"
-    The devcontainer includes a bundled Keycloak instance with pre-configured test users. Sign in with `admin` / `admin`.
+    The devcontainer includes a bundled Keycloak instance with pre-configured test users, so you do not need to configure an external OpenID Connect provider to sign in.
 
 For the full development guide, see the [Developer Guide](../developer/index.md).
 
