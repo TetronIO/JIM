@@ -148,12 +148,31 @@ updates:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
 
-  # Docker Compose images (PostgreSQL)
-  # The digest-pinned postgres image in docker-compose.yml is the single source of truth —
-  # Build-ReleaseBundle.ps1 reads it automatically, so updating here updates the bundle too.
+  # Docker Compose: PostgreSQL (in docker-compose.yml) and Keycloak (in
+  # docker-compose.override.yml, used for development SSO).
+  #
+  # Uses the GA `docker-compose` ecosystem, which shipped on 2025-02-25. The
+  # previous `docker` ecosystem block failed every scheduled run because
+  # Dependabot's `docker` ecosystem only scans Dockerfiles and Kubernetes YAML;
+  # it never read compose files, despite the comment claiming otherwise. The
+  # digest-pinned postgres image in docker-compose.yml is the single source of
+  # truth for the release bundle (Build-ReleaseBundle.ps1 reads it directly).
+  #
+  # Scoped via `exclude-paths` to only `docker-compose.yml` (postgres digest
+  # updates) and `docker-compose.override.yml` (Keycloak SSO version updates).
+  # The integration-tests, local, and production compose files are deliberately
+  # not tracked; integration-tests images are chosen for compatibility testing
+  # and should not be auto-bumped, and local/production contain no trackable
+  # pinned images. Remove a filename from exclude-paths if you want its images
+  # monitored too.
+  #
   # Polled daily for the same reason as the base images above.
-  - package-ecosystem: "docker"
+  - package-ecosystem: "docker-compose"
     directory: "/"
+    exclude-paths:
+      - "docker-compose.integration-tests.yml"
+      - "docker-compose.local.yml"
+      - "docker-compose.production.yml"
     schedule:
       interval: "daily"
       time: "09:00"
