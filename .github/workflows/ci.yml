@@ -102,6 +102,12 @@ jobs:
         exit-code: '1'
         severity: 'CRITICAL,HIGH'
         ignore-unfixed: true
+        # Disable Trivy's DB cache: cached vuln DBs have been observed to cause
+        # the scanner to exit 1 within ~12ms of "Detecting vulnerabilities" with
+        # no findings written to the SARIF file (phantom failure). A fresh DB
+        # download per run adds ~5-10s per matrix leg, which is acceptable for
+        # a security-critical scan. See PR #520 discussion.
+        cache: 'false'
 
     - name: Upload Trivy scan results to GitHub code scanning
       if: always() && hashFiles('trivy-results.sarif') != ''

@@ -14,6 +14,12 @@ on:
       - 'test/integration/Get-HostFingerprint.ps1'
       - 'test/integration/Stream-WorkerLogs.ps1'
 
+# Principle of least privilege: this workflow only reads the repo (to checkout
+# and git diff) and dispatches to jim-metrics via a separate PAT stored in
+# secrets.METRICS_REPO_DISPATCH_TOKEN. The default GITHUB_TOKEN needs no writes.
+permissions:
+  contents: read
+
 jobs:
   notify-metrics-repo:
     runs-on: ubuntu-latest
