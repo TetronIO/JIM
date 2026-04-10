@@ -7,7 +7,7 @@
 
 ARG VERSION=dev
 
-FROM mcr.microsoft.com/dotnet/runtime:10.0-noble@sha256:260c4d478b25ccb5a84be74dc5ea5a772fb4fb520e9226ca8f1cb57bf1425fb1 AS base
+FROM mcr.microsoft.com/dotnet/runtime:10.0-noble@sha256:d899417078f6f2ace195c70bd63c4851f4c2e29c38f50fcfb46f2be5f7e3638f AS base
 ARG VERSION
 
 LABEL org.opencontainers.image.title="JIM Worker"
