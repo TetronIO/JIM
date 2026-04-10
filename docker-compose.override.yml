@@ -58,7 +58,7 @@ services:
   # and clients for the web UI (jim-web) and PowerShell module (jim-powershell).
   # Admin console: http://localhost:8181 (admin/admin)
   jim.keycloak:
-    image: quay.io/keycloak/keycloak:26.0
+    image: quay.io/keycloak/keycloak:26.6
     container_name: jim.keycloak
     restart: unless-stopped
     command: start-dev --import-realm --health-enabled=true
