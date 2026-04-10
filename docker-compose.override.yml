@@ -65,6 +65,30 @@ services:
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      # Hostname v2 configuration (Keycloak 25+):
+      #
+      # KC_HOSTNAME sets the public/frontchannel URL advertised to browsers in
+      # the discovery document, token issuer claims and all redirect endpoints.
+      # Setting it to the browser-reachable URL means JIM.Web does not need to
+      # rewrite Docker-DNS hostnames before redirecting the user.
+      #
+      # KC_HOSTNAME_BACKCHANNEL_DYNAMIC=true is CRITICAL when JIM.Web reaches
+      # Keycloak over a different URL than the browser does (e.g. jim.web
+      # container uses Docker DNS `jim.keycloak:8080`, browser uses
+      # `localhost:8181`). Without this, Hostname v2 returns the same
+      # KC_HOSTNAME URLs for back-channel requests, causing JIM.Web's token,
+      # userinfo and JWKS calls from within the Docker network to fail with
+      # "Connection refused" because `localhost` inside a container is not
+      # the Keycloak container. With it, Keycloak derives back-channel URLs
+      # from the request's Host header, so JIM.Web sees `jim.keycloak:8080`
+      # endpoints while the browser sees `localhost:8181` endpoints.
+      #
+      # KC_HOSTNAME_STRICT=false disables strict hostname validation so that
+      # requests with a Host header that doesn't match KC_HOSTNAME (e.g. the
+      # back-channel Docker DNS requests) are accepted.
+      KC_HOSTNAME: http://localhost:8181
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
     ports:
       - "8180:8080"
     volumes:
