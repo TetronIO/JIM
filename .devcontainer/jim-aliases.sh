@@ -61,9 +61,44 @@ Diagrams:
 Planning:
   jim-prd            - Create a new PRD from template
 
+Developer Setup:
+  jim-setup-signing   - (Re)configure git commit signing for this environment
+  jim-signing-status  - Show current commit signing state and readiness
+
 Help:
   jim                - Show this help message
 "'
+
+# Developer setup
+# Resolve the signing script path dynamically so the aliases work from any
+# shell invocation location. Prefer the mounted workspace path; fall back to
+# the home directory copy if someone has installed the aliases outside a
+# devcontainer.
+_jim_signing_script() {
+  if [ -x "/workspaces/JIM/.devcontainer/configure-signing.sh" ]; then
+    echo "/workspaces/JIM/.devcontainer/configure-signing.sh"
+  elif [ -x "$HOME/.devcontainer/configure-signing.sh" ]; then
+    echo "$HOME/.devcontainer/configure-signing.sh"
+  else
+    return 1
+  fi
+}
+jim-setup-signing() {
+  local script
+  if ! script=$(_jim_signing_script); then
+    echo "configure-signing.sh not found in expected locations" >&2
+    return 1
+  fi
+  "$script"
+}
+jim-signing-status() {
+  local script
+  if ! script=$(_jim_signing_script); then
+    echo "configure-signing.sh not found in expected locations" >&2
+    return 1
+  fi
+  "$script" --status
+}
 
 # .NET local development
 alias jim-compile='dotnet build JIM.sln'

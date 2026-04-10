@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Version** | 1.1 |
+| **Version** | 1.2 |
 | **Last Updated** | 2026-04-10 |
 | **Status** | Active |
 
@@ -52,6 +52,21 @@ JIM's container base images derive from Microsoft's `mcr.microsoft.com/dotnet/<r
 The response procedure for this situation is documented in [`engineering/DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md) under "When the scan-base-images gate blocks on an upstream-only CVE". The available options range from waiting for Microsoft's next rebuild (default), through targeted in-Dockerfile mitigations, to documented temporary gate downgrades. The choice is case-by-case based on CVE severity and timing rather than a pre-baked policy, because the right answer genuinely depends on the specific CVE.
 
 This is a known and intentional limitation of digest-pinned base images. It is not a compliance gap: digest pinning, vulnerability scanning, and SBOM generation all operate correctly. The constraint is purely on remediation latency for one class of finding.
+
+### Controls scale with team size
+
+Tetron currently runs small, focused development teams on JIM. The security and compliance controls described in this document are designed to provide consistent baseline enforcement at any team size, with additional human-review layers that can be added as development capacity grows.
+
+- **Automated baseline review**: every pull request is reviewed by an automated code review job (`claude-review` in `.github/workflows/claude-code-review.yml`) before it can be merged, regardless of author. This provides a consistent independent review across all changes.
+- **CI-enforced quality gates**: build and test success, CodeQL static analysis, container base image vulnerability scanning, and dependency scanning are all enforced at commit time via the CI pipeline. These gates operate identically whether the team has one developer or many.
+- **Signed commits**: all contributors sign their commits via the devcontainer's automated signing setup. The pre-commit hook at `.githooks/pre-commit` enforces this locally, and branch protection will enforce it server-side once rollout is complete. This provides cryptographic attribution for every change that enters `main`.
+- **Scalable human review**: additional reviewer requirements can be layered onto the branch protection ruleset as team composition supports them. The current configuration is designed to extend cleanly; no restructuring is needed to add reviewer requirements.
+
+### Commit provenance and author attribution
+
+All commits to JIM's `main` branch carry cryptographic signatures verifying the committer's identity. The signing setup is automated in `.devcontainer/setup.sh` (which delegates to `.devcontainer/configure-signing.sh`) and works in both GitHub Codespaces (via the built-in `gh-gpgsign` helper) and local devcontainers (via forwarded SSH agent keys). Contributors cannot commit without signing: the pre-commit hook at `.githooks/pre-commit` refuses unsigned commits with clear recovery instructions. See [`engineering/DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md) under "Commit Signing" for the full setup and policy.
+
+This directly supports NIST SP 800-53 SI-7 (Software, Firmware, and Information Integrity) and NCSC Secure Development Principle "Protect your code repository".
 
 ---
 

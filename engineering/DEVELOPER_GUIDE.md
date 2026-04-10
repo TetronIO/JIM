@@ -427,6 +427,83 @@ _logger.LogInformation("Page: {Page}, Id: {Id}", page, objectId);
 - **No hardcoded secrets**: Never commit credentials, connection strings, API keys
 - **Docker secrets**: Use Docker secrets for production deployments
 
+### 6. Commit Signing (Mandatory)
+
+All commits to JIM must be cryptographically signed. Signed commits are the foundation of verifiable code provenance: they cryptographically attribute each commit to a specific identity, which is the first line of defence against compromised credentials, malicious merges, and accidental contributions from an unintended identity.
+
+**Policy:**
+- Every commit on every branch must be signed.
+- The signing key must be one of: an SSH key registered as a *signing key* on GitHub, a GPG key registered on GitHub, or (inside a Codespace) the built-in `gh-gpgsign` helper.
+- The pre-commit hook at `.githooks/pre-commit` enforces this at commit time. Branch protection on `main` will also enforce `required_signatures` once all developer environments are producing signed commits reliably.
+
+**Setup in a devcontainer (automated):**
+
+The devcontainer setup script (`.devcontainer/setup.sh`) configures signing automatically during container creation. It detects the environment and does the right thing:
+
+- **In a GitHub Codespace**: uses the built-in `gh-gpgsign` helper, which signs via the GitHub API. No key management required.
+- **In a local devcontainer**: uses the host machine's SSH agent via forwarding. Your private SSH key never enters the container; only the public identity is referenced.
+
+If signing is not successfully configured at container creation, the setup script prints a prominent warning with recovery steps. At any time, you can re-run the signing configuration via `jim-setup-signing` or inspect the current state via `jim-signing-status`.
+
+**Host-side prerequisites (for local devcontainers):**
+
+SSH agent forwarding only works if the host machine has an SSH agent running with your key loaded. This is per-OS:
+
+- **macOS**: the Keychain-integrated SSH agent is usually running at login. Add your key once with `ssh-add --apple-use-keychain ~/.ssh/id_ed25519`; it persists across reboots. Verify with `ssh-add -l`.
+- **Linux**: start an agent in your login shell and add your key. A common pattern in `~/.bashrc` or `~/.zshrc`:
+  ```bash
+  if ! pgrep -u "$USER" ssh-agent >/dev/null; then
+      eval "$(ssh-agent -s)"
+  fi
+  ssh-add -l >/dev/null 2>&1 || ssh-add ~/.ssh/id_ed25519
+  ```
+- **Windows 11**: the built-in "OpenSSH Authentication Agent" service is present but **disabled by default**. Open `services.msc`, set the service to "Automatic", and start it. Then in PowerShell: `ssh-add $env:USERPROFILE\.ssh\id_ed25519`. Verify with `ssh-add -l`. This persists across reboots.
+
+After loading the key on the host, **rebuild the devcontainer** (Command Palette: *Dev Containers: Rebuild Container*). This is essential; the devcontainer connects to the agent at startup and will not pick up a key added later unless rebuilt.
+
+Verify after rebuild with `jim-signing-status`. A healthy state shows:
+```
+  gpg.format:         ssh
+  user.signingkey:    key::ssh-ed25519 AAAA...
+  commit.gpgsign:     true
+  environment:        local devcontainer (or other)
+  ssh agent:          forwarded, 1 key(s) loaded
+```
+
+**Registering your SSH key as a signing key on GitHub:**
+
+The same physical SSH key can be used for both authentication and signing, but GitHub tracks them as *separate key registrations*. If you have only added your key as an authentication key, commits will be signed but GitHub will display them as "Unverified". To fix:
+
+1. Visit https://github.com/settings/keys
+2. Click "New SSH key"
+3. Set "Key type" to **Signing Key** (not Authentication Key)
+4. Paste the same public key text as your authentication key
+5. Save
+
+Commits made with that key will then show as "Verified" on GitHub.
+
+**What the pre-commit hook checks:**
+
+The hook at `.githooks/pre-commit` runs automatically before every `git commit` (once `core.hooksPath=.githooks` is set, which the devcontainer setup script does). It verifies:
+
+1. `commit.gpgsign` is `true`
+2. A signing mechanism is currently available (SSH agent with keys, or `gh-gpgsign` in Codespaces)
+3. `user.signingkey` is set (for SSH signing)
+
+If any check fails, the hook prints a prominent error with recovery steps and refuses the commit. To bypass in a genuine emergency: `git commit --no-verify`. This should not become a habit; once branch protection enables `required_signatures`, unsigned commits will be rejected at push time regardless.
+
+**Working outside the devcontainer:**
+
+If you work directly against a local clone without the devcontainer (rare), you need to set up signing manually and install the hook:
+
+```bash
+git config --local core.hooksPath .githooks
+git config --global gpg.format ssh
+git config --global user.signingkey "key::$(ssh-add -L | head -1)"
+git config --global commit.gpgsign true
+git config --global tag.gpgsign true
+```
+
 ## Testing Expectations
 
 ### Test-Driven Development (TDD)
@@ -1265,6 +1342,14 @@ Invoke-JIMApiRequest -Method Delete -Endpoint "api/v1/connected-systems/$id"
 - **PostgreSQL Memory**: If database crashes (OOM), check that `shm_size` and `shared_buffers` are tuned for your host - see [PostgreSQL Tuning](#postgresql-tuning-important) above
 - **Docker Issues**: Restart Codespace or rebuild container if Docker daemon issues occur
 - **Missing Aliases**: Run `source ~/.zshrc` or restart terminal if shell aliases not available
+
+**Commit Signing Issues**:
+- **"Commit signing is not enabled" when committing**: the pre-commit hook detected that `commit.gpgsign` is false. Run `jim-setup-signing` to reconfigure, or see [Commit Signing](#6-commit-signing-mandatory) for manual setup.
+- **"SSH agent not available or has no keys" when committing**: your host machine's SSH agent is not forwarding a key into the devcontainer. Follow the host-side prerequisites in the [Commit Signing](#6-commit-signing-mandatory) section for your OS, then rebuild the devcontainer. The hook will not run cleanly until the agent is fully configured.
+- **Commits show as "Unverified" on GitHub**: your SSH key is signing commits correctly but has not been registered as a *Signing Key* on GitHub. Visit https://github.com/settings/keys and add your public key a second time with type "Signing Key" (this is separate from the authentication key registration). See [Commit Signing](#6-commit-signing-mandatory) for details.
+- **Signing worked yesterday, fails today**: the host SSH agent may have been restarted or lost its keys. Run `ssh-add -l` on the host to check, add the key back if missing, then either rebuild the devcontainer or run `jim-setup-signing` inside the container to re-verify.
+
+**Works In Dev But Fails In CI**: the devcontainer image (`mcr.microsoft.com/devcontainers/dotnet:1-10.0-bookworm`) is not digest-pinned; it tracks the upstream `:1-10.0-bookworm` tag which can change over time. If you see a build or test succeed in your devcontainer but fail in CI (or vice versa), check whether the devcontainer image has drifted from what CI is running. Rebuild the devcontainer to pick up the latest image. If this category of problem becomes frequent, consider revisiting whether to digest-pin the devcontainer image (currently left unpinned to reduce maintenance burden since dev-only images are not part of customer-shipped artefacts).
 
 ## Best Practices Summary
 

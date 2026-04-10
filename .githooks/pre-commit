@@ -1,0 +1,137 @@
+#!/bin/bash
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+#
+# Pre-commit hook: refuse commits that would be unsigned or silently fall back
+# to unsigned because the signing mechanism is unavailable.
+#
+# Git's default behaviour when signing fails is version-dependent: older
+# versions silently produced unsigned commits, newer versions abort with an
+# opaque error. Either way, by the time git tells you there is a problem, the
+# user has already typed their commit message and is frustrated. This hook
+# runs earlier and explains what is wrong and how to fix it.
+#
+# Activated by setting core.hooksPath=.githooks, which .devcontainer/setup.sh
+# does at container creation time. If you are working outside the devcontainer
+# (e.g., from a native git install), run this once in your local clone:
+#
+#   git config --local core.hooksPath .githooks
+#
+# To bypass in a genuine emergency, use git commit --no-verify. Do not make
+# this a habit: an unsigned commit that reaches main will be rejected by
+# branch protection once required_signatures is enabled.
+
+set -e
+
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+if [ ! -t 2 ]; then
+    RED=''
+    YELLOW=''
+    BOLD=''
+    NC=''
+fi
+
+fail() {
+    local title="$1"
+    shift
+    echo "" >&2
+    echo -e "${RED}${BOLD}╔══════════════════════════════════════════════════════════════════════════╗${NC}" >&2
+    printf "${RED}${BOLD}║ %-72s ║${NC}\n" "$title" >&2
+    echo -e "${RED}${BOLD}╠══════════════════════════════════════════════════════════════════════════╣${NC}" >&2
+    for line in "$@"; do
+        printf "${RED}${BOLD}║${NC} %-72s ${RED}${BOLD}║${NC}\n" "$line" >&2
+    done
+    echo -e "${RED}${BOLD}╚══════════════════════════════════════════════════════════════════════════╝${NC}" >&2
+    echo "" >&2
+    exit 1
+}
+
+# 1. Is commit signing enabled at all? If not, reject.
+gpgsign=$(git config --get commit.gpgsign 2>/dev/null || echo "false")
+if [ "$gpgsign" != "true" ]; then
+    fail "Commit signing is not enabled" \
+        "" \
+        "This repository requires signed commits. Your git config has:" \
+        "  commit.gpgsign = $gpgsign" \
+        "" \
+        "To fix, run:" \
+        "  jim-setup-signing" \
+        "" \
+        "Or, to bypass this hook for a single emergency commit:" \
+        "  git commit --no-verify" \
+        "" \
+        "See engineering/DEVELOPER_GUIDE.md 'Commit Signing' for details."
+fi
+
+# 2. Is a signing mechanism actually available right now? Config values can
+#    be set without the backing key or helper being reachable (e.g., SSH
+#    agent stopped, key unloaded). Probe the expected source for the current
+#    environment.
+if [ -n "$CODESPACES" ] && [ "$CODESPACES" = "true" ]; then
+    # Codespaces: rely on the gh-gpgsign helper installed into the system
+    # gitconfig. Verify it is executable.
+    if [ ! -x "/.codespaces/bin/gh-gpgsign" ]; then
+        fail "Codespaces signing helper missing" \
+            "" \
+            "This Codespace should have /.codespaces/bin/gh-gpgsign but it" \
+            "is not present or not executable. This is unusual; the" \
+            "Codespace may have been created from an older image." \
+            "" \
+            "Recovery options:" \
+            "  1. Rebuild the Codespace from the Command Palette:" \
+            "     'Codespaces: Rebuild Container'" \
+            "  2. For a single emergency commit, use:" \
+            "     git commit --no-verify"
+    fi
+elif [ -x "/.codespaces/bin/gh-gpgsign" ]; then
+    # Defensive: gh-gpgsign is present but CODESPACES env var is not set.
+    # Treat as Codespace-equivalent.
+    :
+else
+    # Local devcontainer (or other non-Codespace environment): rely on SSH
+    # agent forwarding with a loaded key. Verify both.
+    if ! ssh-add -l >/dev/null 2>&1; then
+        fail "SSH agent not available or has no keys" \
+            "" \
+            "Git cannot sign this commit because the host's SSH agent is" \
+            "not forwarded into the devcontainer or has no keys loaded." \
+            "" \
+            "To fix, on your HOST machine (not inside the container):" \
+            "" \
+            "  macOS:    ssh-add --apple-use-keychain ~/.ssh/id_ed25519" \
+            "  Linux:    eval \"\$(ssh-agent -s)\" && ssh-add ~/.ssh/id_ed25519" \
+            "  Windows:  Start 'OpenSSH Authentication Agent' in Services," \
+            "            then run ssh-add in PowerShell" \
+            "" \
+            "Then rebuild the devcontainer and run:" \
+            "  jim-setup-signing" \
+            "" \
+            "Or, for a single emergency commit:" \
+            "  git commit --no-verify" \
+            "" \
+            "See engineering/DEVELOPER_GUIDE.md 'Commit Signing' for details."
+    fi
+
+    signingkey=$(git config --get user.signingkey 2>/dev/null || echo "")
+    if [ -z "$signingkey" ]; then
+        fail "user.signingkey is not configured" \
+            "" \
+            "Your SSH agent is forwarded and has keys loaded, but git has" \
+            "no signing key configured. This usually means that" \
+            ".devcontainer/configure-signing.sh has not run since the" \
+            "agent was forwarded." \
+            "" \
+            "To fix, run:" \
+            "  jim-setup-signing" \
+            "" \
+            "Or, for a single emergency commit:" \
+            "  git commit --no-verify"
+    fi
+fi
+
+# All checks passed. Allow the commit.
+exit 0

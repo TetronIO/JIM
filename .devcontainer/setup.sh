@@ -143,34 +143,40 @@ else
     print_success "Symlink already exists: connector-files/test-data"
 fi
 
-# 10. Configure Git SSH commit signing
-print_step "Configuring Git SSH commit signing..."
-
-# Check if SSH agent has keys forwarded
-if ssh-add -l &>/dev/null; then
-    # Get the first SSH key from the agent
-    SSH_KEY=$(ssh-add -L | head -1)
-
-    if [ -n "$SSH_KEY" ]; then
-        # Configure git to use SSH signing
-        git config --global gpg.format ssh
-        git config --global commit.gpgsign true
-        git config --global user.signingkey "key::$SSH_KEY"
-
-        # Create allowed_signers file for local verification
-        # Uses the git user email (if configured) or a placeholder
-        GIT_EMAIL=$(git config --global user.email || echo "developer@local")
-        mkdir -p ~/.ssh
-        echo "$GIT_EMAIL $SSH_KEY" > ~/.ssh/allowed_signers
-        git config --global gpg.ssh.allowedSignersFile ~/.ssh/allowed_signers
-
-        print_success "Git SSH signing configured (key from SSH agent)"
+# 10. Configure Git commit signing
+# Delegates to .devcontainer/configure-signing.sh which handles Codespaces
+# (via gh-gpgsign) and local devcontainers (via forwarded SSH agent) and
+# prints a prominent warning if neither is available. Returns non-zero if
+# signing cannot be configured; we do not abort setup on that, because the
+# container should still be usable for non-commit work (browsing, running
+# services, etc.). The pre-commit hook in .githooks/ will catch unsigned
+# commit attempts at commit time with the same warning.
+print_step "Configuring git commit signing..."
+SIGNING_SCRIPT="$WORKDIR/.devcontainer/configure-signing.sh"
+if [ -x "$SIGNING_SCRIPT" ]; then
+    if "$SIGNING_SCRIPT"; then
+        print_success "Git commit signing configured"
     else
-        print_warning "SSH agent has no keys - commit signing not configured"
+        # configure-signing.sh has already printed a detailed warning banner
+        # with recovery steps. Do not print another warning here (would be
+        # duplicate noise), but do leave a marker for setup completion to
+        # flag the overall state.
+        SIGNING_SETUP_FAILED=1
     fi
 else
-    print_warning "SSH agent not available - commit signing not configured"
-    print_warning "To enable signing, ensure SSH agent forwarding is working"
+    print_warning "$SIGNING_SCRIPT not found or not executable - commit signing not configured"
+    SIGNING_SETUP_FAILED=1
+fi
+
+# Install repo-local git hooks. Once configured, git uses .githooks/pre-commit
+# to refuse unsigned commit attempts with a clear error. This catches cases
+# where signing was configured then broke (e.g., SSH agent died, key unloaded)
+# before a silent unsigned commit slips in.
+print_step "Installing repo-local git hooks..."
+if git -C "$WORKDIR" config --local core.hooksPath .githooks; then
+    print_success "Git hooks path set to .githooks/ (pre-commit signing check active)"
+else
+    print_warning "Failed to set core.hooksPath; pre-commit checks will not run"
 fi
 
 # 11. Create useful shell aliases
