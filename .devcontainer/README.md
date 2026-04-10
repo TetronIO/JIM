@@ -208,7 +208,7 @@ JIM supports two different development workflows. Choose the one that fits your 
 
 **Services run at:**
 - Database: `localhost:5432`
-- JIM Web + API: `https://localhost:7000` (API at `/api/`, Swagger at `/api/swagger`)
+- JIM Web + API: `https://localhost:7000` (API at `/api/`, API reference at `/api/reference`)
 
 ### Workflow 2: Full Docker Stack
 
@@ -225,7 +225,7 @@ JIM supports two different development workflows. Choose the one that fits your 
 
 **Services run at:**
 - Database: Internal (container network)
-- JIM Web + API: `http://localhost:5200` (API at `/api/`, Swagger at `/api/swagger`)
+- JIM Web + API: `http://localhost:5200` (API at `/api/`, API reference at `/api/reference`)
 
 **Note:** PostgreSQL is automatically tuned for your devcontainer's CPU and RAM during setup. If you later increase resources, run `jim-postgres-tune` to re-tune and restart the database.
 

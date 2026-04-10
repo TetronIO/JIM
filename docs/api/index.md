@@ -159,13 +159,16 @@ Some long-running operations (schema import, run profile execution, connected sy
 
 ## Interactive Documentation
 
-JIM includes Swagger UI for interactive API exploration:
+JIM includes a [Scalar](https://scalar.com/) API reference for interactive API exploration:
 
 ```
-https://jim.example.com/api/swagger
+https://jim.example.com/api/reference
 ```
 
-The Swagger UI provides a browsable list of all endpoints, request/response schemas, and the ability to execute API calls directly from the browser. It also exposes the OpenAPI specification for client code generation.
+The Scalar API reference provides a browsable list of all endpoints, request/response schemas, and the ability to execute API calls directly from the browser. The underlying OpenAPI specification is available at `/api/openapi/v1.json` for client code generation.
+
+!!! note
+    The interactive API reference is only enabled in development environments. Production deployments do not expose `/api/reference` or the OpenAPI JSON spec, to reduce the attack surface.
 
 !!! tip
-    Use this reference documentation for understanding how the API works and building integrations. Use Swagger UI when you need to quickly test an endpoint or generate a client library.
+    Use this reference documentation for understanding how the API works and building integrations. Use the Scalar API reference when you need to quickly test an endpoint or generate a client library.

@@ -2212,7 +2212,7 @@ if ($SetupOnly) {
     Write-Host "${GRAY}Services:${NC}"
     Write-Host "  JIM Web:            ${CYAN}http://localhost:5200${NC}"
     Write-Host "  JIM API:            ${CYAN}http://localhost:5200/api${NC}"
-    Write-Host "  Swagger:            ${CYAN}http://localhost:5200/api/swagger${NC}"
+    Write-Host "  API Reference:      ${CYAN}http://localhost:5200/api/reference${NC}"
     Write-Host ""
     Write-Host "${GRAY}API Key:${NC}"
     Write-Host "  ${CYAN}$apiKey${NC}"

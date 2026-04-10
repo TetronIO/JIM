@@ -2,9 +2,9 @@
 
 > Copy the content below into the "Instructions" or "System Prompt" field when creating an AI assistant project for JIM.
 >
-> **Document Version**: 1.5
+> **Document Version**: 1.6
 >
-> **Last Updated**: 2026-04-08
+> **Last Updated**: 2026-04-10
 
 ---
 
@@ -26,7 +26,7 @@ JIM is a self-hosted, container-native identity management platform that synchro
 - .NET 10.0, C# 14, Entity Framework Core
 - PostgreSQL 18
 - Blazor Server with MudBlazor
-- REST API at /api/ with OpenAPI/Swagger
+- REST API at /api/ with OpenAPI and an interactive Scalar API reference (development only)
 - OpenID Connect (OIDC) authentication
 - Docker containerisation
 

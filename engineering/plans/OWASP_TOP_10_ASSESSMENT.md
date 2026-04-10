@@ -41,7 +41,7 @@ Core security configuration is sound: HSTS, HTTPS redirection, restricted develo
 |---------|----------|
 | HSTS enabled in production | `Program.cs:398` |
 | HTTPS redirection enabled | `Program.cs:414` |
-| OpenAPI/Swagger restricted to Development | `Program.cs:402-412` |
+| OpenAPI spec and Scalar API reference restricted to Development | `Program.cs:402-412` |
 | Stack traces suppressed in production | `GlobalExceptionHandler.cs:32` |
 | DbContext pooling prevents connection exhaustion | `Program.cs:76-80` |
 
