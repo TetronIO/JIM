@@ -89,6 +89,16 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(id, withChangeTracking);
     }
 
+    /// <summary>
+    /// Loads a lightweight Connected System containing only <c>ConnectorDefinition</c>, <c>SettingValues</c>,
+    /// and shallow <c>RunProfiles</c>. Use for API existence checks, write-path lookups, and any other caller
+    /// that does not need the full schema, partition, or matching-rule graph.
+    /// </summary>
+    public async Task<ConnectedSystem?> GetConnectedSystemCoreAsync(int id, bool withChangeTracking = false)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(id, withChangeTracking);
+    }
+
     public async Task<ConnectedSystemHeader?> GetConnectedSystemHeaderAsync(int id)
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemHeaderAsync(id);

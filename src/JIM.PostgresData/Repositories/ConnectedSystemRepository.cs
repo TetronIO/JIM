@@ -146,15 +146,55 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }).SingleOrDefaultAsync(cs => cs.Id == id);
     }
 
+    /// <summary>
+    /// Loads a lightweight Connected System containing only <c>ConnectorDefinition</c>, <c>SettingValues</c>,
+    /// and shallow <c>RunProfiles</c>. Does not load <c>ObjectTypes</c>, <c>ObjectMatchingRules</c>, or the
+    /// partition/container tree.
+    /// <para>
+    /// See the entity retrieval naming taxonomy in <c>src/CLAUDE.md</c> for guidance on when to use Core vs.
+    /// the full <see cref="GetConnectedSystemAsync"/> variant.
+    /// </para>
+    /// </summary>
+    public async Task<ConnectedSystem?> GetConnectedSystemCoreAsync(int id, bool withChangeTracking = false)
+    {
+        IQueryable<ConnectedSystem> csQuery = Repository.Database.ConnectedSystems
+            .Include(cs => cs.ConnectorDefinition)
+            .Include(cs => cs.SettingValues)
+                .ThenInclude(sv => sv.Setting);
+
+        if (withChangeTracking)
+            csQuery = csQuery.AsTracking();
+
+        var connectedSystem = await csQuery.SingleOrDefaultAsync(x => x.Id == id);
+        if (connectedSystem == null)
+            return null;
+
+        // Load run profiles shallowly (with their partition reference, but without the container tree).
+        IQueryable<ConnectedSystemRunProfile> rpQuery = Repository.Database.ConnectedSystemRunProfiles
+            .Include(q => q.Partition)
+            .Where(q => q.ConnectedSystemId == id);
+
+        if (withChangeTracking)
+            rpQuery = rpQuery.AsTracking();
+
+        connectedSystem.RunProfiles = await rpQuery.ToListAsync();
+        return connectedSystem;
+    }
+
     public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id, bool withChangeTracking = false)
     {
-        // retrieve a complex connected system object. break the query down into three parts for optimal performance.
-        // doing it in one giant include tree query will make it timeout.
+        // Retrieve a full Connected System graph. The previous implementation issued a heavy
+        // partition+container query with an 11-level hard-coded Include chain; that query is now
+        // replaced by a shallow partition query plus a single flat container query that is
+        // rebuilt into a tree in memory. This handles arbitrary hierarchy depth, avoids the
+        // cartesian explosion of deep joins, and removes a duplicate round-trip that used to
+        // load partitions twice (once via the run-profile Include, once via the expensive
+        // partition+containers query). See issue #494.
 
         IQueryable<ConnectedSystem> csQuery = Repository.Database.ConnectedSystems
             .Include(cs => cs.ConnectorDefinition)
             .Include(cs => cs.SettingValues)
-            .ThenInclude(sv => sv.Setting);
+                .ThenInclude(sv => sv.Setting);
 
         if (withChangeTracking)
             csQuery = csQuery.AsTracking();
@@ -164,7 +204,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (connectedSystem == null)
             return null;
 
-        var rpQuery = Repository.Database.ConnectedSystemRunProfiles
+        // Run profiles. We Include Partition shallowly so EF populates the navigation (plus its
+        // shadow FK column). These transient partition instances are replaced below via an
+        // in-memory fixup pass with the instances owned by the partition query, so consumers
+        // see the full container tree through either access path.
+        IQueryable<ConnectedSystemRunProfile> rpQuery = Repository.Database.ConnectedSystemRunProfiles
             .Include(q => q.Partition)
             .Where(q => q.ConnectedSystemId == id);
 
@@ -173,9 +217,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         var runProfiles = await rpQuery.ToListAsync();
 
-        var otQuery = Repository.Database.ConnectedSystemObjectTypes
-            .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
-            .Include(ot => ot.Attributes.OrderBy(a => a.Name))
+        // Object types with attributes and object matching rules. Attributes are NOT sorted here
+        // (the previous OrderBy inside Include did not translate to SQL and sorted in memory after
+        // loading everything). Callers that care about presentation order sort in the UI/API layer
+        // where it matters. AsSplitQuery avoids cartesian explosion across the multiple Include branches.
+        IQueryable<ConnectedSystemObjectType> otQuery = Repository.Database.ConnectedSystemObjectTypes
+            .AsSplitQuery()
+            .Include(ot => ot.Attributes)
             .Include(ot => ot.ObjectMatchingRules)
                 .ThenInclude(omr => omr.Sources)
                     .ThenInclude(s => s.ConnectedSystemAttribute)
@@ -193,24 +241,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         var types = await otQuery.ToListAsync();
 
-        // Load partitions with container hierarchy using a single joined query (no AsSplitQuery).
-        // AsSplitQuery() was removed because it causes EF Core identity fixup issues with
-        // self-referencing hierarchies — child containers were getting their PartitionId set
-        // incorrectly during fixup, causing them to appear as duplicates at the partition root.
-        // A single joined query avoids this because EF processes all results in one pass.
-        // Supporting 11 levels deep (arbitrary; increase if admins need deeper hierarchies).
-        var partQuery = Repository.Database.ConnectedSystemPartitions
-            .Include(p => p.Containers)!
-            .ThenInclude(c => c.ChildContainers)
-            .ThenInclude(c => c.ChildContainers)
-            .ThenInclude(c => c.ChildContainers)
-            .ThenInclude(c => c.ChildContainers)
-            .ThenInclude(c => c.ChildContainers)
-            .ThenInclude(c => c.ChildContainers)
-            .ThenInclude(c => c.ChildContainers)
-            .ThenInclude(c => c.ChildContainers)
-            .ThenInclude(c => c.ChildContainers)
-            .ThenInclude(c => c.ChildContainers)
+        // Partitions for this system, loaded once (shallow — containers are loaded in a separate
+        // flat query and attached below). This replaces the previous 11-level deep partition+
+        // container Include chain, which also left a residual "duplicate partition load" via the
+        // run profile Include above.
+        IQueryable<ConnectedSystemPartition> partQuery = Repository.Database.ConnectedSystemPartitions
             .Where(p => p.ConnectedSystem.Id == id);
 
         if (withChangeTracking)
@@ -218,21 +253,156 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         var partitions = await partQuery.ToListAsync();
 
-        // collect and merge data
+        // Load all containers for the partitions in a single flat query, then rebuild the hierarchy
+        // in memory. This replaces the previous 11-level hard-coded Include chain, handles arbitrary
+        // hierarchy depth, and avoids the cartesian explosion that happens when a deeply joined
+        // query returns many duplicated rows. We only run the query when partitions exist, matching
+        // the prior behaviour of loading containers only through the partition graph.
+        //
+        // We load AsTracking so we can read the shadow FK properties (ParentContainerId, PartitionId)
+        // via the Entry API. If the caller requested no tracking, we detach the containers afterwards
+        // to preserve the overall contract of this method.
+        var partitionsById = partitions.ToDictionary(p => p.Id);
+        if (partitions.Count > 0)
+        {
+            var partitionIds = partitionsById.Keys.ToList();
+            var allContainers = await Repository.Database.ConnectedSystemContainers
+                .AsTracking()
+                .Where(c => c.Partition != null && partitionIds.Contains(c.Partition.Id))
+                .ToListAsync();
+
+            var parentIdByChildId = new Dictionary<int, int?>(allContainers.Count);
+            var partitionIdByContainerId = new Dictionary<int, int?>(allContainers.Count);
+            foreach (var container in allContainers)
+            {
+                var entry = Repository.Database.Entry(container);
+                parentIdByChildId[container.Id] = (int?)entry.Property("ParentContainerId").CurrentValue;
+                partitionIdByContainerId[container.Id] = (int?)entry.Property("PartitionId").CurrentValue;
+            }
+
+            // Rebuild the tree: every container gets its ChildContainers wired up, and roots
+            // (containers with no parent) are returned. We run this pass even though we only attach
+            // top-level roots to partitions below, because the ChildContainers collections on inner
+            // nodes must also be populated for consumers to traverse the hierarchy.
+            var rootContainers = BuildContainerTree(allContainers, parentIdByChildId);
+
+            // Group top-level containers (roots) by partition and attach them.
+            foreach (var root in rootContainers)
+            {
+                if (!partitionIdByContainerId.TryGetValue(root.Id, out var partitionId) || partitionId == null)
+                    continue;
+                if (!partitionsById.TryGetValue(partitionId.Value, out var partition))
+                    continue;
+
+                partition.Containers ??= new HashSet<ConnectedSystemContainer>();
+                partition.Containers.Add(root);
+            }
+
+            // If this connected system was loaded without tracking, detach the containers we just
+            // loaded with AsTracking so that subsequent operations on this context do not see
+            // residual tracking state (matching the semantics of the rest of this method when
+            // tracking is disabled).
+            if (!withChangeTracking)
+            {
+                foreach (var container in allContainers)
+                    Repository.Database.Entry(container).State = EntityState.Detached;
+            }
+        }
+
+        // Collect and merge data onto the connected system.
         connectedSystem.RunProfiles = runProfiles;
         connectedSystem.ObjectTypes = types;
         connectedSystem.Partitions = partitions;
 
         // With AsNoTracking, run profile Partition instances are separate from the partition
-        // instances loaded with Containers above. Wire them up so callers see Containers.
-        var partitionLookup = partitions.ToDictionary(p => p.Id);
+        // instances loaded above. Wire them up so callers see Containers via the run profile.
         foreach (var rp in runProfiles.Where(rp => rp.Partition != null))
         {
-            if (partitionLookup.TryGetValue(rp.Partition!.Id, out var fullPartition))
+            if (partitionsById.TryGetValue(rp.Partition!.Id, out var fullPartition))
                 rp.Partition = fullPartition;
         }
 
         return connectedSystem;
+    }
+
+    /// <summary>
+    /// Rebuilds a container hierarchy from a flat list, wiring each container into its parent's
+    /// <see cref="ConnectedSystemContainer.ChildContainers"/> collection and returning the roots.
+    /// <para>
+    /// This overload relies on <see cref="ConnectedSystemContainer.ParentContainer"/> being set on
+    /// each input container (e.g. after EF Core navigation fixup with change tracking enabled).
+    /// Use <see cref="BuildContainerTree(List{ConnectedSystemContainer}, IDictionary{int, int?})"/>
+    /// when the input was loaded without tracking or the nav property is not populated.
+    /// </para>
+    /// </summary>
+    internal static List<ConnectedSystemContainer> BuildContainerTree(List<ConnectedSystemContainer> flatContainers)
+    {
+        var roots = new List<ConnectedSystemContainer>();
+        if (flatContainers.Count == 0)
+            return roots;
+
+        // Reset ChildContainers so that re-building is idempotent, then populate based on parent refs.
+        foreach (var container in flatContainers)
+            container.ChildContainers.Clear();
+
+        foreach (var container in flatContainers)
+        {
+            var parent = container.ParentContainer;
+            if (parent != null)
+                parent.ChildContainers.Add(container);
+            else
+                roots.Add(container);
+        }
+
+        return roots;
+    }
+
+    /// <summary>
+    /// Rebuilds a container hierarchy from a flat list using an explicit parent-id lookup.
+    /// <para>
+    /// Use this overload when the input was materialised from EF Core via a shadow-property
+    /// projection and the <see cref="ConnectedSystemContainer.ParentContainer"/> navigation may
+    /// not be populated. The dictionary maps container id → parent container id (null for roots).
+    /// </para>
+    /// </summary>
+    internal static List<ConnectedSystemContainer> BuildContainerTree(
+        List<ConnectedSystemContainer> flatContainers,
+        IDictionary<int, int?> parentIdByChildId)
+    {
+        var roots = new List<ConnectedSystemContainer>();
+        if (flatContainers.Count == 0)
+            return roots;
+
+        var byId = flatContainers.ToDictionary(c => c.Id);
+
+        // Reset child collections (and parent references for children we will re-wire) so the build
+        // is idempotent even if called multiple times on the same inputs.
+        foreach (var container in flatContainers)
+            container.ChildContainers.Clear();
+
+        foreach (var container in flatContainers)
+        {
+            if (!parentIdByChildId.TryGetValue(container.Id, out var parentId) || parentId == null)
+            {
+                container.ParentContainer = null;
+                roots.Add(container);
+                continue;
+            }
+
+            if (byId.TryGetValue(parentId.Value, out var parent))
+            {
+                container.ParentContainer = parent;
+                parent.ChildContainers.Add(container);
+            }
+            else
+            {
+                // Parent is missing from the input — treat as a root so the container is not lost.
+                container.ParentContainer = null;
+                roots.Add(container);
+            }
+        }
+
+        return roots;
     }
 
     public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem)

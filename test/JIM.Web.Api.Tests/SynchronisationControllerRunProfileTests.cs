@@ -80,7 +80,7 @@ public class SynchronisationControllerRunProfileTests
     {
         var connectedSystemId = 1;
         var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
             .ReturnsAsync(new List<ConnectedSystemRunProfile>());
@@ -94,7 +94,7 @@ public class SynchronisationControllerRunProfileTests
     public async Task GetRunProfilesAsync_WithNonExistentConnectedSystem_ReturnsNotFound()
     {
         var connectedSystemId = 999;
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync((ConnectedSystem?)null);
 
         var result = await _controller.GetRunProfilesAsync(connectedSystemId);
@@ -126,7 +126,7 @@ public class SynchronisationControllerRunProfileTests
                 PageSize = 50
             }
         };
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
             .ReturnsAsync(runProfiles);
@@ -157,7 +157,7 @@ public class SynchronisationControllerRunProfileTests
             Partition = partition,
             FilePath = "/data/export.csv"
         };
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
             .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });
@@ -181,7 +181,7 @@ public class SynchronisationControllerRunProfileTests
     {
         var connectedSystemId = 1;
         var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
             .ReturnsAsync(new List<ConnectedSystemRunProfile>());
@@ -219,7 +219,7 @@ public class SynchronisationControllerRunProfileTests
             FilePath = "/data/new.csv"
         };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
             .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });
@@ -241,7 +241,7 @@ public class SynchronisationControllerRunProfileTests
         var connectedSystemId = 999;
         var request = new UpdateRunProfileRequest { Name = "Updated" };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync((ConnectedSystem?)null);
 
         var result = await _controller.UpdateRunProfileAsync(connectedSystemId, 1, request);
@@ -256,7 +256,7 @@ public class SynchronisationControllerRunProfileTests
         var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
         var request = new UpdateRunProfileRequest { Name = "Updated" };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
             .ReturnsAsync(new List<ConnectedSystemRunProfile>());
@@ -287,7 +287,7 @@ public class SynchronisationControllerRunProfileTests
             // PageSize and FilePath not set — should remain unchanged
         };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
             .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });
@@ -317,7 +317,7 @@ public class SynchronisationControllerRunProfileTests
         };
         var request = new UpdateRunProfileRequest { Name = "Updated" };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
             .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });
@@ -345,7 +345,7 @@ public class SynchronisationControllerRunProfileTests
         };
         var request = new UpdateRunProfileRequest { PartitionId = 999 };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
             .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });

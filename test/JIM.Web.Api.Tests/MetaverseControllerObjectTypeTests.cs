@@ -237,9 +237,9 @@ public class MetaverseControllerObjectTypeTests
         MetaverseObjectType? capturedObjectType = null;
         _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, false))
             .ReturnsAsync(objectType);
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(1))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem1);
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(2))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(2, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem2);
         _mockMetaverseRepo.Setup(r => r.UpdateMetaverseObjectTypeAsync(It.IsAny<MetaverseObjectType>()))
             .Callback<MetaverseObjectType>(ot => capturedObjectType = ot)
@@ -268,7 +268,7 @@ public class MetaverseControllerObjectTypeTests
 
         _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, false))
             .ReturnsAsync(objectType);
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(999))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(999, It.IsAny<bool>()))
             .ReturnsAsync((JIM.Models.Staging.ConnectedSystem?)null);
 
         var request = new UpdateMetaverseObjectTypeRequest
@@ -432,7 +432,7 @@ public class MetaverseControllerObjectTypeTests
 
         _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, false))
             .ReturnsAsync(objectType);
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(1))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockMetaverseRepo.Setup(r => r.UpdateMetaverseObjectTypeAsync(It.IsAny<MetaverseObjectType>()))
             .Returns(Task.CompletedTask);

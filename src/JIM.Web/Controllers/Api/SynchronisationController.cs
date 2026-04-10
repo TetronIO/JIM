@@ -146,8 +146,8 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Verify connected system exists
-        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Verify connected system exists (Core retrieval — we only need existence, not the full graph)
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
@@ -211,8 +211,8 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Verify connected system exists
-        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Verify connected system exists (Core retrieval — we only need existence, not the full graph)
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
@@ -329,8 +329,9 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Verify connected system exists
-        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Verify connected system exists (Core retrieval — BulkUpdateAttributesAsync only reads
+        // the connected system's Id/Name for activity attribution, not its full graph).
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
@@ -606,7 +607,8 @@ public class SynchronisationController(
     {
         _logger.LogTrace("Requested partitions for connected system: {Id}", connectedSystemId);
 
-        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Core retrieval — partitions are then fetched separately with their own include chain.
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
@@ -644,8 +646,8 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Verify connected system exists
-        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Verify connected system exists (Core retrieval — we only need existence, not the full graph)
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
@@ -695,8 +697,8 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Verify connected system exists
-        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Verify connected system exists (Core retrieval — we only need existence, not the full graph)
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
@@ -1097,8 +1099,8 @@ public class SynchronisationController(
 
         try
         {
-            // Verify connected system exists
-            var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+            // Verify connected system exists (Core retrieval — we only need existence, not the full graph)
+            var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
             if (connectedSystem == null)
             {
                 return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
@@ -1199,7 +1201,8 @@ public class SynchronisationController(
     {
         _logger.LogTrace("Requested run profiles for connected system: {Id}", connectedSystemId);
 
-        var system = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Core retrieval — we only need to verify existence before listing run profiles.
+        var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (system == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
@@ -1232,8 +1235,8 @@ public class SynchronisationController(
         _logger.LogInformation("Run profile execution requested: ConnectedSystem={SystemId}, RunProfile={ProfileId}",
             connectedSystemId, runProfileId);
 
-        // Verify connected system exists
-        var system = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Verify connected system exists (Core retrieval — the sync task only needs the id).
+        var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (system == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
@@ -1317,8 +1320,8 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Verify connected system exists
-        var system = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Verify connected system exists (Core retrieval — partitions are fetched separately below).
+        var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (system == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
@@ -1389,8 +1392,8 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Verify connected system exists
-        var system = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Verify connected system exists (Core retrieval — partitions are fetched separately below).
+        var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (system == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
@@ -1464,8 +1467,8 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Verify connected system exists
-        var system = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Verify connected system exists (Core retrieval — we only need existence).
+        var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (system == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
@@ -1559,8 +1562,9 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Verify connected system exists
-        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(request.ConnectedSystemId);
+        // Verify connected system exists (Core retrieval — only used as a FK reference on the new
+        // sync rule; object types are fetched separately below).
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(request.ConnectedSystemId);
         if (connectedSystem == null)
             return BadRequest(ApiErrorResponse.BadRequest($"Connected system with ID {request.ConnectedSystemId} not found."));
 
@@ -2455,7 +2459,8 @@ public class SynchronisationController(
     {
         _logger.LogInformation("Getting object matching rule {RuleId} for connected system {SystemId}", ruleId, connectedSystemId);
 
-        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Core retrieval — the rule itself is loaded via its own repository method below.
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
@@ -2740,7 +2745,8 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Core retrieval — the rule itself is loaded via its own repository method below.
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 

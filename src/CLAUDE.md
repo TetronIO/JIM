@@ -61,6 +61,28 @@
 - Classes: Full descriptive names (avoid abbreviations)
 - Properties: PascalCase with nullable reference types enabled
 
+**Entity Retrieval Naming Taxonomy:**
+
+Repository and server methods that load a single entity follow a weight-based taxonomy. Pick the lightest variant that satisfies the caller's needs so that expensive object graphs are only materialised when genuinely required.
+
+| Level       | Suffix                  | Returns                                                                                | Example                             | Use case                                                                 |
+|-------------|-------------------------|----------------------------------------------------------------------------------------|-------------------------------------|--------------------------------------------------------------------------|
+| **Summary** | `GetXxxSummaryAsync`    | Minimal scalar projection (a DTO of a handful of fields). No entity materialisation.   | `PendingExportSummary`              | High-scale filtering and reconciliation (100K+ objects).                 |
+| **Header**  | `GetXxxHeaderAsync`     | Lightweight DTO with denormalised FK names and aggregated counts.                      | `ConnectedSystemHeader`, `SyncRuleHeader` | List views, grids, dropdowns.                                     |
+| **Core**    | `GetXxxCoreAsync`       | Materialised entity with essential first-level navigation properties only.            | `GetConnectedSystemCoreAsync`       | API validation, write-path lookups, worker bootstrap, existence checks. |
+| **Detail**  | `GetXxxDetailAsync`     | Full entity wrapped in a result object with metadata (for example, capped MVA totals). | `CsoDetailResult`, `PendingExportDetailResult` | Detail pages that may need paging metadata alongside the entity.   |
+| **Full**    | `GetXxxAsync` (no suffix) | Complete entity graph with all relevant Includes and navigation properties.          | `GetConnectedSystemAsync`           | Sync engine, schema import, and other operations that genuinely need everything. |
+
+**Rules for picking a variant:**
+
+1. **Summary** (lightest): SQL projection into a flat DTO. No entity materialisation. Use when operating at extreme scale.
+2. **Header**: SQL projection into a DTO with denormalised names and aggregated counts. For list and grid display.
+3. **Core**: Materialised entity with first-level navigation properties only (no deep collection loading, no matching rules, no container trees). Use for operations that need the entity but not its full graph, such as null checks in API controllers before performing a dependent query.
+4. **Detail**: Full entity wrapped in a result object with metadata (for example, total attribute counts when capped). For UI detail pages.
+5. **Full** (no suffix, just `GetXxxAsync`): Complete entity graph with all Includes. Reserve for operations that genuinely need everything.
+
+**When adding a new retrieval method, start from the lightest variant that works**; only promote to a heavier one if the caller actually needs the additional data.
+
 **Tabs:**
 - Use `<NavigableMudTabs>` instead of `<MudTabs>` for all top-level page tabs; it syncs the active tab with a `?t=slug` query string, enabling browser back/forward navigation
 - Use plain `<MudTabs>` only for tabs inside dialogs or nested sub-tabs where URL navigation is not needed

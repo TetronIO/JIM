@@ -15,7 +15,31 @@ namespace JIM.Data.Repositories;
 
 public interface IConnectedSystemRepository
 {
+    /// <summary>
+    /// Loads a Connected System with its full object graph: <c>ConnectorDefinition</c>, <c>SettingValues</c>,
+    /// <c>RunProfiles</c>, <c>ObjectTypes</c> (with attributes and matching rules), and <c>Partitions</c> (with
+    /// containers arranged into a tree).
+    /// <para>
+    /// This is the heaviest retrieval variant. Prefer <see cref="GetConnectedSystemCoreAsync"/> when you only
+    /// need to verify existence or read basic properties, and <see cref="GetConnectedSystemHeaderAsync"/> for
+    /// list views. Reserve this method for sync engine, schema import, and other operations that genuinely
+    /// need the full graph.
+    /// </para>
+    /// </summary>
     public Task<ConnectedSystem?> GetConnectedSystemAsync(int id, bool withChangeTracking = false);
+
+    /// <summary>
+    /// Loads a lightweight Connected System containing only essential navigation properties:
+    /// <c>ConnectorDefinition</c>, <c>SettingValues</c>, and <c>RunProfiles</c> (shallow, without partition containers).
+    /// <para>
+    /// Use this for API validation, write-path lookups, worker bootstrap, and any other caller that needs the
+    /// entity but does not traverse <c>ObjectTypes</c>, <c>ObjectMatchingRules</c>, or the partition/container tree.
+    /// It avoids the expensive object-type and partition/container hierarchy queries performed by
+    /// <see cref="GetConnectedSystemAsync"/>.
+    /// </para>
+    /// </summary>
+    public Task<ConnectedSystem?> GetConnectedSystemCoreAsync(int id, bool withChangeTracking = false);
+
     public Task<ConnectedSystemHeader?> GetConnectedSystemHeaderAsync(int id);
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id);
 
