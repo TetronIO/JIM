@@ -52,7 +52,18 @@ jobs:
           # Write diff to file to avoid shell escaping issues
           echo "$DIFF_SUMMARY" > /tmp/diff_summary.txt
 
+      - name: Check for dispatch token
+        id: check_token
+        run: |
+          if [ -z "${{ secrets.METRICS_REPO_DISPATCH_TOKEN }}" ]; then
+            echo "::warning::METRICS_REPO_DISPATCH_TOKEN secret is not configured. Skipping dispatch to TetronIO/jim-metrics. This is expected if the jim-metrics repo has not yet been created. Configure the secret once jim-metrics exists to enable cross-repo sync."
+            echo "token_available=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "token_available=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Dispatch to jim-metrics
+        if: steps.check_token.outputs.token_available == 'true'
         uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0  # v3.0.0
         with:
           token: ${{ secrets.METRICS_REPO_DISPATCH_TOKEN }}
