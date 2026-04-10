@@ -561,9 +561,29 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     font-size: 0.875rem;
 }
 
-/* Sign-out item: subtle emphasis */
-.jim-user-signout .mud-list-item-icon {
-    color: var(--mud-palette-error) !important;
+/* Page footer: flex the whole line so text, separators and links (with icons) all centre vertically */
+.jim-page-footer-text {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5em;
+}
+
+.jim-page-footer-sep {
+    opacity: 0.6;
+}
+
+.jim-page-footer-github {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.jim-page-footer-github-icon {
+    font-size: 1rem !important;
+    height: 1rem !important;
+    width: 1rem !important;
 }
 
 .jim-nowrap {
