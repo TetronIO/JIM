@@ -206,6 +206,17 @@ try
             // .NET looks for the legacy XML URI by default. Point it at the standard OIDC claim.
             options.TokenValidationParameters.NameClaimType = "name";
 
+            // By default, the ASP.NET Core OpenIdConnect handler drops a number of "protocol" claims
+            // (iss, aud, azp, acr, auth_time, ...) after it has validated them, so they never reach
+            // the cookie identity. Explicitly map them back in so administrators can diagnose sign-in
+            // issues from the /claims page without enabling trace logging. These values are not used
+            // for authorisation decisions; they are informational only.
+            options.ClaimActions.MapJsonKey("iss", "iss");
+            options.ClaimActions.MapJsonKey("aud", "aud");
+            options.ClaimActions.MapJsonKey("azp", "azp");
+            options.ClaimActions.MapJsonKey("acr", "acr");
+            options.ClaimActions.MapJsonKey("auth_time", "auth_time");
+
             // Accept tokens from any configured valid issuer (supports Docker DNS + localhost dual-path)
             if (validIssuers.Length > 0)
             {
