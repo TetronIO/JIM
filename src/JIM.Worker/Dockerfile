@@ -1,4 +1,8 @@
 # syntax=docker/dockerfile:1
+# jim-compliance: production-image
+# This image ships to customers. Base image digest pinning is enforced by CI
+# (see .github/workflows/ci.yml scan-base-images job). Do not remove the
+# @sha256: digest from any FROM line or this Dockerfile will fail CI.
 # See https://aka.ms/containerfastmode to understand how Visual Studio uses this Dockerfile to build your images for faster debugging.
 
 ARG VERSION=dev

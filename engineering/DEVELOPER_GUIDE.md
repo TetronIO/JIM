@@ -849,6 +849,18 @@ All production Dockerfiles pin their dependencies for reproducible, auditable bu
 - **Functional apt packages**: Libraries that JIM calls at runtime (libldap, cifs-utils) are pinned to exact versions (e.g., `libldap-2.5-0=2.5.13+dfsg-5`).
 - **Diagnostic utilities**: Tools like `curl` and `iputils-ping` are not pinned, as they are only used for health checks and debugging, not functional code paths.
 
+**The digest-pinning policy is machine-enforced.** Every production Dockerfile carries the directive `# jim-compliance: production-image` near the top of the file. The CI workflow (`.github/workflows/ci.yml`, `discover-base-images` job) scans the repository for Dockerfiles with this directive, parses every external `FROM` line, and fails the build if any of them is missing a `@sha256:` digest. The underlying script is [`.github/scripts/discover-base-images.ps1`](../.github/scripts/discover-base-images.ps1).
+
+Dockerfiles without the compliance directive (`.devcontainer/Dockerfile`, the integration test fixture images under `test/integration/docker/`) are deliberately out of scope. They are dev or test infrastructure, not customer-shipped artefacts, and are expected to track upstream tags rather than pinned digests. **Do not add the directive to a non-production Dockerfile, and do not remove it from a production one.**
+
+When adding a new production Dockerfile:
+
+1. Add `# jim-compliance: production-image` to the file (see `src/JIM.Web/Dockerfile` for the canonical format)
+2. Ensure every external `FROM` line uses `@sha256:` digest pinning
+3. That's it. The discovery script finds the new file automatically; no workflow or config update is required.
+
+Vulnerability scanning runs against every discovered production base image on every push and PR. Findings are surfaced in the GitHub Security tab via SARIF upload in addition to the Actions log, so they are visible to reviewers and auditable after the fact.
+
 **Why this matters**: `System.DirectoryServices.Protocols` (the .NET LDAP client) P/Invokes into the native `libldap` shared library at runtime. An incompatible libldap version could cause silent behavioural differences or crashes during LDAP/AD operations.
 
 Before merging a Docker digest update PR:
@@ -862,6 +874,28 @@ To check available package versions in a new base image:
 docker run --rm <image>@<new-digest> bash -c \
   "apt-get update -qq && apt-cache policy libldap-common libldap-2.5-0 cifs-utils"
 ```
+
+##### When the scan-base-images gate blocks on an upstream-only CVE
+
+The `scan-base-images` CI job fails the build whenever Trivy reports a fixable HIGH or CRITICAL CVE (CVSS >= 7.0) in any production base image. "Fixable" means an upstream-patched version of the affected package exists.
+
+For most JIM-installed packages (the apt versions we pin in our Dockerfiles), "fixable" means we can bump the pinned version ourselves and the gate clears on the next build. But the bulk of packages in a base image come from the **Microsoft `dotnet/<runtime|aspnet|sdk>:10.0-noble` image layer**, not from JIM. We do not control when Microsoft rebuilds those images. Microsoft typically rebuilds on its own cadence (often monthly, sometimes longer); during the gap between an Ubuntu security release and a Microsoft refresh, Trivy can correctly flag a CVE as "fixable upstream" even though we have no way to apply the fix ourselves.
+
+When this happens, every PR and every push to `main` will fail the `scan-base-images` job until either Microsoft publishes a refreshed digest (which Dependabot will then propose) or we apply a manual workaround.
+
+**Response options, in order of preference:**
+
+1. **Wait for the Microsoft rebuild.** This is the default and best response when the CVE risk is acceptable to wait out. Check https://mcr.microsoft.com/en-us/product/dotnet/runtime/tags for the current published digest of `10.0-noble`. If it differs from what is pinned in the Dockerfiles, bump the digest manually (or wait for Dependabot to propose it). This typically takes a few days to a few weeks depending on Microsoft's release cadence.
+
+2. **Apply `apt-get upgrade` in the Dockerfile** as a temporary measure if the CVE is severe enough that waiting is not acceptable. This pulls current Ubuntu security patches at *build* time rather than at *base image publish* time. Trade-off: it weakens the reproducibility guarantee of pinning by digest. Only do this for genuinely urgent issues, and revert as soon as Microsoft publishes a refreshed image.
+
+3. **Temporarily lower the gate threshold from HIGH to CRITICAL** in `.github/workflows/ci.yml` (the `Fail build on fixable HIGH/CRITICAL Trivy findings` step) if the blocking CVE is HIGH but not CRITICAL and the work jam is unacceptable. Two-line change. **Revert as soon as the underlying CVE is resolved.**
+
+4. **Dismiss the specific alert** in the GitHub Security tab with a "won't fix - upstream dependency" reason and a comment explaining why. This requires the alert to first reach the Security tab via SARIF upload, which it will on every CI run. Dismissal only suppresses the specific alert; if the same CVE is detected against a different package or a new base image, it reappears.
+
+**Do not** add `continue-on-error: true` to the scan step. That permanently weakens the gate and is not the same as a documented temporary downgrade.
+
+The choice between options 1-4 depends on the specific CVE, its CVSS score, the nature of the affected component, and how long Microsoft is likely to take. There is no pre-baked policy because the right answer is genuinely case-dependent. When in doubt, escalate to a maintainer.
 
 #### GitHub Actions
 

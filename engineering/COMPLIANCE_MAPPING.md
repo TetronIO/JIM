@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Version** | 1.0 |
-| **Last Updated** | 2026-02-16 |
+| **Version** | 1.1 |
+| **Last Updated** | 2026-04-10 |
 | **Status** | Active |
 
 ---
@@ -43,6 +43,18 @@ The frameworks and standards covered include those commonly required by:
 
 ---
 
+## Operational Considerations
+
+### Upstream-only base image CVEs
+
+JIM's container base images derive from Microsoft's `mcr.microsoft.com/dotnet/<runtime|aspnet|sdk>:10.0-noble` images. Vulnerability scanning (Trivy via the `scan-base-images` CI job) can correctly flag CVEs as "fixable upstream" during the gap between an Ubuntu security release and a Microsoft refresh of the `10.0-noble` digest. JIM cannot apply the fix directly in those cases; the fix lives in a layer JIM does not own.
+
+The response procedure for this situation is documented in [`engineering/DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md) under "When the scan-base-images gate blocks on an upstream-only CVE". The available options range from waiting for Microsoft's next rebuild (default), through targeted in-Dockerfile mitigations, to documented temporary gate downgrades. The choice is case-by-case based on CVE severity and timing rather than a pre-baked policy, because the right answer genuinely depends on the specific CVE.
+
+This is a known and intentional limitation of digest-pinned base images. It is not a compliance gap: digest pinning, vulnerability scanning, and SBOM generation all operate correctly. The constraint is purely on remediation latency for one class of finding.
+
+---
+
 ## NIST Cybersecurity Framework (CSF) 2.0 Mapping
 
 ### GOVERN (GV) - Establish and maintain cybersecurity governance
@@ -51,7 +63,7 @@ The frameworks and standards covered include those commonly required by:
 |-------------|------------------------|--------|
 | GV.OC - Organisational Context | JIM designed for regulated environments; air-gapped deployment supported | Implemented |
 | GV.RM - Risk Management Strategy | Threat modelling required for new features (CLAUDE.md) | Implemented |
-| GV.SC - Supply Chain Risk Management | Dependency review, SBOM generation, pinned versions (CLAUDE.md) | Implemented |
+| GV.SC - Supply Chain Risk Management | Dependency review, SBOM generation, pinned versions (CLAUDE.md). Production Docker base images are digest-pinned and the policy is enforced by CI (`.github/workflows/ci.yml` `discover-base-images` job), not just documented. | Implemented |
 
 ### IDENTIFY (ID) - Understand cybersecurity risks
 
@@ -112,13 +124,13 @@ The UK Government's Software Security Code of Practice defines 14 principles acr
 |-----------|-------------|---------------|--------|
 | 5 | Protect the build environment | GitHub Actions CI/CD, pinned action versions | Aligned |
 | 6 | Secure the development tools and processes | Devcontainer with controlled toolchain, dependency pinning | Aligned |
-| 7 | Manage and secure third-party components | Dependency review policy, SBOM generation, vulnerability scanning | Aligned |
+| 7 | Manage and secure third-party components | Dependency review policy, SBOM generation. Container base image vulnerability scanning runs on every push and PR with results surfaced to GitHub code scanning (SARIF). Digest-pinning of production base images is enforced by CI rather than by convention. | Aligned |
 
 ### Theme 3: Deployment and Maintenance
 
 | Principle | Requirement | JIM Alignment | Status |
 |-----------|-------------|---------------|--------|
-| 8 | Deploy securely | Docker containerisation, deployment best practices in SECURITY.md | Aligned |
+| 8 | Deploy securely | Docker containerisation, deployment best practices in SECURITY.md. **Planned**: pre-release integration test gate so no release can be cut unless the full integration test suite has passed (tracked in #518). | Aligned |
 | 9 | Provide timely security updates | SECURITY.md defines 30-day critical vulnerability resolution SLA | Aligned |
 | 10 | Manage end of life securely | Only latest version supported, clear update guidance | Aligned |
 
@@ -194,7 +206,7 @@ This maps JIM's features to the NIST SP 800-53 control families most relevant to
 | Control | Description | JIM Implementation |
 |---------|-------------|-------------------|
 | SI-2 | Flaw Remediation | Vulnerability disclosure policy, dependency scanning |
-| SI-3 | Malicious Code Protection | Container scanning, dependency vulnerability checks |
+| SI-3 | Malicious Code Protection | Container base image scanning (Trivy) on every push/PR with results in GitHub code scanning; dependency vulnerability checks via Dependabot |
 | SI-7 | Software Integrity | SHA256 checksums on releases, signed commits |
 | SI-10 | Information Input Validation | Input validation at all API boundaries, DTO annotations |
 
@@ -202,7 +214,7 @@ This maps JIM's features to the NIST SP 800-53 control families most relevant to
 
 | Control | Description | JIM Implementation |
 |---------|-------------|-------------------|
-| SA-11 | Developer Testing and Evaluation | Mandatory build/test before commit, security test requirements |
+| SA-11 | Developer Testing and Evaluation | Mandatory build/test before commit, security test requirements. **Planned**: pre-release integration test gate enforcing that no release can be cut unless the full integration test suite has passed (tracked in #518). |
 | SA-15 | Development Process | Secure SDLC documented in CLAUDE.md |
 | SA-22 | Unsupported System Components | Dependency management, outdated package monitoring |
 
