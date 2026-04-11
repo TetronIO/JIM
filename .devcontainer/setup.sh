@@ -131,13 +131,17 @@ fi
 print_step "Setting up connector-files directory..."
 mkdir -p connector-files
 
-# Create symlink to test/Data directory (dynamic - new files appear automatically)
+# Create symlink to test/test-data directory (dynamic - new files appear automatically).
+# NOTE: the directory was renamed from test/Data to test/test-data in commit 90bc8b19
+# (Dec 2025). The old name survived silently on macOS hosts because HFS+/APFS is
+# case-insensitive by default, so "test/Data" still resolved to "test/test-data".
+# On case-sensitive filesystems (Linux) the check fails, so use the real name.
 if [ ! -L connector-files/test-data ]; then
-    if [ -d "test/Data" ]; then
-        ln -s "$(pwd)/test/Data" connector-files/test-data
-        print_success "Symlink created: connector-files/test-data -> test/Data"
+    if [ -d "test/test-data" ]; then
+        ln -s "$(pwd)/test/test-data" connector-files/test-data
+        print_success "Symlink created: connector-files/test-data -> test/test-data"
     else
-        print_warning "test/Data directory not found, skipping symlink"
+        print_warning "test/test-data directory not found, skipping symlink"
     fi
 else
     print_success "Symlink already exists: connector-files/test-data"
@@ -207,38 +211,51 @@ if ! grep -q "source.*jim-aliases.sh" ~/.bashrc; then
     echo "fi" >> ~/.bashrc
 fi
 
-# 12. Display useful information
+# 12. Install Claude Code CLI
+print_step "Installing Claude Code CLI..."
+if command -v npm >/dev/null 2>&1; then
+    if npm install -g @anthropic-ai/claude-code --silent 2>/dev/null; then
+        print_success "Claude Code CLI installed (run: claude)"
+    else
+        print_warning "Claude Code CLI install failed - run manually: npm install -g @anthropic-ai/claude-code"
+    fi
+else
+    print_warning "npm not found - skipping Claude Code CLI install"
+fi
+
+# 13. Display useful information
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${GREEN}✓ JIM Development Environment Ready!${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "Quick Start Commands:"
-echo "  jim                - List all available jim aliases"
-echo "  jim-compile        - Build the entire solution"
-echo "  jim-test           - Run all tests"
-echo "  jim-web            - Run the Blazor web application (local, debuggable)"
-echo "  jim-db             - Start PostgreSQL"
+echo "  jim                 - List all available jim aliases"
+echo "  jim-compile         - Build the entire solution"
+echo "  jim-test            - Run all tests"
+echo "  jim-web             - Run JIM.Web locally (sources .env)"
+echo "  jim-db              - Start PostgreSQL"
 echo ""
-echo "Docker Stack Commands:"
-echo "  jim-stack          - Start Docker stack (production-like)"
-echo "  jim-stack-logs     - View Docker stack logs"
-echo "  jim-stack-down     - Stop Docker stack"
+echo "Docker Stack Management (auto-kills local JIM processes):"
+echo "  jim-stack           - Start Docker stack"
+echo "  jim-stack-logs      - View Docker stack logs"
+echo "  jim-stack-down      - Stop Docker stack"
 echo ""
-echo "Docker Builds (rebuild services):"
-echo "  jim-build          - Build all services + start"
-echo "  jim-build-web      - Build jim.web + start"
-echo "  jim-build-worker   - Build jim.worker + start"
-echo "  jim-build-scheduler - Build jim.scheduler + start"
+echo "Docker Builds (auto-kills local JIM processes, rebuild + start):"
+echo "  jim-build           - Rebuild all services + start"
+echo "  jim-build-light     - Start db + Keycloak, run JIM.Web natively"
+echo "  jim-build-web       - Rebuild jim.web + start"
+echo "  jim-build-worker    - Rebuild jim.worker + start"
+echo "  jim-build-scheduler - Rebuild jim.scheduler + start"
 echo ""
 echo "Reset:"
-echo "  jim-reset          - Reset JIM (delete database & logs volumes)"
+echo "  jim-reset           - Full reset (containers, images, volumes)"
 echo ""
 echo "Database Commands:"
-echo "  jim-migrate        - Apply pending migrations"
-echo "  jim-migration [N]  - Create a new migration"
-echo "  jim-db-logs        - View database logs"
-echo "  jim-db             - Start PostgreSQL"
+echo "  jim-migrate         - Apply pending migrations"
+echo "  jim-migration [N]   - Create a new migration"
+echo "  jim-db-logs         - View database logs"
+echo "  jim-db              - Start PostgreSQL"
 echo ""
 echo "Available Services:"
 echo "  PostgreSQL:        localhost:5432"
@@ -251,14 +268,14 @@ echo "  When running Docker stack:"
 echo "    JIM Web:         http://localhost:5200"
 echo ""
 echo "📖 Documentation:"
-echo "  jim-docs           - Preview docs site at http://localhost:8000"
+echo "  jim-docs            - Preview docs site at http://localhost:8000"
 echo "  Developer Guide:   docs/developer/"
 echo "  Quick Reference:   CLAUDE.md"
 echo ""
 echo "🚀 To start developing (choose one):"
 echo ""
 echo "  Option 1 - Local Debug (Recommended):"
-echo "    1. Run: jim-db && jim-keycloak"
+echo "    1. Run: jim-build-light"
 echo "    2. Press F5 in VS Code"
 echo "    3. Sign in with: admin / admin"
 echo ""

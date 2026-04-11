@@ -3,6 +3,14 @@
   "build": {
     "dockerfile": "Dockerfile"
   },
+  // Explicit workspace mount + folder so behaviour is deterministic across all
+  // launchers (Codespaces, Docker Desktop on Mac/Windows, devcontainer CLI on
+  // Linux, attach-to-existing-container). Without these, the runtime falls
+  // back to the base image's WORKDIR (/home/vscode), which isn't a git repo -
+  // so VS Code's Source Control panel shows nothing and setup.sh's hardcoded
+  // /workspaces/JIM path disagrees with what VS Code has opened.
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/JIM,type=bind,consistency=cached",
+  "workspaceFolder": "/workspaces/JIM",
   // Features - pre-built development tools
   "features": {
     // Docker-in-Docker for running docker-compose
