@@ -3380,8 +3380,9 @@ public class ConnectedSystemServer
         Log.Information("ClearConnectedSystemObjectsAsync: Starting for Connected System {Id}, deleteChangeHistory={DeleteHistory}",
             connectedSystemId, deleteChangeHistory);
 
-        // Check for concurrency - don't clear if system is being deleted
-        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Check for concurrency — don't clear if the system is being deleted. We only need the
+        // Status scalar here, so use the lightweight Core retrieval variant.
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
         {
             Log.Warning("ClearConnectedSystemObjectsAsync: Connected System {Id} not found", connectedSystemId);
