@@ -28,6 +28,51 @@ print_warning() {
     echo -e "${YELLOW}⚠${NC} $1"
 }
 
+# Accumulator for post-setup action items that need the user's attention.
+# Populated by individual steps (signing, gh auth, ...) when their own
+# automated setup can't complete - usually because the step needs
+# interactivity that postCreateCommand doesn't have (no TTY). Rendered as a
+# single banner at the end of the script so the user sees one consolidated
+# TODO list, not individual warnings scattered through the setup log.
+PENDING_ACTIONS=""
+
+# Check Docker daemon health.
+# The docker-in-docker feature starts its own dockerd inside this container at
+# postCreate time. On some native Linux hosts (notably Fedora and Asahi Linux,
+# where the iptable_nat kernel module isn't loaded by default), dockerd crashes
+# during network init and leaves /var/run/docker.sock as a dead socket file.
+# All docker-using commands (jim-db, jim-build, jim-stack, ...) then fail with
+# "Cannot connect to the Docker daemon" until the user runs modprobe on the
+# host and rebuilds the container. We detect that case here and surface the
+# fix in the final summary banner so the user isn't left hunting through
+# dockerd.log to figure out what went wrong. This is a no-op on Docker Desktop
+# (macOS/Windows) and Codespaces, which preload the required kernel modules.
+print_step "Checking Docker daemon health..."
+if ! command -v docker >/dev/null 2>&1; then
+    print_warning "docker CLI not found - skipping daemon health check"
+elif docker info >/dev/null 2>&1; then
+    print_success "Docker daemon is running"
+else
+    DOCKER_ERR_HINT=""
+    if [ -r /tmp/dockerd.log ] && grep -qi "iptable" /tmp/dockerd.log 2>/dev/null; then
+        DOCKER_ERR_HINT=" (host kernel iptable_nat module missing)"
+    fi
+    print_warning "Docker daemon is not responding${DOCKER_ERR_HINT}"
+    PENDING_ACTIONS+="  ▶ Docker daemon inside the devcontainer is not running.
+      This is almost always because the host kernel is missing the iptable_nat
+      module. On the HOST (not inside this container), run:
+
+        sudo modprobe iptable_nat
+        echo iptable_nat | sudo tee /etc/modules-load.d/jim-devcontainer.conf
+
+      Then rebuild the devcontainer (F1 -> Dev Containers: Rebuild Container).
+      Until fixed, jim-db / jim-build / jim-stack will fail with
+      \"Cannot connect to the Docker daemon\".
+      See .devcontainer/README.md for background.
+
+"
+fi
+
 # 1. Install .NET EF Core tools
 print_step "Installing .NET Entity Framework Core tools..."
 # Clean up any corrupted tool state first, then install fresh
@@ -131,13 +176,17 @@ fi
 print_step "Setting up connector-files directory..."
 mkdir -p connector-files
 
-# Create symlink to test/Data directory (dynamic - new files appear automatically)
+# Create symlink to test/test-data directory (dynamic - new files appear automatically).
+# NOTE: the directory was renamed from test/Data to test/test-data in commit 90bc8b19
+# (Dec 2025). The old name survived silently on macOS hosts because HFS+/APFS is
+# case-insensitive by default, so "test/Data" still resolved to "test/test-data".
+# On case-sensitive filesystems (Linux) the check fails, so use the real name.
 if [ ! -L connector-files/test-data ]; then
-    if [ -d "test/Data" ]; then
-        ln -s "$(pwd)/test/Data" connector-files/test-data
-        print_success "Symlink created: connector-files/test-data -> test/Data"
+    if [ -d "test/test-data" ]; then
+        ln -s "$(pwd)/test/test-data" connector-files/test-data
+        print_success "Symlink created: connector-files/test-data -> test/test-data"
     else
-        print_warning "test/Data directory not found, skipping symlink"
+        print_warning "test/test-data directory not found, skipping symlink"
     fi
 else
     print_success "Symlink already exists: connector-files/test-data"
@@ -158,14 +207,23 @@ if [ -x "$SIGNING_SCRIPT" ]; then
         print_success "Git commit signing configured"
     else
         # configure-signing.sh has already printed a detailed warning banner
-        # with recovery steps. Do not print another warning here (would be
-        # duplicate noise), but do leave a marker for setup completion to
-        # flag the overall state.
-        SIGNING_SETUP_FAILED=1
+        # with recovery steps. We don't print another warning inline (would be
+        # duplicate noise), but we DO record an action in PENDING_ACTIONS so
+        # the TODO is repeated in the final summary - in case the detailed
+        # banner scrolled off screen while the rest of setup ran.
+        PENDING_ACTIONS+="  ▶ Git commit signing is not configured.
+      Re-run: .devcontainer/configure-signing.sh
+      Until fixed, the pre-commit hook in .githooks/ will reject commits.
+
+"
     fi
 else
     print_warning "$SIGNING_SCRIPT not found or not executable - commit signing not configured"
-    SIGNING_SETUP_FAILED=1
+    PENDING_ACTIONS+="  ▶ Git commit signing script is missing or not executable:
+      $SIGNING_SCRIPT
+      Until fixed, the pre-commit hook in .githooks/ will reject commits.
+
+"
 fi
 
 # Install repo-local git hooks. Once configured, git uses .githooks/pre-commit
@@ -207,38 +265,79 @@ if ! grep -q "source.*jim-aliases.sh" ~/.bashrc; then
     echo "fi" >> ~/.bashrc
 fi
 
-# 12. Display useful information
+# 12. Install Claude Code CLI
+print_step "Installing Claude Code CLI..."
+if command -v npm >/dev/null 2>&1; then
+    if npm install -g @anthropic-ai/claude-code --silent 2>/dev/null; then
+        print_success "Claude Code CLI installed (run: claude)"
+    else
+        print_warning "Claude Code CLI install failed - run manually: npm install -g @anthropic-ai/claude-code"
+    fi
+else
+    print_warning "npm not found - skipping Claude Code CLI install"
+fi
+
+# 13. Check gh CLI authentication
+# The gh CLI is used for PR/issue operations and other GitHub API calls.
+# It is NOT involved in git push/pull (SSH remote handles that) or commit
+# signing (SSH agent forward handles that), so a missing gh token is not
+# blocking for day-to-day dev - but it is blocking for gh pr create,
+# gh issue list, gh api, etc.
+#
+# On GitHub Codespaces this check passes automatically because Codespaces
+# injects GITHUB_TOKEN into the environment, which gh auth status honours.
+# On local devcontainers (Docker Desktop, Fedora, etc.) we can't prompt
+# interactively here - postCreateCommand runs without a TTY - so we record
+# an action for the final summary and let the user run the login command
+# themselves in the VS Code integrated terminal.
+print_step "Checking gh CLI authentication..."
+if ! command -v gh >/dev/null 2>&1; then
+    print_warning "gh CLI not found - skipping auth check"
+elif gh auth status >/dev/null 2>&1; then
+    print_success "gh CLI is authenticated"
+else
+    print_warning "gh CLI is not authenticated - gh commands will need login"
+    PENDING_ACTIONS+="  ▶ gh CLI is not authenticated. Run in the integrated terminal:
+      gh auth login --hostname github.com --git-protocol ssh --web
+      (Needed for: gh pr create, gh issue list, gh api, etc.
+       Not needed for git push/pull/commit - SSH remote handles those.)
+
+"
+fi
+
+# 14. Display useful information
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${GREEN}✓ JIM Development Environment Ready!${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "Quick Start Commands:"
-echo "  jim                - List all available jim aliases"
-echo "  jim-compile        - Build the entire solution"
-echo "  jim-test           - Run all tests"
-echo "  jim-web            - Run the Blazor web application (local, debuggable)"
-echo "  jim-db             - Start PostgreSQL"
+echo "  jim                 - List all available jim aliases"
+echo "  jim-compile         - Build the entire solution"
+echo "  jim-test            - Run all tests"
+echo "  jim-web             - Run JIM.Web locally (sources .env)"
+echo "  jim-db              - Start PostgreSQL"
 echo ""
-echo "Docker Stack Commands:"
-echo "  jim-stack          - Start Docker stack (production-like)"
-echo "  jim-stack-logs     - View Docker stack logs"
-echo "  jim-stack-down     - Stop Docker stack"
+echo "Docker Stack Management (auto-kills local JIM processes):"
+echo "  jim-stack           - Start Docker stack"
+echo "  jim-stack-logs      - View Docker stack logs"
+echo "  jim-stack-down      - Stop Docker stack"
 echo ""
-echo "Docker Builds (rebuild services):"
-echo "  jim-build          - Build all services + start"
-echo "  jim-build-web      - Build jim.web + start"
-echo "  jim-build-worker   - Build jim.worker + start"
-echo "  jim-build-scheduler - Build jim.scheduler + start"
+echo "Docker Builds (auto-kills local JIM processes, rebuild + start):"
+echo "  jim-build           - Rebuild all services + start"
+echo "  jim-build-light     - Start db + Keycloak, run JIM.Web natively"
+echo "  jim-build-web       - Rebuild jim.web + start"
+echo "  jim-build-worker    - Rebuild jim.worker + start"
+echo "  jim-build-scheduler - Rebuild jim.scheduler + start"
 echo ""
 echo "Reset:"
-echo "  jim-reset          - Reset JIM (delete database & logs volumes)"
+echo "  jim-reset           - Full reset (containers, images, volumes)"
 echo ""
 echo "Database Commands:"
-echo "  jim-migrate        - Apply pending migrations"
-echo "  jim-migration [N]  - Create a new migration"
-echo "  jim-db-logs        - View database logs"
-echo "  jim-db             - Start PostgreSQL"
+echo "  jim-migrate         - Apply pending migrations"
+echo "  jim-migration [N]   - Create a new migration"
+echo "  jim-db-logs         - View database logs"
+echo "  jim-db              - Start PostgreSQL"
 echo ""
 echo "Available Services:"
 echo "  PostgreSQL:        localhost:5432"
@@ -251,14 +350,14 @@ echo "  When running Docker stack:"
 echo "    JIM Web:         http://localhost:5200"
 echo ""
 echo "📖 Documentation:"
-echo "  jim-docs           - Preview docs site at http://localhost:8000"
+echo "  jim-docs            - Preview docs site at http://localhost:8000"
 echo "  Developer Guide:   docs/developer/"
 echo "  Quick Reference:   CLAUDE.md"
 echo ""
 echo "🚀 To start developing (choose one):"
 echo ""
 echo "  Option 1 - Local Debug (Recommended):"
-echo "    1. Run: jim-db && jim-keycloak"
+echo "    1. Run: jim-build-light"
 echo "    2. Press F5 in VS Code"
 echo "    3. Sign in with: admin / admin"
 echo ""
@@ -268,3 +367,17 @@ echo "    2. Open: http://localhost:5200"
 echo "    3. Sign in with: admin / admin"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Render any pending action items as the final thing on screen, so they
+# stay near the top of the user's scrollback after the help banner above
+# has filled the terminal. Deliberately uses yellow (warning) rather than
+# red (error) because the container is still usable - these are follow-up
+# steps, not blockers.
+if [ -n "$PENDING_ACTIONS" ]; then
+    echo ""
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}⚠ Action required before the environment is fully ready${NC}"
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "$PENDING_ACTIONS"
+fi
