@@ -8,8 +8,12 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
+using JIM.PostgresData;
 using JIM.Utilities;
 using JIM.Worker.Tests.Models;
+using Microsoft.EntityFrameworkCore;
+using MockQueryable.Moq;
+using Moq;
 
 namespace JIM.Worker.Tests;
 
@@ -105,6 +109,28 @@ public static class TestUtilities
         Environment.SetEnvironmentVariable(Constants.Config.DatabaseName, "dummy");
         Environment.SetEnvironmentVariable(Constants.Config.DatabaseUsername, "dummy");
         Environment.SetEnvironmentVariable(Constants.Config.DatabasePassword, "dummy");
+    }
+
+    /// <summary>
+    /// Attaches empty <see cref="JimDbContext.ObjectMatchingRules"/> and
+    /// <see cref="JimDbContext.ConnectedSystemContainers"/> mocks to the supplied
+    /// <paramref name="mockDbContext"/>. These DbSets are queried by
+    /// <see cref="JIM.PostgresData.Repositories.ConnectedSystemRepository.GetConnectedSystemAsync"/>
+    /// (the object-matching-rules single-query wire-up, and the flat container tree load),
+    /// so every test that directly or indirectly triggers a full Connected System load must
+    /// have them mocked; otherwise the repository hits a <see cref="NullReferenceException"/>
+    /// dereferencing the unset virtual DbSet property.
+    /// <para>
+    /// Call this after you have wired up all of your own mocks on <paramref name="mockDbContext"/>.
+    /// Tests that want non-empty data should set up their own DbSet mocks instead.
+    /// </para>
+    /// </summary>
+    public static void SetUpEmptyConnectedSystemGraphMocks(Mock<JimDbContext> mockDbContext)
+    {
+        var emptyMatchingRules = new List<ObjectMatchingRule>().BuildMockDbSet();
+        var emptyContainers = new List<ConnectedSystemContainer>().BuildMockDbSet();
+        mockDbContext.Setup(m => m.ObjectMatchingRules).Returns(emptyMatchingRules.Object);
+        mockDbContext.Setup(m => m.ConnectedSystemContainers).Returns(emptyContainers.Object);
     }
 
     public static MetaverseObject GetInitiatedBy()

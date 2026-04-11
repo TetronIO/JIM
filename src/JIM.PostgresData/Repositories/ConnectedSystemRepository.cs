@@ -217,29 +217,65 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         var runProfiles = await rpQuery.ToListAsync();
 
-        // Object types with attributes and object matching rules. Attributes are NOT sorted here
-        // (the previous OrderBy inside Include did not translate to SQL and sorted in memory after
-        // loading everything). Callers that care about presentation order sort in the UI/API layer
-        // where it matters. AsSplitQuery avoids cartesian explosion across the multiple Include branches.
+        // Object types with their attributes. Attributes are NOT sorted here (the previous OrderBy
+        // inside Include did not translate to SQL and sorted in memory after loading everything);
+        // callers that care about presentation order sort in the UI/API layer where it matters.
         IQueryable<ConnectedSystemObjectType> otQuery = Repository.Database.ConnectedSystemObjectTypes
-            .AsSplitQuery()
             .Include(ot => ot.Attributes)
-            .Include(ot => ot.ObjectMatchingRules)
-                .ThenInclude(omr => omr.Sources)
-                    .ThenInclude(s => s.ConnectedSystemAttribute)
-            .Include(ot => ot.ObjectMatchingRules)
-                .ThenInclude(omr => omr.Sources)
-                    .ThenInclude(s => s.MetaverseAttribute)
-            .Include(ot => ot.ObjectMatchingRules)
-                .ThenInclude(omr => omr.TargetMetaverseAttribute)
-            .Include(ot => ot.ObjectMatchingRules)
-                .ThenInclude(omr => omr.MetaverseObjectType)
             .Where(q => q.ConnectedSystemId == id);
 
         if (withChangeTracking)
             otQuery = otQuery.AsTracking();
 
         var types = await otQuery.ToListAsync();
+
+        // Object matching rules, loaded in a single keyed query and wired onto their owning object
+        // types in memory.
+        //
+        // Why not Include them as part of the query above? Before #494 we used four repeated
+        // .Include(ot => ot.ObjectMatchingRules).ThenInclude(...) branches inside AsSplitQuery —
+        // one per path into the rule graph (Sources.ConnectedSystemAttribute, Sources.MetaverseAttribute,
+        // TargetMetaverseAttribute, MetaverseObjectType). EF Core does not support chaining multiple
+        // ThenIncludes off the same collection navigation in one expression, so each branch has to be
+        // re-rooted on the collection, and under AsSplitQuery each branch is emitted as a separate
+        // SQL query (four round-trips for a single graph walk).
+        //
+        // Loading the rules directly from DbSet<ObjectMatchingRule> with one combined Include chain
+        // reduces the fan-out from four queries to one. We then bind rules back onto their owning
+        // object types via ConnectedSystemObjectTypeId in memory.
+        var typesById = types.ToDictionary(t => t.Id);
+        if (types.Count > 0)
+        {
+            var typeIds = typesById.Keys.ToList();
+            IQueryable<ObjectMatchingRule> omrQuery = Repository.Database.ObjectMatchingRules
+                .Include(omr => omr.Sources)
+                    .ThenInclude(s => s.ConnectedSystemAttribute)
+                .Include(omr => omr.Sources)
+                    .ThenInclude(s => s.MetaverseAttribute)
+                .Include(omr => omr.TargetMetaverseAttribute)
+                .Include(omr => omr.MetaverseObjectType)
+                .Where(omr => omr.ConnectedSystemObjectTypeId != null
+                              && typeIds.Contains(omr.ConnectedSystemObjectTypeId.Value));
+
+            if (withChangeTracking)
+                omrQuery = omrQuery.AsTracking();
+
+            var matchingRules = await omrQuery.ToListAsync();
+
+            // Reset each type's matching-rule collection and re-bind from the query result so the
+            // wire-up is deterministic regardless of any stale navigation state.
+            foreach (var type in types)
+                type.ObjectMatchingRules.Clear();
+
+            foreach (var rule in matchingRules)
+            {
+                if (rule.ConnectedSystemObjectTypeId.HasValue &&
+                    typesById.TryGetValue(rule.ConnectedSystemObjectTypeId.Value, out var ot))
+                {
+                    ot.ObjectMatchingRules.Add(rule);
+                }
+            }
+        }
 
         // Partitions for this system, loaded once (shallow — containers are loaded in a separate
         // flat query and attached below). This replaces the previous 11-level deep partition+

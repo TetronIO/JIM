@@ -190,6 +190,81 @@ public class ConnectedSystemRepositoryCoreTests
 
     #endregion
 
+    #region GetConnectedSystemAsync — object matching rule wire-up
+
+    [Test]
+    public async Task GetConnectedSystemAsync_WiresMatchingRulesOntoOwningObjectTypesAsync()
+    {
+        // Arrange: two object types, one with a matching rule, the other without.
+        // Previously this graph was loaded via four repeated .Include(ot => ot.ObjectMatchingRules)
+        // branches inside an .AsSplitQuery() — four separate SQL queries per call. The refactor
+        // collapses that to a single query keyed by object type ids, and wires the rules up in
+        // memory. This test guards against a regression in the wire-up.
+        var cs = CreateConnectedSystem(id: 1);
+        _connectedSystemsData.Add(cs);
+
+        var userType = new ConnectedSystemObjectType
+        {
+            Id = 10,
+            ConnectedSystemId = 1,
+            Name = "User",
+            ObjectMatchingRules = new List<ObjectMatchingRule>()
+        };
+        var groupType = new ConnectedSystemObjectType
+        {
+            Id = 11,
+            ConnectedSystemId = 1,
+            Name = "Group",
+            ObjectMatchingRules = new List<ObjectMatchingRule>()
+        };
+        _objectTypesData.Add(userType);
+        _objectTypesData.Add(groupType);
+
+        var rule = new ObjectMatchingRule
+        {
+            Id = 100,
+            Order = 0,
+            ConnectedSystemObjectTypeId = 10,
+            Sources = new List<ObjectMatchingRuleSource>()
+        };
+        _matchingRulesData.Add(rule);
+
+        BuildMocks();
+
+        // Act
+        var result = await _repository.ConnectedSystems.GetConnectedSystemAsync(1);
+
+        // Assert: the rule is attached to the User object type, and the Group type has no rules.
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.ObjectTypes, Is.Not.Null);
+
+        var loadedUser = result.ObjectTypes!.Single(t => t.Id == 10);
+        var loadedGroup = result.ObjectTypes!.Single(t => t.Id == 11);
+
+        Assert.That(loadedUser.ObjectMatchingRules, Has.Count.EqualTo(1));
+        Assert.That(loadedUser.ObjectMatchingRules[0].Id, Is.EqualTo(100));
+        Assert.That(loadedGroup.ObjectMatchingRules, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetConnectedSystemAsync_WithNoObjectTypes_SkipsMatchingRulesQueryAsync()
+    {
+        // Arrange: a system with no object types at all. The matching-rules query must be
+        // skipped entirely so we do not issue a SELECT ... WHERE id IN () against an empty set.
+        var cs = CreateConnectedSystem(id: 1);
+        _connectedSystemsData.Add(cs);
+        BuildMocks();
+
+        // Act
+        var result = await _repository.ConnectedSystems.GetConnectedSystemAsync(1);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.ObjectTypes, Is.Empty);
+    }
+
+    #endregion
+
     #region BuildContainerTree helper
 
     [Test]
