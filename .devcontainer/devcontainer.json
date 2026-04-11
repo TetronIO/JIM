@@ -143,7 +143,14 @@
   "containerEnv": {
     "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
     "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
-    "ASPNETCORE_ENVIRONMENT": "Development"
+    "ASPNETCORE_ENVIRONMENT": "Development",
+    // Force Claude Code to use the distro ripgrep installed in the Dockerfile
+    // instead of its bundled vendor/ripgrep binary. The bundled arm64 binary
+    // assumes a 4K page size and SIGABRTs on 16K page-size kernels (Asahi
+    // Linux on Apple Silicon), crashing Claude Code at startup. Using the
+    // distro binary works on every host (Codespaces, Docker Desktop on
+    // Windows/macOS, native Linux) regardless of page size.
+    "USE_BUILTIN_RIPGREP": "0"
   },
   // Enable privileged mode for Docker-in-Docker
   "privileged": true,

@@ -27,9 +27,19 @@ RUN rm -f /etc/apt/sources.list.d/yarn.list 2>/dev/null; \
 # image only ships python3-minimal, which lacks pip/ensurepip - so pip install
 # during setup silently fails without this. (Regression from the bookworm->noble
 # base image bump; bookworm shipped pip by default.)
+#
+# Install ripgrep so Claude Code can use the distro binary instead of its
+# bundled vendor/ripgrep/arm64-linux/rg. The bundled binary assumes a 4K
+# memory page size and SIGABRTs on hosts running a 16K page-size kernel
+# (notably Asahi Linux on Apple Silicon, kernel suffix `+16k`), which crashes
+# Claude Code at startup when it scans for slash commands. Pairing this with
+# USE_BUILTIN_RIPGREP=0 in devcontainer.json forces every environment
+# (Codespaces, Docker Desktop on Windows/macOS, native Linux) onto the same
+# distro-built ripgrep, which is page-size agnostic.
 RUN apt-get install -y --no-install-recommends \
     socat \
     python3-pip \
+    ripgrep \
     libglib2.0-0 libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
     libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libpango-1.0-0 \
     libcairo2 libasound2t64 libxshmfence1 libxfixes3 \
