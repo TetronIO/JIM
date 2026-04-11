@@ -28,6 +28,14 @@ print_warning() {
     echo -e "${YELLOW}⚠${NC} $1"
 }
 
+# Accumulator for post-setup action items that need the user's attention.
+# Populated by individual steps (signing, gh auth, ...) when their own
+# automated setup can't complete - usually because the step needs
+# interactivity that postCreateCommand doesn't have (no TTY). Rendered as a
+# single banner at the end of the script so the user sees one consolidated
+# TODO list, not individual warnings scattered through the setup log.
+PENDING_ACTIONS=""
+
 # 1. Install .NET EF Core tools
 print_step "Installing .NET Entity Framework Core tools..."
 # Clean up any corrupted tool state first, then install fresh
@@ -162,14 +170,23 @@ if [ -x "$SIGNING_SCRIPT" ]; then
         print_success "Git commit signing configured"
     else
         # configure-signing.sh has already printed a detailed warning banner
-        # with recovery steps. Do not print another warning here (would be
-        # duplicate noise), but do leave a marker for setup completion to
-        # flag the overall state.
-        SIGNING_SETUP_FAILED=1
+        # with recovery steps. We don't print another warning inline (would be
+        # duplicate noise), but we DO record an action in PENDING_ACTIONS so
+        # the TODO is repeated in the final summary - in case the detailed
+        # banner scrolled off screen while the rest of setup ran.
+        PENDING_ACTIONS+="  ▶ Git commit signing is not configured.
+      Re-run: .devcontainer/configure-signing.sh
+      Until fixed, the pre-commit hook in .githooks/ will reject commits.
+
+"
     fi
 else
     print_warning "$SIGNING_SCRIPT not found or not executable - commit signing not configured"
-    SIGNING_SETUP_FAILED=1
+    PENDING_ACTIONS+="  ▶ Git commit signing script is missing or not executable:
+      $SIGNING_SCRIPT
+      Until fixed, the pre-commit hook in .githooks/ will reject commits.
+
+"
 fi
 
 # Install repo-local git hooks. Once configured, git uses .githooks/pre-commit
@@ -223,7 +240,35 @@ else
     print_warning "npm not found - skipping Claude Code CLI install"
 fi
 
-# 13. Display useful information
+# 13. Check gh CLI authentication
+# The gh CLI is used for PR/issue operations and other GitHub API calls.
+# It is NOT involved in git push/pull (SSH remote handles that) or commit
+# signing (SSH agent forward handles that), so a missing gh token is not
+# blocking for day-to-day dev - but it is blocking for gh pr create,
+# gh issue list, gh api, etc.
+#
+# On GitHub Codespaces this check passes automatically because Codespaces
+# injects GITHUB_TOKEN into the environment, which gh auth status honours.
+# On local devcontainers (Docker Desktop, Fedora, etc.) we can't prompt
+# interactively here - postCreateCommand runs without a TTY - so we record
+# an action for the final summary and let the user run the login command
+# themselves in the VS Code integrated terminal.
+print_step "Checking gh CLI authentication..."
+if ! command -v gh >/dev/null 2>&1; then
+    print_warning "gh CLI not found - skipping auth check"
+elif gh auth status >/dev/null 2>&1; then
+    print_success "gh CLI is authenticated"
+else
+    print_warning "gh CLI is not authenticated - gh commands will need login"
+    PENDING_ACTIONS+="  ▶ gh CLI is not authenticated. Run in the integrated terminal:
+      gh auth login --hostname github.com --git-protocol ssh --web
+      (Needed for: gh pr create, gh issue list, gh api, etc.
+       Not needed for git push/pull/commit - SSH remote handles those.)
+
+"
+fi
+
+# 14. Display useful information
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${GREEN}✓ JIM Development Environment Ready!${NC}"
@@ -285,3 +330,17 @@ echo "    2. Open: http://localhost:5200"
 echo "    3. Sign in with: admin / admin"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Render any pending action items as the final thing on screen, so they
+# stay near the top of the user's scrollback after the help banner above
+# has filled the terminal. Deliberately uses yellow (warning) rather than
+# red (error) because the container is still usable - these are follow-up
+# steps, not blockers.
+if [ -n "$PENDING_ACTIONS" ]; then
+    echo ""
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}⚠ Action required before the environment is fully ready${NC}"
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "$PENDING_ACTIONS"
+fi
