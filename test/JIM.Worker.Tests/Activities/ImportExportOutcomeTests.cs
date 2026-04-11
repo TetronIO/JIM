@@ -65,6 +65,7 @@ public class ImportExportOutcomeTests
         _activitiesData = TestUtilities.GetActivityData(fullImportRunProfile.RunType, fullImportRunProfile.Id);
 
         _mockDbContext = new Mock<JimDbContext>();
+        TestUtilities.SetUpEmptyConnectedSystemGraphMocks(_mockDbContext);
         _mockDbContext.Setup(m => m.Activities).Returns(_activitiesData.BuildMockDbSet().Object);
         _mockDbContext.Setup(m => m.ConnectedSystems).Returns(_connectedSystemsData.BuildMockDbSet().Object);
         _mockDbContext.Setup(m => m.ConnectedSystemObjectTypes).Returns(_objectTypesData.BuildMockDbSet().Object);

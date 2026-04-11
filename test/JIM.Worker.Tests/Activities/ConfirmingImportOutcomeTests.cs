@@ -72,6 +72,7 @@ public class ConfirmingImportOutcomeTests
     private void InitialiseMockDbContext()
     {
         _mockDbContext = new Mock<JimDbContext>();
+        TestUtilities.SetUpEmptyConnectedSystemGraphMocks(_mockDbContext);
 
         _mockDbContext.Setup(m => m.ConnectedSystems).Returns(_connectedSystemsData.BuildMockDbSet().Object);
         _mockDbContext.Setup(m => m.ConnectedSystemRunProfiles).Returns(_runProfilesData.BuildMockDbSet().Object);

@@ -115,7 +115,7 @@ public class SynchronisationControllerSchemaTests
             ConnectedSystem = connectedSystem
         };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
             .ReturnsAsync(objectType);
@@ -132,7 +132,7 @@ public class SynchronisationControllerSchemaTests
         var connectedSystemId = 999;
         var objectTypeId = 5;
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync((ConnectedSystem?)null);
 
         var request = new UpdateConnectedSystemObjectTypeRequest { Selected = true };
@@ -148,7 +148,7 @@ public class SynchronisationControllerSchemaTests
         var objectTypeId = 999;
         var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
             .ReturnsAsync((ConnectedSystemObjectType?)null);
@@ -174,7 +174,7 @@ public class SynchronisationControllerSchemaTests
             ConnectedSystem = differentSystem
         };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
             .ReturnsAsync(objectType);
@@ -200,7 +200,7 @@ public class SynchronisationControllerSchemaTests
             ConnectedSystem = connectedSystem
         };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
             .ReturnsAsync(objectType);
@@ -227,7 +227,7 @@ public class SynchronisationControllerSchemaTests
             ConnectedSystem = connectedSystem
         };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
             .ReturnsAsync(objectType);
@@ -254,7 +254,7 @@ public class SynchronisationControllerSchemaTests
             Attributes = new List<ConnectedSystemObjectTypeAttribute>()
         };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
             .ReturnsAsync(objectType);
@@ -295,7 +295,7 @@ public class SynchronisationControllerSchemaTests
             ConnectedSystemObjectType = objectType
         };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
             .ReturnsAsync(objectType);
@@ -315,7 +315,7 @@ public class SynchronisationControllerSchemaTests
         var objectTypeId = 5;
         var attributeId = 10;
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync((ConnectedSystem?)null);
 
         var request = new UpdateConnectedSystemAttributeRequest { Selected = true };
@@ -332,7 +332,7 @@ public class SynchronisationControllerSchemaTests
         var attributeId = 10;
         var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
             .ReturnsAsync((ConnectedSystemObjectType?)null);
@@ -358,7 +358,7 @@ public class SynchronisationControllerSchemaTests
             ConnectedSystem = connectedSystem
         };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
             .ReturnsAsync(objectType);
@@ -399,7 +399,7 @@ public class SynchronisationControllerSchemaTests
             ConnectedSystemObjectType = differentObjectType
         };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
             .ReturnsAsync(objectType);
@@ -434,7 +434,7 @@ public class SynchronisationControllerSchemaTests
             ConnectedSystemObjectType = objectType
         };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
             .ReturnsAsync(objectType);
@@ -470,7 +470,7 @@ public class SynchronisationControllerSchemaTests
             ConnectedSystemObjectType = objectType
         };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
             .ReturnsAsync(objectType);
@@ -505,7 +505,7 @@ public class SynchronisationControllerSchemaTests
             ConnectedSystemObjectType = objectType
         };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
             .ReturnsAsync(objectType);
@@ -543,7 +543,7 @@ public class SynchronisationControllerSchemaTests
             ConnectedSystemObjectType = objectType
         };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
             .ReturnsAsync(objectType);
@@ -578,7 +578,7 @@ public class SynchronisationControllerSchemaTests
     public async Task BulkUpdateAttributesAsync_WithNonExistentConnectedSystem_ReturnsNotFound()
     {
         var connectedSystemId = 999;
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync((ConnectedSystem?)null);
 
         var request = new BulkUpdateConnectedSystemAttributesRequest
@@ -600,7 +600,7 @@ public class SynchronisationControllerSchemaTests
         var objectTypeId = 999;
         var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
             .ReturnsAsync((ConnectedSystemObjectType?)null);
@@ -644,7 +644,7 @@ public class SynchronisationControllerSchemaTests
             Attributes = new List<ConnectedSystemObjectTypeAttribute> { attribute1, attribute2 }
         };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
             .ReturnsAsync(objectType);
@@ -687,7 +687,7 @@ public class SynchronisationControllerSchemaTests
             Attributes = new List<ConnectedSystemObjectTypeAttribute> { attribute1 }
         };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
             .ReturnsAsync(objectType);
@@ -744,7 +744,7 @@ public class SynchronisationControllerSchemaTests
             Attributes = new List<ConnectedSystemObjectTypeAttribute> { attribute1, attribute2, attribute3 }
         };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
             .ReturnsAsync(objectType);
@@ -787,7 +787,7 @@ public class SynchronisationControllerSchemaTests
             Attributes = new List<ConnectedSystemObjectTypeAttribute> { attribute1 }
         };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
             .ReturnsAsync(objectType);
@@ -833,7 +833,7 @@ public class SynchronisationControllerSchemaTests
             Attributes = new List<ConnectedSystemObjectTypeAttribute> { attribute1 }
         };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(connectedSystemId))
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
             .ReturnsAsync(objectType);

@@ -830,7 +830,7 @@ public class ConnectedSystemDeletionTests
             Status = ConnectedSystemStatus.Active
         };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, It.IsAny<bool>())).Returns(Task.CompletedTask);
 
         // Act
@@ -851,7 +851,7 @@ public class ConnectedSystemDeletionTests
             Status = ConnectedSystemStatus.Deleting
         };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
 
         // Act & Assert
         var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
@@ -864,7 +864,7 @@ public class ConnectedSystemDeletionTests
     public void ClearConnectedSystemObjectsAsync_WithNonExistentSystem_ThrowsException()
     {
         // Arrange
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(999)).ReturnsAsync((ConnectedSystem?)null);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(999, It.IsAny<bool>())).ReturnsAsync((ConnectedSystem?)null);
 
         // Act & Assert
         var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
@@ -884,7 +884,7 @@ public class ConnectedSystemDeletionTests
             Status = ConnectedSystemStatus.Active
         };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, true)).Returns(Task.CompletedTask);
 
         // Act
@@ -905,7 +905,7 @@ public class ConnectedSystemDeletionTests
             Status = ConnectedSystemStatus.Active
         };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, false)).Returns(Task.CompletedTask);
 
         // Act

@@ -114,8 +114,8 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
     {
         _logger.LogDebug("Getting change history count for connected system {ConnectedSystemId}", connectedSystemId);
 
-        // Verify connected system exists
-        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Verify connected system exists (Core retrieval — we only need Id and Name for the response).
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
         {
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));

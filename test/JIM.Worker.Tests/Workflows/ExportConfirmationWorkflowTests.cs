@@ -75,6 +75,7 @@ public class ExportConfirmationWorkflowTests
 
         // Mock entity framework calls
         MockJimDbContext = new Mock<JimDbContext>();
+        TestUtilities.SetUpEmptyConnectedSystemGraphMocks(MockJimDbContext);
         MockJimDbContext.Setup(m => m.ConnectedSystemObjectTypes).Returns(MockDbSetConnectedSystemObjectTypes.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(MockDbSetConnectedSystemObjects.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystems).Returns(MockDbSetConnectedSystems.Object);

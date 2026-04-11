@@ -111,10 +111,10 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
 
         if (request.DeletionTriggerConnectedSystemIds != null)
         {
-            // Validate that the connected system IDs exist
+            // Validate that the connected system IDs exist (Core retrieval — we only need existence).
             foreach (var connectedSystemId in request.DeletionTriggerConnectedSystemIds)
             {
-                var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+                var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
                 if (connectedSystem == null)
                     return BadRequest(ApiErrorResponse.BadRequest($"Connected system with ID {connectedSystemId} not found."));
             }

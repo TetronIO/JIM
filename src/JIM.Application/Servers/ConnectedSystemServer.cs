@@ -89,6 +89,16 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(id, withChangeTracking);
     }
 
+    /// <summary>
+    /// Loads a lightweight Connected System containing only <c>ConnectorDefinition</c>, <c>SettingValues</c>,
+    /// and shallow <c>RunProfiles</c>. Use for API existence checks, write-path lookups, and any other caller
+    /// that does not need the full schema, partition, or matching-rule graph.
+    /// </summary>
+    public async Task<ConnectedSystem?> GetConnectedSystemCoreAsync(int id, bool withChangeTracking = false)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(id, withChangeTracking);
+    }
+
     public async Task<ConnectedSystemHeader?> GetConnectedSystemHeaderAsync(int id)
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemHeaderAsync(id);
@@ -3370,8 +3380,9 @@ public class ConnectedSystemServer
         Log.Information("ClearConnectedSystemObjectsAsync: Starting for Connected System {Id}, deleteChangeHistory={DeleteHistory}",
             connectedSystemId, deleteChangeHistory);
 
-        // Check for concurrency - don't clear if system is being deleted
-        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Check for concurrency — don't clear if the system is being deleted. We only need the
+        // Status scalar here, so use the lightweight Core retrieval variant.
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
         {
             Log.Warning("ClearConnectedSystemObjectsAsync: Connected System {Id} not found", connectedSystemId);

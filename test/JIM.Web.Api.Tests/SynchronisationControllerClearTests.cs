@@ -94,7 +94,7 @@ public class SynchronisationControllerClearTests
             Status = ConnectedSystemStatus.Active
         };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, true)).Returns(Task.CompletedTask);
 
         // Act
@@ -116,7 +116,7 @@ public class SynchronisationControllerClearTests
             Status = ConnectedSystemStatus.Active
         };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, false)).Returns(Task.CompletedTask);
 
         // Act
@@ -138,7 +138,7 @@ public class SynchronisationControllerClearTests
             Status = ConnectedSystemStatus.Active
         };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockConnectedSystemRepo.Setup(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, true)).Returns(Task.CompletedTask);
 
         // Act — call without specifying deleteChangeHistory, should default to true
@@ -153,7 +153,7 @@ public class SynchronisationControllerClearTests
     public async Task ClearConnectorSpaceAsync_WithNonExistentSystem_ReturnsNotFoundAsync()
     {
         // Arrange
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(999)).ReturnsAsync((ConnectedSystem?)null);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(999, It.IsAny<bool>())).ReturnsAsync((ConnectedSystem?)null);
 
         // Act
         var result = await _controller.ClearConnectorSpaceAsync(999);
@@ -173,7 +173,7 @@ public class SynchronisationControllerClearTests
             Status = ConnectedSystemStatus.Deleting
         };
 
-        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
 
         // Act
         var result = await _controller.ClearConnectorSpaceAsync(1);

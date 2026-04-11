@@ -86,6 +86,7 @@ public class ImportUpdateObjectSvaTests
 
         // mock entity framework calls to use our data sources above
         MockJimDbContext = new Mock<JimDbContext>();
+        TestUtilities.SetUpEmptyConnectedSystemGraphMocks(MockJimDbContext);
         MockJimDbContext.Setup(m => m.Activities).Returns(MockDbSetActivities.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystems).Returns(MockDbSetConnectedSystems.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemObjectTypes).Returns(MockDbSetConnectedSystemObjectTypes.Object);
