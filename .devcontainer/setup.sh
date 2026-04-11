@@ -36,6 +36,43 @@ print_warning() {
 # TODO list, not individual warnings scattered through the setup log.
 PENDING_ACTIONS=""
 
+# Check Docker daemon health.
+# The docker-in-docker feature starts its own dockerd inside this container at
+# postCreate time. On some native Linux hosts (notably Fedora and Asahi Linux,
+# where the iptable_nat kernel module isn't loaded by default), dockerd crashes
+# during network init and leaves /var/run/docker.sock as a dead socket file.
+# All docker-using commands (jim-db, jim-build, jim-stack, ...) then fail with
+# "Cannot connect to the Docker daemon" until the user runs modprobe on the
+# host and rebuilds the container. We detect that case here and surface the
+# fix in the final summary banner so the user isn't left hunting through
+# dockerd.log to figure out what went wrong. This is a no-op on Docker Desktop
+# (macOS/Windows) and Codespaces, which preload the required kernel modules.
+print_step "Checking Docker daemon health..."
+if ! command -v docker >/dev/null 2>&1; then
+    print_warning "docker CLI not found - skipping daemon health check"
+elif docker info >/dev/null 2>&1; then
+    print_success "Docker daemon is running"
+else
+    DOCKER_ERR_HINT=""
+    if [ -r /tmp/dockerd.log ] && grep -qi "iptable" /tmp/dockerd.log 2>/dev/null; then
+        DOCKER_ERR_HINT=" (host kernel iptable_nat module missing)"
+    fi
+    print_warning "Docker daemon is not responding${DOCKER_ERR_HINT}"
+    PENDING_ACTIONS+="  ▶ Docker daemon inside the devcontainer is not running.
+      This is almost always because the host kernel is missing the iptable_nat
+      module. On the HOST (not inside this container), run:
+
+        sudo modprobe iptable_nat
+        echo iptable_nat | sudo tee /etc/modules-load.d/jim-devcontainer.conf
+
+      Then rebuild the devcontainer (F1 -> Dev Containers: Rebuild Container).
+      Until fixed, jim-db / jim-build / jim-stack will fail with
+      \"Cannot connect to the Docker daemon\".
+      See .devcontainer/README.md for background.
+
+"
+fi
+
 # 1. Install .NET EF Core tools
 print_step "Installing .NET Entity Framework Core tools..."
 # Clean up any corrupted tool state first, then install fresh

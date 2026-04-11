@@ -14,11 +14,36 @@ This directory contains the configuration for GitHub Codespaces and VS Code Dev 
 
 ### Using VS Code Dev Containers (Local)
 
-1. Install Docker Desktop
+1. Install Docker Desktop (macOS/Windows) or Docker Engine (Linux)
 2. Install VS Code extension: "Dev Containers"
 3. Open JIM repository in VS Code
 4. Press `F1` → "Dev Containers: Reopen in Container"
 5. Wait for container to build and setup to complete
+
+### Native Linux Host Prerequisites
+
+If you're running the devcontainer on a **native Linux host** (as opposed to Docker Desktop on macOS/Windows or GitHub Codespaces), the host kernel must have the `iptable_nat` module loaded. Docker-in-Docker uses it to set up its internal container network, and on some distributions (including Fedora and Asahi Linux) the module isn't loaded by default. Without it, the inner `dockerd` crashes at startup and every `jim-*` command that talks to Docker fails with `Cannot connect to the Docker daemon`.
+
+Before opening the devcontainer, run this **on the host** (not inside any container):
+
+```bash
+# Load now
+sudo modprobe iptable_nat
+
+# Persist across host reboots
+echo iptable_nat | sudo tee /etc/modules-load.d/jim-devcontainer.conf
+```
+
+Verify:
+
+```bash
+lsmod | grep iptable_nat
+sudo iptables -t nat -L >/dev/null && echo "nat table OK"
+```
+
+Docker Desktop on macOS/Windows and GitHub Codespaces already have this configured; only native Linux hosts need the step.
+
+If you open the devcontainer without doing this first, `setup.sh` detects the dead dockerd and surfaces the fix at the end of its output. The container is still usable for `dotnet build`/`dotnet test` in that state; you just won't be able to run anything that needs Docker until you apply the fix and rebuild the container.
 
 ## ✨ What's Included
 
@@ -306,6 +331,24 @@ Edit `devcontainer.json`:
 ```
 
 ## 🆘 Troubleshooting
+
+### "Cannot connect to the Docker daemon" (native Linux hosts)
+
+Symptom: `jim-db`, `jim-build`, `jim-stack`, or any `docker` command fails with:
+
+```
+Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?
+```
+
+On a native Linux host this almost always means the inner `dockerd` (started by the docker-in-docker feature) failed to initialise because the host kernel is missing the `iptable_nat` module. Confirm by checking the inner daemon's log from inside the devcontainer:
+
+```bash
+sudo grep -i iptable /tmp/dockerd.log
+```
+
+If you see `Table does not exist (do you need to insmod?)`, apply the fix from [Native Linux Host Prerequisites](#native-linux-host-prerequisites) on the host, then rebuild the devcontainer (`F1` → **Dev Containers: Rebuild Container**).
+
+This only affects native Linux hosts. Docker Desktop on macOS/Windows and GitHub Codespaces preload the required kernel modules.
 
 ### Database Won't Start
 
