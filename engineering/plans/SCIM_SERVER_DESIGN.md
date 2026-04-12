@@ -288,7 +288,7 @@ Federated Identity Credentials (FIC) enable **secretless machine-to-machine auth
 +-------------------+       +-------------------+       +-----------+
 | SCIM Client       |       | Client's IdP      |       | JIM       |
 | (e.g. HR system   | ----> | (e.g. Keycloak,   | ----> | SCIM      |
-|  on Kubernetes)   |       |  K8s OIDC issuer,  |       | Server    |
+|  on Kubernetes)   |       |  K8s OIDC issuer, |       | Server    |
 +-------------------+       |  SPIRE, etc.)     |       +-----------+
                             +-------------------+
 
