@@ -282,6 +282,20 @@ public class Activity
     /// </summary>
     public DateTime? DeletedRecordsToDate { get; set; }
 
+    // -----------------------------------------------------------------------------------------------------------------
+    // clear connected system stats (for ClearConnectedSystem activities)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// For ClearConnectedSystem activities: Count of pending exports removed.
+    /// </summary>
+    public int? ClearedPendingExportCount { get; set; }
+
+    /// <summary>
+    /// For ClearConnectedSystem activities: Count of connected system objects removed.
+    /// </summary>
+    public int? ClearedConnectedSystemObjectCount { get; set; }
+
     // results:
     // what would be useful here is to capture two levels of stats, depending on system settings:
     // - result item with operation type (create/update/delete) and link to the Metaverse Object

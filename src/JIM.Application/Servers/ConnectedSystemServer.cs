@@ -3375,7 +3375,7 @@ public class ConnectedSystemServer
     /// <param name="connectedSystemId">The unique identifier for the connected system to clear.</param>
     /// <param name="deleteChangeHistory">Whether to delete change history for the cleared CSOs. Default: true (recommended for re-import scenarios).</param>
     /// <exception cref="InvalidOperationException">Thrown if the Connected System is being deleted.</exception>
-    public async Task ClearConnectedSystemObjectsAsync(int connectedSystemId, bool deleteChangeHistory = true)
+    public async Task<ClearConnectedSystemResult> ClearConnectedSystemObjectsAsync(int connectedSystemId, bool deleteChangeHistory = true)
     {
         Log.Information("ClearConnectedSystemObjectsAsync: Starting for Connected System {Id}, deleteChangeHistory={DeleteHistory}",
             connectedSystemId, deleteChangeHistory);
@@ -3396,11 +3396,12 @@ public class ConnectedSystemServer
         }
 
         // Use the shared method that handles all CSO dependencies properly.
-        await Application.Repository.ConnectedSystems.DeleteAllConnectedSystemObjectsAndDependenciesAsync(connectedSystemId, deleteChangeHistory);
+        var result = await Application.Repository.ConnectedSystems.DeleteAllConnectedSystemObjectsAndDependenciesAsync(connectedSystemId, deleteChangeHistory);
 
-        Log.Information("ClearConnectedSystemObjectsAsync: Completed for Connected System {Id}", connectedSystemId);
+        Log.Information("ClearConnectedSystemObjectsAsync: Completed for Connected System {Id}. Removed {PendingExports} pending exports, {Csos} CSOs",
+            connectedSystemId, result.PendingExportsRemoved, result.ConnectedSystemObjectsRemoved);
 
-        // todo: think about returning a status to the UI. perhaps return the job id and allow the job status to be polled/streamed?
+        return result;
     }
         
     /// <summary>

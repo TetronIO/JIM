@@ -3989,10 +3989,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// Shared method for deleting CSOs and their immediate dependencies.
     /// Used by both ClearConnectedSystemObjects and DeleteConnectedSystem.
     /// </summary>
-    public async Task DeleteAllConnectedSystemObjectsAndDependenciesAsync(int connectedSystemId, bool deleteChangeHistory)
+    public async Task<ClearConnectedSystemResult> DeleteAllConnectedSystemObjectsAndDependenciesAsync(int connectedSystemId, bool deleteChangeHistory)
     {
         Log.Information("DeleteAllConnectedSystemObjectsAndDependenciesAsync: Starting for Connected System {Id}, deleteChangeHistory={DeleteHistory}",
             connectedSystemId, deleteChangeHistory);
+
+        // Count pending exports and CSOs before deletion so we can report stats
+        var pendingExportCount = await Repository.Database.PendingExports
+            .CountAsync(pe => pe.ConnectedSystemId == connectedSystemId);
+        var csoCount = await Repository.Database.ConnectedSystemObjects
+            .CountAsync(cso => cso.ConnectedSystemId == connectedSystemId);
 
         // 1. Delete PendingExportAttributeValueChanges (child of PendingExport)
         await Repository.Database.Database.ExecuteSqlRawAsync(
@@ -4067,7 +4073,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             @"DELETE FROM ""ConnectedSystemObjects"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
-        Log.Information("DeleteAllConnectedSystemObjectsAndDependenciesAsync: Completed for Connected System {Id}", connectedSystemId);
+        Log.Information("DeleteAllConnectedSystemObjectsAndDependenciesAsync: Completed for Connected System {Id}. Removed {PendingExports} pending exports, {Csos} CSOs",
+            connectedSystemId, pendingExportCount, csoCount);
+
+        return new ClearConnectedSystemResult
+        {
+            PendingExportsRemoved = pendingExportCount,
+            ConnectedSystemObjectsRemoved = csoCount
+        };
     }
 
     public async Task DeleteConnectedSystemAsync(int connectedSystemId, bool deleteChangeHistory = false)

@@ -820,7 +820,8 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="connectedSystemId">The ID of the Connected System.</param>
     /// <param name="deleteChangeHistory">If true, deletes ConnectedSystemObjectChanges. If false, nulls the CSO FK.</param>
-    Task DeleteAllConnectedSystemObjectsAndDependenciesAsync(int connectedSystemId, bool deleteChangeHistory);
+    /// <returns>Counts of pending exports and connected system objects removed.</returns>
+    Task<ClearConnectedSystemResult> DeleteAllConnectedSystemObjectsAndDependenciesAsync(int connectedSystemId, bool deleteChangeHistory);
 
     /// <summary>
     /// Deletes a Connected System and all its related data using bulk SQL operations for performance.

@@ -259,6 +259,38 @@
         </MudStack>
     }
 
+    @if (_activity.TargetType == ActivityTargetType.ConnectedSystem && _activity.TargetOperationType == ActivityTargetOperationType.Clear)
+    {
+        var pendingExportCount = _activity.ClearedPendingExportCount ?? 0;
+        var csoCount = _activity.ClearedConnectedSystemObjectCount ?? 0;
+        var totalRemoved = pendingExportCount + csoCount;
+
+        <MudText Typo="Typo.h5" Class="mt-5">Clear Summary</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2 mb-4">
+            All connector space objects and pending exports were removed from this connected system.
+        </MudText>
+
+        <MudStack Row="true" Class="mt-2 mb-5 flex-wrap" Spacing="3">
+            @* Total card *@
+            <MudPaper Class="pa-4" Outlined="true" Style="min-width: 120px;">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Total Removed</MudText>
+                <MudText Typo="Typo.h4">@totalRemoved.ToString("N0")</MudText>
+            </MudPaper>
+
+            @* CSOs Removed *@
+            <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Red.Default}; min-width: 120px;")">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">CSOs Removed</MudText>
+                <MudText Typo="Typo.h4" Color="Color.Error">@csoCount.ToString("N0")</MudText>
+            </MudPaper>
+
+            @* Pending Exports Removed *@
+            <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Red.Default}; min-width: 120px;")">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Pending Exports Removed</MudText>
+                <MudText Typo="Typo.h4" Color="Color.Error">@pendingExportCount.ToString("N0")</MudText>
+            </MudPaper>
+        </MudStack>
+    }
+
     @if (_activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && _activity.TargetOperationType == ActivityTargetOperationType.Execute && _initialisationComplete && _preferencesLoaded)
     {
         @if (_activityRunProfileExecutionStats != null)
