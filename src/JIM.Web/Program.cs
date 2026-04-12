@@ -205,6 +205,7 @@ try
             // With MapInboundClaims disabled, Identity.Name won't resolve automatically because
             // .NET looks for the legacy XML URI by default. Point it at the standard OIDC claim.
             options.TokenValidationParameters.NameClaimType = "name";
+            options.TokenValidationParameters.RoleClaimType = Constants.BuiltInRoles.RoleClaimType;
 
             // By default, the ASP.NET Core OpenIdConnect handler drops a number of "protocol" claims
             // (iss, aud, azp, acr, auth_time, ...) after it has validated them, so they never reach
@@ -274,6 +275,8 @@ try
 
             // Preserve standard OIDC claim names for API requests
             options.MapInboundClaims = false;
+
+            options.TokenValidationParameters.RoleClaimType = Constants.BuiltInRoles.RoleClaimType;
         });
 
     // setup authorisation policies

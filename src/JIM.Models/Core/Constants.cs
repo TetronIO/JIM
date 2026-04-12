@@ -157,7 +157,7 @@ public static class Constants
     {
         public static string Administrator => "Administrator";
         public static string User => "User";
-        public static string RoleClaimType => "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
+        public static string RoleClaimType => "role";
     }
 
     public static class BuiltInExampleDataSets
