@@ -33,7 +33,7 @@
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.Versions ?? string.Empty)"><MudText Typo="Typo.button">Version(s)</MudText></MudTableSortLabel></MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd DataLabel="Name"><MudLink Href="@("/admin/connected-systems/connectors/"+context.Id)">@context.Name</MudLink></MudTd>
+        <MudTd DataLabel="Name" Class="jim-nowrap"><MudLink Href="@("/admin/connected-systems/connectors/"+context.Id)">@context.Name</MudLink></MudTd>
         <MudTd DataLabel="Description">@context.Description</MudTd>
         <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
         <MudTd DataLabel="In-use?">@(context.InUse ? "Yes" : "No")</MudTd>
