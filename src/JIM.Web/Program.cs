@@ -205,6 +205,7 @@ try
             // With MapInboundClaims disabled, Identity.Name won't resolve automatically because
             // .NET looks for the legacy XML URI by default. Point it at the standard OIDC claim.
             options.TokenValidationParameters.NameClaimType = "name";
+            options.TokenValidationParameters.RoleClaimType = Constants.BuiltInRoles.RoleClaimType;
 
             // By default, the ASP.NET Core OpenIdConnect handler drops a number of "protocol" claims
             // (iss, aud, azp, acr, auth_time, ...) after it has validated them, so they never reach
@@ -274,6 +275,8 @@ try
 
             // Preserve standard OIDC claim names for API requests
             options.MapInboundClaims = false;
+
+            options.TokenValidationParameters.RoleClaimType = Constants.BuiltInRoles.RoleClaimType;
         });
 
     // setup authorisation policies
@@ -721,7 +724,7 @@ static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
         userRoleClaims.Add(new Claim(Constants.BuiltInClaims.MetaverseObjectId, user.Id.ToString()));
 
         // the new JIM-specific identity is ready, now add it to the ASP.NET identity so it can be easily retrieved later.
-        var jimIdentity = new ClaimsIdentity(userRoleClaims) { Label = "JIM.Web" };
+        var jimIdentity = new ClaimsIdentity(userRoleClaims, authenticationType: null, nameType: null, roleType: Constants.BuiltInRoles.RoleClaimType) { Label = "JIM.Web" };
         context.Principal.AddIdentity(jimIdentity);
 
         // now see if we can supplement the JIM identity with any supplied from the IdP to more fully populate the user.

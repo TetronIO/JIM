@@ -104,7 +104,7 @@ public class JimRoleEnrichmentMiddleware(RequestDelegate next)
             roleClaims.Add(new Claim(Constants.BuiltInClaims.MetaverseObjectId, user.Id.ToString()));
 
             // Create a new identity with JIM claims and add it to the principal
-            var jimIdentity = new ClaimsIdentity(roleClaims) { Label = "JIM.Web.Api" };
+            var jimIdentity = new ClaimsIdentity(roleClaims, authenticationType: null, nameType: null, roleType: Constants.BuiltInRoles.RoleClaimType) { Label = "JIM.Web.Api" };
             context.User.AddIdentity(jimIdentity);
 
             Log.Debug("JimRoleEnrichmentMiddleware: Enriched user with {RoleCount} roles: {Roles}",
