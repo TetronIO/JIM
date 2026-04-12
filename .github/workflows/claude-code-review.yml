@@ -12,7 +12,6 @@ on:
 
 jobs:
   claude-review:
-    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -21,12 +20,22 @@ jobs:
       id-token: write
 
     steps:
+      # Dependabot PRs skip the automated review but the job still reports
+      # success so the required status check is satisfied. Without this,
+      # a job-level `if` skip causes the check to be absent/failed, which
+      # blocks merge when claude-review is a required check.
+      - name: Skip review for Dependabot
+        if: github.actor == 'dependabot[bot]'
+        run: echo "Skipping automated review for Dependabot PRs"
+
       - name: Checkout repository
+        if: github.actor != 'dependabot[bot]'
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
         with:
           fetch-depth: 1
 
       - name: Run Claude Code Review
+        if: github.actor != 'dependabot[bot]'
         id: claude-review
         uses: anthropics/claude-code-action@b47fd721da662d48c5680e154ad16a73ed74d2e0  # v1.0.93
         with:
