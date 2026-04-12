@@ -57,9 +57,10 @@ This is a known and intentional limitation of digest-pinned base images. It is n
 
 Tetron currently runs small, focused development teams on JIM. The security and compliance controls described in this document are designed to provide consistent baseline enforcement at any team size, with additional human-review layers that can be added as development capacity grows.
 
-- **Automated baseline review**: every pull request is reviewed by an automated code review job (`claude-review` in `.github/workflows/claude-code-review.yml`) before it can be merged, regardless of author. This provides a consistent independent review across all changes.
-- **CI-enforced quality gates**: build and test success, CodeQL static analysis, container base image vulnerability scanning, and dependency scanning are all enforced at commit time via the CI pipeline. These gates operate identically whether the team has one developer or many.
-- **Signed commits**: all contributors sign their commits via the devcontainer's automated signing setup. The pre-commit hook at `.githooks/pre-commit` enforces this locally, and branch protection will enforce it server-side once rollout is complete. This provides cryptographic attribution for every change that enters `main`.
+- **Branch protection ruleset ("Protect Main")**: all changes to `main` must land via a pull request, all required status checks must pass before merge, branches must be up to date with `main`, and all review comment threads must be resolved. Direct pushes and force-pushes are blocked. See [`DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md) section 7 for the full ruleset specification.
+- **Automated baseline review**: every pull request is reviewed by an automated code review job (`claude-review` in `.github/workflows/claude-code-review.yml`) before it can be merged, regardless of author. This is a required status check in the branch protection ruleset, providing a consistent independent review across all changes.
+- **CI-enforced quality gates**: build and test success, CodeQL static analysis, container base image vulnerability scanning, and dependency scanning are all required status checks in the branch protection ruleset. These gates are machine-enforced (not advisory) and operate identically whether the team has one developer or many.
+- **Signed commits**: all contributors sign their commits via the devcontainer's automated signing setup. The pre-commit hook at `.githooks/pre-commit` enforces this locally. Server-side enforcement via `required_signatures` in the branch protection ruleset is planned once all contributor environments are reliably producing signed commits.
 - **Scalable human review**: additional reviewer requirements can be layered onto the branch protection ruleset as team composition supports them. The current configuration is designed to extend cleanly; no restructuring is needed to add reviewer requirements.
 
 ### Commit provenance and author attribution
@@ -137,7 +138,7 @@ The UK Government's Software Security Code of Practice defines 14 principles acr
 
 | Principle | Requirement | JIM Alignment | Status |
 |-----------|-------------|---------------|--------|
-| 5 | Protect the build environment | GitHub Actions CI/CD with every action pinned by immutable 40-character commit SHA (not mutable version tags), preventing tag-rewrite supply chain attacks. Dependabot tracks SHA-pinned updates. See DEVELOPER_GUIDE.md "GitHub Actions" for the pinning procedure. | Aligned |
+| 5 | Protect the build environment | GitHub Actions CI/CD with every action pinned by immutable 40-character commit SHA (not mutable version tags), preventing tag-rewrite supply chain attacks. Dependabot tracks SHA-pinned updates. All CI checks are required status checks in the branch protection ruleset, ensuring the pipeline cannot be bypassed. See DEVELOPER_GUIDE.md "GitHub Actions" and "Branch Protection Ruleset" sections. | Aligned |
 | 6 | Secure the development tools and processes | Devcontainer with controlled toolchain, dependency pinning | Aligned |
 | 7 | Manage and secure third-party components | Dependency review policy, SBOM generation. Container base image vulnerability scanning runs on every push and PR with results surfaced to GitHub code scanning (SARIF). Digest-pinning of production base images is enforced by CI rather than by convention. | Aligned |
 
@@ -168,7 +169,7 @@ The UK Government's Software Security Code of Practice defines 14 principles acr
 | Keep your security knowledge sharp | OWASP Top 10 awareness documented, security testing requirements | Aligned |
 | Produce clean and maintainable code | Code style conventions, one class per file, async patterns | Aligned |
 | Secure your development environment | Devcontainer with controlled toolchain, secrets via .env (gitignored) | Aligned |
-| Protect your code repository | GitHub with branch protection, no secrets in code | Aligned |
+| Protect your code repository | GitHub with branch protection ruleset enforcing: required PRs, required status checks (build, test, CodeQL, vulnerability scanning, automated code review), up-to-date branches, conversation resolution, anti-deletion, and anti-force-push. No secrets in code. See DEVELOPER_GUIDE.md section 7. | Aligned |
 | Secure the build and deployment pipeline | GitHub Actions CI/CD, SHA256 checksums on releases | Aligned |
 | Continually test your security | Security test requirements in CLAUDE.md, input validation tests | Aligned |
 | Plan for security flaws | SECURITY.md vulnerability disclosure, fast/hard failure philosophy | Aligned |

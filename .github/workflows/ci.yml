@@ -200,3 +200,25 @@ jobs:
       with:
         sarif_file: trivy-results.sarif
         category: trivy-base-image-${{ matrix.dockerfile }}-line${{ matrix.line }}
+
+  scan-base-images-summary:
+    # Stable-name gate for the dynamic scan-base-images matrix. Matrix leg
+    # names embed image digests that change with every base image update,
+    # making them unsuitable as required status checks. This job succeeds
+    # only when all matrix legs succeed, providing a single stable check
+    # name ("scan-base-images-summary") for the branch protection ruleset.
+    if: always()
+    needs: [discover-base-images, scan-base-images]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check matrix results
+      run: |
+        if [ "${{ needs.discover-base-images.result }}" != "success" ]; then
+          echo "discover-base-images failed or was cancelled"
+          exit 1
+        fi
+        if [ "${{ needs.scan-base-images.result }}" != "success" ]; then
+          echo "One or more scan-base-images matrix legs failed"
+          exit 1
+        fi
+        echo "All base image scans passed"

@@ -434,7 +434,7 @@ All commits to JIM must be cryptographically signed. Signed commits are the foun
 **Policy:**
 - Every commit on every branch must be signed.
 - The signing key must be one of: an SSH key registered as a *signing key* on GitHub, a GPG key registered on GitHub, or (inside a Codespace) the built-in `gh-gpgsign` helper.
-- The pre-commit hook at `.githooks/pre-commit` enforces this at commit time. Branch protection on `main` will also enforce `required_signatures` once all developer environments are producing signed commits reliably.
+- The pre-commit hook at `.githooks/pre-commit` enforces this at commit time. The branch protection ruleset on `main` (see section 7 below) will additionally enforce `required_signatures` server-side once all developer environments are producing signed commits reliably.
 
 **Setup in a devcontainer (automated):**
 
@@ -490,7 +490,7 @@ The hook at `.githooks/pre-commit` runs automatically before every `git commit` 
 2. A signing mechanism is currently available (SSH agent with keys, or `gh-gpgsign` in Codespaces)
 3. `user.signingkey` is set (for SSH signing)
 
-If any check fails, the hook prints a prominent error with recovery steps and refuses the commit. To bypass in a genuine emergency: `git commit --no-verify`. This should not become a habit; once branch protection enables `required_signatures`, unsigned commits will be rejected at push time regardless.
+If any check fails, the hook prints a prominent error with recovery steps and refuses the commit. To bypass in a genuine emergency: `git commit --no-verify`. This should not become a habit; once the branch protection ruleset enables `required_signatures` (see section 7 below), unsigned commits will be rejected at push time regardless.
 
 **Working outside the devcontainer:**
 
@@ -503,6 +503,41 @@ git config --global user.signingkey "key::$(ssh-add -L | head -1)"
 git config --global commit.gpgsign true
 git config --global tag.gpgsign true
 ```
+
+### 7. Branch Protection Ruleset
+
+The `main` branch is protected by the **"Protect Main"** repository ruleset, which enforces the quality and supply chain gates that CI provides. The ruleset ensures that CI is load-bearing: checks cannot be bypassed by merging a red PR or pushing directly to `main`.
+
+**Enforced rules:**
+
+| Rule | Purpose |
+|------|---------|
+| **Require pull request** | All changes to `main` must land via a PR; direct pushes are blocked. Even emergency fixes go through a PR. |
+| **Require status checks to pass** | Every required CI check must pass before merge. See the check list below. |
+| **Branches must be up to date** | PRs must be rebased onto the latest `main` before merge, so CI results reflect the actual merge state. |
+| **Require conversation resolution** | All review comment threads must be resolved before merge. |
+| **No deletion** | `main` cannot be deleted. |
+| **No force-push** | History on `main` cannot be rewritten. |
+
+**Required status checks:**
+
+| Check name | Source | What it validates |
+|------------|--------|-------------------|
+| `build-and-test` | CI workflow | .NET build, .NET tests, PowerShell Pester tests |
+| `discover-base-images` | CI workflow | Production Dockerfile digest-pinning policy |
+| `scan-base-images-summary` | CI workflow | All base image vulnerability scans passed (aggregates dynamic matrix legs) |
+| `Analyze (actions)` | CodeQL default setup | Static analysis of GitHub Actions workflows |
+| `Analyze (csharp)` | CodeQL default setup | Static analysis of C# code |
+| `Analyze (javascript-typescript)` | CodeQL default setup | Static analysis of JavaScript/TypeScript code |
+| `claude-review` | Claude Code Review workflow | Automated code review on every PR |
+
+**Why `scan-base-images-summary` exists:** the `scan-base-images` job uses a dynamic matrix whose leg names embed image digests (e.g. `scan-base-images (src/JIM.Web/Dockerfile, 10, mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:...)`). These names change with every base image update, making them unsuitable as required status checks. The summary job aggregates all matrix legs into a single stable check name.
+
+**Human review:** the required approving review count is currently set to zero; the automated `claude-review` check provides a consistent independent review baseline across all PRs. As the team grows, human reviewer requirements will be layered onto the ruleset without restructuring.
+
+**Signed commits (planned):** server-side enforcement of signed commits via `required_signatures` is deferred until all contributor environments are reliably producing signed commits. See section 6 above for the current local enforcement via pre-commit hook.
+
+**Bypass actors:** none. No user or automation can bypass the ruleset.
 
 ## Testing Expectations
 
