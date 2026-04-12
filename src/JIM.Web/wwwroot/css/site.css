@@ -245,7 +245,7 @@ html[lang] .jim-expansion-panel .mud-table .mud-table-pagination .mud-table-pagi
     background-color: var(--jim-inner-surface, transparent);
 }
 
-html[lang] .jim-expansion-panel .mud-table .mud-table-toolbar .mud-input {
+html[lang] .jim-expansion-panel .mud-table .mud-table-toolbar {
     background-color: var(--mud-palette-surface, #ffffff);
 }
 
@@ -381,8 +381,8 @@ html[lang] .mud-paper .mud-table .mud-table-pagination .mud-table-pagination-too
     background-color: var(--jim-inner-surface, transparent) !important;
 }
 
-/* Search inputs in nested table toolbars use the paper surface for contrast. */
-html[lang] .mud-paper .mud-table .mud-table-toolbar .mud-input {
+/* Toolbar row in nested tables uses the paper surface, matching data rows. */
+html[lang] .mud-paper .mud-table .mud-table-toolbar {
     background-color: var(--mud-palette-surface, #ffffff);
 }
 
