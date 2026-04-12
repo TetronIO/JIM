@@ -82,11 +82,6 @@ html[lang] a.mud-link.mud-primary-text:visited:hover {
     padding-top: 0;
 }
 
-/* Dense body rows with normal-height header: override the reduced padding Dense applies to thead cells */
-.dense-body-only.mud-table-dense .mud-table-head .mud-table-cell {
-    padding-top: 16px;
-    padding-bottom: 16px;
-}
 
 /* Strip all border-radius from MudTable when sandwiched between external pager bars */
 .mud-table.no-border-radius,
