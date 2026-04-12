@@ -54,7 +54,7 @@
     <DialogContent>
         @if (_deletionPreview != null)
         {
-            <MudAlert Severity="Severity.Error" Class="mb-4">
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4">
                 This action is <strong>permanent</strong> and cannot be undone!
             </MudAlert>
 
@@ -94,7 +94,7 @@
 
             @if (_deletionPreview.JoinedMvoCount > 0)
             {
-                <MudAlert Severity="Severity.Info" Class="mt-4">
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">
                     @_deletionPreview.JoinedMvoCount.ToString("N0") Metaverse Object(s) will be disconnected from this system.
                 </MudAlert>
             }
@@ -112,7 +112,7 @@
 
             @if (_deletionPreview.WillRunAsBackgroundJob)
             {
-                <MudAlert Severity="Severity.Info" Class="mt-4">
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">
                     Due to the size of this system, deletion will run as a background job.
                     Estimated time: @_deletionPreview.EstimatedDeletionTime.ToString(@"hh\:mm\:ss")
                 </MudAlert>

@@ -33,7 +33,7 @@
 
     @if (SyncRuleScopingCriteriaGroup.ChildGroups.Count == 0 && SyncRuleScopingCriteriaGroup.Criteria.Count == 0)
     {
-        <MudAlert Severity="Severity.Info" Class="mt-5">Add your first criteria...</MudAlert>
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-5">Add your first criteria...</MudAlert>
     }
 
     @foreach (var criteria in SyncRuleScopingCriteriaGroup.Criteria)
@@ -187,10 +187,10 @@
                     <MudCheckBox @bind-Value="_newSyncRuleScopingCriteria.BoolValue" TriState="true" Class="mt-5" Label="Boolean Value">: @(!_newSyncRuleScopingCriteria.BoolValue.HasValue ? "Null" : _newSyncRuleScopingCriteria.BoolValue.ToString())</MudCheckBox>
                     break;
                 case AttributeDataType.Reference:
-                    <MudAlert Severity="Severity.Warning" Class="mt-5">Apologies, references are not yet supported here.</MudAlert>
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-5">Apologies, references are not yet supported here.</MudAlert>
                     break;
                 case AttributeDataType.Binary:
-                    <MudAlert Severity="Severity.Warning" Class="mt-5">Apologies, binary types are not yet supported here.</MudAlert>
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-5">Apologies, binary types are not yet supported here.</MudAlert>
                     break;
                 case AttributeDataType.NotSet:
                 default:

@@ -1180,11 +1180,18 @@ function Reset-JIMForNextScenario {
     $keyFilePath = Join-Path $ScriptRoot ".api-key"
     $newApiKey | Out-File -FilePath $keyFilePath -NoNewline -Encoding UTF8
 
-    # 5. Restart JIM containers
+    # 5. Pre-create bind-mount directories so Docker doesn't create them as root
+    # (see docker-compose.override.yml worker log volume mount)
+    $workerLogMount = Join-Path $ScriptRoot "results" "logs" "worker"
+    if (-not (Test-Path $workerLogMount)) {
+        New-Item -ItemType Directory -Path $workerLogMount -Force | Out-Null
+    }
+
+    # 6. Restart JIM containers
     Write-Host "${GRAY}  Starting JIM containers...${NC}"
     docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d 2>&1 | Out-Null
 
-    # 6. Wait for JIM API health check
+    # 7. Wait for JIM API health check
     Write-Host "${GRAY}  Waiting for JIM API...${NC}"
     $jimApiReady = $false
     $jimApiElapsed = 0
@@ -1775,6 +1782,16 @@ Write-Success "Saved API key to .api-key"
 # Step 3: Start services
 $step3Start = Get-Date
 Write-Section "Step 3: Starting Services"
+
+# Pre-create bind-mount directories so Docker doesn't create them as root.
+# docker-compose.override.yml mounts ./test/integration/results/logs/worker:/var/log/jim
+# and the test runner later writes scenario logs into results/logs/. If Docker creates
+# these directories first they end up root-owned, which blocks Start-Transcript (runs as
+# the current user) on Linux hosts.
+$workerLogMount = Join-Path $scriptRoot "results" "logs" "worker"
+if (-not (Test-Path $workerLogMount)) {
+    New-Item -ItemType Directory -Path $workerLogMount -Force | Out-Null
+}
 
 Write-Step "Starting JIM stack..."
 $jimResult = docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d 2>&1

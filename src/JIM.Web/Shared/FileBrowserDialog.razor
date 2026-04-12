@@ -16,7 +16,7 @@
         <MudStack Spacing="3">
             @if (!string.IsNullOrEmpty(_errorMessage))
             {
-                <MudAlert Severity="Severity.Error" Dense="true">@_errorMessage</MudAlert>
+                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true">@_errorMessage</MudAlert>
             }
 
             @* Current path breadcrumb *@

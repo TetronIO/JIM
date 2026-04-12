@@ -111,7 +111,7 @@
                                             </MudStack>
                                             @if (_runTimes.Count == 0)
                                             {
-                                                <MudAlert Severity="Severity.Warning" Dense="true">
+                                                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
                                                     Add at least one run time
                                                 </MudAlert>
                                             }
@@ -157,7 +157,7 @@
                                                       HelperText="Format: minute hour day-of-month month day-of-week (e.g., 0 9,12,15,18 * * 1-5)" />
                                     }
 
-                                    <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
+                                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mt-2">
                                         <MudText Typo="Typo.body2">@GetSchedulePreview()</MudText>
                                     </MudAlert>
 
@@ -255,7 +255,7 @@
 
                             @if (_schedule.Steps.Count == 0)
                             {
-                                <MudAlert Severity="Severity.Info">
+                                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
                                     No steps have been added yet. Click "Add Step" to create the first step.
                                 </MudAlert>
                             }

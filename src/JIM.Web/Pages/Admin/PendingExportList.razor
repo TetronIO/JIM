@@ -23,7 +23,7 @@
 
 @if (_connectedSystemHeader != null && _preferencesLoaded)
 {
-    <MudPaper Elevation="0" Class="mt-3 pa-4" Outlined="true">
+    <MudPaper Elevation="0" Class="pa-4" Outlined="true">
         <MudSelect T="PendingExportStatus" Label="Filter by Status" MultiSelection="true"
                    SelectedValues="_statusFilters" SelectedValuesChanged="OnStatusFiltersChanged"
                    MultiSelectionTextFunc="@GetStatusFilterText"

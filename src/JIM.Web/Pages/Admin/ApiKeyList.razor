@@ -3,8 +3,10 @@
 @using JIM.Models.Security
 @using JIM.Web
 @using JIM.Web.Middleware.Api
+@using JIM.Web.Services
 @using Humanizer
 @inject IJimApplicationFactory JimFactory
+@inject IUserPreferenceService PreferenceService
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -21,9 +23,14 @@
     integration testing, and automation scripts.
 </MudText>
 
-<MudTable Items="@_apiKeys" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By"
+<MudTable Items="@_apiKeys" Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="@(_dense ? "mt-5 mb-5 dense-body-only" : "mt-5 mb-5")" SortLabel="Sort By"
     Filter="new Func<ApiKey, bool>(FilterFunc)" Outlined="true" Elevation="0" Loading="@_loading">
     <ToolBarContent>
+        <MudTooltip Text="@(_dense ? "Normal row spacing" : "Compact row spacing")" Arrow="true" Placement="Placement.Top">
+            <MudIconButton Icon="@(_dense ? Icons.Material.Filled.DensitySmall : Icons.Material.Filled.DensityMedium)"
+                           Variant="Variant.Filled" Color="Color.Default" Size="Size.Small" OnClick="OnToggleDense" />
+        </MudTooltip>
+        <MudText Class="mx-2 mud-text-disabled">|</MudText>
         <MudButton OnClick="ShowCreateDialog" StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary"
             DropShadow="false">Create API Key</MudButton>
         <MudSpacer />
@@ -74,10 +81,6 @@
                     </MudTooltip>
                 }
             </div>
-            @if (!string.IsNullOrEmpty(context.Description))
-            {
-                <span class="mud-text-secondary">@context.Description</span>
-            }
         </MudTd>
         <MudTd DataLabel="Key Prefix">
             <span class="jim-text-code">@context.KeyPrefix...</span>
@@ -210,7 +213,7 @@
         </MudText>
     </TitleContent>
     <DialogContent>
-        <MudAlert Severity="Severity.Warning" Class="mb-4">
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-4">
             Copy this API key now. You won't be able to see it again!
         </MudAlert>
         <MudTextField T="string" Value="@_createdFullKey" Label="API Key" ReadOnly="true" Variant="Variant.Outlined"
@@ -278,6 +281,7 @@
     private List<Role> _availableRoles = new();
     private string _searchString = "";
     private bool _loading = true;
+    private bool _dense;
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new()
     {
@@ -310,6 +314,15 @@
     private bool _editEnabled;
     private bool _saving;
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dense = await PreferenceService.GetTableDenseAsync() == true;
+            StateHasChanged();
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         await LoadDataAsync();
@@ -322,6 +335,12 @@
         _apiKeys = await jim.Repository.ApiKeys.GetAllAsync();
         _availableRoles = await jim.Security.GetRolesAsync();
         _loading = false;
+    }
+
+    private async Task OnToggleDense()
+    {
+        _dense = !_dense;
+        await PreferenceService.SetTableDenseAsync(_dense);
     }
 
     private bool FilterFunc(ApiKey element)

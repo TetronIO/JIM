@@ -21,11 +21,13 @@
     border-bottom: 1px solid var(--mud-palette-table-lines, var(--mud-palette-lines-default));
 }
 
+/* Header row stays compact regardless of dense/normal toggle */
 .mud-table-root .mud-table-head .mud-table-cell {
     font-weight: 500;
     font-size: 0.875rem;
     text-transform: uppercase;
     letter-spacing: 0.02857em;
+    padding: 6px 16px;
 }
 
 /* Content/data links use --jim-link-color (softer than UI primary).
@@ -82,11 +84,6 @@ html[lang] a.mud-link.mud-primary-text:visited:hover {
     padding-top: 0;
 }
 
-/* Dense body rows with normal-height header: override the reduced padding Dense applies to thead cells */
-.dense-body-only.mud-table-dense .mud-table-head .mud-table-cell {
-    padding-top: 16px;
-    padding-bottom: 16px;
-}
 
 /* Strip all border-radius from MudTable when sandwiched between external pager bars */
 .mud-table.no-border-radius,
@@ -238,6 +235,17 @@ html[lang] .jim-expansion-panel .mud-table .mud-table-body .mud-table-cell {
     background-color: var(--mud-palette-surface, #ffffff);
 }
 
+html[lang] .jim-expansion-panel .mud-table .mud-table-foot,
+html[lang] .jim-expansion-panel .mud-table .mud-table-foot .mud-table-cell,
+html[lang] .jim-expansion-panel .mud-table .mud-table-pagination,
+html[lang] .jim-expansion-panel .mud-table .mud-table-pagination .mud-table-pagination-toolbar {
+    background-color: var(--jim-inner-surface, transparent);
+}
+
+html[lang] .jim-expansion-panel .mud-table .mud-table-toolbar {
+    background-color: var(--mud-palette-surface, #ffffff);
+}
+
 html[lang] .jim-expansion-panel .mud-table-outlined,
 html[lang] .jim-expansion-panel .mud-simple-table-outlined {
     border-color: var(--jim-inner-border-color, var(--jim-paper-border-color, transparent)) !important;
@@ -358,6 +366,20 @@ html[lang] .mud-paper .mud-simple-table {
    the shaded header row (table-level background bleeds through transparent rows). */
 html[lang] .mud-paper .mud-simple-table tbody td,
 html[lang] .mud-paper .mud-table .mud-table-body .mud-table-cell {
+    background-color: var(--mud-palette-surface, #ffffff);
+}
+
+/* Footer / pagination row in nested tables matches the header background.
+   Uses !important to override MudBlazor's inherited surface colour. */
+html[lang] .mud-paper .mud-table .mud-table-foot,
+html[lang] .mud-paper .mud-table .mud-table-foot .mud-table-cell,
+html[lang] .mud-paper .mud-table .mud-table-pagination,
+html[lang] .mud-paper .mud-table .mud-table-pagination .mud-table-pagination-toolbar {
+    background-color: var(--jim-inner-surface, transparent) !important;
+}
+
+/* Toolbar row in nested tables uses the paper surface, matching data rows. */
+html[lang] .mud-paper .mud-table .mud-table-toolbar {
     background-color: var(--mud-palette-surface, #ffffff);
 }
 

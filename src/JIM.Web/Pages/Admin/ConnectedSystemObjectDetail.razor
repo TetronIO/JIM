@@ -27,7 +27,7 @@
 
 @if (ConnectedSystemHeader != null && ConnectedSystemObject != null)
 {
-    <MudPaper Class="pa-4 mt-4 mb-4" Outlined="true">
+    <MudPaper Class="pa-4" Outlined="true">
         @* First row: Type, Status, Created, Updated, MVO Link *@
         <MudStack Row="true" AlignItems="AlignItems.Center" Class="flex-wrap" Spacing="3">
             @* Object Type *@
@@ -94,7 +94,7 @@
 
     @if (PendingExport != null && _pendingExportTotalCount > 0)
     {
-        <MudPaper Class="pa-5 mt-5 mb-5" Outlined="true">
+        <MudPaper Class="pa-4 mt-6" Outlined="true">
             <MudText Typo="Typo.h6">Pending Exports</MudText>
             <MudText Typo="Typo.subtitle1" Class="my-3">
                 The following attribute changes are pending for this connected system. These may be awaiting export, or have

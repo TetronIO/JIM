@@ -14,7 +14,7 @@
 @if (_exampleDataSet != null)
 {
     <MudText Typo="Typo.h5" Class="mt-5">Details</MudText>
-    <MudPaper Class="pa-4 mt-3" Outlined="true">
+    <MudPaper Class="pa-4" Outlined="true">
         <MudGrid Spacing="4">
             <MudItem xs="12" sm="6" md="4">
                 <MudField Label="Created" Variant="Variant.Outlined">@_exampleDataSet.Created</MudField>
@@ -32,7 +32,7 @@
     </MudPaper>
 
     <MudText Typo="Typo.h5" Class="mt-5">Values</MudText>
-    <MudPaper Class="pa-4 mt-3 mb-5" Outlined="true">
+    <MudPaper Class="pa-4 mt-6 mb-5" Outlined="true">
         @foreach (var val in _exampleDataSet.Values)
         {
             <MudChip T="string" Variant="Variant.Filled" Color="Color.Default">@val.StringValue</MudChip>

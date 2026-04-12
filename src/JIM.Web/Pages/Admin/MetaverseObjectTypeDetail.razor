@@ -24,7 +24,7 @@
 
 @if (_metaverseObjectType != null)
 {
-    <MudPaper Class="pa-4 mt-3" Outlined="true">
+    <MudPaper Class="pa-4" Outlined="true">
         <MudText Typo="Typo.h5" Class="mb-4">Details</MudText>
         <MudGrid Spacing="4">
             <MudItem xs="12" sm="6" md="4">
@@ -47,7 +47,7 @@
         </MudGrid>
     </MudPaper>
 
-    <MudPaper Class="pa-4 mt-3" Outlined="true">
+    <MudPaper Class="pa-4 mt-6" Outlined="true">
         <MudText Typo="Typo.h5" Class="mb-2">Deletion Rules</MudText>
         <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">Configure when metaverse objects of this type should be automatically deleted.</MudText>
         <MudGrid>
@@ -93,7 +93,7 @@
                 }
                 else
                 {
-                    <MudAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true">
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
                         No contributing systems found. Create inbound sync rules for this object type to enable authoritative source selection.
                     </MudAlert>
                 }
@@ -109,11 +109,12 @@
         </MudStack>
     </MudPaper>
 
-    <MudText Typo="Typo.h5" Class="mt-5">Attributes</MudText>
-    <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">These are the attributes bound to the metaverse object type:</MudText>
+    <MudPaper Class="pa-4 mt-6" Outlined="true">
+        <MudText Typo="Typo.h5" Class="mb-2">Attributes</MudText>
+        <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">These are the attributes bound to the metaverse object type:</MudText>
 
     @* Filter Chips Section *@
-    <MudStack Row="true" Spacing="6" Class="mt-3 mb-3 flex-wrap" AlignItems="AlignItems.Start">
+    <MudStack Row="true" Spacing="6" Class="mb-3 flex-wrap" AlignItems="AlignItems.Start">
         @* Type Filter *@
         <div>
             <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Type:</MudText>
@@ -221,6 +222,7 @@
             <MudTablePager />
         </PagerContent>
     </MudTable>
+    </MudPaper>
 }
 
 @code {

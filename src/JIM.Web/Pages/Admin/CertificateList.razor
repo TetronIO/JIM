@@ -3,7 +3,9 @@
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
 @using JIM.Web
+@using JIM.Web.Services
 @inject IJimApplicationFactory JimFactory
+@inject IUserPreferenceService PreferenceService
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -19,9 +21,14 @@
     Certificates can be uploaded directly or referenced from the connector-files mount.
 </MudText>
 
-<MudTable Items="@_certificates" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By"
+<MudTable Items="@_certificates" Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="@(_dense ? "mt-5 mb-5 dense-body-only" : "mt-5 mb-5")" SortLabel="Sort By"
     Filter="new Func<TrustedCertificate, bool>(FilterFunc)" Outlined="true" Elevation="0" Loading="@_loading">
     <ToolBarContent>
+        <MudTooltip Text="@(_dense ? "Normal row spacing" : "Compact row spacing")" Arrow="true" Placement="Placement.Top">
+            <MudIconButton Icon="@(_dense ? Icons.Material.Filled.DensitySmall : Icons.Material.Filled.DensityMedium)"
+                           Variant="Variant.Filled" Color="Color.Default" Size="Size.Small" OnClick="OnToggleDense" />
+        </MudTooltip>
+        <MudText Class="mx-2 mud-text-disabled">|</MudText>
         <MudButtonGroup Variant="Variant.Filled" Color="Color.Primary">
             <MudButton OnClick="ShowUploadDialog" StartIcon="@Icons.Material.Filled.Upload" DropShadow="false">Upload Certificate</MudButton>
             <MudButton OnClick="ShowFilePathDialog" StartIcon="@Icons.Material.Filled.Folder" DropShadow="false">Reference File Path</MudButton>
@@ -292,6 +299,7 @@
     private List<TrustedCertificate>? _certificates;
     private string _searchString = "";
     private bool _loading = true;
+    private bool _dense;
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new()
 {
@@ -328,6 +336,15 @@ new("Certificates", href: null, disabled: true)
     private bool _editEnabled;
     private bool _saving;
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dense = await PreferenceService.GetTableDenseAsync() == true;
+            StateHasChanged();
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         await LoadCertificatesAsync();
@@ -339,6 +356,12 @@ new("Certificates", href: null, disabled: true)
         _loading = true;
         _certificates = await jim.Certificates.GetAllAsync();
         _loading = false;
+    }
+
+    private async Task OnToggleDense()
+    {
+        _dense = !_dense;
+        await PreferenceService.SetTableDenseAsync(_dense);
     }
 
     private bool FilterFunc(TrustedCertificate element)

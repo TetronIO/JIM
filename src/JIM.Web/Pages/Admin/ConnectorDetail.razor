@@ -20,8 +20,8 @@
 
 @if (_connector != null)
 {
-    <MudText Typo="Typo.h5" Class="mt-3">Details</MudText>
-    <MudPaper Class="pa-4 mt-3" Outlined="true">
+    <MudPaper Class="pa-4" Outlined="true">
+        <MudText Typo="Typo.h5" Class="mb-4">Details</MudText>
         <MudGrid Spacing="4">
             <MudItem xs="12" sm="6" md="4">
                 <MudField Label="Description" Variant="Variant.Outlined">@_connector.Description</MudField>
@@ -35,27 +35,34 @@
         </MudGrid>
     </MudPaper>
 
-    <MudText Typo="Typo.h5" Class="mt-5">Capabilities</MudText>
-    <MudPaper Class="pa-4 mt-3" Outlined="true">
-        <MudText Typo="Typo.subtitle2" Class="mt-2">Import</MudText>
-        <MudCheckBox @bind-Value="@_connector.SupportsFullImport" Disabled="true">Supports full import?</MudCheckBox>
-        <MudCheckBox @bind-Value="@_connector.SupportsDeltaImport" Disabled="true">Supports delta import?</MudCheckBox>
-
-        <MudText Typo="Typo.subtitle2" Class="mt-2">Export</MudText>
-        <MudCheckBox @bind-Value="@_connector.SupportsExport" Disabled="true">Supports export?</MudCheckBox>
-        <MudCheckBox @bind-Value="@_connector.SupportsAutoConfirmExport" Disabled="true">Supports auto-confirm export?</MudCheckBox>
-        <MudCheckBox @bind-Value="@_connector.SupportsParallelExport" Disabled="true">Supports parallel export?</MudCheckBox>
-
-        <MudText Typo="Typo.subtitle2" Class="mt-2">Hierarchy</MudText>
-        <MudCheckBox @bind-Value="@_connector.SupportsPartitions" Disabled="true">Supports partitions?</MudCheckBox>
-        <MudCheckBox @bind-Value="@_connector.SupportsPartitionContainers" Disabled="true">Supports partition containers?</MudCheckBox>
-
-        <MudText Typo="Typo.subtitle2" Class="mt-2">Data Handling</MudText>
-        <MudCheckBox @bind-Value="@_connector.SupportsFilePaths" Disabled="true">Supports file paths?</MudCheckBox>
-        <MudCheckBox @bind-Value="@_connector.SupportsPaging" Disabled="true">Supports paging?</MudCheckBox>
-        <MudCheckBox @bind-Value="@_connector.SupportsSecondaryExternalId" Disabled="true">Supports secondary external id?</MudCheckBox>
-        <MudCheckBox @bind-Value="@_connector.SupportsUserSelectedExternalId" Disabled="true">Supports user selected external id?</MudCheckBox>
-        <MudCheckBox @bind-Value="@_connector.SupportsUserSelectedAttributeTypes" Disabled="true">Supports user selected attribute types?</MudCheckBox>
+    <MudPaper Class="pa-4 mt-6" Outlined="true">
+        <MudText Typo="Typo.h5" Class="mb-4">Capabilities</MudText>
+        <MudGrid Spacing="4">
+            <MudItem xs="12" sm="6" md="3">
+                <MudText Typo="Typo.subtitle2">Import</MudText>
+                <MudCheckBox @bind-Value="@_connector.SupportsFullImport" Disabled="true">Full import</MudCheckBox>
+                <MudCheckBox @bind-Value="@_connector.SupportsDeltaImport" Disabled="true">Delta import</MudCheckBox>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudText Typo="Typo.subtitle2">Export</MudText>
+                <MudCheckBox @bind-Value="@_connector.SupportsExport" Disabled="true">Export</MudCheckBox>
+                <MudCheckBox @bind-Value="@_connector.SupportsAutoConfirmExport" Disabled="true">Auto-confirm export</MudCheckBox>
+                <MudCheckBox @bind-Value="@_connector.SupportsParallelExport" Disabled="true">Parallel export</MudCheckBox>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudText Typo="Typo.subtitle2">Hierarchy</MudText>
+                <MudCheckBox @bind-Value="@_connector.SupportsPartitions" Disabled="true">Partitions</MudCheckBox>
+                <MudCheckBox @bind-Value="@_connector.SupportsPartitionContainers" Disabled="true">Partition containers</MudCheckBox>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudText Typo="Typo.subtitle2">Data Handling</MudText>
+                <MudCheckBox @bind-Value="@_connector.SupportsFilePaths" Disabled="true">File paths</MudCheckBox>
+                <MudCheckBox @bind-Value="@_connector.SupportsPaging" Disabled="true">Paging</MudCheckBox>
+                <MudCheckBox @bind-Value="@_connector.SupportsSecondaryExternalId" Disabled="true">Secondary external ID</MudCheckBox>
+                <MudCheckBox @bind-Value="@_connector.SupportsUserSelectedExternalId" Disabled="true">User selected external ID</MudCheckBox>
+                <MudCheckBox @bind-Value="@_connector.SupportsUserSelectedAttributeTypes" Disabled="true">User selected attribute types</MudCheckBox>
+            </MudItem>
+        </MudGrid>
     </MudPaper>
 
     <MudTable Items="@_connector.Files" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Outlined="true" Elevation="0">
