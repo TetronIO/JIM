@@ -87,6 +87,14 @@ Repository and server methods that load a single entity follow a weight-based ta
 - Use `<NavigableMudTabs>` instead of `<MudTabs>` for all top-level page tabs; it syncs the active tab with a `?t=slug` query string, enabling browser back/forward navigation
 - Use plain `<MudTabs>` only for tabs inside dialogs or nested sub-tabs where URL navigation is not needed
 
+**Alerts:**
+- ALWAYS use `Variant="Variant.Outlined"` on all `<MudAlert>` components
+- This ensures a consistent outlined style across the entire UI
+
+**Panel Spacing:**
+- Use `Class="pa-4 mt-6"` on `<MudPaper Outlined="true">` panels to ensure consistent vertical spacing between sections
+- Exception: the **first** panel on a page should omit `mt-6` (use just `Class="pa-4"`) so there is no unnecessary top margin
+
 **Tooltips:**
 - ALWAYS use `Arrow="true" Placement="Placement.Top"` on all `<MudTooltip>` components
 - This ensures tooltips appear above the element with a downward-pointing arrow, consistent across the entire UI
