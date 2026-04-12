@@ -1233,7 +1233,7 @@ internal class SeedingServer
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Email),
                 PopulatedValuesPercentage = 100,
-                Pattern = "{First Name}.{Last Name}[UniqueInt]@demo.tetron.io"
+                Pattern = "{First Name}.{Last Name}[UniqueInt]@panoply.io"
             });
         }
 
@@ -1451,7 +1451,7 @@ internal class SeedingServer
                     StringValue = "Distribution"
                 },
                 PopulatedValuesPercentage = 100,
-                Pattern = "distro-[UniqueInt]@demo.tetron.io"
+                Pattern = "distro-[UniqueInt]@panoply.io"
             });
         }
 
