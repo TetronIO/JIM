@@ -1,9 +1,9 @@
 # SCIM 2.0 Server Design Document
 
 - **Status:** Planned
-> **Issue**: #124
-> **Related Issues**: #123 (Event-Based Sync), #121 (Outbound Sync)
-> **Last Updated**: 2026-02-28
+- **Issue**: #124
+- **Related Issues**: #123 (Event-Based Sync), #121 (Outbound Sync)
+- **Last Updated**: 2026-02-28
 
 ## Overview
 
