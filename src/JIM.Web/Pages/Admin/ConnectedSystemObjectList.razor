@@ -22,7 +22,7 @@
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 @if (_showIntro)
 {
-    <MudAlert Severity="Severity.Normal" Class="mt-3 mb-3" ShowCloseIcon="true" CloseIconClicked="() => _showIntro = false">
+    <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Class="mt-3 mb-3" ShowCloseIcon="true" CloseIconClicked="() => _showIntro = false">
         This is the connector space for this Connected System. Inbound changes from the system are held here before being committed to the Metaverse. Outbound changes are held here ahead of synchronisation to the connected system.
     </MudAlert>
 }
@@ -267,7 +267,7 @@
             </MudText>
         </TitleContent>
         <DialogContent>
-            <MudAlert Severity="Severity.Warning" Class="mb-4">
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-4">
                 This action will delete all Connected System Objects from JIM.
             </MudAlert>
 

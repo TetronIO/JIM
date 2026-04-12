@@ -12,7 +12,7 @@
     </TitleContent>
     <DialogContent>
         <MudStack Spacing="3">
-            <MudAlert Severity="Severity.Error" Dense="true">
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true">
                 @ErrorMessage
             </MudAlert>
 
@@ -40,7 +40,7 @@
 
             @if (!string.IsNullOrEmpty(Suggestion))
             {
-                <MudAlert Severity="Severity.Info" Dense="true" Icon="@Icons.Material.Filled.Lightbulb">
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Icon="@Icons.Material.Filled.Lightbulb">
                     <strong>Suggestion:</strong> @Suggestion
                 </MudAlert>
             }

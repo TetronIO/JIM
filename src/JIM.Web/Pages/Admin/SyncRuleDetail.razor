@@ -201,7 +201,7 @@ else if (_syncRule != null)
                             <MudSwitch @bind-Value="@_syncRule.EnforceState" Color="Color.Primary"
                                        Label="Enforce State (Auto-correct drift)" />
                         </MudTooltip>
-                        <MudAlert Severity="Severity.Normal" Variant="Variant.Text" Dense="true">
+                        <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true">
                             <strong>Enforce State</strong> enables drift detection and automatic correction. When a target system
                             attribute differs from what this export rule dictates, JIM will create a corrective pending export
                             to restore the authoritative value. Disable this option only for scenarios where you need to allow

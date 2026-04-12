@@ -158,13 +158,13 @@
     <DialogContent>
         @if (!_objectTypeAttributeBeingEditedIsEditable)
         {
-            <MudAlert Severity="Severity.Error">
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
                 This Connected System attribute cannot be edited as it is being referenced by either a synchronisation rule, or has values already populated.
             </MudAlert>
         }
         else
         {
-            <MudAlert Severity="Severity.Info">
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
                 This Connector supports changing the data type of a Connected System attribute. This might be because the data type
                 was detected automatically, and might need adjusting if not right.
             </MudAlert>
