@@ -517,11 +517,34 @@ public class MetaverseRepository : IMetaverseRepository
                 Repository.Database.MetaverseAttributes.Attach(av.Attribute);
         }
 
+        // Attach existing MetaverseAttribute entities referenced by change records so EF
+        // recognises them as existing (same pattern as attribute values above).
+        foreach (var change in metaverseObject.Changes)
+        {
+            foreach (var ac in change.AttributeChanges)
+            {
+                if (ac.Attribute != null && Repository.Database.Entry(ac.Attribute).State == EntityState.Detached)
+                    Repository.Database.MetaverseAttributes.Attach(ac.Attribute);
+            }
+        }
+
         // Use Entry().State instead of Add() to avoid graph traversal that would
         // override the Unchanged state of attached entities (Type, Attributes) to Added.
         Repository.Database.Entry(metaverseObject).State = EntityState.Added;
         foreach (var av in metaverseObject.AttributeValues)
             Repository.Database.Entry(av).State = EntityState.Added;
+
+        // Mark change history records as Added so they are persisted alongside the MVO.
+        foreach (var change in metaverseObject.Changes)
+        {
+            Repository.Database.Entry(change).State = EntityState.Added;
+            foreach (var ac in change.AttributeChanges)
+            {
+                Repository.Database.Entry(ac).State = EntityState.Added;
+                foreach (var vc in ac.ValueChanges)
+                    Repository.Database.Entry(vc).State = EntityState.Added;
+            }
+        }
 
         await Repository.Database.SaveChangesAsync();
     }

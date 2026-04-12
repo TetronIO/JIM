@@ -7,6 +7,7 @@ using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Worker.Processors;
+using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.Workflows;
@@ -302,6 +303,61 @@ public class ChangeTrackingPersistenceWorkflowTests : WorkflowTestBase
         // Assert
         Assert.That(mvo.CachedDisplayName, Is.EqualTo("New Name"),
             "CachedDisplayName should be updated when DisplayName attribute changes");
+    }
+
+    [Test]
+    public async Task CreateMetaverseObject_ChangeRecords_PersistedViaSingleObjectCreateAsync()
+    {
+        // Arrange: MVO with attributes created via the single-object path
+        // (CreateMetaverseObjectAsync), which uses explicit EntityState management
+        // rather than AddRange graph traversal.
+        var (mvType, displayNameAttr, employeeIdAttr) = await CreateMvTypeWithBuiltInDisplayNameAsync();
+
+        var mvo = new MetaverseObject
+        {
+            Id = Guid.NewGuid(),
+            Type = mvType,
+            Created = DateTime.UtcNow
+        };
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Attribute = displayNameAttr,
+            AttributeId = displayNameAttr.Id,
+            StringValue = "Admin User"
+        });
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "EMP001"
+        });
+
+        // Act
+        await Jim.Metaverse.CreateMetaverseObjectAsync(
+            mvo,
+            changeInitiatorType: MetaverseObjectChangeInitiatorType.System);
+
+        // Assert: change records were persisted (not silently dropped)
+        var reloaded = await DbContext.MetaverseObjects
+            .Include(m => m.Changes)
+            .ThenInclude(c => c.AttributeChanges)
+            .ThenInclude(ac => ac.ValueChanges)
+            .SingleAsync(m => m.Id == mvo.Id);
+
+        Assert.That(reloaded.Changes, Has.Count.EqualTo(1),
+            "MVO should have one 'Created' change record persisted in the database");
+
+        var change = reloaded.Changes[0];
+        Assert.That(change.ChangeType, Is.EqualTo(ObjectChangeType.Created));
+        Assert.That(change.ChangeInitiatorType, Is.EqualTo(MetaverseObjectChangeInitiatorType.System));
+        Assert.That(change.AttributeChanges, Has.Count.EqualTo(2),
+            "Change record should capture both attribute additions");
+
+        // Verify attribute values were recorded
+        var displayNameChange = change.AttributeChanges.Single(ac => ac.AttributeName == displayNameAttr.Name);
+        Assert.That(displayNameChange.ValueChanges, Has.Count.EqualTo(1));
+        Assert.That(displayNameChange.ValueChanges[0].StringValue, Is.EqualTo("Admin User"));
+        Assert.That(displayNameChange.ValueChanges[0].ValueChangeType, Is.EqualTo(ValueChangeType.Add));
     }
 
     #endregion
