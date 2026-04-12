@@ -526,9 +526,9 @@ The `main` branch is protected by the **"Protect Main"** repository ruleset, whi
 | `build-and-test` | CI workflow | .NET build, .NET tests, PowerShell Pester tests |
 | `discover-base-images` | CI workflow | Production Dockerfile digest-pinning policy |
 | `scan-base-images-summary` | CI workflow | All base image vulnerability scans passed (aggregates dynamic matrix legs) |
-| `Analyze (actions)` | CodeQL default setup | Static analysis of GitHub Actions workflows |
-| `Analyze (csharp)` | CodeQL default setup | Static analysis of C# code |
-| `Analyze (javascript-typescript)` | CodeQL default setup | Static analysis of JavaScript/TypeScript code |
+| `Analyze (actions)` | CodeQL workflow (`.github/workflows/codeql.yml`) | Static analysis of GitHub Actions workflows |
+| `Analyze (csharp)` | CodeQL workflow (`.github/workflows/codeql.yml`) | Static analysis of C# code |
+| `Analyze (javascript-typescript)` | CodeQL workflow (`.github/workflows/codeql.yml`) | Static analysis of JavaScript/TypeScript code |
 | `claude-review` | Claude Code Review workflow | Automated code review on every PR |
 
 **Why `scan-base-images-summary` exists:** the `scan-base-images` job uses a dynamic matrix whose leg names embed image digests (e.g. `scan-base-images (src/JIM.Web/Dockerfile, 10, mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:...)`). These names change with every base image update, making them unsuitable as required status checks. The summary job aggregates all matrix legs into a single stable check name.
