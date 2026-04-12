@@ -79,7 +79,9 @@ function Get-JIMConnectedSystemObject {
     [CmdletBinding(DefaultParameterSetName = 'ById')]
     [OutputType([PSCustomObject])]
     param(
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'AttributeValues', ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'AttributeValuesAll', ValueFromPipelineByPropertyName)]
         [Parameter(Mandatory, ParameterSetName = 'Count', ValueFromPipelineByPropertyName)]
         [int]$ConnectedSystemId,
 

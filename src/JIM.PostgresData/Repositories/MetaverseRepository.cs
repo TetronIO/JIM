@@ -1640,7 +1640,8 @@ public class MetaverseRepository : IMetaverseRepository
 
         if (objectTypeId.HasValue)
         {
-            query = query.Where(mo => mo.Type.Id == objectTypeId.Value);
+            var typeId = objectTypeId.Value;
+            query = query.Where(mo => mo.Type.Id == typeId);
         }
 
         if (!string.IsNullOrWhiteSpace(searchQuery))

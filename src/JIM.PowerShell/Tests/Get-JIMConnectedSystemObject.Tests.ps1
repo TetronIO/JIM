@@ -37,6 +37,10 @@ Describe 'Get-JIMConnectedSystemObject' {
         It 'Should have an AttributeValuesAll parameter set' {
             $command.ParameterSets.Name | Should -Contain 'AttributeValuesAll'
         }
+
+        It 'Should have a Count parameter set' {
+            $command.ParameterSets.Name | Should -Contain 'Count'
+        }
     }
 
     Context 'Parameter Validation' {
@@ -86,6 +90,18 @@ Describe 'Get-JIMConnectedSystemObject' {
         It 'Should have Search as an optional string parameter' {
             $command.Parameters['Search'].ParameterType.Name | Should -Be 'String'
         }
+
+        It 'Should have Count as a switch parameter' {
+            $command.Parameters['Count'].SwitchParameter | Should -BeTrue
+        }
+
+        It 'Should have ObjectTypeId as an optional int parameter' {
+            $command.Parameters['ObjectTypeId'].ParameterType.Name | Should -Be 'Int32'
+        }
+
+        It 'Should have PartitionId as an optional int parameter' {
+            $command.Parameters['PartitionId'].ParameterType.Name | Should -Be 'Int32'
+        }
     }
 
     Context 'Requires Connection' {
@@ -96,6 +112,10 @@ Describe 'Get-JIMConnectedSystemObject' {
 
         It 'Should throw when not connected' {
             { Get-JIMConnectedSystemObject -ConnectedSystemId 1 -Id ([guid]::NewGuid()) } | Should -Throw '*Connect-JIM*'
+        }
+
+        It 'Should throw when not connected with Count' {
+            { Get-JIMConnectedSystemObject -ConnectedSystemId 1 -Count } | Should -Throw '*Connect-JIM*'
         }
     }
 

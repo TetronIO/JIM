@@ -1944,10 +1944,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(cso => cso.ConnectedSystemId == connectedSystemId);
 
         if (objectTypeId.HasValue)
-            query = query.Where(cso => cso.TypeId == objectTypeId.Value);
+        {
+            var typeId = objectTypeId.Value;
+            query = query.Where(cso => cso.TypeId == typeId);
+        }
 
         if (partitionId.HasValue)
-            query = query.Where(cso => cso.PartitionId == partitionId.Value);
+        {
+            var partition = partitionId.Value;
+            query = query.Where(cso => cso.PartitionId == partition);
+        }
 
         return await query.CountAsync();
     }
@@ -2695,10 +2701,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(pe => pe.ConnectedSystemId == connectedSystemId);
 
         if (changeType.HasValue)
-            query = query.Where(pe => pe.ChangeType == changeType.Value);
+        {
+            var type = changeType.Value;
+            query = query.Where(pe => pe.ChangeType == type);
+        }
 
         if (status.HasValue)
-            query = query.Where(pe => pe.Status == status.Value);
+        {
+            var statusValue = status.Value;
+            query = query.Where(pe => pe.Status == statusValue);
+        }
 
         return await query.CountAsync();
     }
