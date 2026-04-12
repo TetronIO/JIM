@@ -935,7 +935,7 @@ public class ConnectedSystemDeletionTests
             ConnectedSystemObjectsRemoved = 150
         };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, true))
             .ReturnsAsync(expectedResult);
 
