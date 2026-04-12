@@ -435,6 +435,35 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
+    /// Gets the count of metaverse objects with optional filtering.
+    /// </summary>
+    /// <remarks>
+    /// Returns a simple integer count. Supports the same filters as the paginated objects endpoint
+    /// but is significantly faster as it only executes a COUNT query without loading entity data.
+    /// </remarks>
+    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <param name="search">Optional search text to filter by display name (partial match, case-insensitive).</param>
+    /// <param name="filterAttributeName">Optional attribute name to filter by (must be used with filterAttributeValue).</param>
+    /// <param name="filterAttributeValue">Optional attribute value to filter by (exact match, case-insensitive).</param>
+    /// <returns>The count of matching metaverse objects.</returns>
+    [HttpGet("objects/count", Name = "GetObjectsCount")]
+    [ProducesResponseType(typeof(int), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetObjectsCountAsync(
+        [FromQuery] int? objectTypeId = null,
+        [FromQuery] string? search = null,
+        [FromQuery] string? filterAttributeName = null,
+        [FromQuery] string? filterAttributeValue = null)
+    {
+        _logger.LogDebug("Getting metaverse objects count (TypeId: {TypeId}, Search: {Search}, FilterAttr: {FilterAttr}={FilterValue})",
+            objectTypeId, LogSanitiser.Sanitise(search), LogSanitiser.Sanitise(filterAttributeName), LogSanitiser.Sanitise(filterAttributeValue));
+
+        var count = await _application.Repository.Metaverse.GetMetaverseObjectsCountAsync(
+            objectTypeId, search, filterAttributeName, filterAttributeValue);
+        return Ok(count);
+    }
+
+    /// <summary>
     /// Searches for metaverse objects using a predefined search, returning lightweight headers
     /// with only the attributes defined in the search. Optimised for fast response at scale (100k+ objects).
     /// </summary>

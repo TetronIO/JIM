@@ -18,6 +18,7 @@ using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
+using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -400,6 +401,114 @@ public class CsoDetailAndPaginationTests
         Assert.That(Enum.IsDefined(typeof(CsoAttributeLoadStrategy), CsoAttributeLoadStrategy.CappedMva));
         Assert.That((int)CsoAttributeLoadStrategy.All, Is.EqualTo(0));
         Assert.That((int)CsoAttributeLoadStrategy.CappedMva, Is.EqualTo(1));
+    }
+
+    #endregion
+
+    #region GetConnectorSpaceCountAsync tests
+
+    [Test]
+    public async Task GetConnectorSpaceCountAsync_ReturnsOkWithIntAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1, It.IsAny<int?>(), It.IsAny<int?>()))
+            .ReturnsAsync(500);
+
+        var result = await _controller.GetConnectorSpaceCountAsync(1);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = (OkObjectResult)result;
+        Assert.That(okResult.Value, Is.EqualTo(500));
+    }
+
+    [Test]
+    public async Task GetConnectorSpaceCountAsync_WithObjectTypeFilter_PassesToRepositoryAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1, 3, It.IsAny<int?>()))
+            .ReturnsAsync(150);
+
+        await _controller.GetConnectorSpaceCountAsync(1, objectTypeId: 3);
+
+        _mockConnectedSystemRepo.Verify(r => r.GetConnectedSystemObjectCountAsync(1, 3, It.IsAny<int?>()), Times.Once);
+    }
+
+    [Test]
+    public async Task GetConnectorSpaceCountAsync_WithPartitionFilter_PassesToRepositoryAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1, It.IsAny<int?>(), 7))
+            .ReturnsAsync(80);
+
+        await _controller.GetConnectorSpaceCountAsync(1, partitionId: 7);
+
+        _mockConnectedSystemRepo.Verify(r => r.GetConnectedSystemObjectCountAsync(1, It.IsAny<int?>(), 7), Times.Once);
+    }
+
+    [Test]
+    public async Task GetConnectorSpaceCountAsync_WithAllFilters_PassesAllToRepositoryAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1, 3, 7))
+            .ReturnsAsync(25);
+
+        var result = await _controller.GetConnectorSpaceCountAsync(1, objectTypeId: 3, partitionId: 7) as OkObjectResult;
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Value, Is.EqualTo(25));
+    }
+
+    #endregion
+
+    #region GetPendingExportsCountAsync tests
+
+    [Test]
+    public async Task GetPendingExportsCountAsync_ReturnsOkWithIntAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetPendingExportsFilteredCountAsync(1, null, null))
+            .ReturnsAsync(100);
+
+        var result = await _controller.GetPendingExportsCountAsync(1);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = (OkObjectResult)result;
+        Assert.That(okResult.Value, Is.EqualTo(100));
+    }
+
+    [Test]
+    public async Task GetPendingExportsCountAsync_WithChangeTypeFilter_PassesToRepositoryAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetPendingExportsFilteredCountAsync(
+                1, PendingExportChangeType.Create, It.IsAny<PendingExportStatus?>()))
+            .ReturnsAsync(30);
+
+        await _controller.GetPendingExportsCountAsync(1, changeType: PendingExportChangeType.Create);
+
+        _mockConnectedSystemRepo.Verify(r => r.GetPendingExportsFilteredCountAsync(
+            1, PendingExportChangeType.Create, It.IsAny<PendingExportStatus?>()), Times.Once);
+    }
+
+    [Test]
+    public async Task GetPendingExportsCountAsync_WithStatusFilter_PassesToRepositoryAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetPendingExportsFilteredCountAsync(
+                1, It.IsAny<PendingExportChangeType?>(), PendingExportStatus.Failed))
+            .ReturnsAsync(5);
+
+        await _controller.GetPendingExportsCountAsync(1, status: PendingExportStatus.Failed);
+
+        _mockConnectedSystemRepo.Verify(r => r.GetPendingExportsFilteredCountAsync(
+            1, It.IsAny<PendingExportChangeType?>(), PendingExportStatus.Failed), Times.Once);
+    }
+
+    [Test]
+    public async Task GetPendingExportsCountAsync_WithAllFilters_PassesAllToRepositoryAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetPendingExportsFilteredCountAsync(
+                1, PendingExportChangeType.Update, PendingExportStatus.Pending))
+            .ReturnsAsync(12);
+
+        var result = await _controller.GetPendingExportsCountAsync(
+            1, changeType: PendingExportChangeType.Update, status: PendingExportStatus.Pending) as OkObjectResult;
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Value, Is.EqualTo(12));
     }
 
     #endregion

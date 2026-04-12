@@ -1937,6 +1937,27 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await query.CountAsync();
     }
 
+    /// <inheritdoc />
+    public async Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? objectTypeId, int? partitionId)
+    {
+        var query = Repository.Database.ConnectedSystemObjects
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId);
+
+        if (objectTypeId.HasValue)
+        {
+            var typeId = objectTypeId.Value;
+            query = query.Where(cso => cso.TypeId == typeId);
+        }
+
+        if (partitionId.HasValue)
+        {
+            var partition = partitionId.Value;
+            query = query.Where(cso => cso.PartitionId == partition);
+        }
+
+        return await query.CountAsync();
+    }
+
     /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System, where the status is Obosolete.
     /// </summary>
@@ -2668,6 +2689,30 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<int> GetPendingExportsCountAsync(int connectedSystemId)
     {
         return await Repository.Database.PendingExports.CountAsync(pe => pe.ConnectedSystemId == connectedSystemId);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> GetPendingExportsFilteredCountAsync(
+        int connectedSystemId,
+        PendingExportChangeType? changeType = null,
+        PendingExportStatus? status = null)
+    {
+        var query = Repository.Database.PendingExports
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId);
+
+        if (changeType.HasValue)
+        {
+            var type = changeType.Value;
+            query = query.Where(pe => pe.ChangeType == type);
+        }
+
+        if (status.HasValue)
+        {
+            var statusValue = status.Value;
+            query = query.Where(pe => pe.Status == statusValue);
+        }
+
+        return await query.CountAsync();
     }
 
     public async Task DeletePendingExportAsync(PendingExport pendingExport)

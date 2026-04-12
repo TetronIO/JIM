@@ -106,6 +106,21 @@ function Get-JIMMetaverseObject {
 
         Gets all User objects with Training Status attribute, automatically paginating.
 
+    .EXAMPLE
+        Get-JIMMetaverseObject -Count
+
+        Gets the total count of all Metaverse Objects.
+
+    .EXAMPLE
+        Get-JIMMetaverseObject -Count -ObjectTypeName 'Person'
+
+        Gets the count of Person objects in the metaverse.
+
+    .EXAMPLE
+        Get-JIMMetaverseObject -Count -AttributeName "Department" -AttributeValue "IT"
+
+        Gets the count of objects where Department equals "IT".
+
     .LINK
         Get-JIMMetaverseObjectType
         Get-JIMMetaverseAttribute
@@ -118,25 +133,30 @@ function Get-JIMMetaverseObject {
 
         [Parameter(ParameterSetName = 'List')]
         [Parameter(ParameterSetName = 'ListAll')]
+        [Parameter(ParameterSetName = 'Count')]
         [int]$ObjectTypeId,
 
         [Parameter(ParameterSetName = 'List')]
         [Parameter(ParameterSetName = 'ListAll')]
+        [Parameter(ParameterSetName = 'Count')]
         [ValidateNotNullOrEmpty()]
         [string]$ObjectTypeName,
 
         [Parameter(ParameterSetName = 'List')]
         [Parameter(ParameterSetName = 'ListAll')]
+        [Parameter(ParameterSetName = 'Count')]
         [SupportsWildcards()]
         [string]$Search,
 
         [Parameter(ParameterSetName = 'List')]
         [Parameter(ParameterSetName = 'ListAll')]
+        [Parameter(ParameterSetName = 'Count')]
         [ValidateNotNullOrEmpty()]
         [string]$AttributeName,
 
         [Parameter(ParameterSetName = 'List')]
         [Parameter(ParameterSetName = 'ListAll')]
+        [Parameter(ParameterSetName = 'Count')]
         [string]$AttributeValue,
 
         [Parameter(ParameterSetName = 'List')]
@@ -145,6 +165,9 @@ function Get-JIMMetaverseObject {
 
         [Parameter(Mandatory, ParameterSetName = 'ListAll')]
         [switch]$All,
+
+        [Parameter(Mandatory, ParameterSetName = 'Count')]
+        [switch]$Count,
 
         [Parameter(ParameterSetName = 'List')]
         [ValidateRange(1, [int]::MaxValue)]
@@ -173,6 +196,43 @@ function Get-JIMMetaverseObject {
             'ById' {
                 Write-Verbose "Getting Metaverse Object with ID: $Id"
                 $result = Invoke-JIMApi -Endpoint "/api/v1/metaverse/objects/$Id"
+                $result
+            }
+
+            'Count' {
+                Write-Verbose "Getting count of Metaverse Objects"
+
+                # Validate AttributeName and AttributeValue are used together
+                if ($AttributeName -and -not $PSBoundParameters.ContainsKey('AttributeValue')) {
+                    Write-Error "AttributeName requires AttributeValue to be specified"
+                    return
+                }
+                if ($PSBoundParameters.ContainsKey('AttributeValue') -and -not $AttributeName) {
+                    Write-Error "AttributeValue requires AttributeName to be specified"
+                    return
+                }
+
+                $queryParams = @()
+
+                if ($PSBoundParameters.ContainsKey('ObjectTypeId') -or $ObjectTypeName) {
+                    $queryParams += "objectTypeId=$ObjectTypeId"
+                }
+
+                if ($Search) {
+                    $queryParams += "search=$([System.Uri]::EscapeDataString($Search))"
+                }
+
+                if ($AttributeName) {
+                    $queryParams += "filterAttributeName=$([System.Uri]::EscapeDataString($AttributeName))"
+                    $queryParams += "filterAttributeValue=$([System.Uri]::EscapeDataString($AttributeValue))"
+                }
+
+                $endpoint = "/api/v1/metaverse/objects/count"
+                if ($queryParams.Count -gt 0) {
+                    $endpoint += "?" + ($queryParams -join '&')
+                }
+
+                $result = Invoke-JIMApi -Endpoint $endpoint
                 $result
             }
 

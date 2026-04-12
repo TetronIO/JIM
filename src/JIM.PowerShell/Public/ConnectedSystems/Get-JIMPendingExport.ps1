@@ -66,6 +66,21 @@ function Get-JIMPendingExport {
 
         Gets all attribute changes for the "member" attribute (auto-paginates).
 
+    .EXAMPLE
+        Get-JIMPendingExport -ConnectedSystemId 2 -Count
+
+        Gets the total count of pending exports for Connected System 2.
+
+    .EXAMPLE
+        Get-JIMPendingExport -ConnectedSystemId 2 -Count -ChangeType Create
+
+        Gets the count of pending Create exports for Connected System 2.
+
+    .EXAMPLE
+        Get-JIMPendingExport -ConnectedSystemId 2 -Count -Status Failed
+
+        Gets the count of failed pending exports for Connected System 2.
+
     .LINK
         Get-JIMConnectedSystem
     #>
@@ -74,6 +89,7 @@ function Get-JIMPendingExport {
     param(
         [Parameter(Mandatory, ParameterSetName = 'List', ValueFromPipelineByPropertyName)]
         [Parameter(Mandatory, ParameterSetName = 'ListAll', ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'Count', ValueFromPipelineByPropertyName)]
         [int]$ConnectedSystemId,
 
         [Parameter(Mandatory, ParameterSetName = 'ById')]
@@ -106,11 +122,44 @@ function Get-JIMPendingExport {
 
         [Parameter(Mandatory, ParameterSetName = 'ListAll')]
         [Parameter(Mandatory, ParameterSetName = 'AttributeChangesAll')]
-        [switch]$All
+        [switch]$All,
+
+        [Parameter(Mandatory, ParameterSetName = 'Count')]
+        [switch]$Count,
+
+        [Parameter(ParameterSetName = 'Count')]
+        [ValidateSet('Create', 'Update', 'Delete')]
+        [string]$ChangeType,
+
+        [Parameter(ParameterSetName = 'Count')]
+        [ValidateSet('Pending', 'ExportNotConfirmed', 'Executing', 'Failed', 'Exported')]
+        [string]$Status
     )
 
     process {
         switch ($PSCmdlet.ParameterSetName) {
+            'Count' {
+                Write-Verbose "Getting pending exports count for Connected System $ConnectedSystemId"
+
+                $queryParams = @()
+
+                if ($ChangeType) {
+                    $queryParams += "changeType=$ChangeType"
+                }
+
+                if ($Status) {
+                    $queryParams += "status=$Status"
+                }
+
+                $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/pending-exports/count"
+                if ($queryParams.Count -gt 0) {
+                    $endpoint += "?" + ($queryParams -join '&')
+                }
+
+                $result = Invoke-JIMApi -Endpoint $endpoint
+                $result
+            }
+
             'ById' {
                 Write-Verbose "Getting Pending Export: $Id"
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/pending-exports/$Id"
