@@ -724,7 +724,7 @@ static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
         userRoleClaims.Add(new Claim(Constants.BuiltInClaims.MetaverseObjectId, user.Id.ToString()));
 
         // the new JIM-specific identity is ready, now add it to the ASP.NET identity so it can be easily retrieved later.
-        var jimIdentity = new ClaimsIdentity(userRoleClaims) { Label = "JIM.Web" };
+        var jimIdentity = new ClaimsIdentity(userRoleClaims, authenticationType: null, nameType: null, roleType: Constants.BuiltInRoles.RoleClaimType) { Label = "JIM.Web" };
         context.Principal.AddIdentity(jimIdentity);
 
         // now see if we can supplement the JIM identity with any supplied from the IdP to more fully populate the user.

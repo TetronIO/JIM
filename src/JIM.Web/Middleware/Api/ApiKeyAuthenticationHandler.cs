@@ -138,7 +138,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
             // Add the virtual "User" role for basic access (consistent with SSO auth)
             claims.Add(new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.User));
 
-            var identity = new ClaimsIdentity(claims, SchemeName);
+            var identity = new ClaimsIdentity(claims, SchemeName, nameType: ClaimTypes.Name, roleType: Constants.BuiltInRoles.RoleClaimType);
             var principal = new ClaimsPrincipal(identity);
             var ticket = new AuthenticationTicket(principal, SchemeName);
 
