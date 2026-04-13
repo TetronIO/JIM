@@ -202,7 +202,7 @@ var schedule = await Jim.Scheduler.GetScheduleAsync(id);
 1. Add method to controller in `JIM.Web/Controllers/Api/`
 2. Use DTOs for request/response (in `JIM.Web/Models/Api/`)
 3. Add XML comments for OpenAPI documentation
-4. Test via the Scalar API reference at `/api/reference` (Development only)
+4. Test via the Scalar API reference at `/api/reference`
 
 **Modifying Database Schema:**
 1. Update entity in `JIM.Models/`
