@@ -11,6 +11,7 @@
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject IDialogService DialogService
+@inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -27,7 +28,7 @@
 
 @if (ConnectedSystemHeader != null && ConnectedSystemObject != null)
 {
-    <MudPaper Class="pa-4" Outlined="true">
+    <MudPaper Class="pa-4 mt-4" Outlined="true">
         @* First row: Type, Status, Created, Updated, MVO Link *@
         <MudStack Row="true" AlignItems="AlignItems.Center" Class="flex-wrap" Spacing="3">
             @* Object Type *@
@@ -160,11 +161,19 @@
         </MudPaper>
     }
 
-    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pa-0 mt-4">
+    <div class="mt-6">
+    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pa-0 mt-6">
         <MudTabPanel Text="Attributes">
             <MudPaper Class="pa-0" Outlined="true">
-                <MudTable Items="@GetGroupedAttributes()" Hover="true" Elevation="0" Class="jim-attribute-table"
+                <MudTable Items="@GetGroupedAttributes()" Hover="true" Dense="@_dense" Elevation="0"
+                    Class="@(_dense ? "jim-attribute-table dense-body-only" : "jim-attribute-table")"
                     Breakpoint="Breakpoint.None">
+                    <ToolBarContent>
+                        <MudTooltip Text="@(_dense ? "Normal row spacing" : "Compact row spacing")" Arrow="true" Placement="Placement.Top">
+                            <MudIconButton Icon="@(_dense ? Icons.Material.Filled.DensitySmall : Icons.Material.Filled.DensityMedium)"
+                                           Variant="Variant.Filled" Color="Color.Default" Size="Size.Small" OnClick="OnToggleDense" />
+                        </MudTooltip>
+                    </ToolBarContent>
                     <HeaderContent>
                         <MudTh Class="jim-attr-header-name">
                             <MudTableSortLabel SortBy="@_sortByAttribute"
@@ -268,6 +277,7 @@
             }
         </MudTabPanel>
     </NavigableMudTabs>
+    </div>
 }
 
 @code {
@@ -303,6 +313,32 @@
     private List<ConnectedSystemObjectChange>? CsoChanges { get; set; }
 
     private List<BreadcrumbItem> Breadcrumbs { get; set; } = null!;
+
+    private bool _dense;
+    private bool _preferencesLoaded;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_preferencesLoaded)
+        {
+            try
+            {
+                _dense = await PreferenceService.GetTableDenseAsync() == true;
+                _preferencesLoaded = true;
+                StateHasChanged();
+            }
+            catch
+            {
+                // JS interop not yet available, will retry on next render
+            }
+        }
+    }
+
+    private async Task OnToggleDense()
+    {
+        _dense = !_dense;
+        await PreferenceService.SetTableDenseAsync(_dense);
+    }
 
     protected override async Task OnParametersSetAsync()
     {
