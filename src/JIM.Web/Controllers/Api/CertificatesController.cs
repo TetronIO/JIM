@@ -13,7 +13,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace JIM.Web.Controllers.Api;
 
 /// <summary>
-/// API controller for managing trusted certificates in the JIM certificate store.
+/// API controller for managing Trusted Certificates in the JIM certificate store.
 /// </summary>
 /// <remarks>
 /// Certificates stored here are used for establishing trust with external systems,
@@ -31,7 +31,7 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
     private readonly JimApplication _application = application;
 
     /// <summary>
-    /// List trusted certificates
+    /// List Trusted Certificates
     /// </summary>
     /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection, filter).</param>
     /// <returns>A paginated list of certificate headers.</returns>
@@ -53,7 +53,7 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
     }
 
     /// <summary>
-    /// List enabled trusted certificates
+    /// List enabled Trusted Certificates
     /// </summary>
     /// <returns>A list of enabled certificate headers.</returns>
     [HttpGet("enabled", Name = "GetEnabledCertificates")]
@@ -68,7 +68,7 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
     }
 
     /// <summary>
-    /// Get a trusted certificate
+    /// Get a Trusted Certificate
     /// </summary>
     /// <param name="id">The unique identifier (GUID) of the certificate.</param>
     /// <returns>The certificate details including metadata but not the raw certificate bytes.</returns>
@@ -223,7 +223,7 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
     }
 
     /// <summary>
-    /// Delete a trusted certificate
+    /// Delete a Trusted Certificate
     /// </summary>
     /// <param name="id">The unique identifier (GUID) of the certificate to delete.</param>
     /// <returns>204 No Content on success.</returns>
