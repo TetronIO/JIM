@@ -448,19 +448,42 @@ try
     var staticOpenApiPath = Path.Combine(app.Environment.WebRootPath, "api", "openapi", "v1.json");
     var hasStaticOpenApiDoc = File.Exists(staticOpenApiPath);
 
-    if (hasStaticOpenApiDoc)
+    // JIM-branded Scalar configuration: deep navy background with purple accent,
+    // matching the JIM web UI theme (navy-o6)
+    void ConfigureScalar(ScalarOptions options, string openApiRoutePattern)
     {
-        // Static file is served automatically by UseStaticFiles() at /api/openapi/v1.json
-        app.MapScalarApiReference("/api/reference", options => options
-            .WithTitle("JIM API Reference")
+        options.WithTitle("JIM API Reference")
             .WithFavicon("/images/jim-logo.png")
-            .WithOpenApiRoutePattern("/api/openapi/v1.json")
+            .ForceDarkMode()
+            .WithCustomCss("""
+                .dark-mode {
+                    --scalar-background-1: #051526;
+                    --scalar-background-2: #0d1e30;
+                    --scalar-background-3: #15293c;
+                    --scalar-background-accent: rgba(97, 75, 158, 0.12);
+                    --scalar-color-1: rgba(255, 255, 255, 0.85);
+                    --scalar-color-2: rgba(255, 255, 255, 0.55);
+                    --scalar-color-3: rgba(255, 255, 255, 0.35);
+                    --scalar-color-accent: #9585c8;
+                    --scalar-border-color: rgba(255, 255, 255, 0.08);
+                    --scalar-button-1: #614b9e;
+                    --scalar-button-1-hover: #4e3c80;
+                    --scalar-button-1-color: #ffffff;
+                }
+                """)
+            .WithOpenApiRoutePattern(openApiRoutePattern)
             .AddPreferredSecuritySchemes("OAuth2", "ApiKey")
             .AddAuthorizationCodeFlow("OAuth2", flow =>
             {
                 flow.ClientId = clientId!;
                 flow.Pkce = Pkce.Sha256;
-            }));
+            });
+    }
+
+    if (hasStaticOpenApiDoc)
+    {
+        // Static file is served automatically by UseStaticFiles() at /api/openapi/v1.json
+        app.MapScalarApiReference("/api/reference", o => ConfigureScalar(o, "/api/openapi/v1.json"));
         app.Logger.LogInformation("Serving static OpenAPI document from {Path}", staticOpenApiPath);
     }
     else if (app.Environment.IsDevelopment())
@@ -508,16 +531,7 @@ try
             await next(context);
         });
 
-        app.MapScalarApiReference("/api/reference", options => options
-            .WithTitle("JIM API Reference")
-            .WithFavicon("/images/jim-logo.png")
-            .WithOpenApiRoutePattern("/api/openapi/{documentName}.json")
-            .AddPreferredSecuritySchemes("OAuth2", "ApiKey")
-            .AddAuthorizationCodeFlow("OAuth2", flow =>
-            {
-                flow.ClientId = clientId!;
-                flow.Pkce = Pkce.Sha256;
-            }));
+        app.MapScalarApiReference("/api/reference", o => ConfigureScalar(o, "/api/openapi/{documentName}.json"));
         app.Logger.LogInformation("No static OpenAPI document found; using runtime generation (development only)");
     }
 
