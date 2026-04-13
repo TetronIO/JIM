@@ -3,6 +3,7 @@
 @using JIM.Models.Search
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
+@inject ISnackbar Snackbar
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -36,6 +37,11 @@
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudField Label="Built-in?" Variant="Variant.Outlined">@(_predefinedSearch.BuiltIn ? "Yes" : "No")</MudField>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudSwitch T="bool" Value="_predefinedSearch.IsEnabled" Color="Color.Success"
+                           Label="Enabled" ValueChanged="async (bool val) => await ToggleEnabledAsync(val)" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Disabled searches are hidden from end users but remain visible to administrators.</MudText>
             </MudItem>
         </MudGrid>
     </MudPaper>
@@ -106,5 +112,23 @@
             new("Predefined Searches", href: "/admin/predefined-searches/"),
             new(_predefinedSearch.Name, href: null, disabled: true)
         };
+    }
+
+    private async Task ToggleEnabledAsync(bool isEnabled)
+    {
+        if (_predefinedSearch == null)
+            return;
+
+        try
+        {
+            using var jim = JimFactory.Create();
+            await jim.Search.SetEnabledAsync(_predefinedSearch.Id, isEnabled);
+            _predefinedSearch.IsEnabled = isEnabled;
+            Snackbar.Add($"Predefined search '{_predefinedSearch.Name}' {(isEnabled ? "enabled" : "disabled")}.", Severity.Success);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add($"Failed to update predefined search: {ex.Message}", Severity.Error);
+        }
     }
 }

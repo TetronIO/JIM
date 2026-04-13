@@ -129,12 +129,18 @@ else if (_isInitialised)
         // are we being asked to load a specific PredefinedSearch, via the URL?
         if (!string.IsNullOrEmpty(PredefinedSearchUri))
         {
-            PredefinedSearch = await jim.Search.GetPredefinedSearchAsync(PredefinedSearchUri);
+            var search = await jim.Search.GetPredefinedSearchAsync(PredefinedSearchUri);
+            // disabled searches are hidden from end users
+            if (search is { IsEnabled: true })
+                PredefinedSearch = search;
         }
         else
         {
             // is there a default predefined search for this object type?
-            PredefinedSearch = await jim.Search.GetPredefinedSearchAsync(MetaverseObjectType);
+            var search = await jim.Search.GetPredefinedSearchAsync(MetaverseObjectType);
+            // disabled searches are hidden from end users
+            if (search is { IsEnabled: true })
+                PredefinedSearch = search;
         }
 
         if (PredefinedSearch != null)

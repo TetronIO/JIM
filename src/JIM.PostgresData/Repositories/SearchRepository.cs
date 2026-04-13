@@ -28,7 +28,8 @@ public class SearchRepository : ISearchRepository
             Id = d.Id,
             MetaverseAttributeCount = d.Attributes.Count(),
             MetaverseObjectTypeName = d.MetaverseObjectType.Name,
-            IsDefaultForMetaverseObjectType = d.IsDefaultForMetaverseObjectType
+            IsDefaultForMetaverseObjectType = d.IsDefaultForMetaverseObjectType,
+            IsEnabled = d.IsEnabled
         }).ToListAsync();
 
         return predefinedSearchHeaders;
@@ -57,6 +58,17 @@ public class SearchRepository : ISearchRepository
             Include(q => q.CriteriaGroups).
             ThenInclude(cg => cg.Criteria).
             ThenInclude(c => c.MetaverseAttribute).
-            SingleOrDefaultAsync(q => q.MetaverseObjectType.Id == metaverseObjectType.Id && q.IsDefaultForMetaverseObjectType);
+            SingleOrDefaultAsync(q => q.MetaverseObjectType.Id == metaverseObjectType.Id && q.IsDefaultForMetaverseObjectType && q.IsEnabled);
+    }
+
+    public async Task SetEnabledAsync(int id, bool isEnabled)
+    {
+        var predefinedSearch = await Repository.Database.PredefinedSearches
+            .AsTracking()
+            .SingleOrDefaultAsync(ps => ps.Id == id)
+            ?? throw new InvalidOperationException($"Predefined search with ID {id} not found.");
+
+        predefinedSearch.IsEnabled = isEnabled;
+        await Repository.Database.SaveChangesAsync();
     }
 }

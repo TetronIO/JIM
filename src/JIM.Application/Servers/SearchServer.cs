@@ -46,6 +46,11 @@ public class SearchServer
         return predefinedSearch;
     }
 
+    public async Task SetEnabledAsync(int id, bool isEnabled)
+    {
+        await Application.Repository.Search.SetEnabledAsync(id, isEnabled);
+    }
+
     private static PredefinedSearch PostProcessPredefinedSearch(PredefinedSearch predefinedSearch)
     {
         predefinedSearch.Attributes = predefinedSearch.Attributes.OrderBy(q => q.Position).ToList();
