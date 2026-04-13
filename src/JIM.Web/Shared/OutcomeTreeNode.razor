@@ -18,9 +18,25 @@
                 </MudText>
                 @if (HasInlineTargetDescription)
                 {
-                    @* Inline target entity shown on the same row as the outcome type (e.g., Projected → MVO name, Provisioned → CS name) *@
+                    @* Inline target entity shown on the same row as the outcome type (e.g., Projected → MVO chip, Provisioned → CS name) *@
                     <MudText Typo="Typo.body1" Class="mud-text-secondary">@GetInlineSeparator()</MudText>
-                    @if (HasCsLink)
+                    @if (HasMvoLink && !string.IsNullOrEmpty(MvoTypeName))
+                    {
+                        <MudLink Href="@GetMvoHref(Outcome.TargetEntityId!.Value)"
+                                 Underline="Underline.None" Class="jim-chip-link"
+                                 Style="margin: 0;">
+                            <MudChip T="string" Color="Color.Default" Size="Size.Medium"
+                                     Style="margin: 0;">
+                                <AvatarContent>
+                                    <MudAvatar Color="Color.Primary">MV</MudAvatar>
+                                </AvatarContent>
+                                <ChildContent>
+                                    <b>@MvoTypeName:</b>&nbsp;@Outcome.TargetEntityDescription
+                                </ChildContent>
+                            </MudChip>
+                        </MudLink>
+                    }
+                    else if (HasCsLink)
                     {
                         <MudLink Href="@GetCsHref()" Typo="Typo.body1" Class="mud-text-secondary">
                             @Outcome.TargetEntityDescription
@@ -109,7 +125,8 @@
                                  ParentOutcomeType="Outcome.OutcomeType"
                                  AttributeChanges="AttributeChanges"
                                  MvoAttributeChanges="MvoAttributeChanges"
-                                 MvoTypePluralName="@MvoTypePluralName" />
+                                 MvoTypePluralName="@MvoTypePluralName"
+                                 MvoTypeName="@MvoTypeName" />
             }
         </div>
     }
@@ -138,6 +155,12 @@
     /// </summary>
     [Parameter]
     public string? MvoTypePluralName { get; set; }
+
+    /// <summary>
+    /// Singular name of the MVO type (e.g., "Person"), used for MVO chip display.
+    /// </summary>
+    [Parameter]
+    public string? MvoTypeName { get; set; }
 
     /// <summary>
     /// The outcome type of this node's parent, passed down from the parent OutcomeTreeNode.
@@ -223,11 +246,11 @@
     private string GetInlineSeparator() =>
         Outcome.OutcomeType switch
         {
-            ActivityRunProfileExecutionItemSyncOutcomeType.Joined => "\u2014 to",
+            ActivityRunProfileExecutionItemSyncOutcomeType.Joined => ": to",
             ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected
                 or ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope
-                => "\u2014 from",
-            _ => "\u2014"
+                => ": from",
+            _ => ":"
         };
 
     private void ToggleExpand()

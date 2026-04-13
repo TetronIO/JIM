@@ -249,6 +249,7 @@
                              CsoId="@_activityRunProfileExecutionItem.ConnectedSystemObjectId"
                              CsoConnectedSystemId="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.ConnectedSystemId ?? _connectedSystemHeader?.Id)"
                              MvoTypePluralName="@_metaverseObjectType?.PluralName"
+                             MvoTypeName="@_metaverseObjectType?.Name"
                              InitiallyExpanded="true" />
             </MudPaper>
         }
