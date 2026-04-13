@@ -37,6 +37,10 @@ public static class Constants
 
         // UI
         public static string Theme => "JIM_THEME";
+
+        // OpenAPI
+        public static string OpenApiGenerate => "JIM_OPENAPI_GENERATE";
+        public static string OpenApiOutputPath => "JIM_OPENAPI_OUTPUT_PATH";
     }
 
     public static class BuiltInObjectTypes

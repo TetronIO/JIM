@@ -25,6 +25,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using Microsoft.AspNetCore.OpenApi;
 using Scalar.AspNetCore;
 using MudBlazor;
 using MudBlazor.Services;
@@ -62,8 +63,17 @@ InitialiseLogging(new LoggerConfiguration(), true);
 
 try
 {
-    Log.Information("Starting JIM.Web");
-    await InitialiseJimApplicationAsync();
+    // Lightweight mode: generate the OpenAPI document and exit without starting the full application.
+    // Used during Docker builds and local dev via jim-openapi-generate.
+    var isOpenApiGenerateMode = Environment.GetEnvironmentVariable(Constants.Config.OpenApiGenerate)
+        ?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
+
+    Log.Information("Starting JIM.Web{Mode}", isOpenApiGenerateMode ? " (OpenAPI generation mode)" : "");
+
+    if (!isOpenApiGenerateMode)
+    {
+        await InitialiseJimApplicationAsync();
+    }
 
     var builder = WebApplication.CreateBuilder(args);
 
@@ -138,6 +148,9 @@ try
     var apiAudience = ExtractApiAudience(apiScope, clientId);
     var validIssuers = GetValidIssuers(authority);
 
+    // Skip authentication setup in OpenAPI generation mode (no IdP needed for schema generation)
+    if (!isOpenApiGenerateMode)
+    {
     // Configure triple authentication: Cookies for Blazor UI, JWT Bearer for SSO API, API Key for non-interactive API
     // Configure authentication with multiple schemes
     // Cookie is default for Blazor UI, but forwards to API Key when X-API-Key header is present
@@ -281,6 +294,7 @@ try
 
     // setup authorisation policies
     builder.Services.AddAuthorization();
+    } // end of !isOpenApiGenerateMode auth block
 
     // Add services to the container.
     builder.Services.AddRazorPages();
@@ -319,8 +333,23 @@ try
         options.SubstituteApiVersionInUrl = true;
     });
 
-    // Fetch OIDC discovery document to get IDP-agnostic authorization endpoints
-    var oidcConfig = await FetchOidcDiscoveryDocumentAsync(authority!);
+    // Fetch OIDC discovery document to get IDP-agnostic authorization endpoints.
+    // In OpenAPI generation mode, use constructed placeholder URLs to avoid requiring a live IdP.
+    // These only affect Scalar's "Try It" auth flow, not the documentation content.
+    OidcDiscoveryDocument oidcConfig;
+    if (isOpenApiGenerateMode)
+    {
+        var authorityBase = (authority ?? "https://idp.example.com/realms/jim").TrimEnd('/');
+        oidcConfig = new OidcDiscoveryDocument
+        {
+            AuthorizationEndpoint = $"{authorityBase}/protocol/openid-connect/auth",
+            TokenEndpoint = $"{authorityBase}/protocol/openid-connect/token"
+        };
+    }
+    else
+    {
+        oidcConfig = await FetchOidcDiscoveryDocumentAsync(authority!);
+    }
 
     // Setup OpenAPI with OAuth2 + API Key security schemes for API documentation
     builder.Services.AddOpenApi("v1", options =>
@@ -411,12 +440,30 @@ try
         app.UseHsts();
     }
 
-    // API documentation available at /api/reference in development.
-    // The OpenAPI document is generated once on first request and cached in memory.
-    // First load takes ~1-2 minutes due to deep DTO schema generation
-    // (see https://github.com/dotnet/aspnetcore/issues/63857).
-    if (app.Environment.IsDevelopment())
+    // API documentation: serve Scalar API reference with the OpenAPI document.
+    // Static mode: if a pre-generated file exists at wwwroot/api/openapi/v1.json (baked into
+    // Docker images during build), serve it via UseStaticFiles. Works in any environment.
+    // Dynamic fallback: in development without a static file, generate at runtime with caching.
+    // See https://github.com/dotnet/aspnetcore/issues/63857 for why runtime generation is expensive.
+    var staticOpenApiPath = Path.Combine(app.Environment.WebRootPath, "api", "openapi", "v1.json");
+    var hasStaticOpenApiDoc = File.Exists(staticOpenApiPath);
+
+    if (hasStaticOpenApiDoc)
     {
+        // Static file is served automatically by UseStaticFiles() at /api/openapi/v1.json
+        app.MapScalarApiReference("/api/reference", options => options
+            .WithOpenApiRoutePattern("/api/openapi/v1.json")
+            .AddPreferredSecuritySchemes("OAuth2", "ApiKey")
+            .AddAuthorizationCodeFlow("OAuth2", flow =>
+            {
+                flow.ClientId = clientId!;
+                flow.Pkce = Pkce.Sha256;
+            }));
+        app.Logger.LogInformation("Serving static OpenAPI document from {Path}", staticOpenApiPath);
+    }
+    else if (app.Environment.IsDevelopment())
+    {
+        // Runtime generation with response caching (first load takes ~1-2 minutes)
         string? cachedOpenApiDoc = null;
         app.MapOpenApi("/api/openapi/{documentName}.json");
         app.Use(async (context, next) =>
@@ -430,7 +477,6 @@ try
                     return;
                 }
 
-                // Capture the response from MapOpenApi on first request
                 var originalBody = context.Response.Body;
                 using var memStream = new MemoryStream();
                 context.Response.Body = memStream;
@@ -441,20 +487,16 @@ try
                 {
                     memStream.Seek(0, SeekOrigin.Begin);
                     cachedOpenApiDoc = await new StreamReader(memStream).ReadToEndAsync();
-
-                    // Write the captured response to the original stream
                     memStream.Seek(0, SeekOrigin.Begin);
                     context.Response.Body = originalBody;
                     await memStream.CopyToAsync(originalBody);
 
-                    // Release memory from schema generation
                     GC.Collect(2, GCCollectionMode.Aggressive, true);
                     GC.WaitForPendingFinalizers();
                     GC.Collect(2, GCCollectionMode.Aggressive, true);
                 }
                 else
                 {
-                    // Error response; don't cache, pass through
                     memStream.Seek(0, SeekOrigin.Begin);
                     context.Response.Body = originalBody;
                     await memStream.CopyToAsync(originalBody);
@@ -472,6 +514,7 @@ try
                 flow.ClientId = clientId!;
                 flow.Pkce = Pkce.Sha256;
             }));
+        app.Logger.LogInformation("No static OpenAPI document found; using runtime generation (development only)");
     }
 
     app.UseHttpsRedirection();
@@ -508,6 +551,30 @@ try
         {
             options.GetLevel = (_, _, _) => Serilog.Events.LogEventLevel.Debug;
         });
+
+    // In OpenAPI generation mode, generate the document and exit without starting Kestrel
+    if (isOpenApiGenerateMode)
+    {
+        var outputPath = Environment.GetEnvironmentVariable(Constants.Config.OpenApiOutputPath)
+            ?? Path.Combine(app.Environment.WebRootPath, "api", "openapi", "v1.json");
+
+        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+
+        app.Logger.LogInformation("Generating OpenAPI document...");
+
+        var documentProvider = app.Services.GetRequiredKeyedService<IOpenApiDocumentProvider>("v1");
+        var document = await documentProvider.GetOpenApiDocumentAsync();
+
+        await using var fileStream = File.Create(outputPath);
+        await using var textWriter = new StreamWriter(fileStream);
+        var jsonWriter = new OpenApiJsonWriter(textWriter);
+        document.SerializeAs(OpenApiSpecVersion.OpenApi3_1, jsonWriter);
+        await textWriter.FlushAsync();
+
+        var fileSize = new FileInfo(outputPath).Length;
+        app.Logger.LogInformation("OpenAPI document generated at {Path} ({Size:N0} bytes)", outputPath, fileSize);
+        return 0;
+    }
 
     // Eager initialisation: warm up EF Core compiled model and database connection pool
     // before accepting requests. This prevents the first browser request from hanging while

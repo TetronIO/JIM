@@ -58,6 +58,9 @@ Documentation:
 Diagrams:
   jim-diagrams       - Export Structurizr C4 diagrams as SVG
 
+OpenAPI:
+  jim-openapi-generate - Generate static OpenAPI document (no DB/IdP required)
+
 Planning:
   jim-prd            - Create a new PRD from template
 
@@ -537,6 +540,13 @@ jim-postgres-tune() {
   fi
 
   "${script_path}" "$@"
+}
+
+# Generate static OpenAPI document (no DB or IdP required)
+jim-openapi-generate() {
+  local repo_root
+  repo_root="$(git rev-parse --show-toplevel 2>/dev/null || echo '/workspaces/JIM')"
+  pwsh -File "${repo_root}/scripts/Generate-OpenApiDoc.ps1" "$@"
 }
 
 # Wipe JIM data (reset to initial state without destroying database)
