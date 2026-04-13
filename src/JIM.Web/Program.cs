@@ -452,6 +452,8 @@ try
     {
         // Static file is served automatically by UseStaticFiles() at /api/openapi/v1.json
         app.MapScalarApiReference("/api/reference", options => options
+            .WithTitle("JIM API Reference")
+            .WithFavicon("/images/jim-logo.png")
             .WithOpenApiRoutePattern("/api/openapi/v1.json")
             .AddPreferredSecuritySchemes("OAuth2", "ApiKey")
             .AddAuthorizationCodeFlow("OAuth2", flow =>
@@ -507,6 +509,8 @@ try
         });
 
         app.MapScalarApiReference("/api/reference", options => options
+            .WithTitle("JIM API Reference")
+            .WithFavicon("/images/jim-logo.png")
             .WithOpenApiRoutePattern("/api/openapi/{documentName}.json")
             .AddPreferredSecuritySchemes("OAuth2", "ApiKey")
             .AddAuthorizationCodeFlow("OAuth2", flow =>
