@@ -37,7 +37,10 @@ GET /api/v1/health
 
     ```powershell
     # No connection required; health endpoints are anonymous
-    Invoke-RestMethod -Uri "https://jim.example.com/api/v1/health"
+    Get-JIMHealth -Url "https://jim.example.com"
+
+    # Or with an active connection
+    Get-JIMHealth
     ```
 
 ### Response
@@ -73,7 +76,10 @@ GET /api/v1/health/ready
 === "PowerShell"
 
     ```powershell
-    Invoke-RestMethod -Uri "https://jim.example.com/api/v1/health/ready"
+    Get-JIMHealth -Url "https://jim.example.com" -Ready
+
+    # Or with an active connection
+    Get-JIMHealth -Ready
     ```
 
 ### Response
@@ -118,7 +124,10 @@ GET /api/v1/health/live
 === "PowerShell"
 
     ```powershell
-    Invoke-RestMethod -Uri "https://jim.example.com/api/v1/health/live"
+    Get-JIMHealth -Url "https://jim.example.com" -Live
+
+    # Or with an active connection
+    Get-JIMHealth -Live
     ```
 
 ### Response
@@ -151,11 +160,10 @@ GET /api/v1/health/version
 === "PowerShell"
 
     ```powershell
-    Invoke-RestMethod -Uri "https://jim.example.com/api/v1/health/version"
+    Get-JIMVersion -Url "https://jim.example.com"
 
-    # Or with an established connection:
-    Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
-    Test-JIMConnection
+    # Or with an active connection
+    Get-JIMVersion
     ```
 
 ### Response
@@ -188,7 +196,10 @@ GET /api/v1/auth/config
 === "PowerShell"
 
     ```powershell
-    Invoke-RestMethod -Uri "https://jim.example.com/api/v1/auth/config"
+    Get-JIMAuthConfig -Url "https://jim.example.com"
+
+    # Or with an active connection
+    Get-JIMAuthConfig
     ```
 
 ### Response
@@ -240,8 +251,7 @@ GET /api/v1/userinfo
     ```powershell
     Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
 
-    # Connection details include user info
-    Test-JIMConnection
+    Get-JIMUserInfo
     ```
 
 ### Response
