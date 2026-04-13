@@ -8,6 +8,7 @@
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -106,9 +107,13 @@
                                     @if (_pendingExport.ConnectedSystemObject != null)
                                     {
                                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                            <MudChip T="string" Color="Color.Default">@_pendingExport.ConnectedSystemObject.Type.Name</MudChip>
-                                            <MudLink Href="@($"/admin/connected-systems/{ConnectedSystemId}/connector-space/{_pendingExport.ConnectedSystemObject.Id}")">
-                                                @GetCsoDisplayName()
+                                            <MudLink Href="@($"/admin/connected-systems/{ConnectedSystemId}/connector-space/{_pendingExport.ConnectedSystemObject.Id}")"
+                                                     Underline="Underline.None" Class="jim-chip-link"
+                                                     Style="margin: 0;">
+                                                <MudChip T="string" Color="Color.Default"
+                                                         Style="margin: 0;">
+                                                    <b>@_pendingExport.ConnectedSystemObject.Type.Name:</b>&nbsp;@GetCsoDisplayName()
+                                                </MudChip>
                                             </MudLink>
                                         </MudStack>
                                     }
@@ -124,9 +129,13 @@
                                     @if (_pendingExport.SourceMetaverseObject != null)
                                     {
                                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                            <MudChip T="string" Color="Color.Default">@_pendingExport.SourceMetaverseObject.Type.Name</MudChip>
-                                            <MudLink Href="@Utilities.GetMetaverseObjectHref(_pendingExport.SourceMetaverseObject)">
-                                                @GetMvoDisplayName()
+                                            <MudLink Href="@Utilities.GetMetaverseObjectHref(_pendingExport.SourceMetaverseObject)"
+                                                     Underline="Underline.None" Class="jim-chip-link"
+                                                     Style="margin: 0;">
+                                                <MudChip T="string" Color="Color.Default"
+                                                         Style="margin: 0;">
+                                                    <b>@_pendingExport.SourceMetaverseObject.Type.Name:</b>&nbsp;@GetMvoDisplayName()
+                                                </MudChip>
                                             </MudLink>
                                         </MudStack>
                                     }
@@ -205,8 +214,14 @@
                 <MudCardContent>
                     @if (_pendingExport.AttributeValueChanges.Count > 0)
                     {
-                        <MudTable Items="@GetGroupedChanges()" Hover="true" Elevation="0" Outlined="true"
-                                  Class="jim-attribute-table" Breakpoint="Breakpoint.None">
+                        <MudTable Items="@GetGroupedChanges()" Hover="true" Dense="@_dense" Elevation="0" Outlined="true"
+                                  Class="@(_dense ? "jim-attribute-table dense-body-only" : "jim-attribute-table")" Breakpoint="Breakpoint.None">
+                            <ToolBarContent>
+                                <MudTooltip Text="@(_dense ? "Normal row spacing" : "Compact row spacing")" Arrow="true" Placement="Placement.Top">
+                                    <MudIconButton Icon="@(_dense ? Icons.Material.Filled.DensitySmall : Icons.Material.Filled.DensityMedium)"
+                                                   Variant="Variant.Filled" Color="Color.Default" Size="Size.Small" OnClick="OnToggleDense" />
+                                </MudTooltip>
+                            </ToolBarContent>
                             <HeaderContent>
                                 <MudTh Class="jim-attr-header-name"><MudText Typo="Typo.button">Attribute</MudText></MudTh>
                                 <MudTh><MudText Typo="Typo.button">Change Type</MudText></MudTh>
@@ -326,6 +341,31 @@ else
     private Dictionary<string, int> _attributeChangeTotalCounts = new();
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private bool _notFound;
+    private bool _dense;
+    private bool _preferencesLoaded;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_preferencesLoaded)
+        {
+            try
+            {
+                _dense = await PreferenceService.GetTableDenseAsync() == true;
+                _preferencesLoaded = true;
+                StateHasChanged();
+            }
+            catch
+            {
+                // JS interop not yet available, will retry on next render
+            }
+        }
+    }
+
+    private async Task OnToggleDense()
+    {
+        _dense = !_dense;
+        await PreferenceService.SetTableDenseAsync(_dense);
+    }
 
     protected override async Task OnParametersSetAsync()
     {
