@@ -10,11 +10,11 @@ using Microsoft.AspNetCore.Mvc;
 namespace JIM.Web.Controllers.Api;
 
 /// <summary>
-/// API controller for managing security-related configuration such as roles.
+/// API controller for managing security-related configuration such as Roles.
 /// </summary>
 /// <remarks>
 /// This controller provides endpoints for:
-/// - Retrieving role definitions used for access control
+/// - Retrieving Role definitions used for access control
 /// </remarks>
 [Route("api/v{version:apiVersion}/[controller]")]
 [ApiController]
@@ -27,9 +27,9 @@ public class SecurityController(ILogger<SecurityController> logger, JimApplicati
     private readonly JimApplication _application = application;
 
     /// <summary>
-    /// List security roles
+    /// List security Roles
     /// </summary>
-    /// <returns>A list of all role definitions.</returns>
+    /// <returns>A list of all Role definitions.</returns>
     [HttpGet("roles", Name = "GetRoles")]
     [ProducesResponseType(typeof(IEnumerable<RoleDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
