@@ -360,7 +360,7 @@ try
             {
                 Title = "JIM API",
                 Version = "v1",
-                Description = "JIM (Junctional Identity Manager) REST API for managing identity synchronisation.",
+                Description = "Programmatic access to JIM's identity lifecycle management capabilities. Use this API to configure Connected Systems, manage Synchronisation Rules, query the Metaverse, monitor Activities, and automate deployment via scripting or CI/CD pipelines.",
                 Contact = new OpenApiContact
                 {
                     Name = "Tetron",
