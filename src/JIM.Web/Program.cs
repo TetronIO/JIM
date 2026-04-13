@@ -293,6 +293,17 @@ try
             options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
         });
     builder.Services.AddEndpointsApiExplorer();
+
+    // Increase MaxDepth for the HTTP JSON options used by the OpenAPI schema generator.
+    // The default of 64 is insufficient for JIM's deep DTO graph; the schema exporter and
+    // its internal ResolveReferences expansion need headroom for recursive types.
+    // This only affects schema generation and minimal API endpoints; MVC controllers use
+    // separate JsonOptions. See: https://github.com/dotnet/aspnetcore/issues/63857
+    builder.Services.ConfigureHttpJsonOptions(options =>
+    {
+        options.SerializerOptions.MaxDepth = 256;
+    });
+
     builder.Services.Configure<RouteOptions>(ro => ro.LowercaseUrls = true);
 
     // Configure API versioning with URL path segment (e.g., /api/v1/...)
@@ -400,11 +411,61 @@ try
         app.UseHsts();
     }
 
-    // API documentation available at /api/reference in development
+    // API documentation available at /api/reference in development.
+    // The OpenAPI document is generated once on first request and cached in memory.
+    // First load takes ~1-2 minutes due to deep DTO schema generation
+    // (see https://github.com/dotnet/aspnetcore/issues/63857).
     if (app.Environment.IsDevelopment())
     {
+        string? cachedOpenApiDoc = null;
         app.MapOpenApi("/api/openapi/{documentName}.json");
+        app.Use(async (context, next) =>
+        {
+            if (context.Request.Path.StartsWithSegments("/api/openapi"))
+            {
+                if (cachedOpenApiDoc != null)
+                {
+                    context.Response.ContentType = "application/json";
+                    await context.Response.WriteAsync(cachedOpenApiDoc);
+                    return;
+                }
+
+                // Capture the response from MapOpenApi on first request
+                var originalBody = context.Response.Body;
+                using var memStream = new MemoryStream();
+                context.Response.Body = memStream;
+
+                await next(context);
+
+                if (context.Response.StatusCode == 200)
+                {
+                    memStream.Seek(0, SeekOrigin.Begin);
+                    cachedOpenApiDoc = await new StreamReader(memStream).ReadToEndAsync();
+
+                    // Write the captured response to the original stream
+                    memStream.Seek(0, SeekOrigin.Begin);
+                    context.Response.Body = originalBody;
+                    await memStream.CopyToAsync(originalBody);
+
+                    // Release memory from schema generation
+                    GC.Collect(2, GCCollectionMode.Aggressive, true);
+                    GC.WaitForPendingFinalizers();
+                    GC.Collect(2, GCCollectionMode.Aggressive, true);
+                }
+                else
+                {
+                    // Error response; don't cache, pass through
+                    memStream.Seek(0, SeekOrigin.Begin);
+                    context.Response.Body = originalBody;
+                    await memStream.CopyToAsync(originalBody);
+                }
+                return;
+            }
+            await next(context);
+        });
+
         app.MapScalarApiReference("/api/reference", options => options
+            .WithOpenApiRoutePattern("/api/openapi/{documentName}.json")
             .AddPreferredSecuritySchemes("OAuth2", "ApiKey")
             .AddAuthorizationCodeFlow("OAuth2", flow =>
             {
