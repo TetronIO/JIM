@@ -23,20 +23,15 @@ JIM is a modern Identity Management system designed for organisations with compl
 - Hub-and-spoke architecture using a central metaverse for identity correlation
 - Bidirectional synchronisation of Users, Groups, and custom object types (e.g., Departments, Roles, Computers)
 - Multi-directory LDAP support: Active Directory, OpenLDAP, 389 Directory Server, and other RFC 4512-compliant directories
+- Build-in scheduler that supports parallel operations
 - Tested at 100K+ object scale with bounded memory pipelines
-- Transform data using expressions with built-in functions for common identity operations
-- Extensible with custom connectors (fully unit-testable)
+- Transform data using expressions with extensive built-in functions for common identity operations
+- Extensible with custom Connectors (fully testable)
 - Modern Web Portal and REST API with OpenAPI documentation
-- Service Settings REST API and PowerShell automation for scripted configuration
-- Activity monitoring with auto-refresh and run profile editing
-- Safe cancellation for synchronisation and import operations with no data loss
-- Partition-scoped deletion detection for precise object lifecycle management
-- Data integrity validation for metaverse attribute operations
-- LDAP export concurrency auto-tuning by directory type
-- Object type icons for visual clarity across the portal
-- Docker container hardening: non-root execution, read-only root filesystem, dropped capabilities
-- Docker healthchecks on Worker and Scheduler for reliable orchestration
+- PowerShell automation for Identity as Code (IDaC) - deploy JIM instances in minutes, not months
+- Realtime activity monitoring
 - Single Sign-On (SSO) using OpenID Connect
+- Dark/Light mode
 
 ![A screenshot of JIM running](https://tetron.io/images/jim/0.8.0/homepage-dark.png "JIM Screenshot")
 
