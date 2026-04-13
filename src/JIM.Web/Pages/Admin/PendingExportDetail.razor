@@ -228,6 +228,11 @@
                                   Filter="new Func<AttributeChangeGroup, bool>(FilterFunc)"
                                   Class="@(_dense ? "jim-attribute-table dense-body-only" : "jim-attribute-table")" Breakpoint="Breakpoint.None">
                             <ToolBarContent>
+                                <MudTooltip Text="@(_dense ? "Normal row spacing" : "Compact row spacing")" Arrow="true" Placement="Placement.Top">
+                                    <MudIconButton Icon="@(_dense ? Icons.Material.Filled.DensitySmall : Icons.Material.Filled.DensityMedium)"
+                                                   Variant="Variant.Filled" Color="Color.Default" Size="Size.Small" OnClick="OnToggleDense" />
+                                </MudTooltip>
+                                <MudSpacer />
                                 <MudTextField @bind-Value="_searchString"
                                               Variant="Variant.Outlined"
                                               Placeholder="Search attribute name or value"
@@ -236,11 +241,6 @@
                                               AdornmentIcon="@Icons.Material.Filled.Search"
                                               IconSize="Size.Medium"
                                               Class="mt-0" />
-                                <MudSpacer />
-                                <MudTooltip Text="@(_dense ? "Normal row spacing" : "Compact row spacing")" Arrow="true" Placement="Placement.Top">
-                                    <MudIconButton Icon="@(_dense ? Icons.Material.Filled.DensitySmall : Icons.Material.Filled.DensityMedium)"
-                                                   Variant="Variant.Filled" Color="Color.Default" Size="Size.Small" OnClick="OnToggleDense" />
-                                </MudTooltip>
                             </ToolBarContent>
                             <HeaderContent>
                                 <MudTh Class="jim-attr-header-name"><MudText Typo="Typo.button">Attribute</MudText></MudTh>
