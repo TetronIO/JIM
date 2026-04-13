@@ -91,11 +91,15 @@ Recommendations should be one of:
 
 Unless running in review-only mode:
 
-1. Identify any merge ordering constraints (multiple PRs touching the same file)
-2. Merge approved PRs in the correct order using `gh pr merge <number> --merge`
-3. Include a merge comment noting what was verified (pinning, security advisory, etc.)
-4. If a PR has merge conflicts after earlier merges, comment `@dependabot rebase` and wait for the rebase before merging
-5. Report final status of all PRs
+1. **Check branch is up to date**: Before merging, check whether the PR branch is behind `main` (`gh pr view <number> --json mergeStateStatus`). Branch protection requires the branch to be current. If the branch is behind:
+   - Comment `@dependabot rebase` on the PR
+   - Tell the user the rebase has been requested and that CI will re-run on the updated branch
+   - Once Dependabot rebases and CI passes, the merge can proceed (the user can re-run this skill or merge manually)
+2. Identify any merge ordering constraints (multiple PRs touching the same file)
+3. Merge approved PRs in the correct order using `gh pr merge <number> --merge`
+4. Include a merge comment noting what was verified (pinning, security advisory, etc.)
+5. If a PR has merge conflicts after earlier merges, comment `@dependabot rebase` and wait for the rebase before merging
+6. Report final status of all PRs
 
 ## Reference: JIM's Supply Chain Security Requirements
 
