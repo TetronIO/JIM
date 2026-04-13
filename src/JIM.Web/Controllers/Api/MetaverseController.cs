@@ -21,7 +21,7 @@ namespace JIM.Web.Controllers.Api;
 /// </summary>
 /// <remarks>
 /// The Metaverse is the central identity store in JIM. This controller provides
-/// endpoints for managing Object Types, attributes, and individual Metaverse Objects.
+/// endpoints for managing Object Types, Attributes, and individual Metaverse Objects.
 /// </remarks>
 [Route("api/v{version:apiVersion}/[controller]")]
 [ApiController]
@@ -163,8 +163,8 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// <summary>
     /// Get a Metaverse Attribute
     /// </summary>
-    /// <param name="id">The unique identifier of the attribute.</param>
-    /// <returns>The attribute details.</returns>
+    /// <param name="id">The unique identifier of the Attribute.</param>
+    /// <returns>The Attribute details.</returns>
     [HttpGet("attributes/{id:int}", Name = "GetAttribute")]
     [ProducesResponseType(typeof(MetaverseAttributeDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -182,8 +182,8 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// <summary>
     /// Create a Metaverse Attribute
     /// </summary>
-    /// <param name="request">The attribute creation request.</param>
-    /// <returns>The created attribute details.</returns>
+    /// <param name="request">The Attribute creation request.</param>
+    /// <returns>The created Attribute details.</returns>
     /// <response code="201">Attribute created successfully.</response>
     /// <response code="400">Invalid request or validation failed.</response>
     /// <response code="401">User not authenticated.</response>
@@ -239,9 +239,9 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// <summary>
     /// Update a Metaverse Attribute
     /// </summary>
-    /// <param name="id">The unique identifier of the attribute.</param>
-    /// <param name="request">The attribute update request.</param>
-    /// <returns>The updated attribute details.</returns>
+    /// <param name="id">The unique identifier of the Attribute.</param>
+    /// <param name="request">The Attribute update request.</param>
+    /// <returns>The updated Attribute details.</returns>
     /// <response code="200">Attribute updated successfully.</response>
     /// <response code="400">Invalid request or validation failed.</response>
     /// <response code="404">Attribute not found.</response>
@@ -325,10 +325,10 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// <summary>
     /// Delete a Metaverse Attribute
     /// </summary>
-    /// <param name="id">The unique identifier of the attribute to delete.</param>
+    /// <param name="id">The unique identifier of the Attribute to delete.</param>
     /// <returns>No content on success.</returns>
     /// <response code="204">Attribute deleted successfully.</response>
-    /// <response code="400">Cannot delete built-in or in-use attribute.</response>
+    /// <response code="400">Cannot delete built-in or in-use Attribute.</response>
     /// <response code="404">Attribute not found.</response>
     /// <response code="401">User not authenticated.</response>
     [HttpDelete("attributes/{id:int}", Name = "DeleteAttribute")]
@@ -374,26 +374,26 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// List Metaverse Objects
     /// </summary>
     /// <remarks>
-    /// The DisplayName attribute is always included in the response. Use the `attributes` parameter
-    /// to request additional attributes to be included. This follows a common pattern in APIs and
+    /// The DisplayName Attribute is always included in the response. Use the `attributes` parameter
+    /// to request additional Attributes to be included. This follows a common pattern in APIs and
     /// PowerShell modules where clients can specify which properties to retrieve.
     ///
-    /// Use `?attributes=*` to include all attributes.
+    /// Use `?attributes=*` to include all Attributes.
     ///
     /// **Filtering:**
     /// - `search` - Searches display name (partial match, case-insensitive)
-    /// - `filterAttributeName` + `filterAttributeValue` - Filters by specific attribute (exact match, case-insensitive)
+    /// - `filterAttributeName` + `filterAttributeValue` - Filters by specific Attribute (exact match, case-insensitive)
     ///
     /// Examples:
-    /// - `?attributes=FirstName&amp;attributes=LastName&amp;attributes=Email` - Include specific attributes
-    /// - `?attributes=*` - Include all attributes
+    /// - `?attributes=FirstName&amp;attributes=LastName&amp;attributes=Email` - Include specific Attributes
+    /// - `?attributes=*` - Include all Attributes
     /// - `?filterAttributeName=Account Name&amp;filterAttributeValue=jsmith` - Find by account name
     /// </remarks>
     /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection).</param>
     /// <param name="objectTypeId">Optional Object Type ID to filter by.</param>
     /// <param name="search">Optional search query to filter by display name.</param>
-    /// <param name="attributes">Optional list of attribute names to include in the response. Use "*" for all attributes. DisplayName is always included.</param>
-    /// <param name="filterAttributeName">Optional attribute name to filter by (must be used with filterAttributeValue).</param>
+    /// <param name="attributes">Optional list of Attribute names to include in the response. Use "*" for all Attributes. DisplayName is always included.</param>
+    /// <param name="filterAttributeName">Optional Attribute name to filter by (must be used with filterAttributeValue).</param>
     /// <param name="filterAttributeValue">Optional Attribute Value to filter by (exact match, case-insensitive).</param>
     /// <returns>A paginated list of Metaverse Object headers.</returns>
     [HttpGet("objects", Name = "GetObjects")]
@@ -439,7 +439,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// </summary>
     /// <param name="objectTypeId">Optional Object Type ID to filter by.</param>
     /// <param name="search">Optional search text to filter by display name (partial match, case-insensitive).</param>
-    /// <param name="filterAttributeName">Optional attribute name to filter by (must be used with filterAttributeValue).</param>
+    /// <param name="filterAttributeName">Optional Attribute name to filter by (must be used with filterAttributeValue).</param>
     /// <param name="filterAttributeValue">Optional Attribute Value to filter by (exact match, case-insensitive).</param>
     /// <returns>The count of matching Metaverse Objects.</returns>
     [HttpGet("objects/count", Name = "GetObjectsCount")]
@@ -463,14 +463,14 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// Search Metaverse Objects using a predefined search
     /// </summary>
     /// <remarks>
-    /// Returns only the attributes configured in the predefined search definition, making it significantly
+    /// Returns only the Attributes configured in the predefined search definition, making it significantly
     /// faster than the general objects endpoint for list views at scale (100k+ objects). Use the general
-    /// GET /objects endpoint when you need full object details or custom attribute selection.
+    /// GET /objects endpoint when you need full object details or custom Attribute selection.
     /// </remarks>
     /// <param name="predefinedSearchUri">The URI identifier of the predefined search (e.g. "users", "groups").</param>
     /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection).</param>
     /// <param name="search">Optional search query to filter across all string Attribute Values (case-insensitive).</param>
-    /// <returns>A paginated list of Metaverse Object headers with the predefined search attributes.</returns>
+    /// <returns>A paginated list of Metaverse Object headers with the predefined search Attributes.</returns>
     [HttpGet("objects/search/{predefinedSearchUri}", Name = "SearchObjects")]
     [ProducesResponseType(typeof(PaginatedResponse<MetaverseObjectHeaderDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]

@@ -12,7 +12,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace JIM.Web.Controllers.Api;
 
 /// <summary>
-/// API controller for browsing the container file system.
+/// API controller for browsing the Container file system.
 /// Provides endpoints for listing directories and files within allowed paths.
 /// </summary>
 /// <remarks>
@@ -33,7 +33,7 @@ public class FileSystemController(ILogger<FileSystemController> logger, JimAppli
     /// List directory contents
     /// </summary>
     /// <remarks>
-    /// Browse files and directories within the JIM container's allowed mount points.
+    /// Browse files and directories within the JIM Container's allowed mount points.
     /// Used when configuring file-based connectors (e.g. CSV) to select import/export paths.
     /// Omit the path parameter to list the allowed root directories.
     /// Only paths within the configured allowed roots are accessible; all other paths return 403.
