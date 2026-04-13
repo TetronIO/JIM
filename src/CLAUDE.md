@@ -83,6 +83,11 @@ Repository and server methods that load a single entity follow a weight-based ta
 
 **When adding a new retrieval method, start from the lightest variant that works**; only promote to a heavier one if the caller actually needs the additional data.
 
+**Razor Comments:**
+- **Section headers**: Use box-drawing delimiters: `@* ─── Section Title ─── *@` (U+2500 horizontal box-drawing character). One line, standing alone between markup blocks, to visually separate major page sections.
+- **Inline comments**: Use plain comments: `@* Explanation of what follows *@`. Brief, contextual, placed immediately above or beside the relevant markup.
+- Do NOT use multi-line banner comments (`===`, `amamam`, or similar filler characters). One line is enough.
+
 **Tabs:**
 - Use `<NavigableMudTabs>` instead of `<MudTabs>` for all top-level page tabs; it syncs the active tab with a `?t=slug` query string, enabling browser back/forward navigation
 - Use plain `<MudTabs>` only for tabs inside dialogs or nested sub-tabs where URL navigation is not needed
