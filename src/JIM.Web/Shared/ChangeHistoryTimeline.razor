@@ -50,7 +50,8 @@ else
                                     <MudText Typo="Typo.body1" Style="margin-right: 14px;">
                                         <strong>@changeGroup.ChangeType</strong>
                                     </MudText>
-                                    @if (changeGroup.ChangeType == ObjectChangeType.Joined &&
+                                    @if ((changeGroup.ChangeType == ObjectChangeType.Joined ||
+                                                                 changeGroup.ChangeType == ObjectChangeType.Projected) &&
                                                                 !string.IsNullOrEmpty(changeGroup.CsoExternalId))
                                     {
                                         <span style="margin-right: 12px;">
@@ -529,7 +530,7 @@ else
         /// </summary>
         public string? RunProfileName { get; set; }
         /// <summary>
-        /// For Joined changes: the CSO ID that joined (from RPEI snapshot).
+        /// For Joined/Projected changes: the CSO ID (from RPEI snapshot).
         /// </summary>
         public Guid? CsoId { get; set; }
         /// <summary>

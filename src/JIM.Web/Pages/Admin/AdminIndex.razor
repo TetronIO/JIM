@@ -1,0 +1,141 @@
+@page "/admin"
+@attribute [Authorize(Roles = "Administrator")]
+@inject NavigationManager NavManager
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+<PageTitle>Administration</PageTitle>
+
+<MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Administration</MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
+    Manage system configuration, operations, and security.
+</MudText>
+
+@* ─── Operations & Monitoring ─── *@
+<MudText Typo="Typo.h5" Class="mt-8">Operations &amp; Monitoring</MudText>
+<MudGrid Class="mt-3" Spacing="4">
+    <MudItem xs="12" sm="6" md="4">
+        <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/operations"))">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                <MudIcon Icon="@Icons.Material.Filled.PendingActions" Color="Color.Primary" />
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">Operations</MudText>
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Manage sync operations, schedules, and run history</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4">
+        <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/logs"))">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                <MudIcon Icon="@Icons.Custom.FileFormats.FileDocument" Color="Color.Primary" />
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">Logs</MudText>
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">View application and synchronisation logs</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@* ─── Identity Configuration ─── *@
+<MudText Typo="Typo.h5" Class="mt-8">Identity Configuration</MudText>
+<MudGrid Class="mt-3" Spacing="4">
+    <MudItem xs="12" sm="6" md="4">
+        <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/connected-systems"))">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                <MudIcon Icon="@Icons.Material.Filled.Cable" Color="Color.Primary" />
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">Connected Systems</MudText>
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Configure external system connections</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4">
+        <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/sync-rules"))">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                <MudIcon Icon="@Icons.Material.Filled.Sync" Color="Color.Primary" />
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">Synchronisation Rules</MudText>
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Define how identities flow between systems</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4">
+        <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/schema"))">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                <MudIcon Icon="@Icons.Material.Filled.Schema" Color="Color.Primary" />
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">Schema</MudText>
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Manage object types and attributes</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@* ─── Data Management ─── *@
+<MudText Typo="Typo.h5" Class="mt-8">Data Management</MudText>
+<MudGrid Class="mt-3" Spacing="4">
+    <MudItem xs="12" sm="6" md="4">
+        <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/predefined-searches"))">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                <MudIcon Icon="@Icons.Material.Filled.SavedSearch" Color="Color.Primary" />
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">Predefined Searches</MudText>
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Create and manage saved search queries</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4">
+        <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/example-data"))">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                <MudIcon Icon="@Icons.Material.Filled.Science" Color="Color.Primary" />
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">Example Data</MudText>
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Generate test data from templates</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4">
+        <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/deleted-objects"))">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                <MudIcon Icon="@Icons.Material.Filled.Delete" Color="Color.Primary" />
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">Deleted Objects</MudText>
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">View and restore deleted objects</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@* ─── Security & Settings ─── *@
+<MudText Typo="Typo.h5" Class="mt-8">Security &amp; Settings</MudText>
+<MudGrid Class="mt-3" Spacing="4">
+    <MudItem xs="12" sm="6" md="4">
+        <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/apikeys"))">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                <MudIcon Icon="@Icons.Material.Filled.Api" Color="Color.Primary" />
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">API Keys</MudText>
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Manage API authentication keys</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4">
+        <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/certificates"))">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                <MudIcon Icon="@Icons.Material.Filled.EnhancedEncryption" Color="Color.Primary" />
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">Certificates</MudText>
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Manage trusted certificates</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4">
+        <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/settings"))">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                <MudIcon Icon="@Icons.Material.Filled.DisplaySettings" Color="Color.Primary" />
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">Settings</MudText>
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Configure service settings</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private readonly List<BreadcrumbItem> _breadcrumbs = new()
+    {
+        new("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new("Administration", href: null, disabled: true)
+    };
+}

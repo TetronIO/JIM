@@ -3124,13 +3124,15 @@ public class ConnectedSystemServer
     /// Creates an "Added" change record for a single CSO linked to a specific RPEI.
     /// Used for provisioning CSOs where the RPEI-to-CSO relationship is resolved externally
     /// (e.g., via MVO ID lookup) rather than via <c>rpei.ConnectedSystemObject</c>.
+    /// The RPEI's ConnectedSystemObjectId is intentionally NOT overwritten here; it must
+    /// continue to reference the source CSO that triggered the sync, not the provisioning CSO.
+    /// The CSO change record links to the provisioning CSO via its own ConnectedSystemObjectId.
     /// </summary>
     public void CreateChangeRecordForCso(
         ConnectedSystemObject cso,
         ActivityRunProfileExecutionItem rpei,
         bool changeTrackingEnabled)
     {
-        rpei.ConnectedSystemObjectId = cso.Id;
         AddConnectedSystemObjectChange(cso, rpei, changeTrackingEnabled);
     }
 

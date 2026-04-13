@@ -1167,6 +1167,11 @@ html[lang] .mud-alert-position {
     font-size: 1rem;
 }
 
+/* Dense mode: reduce body cell padding while keeping header at normal height */
+.jim-attribute-table.mud-table-dense tbody tr td {
+    padding: 4px 16px !important;
+}
+
 
 .jim-attr-name {
     background-color: var(--jim-attr-name-bg, var(--mud-palette-background-grey));
@@ -1345,11 +1350,12 @@ html[lang] .mud-alert-position {
 /* Clickable chip link - hover effect for chips wrapped in links */
 .jim-chip-link .mud-chip {
     cursor: pointer;
-    transition: background-color 0.2s ease;
+    transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-.jim-chip-link .mud-chip:hover {
-    background-color: var(--mud-palette-action-default-hover);
+.jim-chip-link:hover .mud-chip {
+    background-color: var(--mud-palette-primary);
+    color: var(--mud-palette-primary-text);
 }
 
 /* Schedule Step Drag and Drop Styles */

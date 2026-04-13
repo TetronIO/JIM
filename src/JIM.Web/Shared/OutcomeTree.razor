@@ -41,7 +41,7 @@ else
                             @if (!string.IsNullOrEmpty(RunProfileName))
                             {
                                 <MudText Typo="Typo.body1" Class="mud-text-secondary">
-                                    — @RunProfileName
+                                    : @RunProfileName
                                 </MudText>
                             }
                         </MudStack>
@@ -62,7 +62,12 @@ else
                                              Style="margin: 0;">
                                         <MudChip T="string" Color="Color.Default" Size="Size.Medium"
                                                  Style="margin: 0;">
-                                            <b>@CsoObjectTypeName:</b>&nbsp;@CsoExternalId
+                                            <AvatarContent>
+                                                <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
+                                            </AvatarContent>
+                                            <ChildContent>
+                                                <b>@CsoObjectTypeName:</b>&nbsp;@CsoExternalId
+                                            </ChildContent>
                                         </MudChip>
                                     </MudLink>
                                 }
@@ -70,14 +75,24 @@ else
                                 {
                                     <MudChip T="string" Color="Color.Default" Size="Size.Medium"
                                              Style="margin: 0;">
-                                        <b>@CsoObjectTypeName:</b>&nbsp;@CsoExternalId
+                                        <AvatarContent>
+                                            <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
+                                        </AvatarContent>
+                                        <ChildContent>
+                                            <b>@CsoObjectTypeName:</b>&nbsp;@CsoExternalId
+                                        </ChildContent>
                                     </MudChip>
                                 }
                                 else if (!string.IsNullOrEmpty(CsoObjectTypeName))
                                 {
                                     <MudChip T="string" Color="Color.Default" Size="Size.Medium"
                                              Style="margin: 0;">
-                                        <b>@CsoObjectTypeName</b>
+                                        <AvatarContent>
+                                            <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
+                                        </AvatarContent>
+                                        <ChildContent>
+                                            <b>@CsoObjectTypeName</b>
+                                        </ChildContent>
                                     </MudChip>
                                 }
                                 else if (!string.IsNullOrEmpty(CsoExternalId))
@@ -99,7 +114,7 @@ else
                                 @if (!string.IsNullOrEmpty(CsoDisplayName) && CsoDisplayName != CsoExternalId)
                                 {
                                     <MudText Typo="Typo.body1" Class="mud-text-secondary"
-                                             Style="margin: 0;">— @CsoDisplayName</MudText>
+                                             Style="margin: 0;">: @CsoDisplayName</MudText>
                                 }
                             </div>
                         </MudStack>
@@ -112,6 +127,7 @@ else
                                                  AttributeChanges="AttributeChanges"
                                                  MvoAttributeChanges="MvoAttributeChanges"
                                                  MvoTypePluralName="@MvoTypePluralName"
+                                                 MvoTypeName="@MvoTypeName"
                                                  InitiallyExpanded="InitiallyExpanded" />
                             }
                         </div>
@@ -205,6 +221,12 @@ else
     /// </summary>
     [Parameter]
     public string? MvoTypePluralName { get; set; }
+
+    /// <summary>
+    /// Singular name of the MVO type (e.g., "Person"), used for MVO chip display.
+    /// </summary>
+    [Parameter]
+    public string? MvoTypeName { get; set; }
 
     /// <summary>
     /// When true, root outcome nodes start with their attribute detail expanded.

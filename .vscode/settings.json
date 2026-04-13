@@ -13,6 +13,7 @@
         "SCIM",
         "secretless",
         "serviceaccount",
-        "SPIFFE"
+        "SPIFFE",
+        "Tetron"
     ]
 }

@@ -283,7 +283,7 @@
                 SyncRuleName = change.SyncRuleName,
                 // Activity link for drill-down (optional - RPEI may be cleaned up)
                 ActivityRunProfileExecutionItemId = change.ActivityRunProfileExecutionItemId,
-                // CSO context for Joined changes (from RPEI snapshot)
+                // CSO context for Joined/Projected changes (from RPEI snapshot)
                 CsoId = change.ActivityRunProfileExecutionItem?.ConnectedSystemObjectId,
                 CsoExternalId = change.ActivityRunProfileExecutionItem?.ExternalIdSnapshot,
                 AttributeChanges = change.AttributeChanges

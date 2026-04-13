@@ -1230,18 +1230,28 @@ public abstract class SyncTaskProcessorBase
 
                 // Build CS ID → name lookup from the export evaluation cache (the provisioning CSO
                 // intentionally does not have the ConnectedSystem nav property loaded).
-                var csNameLookup = _exportEvaluationCache?.ExportRulesByMvoTypeId.Values
+                var csNameLookup = _exportEvaluationCache.ExportRulesByMvoTypeId.Values
                     .SelectMany(rules => rules)
                     .Where(sr => sr.ConnectedSystem != null)
                     .GroupBy(sr => sr.ConnectedSystemId)
                     .ToDictionary(g => g.Key, g => g.First().ConnectedSystem.Name)
                     ?? new Dictionary<int, string>();
 
+                // Build CSO type name lookup from export rules (the provisioning CSO doesn't have the Type nav property loaded)
+                var csoTypeNameLookup = _exportEvaluationCache.ExportRulesByMvoTypeId.Values
+                    .SelectMany(rules => rules)
+                    .Where(sr => sr.ConnectedSystemObjectType != null)
+                    .GroupBy(sr => sr.ConnectedSystemId)
+                    .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name)
+                    ?? new Dictionary<int, string>();
+
                 foreach (var provisioningCso in result.ProvisioningCsosToCreate)
                 {
-                    // Store CS integer ID in DetailMessage for hyperlinking in the UI
-                    var csIdString = provisioningCso.ConnectedSystemId > 0
-                        ? provisioningCso.ConnectedSystemId.ToString()
+                    // Store CS integer ID and CSO type name in DetailMessage for hyperlinking in the UI
+                    // Format: "csId|csoTypeName" (e.g. "4|person")
+                    csoTypeNameLookup.TryGetValue(provisioningCso.ConnectedSystemId, out var csoTypeName);
+                    var detailMessage = provisioningCso.ConnectedSystemId > 0
+                        ? $"{provisioningCso.ConnectedSystemId}|{csoTypeName}"
                         : null;
 
                     csNameLookup.TryGetValue(provisioningCso.ConnectedSystemId, out var csName);
@@ -1251,15 +1261,17 @@ public abstract class SyncTaskProcessorBase
                     {
                         provisionedOutcome = SyncOutcomeBuilder.AddChildOutcome(originatingRpei, exportParent,
                             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned,
+                            targetEntityId: provisioningCso.Id,
                             targetEntityDescription: csName,
-                            detailMessage: csIdString);
+                            detailMessage: detailMessage);
                     }
                     else
                     {
                         provisionedOutcome = SyncOutcomeBuilder.AddRootOutcome(originatingRpei,
                             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned,
+                            targetEntityId: provisioningCso.Id,
                             targetEntityDescription: csName,
-                            detailMessage: csIdString);
+                            detailMessage: detailMessage);
                     }
 
                     provisionedByCs[provisioningCso.ConnectedSystemId] = provisionedOutcome;

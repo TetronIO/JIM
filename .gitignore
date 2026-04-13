@@ -417,6 +417,8 @@ ASALocalRun/
 #  please consider a global .gitignore https://help.github.com/articles/ignoring-files
 .vagrant*
 bin
+bin\\Debug/
+bin\\Release/
 docker/docker
 .*.swp
 a.out

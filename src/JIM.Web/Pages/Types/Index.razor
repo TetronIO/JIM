@@ -51,7 +51,17 @@
             </MudTd>
             @foreach (var psa in PredefinedSearch.Attributes.Where(q => q.MetaverseAttribute.Name != Constants.BuiltInAttributes.DisplayName))
             {
-                <MudTd DataLabel="@psa.MetaverseAttribute.Name">@context.GetAttributeValue(psa.MetaverseAttribute.Name)?.StringValue</MudTd>
+                var value = context.GetAttributeValue(psa.MetaverseAttribute.Name)?.StringValue;
+                <MudTd DataLabel="@psa.MetaverseAttribute.Name">
+                    @if (string.IsNullOrEmpty(value))
+                    {
+                        <span class="mud-text-disabled">-</span>
+                    }
+                    else
+                    {
+                        @value
+                    }
+                </MudTd>
             }
         </RowTemplate>
         <NoRecordsContent>

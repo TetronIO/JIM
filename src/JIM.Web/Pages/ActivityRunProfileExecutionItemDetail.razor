@@ -156,14 +156,24 @@
                                 <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))"
                                          Underline="Underline.None" Class="jim-chip-link">
                                     <MudChip T="string" Color="Color.Default">
-                                        <b>@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name:</b>&nbsp;@_externalIdAttributeValue.ToStringNoName()
+                                        <AvatarContent>
+                                            <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
+                                        </AvatarContent>
+                                        <ChildContent>
+                                            <b>@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name:</b>&nbsp;@_externalIdAttributeValue.ToStringNoName()
+                                        </ChildContent>
                                     </MudChip>
                                 </MudLink>
                             }
                             else
                             {
                                 <MudChip T="string" Color="Color.Default">
-                                    <b>@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name</b>
+                                    <AvatarContent>
+                                        <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
+                                    </AvatarContent>
+                                    <ChildContent>
+                                        <b>@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name</b>
+                                    </ChildContent>
                                 </MudChip>
                                 <MudLink
                                     Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))">
@@ -239,6 +249,7 @@
                              CsoId="@_activityRunProfileExecutionItem.ConnectedSystemObjectId"
                              CsoConnectedSystemId="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.ConnectedSystemId ?? _connectedSystemHeader?.Id)"
                              MvoTypePluralName="@_metaverseObjectType?.PluralName"
+                             MvoTypeName="@_metaverseObjectType?.Name"
                              InitiallyExpanded="true" />
             </MudPaper>
         }

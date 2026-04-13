@@ -8,6 +8,7 @@
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -106,9 +107,18 @@
                                     @if (_pendingExport.ConnectedSystemObject != null)
                                     {
                                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                            <MudChip T="string" Color="Color.Default">@_pendingExport.ConnectedSystemObject.Type.Name</MudChip>
-                                            <MudLink Href="@($"/admin/connected-systems/{ConnectedSystemId}/connector-space/{_pendingExport.ConnectedSystemObject.Id}")">
-                                                @GetCsoDisplayName()
+                                            <MudLink Href="@($"/admin/connected-systems/{ConnectedSystemId}/connector-space/{_pendingExport.ConnectedSystemObject.Id}")"
+                                                     Underline="Underline.None" Class="jim-chip-link"
+                                                     Style="margin: 0;">
+                                                <MudChip T="string" Color="Color.Default"
+                                                         Style="margin: 0;">
+                                                    <AvatarContent>
+                                                        <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
+                                                    </AvatarContent>
+                                                    <ChildContent>
+                                                        <b>@_pendingExport.ConnectedSystemObject.Type.Name:</b>&nbsp;@GetCsoDisplayName()
+                                                    </ChildContent>
+                                                </MudChip>
                                             </MudLink>
                                         </MudStack>
                                     }
@@ -124,9 +134,18 @@
                                     @if (_pendingExport.SourceMetaverseObject != null)
                                     {
                                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                            <MudChip T="string" Color="Color.Default">@_pendingExport.SourceMetaverseObject.Type.Name</MudChip>
-                                            <MudLink Href="@Utilities.GetMetaverseObjectHref(_pendingExport.SourceMetaverseObject)">
-                                                @GetMvoDisplayName()
+                                            <MudLink Href="@Utilities.GetMetaverseObjectHref(_pendingExport.SourceMetaverseObject)"
+                                                     Underline="Underline.None" Class="jim-chip-link"
+                                                     Style="margin: 0;">
+                                                <MudChip T="string" Color="Color.Default"
+                                                         Style="margin: 0;">
+                                                    <AvatarContent>
+                                                        <MudAvatar Color="Color.Primary">MV</MudAvatar>
+                                                    </AvatarContent>
+                                                    <ChildContent>
+                                                        <b>@_pendingExport.SourceMetaverseObject.Type.Name:</b>&nbsp;@GetMvoDisplayName()
+                                                    </ChildContent>
+                                                </MudChip>
                                             </MudLink>
                                         </MudStack>
                                     }
@@ -151,7 +170,7 @@
             <MudItem xs="12">
                 <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-0" Style="align-items: flex-start;">
                     <MudText Typo="Typo.h6" Class="mb-3" Style="line-height: 1.5rem;">Error Information</MudText>
-                    <MudSimpleTable Hover="true" Dense="true" Style="background: transparent;">
+                    <MudSimpleTable Hover="true" Dense="true" Elevation="0" Style="background: transparent;">
                         <tbody>
                             <tr>
                                 <td style="width: 200px;"><strong>Error Count</strong></td>
@@ -205,8 +224,24 @@
                 <MudCardContent>
                     @if (_pendingExport.AttributeValueChanges.Count > 0)
                     {
-                        <MudTable Items="@GetGroupedChanges()" Hover="true" Elevation="0" Outlined="true"
-                                  Class="jim-attribute-table" Breakpoint="Breakpoint.None">
+                        <MudTable Items="@GetGroupedChanges()" Hover="true" Dense="@_dense" Elevation="0" Outlined="true"
+                                  Filter="new Func<AttributeChangeGroup, bool>(FilterFunc)"
+                                  Class="@(_dense ? "jim-attribute-table dense-body-only" : "jim-attribute-table")" Breakpoint="Breakpoint.None">
+                            <ToolBarContent>
+                                <MudTooltip Text="@(_dense ? "Normal row spacing" : "Compact row spacing")" Arrow="true" Placement="Placement.Top">
+                                    <MudIconButton Icon="@(_dense ? Icons.Material.Filled.DensitySmall : Icons.Material.Filled.DensityMedium)"
+                                                   Variant="Variant.Filled" Color="Color.Default" Size="Size.Small" OnClick="OnToggleDense" />
+                                </MudTooltip>
+                                <MudSpacer />
+                                <MudTextField @bind-Value="_searchString"
+                                              Variant="Variant.Outlined"
+                                              Placeholder="Search attribute name or value"
+                                              Margin="Margin.Dense"
+                                              Adornment="Adornment.Start"
+                                              AdornmentIcon="@Icons.Material.Filled.Search"
+                                              IconSize="Size.Medium"
+                                              Class="mt-0" />
+                            </ToolBarContent>
                             <HeaderContent>
                                 <MudTh Class="jim-attr-header-name"><MudText Typo="Typo.button">Attribute</MudText></MudTh>
                                 <MudTh><MudText Typo="Typo.button">Change Type</MudText></MudTh>
@@ -326,6 +361,32 @@ else
     private Dictionary<string, int> _attributeChangeTotalCounts = new();
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private bool _notFound;
+    private bool _dense;
+    private bool _preferencesLoaded;
+    private string _searchString = "";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_preferencesLoaded)
+        {
+            try
+            {
+                _dense = await PreferenceService.GetTableDenseAsync() == true;
+                _preferencesLoaded = true;
+                StateHasChanged();
+            }
+            catch (InvalidOperationException)
+            {
+                // JS interop not yet available, will retry on next render
+            }
+        }
+    }
+
+    private async Task OnToggleDense()
+    {
+        _dense = !_dense;
+        await PreferenceService.SetTableDenseAsync(_dense);
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -459,6 +520,17 @@ else
         };
 
         await DialogService.ShowAsync<PendingExportMvaDialog>(attributeName, parameters, options);
+    }
+
+    private bool FilterFunc(AttributeChangeGroup group)
+    {
+        if (string.IsNullOrWhiteSpace(_searchString))
+            return true;
+        if (group.AttributeName.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (group.Values.Any(v => GetAttributeValue(v).Contains(_searchString, StringComparison.OrdinalIgnoreCase)))
+            return true;
+        return false;
     }
 
     private record AttributeChangeGroup(

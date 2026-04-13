@@ -1,6 +1,7 @@
 @using JIM.Models.Core
 @using Utilities
 @inject IDialogService DialogService
+@inject IUserPreferenceService PreferenceService
 
 @if (MetaverseObject != null)
 
@@ -8,7 +9,13 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 {
     <MudPaper Class="pa-0 mt-3" Outlined="true">
-        <MudSimpleTable Hover="true" Elevation="0" Class="jim-attribute-table">
+        <div class="d-flex justify-start pa-2">
+            <MudTooltip Text="@(_dense ? "Normal row spacing" : "Compact row spacing")" Arrow="true" Placement="Placement.Top">
+                <MudIconButton Icon="@(_dense ? Icons.Material.Filled.DensitySmall : Icons.Material.Filled.DensityMedium)"
+                               Variant="Variant.Filled" Color="Color.Default" Size="Size.Small" OnClick="OnToggleDense" />
+            </MudTooltip>
+        </div>
+        <MudSimpleTable Hover="true" Dense="@_dense" Elevation="0" Class="jim-attribute-table">
             <thead>
                 <tr>
                     <th class="jim-attr-header-name">Attribute</th>
@@ -90,7 +97,7 @@
     </MudPaper>
 }
 
-@* ========================== Render Fragments ========================== *@
+@* ─── Render Fragments ─── *@
 
 @{
     RenderFragment RenderValue(MetaverseObjectAttributeValue attributeValue) => __builder =>
@@ -171,6 +178,32 @@
     /// Maximum number of multi-valued attribute values to show inline before truncating.
     /// </summary>
     private const int MvaInlineThreshold = 10;
+
+    private bool _dense;
+    private bool _preferencesLoaded;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_preferencesLoaded)
+        {
+            try
+            {
+                _dense = await PreferenceService.GetTableDenseAsync() == true;
+                _preferencesLoaded = true;
+                StateHasChanged();
+            }
+            catch (InvalidOperationException)
+            {
+                // JS interop not yet available, will retry on next render
+            }
+        }
+    }
+
+    private async Task OnToggleDense()
+    {
+        _dense = !_dense;
+        await PreferenceService.SetTableDenseAsync(_dense);
+    }
 
     private record MvoAttributeTableGroup(
         string AttributeName,

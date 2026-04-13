@@ -319,4 +319,72 @@ public class ConnectedSystemServerChangeTrackingTests
     }
 
     #endregion
+
+    #region RPEI ConnectedSystemObjectId preservation
+
+    /// <summary>
+    /// Verifies that CreateChangeRecordForCso does NOT overwrite the RPEI's ConnectedSystemObjectId
+    /// when creating a change record for a provisioning CSO.
+    ///
+    /// Bug: When a CSO is projected from CS 1, the RPEI is created with ConnectedSystemObjectId
+    /// pointing to the source CSO. Later, when export evaluation provisions a new CSO in CS 2,
+    /// CreateChangeRecordForCso was overwriting rpei.ConnectedSystemObjectId with the provisioning
+    /// CSO's ID. Since the RPEI is stored by reference in _pendingMvoChanges, the MVO change record
+    /// ended up pointing to the wrong CSO (provisioning CSO in CS 2 instead of source CSO in CS 1).
+    /// </summary>
+    [Test]
+    public void CreateChangeRecordForCso_DoesNotOverwriteRpeiConnectedSystemObjectId_PreservesSourceCsoAsync()
+    {
+        // Arrange
+        var sourceCsoId = Guid.NewGuid();
+        var provisioningCsoId = Guid.NewGuid();
+
+        var personType = new ConnectedSystemObjectType
+        {
+            Id = 1,
+            Name = "person",
+            Attributes = new List<ConnectedSystemObjectTypeAttribute> { _externalIdAttr }
+        };
+
+        // Source CSO from CS 1 (the one that triggered projection)
+        var sourceCso = new ConnectedSystemObject
+        {
+            Id = sourceCsoId,
+            ConnectedSystemId = 1,
+            TypeId = 1,
+            Type = personType,
+            ExternalIdAttributeId = _externalIdAttr.Id
+        };
+
+        // Provisioning CSO in CS 2 (created by export evaluation)
+        var provisioningCso = new ConnectedSystemObject
+        {
+            Id = provisioningCsoId,
+            ConnectedSystemId = 2,
+            TypeId = 1,
+            Type = personType,
+            ExternalIdAttributeId = _externalIdAttr.Id
+        };
+
+        // RPEI created during projection, pointing to source CSO
+        var rpei = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = sourceCso,
+            ConnectedSystemObjectId = sourceCsoId
+        };
+
+        // Act - create change record for the provisioning CSO using the same RPEI
+        _jim.ConnectedSystems.CreateChangeRecordForCso(provisioningCso, rpei, changeTrackingEnabled: true);
+
+        // Assert - RPEI must still point to the source CSO, not the provisioning CSO
+        Assert.That(rpei.ConnectedSystemObjectId, Is.EqualTo(sourceCsoId),
+            "RPEI's ConnectedSystemObjectId must not be overwritten by CreateChangeRecordForCso; " +
+            "it must continue to reference the source CSO that triggered the sync");
+
+        Assert.That(rpei.ConnectedSystemObject, Is.EqualTo(sourceCso),
+            "RPEI's ConnectedSystemObject navigation must still reference the source CSO");
+    }
+
+    #endregion
 }

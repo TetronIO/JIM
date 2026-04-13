@@ -18,9 +18,50 @@
                 </MudText>
                 @if (HasInlineTargetDescription)
                 {
-                    @* Inline target entity shown on the same row as the outcome type (e.g., Projected → MVO name, Provisioned → CS name) *@
+                    @* Inline target entity shown on the same row as the outcome type (e.g., Projected → MVO chip, Provisioned → CS name) *@
                     <MudText Typo="Typo.body1" Class="mud-text-secondary">@GetInlineSeparator()</MudText>
-                    @if (HasCsLink)
+                    @if (HasMvoLink && !string.IsNullOrEmpty(MvoTypeName))
+                    {
+                        <MudLink Href="@GetMvoHref(Outcome.TargetEntityId!.Value)"
+                                 Underline="Underline.None" Class="jim-chip-link"
+                                 Style="margin: 0;">
+                            <MudChip T="string" Color="Color.Default" Size="Size.Medium"
+                                     Style="margin: 0;">
+                                <AvatarContent>
+                                    <MudAvatar Color="Color.Primary">MV</MudAvatar>
+                                </AvatarContent>
+                                <ChildContent>
+                                    <b>@MvoTypeName:</b>&nbsp;@Outcome.TargetEntityDescription
+                                </ChildContent>
+                            </MudChip>
+                        </MudLink>
+                    }
+                    else if (HasProvisionedCsoLink)
+                    {
+                        var csoTypeName = GetCsoTypeNameFromDetailMessage();
+                        <MudLink Href="@GetCsHref()" Typo="Typo.body1" Class="mud-text-secondary">
+                            @Outcome.TargetEntityDescription
+                        </MudLink>
+                        <MudText Typo="Typo.body1" Class="mud-text-secondary">:</MudText>
+                        <MudLink Href="@GetProvisionedCsoHref()"
+                                 Underline="Underline.None" Class="jim-chip-link"
+                                 Style="margin: 0;">
+                            <MudChip T="string" Color="Color.Default" Size="Size.Medium"
+                                     Style="margin: 0;">
+                                <AvatarContent>
+                                    <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
+                                </AvatarContent>
+                                <ChildContent>
+                                    @if (!string.IsNullOrEmpty(csoTypeName))
+                                    {
+                                        <b>@csoTypeName:</b><text>&nbsp;</text>
+                                    }
+                                    @Outcome.TargetEntityId
+                                </ChildContent>
+                            </MudChip>
+                        </MudLink>
+                    }
+                    else if (HasCsLink)
                     {
                         <MudLink Href="@GetCsHref()" Typo="Typo.body1" Class="mud-text-secondary">
                             @Outcome.TargetEntityDescription
@@ -109,7 +150,8 @@
                                  ParentOutcomeType="Outcome.OutcomeType"
                                  AttributeChanges="AttributeChanges"
                                  MvoAttributeChanges="MvoAttributeChanges"
-                                 MvoTypePluralName="@MvoTypePluralName" />
+                                 MvoTypePluralName="@MvoTypePluralName"
+                                 MvoTypeName="@MvoTypeName" />
             }
         </div>
     }
@@ -138,6 +180,12 @@
     /// </summary>
     [Parameter]
     public string? MvoTypePluralName { get; set; }
+
+    /// <summary>
+    /// Singular name of the MVO type (e.g., "Person"), used for MVO chip display.
+    /// </summary>
+    [Parameter]
+    public string? MvoTypeName { get; set; }
 
     /// <summary>
     /// The outcome type of this node's parent, passed down from the parent OutcomeTreeNode.
@@ -202,32 +250,44 @@
 
     /// <summary>
     /// Whether this outcome node has a connected system link available.
-    /// The CS integer ID is stored in DetailMessage as a convention for Provisioned and PendingExportCreated outcomes.
+    /// The CS integer ID is stored in DetailMessage, either as a plain integer ("4") or
+    /// as "csId|csoTypeName" for Provisioned outcomes ("4|person").
     /// </summary>
     private bool HasCsLink =>
         Outcome.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
             or ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
         && !string.IsNullOrEmpty(Outcome.DetailMessage)
-        && int.TryParse(Outcome.DetailMessage, out _);
+        && int.TryParse(GetCsIdFromDetailMessage(), out _);
 
     /// <summary>
     /// Whether this outcome has an MVO link (Guid target entity ID that isn't empty).
     /// Excluded when the MVO no longer exists: MvoDeleted outcomes themselves, or parent
     /// outcomes (e.g. Disconnected) that have an MvoDeleted child in their causality tree.
+    /// Provisioned outcomes store the CSO ID in TargetEntityId, not an MVO ID.
     /// </summary>
     private bool HasMvoLink =>
         Outcome.TargetEntityId.HasValue && Outcome.TargetEntityId.Value != Guid.Empty
         && Outcome.OutcomeType != ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted
+        && Outcome.OutcomeType != ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
         && !Outcome.Children.Any(c => c.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
+
+    /// <summary>
+    /// Whether this Provisioned outcome has a CSO link available.
+    /// Provisioned outcomes store the new CSO's GUID in TargetEntityId and the CS integer ID in DetailMessage.
+    /// </summary>
+    private bool HasProvisionedCsoLink =>
+        Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
+        && Outcome.TargetEntityId.HasValue && Outcome.TargetEntityId.Value != Guid.Empty
+        && HasCsLink;
 
     private string GetInlineSeparator() =>
         Outcome.OutcomeType switch
         {
-            ActivityRunProfileExecutionItemSyncOutcomeType.Joined => "\u2014 to",
+            ActivityRunProfileExecutionItemSyncOutcomeType.Joined => ": to",
             ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected
                 or ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope
-                => "\u2014 from",
-            _ => "\u2014"
+                => ": from",
+            _ => ":"
         };
 
     private void ToggleExpand()
@@ -316,9 +376,32 @@
             : $"/identity/search/{mvoId}";
 
     /// <summary>
-    /// Builds the connected system href for Provisioned and PendingExportCreated outcomes.
-    /// The CS integer ID is stored in DetailMessage by convention.
+    /// Extracts the CS integer ID from DetailMessage, which may be a plain integer ("4")
+    /// or "csId|csoTypeName" for Provisioned outcomes ("4|person").
     /// </summary>
-    private string GetCsHref() => $"/admin/connected-systems/{Outcome.DetailMessage}";
+    private string GetCsIdFromDetailMessage() =>
+        Outcome.DetailMessage?.Split('|')[0] ?? "";
+
+    /// <summary>
+    /// Extracts the CSO type name from DetailMessage for Provisioned outcomes.
+    /// Format: "csId|csoTypeName" (e.g. "4|person"). Returns null if not available.
+    /// </summary>
+    private string? GetCsoTypeNameFromDetailMessage()
+    {
+        var parts = Outcome.DetailMessage?.Split('|');
+        return parts is { Length: > 1 } ? parts[1] : null;
+    }
+
+    /// <summary>
+    /// Builds the connected system href for Provisioned and PendingExportCreated outcomes.
+    /// </summary>
+    private string GetCsHref() => $"/admin/connected-systems/{GetCsIdFromDetailMessage()}";
+
+    /// <summary>
+    /// Builds the CSO detail href for Provisioned outcomes.
+    /// The CS integer ID is in DetailMessage and the CSO GUID is in TargetEntityId.
+    /// </summary>
+    private string GetProvisionedCsoHref() =>
+        Utilities.GetConnectedSystemObjectHref(int.Parse(GetCsIdFromDetailMessage()), Outcome.TargetEntityId!.Value);
 
 }

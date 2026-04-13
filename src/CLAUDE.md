@@ -48,6 +48,14 @@
 - ALWAYS wrap nullable parameters with a typed `NpgsqlParameter`: `NullableParam(value, NpgsqlTypes.NpgsqlDbType.Text)` (see helper method in `ConnectedSystemRepository`, `ActivitiesRepository`, `MetaverseRepository`)
 - This applies to ALL nullable columns in raw SQL INSERT/UPDATE statements: string, int, Guid, DateTime, bool, etc.
 
+**Exception Handling:**
+- NEVER use generic `catch` or `catch (Exception)` clauses; always catch a specific exception type
+- For JS interop retry patterns in `OnAfterRenderAsync` (e.g. loading user preferences), catch `InvalidOperationException` specifically; this is the exception Blazor throws when JS interop is invoked before the runtime is ready
+- Do NOT use `?.` on a variable that has already been null-checked with an early return; the null-conditional is redundant and triggers code quality warnings
+
+**Nullable Dereference in Razor:**
+- When accessing a nullable `.Value` property in Razor markup (e.g. `context.LastUpdated.Value`), capture it into a local variable inside the `@if (x.HasValue)` block: `var lastUpdated = context.LastUpdated.Value;` then use the local variable in markup expressions. This avoids repeated nullable dereference warnings from code analysis.
+
 **File Organisation:**
 - One class per file - each class should have its own `.cs` file named after the class
 - Exception: Enums are grouped into a single file per area/folder (e.g., `ConnectedSystemEnums.cs`, `PendingExportEnums.cs`)
@@ -83,6 +91,11 @@ Repository and server methods that load a single entity follow a weight-based ta
 
 **When adding a new retrieval method, start from the lightest variant that works**; only promote to a heavier one if the caller actually needs the additional data.
 
+**Razor Comments:**
+- **Section headers**: Use box-drawing delimiters: `@* ─── Section Title ─── *@` (U+2500 horizontal box-drawing character). One line, standing alone between markup blocks, to visually separate major page sections.
+- **Inline comments**: Use plain comments: `@* Explanation of what follows *@`. Brief, contextual, placed immediately above or beside the relevant markup.
+- Do NOT use multi-line banner comments (`===`, `amamam`, or similar filler characters). One line is enough.
+
 **Tabs:**
 - Use `<NavigableMudTabs>` instead of `<MudTabs>` for all top-level page tabs; it syncs the active tab with a `?t=slug` query string, enabling browser back/forward navigation
 - Use plain `<MudTabs>` only for tabs inside dialogs or nested sub-tabs where URL navigation is not needed
@@ -91,9 +104,12 @@ Repository and server methods that load a single entity follow a weight-based ta
 - ALWAYS use `Variant="Variant.Outlined"` on all `<MudAlert>` components
 - This ensures a consistent outlined style across the entire UI
 
-**Panel Spacing:**
+**Panel Spacing (target: uniform `mt-6` visual gaps between all block-level sections):**
 - Use `Class="pa-4 mt-6"` on `<MudPaper Outlined="true">` panels to ensure consistent vertical spacing between sections
 - Exception: the **first** panel on a page should omit `mt-6` (use just `Class="pa-4"`) so there is no unnecessary top margin
+- **After intro text**: `MudText` with `Typo.subtitle1` renders as a `<p>` with its own bottom margin (~16px). The first panel after intro text should use `mt-4` (not `mt-6`) so the combined gap matches `mt-6` visually
+- **Tab content spacing**: Use `TabPanelsClass="pa-0 mt-6"` on `NavigableMudTabs` / `MudTabs` so the gap between tab headers and tab panel content matches the surrounding spacing
+- **Tabs margin**: `NavigableMudTabs` may not honour `Class` for outer margin; wrap in `<div class="mt-6">` to guarantee spacing above the tab bar
 
 **Tooltips:**
 - ALWAYS use `Arrow="true" Placement="Placement.Top"` on all `<MudTooltip>` components
@@ -114,7 +130,7 @@ Repository and server methods that load a single entity follow a weight-based ta
 - Use `Dense="@_dense"` and `Class="@(_dense ? "dense-body-only" : "")"` on the `MudTable`; the `dense-body-only` CSS class keeps header rows at normal height while body rows are compact
 - Add a `MudButton` with `StartIcon` (not `MudIconButton`, which renders circular) in the `ToolBarContent` to toggle density, using `Icons.Material.Filled.DensitySmall` / `DensityMedium`
 - Persist the preference via `IUserPreferenceService.GetTableDenseAsync()` / `SetTableDenseAsync()` (stored in browser localStorage under a single shared key, so the setting applies globally across all pages)
-- Default to normal spacing (`_dense = false`); load the saved preference in `OnAfterRenderAsync`
+- Default to normal spacing (`_dense = false`); load the saved preference in `OnAfterRenderAsync` with `catch (InvalidOperationException)` for JS interop retry
 - See `Pages/Types/Index.razor` for the reference implementation
 
 ## Architecture Quick Reference
