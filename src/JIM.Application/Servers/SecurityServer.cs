@@ -24,18 +24,38 @@ public class SecurityServer
         return await Application.Repository.Security.GetRoleAsync(roleName);
     }
 
+    public async Task<Role?> GetRoleByIdAsync(int roleId)
+    {
+        return await Application.Repository.Security.GetRoleByIdAsync(roleId);
+    }
+
     public async Task<List<Role>> GetMetaverseObjectRolesAsync(MetaverseObject metaverseObject)
     {
         return await Application.Repository.Security.GetMetaverseObjectRolesAsync(metaverseObject.Id);
     }
 
     public async Task<bool> IsObjectInRoleAsync(MetaverseObject metaverseObject, string roleName)
-    { 
+    {
         return await Application.Repository.Security.IsObjectInRoleAsync(metaverseObject.Id, roleName);
     }
 
     public async Task AddObjectToRoleAsync(MetaverseObject metaverseObject, string roleName)
     {
         await Application.Repository.Security.AddObjectToRoleAsync(metaverseObject.Id, roleName);
+    }
+
+    public async Task AddObjectToRoleByIdAsync(Guid objectId, int roleId)
+    {
+        await Application.Repository.Security.AddObjectToRoleByIdAsync(objectId, roleId);
+    }
+
+    public async Task RemoveObjectFromRoleAsync(Guid objectId, int roleId)
+    {
+        await Application.Repository.Security.RemoveObjectFromRoleAsync(objectId, roleId);
+    }
+
+    public async Task<List<MetaverseObject>> GetRoleMembersAsync(int roleId)
+    {
+        return await Application.Repository.Security.GetRoleMembersAsync(roleId);
     }
 }

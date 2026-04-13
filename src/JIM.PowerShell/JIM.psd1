@@ -128,6 +128,9 @@
 
         # Security
         'Get-JIMRole',
+        'Get-JIMRoleMember',
+        'Add-JIMRoleMember',
+        'Remove-JIMRoleMember',
 
         # Data Generation
         'Get-JIMExampleDataSet',
