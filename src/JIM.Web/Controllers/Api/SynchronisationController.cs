@@ -24,12 +24,12 @@ using Microsoft.AspNetCore.Mvc;
 namespace JIM.Web.Controllers.Api;
 
 /// <summary>
-/// API controller for managing synchronisation configuration including Connected Systems and Sync Rules.
+/// API controller for managing synchronisation configuration including Connected Systems and Synchronisation Rules.
 /// </summary>
 /// <remarks>
 /// This controller provides endpoints for managing the synchronisation infrastructure:
 /// - Connected Systems: External identity stores that sync with the Metaverse
-/// - Sync Rules: Configuration for how data flows between Connected Systems and the Metaverse
+/// - Synchronisation Rules: Configuration for how data flows between Connected Systems and the Metaverse
 /// </remarks>
 [Route("api/v{version:apiVersion}/[controller]")]
 [ApiController]
@@ -440,7 +440,7 @@ public class SynchronisationController(
     /// Get a deletion preview for a Connected System
     /// </summary>
     /// <remarks>
-    /// Call this before deleting a Connected System to understand the impact. The preview includes counts of Connected System Objects, Sync Rules, Metaverse Objects, and Pending Exports that will be affected.
+    /// Call this before deleting a Connected System to understand the impact. The preview includes counts of Connected System Objects, Synchronisation Rules, Metaverse Objects, and Pending Exports that will be affected.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <returns>A preview showing counts of affected objects and any warnings.</returns>
@@ -903,7 +903,7 @@ public class SynchronisationController(
     /// Import schema from a Connected System
     /// </summary>
     /// <remarks>
-    /// Connects to the external system and retrieves its Object Types and Attributes. This is required before creating Sync Rules. Existing schema configuration will be replaced; Sync Rules referencing removed Object Types or Attributes will need to be updated.
+    /// Connects to the external system and retrieves its Object Types and Attributes. This is required before creating Synchronisation Rules. Existing schema configuration will be replaced; Synchronisation Rules referencing removed Object Types or Attributes will need to be updated.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <returns>The updated Connected System with imported schema.</returns>
@@ -1477,10 +1477,10 @@ public class SynchronisationController(
     #region Sync Rules
 
     /// <summary>
-    /// List Sync Rules
+    /// List Synchronisation Rules
     /// </summary>
     /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection, filter).</param>
-    /// <returns>A paginated list of Sync Rule headers.</returns>
+    /// <returns>A paginated list of Synchronisation Rule headers.</returns>
     [HttpGet("sync-rules", Name = "GetSyncRules")]
     [ProducesResponseType(typeof(PaginatedResponse<SyncRuleHeader>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -1498,10 +1498,10 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Get a Sync Rule
+    /// Get a Synchronisation Rule
     /// </summary>
-    /// <param name="id">The unique identifier of the Sync Rule.</param>
-    /// <returns>The Sync Rule details including Attribute flow configuration.</returns>
+    /// <param name="id">The unique identifier of the Synchronisation Rule.</param>
+    /// <returns>The Synchronisation Rule details including Attribute flow configuration.</returns>
     [HttpGet("sync-rules/{id:int}", Name = "GetSyncRule")]
     [ProducesResponseType(typeof(SyncRuleHeader), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -1517,14 +1517,14 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Create a Sync Rule
+    /// Create a Synchronisation Rule
     /// </summary>
     /// <remarks>
     /// For Import rules, set <c>ProjectToMetaverse</c> to true to create Metaverse objects from imported data. For Export rules, set <c>ProvisionToConnectedSystem</c> to true to create Connected System Objects.
     /// </remarks>
-    /// <param name="request">The Sync Rule creation request.</param>
-    /// <returns>The created Sync Rule details.</returns>
-    /// <response code="201">Sync Rule created successfully.</response>
+    /// <param name="request">The Synchronisation Rule creation request.</param>
+    /// <returns>The created Synchronisation Rule details.</returns>
+    /// <response code="201">Synchronisation Rule created successfully.</response>
     /// <response code="400">Invalid request or validation failed.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("sync-rules", Name = "CreateSyncRule")]
@@ -1598,14 +1598,14 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Update a Sync Rule
+    /// Update a Synchronisation Rule
     /// </summary>
-    /// <param name="id">The unique identifier of the Sync Rule to update.</param>
+    /// <param name="id">The unique identifier of the Synchronisation Rule to update.</param>
     /// <param name="request">The update request with new values.</param>
-    /// <returns>The updated Sync Rule details.</returns>
-    /// <response code="200">Sync Rule updated successfully.</response>
+    /// <returns>The updated Synchronisation Rule details.</returns>
+    /// <response code="200">Synchronisation Rule updated successfully.</response>
     /// <response code="400">Invalid request or validation failed.</response>
-    /// <response code="404">Sync Rule not found.</response>
+    /// <response code="404">Synchronisation Rule not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPut("sync-rules/{id:int}", Name = "UpdateSyncRule")]
     [ProducesResponseType(typeof(SyncRuleHeader), StatusCodes.Status200OK)]
@@ -1666,12 +1666,12 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Delete a Sync Rule
+    /// Delete a Synchronisation Rule
     /// </summary>
-    /// <param name="id">The unique identifier of the Sync Rule to delete.</param>
+    /// <param name="id">The unique identifier of the Synchronisation Rule to delete.</param>
     /// <returns>No content on success.</returns>
-    /// <response code="204">Sync Rule deleted successfully.</response>
-    /// <response code="404">Sync Rule not found.</response>
+    /// <response code="204">Synchronisation Rule deleted successfully.</response>
+    /// <response code="404">Synchronisation Rule not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpDelete("sync-rules/{id:int}", Name = "DeleteSyncRule")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -1710,9 +1710,9 @@ public class SynchronisationController(
     #region Sync Rule Mappings
 
     /// <summary>
-    /// List Attribute Flow Mappings for a Sync Rule
+    /// List Attribute Flow Mappings for a Synchronisation Rule
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <returns>A list of Attribute Flow Mappings.</returns>
     [HttpGet("sync-rules/{syncRuleId:int}/mappings", Name = "GetSyncRuleMappings")]
     [ProducesResponseType(typeof(IEnumerable<SyncRuleMappingDto>), StatusCodes.Status200OK)]
@@ -1734,7 +1734,7 @@ public class SynchronisationController(
     /// <summary>
     /// Get an Attribute Flow Mapping
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="mappingId">The unique identifier of the mapping.</param>
     /// <returns>The Attribute Flow Mapping details.</returns>
     [HttpGet("sync-rules/{syncRuleId:int}/mappings/{mappingId:int}", Name = "GetSyncRuleMapping")]
@@ -1762,12 +1762,12 @@ public class SynchronisationController(
     /// <remarks>
     /// For Import rules, specify <c>TargetMetaverseAttributeId</c> and source <c>ConnectedSystemAttributeIds</c>. For Export rules, specify <c>TargetConnectedSystemAttributeId</c> and source <c>MetaverseAttributeIds</c>.
     /// </remarks>
-    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="request">The mapping creation request.</param>
     /// <returns>The created Attribute Flow Mapping.</returns>
     /// <response code="201">Mapping created successfully.</response>
     /// <response code="400">Invalid request or validation failed.</response>
-    /// <response code="404">Sync Rule or referenced Attributes not found.</response>
+    /// <response code="404">Synchronisation Rule or referenced Attributes not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("sync-rules/{syncRuleId:int}/mappings", Name = "CreateSyncRuleMapping")]
     [ProducesResponseType(typeof(SyncRuleMappingDto), StatusCodes.Status201Created)]
@@ -1908,11 +1908,11 @@ public class SynchronisationController(
     /// <summary>
     /// Delete an Attribute Flow Mapping
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="mappingId">The unique identifier of the mapping to delete.</param>
     /// <returns>No content on success.</returns>
     /// <response code="204">Mapping deleted successfully.</response>
-    /// <response code="404">Sync Rule or mapping not found.</response>
+    /// <response code="404">Synchronisation Rule or mapping not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpDelete("sync-rules/{syncRuleId:int}/mappings/{mappingId:int}", Name = "DeleteSyncRuleMapping")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -1954,13 +1954,13 @@ public class SynchronisationController(
     #region Sync Rule Scoping Criteria
 
     /// <summary>
-    /// List Scoping Criteria groups for a Sync Rule
+    /// List Scoping Criteria groups for a Synchronisation Rule
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <returns>A list of Scoping Criteria groups with their criteria.</returns>
     /// <response code="200">Returns the list of Scoping Criteria groups.</response>
-    /// <response code="400">Sync Rule is not an export rule.</response>
-    /// <response code="404">Sync Rule not found.</response>
+    /// <response code="400">Synchronisation Rule is not an export rule.</response>
+    /// <response code="404">Synchronisation Rule not found.</response>
     [HttpGet("sync-rules/{syncRuleId:int}/scoping-criteria", Name = "GetScopingCriteriaGroups")]
     [ProducesResponseType(typeof(IEnumerable<SyncRuleScopingCriteriaGroupDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
@@ -1983,7 +1983,7 @@ public class SynchronisationController(
     /// <summary>
     /// Get a Scoping Criteria group
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="groupId">The unique identifier of the criteria group.</param>
     /// <returns>The Scoping Criteria group details.</returns>
     [HttpGet("sync-rules/{syncRuleId:int}/scoping-criteria/{groupId:int}", Name = "GetScopingCriteriaGroup")]
@@ -2010,12 +2010,12 @@ public class SynchronisationController(
     /// <remarks>
     /// Creates a group at the root level. Use the child-groups endpoint to create nested groups.
     /// </remarks>
-    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="request">The criteria group creation request.</param>
     /// <returns>The created Scoping Criteria group.</returns>
     /// <response code="201">Group created successfully.</response>
     /// <response code="400">Invalid request.</response>
-    /// <response code="404">Sync Rule not found.</response>
+    /// <response code="404">Synchronisation Rule not found.</response>
     [HttpPost("sync-rules/{syncRuleId:int}/scoping-criteria", Name = "CreateScopingCriteriaGroup")]
     [ProducesResponseType(typeof(SyncRuleScopingCriteriaGroupDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
@@ -2064,7 +2064,7 @@ public class SynchronisationController(
     /// <summary>
     /// Create a child Scoping Criteria group
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="parentGroupId">The unique identifier of the parent criteria group.</param>
     /// <param name="request">The criteria group creation request.</param>
     /// <returns>The created Scoping Criteria group.</returns>
@@ -2121,7 +2121,7 @@ public class SynchronisationController(
     /// <summary>
     /// Update a Scoping Criteria group
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="groupId">The unique identifier of the criteria group.</param>
     /// <param name="request">The update request.</param>
     /// <returns>The updated Scoping Criteria group.</returns>
@@ -2176,7 +2176,7 @@ public class SynchronisationController(
     /// <summary>
     /// Delete a Scoping Criteria group
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="groupId">The unique identifier of the criteria group to delete.</param>
     /// <returns>No content on success.</returns>
     [HttpDelete("sync-rules/{syncRuleId:int}/scoping-criteria/{groupId:int}", Name = "DeleteScopingCriteriaGroup")]
@@ -2226,9 +2226,9 @@ public class SynchronisationController(
     /// Add a criterion to a Scoping Criteria group
     /// </summary>
     /// <remarks>
-    /// For Export Sync Rules, provide <c>MetaverseAttributeId</c>. For Import Sync Rules, provide <c>ConnectedSystemAttributeId</c>.
+    /// For Export Synchronisation Rules, provide <c>MetaverseAttributeId</c>. For Import Synchronisation Rules, provide <c>ConnectedSystemAttributeId</c>.
     /// </remarks>
-    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="groupId">The unique identifier of the criteria group.</param>
     /// <param name="request">The criterion creation request.</param>
     /// <returns>The created criterion.</returns>
@@ -2319,7 +2319,7 @@ public class SynchronisationController(
     /// <summary>
     /// Delete a criterion from a Scoping Criteria group
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="groupId">The unique identifier of the criteria group.</param>
     /// <param name="criterionId">The unique identifier of the criterion to delete.</param>
     /// <returns>No content on success.</returns>
@@ -2749,12 +2749,12 @@ public class SynchronisationController(
     #region Sync Rule Object Matching Rules (Advanced Mode)
 
     /// <summary>
-    /// List Object Matching Rules for a Sync Rule
+    /// List Object Matching Rules for a Synchronisation Rule
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <returns>A list of Object Matching Rules.</returns>
     /// <response code="200">Returns the list of Object Matching Rules.</response>
-    /// <response code="404">Sync Rule not found.</response>
+    /// <response code="404">Synchronisation Rule not found.</response>
     [HttpGet("sync-rules/{syncRuleId:int}/matching-rules", Name = "GetSyncRuleObjectMatchingRules")]
     [ProducesResponseType(typeof(IEnumerable<ObjectMatchingRuleDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -2775,13 +2775,13 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Get an Object Matching Rule for a Sync Rule
+    /// Get an Object Matching Rule for a Synchronisation Rule
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="ruleId">The unique identifier of the Matching Rule.</param>
     /// <returns>The Object Matching Rule.</returns>
     /// <response code="200">Returns the Object Matching Rule.</response>
-    /// <response code="404">Sync Rule or Matching Rule not found.</response>
+    /// <response code="404">Synchronisation Rule or Matching Rule not found.</response>
     [HttpGet("sync-rules/{syncRuleId:int}/matching-rules/{ruleId:int}", Name = "GetSyncRuleObjectMatchingRule")]
     [ProducesResponseType(typeof(ObjectMatchingRuleDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -2801,14 +2801,14 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Create an Object Matching Rule on a Sync Rule
+    /// Create an Object Matching Rule on a Synchronisation Rule
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="request">The rule creation request.</param>
     /// <returns>The created Object Matching Rule.</returns>
     /// <response code="201">Object Matching Rule created successfully.</response>
     /// <response code="400">Invalid request data.</response>
-    /// <response code="404">Sync Rule or referenced entities not found.</response>
+    /// <response code="404">Synchronisation Rule or referenced entities not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("sync-rules/{syncRuleId:int}/matching-rules", Name = "CreateSyncRuleObjectMatchingRule")]
     [ProducesResponseType(typeof(ObjectMatchingRuleDto), StatusCodes.Status201Created)]
@@ -2906,15 +2906,15 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Update an Object Matching Rule on a Sync Rule
+    /// Update an Object Matching Rule on a Synchronisation Rule
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="ruleId">The unique identifier of the Matching Rule.</param>
     /// <param name="request">The update request.</param>
     /// <returns>The updated Object Matching Rule.</returns>
     /// <response code="200">Object Matching Rule updated successfully.</response>
     /// <response code="400">Invalid request data.</response>
-    /// <response code="404">Sync Rule or Matching Rule not found.</response>
+    /// <response code="404">Synchronisation Rule or Matching Rule not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPut("sync-rules/{syncRuleId:int}/matching-rules/{ruleId:int}", Name = "UpdateSyncRuleObjectMatchingRule")]
     [ProducesResponseType(typeof(ObjectMatchingRuleDto), StatusCodes.Status200OK)]
@@ -3025,13 +3025,13 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Delete an Object Matching Rule from a Sync Rule
+    /// Delete an Object Matching Rule from a Synchronisation Rule
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="ruleId">The unique identifier of the Matching Rule.</param>
     /// <returns>No content on success.</returns>
     /// <response code="204">Object Matching Rule deleted successfully.</response>
-    /// <response code="404">Sync Rule or Matching Rule not found.</response>
+    /// <response code="404">Synchronisation Rule or Matching Rule not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpDelete("sync-rules/{syncRuleId:int}/matching-rules/{ruleId:int}", Name = "DeleteSyncRuleObjectMatchingRule")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -3079,7 +3079,7 @@ public class SynchronisationController(
     /// Switch the Object Matching mode for a Connected System
     /// </summary>
     /// <remarks>
-    /// When switching to advanced mode, Matching Rules are copied from Object Types to Sync Rules. When switching to simple mode, Matching Rules are migrated from Sync Rules to Object Types.
+    /// When switching to advanced mode, Matching Rules are copied from Object Types to Synchronisation Rules. When switching to simple mode, Matching Rules are migrated from Synchronisation Rules to Object Types.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="request">The mode switch request.</param>
