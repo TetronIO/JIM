@@ -23,7 +23,7 @@ namespace JIM.Web.Controllers.Api;
 public class AuthController : ControllerBase
 {
     /// <summary>
-    /// Gets the OAuth/OIDC configuration for interactive authentication.
+    /// Get OAuth/OIDC configuration
     /// </summary>
     /// <remarks>
     /// Returns the OAuth configuration needed by clients (e.g., PowerShell module) to perform

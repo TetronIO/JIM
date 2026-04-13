@@ -50,10 +50,10 @@ public class SynchronisationController(
     #region Connected Systems
 
     /// <summary>
-    /// Gets all connected systems with optional pagination, sorting, and filtering.
+    /// List Connected Systems
     /// </summary>
     /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection, filter).</param>
-    /// <returns>A paginated list of connected system headers.</returns>
+    /// <returns>A paginated list of Connected System headers.</returns>
     [HttpGet("connected-systems", Name = "GetConnectedSystems")]
     [ProducesResponseType(typeof(PaginatedResponse<ConnectedSystemHeader>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -73,10 +73,10 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Gets a specific connected system by ID.
+    /// Get a Connected System
     /// </summary>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
-    /// <returns>The connected system details including configuration and schema.</returns>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <returns>The Connected System details including configuration and schema.</returns>
     [HttpGet("connected-systems/{connectedSystemId:int}", Name = "GetConnectedSystem")]
     [ProducesResponseType(typeof(ConnectedSystemDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -96,10 +96,10 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Gets all object types defined in a connected system's schema.
+    /// List Object Types for a Connected System
     /// </summary>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
-    /// <returns>A list of object types with their attributes.</returns>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <returns>A list of Object Types with their attributes.</returns>
     [HttpGet("connected-systems/{connectedSystemId:int}/object-types", Name = "GetConnectedSystemObjectTypes")]
     [ProducesResponseType(typeof(IEnumerable<ConnectedSystemObjectTypeDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -116,20 +116,20 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Updates a Connected System Object Type.
+    /// Update an Object Type
     /// </summary>
     /// <remarks>
-    /// Use this endpoint to update properties of an object type, such as:
-    /// - Selected: Whether the object type is managed by JIM
+    /// Use this endpoint to update properties of an Object Type, such as:
+    /// - Selected: Whether the Object Type is managed by JIM
     /// - RemoveContributedAttributesOnObsoletion: Whether MVO attributes are removed when CSO is obsoleted
     /// </remarks>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
-    /// <param name="objectTypeId">The unique identifier of the object type.</param>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="objectTypeId">The unique identifier of the Object Type.</param>
     /// <param name="request">The update request with new values.</param>
-    /// <returns>The updated object type details.</returns>
-    /// <response code="200">Object type updated successfully.</response>
+    /// <returns>The updated Object Type details.</returns>
+    /// <response code="200">Object Type updated successfully.</response>
     /// <response code="400">Invalid request or validation failed.</response>
-    /// <response code="404">Connected system or object type not found.</response>
+    /// <response code="404">Connected System or Object Type not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPut("connected-systems/{connectedSystemId:int}/object-types/{objectTypeId:int}", Name = "UpdateConnectedSystemObjectType")]
     [ProducesResponseType(typeof(ConnectedSystemObjectTypeDto), StatusCodes.Status200OK)]
@@ -179,7 +179,7 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Updates a Connected System Attribute.
+    /// Update an attribute
     /// </summary>
     /// <remarks>
     /// Use this endpoint to update properties of an attribute, such as:
@@ -187,14 +187,14 @@ public class SynchronisationController(
     /// - IsExternalId: Whether this is the unique identifier for objects
     /// - IsSecondaryExternalId: Whether this is a secondary identifier (e.g., DN for LDAP)
     /// </remarks>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
-    /// <param name="objectTypeId">The unique identifier of the object type.</param>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="objectTypeId">The unique identifier of the Object Type.</param>
     /// <param name="attributeId">The unique identifier of the attribute.</param>
     /// <param name="request">The update request with new values.</param>
     /// <returns>The updated attribute details.</returns>
     /// <response code="200">Attribute updated successfully.</response>
     /// <response code="400">Invalid request or validation failed.</response>
-    /// <response code="404">Connected system, object type, or attribute not found.</response>
+    /// <response code="404">Connected System, Object Type, or attribute not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPut("connected-systems/{connectedSystemId:int}/object-types/{objectTypeId:int}/attributes/{attributeId:int}", Name = "UpdateConnectedSystemAttribute")]
     [ProducesResponseType(typeof(ConnectedSystemAttributeDto), StatusCodes.Status200OK)]
@@ -292,17 +292,18 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Bulk updates multiple Connected System Attributes in a single operation.
-    /// This creates a single Activity record for the entire batch operation, rather than
-    /// individual activities for each attribute update.
+    /// Bulk update attributes for an Object Type
     /// </summary>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
-    /// <param name="objectTypeId">The unique identifier of the object type containing the attributes.</param>
+    /// <remarks>
+    /// Updates multiple attributes in a single operation, creating one Activity record for the entire batch rather than individual records per attribute.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="objectTypeId">The unique identifier of the Object Type containing the attributes.</param>
     /// <param name="request">Dictionary of attribute updates keyed by attribute ID.</param>
     /// <returns>Response containing the activity ID, updated count, updated attributes, and any errors.</returns>
     /// <response code="200">Attributes updated successfully (may include partial success with errors).</response>
     /// <response code="400">Invalid request or empty attributes dictionary.</response>
-    /// <response code="404">Connected system or object type not found.</response>
+    /// <response code="404">Connected System or Object Type not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPut("connected-systems/{connectedSystemId:int}/object-types/{objectTypeId:int}/attributes", Name = "BulkUpdateConnectedSystemAttributes")]
     [ProducesResponseType(typeof(BulkUpdateConnectedSystemAttributesResponse), StatusCodes.Status200OK)]
@@ -373,11 +374,11 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Gets a specific connected system object by ID.
+    /// Get a Connected System Object
     /// </summary>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
-    /// <param name="id">The unique identifier (GUID) of the connected system object.</param>
-    /// <returns>The connected system object details with capped MVA values and per-attribute summaries.</returns>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="id">The unique identifier (GUID) of the Connected System Object.</param>
+    /// <returns>The Connected System Object details with capped MVA values and per-attribute summaries.</returns>
     [HttpGet("connected-systems/{connectedSystemId:int}/connector-space/{id:guid}", Name = "GetConnectedSystemObject")]
     [ProducesResponseType(typeof(ConnectedSystemObjectDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -394,20 +395,20 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Gets a paginated list of attribute values for a specific attribute on a Connected System Object.
+    /// List Attribute Values for a Connected System Object
     /// </summary>
     /// <remarks>
     /// Use this endpoint to retrieve large multi-valued attribute data (e.g. group members)
     /// with server-side search and pagination. The CSO detail endpoint caps MVA values;
     /// use this endpoint to page through all values.
     /// </remarks>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
-    /// <param name="csoId">The unique identifier (GUID) of the connected system object.</param>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="csoId">The unique identifier (GUID) of the Connected System Object.</param>
     /// <param name="attributeName">The attribute name to retrieve values for.</param>
     /// <param name="page">Page number (1-based). Default: 1.</param>
     /// <param name="pageSize">Number of values per page (1-100). Default: 50.</param>
     /// <param name="search">Optional search text to filter values.</param>
-    /// <returns>A paginated set of attribute values with total count.</returns>
+    /// <returns>A paginated set of Attribute Values with total count.</returns>
     [HttpGet("connected-systems/{connectedSystemId:int}/connector-space/{csoId:guid}/attributes/{attributeName}/values", Name = "GetAttributeValuesPaged")]
     [ProducesResponseType(typeof(PaginatedResponse<ConnectedSystemObjectAttributeValueDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -436,17 +437,12 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Gets a preview of what will be affected by deleting a Connected System.
+    /// Get a deletion preview for a Connected System
     /// </summary>
     /// <remarks>
-    /// Call this before DeleteConnectedSystemAsync to inform the user of the impact.
-    /// The preview includes counts of:
-    /// - Connected System Objects that will be deleted
-    /// - Sync Rules that will be removed
-    /// - Metaverse Objects that will be disconnected
-    /// - Pending exports that will be cancelled
+    /// Call this before deleting a Connected System to understand the impact. The preview includes counts of Connected System Objects, Sync Rules, Metaverse Objects, and Pending Exports that will be affected.
     /// </remarks>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <returns>A preview showing counts of affected objects and any warnings.</returns>
     [HttpGet("connected-systems/{connectedSystemId:int}/deletion-preview", Name = "GetConnectedSystemDeletionPreview")]
     [ProducesResponseType(typeof(ConnectedSystemDeletionPreview), StatusCodes.Status200OK)]
@@ -464,17 +460,13 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Gets the count of unresolved reference attribute values across all objects in a connected system.
+    /// Get the unresolved reference count for a Connected System
     /// </summary>
     /// <remarks>
-    /// An unresolved reference occurs when a reference attribute (e.g. group 'member') contains a value
-    /// that could not be matched to another Connected System Object during the last import run.
-    /// This typically happens when the referenced object is outside the configured container scope
-    /// or has not been imported yet.
-    /// A non-zero count indicates data integrity issues that should be investigated.
+    /// An unresolved reference occurs when a reference attribute (e.g. group 'member') contains a value that could not be matched to another Connected System Object during the last import run. A non-zero count indicates data integrity issues that should be investigated.
     /// </remarks>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
-    /// <returns>The count of unresolved reference attribute values.</returns>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <returns>The count of unresolved reference Attribute Values.</returns>
     [HttpGet("connected-systems/{connectedSystemId:int}/connector-space/unresolved-references/count", Name = "GetUnresolvedReferenceCount")]
     [ProducesResponseType(typeof(int), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -486,13 +478,10 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Gets the count of Connected System Objects in the connector space with optional filtering.
+    /// Get the connector space object count for a Connected System
     /// </summary>
-    /// <remarks>
-    /// Returns a simple integer count. Optimised for fast counting without loading entity data.
-    /// </remarks>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
-    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="objectTypeId">Optional Object Type ID to filter by.</param>
     /// <param name="partitionId">Optional partition ID to filter by.</param>
     /// <returns>The count of matching Connected System Objects.</returns>
     [HttpGet("connected-systems/{connectedSystemId:int}/connector-space/count", Name = "GetConnectorSpaceCount")]
@@ -513,17 +502,16 @@ public class SynchronisationController(
     #region Pending Exports
 
     /// <summary>
-    /// Gets a paginated list of Pending Exports for a Connected System.
+    /// List Pending Exports for a Connected System
     /// </summary>
     /// <remarks>
-    /// Returns lightweight header objects suitable for list views. Use the detail endpoint
-    /// to retrieve full attribute change data for a specific pending export.
+    /// Returns lightweight header objects. Use the detail endpoint to retrieve full attribute change data for a specific Pending Export.
     /// </remarks>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="page">Page number (1-based). Default: 1.</param>
     /// <param name="pageSize">Number of items per page (1-100). Default: 50.</param>
     /// <param name="search">Optional search text to filter by target object, source MVO, or error message.</param>
-    /// <returns>A paginated set of pending export headers.</returns>
+    /// <returns>A paginated set of Pending Export headers.</returns>
     [HttpGet("connected-systems/{connectedSystemId:int}/pending-exports", Name = "GetPendingExports")]
     [ProducesResponseType(typeof(PaginatedResponse<PendingExportHeader>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -550,12 +538,9 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Gets the count of Pending Exports for a Connected System with optional filtering.
+    /// Get the Pending Export count for a Connected System
     /// </summary>
-    /// <remarks>
-    /// Returns a simple integer count. Optimised for fast counting without loading entity data.
-    /// </remarks>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="changeType">Optional change type to filter by (Create = 0, Update = 1, Delete = 2).</param>
     /// <param name="status">Optional status to filter by (Pending = 0, ExportNotConfirmed = 1, Executing = 2, Failed = 3, Exported = 4).</param>
     /// <returns>The count of matching Pending Export objects.</returns>
@@ -575,15 +560,13 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Gets a specific Pending Export by ID with capped multi-valued attribute changes.
+    /// Get a Pending Export
     /// </summary>
     /// <remarks>
-    /// Multi-valued attribute changes are capped at 10 per attribute. Use the
-    /// <c>attributeChangeSummaries</c> array to identify truncated attributes, then
-    /// call the paged attribute changes endpoint to retrieve all values.
+    /// Multi-valued attribute changes are capped at 10 per attribute. Use the <c>attributeChangeSummaries</c> array to identify truncated attributes, then call the paged attribute changes endpoint to retrieve all values.
     /// </remarks>
-    /// <param name="pendingExportId">The unique identifier (GUID) of the pending export.</param>
-    /// <returns>The pending export details with capped attribute changes and per-attribute summaries.</returns>
+    /// <param name="pendingExportId">The unique identifier (GUID) of the Pending Export.</param>
+    /// <returns>The Pending Export details with capped attribute changes and per-attribute summaries.</returns>
     [HttpGet("pending-exports/{pendingExportId:guid}", Name = "GetPendingExport")]
     [ProducesResponseType(typeof(PendingExportDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -599,19 +582,17 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Gets a paginated list of attribute value changes for a specific attribute on a Pending Export.
+    /// List Attribute Value changes for a Pending Export
     /// </summary>
     /// <remarks>
-    /// Use this endpoint to retrieve large multi-valued attribute change data (e.g. group member additions)
-    /// with server-side search and pagination. The pending export detail endpoint caps multi-valued attribute
-    /// changes; use this endpoint to page through all changes for a specific attribute.
+    /// Use this endpoint to page through large multi-valued attribute changes (e.g. group member additions). The Pending Export detail endpoint caps multi-valued attribute changes; use this endpoint to retrieve all values for a specific attribute.
     /// </remarks>
-    /// <param name="pendingExportId">The unique identifier (GUID) of the pending export.</param>
+    /// <param name="pendingExportId">The unique identifier (GUID) of the Pending Export.</param>
     /// <param name="attributeName">The attribute name to retrieve changes for.</param>
     /// <param name="page">Page number (1-based). Default: 1.</param>
     /// <param name="pageSize">Number of changes per page (1-100). Default: 50.</param>
     /// <param name="search">Optional search text to filter changes by value.</param>
-    /// <returns>A paginated set of attribute value changes with total count.</returns>
+    /// <returns>A paginated set of Attribute Value changes with total count.</returns>
     [HttpGet("pending-exports/{pendingExportId:guid}/attribute-changes/{attributeName}/values", Name = "GetPendingExportAttributeChangesPaged")]
     [ProducesResponseType(typeof(PaginatedResponse<PendingExportAttributeValueChangeDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -642,13 +623,9 @@ public class SynchronisationController(
 
     #region Partitions and Containers
     /// <summary>
-    /// Gets all partitions for a Connected System.
+    /// List partitions for a Connected System
     /// </summary>
-    /// <remarks>
-    /// Partitions represent logical divisions within a connected system (e.g., LDAP naming contexts).
-    /// Each partition contains containers that can be selected for import operations.
-    /// </remarks>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <returns>A list of partitions with their containers.</returns>
     [HttpGet("connected-systems/{connectedSystemId:int}/partitions", Name = "GetConnectedSystemPartitions")]
     [ProducesResponseType(typeof(IEnumerable<ConnectedSystemPartitionDto>), StatusCodes.Status200OK)]
@@ -669,18 +646,14 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Updates a Connected System Partition.
+    /// Update a partition
     /// </summary>
-    /// <remarks>
-    /// Use this endpoint to select or deselect a partition for import operations.
-    /// When a partition is selected, objects within it (and its selected containers) will be imported during sync.
-    /// </remarks>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="partitionId">The unique identifier of the partition.</param>
     /// <param name="request">The update request with new values.</param>
     /// <returns>The updated partition details.</returns>
     /// <response code="200">Partition updated successfully.</response>
-    /// <response code="404">Connected system or partition not found.</response>
+    /// <response code="404">Connected System or partition not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPut("connected-systems/{connectedSystemId:int}/partitions/{partitionId:int}", Name = "UpdateConnectedSystemPartition")]
     [ProducesResponseType(typeof(ConnectedSystemPartitionDto), StatusCodes.Status200OK)]
@@ -719,19 +692,14 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Updates a Connected System Container.
+    /// Update a container
     /// </summary>
-    /// <remarks>
-    /// Use this endpoint to select or deselect a container for import operations.
-    /// When a container is selected, objects within it will be imported during sync.
-    /// The parent partition must also be selected for the container selection to take effect.
-    /// </remarks>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="containerId">The unique identifier of the container.</param>
     /// <param name="request">The update request with new values.</param>
     /// <returns>The updated container details.</returns>
     /// <response code="200">Container updated successfully.</response>
-    /// <response code="404">Connected system or container not found.</response>
+    /// <response code="404">Connected System or container not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPut("connected-systems/{connectedSystemId:int}/containers/{containerId:int}", Name = "UpdateConnectedSystemContainer")]
     [ProducesResponseType(typeof(ConnectedSystemContainerDto), StatusCodes.Status200OK)]
@@ -776,15 +744,14 @@ public class SynchronisationController(
     #endregion
 
     /// <summary>
-    /// Creates a new Connected System.
+    /// Create a Connected System
     /// </summary>
     /// <remarks>
-    /// Creates a new Connected System with the specified connector type. The connector's default settings
-    /// will be applied automatically. Use the Update endpoint to configure the settings after creation.
+    /// The connector's default settings are applied automatically. Use the Update endpoint to configure settings after creation.
     /// </remarks>
-    /// <param name="request">The connected system creation request.</param>
-    /// <returns>The created connected system details.</returns>
-    /// <response code="201">Connected system created successfully.</response>
+    /// <param name="request">The Connected System creation request.</param>
+    /// <returns>The created Connected System details.</returns>
+    /// <response code="201">Connected System created successfully.</response>
     /// <response code="400">Invalid request or connector definition not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("connected-systems", Name = "CreateConnectedSystem")]
@@ -845,18 +812,14 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Updates an existing Connected System.
+    /// Update a Connected System
     /// </summary>
-    /// <remarks>
-    /// Updates the name, description, and/or setting values of an existing Connected System.
-    /// Only the fields provided in the request will be updated.
-    /// </remarks>
-    /// <param name="connectedSystemId">The unique identifier of the connected system to update.</param>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System to update.</param>
     /// <param name="request">The update request with new values.</param>
-    /// <returns>The updated connected system details.</returns>
-    /// <response code="200">Connected system updated successfully.</response>
+    /// <returns>The updated Connected System details.</returns>
+    /// <response code="200">Connected System updated successfully.</response>
     /// <response code="400">Invalid request.</response>
-    /// <response code="404">Connected system not found.</response>
+    /// <response code="404">Connected System not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPut("connected-systems/{connectedSystemId:int}", Name = "UpdateConnectedSystem")]
     [ProducesResponseType(typeof(ConnectedSystemDetailDto), StatusCodes.Status200OK)]
@@ -937,20 +900,16 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Imports the schema from the Connected System.
+    /// Import schema from a Connected System
     /// </summary>
     /// <remarks>
-    /// Connects to the external system and retrieves its schema (object types and attributes).
-    /// This is required before creating sync rules, as sync rules reference object type IDs.
-    ///
-    /// **Note:** This operation is destructive - it will replace any existing schema configuration.
-    /// Any sync rules referencing removed object types/attributes will need to be updated.
+    /// Connects to the external system and retrieves its Object Types and attributes. This is required before creating Sync Rules. Existing schema configuration will be replaced; Sync Rules referencing removed Object Types or attributes will need to be updated.
     /// </remarks>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
-    /// <returns>The updated connected system with imported schema.</returns>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <returns>The updated Connected System with imported schema.</returns>
     /// <response code="200">Schema imported successfully.</response>
     /// <response code="400">Schema import failed (e.g., connection error, invalid settings).</response>
-    /// <response code="404">Connected system not found.</response>
+    /// <response code="404">Connected System not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("connected-systems/{connectedSystemId:int}/import-schema", Name = "ImportConnectedSystemSchema")]
     [ProducesResponseType(typeof(ConnectedSystemDetailDto), StatusCodes.Status200OK)]
@@ -998,27 +957,16 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Imports hierarchy (partitions and containers) from the connected system.
+    /// Import hierarchy from a Connected System
     /// </summary>
     /// <remarks>
-    /// This endpoint connects to the external system and retrieves its partition and container hierarchy.
-    /// For LDAP connectors, this retrieves naming contexts and organisational units.
-    ///
-    /// After importing the hierarchy, you can select which partitions and containers to include
-    /// in import operations using the partition and container update endpoints.
-    ///
-    /// This operation uses a match-and-merge approach that preserves existing partition and container
-    /// selections where possible. Items are matched by their ExternalId (e.g., LDAP DN). The response
-    /// includes details about what changed: added items, removed items, renamed items, and moved containers.
-    ///
-    /// If any previously selected items were removed (no longer exist in the external system),
-    /// the `hasSelectedItemsRemoved` flag will be true in the response as a warning.
+    /// Connects to the external system and retrieves its partition and container hierarchy. Existing selections are preserved where possible using a match-and-merge approach. If previously selected items were removed, the <c>hasSelectedItemsRemoved</c> flag will be set in the response.
     /// </remarks>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <returns>A result object describing what changed during the hierarchy refresh.</returns>
     /// <response code="200">Hierarchy imported successfully.</response>
     /// <response code="400">Hierarchy import failed (e.g., connection error, invalid settings).</response>
-    /// <response code="404">Connected system not found.</response>
+    /// <response code="404">Connected System not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("connected-systems/{connectedSystemId:int}/import-hierarchy", Name = "ImportConnectedSystemHierarchy")]
     [ProducesResponseType(typeof(HierarchyRefreshResultDto), StatusCodes.Status200OK)]
@@ -1065,17 +1013,12 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Deletes a Connected System and all its related data.
+    /// Delete a Connected System
     /// </summary>
     /// <remarks>
-    /// This operation may execute synchronously or be queued as a background job depending on system size:
-    /// - Small systems (less than 1000 CSOs): Deleted immediately, returns 200 OK
-    /// - Large systems: Queued as background job, returns 202 Accepted with tracking IDs
-    /// - Systems with running sync: Queued to run after sync completes, returns 202 Accepted
-    ///
-    /// Use the deletion-preview endpoint first to understand the impact before calling this endpoint.
+    /// Small systems (fewer than 1,000 CSOs) are deleted immediately and return 200 OK. Larger systems, or systems with a running sync, are queued as a background job and return 202 Accepted with tracking IDs. Use the deletion-preview endpoint first to understand the impact.
     /// </remarks>
-    /// <param name="connectedSystemId">The unique identifier of the connected system to delete.</param>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System to delete.</param>
     /// <param name="deleteChangeHistory">Whether to delete change history for the deleted CSOs. Default: false (preserves audit trail).</param>
     /// <returns>The result of the deletion request including outcome and tracking IDs.</returns>
     /// <response code="200">Deletion completed immediately.</response>
@@ -1121,21 +1064,17 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Clears all Connected System Objects from a connected system's connector space.
+    /// Clear the connector space for a Connected System
     /// </summary>
     /// <remarks>
-    /// This operation removes all CSOs and their attributes from the connector space,
-    /// typically used before re-importing data from the connected system. By default,
-    /// change history is also deleted since the objects will be re-imported.
-    ///
-    /// This is a destructive operation and should be used with caution.
+    /// Removes all Connected System Objects and their attributes from the connector space. Typically used before re-importing data. This is a destructive operation.
     /// </remarks>
-    /// <param name="connectedSystemId">The unique identifier of the connected system to clear.</param>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System to clear.</param>
     /// <param name="deleteChangeHistory">Whether to delete change history for the cleared CSOs. Default: true (recommended for re-import scenarios).</param>
     /// <response code="200">Connector space cleared successfully.</response>
     /// <response code="400">Clear operation failed.</response>
     /// <response code="401">User is not authenticated.</response>
-    /// <response code="404">Connected system not found.</response>
+    /// <response code="404">Connected System not found.</response>
     [HttpPost("connected-systems/{connectedSystemId:int}/clear", Name = "ClearConnectorSpace")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
@@ -1180,12 +1119,8 @@ public class SynchronisationController(
     #region Connector Definitions
 
     /// <summary>
-    /// Gets all available connector definitions.
+    /// List connector definitions
     /// </summary>
-    /// <remarks>
-    /// Connector definitions describe the available connector types that can be used when creating Connected Systems.
-    /// Each connector definition includes metadata about capabilities, settings, and configuration options.
-    /// </remarks>
     /// <returns>A list of all available connector definitions.</returns>
     [HttpGet("connector-definitions", Name = "GetConnectorDefinitions")]
     [ProducesResponseType(typeof(IEnumerable<ConnectorDefinitionHeader>), StatusCodes.Status200OK)]
@@ -1198,7 +1133,7 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Gets a specific connector definition by ID.
+    /// Get a connector definition
     /// </summary>
     /// <param name="id">The unique identifier of the connector definition.</param>
     /// <returns>The connector definition details including all settings and capabilities.</returns>
@@ -1217,7 +1152,7 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Gets a specific connector definition by name.
+    /// Get a connector definition by name
     /// </summary>
     /// <param name="name">The name of the connector definition (e.g., "CSV File", "LDAP").</param>
     /// <returns>The connector definition details including all settings and capabilities.</returns>
@@ -1240,10 +1175,10 @@ public class SynchronisationController(
     #region Run Profiles
 
     /// <summary>
-    /// Gets all run profiles for a connected system.
+    /// List Run Profiles for a Connected System
     /// </summary>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
-    /// <returns>A list of run profiles configured for the connected system.</returns>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <returns>A list of Run Profiles configured for the Connected System.</returns>
     [HttpGet("connected-systems/{connectedSystemId:int}/run-profiles", Name = "GetRunProfiles")]
     [ProducesResponseType(typeof(IEnumerable<RunProfileDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -1263,19 +1198,16 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Executes a run profile to trigger a synchronisation operation.
+    /// Execute a Run Profile
     /// </summary>
     /// <remarks>
-    /// This endpoint queues a synchronisation task (Full Import, Delta Import, Full Sync, Delta Sync, or Export)
-    /// for execution by the worker service. The task runs asynchronously and can be monitored via the Activities API.
-    ///
-    /// Returns 202 Accepted with the Activity ID and Task ID for tracking the execution.
+    /// Queues a synchronisation task for execution by the worker service. Returns 202 Accepted with the Activity ID and Task ID for tracking.
     /// </remarks>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
-    /// <param name="runProfileId">The unique identifier of the run profile to execute.</param>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="runProfileId">The unique identifier of the Run Profile to execute.</param>
     /// <returns>The execution response with activity and task IDs for tracking.</returns>
-    /// <response code="202">Run profile execution has been queued.</response>
-    /// <response code="404">Connected system or run profile not found.</response>
+    /// <response code="202">Run Profile execution has been queued.</response>
+    /// <response code="404">Connected System or Run Profile not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("connected-systems/{connectedSystemId:int}/run-profiles/{runProfileId:int}/execute", Name = "ExecuteRunProfile")]
     [ProducesResponseType(typeof(RunProfileExecutionResponse), StatusCodes.Status202Accepted)]
@@ -1345,14 +1277,14 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Creates a new Run Profile for a Connected System.
+    /// Create a Run Profile
     /// </summary>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
-    /// <param name="request">The run profile creation request.</param>
-    /// <returns>The created run profile details.</returns>
-    /// <response code="201">Run profile created successfully.</response>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="request">The Run Profile creation request.</param>
+    /// <returns>The created Run Profile details.</returns>
+    /// <response code="201">Run Profile created successfully.</response>
     /// <response code="400">Invalid request or run type not supported by connector.</response>
-    /// <response code="404">Connected system not found.</response>
+    /// <response code="404">Connected System not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("connected-systems/{connectedSystemId:int}/run-profiles", Name = "CreateRunProfile")]
     [ProducesResponseType(typeof(RunProfileDto), StatusCodes.Status201Created)]
@@ -1416,15 +1348,15 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Updates an existing Run Profile.
+    /// Update a Run Profile
     /// </summary>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
-    /// <param name="runProfileId">The unique identifier of the run profile to update.</param>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="runProfileId">The unique identifier of the Run Profile to update.</param>
     /// <param name="request">The update request with new values.</param>
-    /// <returns>The updated run profile details.</returns>
-    /// <response code="200">Run profile updated successfully.</response>
+    /// <returns>The updated Run Profile details.</returns>
+    /// <response code="200">Run Profile updated successfully.</response>
     /// <response code="400">Invalid request.</response>
-    /// <response code="404">Connected system or run profile not found.</response>
+    /// <response code="404">Connected System or Run Profile not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPut("connected-systems/{connectedSystemId:int}/run-profiles/{runProfileId:int}", Name = "UpdateRunProfile")]
     [ProducesResponseType(typeof(RunProfileDto), StatusCodes.Status200OK)]
@@ -1494,13 +1426,13 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Deletes a Run Profile.
+    /// Delete a Run Profile
     /// </summary>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
-    /// <param name="runProfileId">The unique identifier of the run profile to delete.</param>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="runProfileId">The unique identifier of the Run Profile to delete.</param>
     /// <returns>No content on success.</returns>
-    /// <response code="204">Run profile deleted successfully.</response>
-    /// <response code="404">Connected system or run profile not found.</response>
+    /// <response code="204">Run Profile deleted successfully.</response>
+    /// <response code="404">Connected System or Run Profile not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpDelete("connected-systems/{connectedSystemId:int}/run-profiles/{runProfileId:int}", Name = "DeleteRunProfile")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -1545,10 +1477,10 @@ public class SynchronisationController(
     #region Sync Rules
 
     /// <summary>
-    /// Gets all synchronisation rules with optional pagination, sorting, and filtering.
+    /// List Sync Rules
     /// </summary>
     /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection, filter).</param>
-    /// <returns>A paginated list of sync rule headers.</returns>
+    /// <returns>A paginated list of Sync Rule headers.</returns>
     [HttpGet("sync-rules", Name = "GetSyncRules")]
     [ProducesResponseType(typeof(PaginatedResponse<SyncRuleHeader>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -1566,10 +1498,10 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Gets a specific synchronisation rule by ID.
+    /// Get a Sync Rule
     /// </summary>
-    /// <param name="id">The unique identifier of the sync rule.</param>
-    /// <returns>The sync rule details including attribute flow configuration.</returns>
+    /// <param name="id">The unique identifier of the Sync Rule.</param>
+    /// <returns>The Sync Rule details including attribute flow configuration.</returns>
     [HttpGet("sync-rules/{id:int}", Name = "GetSyncRule")]
     [ProducesResponseType(typeof(SyncRuleHeader), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -1585,16 +1517,14 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Creates a new Sync Rule.
+    /// Create a Sync Rule
     /// </summary>
     /// <remarks>
-    /// Creates a sync rule that defines how data flows between a Connected System and the Metaverse.
-    /// For Import rules, set ProjectToMetaverse to true to create Metaverse objects from imported data.
-    /// For Export rules, set ProvisionToConnectedSystem to true to create Connected System objects.
+    /// For Import rules, set <c>ProjectToMetaverse</c> to true to create Metaverse objects from imported data. For Export rules, set <c>ProvisionToConnectedSystem</c> to true to create Connected System Objects.
     /// </remarks>
-    /// <param name="request">The sync rule creation request.</param>
-    /// <returns>The created sync rule details.</returns>
-    /// <response code="201">Sync rule created successfully.</response>
+    /// <param name="request">The Sync Rule creation request.</param>
+    /// <returns>The created Sync Rule details.</returns>
+    /// <response code="201">Sync Rule created successfully.</response>
     /// <response code="400">Invalid request or validation failed.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("sync-rules", Name = "CreateSyncRule")]
@@ -1668,14 +1598,14 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Updates an existing Sync Rule.
+    /// Update a Sync Rule
     /// </summary>
-    /// <param name="id">The unique identifier of the sync rule to update.</param>
+    /// <param name="id">The unique identifier of the Sync Rule to update.</param>
     /// <param name="request">The update request with new values.</param>
-    /// <returns>The updated sync rule details.</returns>
-    /// <response code="200">Sync rule updated successfully.</response>
+    /// <returns>The updated Sync Rule details.</returns>
+    /// <response code="200">Sync Rule updated successfully.</response>
     /// <response code="400">Invalid request or validation failed.</response>
-    /// <response code="404">Sync rule not found.</response>
+    /// <response code="404">Sync Rule not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPut("sync-rules/{id:int}", Name = "UpdateSyncRule")]
     [ProducesResponseType(typeof(SyncRuleHeader), StatusCodes.Status200OK)]
@@ -1736,12 +1666,12 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Deletes a Sync Rule.
+    /// Delete a Sync Rule
     /// </summary>
-    /// <param name="id">The unique identifier of the sync rule to delete.</param>
+    /// <param name="id">The unique identifier of the Sync Rule to delete.</param>
     /// <returns>No content on success.</returns>
-    /// <response code="204">Sync rule deleted successfully.</response>
-    /// <response code="404">Sync rule not found.</response>
+    /// <response code="204">Sync Rule deleted successfully.</response>
+    /// <response code="404">Sync Rule not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpDelete("sync-rules/{id:int}", Name = "DeleteSyncRule")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -1780,9 +1710,9 @@ public class SynchronisationController(
     #region Sync Rule Mappings
 
     /// <summary>
-    /// Gets all attribute flow mappings for a sync rule.
+    /// List attribute flow mappings for a Sync Rule
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
     /// <returns>A list of attribute flow mappings.</returns>
     [HttpGet("sync-rules/{syncRuleId:int}/mappings", Name = "GetSyncRuleMappings")]
     [ProducesResponseType(typeof(IEnumerable<SyncRuleMappingDto>), StatusCodes.Status200OK)]
@@ -1802,9 +1732,9 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Gets a specific attribute flow mapping by ID.
+    /// Get an attribute flow mapping
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
     /// <param name="mappingId">The unique identifier of the mapping.</param>
     /// <returns>The attribute flow mapping details.</returns>
     [HttpGet("sync-rules/{syncRuleId:int}/mappings/{mappingId:int}", Name = "GetSyncRuleMapping")]
@@ -1827,18 +1757,17 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Creates a new attribute flow mapping for a sync rule.
+    /// Create an attribute flow mapping
     /// </summary>
     /// <remarks>
-    /// For Import rules (direction = Import), specify TargetMetaverseAttributeId and source ConnectedSystemAttributeIds.
-    /// For Export rules (direction = Export), specify TargetConnectedSystemAttributeId and source MetaverseAttributeIds.
+    /// For Import rules, specify <c>TargetMetaverseAttributeId</c> and source <c>ConnectedSystemAttributeIds</c>. For Export rules, specify <c>TargetConnectedSystemAttributeId</c> and source <c>MetaverseAttributeIds</c>.
     /// </remarks>
-    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
     /// <param name="request">The mapping creation request.</param>
     /// <returns>The created attribute flow mapping.</returns>
     /// <response code="201">Mapping created successfully.</response>
     /// <response code="400">Invalid request or validation failed.</response>
-    /// <response code="404">Sync rule or referenced attributes not found.</response>
+    /// <response code="404">Sync Rule or referenced attributes not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("sync-rules/{syncRuleId:int}/mappings", Name = "CreateSyncRuleMapping")]
     [ProducesResponseType(typeof(SyncRuleMappingDto), StatusCodes.Status201Created)]
@@ -1977,13 +1906,13 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Deletes an attribute flow mapping.
+    /// Delete an attribute flow mapping
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
     /// <param name="mappingId">The unique identifier of the mapping to delete.</param>
     /// <returns>No content on success.</returns>
     /// <response code="204">Mapping deleted successfully.</response>
-    /// <response code="404">Sync rule or mapping not found.</response>
+    /// <response code="404">Sync Rule or mapping not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpDelete("sync-rules/{syncRuleId:int}/mappings/{mappingId:int}", Name = "DeleteSyncRuleMapping")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -2025,17 +1954,13 @@ public class SynchronisationController(
     #region Sync Rule Scoping Criteria
 
     /// <summary>
-    /// Gets all scoping criteria groups for a sync rule.
+    /// List Scoping Criteria groups for a Sync Rule
     /// </summary>
-    /// <remarks>
-    /// Scoping criteria define which Metaverse objects are included in an export sync rule.
-    /// Only export sync rules support scoping criteria.
-    /// </remarks>
-    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
-    /// <returns>A list of scoping criteria groups with their criteria.</returns>
-    /// <response code="200">Returns the list of scoping criteria groups.</response>
-    /// <response code="400">Sync rule is not an export rule.</response>
-    /// <response code="404">Sync rule not found.</response>
+    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <returns>A list of Scoping Criteria groups with their criteria.</returns>
+    /// <response code="200">Returns the list of Scoping Criteria groups.</response>
+    /// <response code="400">Sync Rule is not an export rule.</response>
+    /// <response code="404">Sync Rule not found.</response>
     [HttpGet("sync-rules/{syncRuleId:int}/scoping-criteria", Name = "GetScopingCriteriaGroups")]
     [ProducesResponseType(typeof(IEnumerable<SyncRuleScopingCriteriaGroupDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
@@ -2056,11 +1981,11 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Gets a specific scoping criteria group by ID.
+    /// Get a Scoping Criteria group
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
     /// <param name="groupId">The unique identifier of the criteria group.</param>
-    /// <returns>The scoping criteria group details.</returns>
+    /// <returns>The Scoping Criteria group details.</returns>
     [HttpGet("sync-rules/{syncRuleId:int}/scoping-criteria/{groupId:int}", Name = "GetScopingCriteriaGroup")]
     [ProducesResponseType(typeof(SyncRuleScopingCriteriaGroupDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -2080,17 +2005,17 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Creates a new root scoping criteria group for a sync rule.
+    /// Create a root Scoping Criteria group
     /// </summary>
     /// <remarks>
-    /// Creates a new criteria group at the root level. Use the child-groups endpoint to create nested groups.
+    /// Creates a group at the root level. Use the child-groups endpoint to create nested groups.
     /// </remarks>
-    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
     /// <param name="request">The criteria group creation request.</param>
-    /// <returns>The created scoping criteria group.</returns>
+    /// <returns>The created Scoping Criteria group.</returns>
     /// <response code="201">Group created successfully.</response>
     /// <response code="400">Invalid request.</response>
-    /// <response code="404">Sync rule not found.</response>
+    /// <response code="404">Sync Rule not found.</response>
     [HttpPost("sync-rules/{syncRuleId:int}/scoping-criteria", Name = "CreateScopingCriteriaGroup")]
     [ProducesResponseType(typeof(SyncRuleScopingCriteriaGroupDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
@@ -2137,12 +2062,12 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Creates a new child scoping criteria group nested within a parent group.
+    /// Create a child Scoping Criteria group
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
     /// <param name="parentGroupId">The unique identifier of the parent criteria group.</param>
     /// <param name="request">The criteria group creation request.</param>
-    /// <returns>The created scoping criteria group.</returns>
+    /// <returns>The created Scoping Criteria group.</returns>
     [HttpPost("sync-rules/{syncRuleId:int}/scoping-criteria/{parentGroupId:int}/child-groups", Name = "CreateChildScopingCriteriaGroup")]
     [ProducesResponseType(typeof(SyncRuleScopingCriteriaGroupDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
@@ -2194,12 +2119,12 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Updates a scoping criteria group's type or position.
+    /// Update a Scoping Criteria group
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
     /// <param name="groupId">The unique identifier of the criteria group.</param>
     /// <param name="request">The update request.</param>
-    /// <returns>The updated scoping criteria group.</returns>
+    /// <returns>The updated Scoping Criteria group.</returns>
     [HttpPut("sync-rules/{syncRuleId:int}/scoping-criteria/{groupId:int}", Name = "UpdateScopingCriteriaGroup")]
     [ProducesResponseType(typeof(SyncRuleScopingCriteriaGroupDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
@@ -2249,9 +2174,9 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Deletes a scoping criteria group and all its contents.
+    /// Delete a Scoping Criteria group
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
     /// <param name="groupId">The unique identifier of the criteria group to delete.</param>
     /// <returns>No content on success.</returns>
     [HttpDelete("sync-rules/{syncRuleId:int}/scoping-criteria/{groupId:int}", Name = "DeleteScopingCriteriaGroup")]
@@ -2298,13 +2223,12 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Adds a criterion to a scoping criteria group.
+    /// Add a criterion to a Scoping Criteria group
     /// </summary>
     /// <remarks>
-    /// For Export sync rules: provide MetaverseAttributeId to evaluate MVO attributes.
-    /// For Import sync rules: provide ConnectedSystemAttributeId to evaluate CSO attributes.
+    /// For Export Sync Rules, provide <c>MetaverseAttributeId</c>. For Import Sync Rules, provide <c>ConnectedSystemAttributeId</c>.
     /// </remarks>
-    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
     /// <param name="groupId">The unique identifier of the criteria group.</param>
     /// <param name="request">The criterion creation request.</param>
     /// <returns>The created criterion.</returns>
@@ -2393,9 +2317,9 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Deletes a criterion from a scoping criteria group.
+    /// Delete a criterion from a Scoping Criteria group
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
     /// <param name="groupId">The unique identifier of the criteria group.</param>
     /// <param name="criterionId">The unique identifier of the criterion to delete.</param>
     /// <returns>No content on success.</returns>
@@ -2443,7 +2367,7 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Recursively finds a scoping criteria group by ID within a collection.
+    /// Recursively finds a Scoping Criteria group by ID within a collection.
     /// </summary>
     private static SyncRuleScopingCriteriaGroup? FindScopingCriteriaGroup(IEnumerable<SyncRuleScopingCriteriaGroup> groups, int groupId)
     {
@@ -2465,13 +2389,13 @@ public class SynchronisationController(
     #region Object Matching Rules
 
     /// <summary>
-    /// Gets all object matching rules for a Connected System Object Type.
+    /// List Object Matching Rules for an Object Type
     /// </summary>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
-    /// <param name="objectTypeId">The unique identifier of the object type.</param>
-    /// <returns>A list of object matching rules.</returns>
-    /// <response code="200">Returns the list of object matching rules.</response>
-    /// <response code="404">Connected system or object type not found.</response>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="objectTypeId">The unique identifier of the Object Type.</param>
+    /// <returns>A list of Object Matching Rules.</returns>
+    /// <response code="200">Returns the list of Object Matching Rules.</response>
+    /// <response code="404">Connected System or Object Type not found.</response>
     [HttpGet("connected-systems/{connectedSystemId:int}/object-types/{objectTypeId:int}/matching-rules", Name = "GetObjectMatchingRules")]
     [ProducesResponseType(typeof(IEnumerable<ObjectMatchingRuleDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -2496,13 +2420,13 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Gets a specific object matching rule by ID.
+    /// Get an Object Matching Rule
     /// </summary>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
-    /// <param name="ruleId">The unique identifier of the matching rule.</param>
-    /// <returns>The object matching rule.</returns>
-    /// <response code="200">Returns the object matching rule.</response>
-    /// <response code="404">Connected system or matching rule not found.</response>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="ruleId">The unique identifier of the Matching Rule.</param>
+    /// <returns>The Object Matching Rule.</returns>
+    /// <response code="200">Returns the Object Matching Rule.</response>
+    /// <response code="404">Connected System or Matching Rule not found.</response>
     [HttpGet("connected-systems/{connectedSystemId:int}/matching-rules/{ruleId:int}", Name = "GetObjectMatchingRule")]
     [ProducesResponseType(typeof(ObjectMatchingRuleDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -2527,14 +2451,14 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Creates a new object matching rule.
+    /// Create an Object Matching Rule
     /// </summary>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="request">The rule creation request.</param>
-    /// <returns>The created object matching rule.</returns>
-    /// <response code="201">Object matching rule created successfully.</response>
+    /// <returns>The created Object Matching Rule.</returns>
+    /// <response code="201">Object Matching Rule created successfully.</response>
     /// <response code="400">Invalid request data.</response>
-    /// <response code="404">Connected system or referenced entities not found.</response>
+    /// <response code="404">Connected System or referenced entities not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("connected-systems/{connectedSystemId:int}/matching-rules", Name = "CreateObjectMatchingRule")]
     [ProducesResponseType(typeof(ObjectMatchingRuleDto), StatusCodes.Status201Created)]
@@ -2642,15 +2566,15 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Updates an existing object matching rule.
+    /// Update an Object Matching Rule
     /// </summary>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
-    /// <param name="ruleId">The unique identifier of the matching rule.</param>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="ruleId">The unique identifier of the Matching Rule.</param>
     /// <param name="request">The update request.</param>
-    /// <returns>The updated object matching rule.</returns>
-    /// <response code="200">Object matching rule updated successfully.</response>
+    /// <returns>The updated Object Matching Rule.</returns>
+    /// <response code="200">Object Matching Rule updated successfully.</response>
     /// <response code="400">Invalid request data.</response>
-    /// <response code="404">Connected system or matching rule not found.</response>
+    /// <response code="404">Connected System or Matching Rule not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPut("connected-systems/{connectedSystemId:int}/matching-rules/{ruleId:int}", Name = "UpdateObjectMatchingRule")]
     [ProducesResponseType(typeof(ObjectMatchingRuleDto), StatusCodes.Status200OK)]
@@ -2773,13 +2697,13 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Deletes an object matching rule.
+    /// Delete an Object Matching Rule
     /// </summary>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
-    /// <param name="ruleId">The unique identifier of the matching rule.</param>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="ruleId">The unique identifier of the Matching Rule.</param>
     /// <returns>No content on success.</returns>
-    /// <response code="204">Object matching rule deleted successfully.</response>
-    /// <response code="404">Connected system or matching rule not found.</response>
+    /// <response code="204">Object Matching Rule deleted successfully.</response>
+    /// <response code="404">Connected System or Matching Rule not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpDelete("connected-systems/{connectedSystemId:int}/matching-rules/{ruleId:int}", Name = "DeleteObjectMatchingRule")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -2825,12 +2749,12 @@ public class SynchronisationController(
     #region Sync Rule Object Matching Rules (Advanced Mode)
 
     /// <summary>
-    /// Gets all object matching rules for a sync rule (advanced mode).
+    /// List Object Matching Rules for a Sync Rule
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
-    /// <returns>A list of object matching rules.</returns>
-    /// <response code="200">Returns the list of object matching rules.</response>
-    /// <response code="404">Sync rule not found.</response>
+    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <returns>A list of Object Matching Rules.</returns>
+    /// <response code="200">Returns the list of Object Matching Rules.</response>
+    /// <response code="404">Sync Rule not found.</response>
     [HttpGet("sync-rules/{syncRuleId:int}/matching-rules", Name = "GetSyncRuleObjectMatchingRules")]
     [ProducesResponseType(typeof(IEnumerable<ObjectMatchingRuleDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -2851,13 +2775,13 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Gets a specific object matching rule on a sync rule by ID (advanced mode).
+    /// Get an Object Matching Rule for a Sync Rule
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
-    /// <param name="ruleId">The unique identifier of the matching rule.</param>
-    /// <returns>The object matching rule.</returns>
-    /// <response code="200">Returns the object matching rule.</response>
-    /// <response code="404">Sync rule or matching rule not found.</response>
+    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <param name="ruleId">The unique identifier of the Matching Rule.</param>
+    /// <returns>The Object Matching Rule.</returns>
+    /// <response code="200">Returns the Object Matching Rule.</response>
+    /// <response code="404">Sync Rule or Matching Rule not found.</response>
     [HttpGet("sync-rules/{syncRuleId:int}/matching-rules/{ruleId:int}", Name = "GetSyncRuleObjectMatchingRule")]
     [ProducesResponseType(typeof(ObjectMatchingRuleDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -2877,14 +2801,14 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Creates a new object matching rule on a sync rule (advanced mode).
+    /// Create an Object Matching Rule on a Sync Rule
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
     /// <param name="request">The rule creation request.</param>
-    /// <returns>The created object matching rule.</returns>
-    /// <response code="201">Object matching rule created successfully.</response>
+    /// <returns>The created Object Matching Rule.</returns>
+    /// <response code="201">Object Matching Rule created successfully.</response>
     /// <response code="400">Invalid request data.</response>
-    /// <response code="404">Sync rule or referenced entities not found.</response>
+    /// <response code="404">Sync Rule or referenced entities not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("sync-rules/{syncRuleId:int}/matching-rules", Name = "CreateSyncRuleObjectMatchingRule")]
     [ProducesResponseType(typeof(ObjectMatchingRuleDto), StatusCodes.Status201Created)]
@@ -2982,15 +2906,15 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Updates an existing object matching rule on a sync rule (advanced mode).
+    /// Update an Object Matching Rule on a Sync Rule
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
-    /// <param name="ruleId">The unique identifier of the matching rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <param name="ruleId">The unique identifier of the Matching Rule.</param>
     /// <param name="request">The update request.</param>
-    /// <returns>The updated object matching rule.</returns>
-    /// <response code="200">Object matching rule updated successfully.</response>
+    /// <returns>The updated Object Matching Rule.</returns>
+    /// <response code="200">Object Matching Rule updated successfully.</response>
     /// <response code="400">Invalid request data.</response>
-    /// <response code="404">Sync rule or matching rule not found.</response>
+    /// <response code="404">Sync Rule or Matching Rule not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPut("sync-rules/{syncRuleId:int}/matching-rules/{ruleId:int}", Name = "UpdateSyncRuleObjectMatchingRule")]
     [ProducesResponseType(typeof(ObjectMatchingRuleDto), StatusCodes.Status200OK)]
@@ -3101,13 +3025,13 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Deletes an object matching rule from a sync rule (advanced mode).
+    /// Delete an Object Matching Rule from a Sync Rule
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
-    /// <param name="ruleId">The unique identifier of the matching rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <param name="ruleId">The unique identifier of the Matching Rule.</param>
     /// <returns>No content on success.</returns>
-    /// <response code="204">Object matching rule deleted successfully.</response>
-    /// <response code="404">Sync rule or matching rule not found.</response>
+    /// <response code="204">Object Matching Rule deleted successfully.</response>
+    /// <response code="404">Sync Rule or Matching Rule not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpDelete("sync-rules/{syncRuleId:int}/matching-rules/{ruleId:int}", Name = "DeleteSyncRuleObjectMatchingRule")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -3152,16 +3076,17 @@ public class SynchronisationController(
     #region Object Matching Mode Switching
 
     /// <summary>
-    /// Switches the object matching rule mode for a connected system.
-    /// When switching to advanced mode, matching rules are copied from object types to sync rules.
-    /// When switching to simple mode, matching rules are migrated from sync rules to object types.
+    /// Switch the Object Matching mode for a Connected System
     /// </summary>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <remarks>
+    /// When switching to advanced mode, Matching Rules are copied from Object Types to Sync Rules. When switching to simple mode, Matching Rules are migrated from Sync Rules to Object Types.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="request">The mode switch request.</param>
     /// <returns>The result of the mode switch operation.</returns>
     /// <response code="200">Mode switched successfully.</response>
     /// <response code="400">Mode switch failed.</response>
-    /// <response code="404">Connected system not found.</response>
+    /// <response code="404">Connected System not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("connected-systems/{connectedSystemId:int}/matching-mode", Name = "SwitchObjectMatchingMode")]
     [ProducesResponseType(typeof(ObjectMatchingModeSwitchResult), StatusCodes.Status200OK)]
@@ -3202,9 +3127,9 @@ public class SynchronisationController(
     #region Expression Testing
 
     /// <summary>
-    /// Tests an expression with sample attribute data.
+    /// Test an expression with sample attribute data
     /// </summary>
-    /// <param name="request">The test expression request containing the expression and sample attribute values.</param>
+    /// <param name="request">The test expression request containing the expression and sample Attribute Values.</param>
     /// <returns>The result of evaluating the expression.</returns>
     /// <response code="200">Expression evaluated successfully.</response>
     /// <response code="400">Invalid expression or test data.</response>
@@ -3344,11 +3269,11 @@ public class SynchronisationController(
     }
 
     /// <summary>
-    /// Checks if a container belongs to a connected system, traversing the parent container chain if necessary.
+    /// Checks if a container belongs to a Connected System, traversing the parent container chain if necessary.
     /// </summary>
     /// <param name="container">The container to check.</param>
-    /// <param name="connectedSystemId">The connected system ID to check against.</param>
-    /// <returns>True if the container belongs to the connected system.</returns>
+    /// <param name="connectedSystemId">The Connected System ID to check against.</param>
+    /// <returns>True if the container belongs to the Connected System.</returns>
     private static bool ContainerBelongsToConnectedSystem(ConnectedSystemContainer container, int connectedSystemId)
     {
         // Check if directly connected to the system

@@ -30,7 +30,7 @@ public class FileSystemController(ILogger<FileSystemController> logger, JimAppli
     private readonly JimApplication _application = application;
 
     /// <summary>
-    /// Lists the contents of a directory within allowed paths.
+    /// List directory contents
     /// </summary>
     /// <param name="path">The directory path to list. If not specified, returns the allowed root directories.</param>
     /// <returns>A list of files and directories in the specified path.</returns>
@@ -63,7 +63,7 @@ public class FileSystemController(ILogger<FileSystemController> logger, JimAppli
     }
 
     /// <summary>
-    /// Gets the list of allowed root directories that can be browsed.
+    /// List allowed root directories
     /// </summary>
     /// <returns>A list of allowed root directory paths.</returns>
     [HttpGet("roots")]
@@ -76,7 +76,7 @@ public class FileSystemController(ILogger<FileSystemController> logger, JimAppli
     }
 
     /// <summary>
-    /// Validates whether a given path is within the allowed directories.
+    /// Validate a file system path
     /// </summary>
     /// <param name="path">The path to validate.</param>
     /// <returns>True if the path is allowed, false otherwise.</returns>

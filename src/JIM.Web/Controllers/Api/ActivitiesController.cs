@@ -31,7 +31,7 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
     private readonly JimApplication _application = application;
 
     /// <summary>
-    /// Gets a paginated list of activities with optional filtering and sorting.
+    /// List activities
     /// </summary>
     /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection, filter).</param>
     /// <param name="search">Optional search query to filter by target name or type.</param>
@@ -73,7 +73,7 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
     }
 
     /// <summary>
-    /// Gets detailed information about a specific activity.
+    /// Get activity details
     /// </summary>
     /// <param name="id">The unique identifier (GUID) of the activity.</param>
     /// <returns>The activity details including error information and execution statistics.</returns>
@@ -105,13 +105,13 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
     }
 
     /// <summary>
-    /// Gets execution statistics for a run profile activity.
+    /// Get Run Profile execution statistics
     /// </summary>
     /// <param name="id">The unique identifier (GUID) of the activity.</param>
     /// <returns>The execution statistics for the activity.</returns>
     /// <response code="200">Returns the execution statistics.</response>
     /// <response code="404">If the activity is not found.</response>
-    /// <response code="400">If the activity is not a run profile activity.</response>
+    /// <response code="400">If the activity is not a Run Profile activity.</response>
     /// <response code="401">If the user is not authenticated.</response>
     [HttpGet("{id:guid}/stats", Name = "GetActivityStats")]
     [ProducesResponseType(typeof(ActivityRunProfileExecutionStatsDto), StatusCodes.Status200OK)]
@@ -138,14 +138,14 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
     }
 
     /// <summary>
-    /// Gets a paginated list of execution items for a run profile activity.
+    /// List Run Profile Execution Items
     /// </summary>
     /// <param name="id">The unique identifier (GUID) of the activity.</param>
     /// <param name="pagination">Pagination parameters.</param>
-    /// <returns>A paginated list of execution item headers.</returns>
-    /// <response code="200">Returns the paginated list of execution items.</response>
+    /// <returns>A paginated list of Execution Item headers.</returns>
+    /// <response code="200">Returns the paginated list of Execution Items.</response>
     /// <response code="404">If the activity is not found.</response>
-    /// <response code="400">If the activity is not a run profile activity.</response>
+    /// <response code="400">If the activity is not a Run Profile activity.</response>
     /// <response code="401">If the user is not authenticated.</response>
     [HttpGet("{id:guid}/items", Name = "GetActivityExecutionItems")]
     [ProducesResponseType(typeof(PaginatedResponse<ActivityRunProfileExecutionItemHeader>), StatusCodes.Status200OK)]
@@ -185,7 +185,7 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
     }
 
     /// <summary>
-    /// Gets the direct child activities for a given activity.
+    /// List child activities
     /// </summary>
     /// <param name="id">The unique identifier (GUID) of the parent activity.</param>
     /// <returns>A list of child activity headers, ordered by creation date ascending.</returns>

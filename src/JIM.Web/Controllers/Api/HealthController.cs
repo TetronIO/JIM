@@ -26,7 +26,7 @@ public class HealthController(JimApplication application) : ControllerBase
     private readonly JimApplication _application = application;
 
     /// <summary>
-    /// Basic health check - returns 200 OK if the service is running.
+    /// Get service health status
     /// </summary>
     /// <returns>Health status and timestamp.</returns>
     [HttpGet(Name = "GetHealth")]
@@ -37,7 +37,7 @@ public class HealthController(JimApplication application) : ControllerBase
     }
 
     /// <summary>
-    /// Readiness check - confirms the service is ready to accept requests.
+    /// Get service readiness status
     /// </summary>
     /// <remarks>
     /// Verifies the application is ready by checking database connectivity
@@ -83,7 +83,7 @@ public class HealthController(JimApplication application) : ControllerBase
     }
 
     /// <summary>
-    /// Liveness check - confirms the service process is alive.
+    /// Get service liveness status
     /// </summary>
     /// <remarks>
     /// Used by orchestrators to determine if the service needs to be restarted.
@@ -98,12 +98,8 @@ public class HealthController(JimApplication application) : ControllerBase
     }
 
     /// <summary>
-    /// Returns the JIM application version.
+    /// Get application version
     /// </summary>
-    /// <remarks>
-    /// Reads the version from the assembly's InformationalVersion attribute,
-    /// which is set at build time from the VERSION file.
-    /// </remarks>
     /// <returns>Product name and version string.</returns>
     [HttpGet("version", Name = "GetHealthVersion")]
     [ProducesResponseType(StatusCodes.Status200OK)]

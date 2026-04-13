@@ -14,10 +14,10 @@ using Microsoft.AspNetCore.Mvc;
 namespace JIM.Web.Controllers.Api;
 
 /// <summary>
-/// API controller for managing schedule executions.
+/// API controller for managing Schedule Executions.
 /// </summary>
 /// <remarks>
-/// Schedule executions track the progress of running schedules,
+/// Schedule Executions track the progress of running schedules,
 /// including which steps have completed and any errors encountered.
 /// </remarks>
 [Route("api/v{version:apiVersion}/schedule-executions")]
@@ -31,14 +31,14 @@ public class ScheduleExecutionsController(ILogger<ScheduleExecutionsController> 
     private readonly JimApplication _application = application;
 
     /// <summary>
-    /// Gets schedule executions with pagination.
+    /// List Schedule Executions
     /// </summary>
     /// <param name="scheduleId">Optional filter by schedule ID.</param>
     /// <param name="page">The page number (1-based).</param>
     /// <param name="pageSize">The number of items per page.</param>
     /// <param name="sortBy">Optional field to sort by (queuedAt, startedAt, completedAt, status).</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true for newest first).</param>
-    /// <returns>A paginated list of schedule executions.</returns>
+    /// <returns>A paginated list of Schedule Executions.</returns>
     [HttpGet(Name = "GetScheduleExecutions")]
     [ProducesResponseType(typeof(PaginatedResponse<ScheduleExecutionDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -62,7 +62,7 @@ public class ScheduleExecutionsController(ILogger<ScheduleExecutionsController> 
     }
 
     /// <summary>
-    /// Gets a specific schedule execution by ID.
+    /// Get Schedule Execution details
     /// </summary>
     /// <param name="id">The unique identifier of the execution.</param>
     /// <returns>The execution details including step progress.</returns>
@@ -144,7 +144,7 @@ public class ScheduleExecutionsController(ILogger<ScheduleExecutionsController> 
     }
 
     /// <summary>
-    /// Cancels a running schedule execution.
+    /// Cancel a Schedule Execution
     /// </summary>
     /// <param name="id">The unique identifier of the execution to cancel.</param>
     /// <returns>The updated execution status.</returns>
@@ -181,7 +181,7 @@ public class ScheduleExecutionsController(ILogger<ScheduleExecutionsController> 
     }
 
     /// <summary>
-    /// Gets currently active (running) schedule executions.
+    /// List active Schedule Executions
     /// </summary>
     /// <returns>A list of active executions.</returns>
     [HttpGet("active", Name = "GetActiveScheduleExecutions")]

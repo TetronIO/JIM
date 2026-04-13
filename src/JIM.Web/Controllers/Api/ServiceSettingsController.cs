@@ -34,7 +34,7 @@ public class ServiceSettingsController(ILogger<ServiceSettingsController> logger
     private readonly JimApplication _application = application;
 
     /// <summary>
-    /// Gets all service settings.
+    /// List service settings
     /// </summary>
     /// <returns>A list of all service settings with their current and default values.</returns>
     [HttpGet(Name = "GetServiceSettings")]
@@ -50,7 +50,7 @@ public class ServiceSettingsController(ILogger<ServiceSettingsController> logger
     }
 
     /// <summary>
-    /// Gets a specific service setting by key.
+    /// Get a service setting
     /// </summary>
     /// <param name="key">The setting key using dot notation (e.g., "ChangeTracking.CsoChanges.Enabled").</param>
     /// <returns>The service setting details.</returns>
@@ -73,11 +73,10 @@ public class ServiceSettingsController(ILogger<ServiceSettingsController> logger
     }
 
     /// <summary>
-    /// Updates a service setting value.
+    /// Update a service setting
     /// </summary>
     /// <remarks>
-    /// Sets the value for a configurable service setting. Read-only settings
-    /// (mirrored from environment variables) cannot be modified through this endpoint.
+    /// Read-only settings (mirrored from environment variables) cannot be modified through this endpoint.
     /// </remarks>
     /// <param name="key">The setting key using dot notation.</param>
     /// <param name="request">The update request containing the new value.</param>
@@ -122,10 +121,9 @@ public class ServiceSettingsController(ILogger<ServiceSettingsController> logger
     }
 
     /// <summary>
-    /// Reverts a service setting to its default value.
+    /// Revert a service setting to its default
     /// </summary>
     /// <remarks>
-    /// Clears any override and restores the setting to its default value.
     /// Read-only settings cannot be reverted through this endpoint.
     /// </remarks>
     /// <param name="key">The setting key using dot notation.</param>

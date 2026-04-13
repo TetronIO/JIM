@@ -27,12 +27,8 @@ public class SecurityController(ILogger<SecurityController> logger, JimApplicati
     private readonly JimApplication _application = application;
 
     /// <summary>
-    /// Gets all security roles defined in the system.
+    /// List security roles
     /// </summary>
-    /// <remarks>
-    /// Roles define permissions that can be assigned to users or groups
-    /// to control access to JIM functionality.
-    /// </remarks>
     /// <returns>A list of all role definitions.</returns>
     [HttpGet("roles", Name = "GetRoles")]
     [ProducesResponseType(typeof(IEnumerable<RoleDto>), StatusCodes.Status200OK)]
