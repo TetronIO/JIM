@@ -112,7 +112,12 @@
                                                      Style="margin: 0;">
                                                 <MudChip T="string" Color="Color.Default"
                                                          Style="margin: 0;">
-                                                    <b>@_pendingExport.ConnectedSystemObject.Type.Name:</b>&nbsp;@GetCsoDisplayName()
+                                                    <AvatarContent>
+                                                        <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
+                                                    </AvatarContent>
+                                                    <ChildContent>
+                                                        <b>@_pendingExport.ConnectedSystemObject.Type.Name:</b>&nbsp;@GetCsoDisplayName()
+                                                    </ChildContent>
                                                 </MudChip>
                                             </MudLink>
                                         </MudStack>
@@ -134,7 +139,12 @@
                                                      Style="margin: 0;">
                                                 <MudChip T="string" Color="Color.Default"
                                                          Style="margin: 0;">
-                                                    <b>@_pendingExport.SourceMetaverseObject.Type.Name:</b>&nbsp;@GetMvoDisplayName()
+                                                    <AvatarContent>
+                                                        <MudAvatar Color="Color.Primary">MV</MudAvatar>
+                                                    </AvatarContent>
+                                                    <ChildContent>
+                                                        <b>@_pendingExport.SourceMetaverseObject.Type.Name:</b>&nbsp;@GetMvoDisplayName()
+                                                    </ChildContent>
                                                 </MudChip>
                                             </MudLink>
                                         </MudStack>
@@ -215,8 +225,18 @@
                     @if (_pendingExport.AttributeValueChanges.Count > 0)
                     {
                         <MudTable Items="@GetGroupedChanges()" Hover="true" Dense="@_dense" Elevation="0" Outlined="true"
+                                  Filter="new Func<AttributeChangeGroup, bool>(FilterFunc)"
                                   Class="@(_dense ? "jim-attribute-table dense-body-only" : "jim-attribute-table")" Breakpoint="Breakpoint.None">
                             <ToolBarContent>
+                                <MudTextField @bind-Value="_searchString"
+                                              Variant="Variant.Outlined"
+                                              Placeholder="Search attribute name or value"
+                                              Margin="Margin.Dense"
+                                              Adornment="Adornment.Start"
+                                              AdornmentIcon="@Icons.Material.Filled.Search"
+                                              IconSize="Size.Medium"
+                                              Class="mt-0" />
+                                <MudSpacer />
                                 <MudTooltip Text="@(_dense ? "Normal row spacing" : "Compact row spacing")" Arrow="true" Placement="Placement.Top">
                                     <MudIconButton Icon="@(_dense ? Icons.Material.Filled.DensitySmall : Icons.Material.Filled.DensityMedium)"
                                                    Variant="Variant.Filled" Color="Color.Default" Size="Size.Small" OnClick="OnToggleDense" />
@@ -343,6 +363,7 @@ else
     private bool _notFound;
     private bool _dense;
     private bool _preferencesLoaded;
+    private string _searchString = "";
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -499,6 +520,17 @@ else
         };
 
         await DialogService.ShowAsync<PendingExportMvaDialog>(attributeName, parameters, options);
+    }
+
+    private bool FilterFunc(AttributeChangeGroup group)
+    {
+        if (string.IsNullOrWhiteSpace(_searchString))
+            return true;
+        if (group.AttributeName.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (group.Values.Any(v => GetAttributeValue(v).Contains(_searchString, StringComparison.OrdinalIgnoreCase)))
+            return true;
+        return false;
     }
 
     private record AttributeChangeGroup(
