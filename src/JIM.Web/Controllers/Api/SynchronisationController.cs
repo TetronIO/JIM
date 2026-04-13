@@ -300,7 +300,7 @@ public class SynchronisationController(
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="objectTypeId">The unique identifier of the Object Type containing the Attributes.</param>
     /// <param name="request">Dictionary of Attribute updates keyed by Attribute ID.</param>
-    /// <returns>Response containing the activity ID, updated count, updated Attributes, and any errors.</returns>
+    /// <returns>Response containing the Activity ID, updated count, updated Attributes, and any errors.</returns>
     /// <response code="200">Attributes updated successfully (may include partial success with errors).</response>
     /// <response code="400">Invalid request or empty Attributes dictionary.</response>
     /// <response code="404">Connected System or Object Type not found.</response>
@@ -1205,7 +1205,7 @@ public class SynchronisationController(
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="runProfileId">The unique identifier of the Run Profile to execute.</param>
-    /// <returns>The execution response with activity and task IDs for tracking.</returns>
+    /// <returns>The execution response with Activity and task IDs for tracking.</returns>
     /// <response code="202">Run Profile execution has been queued.</response>
     /// <response code="404">Connected System or Run Profile not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
