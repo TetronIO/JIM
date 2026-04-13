@@ -129,9 +129,26 @@ Describe 'Module: JIM' {
             $exportedFunctions | Should -Contain 'Get-JIMActivityStats'
         }
 
+        It 'Should export Get-JIMHealth' {
+            $exportedFunctions | Should -Contain 'Get-JIMHealth'
+        }
+
+        It 'Should export Get-JIMVersion' {
+            $exportedFunctions | Should -Contain 'Get-JIMVersion'
+        }
+
+        It 'Should export Get-JIMAuthConfig' {
+            $exportedFunctions | Should -Contain 'Get-JIMAuthConfig'
+        }
+
+        It 'Should export Get-JIMUserInfo' {
+            $exportedFunctions | Should -Contain 'Get-JIMUserInfo'
+        }
+
         It 'Should not export private functions' {
             $exportedFunctions | Should -Not -Contain 'Invoke-JIMApi'
             $exportedFunctions | Should -Not -Contain 'Test-JIMAuthorisation'
+            $exportedFunctions | Should -Not -Contain 'Resolve-JIMBaseUrl'
         }
     }
 }
