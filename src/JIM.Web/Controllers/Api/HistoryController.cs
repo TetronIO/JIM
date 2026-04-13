@@ -33,7 +33,7 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
     private readonly JimApplication _application = application;
 
     /// <summary>
-    /// Manually triggers change history cleanup based on retention policy.
+    /// Trigger change history cleanup
     /// </summary>
     /// <remarks>
     /// Deletes expired CSO changes, MVO changes, and Activities older than the configured
@@ -99,12 +99,12 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
     }
 
     /// <summary>
-    /// Gets the count of change history records for a specific connected system.
+    /// Get change history count for a Connected System
     /// </summary>
-    /// <param name="connectedSystemId">The connected system ID.</param>
+    /// <param name="connectedSystemId">The Connected System ID.</param>
     /// <returns>Count of CSO change records for the system.</returns>
     /// <response code="200">Returns the count of change records.</response>
-    /// <response code="404">If the connected system is not found.</response>
+    /// <response code="404">If the Connected System is not found.</response>
     /// <response code="401">If the user is not authenticated.</response>
     [HttpGet("connected-systems/{connectedSystemId:int}/count", Name = "GetConnectedSystemChangeCount")]
     [ProducesResponseType(typeof(HistoryCountResponse), StatusCodes.Status200OK)]
@@ -134,7 +134,7 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
     }
 
     /// <summary>
-    /// Gets a paginated list of deleted CSOs (Connected System Objects).
+    /// List deleted Connected System Objects
     /// </summary>
     /// <remarks>
     /// Returns CSOs that have been deleted, with their identity preserved at deletion time.
@@ -201,7 +201,7 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
     }
 
     /// <summary>
-    /// Gets a paginated list of deleted MVOs (Metaverse Objects).
+    /// List deleted Metaverse Objects
     /// </summary>
     /// <remarks>
     /// Returns MVOs that have been deleted, with their identity preserved at deletion time.

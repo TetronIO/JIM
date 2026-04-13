@@ -13,12 +13,12 @@ using Microsoft.AspNetCore.Mvc;
 namespace JIM.Web.Controllers.Api;
 
 /// <summary>
-/// API controller for data generation operations including templates and example data sets.
+/// API controller for data generation operations including templates and Example Data Sets.
 /// </summary>
 /// <remarks>
 /// This controller provides endpoints for:
-/// - Browsing available data generation templates
-/// - Viewing example data sets that can be used for testing
+/// - Browsing available Data Generation Templates
+/// - Viewing Example Data Sets that can be used for testing
 /// - Executing templates to generate test data in the Metaverse
 /// </remarks>
 [Route("api/v{version:apiVersion}/example-data")]
@@ -32,14 +32,10 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     private readonly JimApplication _application = application;
 
     /// <summary>
-    /// Gets all example data sets with optional pagination, sorting, and filtering.
+    /// List Example Data Sets
     /// </summary>
-    /// <remarks>
-    /// Example data sets contain pre-defined identity data that can be used for
-    /// testing and demonstration purposes.
-    /// </remarks>
     /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection, filter).</param>
-    /// <returns>A paginated list of example data set headers.</returns>
+    /// <returns>A paginated list of Example Data Set headers.</returns>
     [HttpGet("example-data-sets", Name = "GetExampleDataSets")]
     [ProducesResponseType(typeof(PaginatedResponse<ExampleDataSetHeader>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -57,12 +53,8 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     }
 
     /// <summary>
-    /// Gets all data generation templates with optional pagination, sorting, and filtering.
+    /// List Data Generation Templates
     /// </summary>
-    /// <remarks>
-    /// Templates define how test data should be generated, including which object types
-    /// to create and how many instances of each.
-    /// </remarks>
     /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection, filter).</param>
     /// <returns>A paginated list of template headers.</returns>
     [HttpGet("templates", Name = "GetExampleDataTemplates")]
@@ -82,10 +74,10 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     }
 
     /// <summary>
-    /// Gets a specific data generation template by ID.
+    /// Get a Data Generation Template
     /// </summary>
     /// <param name="id">The unique identifier of the template.</param>
-    /// <returns>The full template details including nested object type configurations.</returns>
+    /// <returns>The full template details including nested Object Type configurations.</returns>
     [HttpGet("templates/{id:int}", Name = "GetExampleDataTemplate")]
     [ProducesResponseType(typeof(ExampleDataTemplate), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -102,13 +94,8 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     }
 
     /// <summary>
-    /// Executes a data generation template to create test data.
+    /// Execute a Data Generation Template
     /// </summary>
-    /// <remarks>
-    /// This operation runs asynchronously and creates identity objects in the Metaverse
-    /// according to the template configuration. The operation may take some time to complete
-    /// depending on the number of objects being generated.
-    /// </remarks>
     /// <param name="id">The unique identifier of the template to execute.</param>
     /// <param name="cancellationToken">Cancellation token for the operation.</param>
     /// <returns>202 Accepted if the template execution has started.</returns>

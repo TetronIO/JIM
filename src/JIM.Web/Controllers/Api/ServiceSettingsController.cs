@@ -16,7 +16,7 @@ namespace JIM.Web.Controllers.Api;
 /// API controller for managing service-wide configuration settings.
 /// </summary>
 /// <remarks>
-/// Service settings control behaviour such as change tracking, sync page sizes,
+/// Service Settings control behaviour such as change tracking, sync page sizes,
 /// history retention, and other operational parameters. Settings are identified
 /// by dot-notation keys (e.g., "ChangeTracking.CsoChanges.Enabled").
 ///
@@ -34,9 +34,9 @@ public class ServiceSettingsController(ILogger<ServiceSettingsController> logger
     private readonly JimApplication _application = application;
 
     /// <summary>
-    /// Gets all service settings.
+    /// List Service Settings
     /// </summary>
-    /// <returns>A list of all service settings with their current and default values.</returns>
+    /// <returns>A list of all Service Settings with their current and default values.</returns>
     [HttpGet(Name = "GetServiceSettings")]
     [ProducesResponseType(typeof(IEnumerable<ServiceSettingDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -50,10 +50,10 @@ public class ServiceSettingsController(ILogger<ServiceSettingsController> logger
     }
 
     /// <summary>
-    /// Gets a specific service setting by key.
+    /// Get a Service Setting
     /// </summary>
     /// <param name="key">The setting key using dot notation (e.g., "ChangeTracking.CsoChanges.Enabled").</param>
-    /// <returns>The service setting details.</returns>
+    /// <returns>The Service Setting details.</returns>
     [HttpGet("{key}", Name = "GetServiceSetting")]
     [ProducesResponseType(typeof(ServiceSettingDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -73,15 +73,14 @@ public class ServiceSettingsController(ILogger<ServiceSettingsController> logger
     }
 
     /// <summary>
-    /// Updates a service setting value.
+    /// Update a Service Setting
     /// </summary>
     /// <remarks>
-    /// Sets the value for a configurable service setting. Read-only settings
-    /// (mirrored from environment variables) cannot be modified through this endpoint.
+    /// Read-only settings (mirrored from environment variables) cannot be modified through this endpoint.
     /// </remarks>
     /// <param name="key">The setting key using dot notation.</param>
     /// <param name="request">The update request containing the new value.</param>
-    /// <returns>The updated service setting.</returns>
+    /// <returns>The updated Service Setting.</returns>
     [HttpPut("{key}", Name = "UpdateServiceSetting")]
     [ProducesResponseType(typeof(ServiceSettingDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
@@ -122,14 +121,13 @@ public class ServiceSettingsController(ILogger<ServiceSettingsController> logger
     }
 
     /// <summary>
-    /// Reverts a service setting to its default value.
+    /// Revert a Service Setting to its default
     /// </summary>
     /// <remarks>
-    /// Clears any override and restores the setting to its default value.
     /// Read-only settings cannot be reverted through this endpoint.
     /// </remarks>
     /// <param name="key">The setting key using dot notation.</param>
-    /// <returns>The reverted service setting.</returns>
+    /// <returns>The reverted Service Setting.</returns>
     [HttpDelete("{key}", Name = "RevertServiceSetting")]
     [ProducesResponseType(typeof(ServiceSettingDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]

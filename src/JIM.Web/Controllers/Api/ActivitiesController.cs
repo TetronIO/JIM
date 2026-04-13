@@ -13,12 +13,12 @@ using Microsoft.AspNetCore.Mvc;
 namespace JIM.Web.Controllers.Api;
 
 /// <summary>
-/// API controller for viewing activity history and monitoring sync operations.
+/// API controller for viewing Activity history and monitoring sync operations.
 /// </summary>
 /// <remarks>
 /// Activities track all operations performed in JIM, including sync runs, data generation,
 /// certificate management, and other administrative actions. This controller provides
-/// read-only access to the activity history for monitoring and audit purposes.
+/// read-only access to the Activity history for monitoring and audit purposes.
 /// </remarks>
 [Route("api/v{version:apiVersion}/[controller]")]
 [ApiController]
@@ -31,12 +31,12 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
     private readonly JimApplication _application = application;
 
     /// <summary>
-    /// Gets a paginated list of activities with optional filtering and sorting.
+    /// List Activities
     /// </summary>
     /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection, filter).</param>
     /// <param name="search">Optional search query to filter by target name or type.</param>
-    /// <returns>A paginated list of activity headers.</returns>
-    /// <response code="200">Returns the paginated list of activities.</response>
+    /// <returns>A paginated list of Activity headers.</returns>
+    /// <response code="200">Returns the paginated list of Activities.</response>
     /// <response code="401">If the user is not authenticated.</response>
     [HttpGet(Name = "GetActivities")]
     [ProducesResponseType(typeof(PaginatedResponse<ActivityHeader>), StatusCodes.Status200OK)]
@@ -73,12 +73,12 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
     }
 
     /// <summary>
-    /// Gets detailed information about a specific activity.
+    /// Get Activity details
     /// </summary>
-    /// <param name="id">The unique identifier (GUID) of the activity.</param>
-    /// <returns>The activity details including error information and execution statistics.</returns>
-    /// <response code="200">Returns the activity details.</response>
-    /// <response code="404">If the activity is not found.</response>
+    /// <param name="id">The unique identifier (GUID) of the Activity.</param>
+    /// <returns>The Activity details including error information and execution statistics.</returns>
+    /// <response code="200">Returns the Activity details.</response>
+    /// <response code="404">If the Activity is not found.</response>
     /// <response code="401">If the user is not authenticated.</response>
     [HttpGet("{id:guid}", Name = "GetActivity")]
     [ProducesResponseType(typeof(ActivityDetailDto), StatusCodes.Status200OK)]
@@ -105,13 +105,13 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
     }
 
     /// <summary>
-    /// Gets execution statistics for a run profile activity.
+    /// Get Run Profile execution statistics
     /// </summary>
-    /// <param name="id">The unique identifier (GUID) of the activity.</param>
-    /// <returns>The execution statistics for the activity.</returns>
+    /// <param name="id">The unique identifier (GUID) of the Activity.</param>
+    /// <returns>The execution statistics for the Activity.</returns>
     /// <response code="200">Returns the execution statistics.</response>
-    /// <response code="404">If the activity is not found.</response>
-    /// <response code="400">If the activity is not a run profile activity.</response>
+    /// <response code="404">If the Activity is not found.</response>
+    /// <response code="400">If the Activity is not a Run Profile Activity.</response>
     /// <response code="401">If the user is not authenticated.</response>
     [HttpGet("{id:guid}/stats", Name = "GetActivityStats")]
     [ProducesResponseType(typeof(ActivityRunProfileExecutionStatsDto), StatusCodes.Status200OK)]
@@ -138,14 +138,14 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
     }
 
     /// <summary>
-    /// Gets a paginated list of execution items for a run profile activity.
+    /// List Run Profile Execution Items
     /// </summary>
-    /// <param name="id">The unique identifier (GUID) of the activity.</param>
+    /// <param name="id">The unique identifier (GUID) of the Activity.</param>
     /// <param name="pagination">Pagination parameters.</param>
-    /// <returns>A paginated list of execution item headers.</returns>
-    /// <response code="200">Returns the paginated list of execution items.</response>
-    /// <response code="404">If the activity is not found.</response>
-    /// <response code="400">If the activity is not a run profile activity.</response>
+    /// <returns>A paginated list of Execution Item headers.</returns>
+    /// <response code="200">Returns the paginated list of Execution Items.</response>
+    /// <response code="404">If the Activity is not found.</response>
+    /// <response code="400">If the Activity is not a Run Profile Activity.</response>
     /// <response code="401">If the user is not authenticated.</response>
     [HttpGet("{id:guid}/items", Name = "GetActivityExecutionItems")]
     [ProducesResponseType(typeof(PaginatedResponse<ActivityRunProfileExecutionItemHeader>), StatusCodes.Status200OK)]
@@ -185,12 +185,12 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
     }
 
     /// <summary>
-    /// Gets the direct child activities for a given activity.
+    /// List child Activities
     /// </summary>
-    /// <param name="id">The unique identifier (GUID) of the parent activity.</param>
-    /// <returns>A list of child activity headers, ordered by creation date ascending.</returns>
-    /// <response code="200">Returns the child activities (empty list if none).</response>
-    /// <response code="404">If the parent activity is not found.</response>
+    /// <param name="id">The unique identifier (GUID) of the parent Activity.</param>
+    /// <returns>A list of child Activity headers, ordered by creation date ascending.</returns>
+    /// <response code="200">Returns the child Activities (empty list if none).</response>
+    /// <response code="404">If the parent Activity is not found.</response>
     /// <response code="401">If the user is not authenticated.</response>
     [HttpGet("{id:guid}/children", Name = "GetChildActivities")]
     [ProducesResponseType(typeof(IEnumerable<ActivityHeader>), StatusCodes.Status200OK)]

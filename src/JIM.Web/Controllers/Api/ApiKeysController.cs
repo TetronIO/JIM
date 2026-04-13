@@ -33,7 +33,7 @@ public class ApiKeysController(ILogger<ApiKeysController> logger, JimApplication
     private readonly JimApplication _application = application;
 
     /// <summary>
-    /// Gets all API keys.
+    /// List API keys
     /// </summary>
     /// <remarks>
     /// Returns all API keys with their metadata. The full key value is never returned;
@@ -53,7 +53,7 @@ public class ApiKeysController(ILogger<ApiKeysController> logger, JimApplication
     }
 
     /// <summary>
-    /// Gets a specific API key by ID.
+    /// Get an API key
     /// </summary>
     /// <param name="id">The unique identifier of the API key.</param>
     /// <returns>The API key details.</returns>
@@ -76,7 +76,7 @@ public class ApiKeysController(ILogger<ApiKeysController> logger, JimApplication
     }
 
     /// <summary>
-    /// Creates a new API key.
+    /// Create an API key
     /// </summary>
     /// <remarks>
     /// The full API key is returned only in this response. Store it securely as it
@@ -152,12 +152,8 @@ public class ApiKeysController(ILogger<ApiKeysController> logger, JimApplication
     }
 
     /// <summary>
-    /// Updates an existing API key.
+    /// Update an API key
     /// </summary>
-    /// <remarks>
-    /// Updates the API key's name, description, roles, expiry, and enabled status.
-    /// The key value itself cannot be changed.
-    /// </remarks>
     /// <param name="id">The unique identifier of the API key.</param>
     /// <param name="request">The update request.</param>
     /// <returns>The updated API key details.</returns>
@@ -210,11 +206,8 @@ public class ApiKeysController(ILogger<ApiKeysController> logger, JimApplication
     }
 
     /// <summary>
-    /// Deletes an API key.
+    /// Delete an API key
     /// </summary>
-    /// <remarks>
-    /// Permanently deletes the API key. Any requests using this key will fail immediately.
-    /// </remarks>
     /// <param name="id">The unique identifier of the API key to delete.</param>
     /// <returns>No content on success.</returns>
     [HttpDelete("{id:guid}", Name = "DeleteApiKey")]

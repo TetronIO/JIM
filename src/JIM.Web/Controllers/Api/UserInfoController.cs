@@ -32,12 +32,10 @@ public class UserInfoController(ILogger<UserInfoController> logger, JimApplicati
     private readonly JimApplication _application = application;
 
     /// <summary>
-    /// Gets information about the currently authenticated user.
+    /// Get current user info
     /// </summary>
     /// <remarks>
-    /// Returns the user's JIM identity, assigned roles, and authorisation status.
-    /// If the user is authenticated but has no JIM identity (MetaverseObject),
-    /// <c>authorised</c> will be <c>false</c> with a message explaining how to resolve this.
+    /// If the authenticated user has no JIM identity (MetaverseObject), <c>authorised</c> will be <c>false</c> with a message explaining how to resolve this.
     /// </remarks>
     /// <returns>User identity, roles, and authorisation status.</returns>
     [HttpGet(Name = "GetUserInfo")]

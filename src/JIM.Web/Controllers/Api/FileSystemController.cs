@@ -12,7 +12,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace JIM.Web.Controllers.Api;
 
 /// <summary>
-/// API controller for browsing the container file system.
+/// API controller for browsing the Container file system.
 /// Provides endpoints for listing directories and files within allowed paths.
 /// </summary>
 /// <remarks>
@@ -30,8 +30,14 @@ public class FileSystemController(ILogger<FileSystemController> logger, JimAppli
     private readonly JimApplication _application = application;
 
     /// <summary>
-    /// Lists the contents of a directory within allowed paths.
+    /// List directory contents
     /// </summary>
+    /// <remarks>
+    /// Browse files and directories within the JIM Container's allowed mount points.
+    /// Used when configuring file-based connectors (e.g. CSV) to select import/export paths.
+    /// Omit the path parameter to list the allowed root directories.
+    /// Only paths within the configured allowed roots are accessible; all other paths return 403.
+    /// </remarks>
     /// <param name="path">The directory path to list. If not specified, returns the allowed root directories.</param>
     /// <returns>A list of files and directories in the specified path.</returns>
     /// <response code="200">Returns the directory listing.</response>
@@ -63,8 +69,12 @@ public class FileSystemController(ILogger<FileSystemController> logger, JimAppli
     }
 
     /// <summary>
-    /// Gets the list of allowed root directories that can be browsed.
+    /// List allowed root directories
     /// </summary>
+    /// <remarks>
+    /// Returns the root directories that JIM is permitted to browse.
+    /// These correspond to Docker volume mounts configured for file-based connectors.
+    /// </remarks>
     /// <returns>A list of allowed root directory paths.</returns>
     [HttpGet("roots")]
     [ProducesResponseType(typeof(IReadOnlyList<string>), StatusCodes.Status200OK)]
@@ -76,8 +86,12 @@ public class FileSystemController(ILogger<FileSystemController> logger, JimAppli
     }
 
     /// <summary>
-    /// Validates whether a given path is within the allowed directories.
+    /// Validate a file system path
     /// </summary>
+    /// <remarks>
+    /// Check whether a given path falls within the allowed root directories.
+    /// Use this before attempting to configure a connector with a file path.
+    /// </remarks>
     /// <param name="path">The path to validate.</param>
     /// <returns>True if the path is allowed, false otherwise.</returns>
     [HttpGet("validate")]

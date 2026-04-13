@@ -476,5 +476,8 @@ engineering/diagrams/structurizr/node_modules/
 # MkDocs build output
 site/
 
+# Generated OpenAPI document (built by jim-openapi-generate or Docker build)
+src/JIM.Web/wwwroot/api/openapi/
+
 # Dev notes
 dev.txt

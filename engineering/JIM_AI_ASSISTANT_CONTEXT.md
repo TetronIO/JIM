@@ -291,7 +291,7 @@ FormatDateTime(hireDate, "yyyy-MM-dd")
 | `GET /api/v1/logs` | Unified log viewer (app + PostgreSQL) |
 | `GET /api/v1/synchronisation/sync-rules/{id}/matching-rules` | Manage object matching rules |
 
-Full interactive Scalar API reference available at `/api/reference` (development only; disabled in production). The underlying OpenAPI JSON spec is served at `/api/openapi/v1.json`.
+Full interactive Scalar API reference available at `/api/reference` in all environments, including air-gapped deployments. The OpenAPI document is pre-generated at build time and served as a static file at `/api/openapi/v1.json`.
 
 ### PowerShell Module
 

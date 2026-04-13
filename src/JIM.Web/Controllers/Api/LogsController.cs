@@ -30,12 +30,8 @@ public class LogsController(ILogger<LogsController> logger, LogReaderService log
     private readonly LogReaderService _logReaderService = logReaderService;
 
     /// <summary>
-    /// Gets all available log files.
+    /// List available log files
     /// </summary>
-    /// <remarks>
-    /// Returns information about all log files in the log directory, including
-    /// file name, service, date, and size. Files are sorted by date descending.
-    /// </remarks>
     /// <returns>A list of available log files.</returns>
     [HttpGet("files", Name = "GetLogFiles")]
     [ProducesResponseType(typeof(IEnumerable<LogFileDto>), StatusCodes.Status200OK)]
@@ -59,12 +55,8 @@ public class LogsController(ILogger<LogsController> logger, LogReaderService log
     }
 
     /// <summary>
-    /// Gets log entries with optional filtering.
+    /// List log entries
     /// </summary>
-    /// <remarks>
-    /// Returns log entries matching the specified criteria. Results are sorted by
-    /// timestamp descending (newest first) and limited to prevent excessive data transfer.
-    /// </remarks>
     /// <param name="request">The query parameters for filtering logs.</param>
     /// <returns>A list of log entries matching the criteria.</returns>
     [HttpGet(Name = "GetLogEntries")]
@@ -103,11 +95,8 @@ public class LogsController(ILogger<LogsController> logger, LogReaderService log
     }
 
     /// <summary>
-    /// Gets the available log levels.
+    /// List available log levels
     /// </summary>
-    /// <remarks>
-    /// Returns the list of log levels in order of severity, from Verbose to Fatal.
-    /// </remarks>
     /// <returns>A list of log level names.</returns>
     [HttpGet("levels", Name = "GetLogLevels")]
     [ProducesResponseType(typeof(IEnumerable<string>), StatusCodes.Status200OK)]
@@ -120,11 +109,8 @@ public class LogsController(ILogger<LogsController> logger, LogReaderService log
     }
 
     /// <summary>
-    /// Gets the available service names.
+    /// List available log services
     /// </summary>
-    /// <remarks>
-    /// Returns the list of JIM services that generate logs.
-    /// </remarks>
     /// <returns>A list of service names.</returns>
     [HttpGet("services", Name = "GetLogServices")]
     [ProducesResponseType(typeof(IEnumerable<string>), StatusCodes.Status200OK)]

@@ -25,6 +25,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using Microsoft.AspNetCore.OpenApi;
 using Scalar.AspNetCore;
 using MudBlazor;
 using MudBlazor.Services;
@@ -62,8 +63,17 @@ InitialiseLogging(new LoggerConfiguration(), true);
 
 try
 {
-    Log.Information("Starting JIM.Web");
-    await InitialiseJimApplicationAsync();
+    // Lightweight mode: generate the OpenAPI document and exit without starting the full application.
+    // Used during Docker builds and local dev via jim-openapi-generate.
+    var isOpenApiGenerateMode = Environment.GetEnvironmentVariable(Constants.Config.OpenApiGenerate)
+        ?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
+
+    Log.Information("Starting JIM.Web{Mode}", isOpenApiGenerateMode ? " (OpenAPI generation mode)" : "");
+
+    if (!isOpenApiGenerateMode)
+    {
+        await InitialiseJimApplicationAsync();
+    }
 
     var builder = WebApplication.CreateBuilder(args);
 
@@ -138,6 +148,9 @@ try
     var apiAudience = ExtractApiAudience(apiScope, clientId);
     var validIssuers = GetValidIssuers(authority);
 
+    // Skip authentication setup in OpenAPI generation mode (no IdP needed for schema generation)
+    if (!isOpenApiGenerateMode)
+    {
     // Configure triple authentication: Cookies for Blazor UI, JWT Bearer for SSO API, API Key for non-interactive API
     // Configure authentication with multiple schemes
     // Cookie is default for Blazor UI, but forwards to API Key when X-API-Key header is present
@@ -281,6 +294,7 @@ try
 
     // setup authorisation policies
     builder.Services.AddAuthorization();
+    } // end of !isOpenApiGenerateMode auth block
 
     // Add services to the container.
     builder.Services.AddRazorPages();
@@ -293,6 +307,17 @@ try
             options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
         });
     builder.Services.AddEndpointsApiExplorer();
+
+    // Increase MaxDepth for the HTTP JSON options used by the OpenAPI schema generator.
+    // The default of 64 is insufficient for JIM's deep DTO graph; the schema exporter and
+    // its internal ResolveReferences expansion need headroom for recursive types.
+    // This only affects schema generation and minimal API endpoints; MVC controllers use
+    // separate JsonOptions. See: https://github.com/dotnet/aspnetcore/issues/63857
+    builder.Services.ConfigureHttpJsonOptions(options =>
+    {
+        options.SerializerOptions.MaxDepth = 256;
+    });
+
     builder.Services.Configure<RouteOptions>(ro => ro.LowercaseUrls = true);
 
     // Configure API versioning with URL path segment (e.g., /api/v1/...)
@@ -308,8 +333,23 @@ try
         options.SubstituteApiVersionInUrl = true;
     });
 
-    // Fetch OIDC discovery document to get IDP-agnostic authorization endpoints
-    var oidcConfig = await FetchOidcDiscoveryDocumentAsync(authority!);
+    // Fetch OIDC discovery document to get IDP-agnostic authorization endpoints.
+    // In OpenAPI generation mode, use constructed placeholder URLs to avoid requiring a live IdP.
+    // These only affect Scalar's "Try It" auth flow, not the documentation content.
+    OidcDiscoveryDocument oidcConfig;
+    if (isOpenApiGenerateMode)
+    {
+        var authorityBase = (authority ?? "https://idp.example.com/realms/jim").TrimEnd('/');
+        oidcConfig = new OidcDiscoveryDocument
+        {
+            AuthorizationEndpoint = $"{authorityBase}/protocol/openid-connect/auth",
+            TokenEndpoint = $"{authorityBase}/protocol/openid-connect/token"
+        };
+    }
+    else
+    {
+        oidcConfig = await FetchOidcDiscoveryDocumentAsync(authority!);
+    }
 
     // Setup OpenAPI with OAuth2 + API Key security schemes for API documentation
     builder.Services.AddOpenApi("v1", options =>
@@ -320,7 +360,7 @@ try
             {
                 Title = "JIM API",
                 Version = "v1",
-                Description = "JIM (Junctional Identity Manager) REST API for managing identity synchronisation.",
+                Description = "Programmatic access to JIM's identity lifecycle management capabilities. Use this API to configure Connected Systems, manage Synchronisation Rules, query the Metaverse, monitor Activities, and automate deployment via scripting or CI/CD pipelines.",
                 Contact = new OpenApiContact
                 {
                     Name = "Tetron",
@@ -400,17 +440,99 @@ try
         app.UseHsts();
     }
 
-    // API documentation available at /api/reference in development
-    if (app.Environment.IsDevelopment())
+    // API documentation: serve Scalar API reference with the OpenAPI document.
+    // Static mode: if a pre-generated file exists at wwwroot/api/openapi/v1.json (baked into
+    // Docker images during build), serve it via UseStaticFiles. Works in any environment.
+    // Dynamic fallback: in development without a static file, generate at runtime with caching.
+    // See https://github.com/dotnet/aspnetcore/issues/63857 for why runtime generation is expensive.
+    var staticOpenApiPath = Path.Combine(app.Environment.WebRootPath, "api", "openapi", "v1.json");
+    var hasStaticOpenApiDoc = File.Exists(staticOpenApiPath);
+
+    // JIM-branded Scalar configuration: deep navy background with purple accent,
+    // matching the JIM web UI theme (navy-o6)
+    void ConfigureScalar(ScalarOptions options, string openApiRoutePattern)
     {
-        app.MapOpenApi("/api/openapi/{documentName}.json");
-        app.MapScalarApiReference("/api/reference", options => options
+        options.WithTitle("JIM API Reference")
+            .WithFavicon("/images/jim-logo.png")
+            .ForceDarkMode()
+            .WithCustomCss("""
+                .dark-mode {
+                    --scalar-background-1: #051526;
+                    --scalar-background-2: #0d1e30;
+                    --scalar-background-3: #15293c;
+                    --scalar-background-accent: rgba(97, 75, 158, 0.12);
+                    --scalar-color-1: rgba(255, 255, 255, 0.85);
+                    --scalar-color-2: rgba(255, 255, 255, 0.55);
+                    --scalar-color-3: rgba(255, 255, 255, 0.35);
+                    --scalar-color-accent: #9585c8;
+                    --scalar-border-color: rgba(255, 255, 255, 0.08);
+                    --scalar-button-1: #614b9e;
+                    --scalar-button-1-hover: #4e3c80;
+                    --scalar-button-1-color: #ffffff;
+                }
+                """)
+            .WithOpenApiRoutePattern(openApiRoutePattern)
             .AddPreferredSecuritySchemes("OAuth2", "ApiKey")
             .AddAuthorizationCodeFlow("OAuth2", flow =>
             {
                 flow.ClientId = clientId!;
                 flow.Pkce = Pkce.Sha256;
-            }));
+            });
+    }
+
+    if (hasStaticOpenApiDoc)
+    {
+        // Static file is served automatically by UseStaticFiles() at /api/openapi/v1.json
+        app.MapScalarApiReference("/api/reference", o => ConfigureScalar(o, "/api/openapi/v1.json"));
+        app.Logger.LogInformation("Serving static OpenAPI document from {Path}", staticOpenApiPath);
+    }
+    else if (app.Environment.IsDevelopment())
+    {
+        // Runtime generation with response caching (first load takes ~1-2 minutes)
+        string? cachedOpenApiDoc = null;
+        app.MapOpenApi("/api/openapi/{documentName}.json");
+        app.Use(async (context, next) =>
+        {
+            if (context.Request.Path.StartsWithSegments("/api/openapi"))
+            {
+                if (cachedOpenApiDoc != null)
+                {
+                    context.Response.ContentType = "application/json";
+                    await context.Response.WriteAsync(cachedOpenApiDoc);
+                    return;
+                }
+
+                var originalBody = context.Response.Body;
+                using var memStream = new MemoryStream();
+                context.Response.Body = memStream;
+
+                await next(context);
+
+                if (context.Response.StatusCode == 200)
+                {
+                    memStream.Seek(0, SeekOrigin.Begin);
+                    cachedOpenApiDoc = await new StreamReader(memStream).ReadToEndAsync();
+                    memStream.Seek(0, SeekOrigin.Begin);
+                    context.Response.Body = originalBody;
+                    await memStream.CopyToAsync(originalBody);
+
+                    GC.Collect(2, GCCollectionMode.Aggressive, true);
+                    GC.WaitForPendingFinalizers();
+                    GC.Collect(2, GCCollectionMode.Aggressive, true);
+                }
+                else
+                {
+                    memStream.Seek(0, SeekOrigin.Begin);
+                    context.Response.Body = originalBody;
+                    await memStream.CopyToAsync(originalBody);
+                }
+                return;
+            }
+            await next(context);
+        });
+
+        app.MapScalarApiReference("/api/reference", o => ConfigureScalar(o, "/api/openapi/{documentName}.json"));
+        app.Logger.LogInformation("No static OpenAPI document found; using runtime generation (development only)");
     }
 
     app.UseHttpsRedirection();
@@ -447,6 +569,30 @@ try
         {
             options.GetLevel = (_, _, _) => Serilog.Events.LogEventLevel.Debug;
         });
+
+    // In OpenAPI generation mode, generate the document and exit without starting Kestrel
+    if (isOpenApiGenerateMode)
+    {
+        var outputPath = Environment.GetEnvironmentVariable(Constants.Config.OpenApiOutputPath)
+            ?? Path.Combine(app.Environment.WebRootPath, "api", "openapi", "v1.json");
+
+        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+
+        app.Logger.LogInformation("Generating OpenAPI document...");
+
+        var documentProvider = app.Services.GetRequiredKeyedService<IOpenApiDocumentProvider>("v1");
+        var document = await documentProvider.GetOpenApiDocumentAsync();
+
+        await using var fileStream = File.Create(outputPath);
+        await using var textWriter = new StreamWriter(fileStream);
+        var jsonWriter = new OpenApiJsonWriter(textWriter);
+        document.SerializeAs(OpenApiSpecVersion.OpenApi3_1, jsonWriter);
+        await textWriter.FlushAsync();
+
+        var fileSize = new FileInfo(outputPath).Length;
+        app.Logger.LogInformation("OpenAPI document generated at {Path} ({Size:N0} bytes)", outputPath, fileSize);
+        return 0;
+    }
 
     // Eager initialisation: warm up EF Core compiled model and database connection pool
     // before accepting requests. This prevents the first browser request from hanging while

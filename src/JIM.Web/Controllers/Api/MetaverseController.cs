@@ -21,7 +21,7 @@ namespace JIM.Web.Controllers.Api;
 /// </summary>
 /// <remarks>
 /// The Metaverse is the central identity store in JIM. This controller provides
-/// endpoints for managing object types, attributes, and individual metaverse objects.
+/// endpoints for managing Object Types, Attributes, and individual Metaverse Objects.
 /// </remarks>
 [Route("api/v{version:apiVersion}/[controller]")]
 [ApiController]
@@ -34,11 +34,11 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     private readonly JimApplication _application = application;
 
     /// <summary>
-    /// Gets all metaverse object types with optional pagination, sorting, and filtering.
+    /// List Metaverse Object Types
     /// </summary>
     /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection, filter).</param>
     /// <param name="includeChildObjects">Whether to include child object counts in the response.</param>
-    /// <returns>A paginated list of metaverse object type headers.</returns>
+    /// <returns>A paginated list of Metaverse Object Type headers.</returns>
     [HttpGet("object-types", Name = "GetObjectTypes")]
     [ProducesResponseType(typeof(PaginatedResponse<MetaverseObjectTypeHeader>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -56,11 +56,11 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
-    /// Gets a specific metaverse object type by ID.
+    /// Get a Metaverse Object Type
     /// </summary>
-    /// <param name="id">The unique identifier of the object type.</param>
+    /// <param name="id">The unique identifier of the Object Type.</param>
     /// <param name="includeChildObjects">Whether to include child object details in the response.</param>
-    /// <returns>The object type details.</returns>
+    /// <returns>The Object Type details.</returns>
     [HttpGet("object-types/{id:int}", Name = "GetObjectType")]
     [ProducesResponseType(typeof(MetaverseObjectTypeDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -76,14 +76,14 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
-    /// Updates a metaverse object type's deletion rules.
+    /// Update a Metaverse Object Type
     /// </summary>
-    /// <param name="id">The unique identifier of the object type.</param>
+    /// <param name="id">The unique identifier of the Object Type.</param>
     /// <param name="request">The update request containing deletion rule settings.</param>
-    /// <returns>The updated object type details.</returns>
-    /// <response code="200">Object type updated successfully.</response>
+    /// <returns>The updated Object Type details.</returns>
+    /// <response code="200">Object Type updated successfully.</response>
     /// <response code="400">Invalid request or validation failed.</response>
-    /// <response code="404">Object type not found.</response>
+    /// <response code="404">Object Type not found.</response>
     /// <response code="401">User not authenticated.</response>
     [HttpPut("object-types/{id:int}", Name = "UpdateObjectType")]
     [ProducesResponseType(typeof(MetaverseObjectTypeDetailDto), StatusCodes.Status200OK)]
@@ -140,10 +140,10 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
-    /// Gets all metaverse attributes with optional pagination, sorting, and filtering.
+    /// List Metaverse Attributes
     /// </summary>
     /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection, filter).</param>
-    /// <returns>A paginated list of metaverse attribute headers.</returns>
+    /// <returns>A paginated list of Metaverse Attribute headers.</returns>
     [HttpGet("attributes", Name = "GetAttributes")]
     [ProducesResponseType(typeof(PaginatedResponse<MetaverseAttributeHeader>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -161,10 +161,10 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
-    /// Gets a specific metaverse attribute by ID.
+    /// Get a Metaverse Attribute
     /// </summary>
-    /// <param name="id">The unique identifier of the attribute.</param>
-    /// <returns>The attribute details.</returns>
+    /// <param name="id">The unique identifier of the Attribute.</param>
+    /// <returns>The Attribute details.</returns>
     [HttpGet("attributes/{id:int}", Name = "GetAttribute")]
     [ProducesResponseType(typeof(MetaverseAttributeDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -180,10 +180,10 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
-    /// Creates a new metaverse attribute.
+    /// Create a Metaverse Attribute
     /// </summary>
-    /// <param name="request">The attribute creation request.</param>
-    /// <returns>The created attribute details.</returns>
+    /// <param name="request">The Attribute creation request.</param>
+    /// <returns>The created Attribute details.</returns>
     /// <response code="201">Attribute created successfully.</response>
     /// <response code="400">Invalid request or validation failed.</response>
     /// <response code="401">User not authenticated.</response>
@@ -237,11 +237,11 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
-    /// Updates an existing metaverse attribute.
+    /// Update a Metaverse Attribute
     /// </summary>
-    /// <param name="id">The unique identifier of the attribute.</param>
-    /// <param name="request">The attribute update request.</param>
-    /// <returns>The updated attribute details.</returns>
+    /// <param name="id">The unique identifier of the Attribute.</param>
+    /// <param name="request">The Attribute update request.</param>
+    /// <returns>The updated Attribute details.</returns>
     /// <response code="200">Attribute updated successfully.</response>
     /// <response code="400">Invalid request or validation failed.</response>
     /// <response code="404">Attribute not found.</response>
@@ -323,12 +323,12 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
-    /// Deletes a metaverse attribute.
+    /// Delete a Metaverse Attribute
     /// </summary>
-    /// <param name="id">The unique identifier of the attribute to delete.</param>
+    /// <param name="id">The unique identifier of the Attribute to delete.</param>
     /// <returns>No content on success.</returns>
     /// <response code="204">Attribute deleted successfully.</response>
-    /// <response code="400">Cannot delete built-in or in-use attribute.</response>
+    /// <response code="400">Cannot delete built-in or in-use Attribute.</response>
     /// <response code="404">Attribute not found.</response>
     /// <response code="401">User not authenticated.</response>
     [HttpDelete("attributes/{id:int}", Name = "DeleteAttribute")]
@@ -371,31 +371,31 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
-    /// Gets a paginated list of metaverse objects with optional filtering.
+    /// List Metaverse Objects
     /// </summary>
     /// <remarks>
-    /// The DisplayName attribute is always included in the response. Use the `attributes` parameter
-    /// to request additional attributes to be included. This follows a common pattern in APIs and
+    /// The DisplayName Attribute is always included in the response. Use the `attributes` parameter
+    /// to request additional Attributes to be included. This follows a common pattern in APIs and
     /// PowerShell modules where clients can specify which properties to retrieve.
     ///
-    /// Use `?attributes=*` to include all attributes.
+    /// Use `?attributes=*` to include all Attributes.
     ///
     /// **Filtering:**
     /// - `search` - Searches display name (partial match, case-insensitive)
-    /// - `filterAttributeName` + `filterAttributeValue` - Filters by specific attribute (exact match, case-insensitive)
+    /// - `filterAttributeName` + `filterAttributeValue` - Filters by specific Attribute (exact match, case-insensitive)
     ///
     /// Examples:
-    /// - `?attributes=FirstName&amp;attributes=LastName&amp;attributes=Email` - Include specific attributes
-    /// - `?attributes=*` - Include all attributes
+    /// - `?attributes=FirstName&amp;attributes=LastName&amp;attributes=Email` - Include specific Attributes
+    /// - `?attributes=*` - Include all Attributes
     /// - `?filterAttributeName=Account Name&amp;filterAttributeValue=jsmith` - Find by account name
     /// </remarks>
     /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection).</param>
-    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <param name="objectTypeId">Optional Object Type ID to filter by.</param>
     /// <param name="search">Optional search query to filter by display name.</param>
-    /// <param name="attributes">Optional list of attribute names to include in the response. Use "*" for all attributes. DisplayName is always included.</param>
-    /// <param name="filterAttributeName">Optional attribute name to filter by (must be used with filterAttributeValue).</param>
-    /// <param name="filterAttributeValue">Optional attribute value to filter by (exact match, case-insensitive).</param>
-    /// <returns>A paginated list of metaverse object headers.</returns>
+    /// <param name="attributes">Optional list of Attribute names to include in the response. Use "*" for all Attributes. DisplayName is always included.</param>
+    /// <param name="filterAttributeName">Optional Attribute name to filter by (must be used with filterAttributeValue).</param>
+    /// <param name="filterAttributeValue">Optional Attribute Value to filter by (exact match, case-insensitive).</param>
+    /// <returns>A paginated list of Metaverse Object headers.</returns>
     [HttpGet("objects", Name = "GetObjects")]
     [ProducesResponseType(typeof(PaginatedResponse<MetaverseObjectHeaderDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -435,17 +435,13 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
-    /// Gets the count of metaverse objects with optional filtering.
+    /// Count Metaverse Objects
     /// </summary>
-    /// <remarks>
-    /// Returns a simple integer count. Supports the same filters as the paginated objects endpoint
-    /// but is significantly faster as it only executes a COUNT query without loading entity data.
-    /// </remarks>
-    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <param name="objectTypeId">Optional Object Type ID to filter by.</param>
     /// <param name="search">Optional search text to filter by display name (partial match, case-insensitive).</param>
-    /// <param name="filterAttributeName">Optional attribute name to filter by (must be used with filterAttributeValue).</param>
-    /// <param name="filterAttributeValue">Optional attribute value to filter by (exact match, case-insensitive).</param>
-    /// <returns>The count of matching metaverse objects.</returns>
+    /// <param name="filterAttributeName">Optional Attribute name to filter by (must be used with filterAttributeValue).</param>
+    /// <param name="filterAttributeValue">Optional Attribute Value to filter by (exact match, case-insensitive).</param>
+    /// <returns>The count of matching Metaverse Objects.</returns>
     [HttpGet("objects/count", Name = "GetObjectsCount")]
     [ProducesResponseType(typeof(int), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -464,19 +460,17 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
-    /// Searches for metaverse objects using a predefined search, returning lightweight headers
-    /// with only the attributes defined in the search. Optimised for fast response at scale (100k+ objects).
+    /// Search Metaverse Objects using a predefined search
     /// </summary>
     /// <remarks>
-    /// This endpoint uses raw SQL queries optimised for large datasets. It returns only the attributes
-    /// configured in the predefined search definition, making it significantly faster than the general
-    /// objects endpoint for list views. Use the general GET /objects endpoint when you need full object
-    /// details or custom attribute selection.
+    /// Returns only the Attributes configured in the predefined search definition, making it significantly
+    /// faster than the general objects endpoint for list views at scale (100k+ objects). Use the general
+    /// GET /objects endpoint when you need full object details or custom Attribute selection.
     /// </remarks>
     /// <param name="predefinedSearchUri">The URI identifier of the predefined search (e.g. "users", "groups").</param>
     /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection).</param>
-    /// <param name="search">Optional search query to filter across all string attribute values (case-insensitive).</param>
-    /// <returns>A paginated list of metaverse object headers with the predefined search attributes.</returns>
+    /// <param name="search">Optional search query to filter across all string Attribute Values (case-insensitive).</param>
+    /// <returns>A paginated list of Metaverse Object headers with the predefined search Attributes.</returns>
     [HttpGet("objects/search/{predefinedSearchUri}", Name = "SearchObjects")]
     [ProducesResponseType(typeof(PaginatedResponse<MetaverseObjectHeaderDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -515,10 +509,10 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
-    /// Gets a specific metaverse object by ID.
+    /// Get a Metaverse Object
     /// </summary>
-    /// <param name="id">The unique identifier (GUID) of the metaverse object.</param>
-    /// <returns>The metaverse object details including all attribute values.</returns>
+    /// <param name="id">The unique identifier (GUID) of the Metaverse Object.</param>
+    /// <returns>The Metaverse Object details including all Attribute Values.</returns>
     [HttpGet("objects/{id:guid}", Name = "GetObject")]
     [ProducesResponseType(typeof(MetaverseObjectDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -534,7 +528,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
-    /// Gets a paginated list of metaverse objects pending deletion.
+    /// List Metaverse Objects pending deletion
     /// </summary>
     /// <remarks>
     /// Returns MVOs that have been disconnected from their last connector and are awaiting
@@ -542,7 +536,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// identities scheduled for cleanup.
     /// </remarks>
     /// <param name="pagination">Pagination parameters (page, pageSize).</param>
-    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <param name="objectTypeId">Optional Object Type ID to filter by.</param>
     /// <returns>A paginated list of MVOs pending deletion.</returns>
     [HttpGet("pending-deletions", Name = "GetPendingDeletions")]
     [ProducesResponseType(typeof(PaginatedResponse<PendingDeletionDto>), StatusCodes.Status200OK)]
@@ -573,9 +567,9 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
-    /// Gets the count of metaverse objects pending deletion.
+    /// Count Metaverse Objects pending deletion
     /// </summary>
-    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <param name="objectTypeId">Optional Object Type ID to filter by.</param>
     /// <returns>The count of MVOs pending deletion.</returns>
     [HttpGet("pending-deletions/count", Name = "GetPendingDeletionsCount")]
     [ProducesResponseType(typeof(int), StatusCodes.Status200OK)]
@@ -588,7 +582,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
-    /// Gets summary statistics for pending deletions.
+    /// Get pending deletion summary statistics
     /// </summary>
     /// <remarks>
     /// Provides an overview of deletion status including total count and counts by status:

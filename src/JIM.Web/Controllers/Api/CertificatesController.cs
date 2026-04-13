@@ -13,7 +13,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace JIM.Web.Controllers.Api;
 
 /// <summary>
-/// API controller for managing trusted certificates in the JIM certificate store.
+/// API controller for managing Trusted Certificates in the JIM certificate store.
 /// </summary>
 /// <remarks>
 /// Certificates stored here are used for establishing trust with external systems,
@@ -31,7 +31,7 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
     private readonly JimApplication _application = application;
 
     /// <summary>
-    /// Gets all trusted certificates with optional pagination, sorting, and filtering.
+    /// List Trusted Certificates
     /// </summary>
     /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection, filter).</param>
     /// <returns>A paginated list of certificate headers.</returns>
@@ -53,7 +53,7 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
     }
 
     /// <summary>
-    /// Gets all enabled trusted certificates.
+    /// List enabled Trusted Certificates
     /// </summary>
     /// <returns>A list of enabled certificate headers.</returns>
     [HttpGet("enabled", Name = "GetEnabledCertificates")]
@@ -68,7 +68,7 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
     }
 
     /// <summary>
-    /// Gets a trusted certificate by ID.
+    /// Get a Trusted Certificate
     /// </summary>
     /// <param name="id">The unique identifier (GUID) of the certificate.</param>
     /// <returns>The certificate details including metadata but not the raw certificate bytes.</returns>
@@ -87,7 +87,7 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
     }
 
     /// <summary>
-    /// Adds a certificate from uploaded data (Base64 encoded PEM or DER).
+    /// Add a certificate from uploaded data
     /// </summary>
     /// <remarks>
     /// The certificate data should be Base64 encoded. Both PEM and DER formats are supported.
@@ -139,7 +139,7 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
     }
 
     /// <summary>
-    /// Adds a certificate from a file path in the connector-files mount.
+    /// Add a certificate from a file path
     /// </summary>
     /// <remarks>
     /// The file path should be relative to the connector-files volume mount.
@@ -188,7 +188,7 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
     }
 
     /// <summary>
-    /// Updates a certificate's editable properties (name, notes, enabled state).
+    /// Update a certificate
     /// </summary>
     /// <param name="id">The unique identifier (GUID) of the certificate to update.</param>
     /// <param name="request">The properties to update (all optional).</param>
@@ -223,7 +223,7 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
     }
 
     /// <summary>
-    /// Deletes a trusted certificate from the store.
+    /// Delete a Trusted Certificate
     /// </summary>
     /// <param name="id">The unique identifier (GUID) of the certificate to delete.</param>
     /// <returns>204 No Content on success.</returns>
@@ -252,7 +252,7 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
     }
 
     /// <summary>
-    /// Validates a certificate and returns any issues found.
+    /// Validate a certificate
     /// </summary>
     /// <remarks>
     /// Checks include expiry date, chain validation, and other certificate properties.
@@ -278,7 +278,7 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
     }
 
     /// <summary>
-    /// Downloads the raw certificate data in DER format.
+    /// Download certificate data
     /// </summary>
     /// <remarks>
     /// Returns the certificate as a binary file download. The certificate is returned

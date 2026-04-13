@@ -30,7 +30,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     private readonly JimApplication _application = application;
 
     /// <summary>
-    /// Gets all schedules with pagination.
+    /// List schedules
     /// </summary>
     /// <param name="page">The page number (1-based).</param>
     /// <param name="pageSize">The number of items per page.</param>
@@ -58,7 +58,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     }
 
     /// <summary>
-    /// Gets a specific schedule by ID.
+    /// Get schedule details
     /// </summary>
     /// <param name="id">The unique identifier of the schedule.</param>
     /// <returns>The schedule details including steps.</returns>
@@ -81,7 +81,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     }
 
     /// <summary>
-    /// Creates a new schedule.
+    /// Create a schedule
     /// </summary>
     /// <param name="request">The schedule creation request.</param>
     /// <returns>The created schedule.</returns>
@@ -140,11 +140,10 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     }
 
     /// <summary>
-    /// Updates an existing schedule.
+    /// Update a schedule
     /// </summary>
     /// <remarks>
-    /// Updates the schedule properties and replaces all steps with the provided list.
-    /// Steps not included in the request will be deleted.
+    /// Replaces all schedule steps with the provided list; steps not included in the request will be deleted.
     /// </remarks>
     /// <param name="id">The unique identifier of the schedule.</param>
     /// <param name="request">The update request.</param>
@@ -254,7 +253,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     }
 
     /// <summary>
-    /// Deletes a schedule.
+    /// Delete a schedule
     /// </summary>
     /// <param name="id">The unique identifier of the schedule to delete.</param>
     /// <returns>No content on success.</returns>
@@ -280,7 +279,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     }
 
     /// <summary>
-    /// Enables a schedule.
+    /// Enable a schedule
     /// </summary>
     /// <param name="id">The unique identifier of the schedule.</param>
     /// <returns>The updated schedule.</returns>
@@ -314,7 +313,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     }
 
     /// <summary>
-    /// Disables a schedule.
+    /// Disable a schedule
     /// </summary>
     /// <param name="id">The unique identifier of the schedule.</param>
     /// <returns>The updated schedule.</returns>
@@ -348,7 +347,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     }
 
     /// <summary>
-    /// Manually triggers a schedule execution.
+    /// Run a schedule
     /// </summary>
     /// <param name="id">The unique identifier of the schedule.</param>
     /// <returns>The execution ID and status.</returns>

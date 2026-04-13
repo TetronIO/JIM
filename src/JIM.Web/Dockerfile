@@ -65,8 +65,32 @@ FROM build AS publish
 ARG VERSION_SUFFIX=
 RUN dotnet publish "JIM.Web.csproj" -c Release -o /app/publish /p:UseAppHost=false /p:VersionSuffix="${VERSION_SUFFIX}"
 
-# Final stage - use published output
+# Generate OpenAPI document in lightweight mode (no DB or IdP required).
+# The app starts, generates the schema from controller metadata, writes the
+# JSON file, and exits. The generated file is copied into the final image.
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:c433886fdfe33c6427966a412328867b2be9a64f540a105d08943c2dc6fba39b AS openapi-gen
+WORKDIR /app
+COPY --from=publish /app/publish .
+ENV JIM_OPENAPI_GENERATE=true \
+    JIM_OPENAPI_OUTPUT_PATH=/app/wwwroot/api/openapi/v1.json \
+    JIM_LOG_LEVEL=Warning \
+    JIM_LOG_PATH=/tmp \
+    JIM_SSO_AUTHORITY=http://localhost:8181/realms/jim \
+    JIM_SSO_CLIENT_ID=jim-web \
+    JIM_SSO_SECRET=placeholder \
+    JIM_SSO_API_SCOPE=jim-api \
+    JIM_SSO_CLAIM_TYPE=sub \
+    JIM_SSO_MV_ATTRIBUTE="Subject Identifier" \
+    JIM_SSO_INITIAL_ADMIN=placeholder \
+    JIM_DB_HOSTNAME=localhost \
+    JIM_DB_NAME=jim \
+    JIM_DB_USERNAME=jim \
+    JIM_DB_PASSWORD=placeholder
+RUN dotnet JIM.Web.dll
+
+# Final stage - use published output with pre-generated OpenAPI document
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+COPY --from=openapi-gen /app/wwwroot/api/openapi/v1.json ./wwwroot/api/openapi/v1.json
 ENTRYPOINT ["dotnet", "JIM.Web.dll"]
