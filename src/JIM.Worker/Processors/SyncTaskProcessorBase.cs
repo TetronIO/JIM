@@ -1230,7 +1230,7 @@ public abstract class SyncTaskProcessorBase
 
                 // Build CS ID → name lookup from the export evaluation cache (the provisioning CSO
                 // intentionally does not have the ConnectedSystem nav property loaded).
-                var csNameLookup = _exportEvaluationCache?.ExportRulesByMvoTypeId.Values
+                var csNameLookup = _exportEvaluationCache.ExportRulesByMvoTypeId.Values
                     .SelectMany(rules => rules)
                     .Where(sr => sr.ConnectedSystem != null)
                     .GroupBy(sr => sr.ConnectedSystemId)
@@ -1238,7 +1238,7 @@ public abstract class SyncTaskProcessorBase
                     ?? new Dictionary<int, string>();
 
                 // Build CSO type name lookup from export rules (the provisioning CSO doesn't have the Type nav property loaded)
-                var csoTypeNameLookup = _exportEvaluationCache?.ExportRulesByMvoTypeId.Values
+                var csoTypeNameLookup = _exportEvaluationCache.ExportRulesByMvoTypeId.Values
                     .SelectMany(rules => rules)
                     .Where(sr => sr.ConnectedSystemObjectType != null)
                     .GroupBy(sr => sr.ConnectedSystemId)

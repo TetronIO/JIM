@@ -48,6 +48,14 @@
 - ALWAYS wrap nullable parameters with a typed `NpgsqlParameter`: `NullableParam(value, NpgsqlTypes.NpgsqlDbType.Text)` (see helper method in `ConnectedSystemRepository`, `ActivitiesRepository`, `MetaverseRepository`)
 - This applies to ALL nullable columns in raw SQL INSERT/UPDATE statements: string, int, Guid, DateTime, bool, etc.
 
+**Exception Handling:**
+- NEVER use generic `catch` or `catch (Exception)` clauses; always catch a specific exception type
+- For JS interop retry patterns in `OnAfterRenderAsync` (e.g. loading user preferences), catch `InvalidOperationException` specifically; this is the exception Blazor throws when JS interop is invoked before the runtime is ready
+- Do NOT use `?.` on a variable that has already been null-checked with an early return; the null-conditional is redundant and triggers code quality warnings
+
+**Nullable Dereference in Razor:**
+- When accessing a nullable `.Value` property in Razor markup (e.g. `context.LastUpdated.Value`), capture it into a local variable inside the `@if (x.HasValue)` block: `var lastUpdated = context.LastUpdated.Value;` then use the local variable in markup expressions. This avoids repeated nullable dereference warnings from code analysis.
+
 **File Organisation:**
 - One class per file - each class should have its own `.cs` file named after the class
 - Exception: Enums are grouped into a single file per area/folder (e.g., `ConnectedSystemEnums.cs`, `PendingExportEnums.cs`)
@@ -122,7 +130,7 @@ Repository and server methods that load a single entity follow a weight-based ta
 - Use `Dense="@_dense"` and `Class="@(_dense ? "dense-body-only" : "")"` on the `MudTable`; the `dense-body-only` CSS class keeps header rows at normal height while body rows are compact
 - Add a `MudButton` with `StartIcon` (not `MudIconButton`, which renders circular) in the `ToolBarContent` to toggle density, using `Icons.Material.Filled.DensitySmall` / `DensityMedium`
 - Persist the preference via `IUserPreferenceService.GetTableDenseAsync()` / `SetTableDenseAsync()` (stored in browser localStorage under a single shared key, so the setting applies globally across all pages)
-- Default to normal spacing (`_dense = false`); load the saved preference in `OnAfterRenderAsync`
+- Default to normal spacing (`_dense = false`); load the saved preference in `OnAfterRenderAsync` with `catch (InvalidOperationException)` for JS interop retry
 - See `Pages/Types/Index.razor` for the reference implementation
 
 ## Architecture Quick Reference

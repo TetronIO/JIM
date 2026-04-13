@@ -653,8 +653,9 @@ else if (_syncRule != null)
                 <MudTd DataLabel="Updated">
                     @if (context.LastUpdated.HasValue)
                     {
-                        <MudTooltip Text="@context.LastUpdated.Value.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                            <MudText Typo="Typo.body2">@context.LastUpdated.Value.ToLocalTime().ToRelativeTime()</MudText>
+                        var lastUpdated = context.LastUpdated.Value;
+                        <MudTooltip Text="@lastUpdated.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                            <MudText Typo="Typo.body2">@lastUpdated.ToLocalTime().ToRelativeTime()</MudText>
                         </MudTooltip>
                     }
                     else

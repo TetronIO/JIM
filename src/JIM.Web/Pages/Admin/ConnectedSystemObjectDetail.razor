@@ -327,7 +327,7 @@
                 _preferencesLoaded = true;
                 StateHasChanged();
             }
-            catch
+            catch (InvalidOperationException)
             {
                 // JS interop not yet available, will retry on next render
             }
