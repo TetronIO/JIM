@@ -1230,10 +1230,10 @@ public abstract class SyncTaskProcessorBase
                 // Prefer the AttributeFlow child as parent (MVO is fully formed after attribute flow),
                 // fall back to root outcome, fall back to creating outcomes at root level.
                 var rootOutcome = originatingRpei.SyncOutcomes.FirstOrDefault(o =>
-                    o.ParentSyncOutcome == null && o.ParentSyncOutcomeId == null);
+                    !o.ParentSyncOutcomeId.HasValue);
                 var attributeFlowChild = originatingRpei.SyncOutcomes.FirstOrDefault(o =>
                     o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
-                    && o.ParentSyncOutcome != null);
+                    && o.ParentSyncOutcomeId.HasValue);
                 var exportParent = attributeFlowChild ?? rootOutcome;
 
                 // Track Provisioned outcomes by CS ID so we can nest Pending Exports under them
@@ -1614,7 +1614,7 @@ public abstract class SyncTaskProcessorBase
                                 {
                                     var attrFlowChild = existingChangeEntry.Rpei.SyncOutcomes.FirstOrDefault(o =>
                                         o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
-                                        && o.ParentSyncOutcome != null);
+                                        && o.ParentSyncOutcomeId.HasValue);
                                     if (attrFlowChild != null)
                                         attrFlowChild.DetailCount = existingChangeEntry.Rpei.AttributeFlowCount;
                                 }
