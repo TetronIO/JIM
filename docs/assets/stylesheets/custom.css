@@ -196,6 +196,25 @@
   margin: 0 auto 1.5rem;
   display: block;
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.25));
+  transform-origin: 50% 50%;
+  animation: jim-logo-pulse 12s ease-in-out infinite;
+}
+
+@keyframes jim-logo-pulse {
+  0%,
+  100% { transform: scale(1)    rotate(0); }
+  8%   { transform: scale(1.15) rotate(0); }       /* grow */
+  17%  { transform: scale(1.15) rotate(90deg); }   /* rotate while enlarged */
+  25%  { transform: scale(1)    rotate(90deg); }   /* shrink, hold rotation */
+  /* 25% -> 100%: long quiet rest. The implicit reset to 0deg at the
+     next iteration is visually invisible because the logo is
+     rotationally symmetric. */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jim-hero__logo {
+    animation: none;
+  }
 }
 
 .jim-hero__title {
