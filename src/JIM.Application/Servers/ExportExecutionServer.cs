@@ -463,22 +463,56 @@ public class ExportExecutionServer
                             await MarkBatchAsExecutingAsync(immediateExports, SyncRepo);
                         }
 
-                        // Execute batch via connector
-                        List<ConnectedSystemExportResult> exportResults;
-                        using (Diagnostics.Diagnostics.Connector.StartSpan("ExportBatch")
-                            .SetTag("batchSize", immediateExports.Count)
-                            .SetTag("cumulativeObjectCount", processedCount + immediateExports.Count)
-                            .SetTag("wallClockOffsetMs", exportPhaseStopwatch.Elapsed.TotalMilliseconds))
+                        try
                         {
-                            exportResults = await connector.ExportAsync(immediateExports, cancellationToken);
-                        }
+                            // Execute batch via connector
+                            List<ConnectedSystemExportResult> exportResults;
+                            using (Diagnostics.Diagnostics.Connector.StartSpan("ExportBatch")
+                                .SetTag("batchSize", immediateExports.Count)
+                                .SetTag("cumulativeObjectCount", processedCount + immediateExports.Count)
+                                .SetTag("wallClockOffsetMs", exportPhaseStopwatch.Elapsed.TotalMilliseconds))
+                            {
+                                exportResults = await connector.ExportAsync(immediateExports, cancellationToken);
+                            }
 
-                        // Process results
-                        using (Diagnostics.Diagnostics.Database.StartSpan("ProcessBatchSuccess")
-                            .SetTag("batchSize", immediateExports.Count))
+                            // Process results
+                            using (Diagnostics.Diagnostics.Database.StartSpan("ProcessBatchSuccess")
+                                .SetTag("batchSize", immediateExports.Count))
+                            {
+                                await ProcessBatchSuccessAsync(immediateExports, exportResults, result,
+                                    SyncRepo);
+                            }
+                        }
+                        catch (OperationCanceledException)
                         {
-                            await ProcessBatchSuccessAsync(immediateExports, exportResults, result,
-                                SyncRepo);
+                            throw;
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.Error(ex, "ExecuteUsingCallsWithBatchingAsync: Batch failed for {SystemName}", connectedSystem.Name);
+
+                            // Create ProcessedExportItems so the RPEI pipeline can record the failures.
+                            // Without this, the activity would silently report Status: Complete.
+                            foreach (var export in immediateExports)
+                            {
+                                MarkExportFailed(export, ex.Message);
+                                result.FailedCount++;
+                                result.ProcessedExportItems.Add(new ProcessedExportItem
+                                {
+                                    ChangeType = export.ChangeType,
+                                    ConnectedSystemObject = export.ConnectedSystemObject,
+                                    AttributeChangeCount = export.AttributeValueChanges.Count,
+                                    AttributeValueChanges = export.AttributeValueChanges.ToList(),
+                                    Succeeded = false,
+                                    ErrorMessage = $"Batch export failed: {ex.Message}",
+                                    ErrorCount = export.ErrorCount,
+                                    ErrorType = ConnectedSystemExportErrorType.General
+                                });
+                            }
+                            await SyncRepo.UpdatePendingExportsAsync(immediateExports);
+
+                            // Stop processing further batches — the connector is likely broken
+                            break;
                         }
 
                         processedCount += immediateExports.Count;
@@ -548,8 +582,10 @@ public class ExportExecutionServer
         catch (Exception ex)
         {
             Log.Error(ex, "ExecuteUsingCallsWithBatchingAsync: Failed to execute exports for {SystemName}", connectedSystem.Name);
-            // Individual batch failures are already handled in ProcessBatchSuccessAsync.
-            // This catch is for connection-level or unexpected errors.
+            // Connection-level or unexpected errors must propagate so PerformExportAsync
+            // can fail the activity via FailActivityWithErrorAsync. Swallowing the exception
+            // here would cause the activity to silently report Status: Complete.
+            throw;
         }
     }
 
@@ -893,10 +929,22 @@ public class ExportExecutionServer
             {
                 Log.Error(ex, "ProcessBatchesInParallelAsync: Batch {BatchIndex} failed", batchIndex);
 
-                // Mark this batch's exports as failed
+                // Mark this batch's exports as failed and create ProcessedExportItems
+                // so the RPEI pipeline can record the failures. Without ProcessedExportItems,
+                // the activity would silently report Status: Complete with no error RPEIs.
                 lock (resultLock)
                 {
                     result.FailedCount += batchIds.Count;
+                    foreach (var id in batchIds)
+                    {
+                        result.ProcessedExportItems.Add(new ProcessedExportItem
+                        {
+                            ChangeType = PendingExportChangeType.Update,
+                            Succeeded = false,
+                            ErrorMessage = $"Batch export failed: {ex.Message}",
+                            ErrorCount = 1
+                        });
+                    }
                 }
             }
             finally
@@ -1437,6 +1485,21 @@ public class ExportExecutionServer
                 export.LastAttemptedAt = now;
                 export.NextRetryAt = CalculateNextRetryTime(export.ErrorCount);
                 export.Status = PendingExportStatus.ExportNotConfirmed;
+
+                // Create ProcessedExportItem so the RPEI pipeline can record the failure.
+                // Without this, no RPEIs are generated and the activity silently reports
+                // Status: Complete despite all exports having failed.
+                result.ProcessedExportItems.Add(new ProcessedExportItem
+                {
+                    ChangeType = export.ChangeType,
+                    ConnectedSystemObject = export.ConnectedSystemObject,
+                    AttributeChangeCount = export.AttributeValueChanges.Count,
+                    AttributeValueChanges = export.AttributeValueChanges.ToList(),
+                    Succeeded = false,
+                    ErrorMessage = $"Export failed: {ex.Message}",
+                    ErrorCount = export.ErrorCount,
+                    ErrorType = ConnectedSystemExportErrorType.General
+                });
             }
             using (Diagnostics.Diagnostics.Database.StartSpan("UpdateFailedExports")
                 .SetTag("count", pendingExports.Count))

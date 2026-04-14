@@ -334,7 +334,7 @@ try {
             # Now export to AD (this will provision the user)
             Write-Host "  Exporting to AD..." -ForegroundColor Gray
             $exportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $exportResult.activityId -Name "LDAP Export (Join)"
+            Assert-ExportSuccess -ActivityId $exportResult.activityId -Name "LDAP Export (Join)"
 
             # Import from AD to confirm the CSO joins back to the same MVO
             Write-Host "  Importing from AD to verify join..." -ForegroundColor Gray
