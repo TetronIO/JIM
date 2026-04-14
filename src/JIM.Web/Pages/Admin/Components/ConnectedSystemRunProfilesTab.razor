@@ -146,7 +146,7 @@
                 {
                     <MudTextField T="string" @bind-Value="_newRunProfile.FilePath" Label="File Path" Variant="Variant.Outlined"
                                   Class="mt-3"
-                                  HelperText="File-based connectors need the in-container path specifying, i.e. /var/connector-files/test-data/Users.csv" />
+                                  HelperText="File-based connectors need the in-container path specifying, i.e. /connector-files/Users.csv" />
                 }
 
                 @if (IsImportRunType(_newRunProfile.RunType) && ConnectedSystem.ConnectorDefinition.SupportsPartitions && ConnectedSystem.Partitions != null)
@@ -200,7 +200,7 @@
                 {
                     <MudTextField T="string" @bind-Value="_editRunProfile.FilePath" Label="File Path" Variant="Variant.Outlined"
                                   Class="mt-3"
-                                  HelperText="File-based connectors need the in-container path specifying, i.e. /var/connector-files/test-data/Users.csv" />
+                                  HelperText="File-based connectors need the in-container path specifying, i.e. /connector-files/Users.csv" />
                 }
 
                 @if (IsImportRunType(_editRunProfile.RunType) && ConnectedSystem.ConnectorDefinition.SupportsPartitions && ConnectedSystem.Partitions != null)

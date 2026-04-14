@@ -718,6 +718,52 @@ function Get-RandomSubset {
 
 # Progress bar functions for visual feedback during long operations
 
+function Copy-CsvToConnectorFiles {
+    <#
+    .SYNOPSIS
+        Copy a CSV file from the host to /connector-files/test-data in the jim-connector-files-volume.
+
+    .DESCRIPTION
+        Uses `docker cp` via the jim.worker container to push a host file into the named
+        Docker volume at /connector-files/test-data/<filename>. The destination filename
+        defaults to the source file's basename, or can be overridden.
+
+        This is the integration-test equivalent of the customer "drop a file into the
+        File Connector volume" step. It mirrors the pattern used in Generate-TestCSV.ps1.
+
+    .PARAMETER SourcePath
+        The host path to the CSV file to copy.
+
+    .PARAMETER DestinationName
+        Optional override for the target filename. Defaults to the basename of SourcePath.
+
+    .EXAMPLE
+        Copy-CsvToConnectorFiles -SourcePath "$testDataPath/hr-users.csv"
+
+        Copies to jim.worker:/connector-files/test-data/hr-users.csv
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$SourcePath,
+
+        [Parameter(Mandatory=$false)]
+        [string]$DestinationName
+    )
+
+    if (-not (Test-Path $SourcePath)) {
+        throw "Source file not found: $SourcePath"
+    }
+
+    if (-not $DestinationName) {
+        $DestinationName = [System.IO.Path]::GetFileName($SourcePath)
+    }
+
+    $result = docker cp $SourcePath "jim.worker:/connector-files/test-data/$DestinationName" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to copy $SourcePath to jim.worker:/connector-files/test-data/${DestinationName}: $result"
+    }
+}
+
 function Write-ProgressBar {
     <#
     .SYNOPSIS
@@ -1131,6 +1177,46 @@ function Assert-ActivitySuccess {
     }
 
     throw "Activity '$Name' did not complete successfully. Status: $status (ActivityId: $ActivityId)"
+}
+
+function Assert-ExportSuccess {
+    <#
+    .SYNOPSIS
+        Assert that an export Activity completed successfully with no export failures.
+
+    .DESCRIPTION
+        Validates both the activity status (must be 'Complete') AND the export outcome
+        (no failures reported in the activity message). This catches cases where the
+        activity status is 'Complete' but exports actually failed silently.
+
+    .PARAMETER ActivityId
+        The Activity ID (GUID) to validate
+
+    .PARAMETER Name
+        A friendly name for the operation (used in error messages)
+
+    .EXAMPLE
+        Assert-ExportSuccess -ActivityId $exportResult.activityId -Name "LDAP Export (Joiner)"
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ActivityId,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Name
+    )
+
+    # First validate activity status
+    Assert-ActivitySuccess -ActivityId $ActivityId -Name $Name
+
+    # Then validate no export failures in the activity message
+    $activity = Get-JIMActivity -Id $ActivityId
+    if ($activity.message -match '(\d+) failed' -and [int]$Matches[1] -gt 0) {
+        Write-Host "  ✗ $Name had $($Matches[1]) export failure(s)" -ForegroundColor Red
+        Write-Host "    Activity message: $($activity.message)" -ForegroundColor Red
+        Write-Host "    Activity ID: $ActivityId" -ForegroundColor Red
+        throw "Export '$Name' had $($Matches[1]) failure(s). Activity message: $($activity.message) (ActivityId: $ActivityId)"
+    }
 }
 
 function Assert-ActivityHasChanges {

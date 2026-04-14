@@ -32,7 +32,7 @@
     This script requires the JIM PowerShell module and assumes:
     - JIM is running and accessible
     - Samba AD container is running on jim-network
-    - CSV files exist at /var/connector-files/test-data/hr-users.csv
+    - CSV files exist at /connector-files/test-data/hr-users.csv
 #>
 
 param(
@@ -204,7 +204,7 @@ try {
 
     $settingValues = @{}
     if ($filePathSetting) {
-        $settingValues[$filePathSetting.id] = @{ stringValue = "/var/connector-files/test-data/hr-users.csv" }
+        $settingValues[$filePathSetting.id] = @{ stringValue = "/connector-files/test-data/hr-users.csv" }
     }
     if ($delimiterSetting) {
         $settingValues[$delimiterSetting.id] = @{ stringValue = "," }
@@ -341,7 +341,7 @@ try {
     # Configure Training CSV settings
     $trainingSettingValues = @{}
     if ($filePathSetting) {
-        $trainingSettingValues[$filePathSetting.id] = @{ stringValue = "/var/connector-files/test-data/training-records.csv" }
+        $trainingSettingValues[$filePathSetting.id] = @{ stringValue = "/connector-files/test-data/training-records.csv" }
     }
     if ($delimiterSetting) {
         $trainingSettingValues[$delimiterSetting.id] = @{ stringValue = "," }
@@ -382,7 +382,7 @@ try {
     # Configure Cross-Domain CSV settings
     $crossDomainSettingValues = @{}
     if ($filePathSetting) {
-        $crossDomainSettingValues[$filePathSetting.id] = @{ stringValue = "/var/connector-files/test-data/cross-domain-users.csv" }
+        $crossDomainSettingValues[$filePathSetting.id] = @{ stringValue = "/connector-files/test-data/cross-domain-users.csv" }
     }
     if ($delimiterSetting) {
         $crossDomainSettingValues[$delimiterSetting.id] = @{ stringValue = "," }
@@ -1412,7 +1412,7 @@ try {
     $ldapProfiles = Get-JIMRunProfile -ConnectedSystemId $ldapSystem.id
 
     # CSV Run Profiles
-    $csvFilePath = "/var/connector-files/test-data/hr-users.csv"
+    $csvFilePath = "/connector-files/test-data/hr-users.csv"
 
     # Full Import (CSV)
     $csvImportProfile = $csvProfiles | Where-Object { $_.name -eq "Full Import" }
@@ -1531,7 +1531,7 @@ try {
 
     # Training Run Profiles
     $trainingProfiles = Get-JIMRunProfile -ConnectedSystemId $trainingSystem.id
-    $trainingFilePath = "/var/connector-files/test-data/training-records.csv"
+    $trainingFilePath = "/connector-files/test-data/training-records.csv"
 
     # Full Import (Training)
     $trainingImportProfile = $trainingProfiles | Where-Object { $_.name -eq "Full Import" }
@@ -1578,7 +1578,7 @@ try {
 
     # Cross-Domain Run Profiles
     $crossDomainProfiles = Get-JIMRunProfile -ConnectedSystemId $crossDomainSystem.id
-    $crossDomainFilePath = "/var/connector-files/test-data/cross-domain-users.csv"
+    $crossDomainFilePath = "/connector-files/test-data/cross-domain-users.csv"
 
     # Full Import (Cross-Domain) - for confirming exports
     $crossDomainImportProfile = $crossDomainProfiles | Where-Object { $_.name -eq "Full Import" }

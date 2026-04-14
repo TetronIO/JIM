@@ -244,7 +244,54 @@ jobs:
           path: sbom-${{ matrix.image }}.spdx.json
           retention-days: 5
 
-  # Job 3: Publish PowerShell module to PSGallery
+  # Job 3: Publish the documentation site with the latest OpenAPI document.
+  # Extracts the pre-generated OpenAPI JSON from the released jim-web Docker image,
+  # drops it into the docs/ tree, builds the MkDocs site, and deploys to GitHub Pages.
+  # This ensures the public API reference at https://tetronio.github.io/JIM/api/reference/
+  # always matches the latest stable release.
+  publish-docs:
+    name: Publish Documentation Site
+    runs-on: ubuntu-latest
+    needs: [validate, build-containers]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - name: Configure Git
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+
+      - name: Set image prefix
+        id: prefix
+        run: echo "IMAGE_PREFIX=$(echo 'ghcr.io/${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Extract OpenAPI document from jim-web image
+        run: |
+          IMAGE="${{ steps.prefix.outputs.IMAGE_PREFIX }}/jim-web:${{ steps.version.outputs.VERSION }}"
+          docker pull "$IMAGE"
+          CONTAINER_ID=$(docker create "$IMAGE")
+          docker cp "${CONTAINER_ID}:/app/wwwroot/api/openapi/v1.json" docs/api/reference/v1.json
+          docker rm "$CONTAINER_ID"
+          echo "Extracted OpenAPI document: $(wc -c < docs/api/reference/v1.json) bytes"
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: 3.x
+
+      - name: Install MkDocs
+        run: pip install "mkdocs>=1.6,<2" "mkdocs-material>=9.7,<10" "mkdocs-glightbox>=0.4,<1"
+
+      - name: Deploy to GitHub Pages
+        run: mkdocs gh-deploy --force
+
+  # Job 4: Publish PowerShell module to PSGallery
   # Depends on build-containers to ensure nothing publishes if Docker builds fail
   publish-powershell:
     name: Publish PowerShell Module

@@ -13,6 +13,7 @@ services:
     volumes:
       - jim-logs-volume:/var/log/jim
       - jim-keys-volume:/data/keys
+      - jim-connector-files-volume:/connector-files
     read_only: true
     tmpfs:
       - /tmp
@@ -52,6 +53,7 @@ services:
     volumes:
       - jim-logs-volume:/var/log/jim
       - jim-keys-volume:/data/keys
+      - jim-connector-files-volume:/connector-files
     read_only: true
     tmpfs:
       - /tmp
@@ -173,3 +175,10 @@ volumes:
     name: jim-logs-volume
   jim-keys-volume:
     name: jim-keys-volume
+  # File Connector storage: imports and exports for the JIM File Connector.
+  # Mounted on jim.web (for the file browser dialog) and jim.worker (read/write).
+  # Customers integrating with fixed external file locations bind-mount over
+  # subdirectories of this volume (e.g. a network share at /connector-files/hr-input).
+  # See docs/connectors/jim-file-connector.md for configuration patterns.
+  jim-connector-files-volume:
+    name: jim-connector-files-volume

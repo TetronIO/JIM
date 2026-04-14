@@ -16,7 +16,7 @@ public class FileSystemServer
     /// <summary>
     /// The root directories that users are allowed to browse.
     /// </summary>
-    private static readonly string[] AllowedRoots = { "/var/connector-files" };
+    private static readonly string[] AllowedRoots = { "/connector-files" };
 
     internal FileSystemServer(JimApplication application)
     {
@@ -38,8 +38,8 @@ public class FileSystemServer
             {
                 return new FileSystemListResult
                 {
-                    Path = "/var/connector-files",
-                    Error = "No accessible directories found. Ensure /var/connector-files is mounted.",
+                    Path = "/connector-files",
+                    Error = "No accessible directories found. Ensure /connector-files is mounted.",
                     Entries = new List<FileSystemEntry>()
                 };
             }
