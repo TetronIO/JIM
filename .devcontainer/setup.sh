@@ -143,6 +143,24 @@ else
     print_warning "Pester installation failed - you can install manually: Install-Module -Name Pester -MinimumVersion 5.0 -Force"
 fi
 
+# 5a. Make the nested pwsh binary executable for non-root users.
+# The `pwsh` shim at /usr/bin/pwsh works for all users, but PowerShell's own Start-Process
+# resolves to the real binary at /usr/share/powershell/.store/.../pwsh, which ships with
+# 0744 permissions (only root can exec). That blocks any PowerShell script from spawning
+# a pwsh subprocess (e.g. the integration runner's docker-stats capture), with a confusing
+# "Permission denied" error. A single chmod +x on the real binary fixes it permanently.
+print_step "Fixing nested pwsh binary permissions..."
+nested_pwsh=$(find /usr/share/powershell/.store -name 'pwsh' -type f 2>/dev/null | head -1)
+if [ -n "$nested_pwsh" ] && [ ! -x "$nested_pwsh" ]; then
+    if sudo chmod +x "$nested_pwsh" 2>/dev/null; then
+        print_success "Made $nested_pwsh executable for all users"
+    else
+        print_warning "Could not chmod $nested_pwsh; pwsh subprocess spawning may fail"
+    fi
+else
+    print_success "Nested pwsh binary already executable (or not found)"
+fi
+
 # 6. Install MkDocs Material for documentation preview
 print_step "Installing MkDocs Material..."
 if pip install "mkdocs>=1.6,<2" "mkdocs-material>=9.7,<10" "mkdocs-glightbox>=0.4,<1" --break-system-packages --quiet 2>/dev/null; then

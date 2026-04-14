@@ -431,6 +431,41 @@ public interface ISyncRepository
     Task BulkUpdateRpeiOutcomesAsync(List<ActivityRunProfileExecutionItem> rpeis, List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes);
 
     /// <summary>
+    /// Loads persisted RPEIs and their SyncOutcomes for the specified CSO ids, for use by
+    /// cross-page reference resolution to merge reference attribute flow into existing RPEIs
+    /// rather than creating duplicates. Previous implementations relied on
+    /// <c>_activity.RunProfileExecutionItems</c> as a lookup source, but per-page raw-SQL flushes
+    /// clear that collection so the lookup has to come from the database.
+    /// </summary>
+    Task<List<ActivityRunProfileExecutionItem>> GetActivityRpeisByCsoIdsForCrossPageMergeAsync(
+        Guid activityId, IReadOnlyCollection<Guid> csoIds);
+
+    /// <summary>
+    /// Returns a dictionary mapping RPEI id → existing MetaverseObjectChange id for the
+    /// supplied RPEI ids. Used by cross-page reference resolution so that the reference
+    /// attribute flows added to an already-persisted Projected/Joined RPEI can be written
+    /// as new attribute rows under the existing MvoChange parent — respecting the unique
+    /// constraint <c>IX_MetaverseObjectChanges_ActivityRunProfileExecutionItemId</c>.
+    ///
+    /// PostgreSQL implementation uses raw Npgsql (not EF projection): measured ~3.5× faster
+    /// on Medium-scale cross-page loads (2 ms vs 7 ms for 113 RPEIs), with the gap widening
+    /// at higher scales where EF materialisation overhead dominates.
+    /// </summary>
+    Task<Dictionary<Guid, Guid>> GetRpeiToMvoChangeIdMapAsync(IReadOnlyCollection<Guid> rpeiIds);
+
+    /// <summary>
+    /// Persists only the attribute + value rows of pending MVO changes whose parent
+    /// MetaverseObjectChange record already exists in the database (i.e. from an earlier
+    /// page flush). Used by cross-page reference resolution after merging reference
+    /// attribute flows into an already-persisted Projected/Joined RPEI.
+    ///
+    /// Each change in <paramref name="mvoChanges"/> must already have its <c>Id</c> set
+    /// to the existing parent's id; the method skips the parent INSERT and writes only the
+    /// attribute and attribute-value children via COPY.
+    /// </summary>
+    Task PersistPendingMvoChangeAttributesAsync(List<MetaverseObjectChange> mvoChanges);
+
+    /// <summary>
     /// Detaches RPEIs from the EF change tracker so they are not persisted by subsequent
     /// SaveChangesAsync calls. Call after raw SQL bulk insert has persisted them.
     /// </summary>

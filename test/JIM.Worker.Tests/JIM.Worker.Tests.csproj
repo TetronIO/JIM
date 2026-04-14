@@ -33,6 +33,7 @@
       <ProjectReference Include="..\..\src\JIM.InMemoryData\JIM.InMemoryData.csproj" />
       <ProjectReference Include="..\..\src\JIM.PostgresData\JIM.PostgresData.csproj" />
       <ProjectReference Include="..\..\src\JIM.Worker\JIM.Worker.csproj" />
+      <ProjectReference Include="..\JIM.TestSupport\JIM.TestSupport.csproj" />
     </ItemGroup>
 
     <ItemGroup>

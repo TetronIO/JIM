@@ -32,6 +32,16 @@ public class SyncRepository : ISyncRepository
     private readonly Dictionary<Guid, PendingExport> _pendingExports = new();
     private readonly Dictionary<Guid, Activity> _activities = new();
     private readonly Dictionary<Guid, ActivityRunProfileExecutionItem> _rpeis = new();
+
+    /// <summary>
+    /// When true, <see cref="BulkInsertRpeisAsync"/> returns true (simulating the production
+    /// raw-SQL path) so the processor clears <c>_activity.RunProfileExecutionItems</c> after each
+    /// page. Off by default because most existing tests assert against that in-memory collection.
+    /// Tests exercising cross-page RPEI behaviour should opt in so the test exercises the code
+    /// path used in production.
+    /// </summary>
+    public bool SimulateRawSqlPersistence { get; set; }
+
     private readonly Dictionary<int, ConnectedSystem> _connectedSystems = new();
     private readonly Dictionary<int, SyncRule> _syncRules = new();
     private readonly Dictionary<int, ConnectedSystemObjectType> _objectTypes = new();
@@ -1039,10 +1049,11 @@ public class SyncRepository : ISyncRepository
             // Generate IDs for SyncOutcomes (matches PostgresDataRepository.FlattenSyncOutcomes behaviour)
             AssignSyncOutcomeIds(rpei.SyncOutcomes, rpei.Id, null);
         }
-        // Return false to indicate "not raw SQL" — tells the processor to keep RPEIs in
-        // the activity's RunProfileExecutionItems collection for test assertions, rather
-        // than clearing them (which is the production raw SQL path).
-        return Task.FromResult(false);
+        // When SimulateRawSqlPersistence is off (default), return false so the processor keeps
+        // RPEIs in the activity's RunProfileExecutionItems collection for simpler test assertions.
+        // When on, return true so the processor clears that collection after each page — matching
+        // the production raw-SQL path and exposing cross-page lookup bugs.
+        return Task.FromResult(SimulateRawSqlPersistence);
     }
 
     private static void AssignSyncOutcomeIds(
@@ -1071,6 +1082,53 @@ public class SyncRepository : ISyncRepository
     {
         foreach (var rpei in rpeis)
             _rpeis[rpei.Id] = rpei;
+        return Task.CompletedTask;
+    }
+
+    public Task<List<ActivityRunProfileExecutionItem>> GetActivityRpeisByCsoIdsForCrossPageMergeAsync(
+        Guid activityId, IReadOnlyCollection<Guid> csoIds)
+    {
+        var csoIdSet = csoIds as HashSet<Guid> ?? csoIds.ToHashSet();
+        var matches = _rpeis.Values
+            .Where(r => r.ActivityId == activityId
+                        && r.ConnectedSystemObjectId.HasValue
+                        && csoIdSet.Contains(r.ConnectedSystemObjectId.Value))
+            .ToList();
+        return Task.FromResult(matches);
+    }
+
+    public Task<Dictionary<Guid, Guid>> GetRpeiToMvoChangeIdMapAsync(IReadOnlyCollection<Guid> rpeiIds)
+    {
+        var rpeiIdSet = rpeiIds as HashSet<Guid> ?? rpeiIds.ToHashSet();
+        var map = _mvoChanges.Values
+            .Where(c => c.ActivityRunProfileExecutionItemId.HasValue
+                        && rpeiIdSet.Contains(c.ActivityRunProfileExecutionItemId.Value))
+            .ToDictionary(c => c.ActivityRunProfileExecutionItemId!.Value, c => c.Id);
+        return Task.FromResult(map);
+    }
+
+    public Task PersistPendingMvoChangeAttributesAsync(List<MetaverseObjectChange> mvoChanges)
+    {
+        // In-memory model: the existing MvoChange is already in _mvoChanges (keyed by Id).
+        // Append the new AttributeChanges to the existing record and assign ids for children.
+        foreach (var incoming in mvoChanges)
+        {
+            if (!_mvoChanges.TryGetValue(incoming.Id, out var existing))
+            {
+                throw new InvalidOperationException(
+                    $"PersistPendingMvoChangeAttributesAsync: no existing MvoChange with Id {incoming.Id}");
+            }
+
+            foreach (var attrChange in incoming.AttributeChanges)
+            {
+                if (attrChange.Id == Guid.Empty)
+                    attrChange.Id = Guid.NewGuid();
+                foreach (var valueChange in attrChange.ValueChanges.Where(vc => vc.Id == Guid.Empty))
+                    valueChange.Id = Guid.NewGuid();
+                existing.AttributeChanges.Add(attrChange);
+            }
+        }
+
         return Task.CompletedTask;
     }
 
