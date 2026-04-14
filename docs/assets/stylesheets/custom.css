@@ -178,7 +178,7 @@
 
 .jim-hero {
   width: 100%;
-  padding: 4.5rem 1rem 3.5rem;
+  padding: 3rem 1rem 3.5rem;
   background: linear-gradient(135deg, #5A45A2 0%, #483790 60%, #2f2466 100%);
   color: #ffffff;
   text-align: center;
@@ -191,13 +191,13 @@
 }
 
 .jim-hero__logo {
-  width: 96px;
+  width: 120px;
   height: auto;
-  margin: 0 auto 1.5rem;
+  margin: 0 auto 3rem;
   display: block;
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.25));
   transform-origin: 50% 50%;
-  animation: jim-logo-pulse 48s ease-in-out infinite;
+  animation: jim-logo-pulse 32s ease-in-out infinite;
 }
 
 /* Four "pick up, quarter-turn, set down" actions per cycle.
@@ -299,11 +299,11 @@
 /* Smaller hero on mobile/tablet */
 @media screen and (max-width: 76.1875em) {
   .jim-hero {
-    padding: 2.75rem 1rem 2.25rem;
+    padding: 2rem 1rem 2.25rem;
   }
   .jim-hero__logo {
-    width: 72px;
-    margin-bottom: 1rem;
+    width: 90px;
+    margin-bottom: 2rem;
   }
   .jim-hero__title {
     font-size: 2rem;
