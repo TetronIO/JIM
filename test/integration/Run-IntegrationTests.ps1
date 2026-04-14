@@ -2438,15 +2438,22 @@ if ($metricsStreamingEnabled) {
     Write-Success "Metrics streaming started (Run ID: $metricsRunId)"
 }
 
-# Start docker stats capture in the background so we can correlate per-container memory
-# and CPU with the scenario phases. Cheap to leave running for a short scenario; skipped
-# automatically when `docker` isn't on PATH.
-$dockerStatsJob = $null
+# Start docker stats capture as a detached pwsh process so we can correlate per-container
+# memory and CPU with the scenario phases. Uses Start-Process rather than Start-Job
+# because Start-Job's runspace adds unnecessary overhead for a fire-and-forget script.
+# The explicit /usr/bin/pwsh path is the distro shim; bare "pwsh" resolves Start-Process
+# to a nested .store binary whose permissions can cause "Permission denied" on some
+# devcontainer images (see .devcontainer/setup.sh for the complementary chmod fix).
+$dockerStatsProcess = $null
 $dockerStatsPath = $null
 if (Get-Command docker -ErrorAction SilentlyContinue) {
     $dockerStatsPath = Join-Path $scriptRoot "results" "docker-stats-$Scenario-$Template-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').csv"
     Write-Step "Starting docker stats capture -> $dockerStatsPath"
-    $dockerStatsJob = Start-Job -FilePath "$scriptRoot/Capture-DockerStats.ps1" -ArgumentList @($dockerStatsPath, 2)
+    $pwshPath = if (Test-Path '/usr/bin/pwsh') { '/usr/bin/pwsh' } else { 'pwsh' }
+    $dockerStatsProcess = Start-Process -FilePath $pwshPath -ArgumentList @(
+        "-NoProfile", "-File", "$scriptRoot/Capture-DockerStats.ps1",
+        "-OutputPath", $dockerStatsPath, "-IntervalSeconds", "2"
+    ) -PassThru -RedirectStandardOutput "$dockerStatsPath.stdout.log" -RedirectStandardError "$dockerStatsPath.stderr.log"
 }
 
 try {
@@ -2460,13 +2467,12 @@ catch {
     Write-Host ""
 }
 finally {
-    if ($dockerStatsJob) {
-        Stop-Job $dockerStatsJob -ErrorAction SilentlyContinue | Out-Null
-        Remove-Job $dockerStatsJob -Force -ErrorAction SilentlyContinue | Out-Null
-        if ($dockerStatsPath -and (Test-Path $dockerStatsPath)) {
-            $rowCount = (Get-Content $dockerStatsPath).Count - 1
-            Write-Step "Docker stats capture stopped ($rowCount samples recorded)"
-        }
+    if ($dockerStatsProcess -and -not $dockerStatsProcess.HasExited) {
+        Stop-Process -Id $dockerStatsProcess.Id -Force -ErrorAction SilentlyContinue
+    }
+    if ($dockerStatsPath -and (Test-Path $dockerStatsPath)) {
+        $rowCount = (Get-Content $dockerStatsPath).Count - 1
+        Write-Step "Docker stats capture stopped ($rowCount samples recorded)"
     }
 }
 $timings["5. Run Tests"] = (Get-Date) - $step5Start
