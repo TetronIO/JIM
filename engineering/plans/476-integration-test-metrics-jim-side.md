@@ -173,8 +173,6 @@ volumes:
   - ./test/integration/results/logs/worker:/var/log/jim    # Expose worker logs for metrics streaming
 ```
 
-(Note: the previous `./test/test-data:/var/connector-files/test-data` bind-mount was removed when File Connector storage migrated to the named `jim-connector-files-volume` — see `docs/connectors/jim-file-connector.md`.)
-
 This is the correct file because:
 - `docker-compose.override.yml` is already dev-only (contains Keycloak, debug ports, test-data mounts)
 - The integration test runner already uses `-f docker-compose.yml -f docker-compose.override.yml`
