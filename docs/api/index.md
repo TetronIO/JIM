@@ -58,6 +58,7 @@ https://jim.example.com/api/v1/
 | [Attributes](metaverse/attributes.md) | Metaverse attribute definitions and object type associations |
 | [Objects](metaverse/objects.md) | Identity objects stored in the metaverse |
 | [Pending Deletions](metaverse/pending-deletions.md) | Metaverse objects awaiting deletion after grace period |
+| [Predefined Searches](predefined-searches/index.md) | Named searches that drive portal list views and the fast search API |
 
 ### Scheduling
 

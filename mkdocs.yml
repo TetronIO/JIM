@@ -166,6 +166,8 @@ nav:
           - Attributes: api/metaverse/attributes.md
           - Objects: api/metaverse/objects.md
           - Pending Deletions: api/metaverse/pending-deletions.md
+      - Predefined Searches:
+          - api/predefined-searches/index.md
       - Activities:
           - api/activities/index.md
           - List: api/activities/list.md
