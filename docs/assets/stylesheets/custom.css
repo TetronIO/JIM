@@ -75,9 +75,9 @@
    ======================================== */
 
 [data-md-color-scheme="slate"] {
-  --md-primary-fg-color: #15293c;            /* header background */
-  --md-primary-fg-color--light: #15293c;
-  --md-primary-fg-color--dark: #15293c;
+  --md-primary-fg-color: #1d1a3d;            /* header background — purple-navy bridge to brand */
+  --md-primary-fg-color--light: #1d1a3d;
+  --md-primary-fg-color--dark: #1d1a3d;
   --md-primary-bg-color: #e0e4ea;            /* header text (light on dark) */
   --md-default-bg-color: #051526;            /* page background */
   --md-default-bg-color--light: #0d1e30;
@@ -102,6 +102,11 @@
 [data-md-color-scheme="slate"] .md-search__input {
   background-color: #0d1e30;                 /* surface colour */
   border: 1px solid #243a52;                  /* --mud-palette-lines-default */
+}
+
+/* Dark mode — tabs bar slightly darker than header for separation */
+[data-md-color-scheme="slate"] .md-tabs {
+  background-color: #15132b;
 }
 
 [data-md-color-scheme="slate"] .md-typeset a:hover,
@@ -163,4 +168,171 @@
 [data-md-color-scheme="slate"] .gslide-image img {
   background-color: #051526;
   border-radius: 4px;
+}
+
+/* ========================================
+   Homepage hero (full-bleed) and layout
+   Scoped via .jim-hero / .jim-home from
+   docs/overrides/home.html
+   ======================================== */
+
+.jim-hero {
+  width: 100%;
+  padding: 1.75rem 1rem 3.5rem;
+  background: linear-gradient(135deg, #5A45A2 0%, #483790 60%, #2f2466 100%);
+  color: #ffffff;
+  text-align: center;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+.jim-hero__inner {
+  max-width: 56rem;
+  margin: 0 auto;
+}
+
+.jim-hero__logo {
+  width: 160px;
+  height: auto;
+  margin: 0 auto 1.75rem;
+  display: block;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.25));
+  transform-origin: 50% 50%;
+  animation: jim-logo-pulse 32s ease-in-out infinite;
+}
+
+/* Four "pick up, quarter-turn, set down" actions per cycle.
+   Each action takes ~3s, followed by a ~9s rest. The logo never
+   rotates backwards and never moves while at rest. After four
+   actions the cumulative rotation reaches 360° which equals 0°,
+   so the iteration boundary is visually seamless. */
+@keyframes jim-logo-pulse {
+  /* --- Quarter-turn 1 (0deg -> 90deg) --- */
+  0%   { transform: scale(1)    rotate(0); }
+  2%   { transform: scale(1.15) rotate(0); }       /* grow */
+  4%   { transform: scale(1.15) rotate(90deg); }   /* rotate while enlarged */
+  6%   { transform: scale(1)    rotate(90deg); }   /* shrink, hold rotation */
+  25%  { transform: scale(1)    rotate(90deg); }   /* rest */
+
+  /* --- Quarter-turn 2 (90deg -> 180deg) --- */
+  27%  { transform: scale(1.15) rotate(90deg); }
+  29%  { transform: scale(1.15) rotate(180deg); }
+  31%  { transform: scale(1)    rotate(180deg); }
+  50%  { transform: scale(1)    rotate(180deg); }  /* rest */
+
+  /* --- Quarter-turn 3 (180deg -> 270deg) --- */
+  52%  { transform: scale(1.15) rotate(180deg); }
+  54%  { transform: scale(1.15) rotate(270deg); }
+  56%  { transform: scale(1)    rotate(270deg); }
+  75%  { transform: scale(1)    rotate(270deg); }  /* rest */
+
+  /* --- Quarter-turn 4 (270deg -> 360deg) --- */
+  77%  { transform: scale(1.15) rotate(270deg); }
+  79%  { transform: scale(1.15) rotate(360deg); }
+  81%  { transform: scale(1)    rotate(360deg); }
+  100% { transform: scale(1)    rotate(360deg); }  /* rest; equals rotate(0) */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jim-hero__logo {
+    animation: none;
+  }
+}
+
+.jim-hero__title {
+  font-size: 3rem;
+  font-weight: 700;
+  margin: 0 0 1rem;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+}
+
+.jim-hero__tagline {
+  font-size: 1.2rem;
+  line-height: 1.55;
+  margin: 0 auto 2.25rem;
+  max-width: 42rem;
+  opacity: 0.92;
+}
+
+.jim-hero__ctas {
+  display: flex;
+  gap: 0.85rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.jim-hero__cta {
+  display: inline-block;
+  padding: 0.75rem 1.75rem;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-decoration: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.jim-hero__cta--primary {
+  background: #ffffff;
+  color: #5A45A2;
+}
+
+.jim-hero__cta--primary:hover {
+  background: #f5f3fa;
+  color: #483790;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.jim-hero__cta--secondary {
+  background: transparent;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+}
+
+.jim-hero__cta--secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+/* Smaller hero on mobile/tablet */
+@media screen and (max-width: 76.1875em) {
+  .jim-hero {
+    padding: 1.25rem 1rem 2.25rem;
+  }
+  .jim-hero__logo {
+    width: 120px;
+    margin-bottom: 1.25rem;
+  }
+  .jim-hero__title {
+    font-size: 2rem;
+  }
+  .jim-hero__tagline {
+    font-size: 1rem;
+    margin-bottom: 1.75rem;
+  }
+}
+
+/* Widen the content grid on the homepage only.
+   Targets the page rendered with overrides/home.html via :has(). */
+body:has(.jim-home) .md-main__inner.md-grid,
+body:has(.jim-home) .md-content {
+  max-width: none;
+}
+
+body:has(.jim-home) .md-content__inner {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding-top: 2rem;
+}
+
+/* Hide the auto-generated edit button on the homepage; it looks odd under the hero */
+body:has(.jim-home) .md-content__button {
+  display: none;
+}
+
+/* Hide the auto-generated "Home" h1 (the hero already serves as the page title) */
+.jim-home > h1:first-of-type {
+  display: none;
 }

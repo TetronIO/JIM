@@ -262,28 +262,23 @@ Ensure your JIM server is resolvable by name in your network:
 
 The OIDC redirect URIs configured in your identity provider must match the JIM server's accessible URL.
 
-### Step 6: Configure File Connector Volumes (Optional)
+### Step 6: File Connector storage (optional)
 
-If you plan to use the File Connector to import/export CSV files, configure a volume mount:
+The File Connector ships pre-configured to read and write at `/connector-files` inside the container, backed by a Docker-managed volume named `jim-connector-files-volume`. **No setup is required for the default case** — start the stack and the volume is created automatically with correct ownership.
 
-1. Create a directory on the host:
+To put files in or pull them out:
 
-    ```bash
-    mkdir -p /opt/jim/connector-files
-    ```
+```bash
+# Push an import file into the volume
+docker cp ./Users.csv jim.worker:/connector-files/Users.csv
 
-2. Add a volume mount to `docker-compose.yml` for the `jim.worker` service:
+# Pull an exported file out
+docker cp jim.worker:/connector-files/Exports.csv ./Exports.csv
+```
 
-    ```yaml
-    jim.worker:
-      volumes:
-        - jim-logs-volume:/var/log/jim
-        - /opt/jim/connector-files:/var/connector-files
-    ```
+Then configure the File Connector's **File Path** setting as `/connector-files/Users.csv`.
 
-3. Place CSV files in `/opt/jim/connector-files/` on the host
-
-4. In JIM, configure the File Connector with the container path: `/var/connector-files/yourfile.csv`
+If you need to integrate with an external system that writes to a fixed network location (e.g. an SMB or NFS share), bind-mount that path over a subdirectory of `/connector-files`. See the [JIM File Connector documentation](../connectors/jim-file-connector.md#file-access) for the full pattern, including the UID 1654 ownership requirement for bind-mounted host paths.
 
 ### Step 7: Start Services
 

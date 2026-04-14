@@ -1678,4 +1678,210 @@ public class ExportExecutionTests
     }
 
     #endregion
+
+    #region Exception Handling (RPEI Blind Spot Fixes)
+
+    /// <summary>
+    /// Tests that when a file-based connector throws an exception during ExportAsync,
+    /// ProcessedExportItems are created so RPEIs can be generated. Previously, the catch block
+    /// in ExecuteUsingFilesWithBatchingAsync set result.FailedCount but did not create
+    /// ProcessedExportItems, causing the activity to show "100 failed" with Status: Complete
+    /// and no error RPEIs.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_FileConnectorThrows_CreatesProcessedExportItemsAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var mvo = MetaverseObjectsData[0];
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        // Create a CSO
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            Status = ConnectedSystemObjectStatus.Normal,
+            DateJoined = DateTime.UtcNow,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(cso);
+
+        // Create pending exports
+        var pendingExport1 = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            SourceMetaverseObjectId = mvo.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Create,
+            CreatedAt = DateTime.UtcNow,
+            ErrorCount = 0,
+            MaxRetries = 3,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Add,
+                    AttributeId = displayNameAttr.Id,
+                    Attribute = displayNameAttr,
+                    StringValue = "Test User"
+                }
+            }
+        };
+
+        var pendingExport2 = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            SourceMetaverseObjectId = mvo.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Update,
+            CreatedAt = DateTime.UtcNow,
+            ErrorCount = 0,
+            MaxRetries = 3,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = displayNameAttr.Id,
+                    Attribute = displayNameAttr,
+                    StringValue = "Updated Name"
+                }
+            }
+        };
+        PendingExportsData.Add(pendingExport1);
+        PendingExportsData.Add(pendingExport2);
+        SyncRepo.SeedPendingExport(pendingExport1);
+        SyncRepo.SeedPendingExport(pendingExport2);
+
+        // Mock a file-based connector that throws during ExportAsync
+        var mockConnector = new Mock<IConnector>();
+        var mockFileConnector = mockConnector.As<IConnectorExportUsingFiles>();
+        mockConnector.Setup(c => c.Name).Returns("Test File Connector");
+        mockFileConnector.Setup(c => c.ExportAsync(
+                It.IsAny<IList<ConnectedSystemSettingValue>>(),
+                It.IsAny<IList<PendingExport>>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new IOException("Permission denied: /connector-files/export.csv"));
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync);
+
+        // Assert - FailedCount should reflect all pending exports
+        Assert.That(result.FailedCount, Is.EqualTo(2), "Both exports should be marked as failed");
+        Assert.That(result.SuccessCount, Is.EqualTo(0), "No exports should have succeeded");
+
+        // Assert - ProcessedExportItems must be created for RPEI generation
+        Assert.That(result.ProcessedExportItems, Has.Count.EqualTo(2),
+            "ProcessedExportItems must be created even when connector throws, " +
+            "otherwise no RPEIs are generated and the activity silently reports Status: Complete");
+
+        // Assert - Each ProcessedExportItem must have failure information for RPEI error tracking
+        foreach (var item in result.ProcessedExportItems)
+        {
+            Assert.That(item.Succeeded, Is.False, "Each item should be marked as not succeeded");
+            Assert.That(item.ErrorMessage, Is.Not.Null.And.Not.Empty,
+                "Each item must have an error message so the RPEI gets an ErrorType set");
+        }
+    }
+
+    /// <summary>
+    /// Tests that when a call-based connector throws a connection-level exception
+    /// (e.g., LDAP connection dropped), the exception propagates to the caller so
+    /// PerformExportAsync can fail the activity. Previously, the outer catch block
+    /// silently swallowed the exception.
+    /// </summary>
+    [Test]
+    public void ExecuteExportsAsync_CallConnectorThrows_RethrowsToCallerAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var mvo = MetaverseObjectsData[0];
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        // Create a CSO
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            Status = ConnectedSystemObjectStatus.Normal,
+            DateJoined = DateTime.UtcNow,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(cso);
+
+        // Create a pending export
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            SourceMetaverseObjectId = mvo.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Update,
+            CreatedAt = DateTime.UtcNow,
+            ErrorCount = 0,
+            MaxRetries = 3,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = displayNameAttr.Id,
+                    Attribute = displayNameAttr,
+                    StringValue = "Updated Name"
+                }
+            }
+        };
+        PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
+
+        // Mock a call-based connector that throws during OpenExportConnection
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Failing Connector");
+        mockExportConnector.Setup(c => c.OpenExportConnection(It.IsAny<IList<ConnectedSystemSettingValue>>()))
+            .Throws(new InvalidOperationException("Connection refused"));
+
+        // Act & Assert - Exception must propagate so PerformExportAsync can fail the activity
+        Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await Jim.ExportExecution.ExecuteExportsAsync(
+                targetSystem,
+                mockConnector.Object,
+                SyncRunMode.PreviewAndSync);
+        });
+    }
+
+    #endregion
 }

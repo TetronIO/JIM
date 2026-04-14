@@ -7,6 +7,14 @@ exclude_docs: |
   diagrams/structurizr/node_modules/
   CLAUDE.md
 
+# Silence the INFO emitted for relative links MkDocs leaves as-is for the
+# browser to resolve at runtime (e.g. links to the Scalar API reference
+# published alongside the docs at /api/reference/). Genuine broken
+# internal links are still reported via the not_found warning.
+validation:
+  links:
+    unrecognized_links: ignore
+
 theme:
   name: material
   custom_dir: docs/overrides
@@ -197,6 +205,7 @@ nav:
           - api/system/index.md
   - PowerShell Module:
       - powershell/index.md
+      - System: powershell/system.md
       - Connection: powershell/connection.md
       - Connected Systems: powershell/connected-systems.md
       - Run Profiles: powershell/run-profiles.md

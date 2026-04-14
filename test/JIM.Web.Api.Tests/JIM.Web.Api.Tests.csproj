@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\JIM.Web\JIM.Web.csproj" />
+    <ProjectReference Include="..\JIM.TestSupport\JIM.TestSupport.csproj" />
   </ItemGroup>
 
 </Project>

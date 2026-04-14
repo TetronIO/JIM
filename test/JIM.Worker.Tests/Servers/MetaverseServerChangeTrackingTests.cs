@@ -682,10 +682,11 @@ public class MetaverseServerChangeTrackingTests
     }
 
     [Test]
-    public void AddMvoChangeAttributeValueObject_ReferenceWithFkOnly_RecordsGuidAsync()
+    public void AddMvoChangeAttributeValueObject_ReferenceWithFkOnly_RecordsReferenceValueIdAsync()
     {
         // Arrange — navigation property not loaded but FK is set (common during MVO deletion
-        // when referenced MVOs are not in the EF change tracker)
+        // when referenced MVOs are not in the EF change tracker, and during projection when
+        // reference attribute values are populated via direct SQL without loading navigations)
         var change = new MetaverseObjectChange();
         var referencedMvoId = Guid.NewGuid();
         var refAttr = new MetaverseAttribute { Id = 10, Name = "Manager", Type = AttributeDataType.Reference };
@@ -699,11 +700,13 @@ public class MetaverseServerChangeTrackingTests
         // Act
         JIM.Application.Servers.MetaverseServer.AddMvoChangeAttributeValueObject(change, attrValue, ValueChangeType.Remove);
 
-        // Assert — recorded as a GUID since the navigation property isn't available
+        // Assert — FK recorded on the change record so the ReferenceValue navigation can be
+        // loaded later via .Include; rendered as a linked MVO chip in the activity UI.
         var attrChange = change.AttributeChanges.Single();
         Assert.That(attrChange.AttributeName, Is.EqualTo("Manager"));
         var valueChange = attrChange.ValueChanges.Single();
-        Assert.That(valueChange.GuidValue, Is.EqualTo(referencedMvoId));
+        Assert.That(valueChange.ReferenceValueId, Is.EqualTo(referencedMvoId));
+        Assert.That(valueChange.GuidValue, Is.Null, "GuidValue is reserved for Guid-type attributes, not reference FKs");
         Assert.That(valueChange.ValueChangeType, Is.EqualTo(ValueChangeType.Remove));
     }
 

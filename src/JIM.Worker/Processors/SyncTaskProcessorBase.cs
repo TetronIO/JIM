@@ -108,11 +108,22 @@ public abstract class SyncTaskProcessorBase
     // Stores: (MVO, Additions, Removals, ChangeType, RPEI) - captured BEFORE applying pending changes
     // ChangeType indicates how the MVO was created/modified (Projected, Joined, AttributeFlow, Updated)
     // RPEI links MVO changes to the Activity for initiator context (User, ApiKey, etc.)
-    protected readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> Additions, List<MetaverseObjectAttributeValue> Removals, ObjectChangeType ChangeType, ActivityRunProfileExecutionItem Rpei)> _pendingMvoChanges = [];
+    // ExistingMvoChangeId is set only for entries produced by cross-page reference resolution
+    // where the RPEI already has a persisted MetaverseObjectChange parent from an earlier page
+    // flush. Those entries must not INSERT a second parent row (the unique constraint
+    // IX_MetaverseObjectChanges_ActivityRunProfileExecutionItemId forbids it) — they are
+    // persisted via PersistPendingMvoChangeAttributesAsync (children only) instead.
+    protected readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> Additions, List<MetaverseObjectAttributeValue> Removals, ObjectChangeType ChangeType, ActivityRunProfileExecutionItem Rpei, Guid? ExistingMvoChangeId)> _pendingMvoChanges = [];
 
     // MVO change records created by CreatePendingMvoChangeObjectsAsync, awaiting explicit persistence
     // via FlushPendingMvoChangesAsync before ClearChangeTracker discards them.
     private readonly List<MetaverseObjectChange> _pendingMvoChangesToPersist = [];
+
+    // Separate queue for cross-page-merge MvoChange attribute deltas, which reuse an
+    // already-persisted parent MvoChange (their Id is set to the existing parent's id).
+    // Flushed via PersistPendingMvoChangeAttributesAsync (children only, skipping the
+    // parent INSERT that would violate the unique-per-RPEI constraint).
+    private readonly List<MetaverseObjectChange> _pendingMvoChangeAttributesToPersist = [];
 
     // Batch collection for deferred reference attribute processing.
     // Reference attributes must be processed AFTER all CSOs in the page have been processed (joined/projected)
@@ -449,7 +460,7 @@ public abstract class SyncTaskProcessorBase
                     if (changeResult.RecalledAttributeValues != null && changeResult.DisconnectedMvo != null)
                     {
                         _pendingMvoChanges.Add((changeResult.DisconnectedMvo, new List<MetaverseObjectAttributeValue>(),
-                            changeResult.RecalledAttributeValues, ObjectChangeType.DisconnectedOutOfScope, existingRpei));
+                            changeResult.RecalledAttributeValues, ObjectChangeType.DisconnectedOutOfScope, existingRpei, null));
                     }
                 }
                 else
@@ -470,7 +481,7 @@ public abstract class SyncTaskProcessorBase
                     if (changeResult.RecalledAttributeValues != null && changeResult.DisconnectedMvo != null)
                     {
                         _pendingMvoChanges.Add((changeResult.DisconnectedMvo, new List<MetaverseObjectAttributeValue>(),
-                            changeResult.RecalledAttributeValues, ObjectChangeType.DisconnectedOutOfScope, runProfileExecutionItem));
+                            changeResult.RecalledAttributeValues, ObjectChangeType.DisconnectedOutOfScope, runProfileExecutionItem, null));
                     }
 
                     // Build sync outcome for RPEIs not already covered by ProcessMetaverseObjectChangesAsync
@@ -709,7 +720,7 @@ public abstract class SyncTaskProcessorBase
                 // Capture MVO changes for change tracking BEFORE applying (which clears the pending lists).
                 // This enables the RPEI detail page to show the recalled attribute values in the causality tree.
                 var removals = mvo.PendingAttributeValueRemovals.ToList();
-                _pendingMvoChanges.Add((mvo, new List<MetaverseObjectAttributeValue>(), removals, ObjectChangeType.Disconnected, deletionExecutionItem));
+                _pendingMvoChanges.Add((mvo, new List<MetaverseObjectAttributeValue>(), removals, ObjectChangeType.Disconnected, deletionExecutionItem, null));
 
                 Log.Information("ProcessObsoleteConnectedSystemObjectAsync: Applying {Count} attribute removals to MVO {MvoId} and queueing for export evaluation",
                     changedAttributes.Count, mvo.Id);
@@ -1061,7 +1072,7 @@ public abstract class SyncTaskProcessorBase
                     rpei.AttributeFlowCount = attributesAdded + attributesRemoved;
                 }
 
-                _pendingMvoChanges.Add((connectedSystemObject.MetaverseObject, additions, removals, changeType, rpei));
+                _pendingMvoChanges.Add((connectedSystemObject.MetaverseObject, additions, removals, changeType, rpei, null));
 
                 // Build sync outcome tree on the RPEI
                 if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
@@ -1614,7 +1625,7 @@ public abstract class SyncTaskProcessorBase
                     {
                         // No existing entry - create new one (reference-only change scenario)
                         // Use AttributeFlow since this is just attribute changes on an existing MVO
-                        _pendingMvoChanges.Add((mvo, refAddedAttributes, refRemovedAttributesList, ObjectChangeType.AttributeFlow, rpei));
+                        _pendingMvoChanges.Add((mvo, refAddedAttributes, refRemovedAttributesList, ObjectChangeType.AttributeFlow, rpei, null));
                     }
                 }
 
@@ -1683,34 +1694,45 @@ public abstract class SyncTaskProcessorBase
             $"Resolving cross-page references (0 / {totalCrossPagesToResolve})");
 
         // Build a lookup of CSO ID → existing RPEI for CSOs that need cross-page resolution.
-        // These RPEIs were created during initial page processing (e.g., Projected, Joined) and have
-        // already been persisted to the database. We save references BEFORE clearing the in-memory
-        // collection so that cross-page resolution can merge reference attribute flows into the
-        // existing RPEIs rather than creating duplicates.
+        // These RPEIs were created during initial page processing (e.g., Projected, Joined) and
+        // were persisted to the database *and* cleared from _activity.RunProfileExecutionItems by
+        // each per-page FlushRpeisAsync, so the lookup has to come from the database — reading
+        // from the in-memory collection would produce an empty lookup and cause cross-page
+        // resolution to create duplicate AttributeFlow RPEIs instead of merging into existing ones.
         var unresolvedCsoIds = _unresolvedCrossPageReferences.Select(x => x.CsoId).ToHashSet();
-        var existingRpeisByCsoId = new Dictionary<Guid, ActivityRunProfileExecutionItem>();
-        foreach (var rpei in _activity.RunProfileExecutionItems)
-        {
-            if (rpei.ConnectedSystemObjectId.HasValue && unresolvedCsoIds.Contains(rpei.ConnectedSystemObjectId.Value))
-                existingRpeisByCsoId[rpei.ConnectedSystemObjectId.Value] = rpei;
-        }
+        var rpeiLoadStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var existingRpeis = await _syncRepo.GetActivityRpeisByCsoIdsForCrossPageMergeAsync(
+            _activity.Id, unresolvedCsoIds);
+        rpeiLoadStopwatch.Stop();
+        var existingRpeisByCsoId = existingRpeis.ToDictionary(r => r.ConnectedSystemObjectId!.Value);
+        Log.Information(
+            "ResolveCrossPageReferences: Loaded {RpeiCount} existing RPEIs for {CsoCount} cross-page CSOs from database in {ElapsedMs} ms (lookup hit rate {HitRate:P0})",
+            existingRpeis.Count, unresolvedCsoIds.Count, rpeiLoadStopwatch.ElapsedMilliseconds,
+            unresolvedCsoIds.Count > 0 ? (double)existingRpeis.Count / unresolvedCsoIds.Count : 1.0);
+
+        // Build RPEI-id → existing MvoChange-id map so cross-page attribute flows can be
+        // persisted as children of the already-existing parent MvoChange (enforced by the
+        // unique-per-RPEI index on MetaverseObjectChanges).
+        var rpeiIdsToLookUp = existingRpeis.Select(r => r.Id).ToList();
+        var mvoChangeIdLookupStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var rpeiIdToMvoChangeId = await _syncRepo.GetRpeiToMvoChangeIdMapAsync(rpeiIdsToLookUp);
+        mvoChangeIdLookupStopwatch.Stop();
+        Log.Information(
+            "ResolveCrossPageReferences: Loaded {MapCount} existing MvoChange ids for {RpeiCount} RPEIs in {ElapsedMs} ms",
+            rpeiIdToMvoChangeId.Count, rpeiIdsToLookUp.Count, mvoChangeIdLookupStopwatch.ElapsedMilliseconds);
 
         // Clear the change tracker to prevent performance degradation.
         // After processing all pages, the change tracker accumulates thousands of tracked entities
         // (MVOs, CSOs, attribute values, etc.). This causes EF Core's identity resolution to become
         // extremely slow when loading the cross-page reference CSOs with deep Include chains.
-        // All previous page data has been fully persisted, so clearing is safe.
         //
-        // IMPORTANT: Also clear the Activity's in-memory RPEI collection. RPEIs from all pages have
-        // been persisted to the database, but the in-memory list still holds references to detached
-        // entities (CSO → MVO → Type → Attributes). If any subsequent EF operation (Update, Remove,
-        // SaveChanges) triggers change detection on the Activity, EF will try to re-track those stale
-        // entity references, causing identity conflicts with freshly loaded entities from the
-        // cross-page resolution query.
+        // The Activity's in-memory RPEI collection is also defensively cleared. In production it's
+        // already empty (per-page raw-SQL flushes clear it); in test environments using the EF
+        // fallback path it may still hold stragglers.
         var rpeiCountBeforeClear = _activity.RunProfileExecutionItems.Count;
         _activity.RunProfileExecutionItems.Clear();
         _syncRepo.ClearChangeTracker();
-        Log.Debug("ResolveCrossPageReferences: Cleared change tracker and {RpeiCount} persisted RPEIs from activity",
+        Log.Debug("ResolveCrossPageReferences: Cleared change tracker and {RpeiCount} in-memory RPEIs from activity",
             rpeiCountBeforeClear);
 
         // Build sync rule lookup (keyed by ID) for O(1) access
@@ -1810,26 +1832,36 @@ public abstract class SyncTaskProcessorBase
                     // Merge into existing RPEI if one was created during initial page processing
                     // (e.g., Projected or Joined). This prevents duplicate RPEIs for the same CSO
                     // which would inflate TotalAttributeFlows counts and show duplicate rows in the UI.
+                    // existingMvoChangeId is set only on the merge branch — it's the id of the
+                    // already-persisted MetaverseObjectChange for this RPEI, needed so the cross-page
+                    // attribute additions are written as children of that row rather than a new one.
                     ActivityRunProfileExecutionItem rpei;
+                    Guid? existingMvoChangeId = null;
                     if (existingRpeisByCsoId.TryGetValue(csoId, out var existingRpei))
                     {
                         rpei = existingRpei;
+                        rpeiIdToMvoChangeId.TryGetValue(rpei.Id, out var mvoChangeId);
+                        existingMvoChangeId = mvoChangeId == Guid.Empty ? null : mvoChangeId;
                         rpei.AttributeFlowCount = (rpei.AttributeFlowCount ?? 0) + additionsCount + removalsCount;
 
                         // Update outcome tree: add or update the AttributeFlow child node
                         if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
                             && rpei.ObjectChangeType is ObjectChangeType.Projected or ObjectChangeType.Joined)
                         {
+                            // Use the FK (ParentSyncOutcomeId) rather than the navigation property
+                            // so the check works whether or not EF populated ParentSyncOutcome —
+                            // AsNoTracking + Include(SyncOutcomes) loads the list but not the
+                            // per-node parent navigation.
                             var attrFlowChild = rpei.SyncOutcomes.FirstOrDefault(o =>
                                 o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
-                                && o.ParentSyncOutcome != null);
+                                && o.ParentSyncOutcomeId.HasValue);
                             if (attrFlowChild != null)
                                 attrFlowChild.DetailCount = rpei.AttributeFlowCount;
                             else
                             {
                                 // No child yet (e.g., initial projection had no scalar attribute changes).
                                 // Add an AttributeFlow child under the root Projected/Joined outcome.
-                                var rootOutcome = rpei.SyncOutcomes.FirstOrDefault(o => o.ParentSyncOutcome == null);
+                                var rootOutcome = rpei.SyncOutcomes.FirstOrDefault(o => !o.ParentSyncOutcomeId.HasValue);
                                 if (rootOutcome != null)
                                 {
                                     SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
@@ -1884,9 +1916,12 @@ public abstract class SyncTaskProcessorBase
                         }
                     }
 
-                    // Track MVO changes for change tracking
+                    // Track MVO changes for change tracking. When merging into an existing
+                    // RPEI, carry the existing MvoChange id so the flush writes attribute
+                    // children under the existing parent rather than attempting to create a
+                    // new parent row (which would violate the unique-per-RPEI constraint).
                     _pendingMvoChanges.Add((mvo, refAddedAttributes, refRemovedAttributesList,
-                        ObjectChangeType.AttributeFlow, rpei));
+                        ObjectChangeType.AttributeFlow, rpei, existingMvoChangeId));
 
                     // Apply changes to MVO
                     ApplyPendingMetaverseObjectAttributeChanges(mvo);
@@ -2447,12 +2482,14 @@ public abstract class SyncTaskProcessorBase
         using var span = Diagnostics.Sync.StartSpan("CreatePendingMvoChangeObjects");
         span.SetTag("changeCount", _pendingMvoChanges.Count);
 
-        foreach (var (mvo, additions, removals, changeType, rpei) in _pendingMvoChanges)
+        foreach (var (mvo, additions, removals, changeType, rpei, existingMvoChangeId) in _pendingMvoChanges)
         {
-            // Create MVO change object with the specific ChangeType (Projected, Joined, AttributeFlow, etc.)
-            // Initiator info copied directly from Activity for self-contained audit trail
+            // For cross-page merges, reuse the existing parent MvoChange id so the
+            // attribute children FK-link to it. The parent row already exists in the
+            // database; we must not INSERT another one under the unique-per-RPEI index.
             var change = new MetaverseObjectChange
             {
+                Id = existingMvoChangeId ?? Guid.Empty,
                 MetaverseObject = mvo,
                 ChangeType = changeType,
                 ChangeTime = DateTime.UtcNow,
@@ -2477,10 +2514,12 @@ public abstract class SyncTaskProcessorBase
                 AddMvoChangeAttributeValueObject(change, removal, ValueChangeType.Remove);
             }
 
-            // Collect for explicit persistence via FlushPendingMvoChangesAsync.
-            // Previously added to mvo.Changes relying on EF change tracker, but
-            // ClearChangeTracker at page boundaries discarded them before SaveChangesAsync.
-            _pendingMvoChangesToPersist.Add(change);
+            // Route to the appropriate persistence queue based on whether the parent
+            // MvoChange already exists in the database.
+            if (existingMvoChangeId.HasValue)
+                _pendingMvoChangeAttributesToPersist.Add(change);
+            else
+                _pendingMvoChangesToPersist.Add(change);
         }
 
         _pendingMvoChanges.Clear();
@@ -2490,14 +2529,22 @@ public abstract class SyncTaskProcessorBase
     /// <summary>
     /// Persists pending MVO change records via raw SQL bulk insert.
     /// Must be called after CreatePendingMvoChangeObjectsAsync and before ClearChangeTracker.
+    /// Handles both initial-page inserts (full parent + child rows) and cross-page-merge
+    /// appends (child rows only under already-persisted parents).
     /// </summary>
     protected async Task FlushPendingMvoChangesAsync()
     {
-        if (_pendingMvoChangesToPersist.Count == 0)
-            return;
+        if (_pendingMvoChangesToPersist.Count > 0)
+        {
+            await _syncRepo.PersistPendingMvoChangesAsync(_pendingMvoChangesToPersist);
+            _pendingMvoChangesToPersist.Clear();
+        }
 
-        await _syncRepo.PersistPendingMvoChangesAsync(_pendingMvoChangesToPersist);
-        _pendingMvoChangesToPersist.Clear();
+        if (_pendingMvoChangeAttributesToPersist.Count > 0)
+        {
+            await _syncRepo.PersistPendingMvoChangeAttributesAsync(_pendingMvoChangeAttributesToPersist);
+            _pendingMvoChangeAttributesToPersist.Clear();
+        }
     }
 
     /// <summary>
@@ -2551,10 +2598,16 @@ public abstract class SyncTaskProcessorBase
                 attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, metaverseObjectAttributeValue.ReferenceValue));
                 break;
             case AttributeDataType.Reference when metaverseObjectAttributeValue.ReferenceValueId.HasValue:
-                // Navigation property not loaded but FK is set — record the referenced MVO ID as a GUID.
-                // This happens when ReferenceValue navigations are not loaded via EF Include
+                // Navigation property not loaded but FK is set — record the FK directly on the
+                // change record so the ReferenceValue navigation can be materialised later via
+                // .Include. Happens when ReferenceValue navigations aren't loaded via EF Include
                 // (replaced by direct SQL PopulateReferenceValuesAsync on the CSO side).
-                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, metaverseObjectAttributeValue.ReferenceValueId.Value));
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue
+                {
+                    MetaverseObjectChangeAttribute = attributeChange,
+                    ValueChangeType = valueChangeType,
+                    ReferenceValueId = metaverseObjectAttributeValue.ReferenceValueId.Value
+                });
                 break;
             case AttributeDataType.Reference when metaverseObjectAttributeValue.UnresolvedReferenceValue != null:
                 // We do not log changes for unresolved references. Only resolved references get change tracked.

@@ -242,7 +242,7 @@ This scenario tests the complete Identity Lifecycle Management (ILM) pattern:
 ### What Gets Tested
 
 1. **Setup** - Automatically configures JIM with:
-   - CSV Connected System (HR source at `/connector-files/hr-users.csv`)
+   - CSV Connected System (HR source at `/connector-files/test-data/hr-users.csv`)
    - LDAP Connected System (Samba AD at `samba-ad-primary:389`)
    - Sync Rules (employeeId, firstName, lastName, email, department, etc.)
    - Object Matching Rules (for CSO auto-join on provisioning)

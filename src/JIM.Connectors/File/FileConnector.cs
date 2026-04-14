@@ -57,7 +57,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         return new List<ConnectorSetting>
         {
             // Primary settings
-            new() { Name = SettingFilePath, Required = true, Description = "Path to the CSV file. Used for import, export, or both depending on mode. e.g. /var/connector-files/Users.csv", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.File },
+            new() { Name = SettingFilePath, Required = true, Description = "Path to the CSV file. Used for import, export, or both depending on mode. e.g. /connector-files/Users.csv", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.File },
             new()
             {
                 Name = SettingMode,

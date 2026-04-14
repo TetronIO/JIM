@@ -36,6 +36,13 @@ public class MetaverseObjectChangeAttributeValue
     public bool? BoolValue { get; set; }
 
     public MetaverseObject? ReferenceValue { get; set; }
+
+    /// <summary>
+    /// Foreign key for <see cref="ReferenceValue"/>. Exposed as a scalar so reference change
+    /// records can be written when only the target MVO id is known (navigation not loaded),
+    /// and so the navigation can be materialised later via <c>.Include(x =&gt; x.ReferenceValue)</c>.
+    /// </summary>
+    public Guid? ReferenceValueId { get; set; }
     #endregion
 
     public override string ToString()
