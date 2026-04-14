@@ -2,6 +2,8 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Core;
+using JIM.Models.Enums;
 
 namespace JIM.InMemoryData.Tests;
 
@@ -141,5 +143,140 @@ public class SyncRepositoryActivityRpeiTests
     {
         var rpei = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
         await _repo.PersistRpeiCsoChangesAsync(new List<ActivityRunProfileExecutionItem> { rpei });
+    }
+
+    [Test]
+    public async Task GetRpeisWithMvoChangeIdsForCrossPageMergeAsync_EmptyCsoIds_ReturnsEmptyAsync()
+    {
+        var result = await _repo.GetRpeisWithMvoChangeIdsForCrossPageMergeAsync(
+            Guid.NewGuid(), Array.Empty<Guid>());
+
+        Assert.That(result, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetRpeisWithMvoChangeIdsForCrossPageMergeAsync_RpeiWithoutMvoChange_HasNullExistingMvoChangeIdAsync()
+    {
+        var activityId = Guid.NewGuid();
+        var csoId = Guid.NewGuid();
+        var rpei = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = activityId,
+            ObjectChangeType = ObjectChangeType.Projected,
+            ConnectedSystemObjectId = csoId
+        };
+        await _repo.BulkInsertRpeisAsync(new List<ActivityRunProfileExecutionItem> { rpei });
+
+        var result = await _repo.GetRpeisWithMvoChangeIdsForCrossPageMergeAsync(
+            activityId, new[] { csoId });
+
+        Assert.That(result, Has.Count.EqualTo(1));
+        Assert.That(result[0].Rpei.Id, Is.EqualTo(rpei.Id));
+        Assert.That(result[0].Rpei.ConnectedSystemObjectId, Is.EqualTo(csoId));
+        Assert.That(result[0].ExistingMvoChangeId, Is.Null);
+    }
+
+    [Test]
+    public async Task GetRpeisWithMvoChangeIdsForCrossPageMergeAsync_RpeiWithMvoChange_MapsExistingMvoChangeIdAsync()
+    {
+        var activityId = Guid.NewGuid();
+        var csoId = Guid.NewGuid();
+        var rpei = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = activityId,
+            ObjectChangeType = ObjectChangeType.Projected,
+            ConnectedSystemObjectId = csoId
+        };
+        await _repo.BulkInsertRpeisAsync(new List<ActivityRunProfileExecutionItem> { rpei });
+
+        var mvoChange = new MetaverseObjectChange
+        {
+            Id = Guid.NewGuid(),
+            ActivityRunProfileExecutionItemId = rpei.Id,
+            ChangeType = ObjectChangeType.Projected,
+            ChangeTime = DateTime.UtcNow
+        };
+        await _repo.CreateMetaverseObjectChangeDirectAsync(mvoChange);
+
+        var result = await _repo.GetRpeisWithMvoChangeIdsForCrossPageMergeAsync(
+            activityId, new[] { csoId });
+
+        Assert.That(result, Has.Count.EqualTo(1));
+        Assert.That(result[0].ExistingMvoChangeId, Is.EqualTo(mvoChange.Id));
+    }
+
+    [Test]
+    public async Task GetRpeisWithMvoChangeIdsForCrossPageMergeAsync_IncludesSyncOutcomesAsync()
+    {
+        var activityId = Guid.NewGuid();
+        var csoId = Guid.NewGuid();
+        var rpei = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = activityId,
+            ObjectChangeType = ObjectChangeType.Projected,
+            ConnectedSystemObjectId = csoId
+        };
+        var rootOutcome = new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            Id = Guid.NewGuid(),
+            ActivityRunProfileExecutionItemId = rpei.Id,
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Projected,
+            Ordinal = 0
+        };
+        var childOutcome = new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            Id = Guid.NewGuid(),
+            ActivityRunProfileExecutionItemId = rpei.Id,
+            ParentSyncOutcomeId = rootOutcome.Id,
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+            Ordinal = 0,
+            DetailCount = 3
+        };
+        rpei.SyncOutcomes.Add(rootOutcome);
+        rpei.SyncOutcomes.Add(childOutcome);
+        await _repo.BulkInsertRpeisAsync(new List<ActivityRunProfileExecutionItem> { rpei });
+
+        var result = await _repo.GetRpeisWithMvoChangeIdsForCrossPageMergeAsync(
+            activityId, new[] { csoId });
+
+        Assert.That(result, Has.Count.EqualTo(1));
+        Assert.That(result[0].Rpei.SyncOutcomes, Has.Count.EqualTo(2));
+        Assert.That(result[0].Rpei.SyncOutcomes.Any(o => !o.ParentSyncOutcomeId.HasValue), Is.True,
+            "Root outcome should be present.");
+        Assert.That(result[0].Rpei.SyncOutcomes.Any(o => o.ParentSyncOutcomeId == rootOutcome.Id), Is.True,
+            "Child outcome should be present and linked to the root.");
+    }
+
+    [Test]
+    public async Task GetRpeisWithMvoChangeIdsForCrossPageMergeAsync_FiltersOutDifferentActivityAsync()
+    {
+        var targetActivityId = Guid.NewGuid();
+        var otherActivityId = Guid.NewGuid();
+        var csoId = Guid.NewGuid();
+
+        var targetRpei = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = targetActivityId,
+            ObjectChangeType = ObjectChangeType.Projected,
+            ConnectedSystemObjectId = csoId
+        };
+        var otherRpei = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = otherActivityId,
+            ObjectChangeType = ObjectChangeType.Projected,
+            ConnectedSystemObjectId = csoId
+        };
+        await _repo.BulkInsertRpeisAsync(new List<ActivityRunProfileExecutionItem> { targetRpei, otherRpei });
+
+        var result = await _repo.GetRpeisWithMvoChangeIdsForCrossPageMergeAsync(
+            targetActivityId, new[] { csoId });
+
+        Assert.That(result, Has.Count.EqualTo(1));
+        Assert.That(result[0].Rpei.Id, Is.EqualTo(targetRpei.Id));
     }
 }
