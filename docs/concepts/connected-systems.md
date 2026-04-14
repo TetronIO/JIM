@@ -102,10 +102,13 @@ The connector adapts its behaviour to the target directory type (for example, us
 - SSL/TLS and StartTLS support
 - Partition and container discovery
 - Container creation during provisioning
-- Schema discovery for available object types and attributes
+- Schema discovery for **both structural and auxiliary object classes**, so objects whose primary class is auxiliary are first-class citizens
 - Parallel imports for large directories
 - Delta import via the accesslog overlay (OpenLDAP and compatible directories)
 - Active Directory-specific features (`userAccountControl`, FILETIME dates, etc.)
+
+!!! tip "Auxiliary classes are fully supported"
+    Some traditional ILM solutions only discover **structural** object classes, which forces customers whose directories rely on **auxiliary** classes as primary classes to build and maintain their own connectors at significant cost. JIM handles this out of the box: enable **Include Auxiliary Classes** on the LDAP connector and auxiliary classes, along with any attributes they contribute, are brought into schema discovery alongside structural classes.
 
 ## Planned Connectors
 
