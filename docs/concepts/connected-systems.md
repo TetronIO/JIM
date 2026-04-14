@@ -55,12 +55,12 @@ Most connected systems do not support partitions. A flat file, a SQL table, or a
 
 Where they do apply, partitions let JIM scope imports, exports, and sync rules to a specific naming context. Multi-domain directories are a common example; each partition can be targeted by its own run profile or sync rules.
 
-!!! warning "Partitions are not OUs"
-    Partitions are **not** the same as organisational units (OUs) or containers. An OU is a sub-tree within a partition, not a partition itself. See [Containers](#containers) below for the lower-order construct used to scope within a partition.
+!!! note "Partitions and OUs are different concepts"
+    Partitions and organisational units (OUs) are distinct. A partition is a top-level boundary on the external system; an OU is a sub-tree *within* a partition and is modelled in JIM as a [container](#containers).
 
 ### Containers
 
-Inside a partition, or directly inside the connector space of a connector that does not support partitions, you can have **containers**. Containers are a separate, lower-order logical construct and should not be conflated with partitions. They exist mainly to support LDAP **organisational units (OUs)** and similar hierarchical groupings.
+Inside a partition, or directly inside the connector space of a connector that does not support partitions, you can have **containers**. Containers are a separate, lower-order logical construct that sits beneath partitions. They exist mainly to support LDAP **organisational units (OUs)** and similar hierarchical groupings.
 
 Containers are what you use to narrow imports and exports to a subset of data. For example, you might configure JIM to import only from `OU=Users,DC=company,DC=local` rather than the entire domain partition.
 
@@ -71,7 +71,7 @@ Containers are what you use to narrow imports and exports to a subset of data. F
 | **Partition** | Top-level boundary defined by the external system; discovered, not invented, by JIM | An Active Directory domain naming context (`DC=company,DC=local`) | LDAP-style connectors only |
 | **Container** | Sub-tree within a partition, or within the connector space of a non-partitioned system | An OU (`OU=Users,DC=company,DC=local`) | Most connectors that expose hierarchy |
 
-Confusing the two leads to incorrect configuration. Selecting a partition brings an entire naming context into scope, whereas selecting containers narrows what is imported within that partition (or within the connector space for connectors that have no partitions).
+In practice, selecting a partition brings an entire naming context into scope, while selecting containers narrows what is imported within that partition (or within the connector space for connectors that have no partitions).
 
 ## Available Connectors
 
