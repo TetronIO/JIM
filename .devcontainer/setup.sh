@@ -172,27 +172,7 @@ else
     print_warning "Build had warnings or errors. Run 'dotnet build JIM.sln' to see details."
 fi
 
-# 9. Create connector-files directory with symlink to test data
-print_step "Setting up connector-files directory..."
-mkdir -p connector-files
-
-# Create symlink to test/test-data directory (dynamic - new files appear automatically).
-# NOTE: the directory was renamed from test/Data to test/test-data in commit 90bc8b19
-# (Dec 2025). The old name survived silently on macOS hosts because HFS+/APFS is
-# case-insensitive by default, so "test/Data" still resolved to "test/test-data".
-# On case-sensitive filesystems (Linux) the check fails, so use the real name.
-if [ ! -L connector-files/test-data ]; then
-    if [ -d "test/test-data" ]; then
-        ln -s "$(pwd)/test/test-data" connector-files/test-data
-        print_success "Symlink created: connector-files/test-data -> test/test-data"
-    else
-        print_warning "test/test-data directory not found, skipping symlink"
-    fi
-else
-    print_success "Symlink already exists: connector-files/test-data"
-fi
-
-# 10. Configure Git commit signing
+# 9. Configure Git commit signing
 # Delegates to .devcontainer/configure-signing.sh which handles Codespaces
 # (via gh-gpgsign) and local devcontainers (via forwarded SSH agent) and
 # prints a prominent warning if neither is available. Returns non-zero if
@@ -237,7 +217,7 @@ else
     print_warning "Failed to set core.hooksPath; pre-commit checks will not run"
 fi
 
-# 11. Create useful shell aliases
+# 10. Create useful shell aliases
 print_step "Creating shell aliases..."
 
 # Add source line to .zshrc if not already present
@@ -265,7 +245,7 @@ if ! grep -q "source.*jim-aliases.sh" ~/.bashrc; then
     echo "fi" >> ~/.bashrc
 fi
 
-# 12. Install Claude Code CLI
+# 11. Install Claude Code CLI
 print_step "Installing Claude Code CLI..."
 if command -v npm >/dev/null 2>&1; then
     if npm install -g @anthropic-ai/claude-code --silent 2>/dev/null; then
@@ -277,7 +257,7 @@ else
     print_warning "npm not found - skipping Claude Code CLI install"
 fi
 
-# 13. Check gh CLI authentication
+# 12. Check gh CLI authentication
 # The gh CLI is used for PR/issue operations and other GitHub API calls.
 # It is NOT involved in git push/pull (SSH remote handles that) or commit
 # signing (SSH agent forward handles that), so a missing gh token is not
@@ -305,7 +285,7 @@ else
 "
 fi
 
-# 14. Display useful information
+# 13. Display useful information
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${GREEN}✓ JIM Development Environment Ready!${NC}"

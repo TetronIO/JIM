@@ -718,6 +718,52 @@ function Get-RandomSubset {
 
 # Progress bar functions for visual feedback during long operations
 
+function Copy-CsvToConnectorFiles {
+    <#
+    .SYNOPSIS
+        Copy a CSV file from the host to /connector-files/test-data in the jim-connector-files-volume.
+
+    .DESCRIPTION
+        Uses `docker cp` via the jim.worker container to push a host file into the named
+        Docker volume at /connector-files/test-data/<filename>. The destination filename
+        defaults to the source file's basename, or can be overridden.
+
+        This is the integration-test equivalent of the customer "drop a file into the
+        File Connector volume" step. It mirrors the pattern used in Generate-TestCSV.ps1.
+
+    .PARAMETER SourcePath
+        The host path to the CSV file to copy.
+
+    .PARAMETER DestinationName
+        Optional override for the target filename. Defaults to the basename of SourcePath.
+
+    .EXAMPLE
+        Copy-CsvToConnectorFiles -SourcePath "$testDataPath/hr-users.csv"
+
+        Copies to jim.worker:/connector-files/test-data/hr-users.csv
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$SourcePath,
+
+        [Parameter(Mandatory=$false)]
+        [string]$DestinationName
+    )
+
+    if (-not (Test-Path $SourcePath)) {
+        throw "Source file not found: $SourcePath"
+    }
+
+    if (-not $DestinationName) {
+        $DestinationName = [System.IO.Path]::GetFileName($SourcePath)
+    }
+
+    $result = docker cp $SourcePath "jim.worker:/connector-files/test-data/$DestinationName" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to copy $SourcePath to jim.worker:/connector-files/test-data/${DestinationName}: $result"
+    }
+}
+
 function Write-ProgressBar {
     <#
     .SYNOPSIS
