@@ -72,6 +72,64 @@ public partial class SyncRepository
             mvoChanges.Count, allAttrChanges.Count, allValueChanges.Count);
     }
 
+    /// <inheritdoc />
+    public async Task PersistPendingMvoChangeAttributesAsync(List<MetaverseObjectChange> mvoChanges)
+    {
+        if (mvoChanges.Count == 0)
+            return;
+
+        // Each change's Id is assumed to already be set to the existing parent MvoChange id.
+        // We ONLY pre-generate ids for the attribute + value children, because the parent
+        // rows already exist in the database (written on an earlier page flush) and must
+        // not be re-inserted under the unique (ActivityRunProfileExecutionItemId) constraint.
+        foreach (var change in mvoChanges)
+        {
+            if (change.Id == Guid.Empty)
+                throw new InvalidOperationException(
+                    "PersistPendingMvoChangeAttributesAsync requires each MvoChange to already have its existing parent Id set.");
+
+            foreach (var attrChange in change.AttributeChanges)
+            {
+                if (attrChange.Id == Guid.Empty)
+                    attrChange.Id = Guid.NewGuid();
+
+                foreach (var valueChange in attrChange.ValueChanges)
+                {
+                    if (valueChange.Id == Guid.Empty)
+                        valueChange.Id = Guid.NewGuid();
+                }
+            }
+        }
+
+        var previousTimeout = _context.Database.GetCommandTimeout();
+        _context.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
+
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        // Skip parent INSERT. Write only attribute + value children under the existing parent Ids.
+        var allAttrChanges = mvoChanges
+            .SelectMany(c => c.AttributeChanges.Select(ac =>
+                (ChangeId: c.Id, AttributeId: ac.Attribute?.Id, AttrChange: ac)))
+            .ToList();
+
+        if (allAttrChanges.Count > 0)
+            await BulkInsertMvoChangeAttributesRawAsync(allAttrChanges);
+
+        var allValueChanges = mvoChanges
+            .SelectMany(c => c.AttributeChanges
+                .SelectMany(ac => ac.ValueChanges.Select(vc => (AttrChangeId: ac.Id, Value: vc))))
+            .ToList();
+
+        if (allValueChanges.Count > 0)
+            await BulkInsertMvoChangeAttributeValuesRawAsync(allValueChanges);
+
+        await transaction.CommitAsync();
+        _context.Database.SetCommandTimeout(previousTimeout);
+
+        Log.Debug("PersistPendingMvoChangeAttributesAsync: Appended {AttrCount} attribute changes and {ValueCount} value changes to {ChangeCount} existing MVO changes",
+            allAttrChanges.Count, allValueChanges.Count, mvoChanges.Count);
+    }
+
     /// <summary>
     /// Bulk inserts MetaverseObjectChange rows using COPY binary import.
     /// </summary>
@@ -228,8 +286,10 @@ public partial class SyncRepository
                 await writer.WriteAsync(v.BoolValue.Value, NpgsqlTypes.NpgsqlDbType.Boolean);
             else
                 await writer.WriteNullAsync();
-            // Write the ReferenceValueId FK if the referenced MVO has a known ID.
-            var refId = v.ReferenceValue?.Id;
+            // Write the ReferenceValueId FK. Prefer the scalar property (set directly when
+            // only the target MVO id is known); fall back to the navigation's Id when the
+            // full entity is attached.
+            var refId = v.ReferenceValueId ?? v.ReferenceValue?.Id;
             if (refId.HasValue && refId.Value != Guid.Empty)
                 await writer.WriteAsync(refId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
             else

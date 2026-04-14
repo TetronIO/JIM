@@ -1097,6 +1097,44 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(matches);
     }
 
+    public Task<Dictionary<Guid, Guid>> GetRpeiToMvoChangeIdMapAsync(IReadOnlyCollection<Guid> rpeiIds)
+    {
+        var rpeiIdSet = rpeiIds as HashSet<Guid> ?? rpeiIds.ToHashSet();
+        var map = _mvoChanges.Values
+            .Where(c => c.ActivityRunProfileExecutionItemId.HasValue
+                        && rpeiIdSet.Contains(c.ActivityRunProfileExecutionItemId.Value))
+            .ToDictionary(c => c.ActivityRunProfileExecutionItemId!.Value, c => c.Id);
+        return Task.FromResult(map);
+    }
+
+    public Task PersistPendingMvoChangeAttributesAsync(List<MetaverseObjectChange> mvoChanges)
+    {
+        // In-memory model: the existing MvoChange is already in _mvoChanges (keyed by Id).
+        // Append the new AttributeChanges to the existing record and assign ids for children.
+        foreach (var incoming in mvoChanges)
+        {
+            if (!_mvoChanges.TryGetValue(incoming.Id, out var existing))
+            {
+                throw new InvalidOperationException(
+                    $"PersistPendingMvoChangeAttributesAsync: no existing MvoChange with Id {incoming.Id}");
+            }
+
+            foreach (var attrChange in incoming.AttributeChanges)
+            {
+                if (attrChange.Id == Guid.Empty)
+                    attrChange.Id = Guid.NewGuid();
+                foreach (var valueChange in attrChange.ValueChanges)
+                {
+                    if (valueChange.Id == Guid.Empty)
+                        valueChange.Id = Guid.NewGuid();
+                }
+                existing.AttributeChanges.Add(attrChange);
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
     public void DetachRpeisFromChangeTracker(List<ActivityRunProfileExecutionItem> rpeis)
     {
         // No-op — no EF change tracker in memory
