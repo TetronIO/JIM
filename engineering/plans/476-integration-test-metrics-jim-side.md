@@ -167,12 +167,13 @@ Add a bind mount so the worker log file is readable from the host filesystem.
 
 **File**: `docker-compose.override.yml` (dev/devcontainer only; never touches `docker-compose.yml` or `docker-compose.production.yml`)
 
-Add to `jim.worker` service volumes (line ~29, alongside the existing `test-data` mount):
+Add to `jim.worker` service volumes (line ~29):
 ```yaml
 volumes:
-  - ./test/test-data:/var/connector-files/test-data
   - ./test/integration/results/logs/worker:/var/log/jim    # Expose worker logs for metrics streaming
 ```
+
+(Note: the previous `./test/test-data:/var/connector-files/test-data` bind-mount was removed when File Connector storage migrated to the named `jim-connector-files-volume` — see `docs/connectors/jim-file-connector.md`.)
 
 This is the correct file because:
 - `docker-compose.override.yml` is already dev-only (contains Keycloak, debug ports, test-data mounts)

@@ -37,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - 🖥️ Page footer now links the Tetron name to tetron.io and includes a GitHub link next to the version number (#49)
+- 📦 File Connector storage migrated to a formal Docker named volume `jim-connector-files-volume`, mounted at `/connector-files` inside JIM Web and JIM Worker. Default deployments get working File Connector exports out of the box without any host-side permission setup. Customers integrating with external file shares bind-mount over a subdirectory of `/connector-files` — see the [JIM File Connector documentation](docs/connectors/jim-file-connector.md) for both patterns.
+- 🔄 File Connector File Path settings now use the new container path `/connector-files/...` (previously `/var/connector-files/...`). Existing connected systems must be updated to the new path.
 
 ## [0.9.1] - 2026-04-08
 

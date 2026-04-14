@@ -1044,106 +1044,62 @@ docker compose exec jim.web dotnet ef database update
 
 ## File Connector Setup
 
-The JIM File Connector imports identity data from CSV files. Because JIM runs in Docker containers, files must be accessible via Docker volumes.
+The JIM File Connector imports and exports identity data via CSV files. JIM ships with a Docker-managed named volume — `jim-connector-files-volume` — mounted at `/connector-files` inside both the JIM Web and JIM Worker containers. The connector reads and writes paths under that directory. The customer-facing reference is in [docs/connectors/jim-file-connector.md](../docs/connectors/jim-file-connector.md); this section is the developer-flavour view.
 
-> **📝 Quick Start for Development**: Test data files from `test/Data/` are automatically available via symlink at `/var/connector-files/test-data/` in the devcontainer. See [FILE_CONNECTOR_TEST_DATA.md](FILE_CONNECTOR_TEST_DATA.md) for details.
+### Why a named volume
 
-### Understanding Docker Volumes
+The worker container runs as the non-root `app` user (UID 1654). Bind-mounting a host directory into the container preserves the host UID, which usually doesn't match — so JIM can't write to it without explicit `chown` or mount-option intervention. Docker-managed named volumes inherit ownership from the container's mount point at first mount, so `app` always has read/write access. For dev and for the default customer deployment we use the named volume; for integration with external systems that write to fixed host paths, customers bind-mount over a subdirectory of `/connector-files`.
 
-Docker volumes bridge your host filesystem to the container. The File Connector expects files at a **container path** (e.g., `/var/connector-files/Users.csv`), which maps to a **host path** on your machine.
+This is the same model dev and production use — there is no special dev override.
 
-### Volume Configuration by Environment
+### Getting files into the volume during dev
 
-| Environment | Host Path | Container Path |
-|-------------|-----------|----------------|
-| **Windows** | `c:/temp/jim-connector-files/` | `/var/connector-files/` |
-| **Linux** | `~/temp/jim-connector-files/` | `/var/connector-files/` |
-| **macOS** | `~/temp/jim-connector-files/` | `/var/connector-files/` |
-| **Codespaces** | `/tmp/jim-connector-files/` | `/var/connector-files/` |
+Use `docker cp` against the worker container:
 
-These mappings are already pre-configured in the respective `docker-compose.override.*.yml` files - no additional Docker volume commands are required. The `jim-stack` alias automatically uses the correct override file for your environment.
+```bash
+docker cp ./Users.csv jim.worker:/connector-files/Users.csv
+```
 
-### Setup Steps
+The integration test harness uses the helper `Copy-CsvToConnectorFiles` in `test/integration/utils/Test-Helpers.ps1` to push test CSVs to `/connector-files/test-data/` — see `Generate-TestCSV.ps1` for the seeding pattern.
 
-1. **Create the host directory** (if it doesn't exist):
-   ```bash
-   # For Codespaces:
-   mkdir -p /tmp/jim-connector-files
+### Getting files out of the volume
 
-   # For Linux/macOS:
-   mkdir -p ~/temp/jim-connector-files
+```bash
+docker cp jim.worker:/connector-files/Exports.csv ./Exports.csv
+```
 
-   # For Windows (PowerShell):
-   New-Item -ItemType Directory -Force -Path "c:\temp\jim-connector-files"
-   ```
+For ongoing/automated extraction, customers run a sidecar service or scheduled job that mounts the same volume and ships files elsewhere (SFTP, blob storage, etc.).
 
-2. **Place your CSV file in the host directory**:
-   ```bash
-   # Example: copy a file to the connector files directory
-   cp /path/to/your/Users.csv /tmp/jim-connector-files/
-   ```
+### Configuring the File Connector in JIM
 
-3. **Restart the Docker stack** (if already running) to pick up the volume mount:
-   ```bash
-   jim-stack-down && jim-stack
-   ```
+When creating a Connected System with the File Connector, set the **File Path** to a path under `/connector-files`, e.g. `/connector-files/Users.csv`. The UI's file browser starts at `/connector-files` and shows what's currently in the volume.
 
-4. **In the JIM UI**, enter the **container path** for "Import File Path":
-   ```
-   /var/connector-files/Users.csv
-   ```
+### Network Share Access (Bind-mount over a subdirectory)
 
-### File Connector Settings
+When integrating with an external system that writes files to a fixed location (commonly an SMB or NFS share already mounted on the host), bind-mount that path over a subdirectory of `/connector-files`:
 
-When creating a Connected System with the File Connector:
+```yaml
+# In your production overlay or docker-compose.override.yml
+services:
+  jim.worker:
+    volumes:
+      - /mnt/hr-extracts:/connector-files/hr-input
+  jim.web:
+    volumes:
+      - /mnt/hr-extracts:/connector-files/hr-input
+```
 
-| Setting | Description | Example |
-|---------|-------------|---------|
-| **Import File Path** | Container path to the CSV file to import | `/var/connector-files/Users.csv` |
-| **Object Type Column** | Column containing object type (optional) | `Type` |
-| **Object Type** | Fixed object type if file contains single type (optional) | `User` |
-| **Delimiter** | CSV delimiter character | `,` (default) |
-| **Culture** | Culture for parsing (optional) | `en-gb` |
+JIM still sees `/connector-files` as a single filesystem; only the `hr-input` subdirectory comes from the host. The File Connector setting becomes `/connector-files/hr-input/employees.csv`.
 
-### Schema Discovery
-
-When you retrieve the schema, the File Connector:
-1. Opens the CSV file at the "Import File Path"
-2. Reads column headers as attribute names
-3. Inspects up to 50 rows to detect data types (Text, Number, Boolean, Guid, DateTime)
-4. Detects multi-valued attributes (duplicate column names)
-
-### Run Profile Configuration
-
-When creating a Run Profile for the File Connector:
-- The connector reads the file specified in "Import File Path" during import operations
+For bind-mounted host paths, ensure the host files are readable/writable by UID 1654 — either `chown 1654:1654 /mnt/hr-extracts` or set mount options like `uid=1654,gid=1654` for CIFS/NFS.
 
 ### Troubleshooting
 
-**"File path not provided, the path couldn't be accessed, or the file doesn't exist"**
-- Verify the file exists in your host directory
-- Check the Docker stack is running with volume mounts: `docker compose ps`
-- Ensure you're using the container path (`/var/connector-files/...`), not the host path
-- Restart the stack if you added files after starting: `jim-stack-down && jim-stack`
+**File not found** — confirm the file is in the volume: `docker exec jim.worker ls /connector-files`. For bind-mounted subdirs, verify the host path is mounted: `docker compose config | grep connector-files`.
 
-**File not found during import**
-- The Run Profile's File Path must also use the container path
-- Verify the file exists and has read permissions
+**Access denied during export** — the JIM worker (UID 1654) doesn't have write access to a bind-mounted host path. Either `chown -R 1654:1654 /your/host/path` or set the mount UID. The default named volume doesn't have this problem.
 
-### Network Share Access (Advanced)
-
-For accessing network shares (e.g., Windows file shares), you can mount them into the host directory:
-
-```bash
-# Linux example - mount CIFS/SMB share
-sudo mkdir -p /mnt/jim_share
-sudo mount -t cifs //server/share /mnt/jim_share -o username=user,password=pass
-
-# Then symlink or copy to the connector files directory
-ln -s /mnt/jim_share/Users.csv /tmp/jim-connector-files/Users.csv
-```
-
-For production deployments, consider using Docker volume drivers or bind mounts to network storage.
+**Permission errors surface as RPEIs** — `Access to the path … is denied` will appear on the Activity for the failing import or export, not be silently swallowed.
 
 ## PowerShell Module Development
 
