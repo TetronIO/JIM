@@ -229,6 +229,7 @@ nav:
       - Architecture: developer/architecture.md
       - Building from Source: developer/building.md
       - Testing: developer/testing.md
+      - PowerShell Module: developer/powershell-module.md
       - Writing Connectors: developer/connectors.md
       - Contributing: developer/contributing.md
       - Diagrams:
