@@ -106,9 +106,9 @@ public class SecurityControllerTests
         // Assert
         Assert.That(result, Is.InstanceOf<OkObjectResult>());
         var okResult = (OkObjectResult)result;
-        var dto = okResult.Value as RoleDto;
-        Assert.That(dto, Is.Not.Null);
-        Assert.That(dto!.Id, Is.EqualTo(1));
+        Assert.That(okResult.Value, Is.InstanceOf<RoleDto>());
+        var dto = (RoleDto)okResult.Value!;
+        Assert.That(dto.Id, Is.EqualTo(1));
         Assert.That(dto.Name, Is.EqualTo("Administrator"));
     }
 
@@ -307,9 +307,9 @@ public class SecurityControllerTests
         // Assert
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
         var badRequest = (BadRequestObjectResult)result;
-        var error = badRequest.Value as ApiErrorResponse;
-        Assert.That(error, Is.Not.Null);
-        Assert.That(error!.Code, Is.EqualTo("VALIDATION_ERROR"));
+        Assert.That(badRequest.Value, Is.InstanceOf<ApiErrorResponse>());
+        var error = (ApiErrorResponse)badRequest.Value!;
+        Assert.That(error.Code, Is.EqualTo("VALIDATION_ERROR"));
         Assert.That(error.Message, Does.Contain("cannot remove yourself"));
     }
 
@@ -333,9 +333,9 @@ public class SecurityControllerTests
         // Assert
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
         var badRequest = (BadRequestObjectResult)result;
-        var error = badRequest.Value as ApiErrorResponse;
-        Assert.That(error, Is.Not.Null);
-        Assert.That(error!.Code, Is.EqualTo("VALIDATION_ERROR"));
+        Assert.That(badRequest.Value, Is.InstanceOf<ApiErrorResponse>());
+        var error = (ApiErrorResponse)badRequest.Value!;
+        Assert.That(error.Code, Is.EqualTo("VALIDATION_ERROR"));
         Assert.That(error.Message, Does.Contain("last member"));
     }
 
