@@ -935,7 +935,7 @@ public class ExportExecutionServer
                 lock (resultLock)
                 {
                     result.FailedCount += batchIds.Count;
-                    foreach (var id in batchIds)
+                    for (var i = 0; i < batchIds.Count; i++)
                     {
                         result.ProcessedExportItems.Add(new ProcessedExportItem
                         {
