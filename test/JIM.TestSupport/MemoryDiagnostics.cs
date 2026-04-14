@@ -100,13 +100,34 @@ public static class MemoryDiagnostics
                     AppDomain.CurrentDomain.ProcessExit += (_, _) => CloseWriter();
                 }
             }
-            catch (Exception ex)
+            catch (UnauthorizedAccessException ex)
             {
-                // Diagnostic should never break tests. Fall back to no-op and surface via stderr.
-                Console.Error.WriteLine($"[MemoryDiagnostics] Failed to open log at '{path}': {ex.Message}");
-                _writer = null;
+                FailOpen(path, ex);
+            }
+            catch (IOException ex)
+            {
+                FailOpen(path, ex);
+            }
+            catch (ArgumentException ex)
+            {
+                FailOpen(path, ex);
+            }
+            catch (NotSupportedException ex)
+            {
+                FailOpen(path, ex);
+            }
+            catch (System.Security.SecurityException ex)
+            {
+                FailOpen(path, ex);
             }
         }
+    }
+
+    private static void FailOpen(string path, Exception ex)
+    {
+        // Diagnostic should never break tests. Fall back to no-op and surface via stderr.
+        Console.Error.WriteLine($"[MemoryDiagnostics] Failed to open log at '{path}': {ex.Message}");
+        _writer = null;
     }
 
     private static void CloseWriter()

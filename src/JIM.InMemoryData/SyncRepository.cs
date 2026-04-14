@@ -1123,11 +1123,8 @@ public class SyncRepository : ISyncRepository
             {
                 if (attrChange.Id == Guid.Empty)
                     attrChange.Id = Guid.NewGuid();
-                foreach (var valueChange in attrChange.ValueChanges)
-                {
-                    if (valueChange.Id == Guid.Empty)
-                        valueChange.Id = Guid.NewGuid();
-                }
+                foreach (var valueChange in attrChange.ValueChanges.Where(vc => vc.Id == Guid.Empty))
+                    valueChange.Id = Guid.NewGuid();
                 existing.AttributeChanges.Add(attrChange);
             }
         }
