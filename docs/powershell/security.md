@@ -96,6 +96,52 @@ Get-JIMRole | ForEach-Object {
 
 ---
 
+## Get-JIMMetaverseObjectRole
+
+Lists the security roles a metaverse object is a member of.
+
+### Syntax
+
+```powershell
+Get-JIMMetaverseObjectRole -Id <guid>
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `guid` | Yes | | The unique identifier of the metaverse object. Accepts pipeline input by property name (e.g. from `Get-JIMMetaverseObject`). |
+
+### Output
+
+Role objects with `id`, `name`, `builtIn`, `created`, and `staticMemberCount` properties. Returns nothing if the object is not a member of any role.
+
+### Examples
+
+```powershell title="List the roles a specific object is a member of"
+Get-JIMMetaverseObjectRole -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+```
+
+```powershell title="Find an object by attribute and list its roles"
+Get-JIMMetaverseObject -AttributeName 'Account Name' -AttributeValue 'jsmith' |
+    Get-JIMMetaverseObjectRole
+```
+
+```powershell title="Audit the role memberships of every administrator"
+Get-JIMRole -Name "Administrator" |
+    Get-JIMRoleMember |
+    ForEach-Object {
+        $member = $_
+        $roles = $_ | Get-JIMMetaverseObjectRole
+        [PSCustomObject]@{
+            Member = $member.displayName
+            Roles  = ($roles | ForEach-Object { $_.name }) -join ", "
+        }
+    }
+```
+
+---
+
 ## Add-JIMRoleMember
 
 Adds a metaverse object to a security role.

@@ -34,6 +34,11 @@ public class SecurityServer
         return await Application.Repository.Security.GetMetaverseObjectRolesAsync(metaverseObject.Id);
     }
 
+    public async Task<List<Role>> GetMetaverseObjectRolesAsync(Guid metaverseObjectId)
+    {
+        return await Application.Repository.Security.GetMetaverseObjectRolesAsync(metaverseObjectId);
+    }
+
     public async Task<bool> IsObjectInRoleAsync(MetaverseObject metaverseObject, string roleName)
     {
         return await Application.Repository.Security.IsObjectInRoleAsync(metaverseObject.Id, roleName);

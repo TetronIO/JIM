@@ -218,6 +218,61 @@ Describe 'Add-JIMRoleMember' {
     }
 }
 
+Describe 'Get-JIMMetaverseObjectRole' {
+
+    Context 'Parameter Validation' {
+
+        BeforeAll {
+            $command = Get-Command Get-JIMMetaverseObjectRole
+        }
+
+        It 'Should have a mandatory Id parameter' {
+            $param = $command.Parameters['Id']
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have Id parameter that accepts GUID' {
+            $param = $command.Parameters['Id']
+            $param.ParameterType.Name | Should -Be 'Guid'
+        }
+
+        It 'Should have Id parameter that accepts pipeline by property name' {
+            $param = $command.Parameters['Id']
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ValueFromPipelineByPropertyName } | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Requires Connection' {
+
+        BeforeEach {
+            Disconnect-JIM
+        }
+
+        It 'Should throw when not connected' {
+            { Get-JIMMetaverseObjectRole -Id ([Guid]::NewGuid()) -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll {
+            $help = Get-Help Get-JIMMetaverseObjectRole -Full
+        }
+
+        It 'Should have a synopsis' {
+            $help.Synopsis | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have examples' {
+            $help.Examples.Example.Count | Should -BeGreaterThan 0
+        }
+
+        It 'Should have related links' {
+            $help.RelatedLinks | Should -Not -BeNullOrEmpty
+        }
+    }
+}
+
 Describe 'Remove-JIMRoleMember' {
 
     Context 'Parameter Validation' {

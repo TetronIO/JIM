@@ -26,6 +26,7 @@ public class SecurityControllerTests
 {
     private Mock<IRepository> _mockRepository = null!;
     private Mock<ISecurityRepository> _mockSecurityRepo = null!;
+    private Mock<IMetaverseRepository> _mockMetaverseRepo = null!;
     private Mock<ILogger<SecurityController>> _mockLogger = null!;
     private JimApplication _application = null!;
     private SecurityController _controller = null!;
@@ -36,9 +37,11 @@ public class SecurityControllerTests
     {
         _mockRepository = new Mock<IRepository>();
         _mockSecurityRepo = new Mock<ISecurityRepository>();
+        _mockMetaverseRepo = new Mock<IMetaverseRepository>();
         _mockLogger = new Mock<ILogger<SecurityController>>();
 
         _mockRepository.Setup(r => r.Security).Returns(_mockSecurityRepo.Object);
+        _mockRepository.Setup(r => r.Metaverse).Returns(_mockMetaverseRepo.Object);
 
         _application = new JimApplication(_mockRepository.Object);
         _controller = new SecurityController(_mockLogger.Object, _application);
@@ -377,6 +380,74 @@ public class SecurityControllerTests
 
         // Assert
         Assert.That(result, Is.InstanceOf<NoContentResult>());
+    }
+
+    // ──────────────────────────────────────────────
+    // GET /api/v1/security/metaverse-objects/{metaverseObjectId}/roles
+    // ──────────────────────────────────────────────
+
+    [Test]
+    public async Task GetMetaverseObjectRolesAsync_WithValidId_ReturnsOkWithRolesAsync()
+    {
+        // Arrange
+        var objectId = Guid.NewGuid();
+        var mvo = new MetaverseObject { Id = objectId, CachedDisplayName = "Alice", Type = new MetaverseObjectType { Id = 1, Name = "Person" } };
+        var roles = new List<Role>
+        {
+            new() { Id = 1, Name = "Administrator", BuiltIn = true, Created = DateTime.UtcNow, StaticMembers = new List<MetaverseObject> { mvo } },
+            new() { Id = 2, Name = "Auditor", BuiltIn = false, Created = DateTime.UtcNow, StaticMembers = new List<MetaverseObject> { mvo } }
+        };
+
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectAsync(objectId)).ReturnsAsync(mvo);
+        _mockSecurityRepo.Setup(r => r.GetMetaverseObjectRolesAsync(objectId)).ReturnsAsync(roles);
+
+        // Act
+        var result = await _controller.GetMetaverseObjectRolesAsync(objectId);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = (OkObjectResult)result;
+        var dtos = okResult.Value as IEnumerable<RoleDto>;
+        Assert.That(dtos, Is.Not.Null);
+        Assert.That(dtos!.Count(), Is.EqualTo(2));
+        Assert.That(dtos!.Any(r => r.Name == "Administrator"), Is.True);
+        Assert.That(dtos!.Any(r => r.Name == "Auditor"), Is.True);
+    }
+
+    [Test]
+    public async Task GetMetaverseObjectRolesAsync_WithUnknownMetaverseObjectId_ReturnsNotFoundAsync()
+    {
+        // Arrange
+        var objectId = Guid.NewGuid();
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectAsync(objectId)).ReturnsAsync((MetaverseObject?)null);
+
+        // Act
+        var result = await _controller.GetMetaverseObjectRolesAsync(objectId);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+        _mockSecurityRepo.Verify(r => r.GetMetaverseObjectRolesAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Test]
+    public async Task GetMetaverseObjectRolesAsync_WhenObjectHasNoRoles_ReturnsEmptyListAsync()
+    {
+        // Arrange
+        var objectId = Guid.NewGuid();
+        var mvo = new MetaverseObject { Id = objectId, CachedDisplayName = "Eve", Type = new MetaverseObjectType { Id = 1, Name = "Person" } };
+
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectAsync(objectId)).ReturnsAsync(mvo);
+        _mockSecurityRepo.Setup(r => r.GetMetaverseObjectRolesAsync(objectId)).ReturnsAsync(new List<Role>());
+
+        // Act
+        var result = await _controller.GetMetaverseObjectRolesAsync(objectId);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = (OkObjectResult)result;
+        var dtos = okResult.Value as IEnumerable<RoleDto>;
+        Assert.That(dtos, Is.Not.Null);
+        Assert.That(dtos!.Count(), Is.EqualTo(0));
     }
 
     [Test]

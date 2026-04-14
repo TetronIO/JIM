@@ -108,6 +108,39 @@ public class SecurityController(ILogger<SecurityController> logger, JimApplicati
     }
 
     /// <summary>
+    /// List the Roles a Metaverse Object is a member of
+    /// </summary>
+    /// <remarks>
+    /// Returns all security Roles that the specified Metaverse Object is statically assigned to.
+    /// Returns an empty list if the object is not a member of any Role.
+    /// </remarks>
+    /// <param name="metaverseObjectId">The unique identifier of the Metaverse Object.</param>
+    /// <returns>A list of Roles the Metaverse Object is a member of.</returns>
+    /// <response code="200">Returns the list of Roles.</response>
+    /// <response code="401">If the user is not authenticated.</response>
+    /// <response code="403">If the user lacks the Administrator role.</response>
+    /// <response code="404">If no Metaverse Object exists with the specified ID.</response>
+    [HttpGet("metaverse-objects/{metaverseObjectId:guid}/roles", Name = "GetMetaverseObjectRoles")]
+    [ProducesResponseType(typeof(IEnumerable<RoleDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetMetaverseObjectRolesAsync(Guid metaverseObjectId)
+    {
+        _logger.LogTrace("Requested roles of metaverse object {MetaverseObjectId}", metaverseObjectId);
+
+        var mvo = await _application.Metaverse.GetMetaverseObjectAsync(metaverseObjectId);
+        if (mvo == null)
+        {
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse object not found: {metaverseObjectId}"));
+        }
+
+        var roles = await _application.Security.GetMetaverseObjectRolesAsync(metaverseObjectId);
+        var dtos = roles.Select(RoleDto.FromEntity);
+        return Ok(dtos);
+    }
+
+    /// <summary>
     /// Add a member to a Role
     /// </summary>
     /// <remarks>
