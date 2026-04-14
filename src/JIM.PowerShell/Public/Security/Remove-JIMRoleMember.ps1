@@ -73,7 +73,7 @@ function Remove-JIMRoleMember {
             Write-Verbose "Removing metaverse object $objectId from role $RoleId"
 
             try {
-                Invoke-JIMApi -Endpoint "/api/v1/security/roles/$RoleId/members/$objectId" -Method 'DELETE'
+                $null = Invoke-JIMApi -Endpoint "/api/v1/security/roles/$RoleId/members/$objectId" -Method 'DELETE'
                 Write-Verbose "Removed metaverse object $objectId from role $RoleId"
             }
             catch {

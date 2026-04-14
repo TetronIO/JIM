@@ -69,7 +69,7 @@ function Add-JIMRoleMember {
             Write-Verbose "Adding metaverse object $objectId to role $RoleId"
 
             try {
-                Invoke-JIMApi -Endpoint "/api/v1/security/roles/$RoleId/members/$objectId" -Method 'PUT'
+                $null = Invoke-JIMApi -Endpoint "/api/v1/security/roles/$RoleId/members/$objectId" -Method 'PUT'
                 Write-Verbose "Added metaverse object $objectId to role $RoleId"
             }
             catch {
