@@ -52,6 +52,22 @@
 - NEVER use generic `catch` or `catch (Exception)` clauses; always catch a specific exception type
 - For JS interop retry patterns in `OnAfterRenderAsync` (e.g. loading user preferences), catch `InvalidOperationException` specifically; this is the exception Blazor throws when JS interop is invoked before the runtime is ready
 
+**Worker Hot Path - Raw SQL Over EF Projection:**
+- For queries on the synchronisation hot path (per-page flushes, cross-page resolution, export evaluation, change-record persistence), default to raw Npgsql (`NpgsqlCommand` + `DbDataReader`, or `BeginBinaryImportAsync` for COPY) rather than EF Core - even `AsNoTracking()` projection.
+- Measured on a cross-page MvoChange-id lookup (113 RPEIs): EF projection 7 ms vs raw SQL 2 ms (~3.5x faster). The gap widens with row count because EF materialisation cost scales harder than the query itself.
+- EF projection is still appropriate for UI reads and infrequent operations. For **bulk worker paths**, mirror the existing `BulkInsertRpeisRawAsync` / `BulkUpdateRpeiFieldsRawAsync` / `BulkInsertMvoChangesRawAsync` patterns - they exist for a reason.
+- When adding a new **Summary**-tier method (see Entity Retrieval Naming Taxonomy below), implement as raw SQL into a DTO, not EF projection into an anonymous type.
+
+**Check DB Constraints Before Proposing Model-Touching Fixes:**
+- Before designing a fix that changes how rows are inserted, merged, or de-duplicated in a table, read the relevant `CreateIndex` / `HasIndex` declarations in `src/JIM.PostgresData/Migrations/` (the initial migration or the latest one affecting the table) - or the corresponding section in `JimDbContextModelSnapshot.cs`.
+- Unique indexes and FK cascades are opinions baked into the schema. A fix that violates them fails at INSERT time, not at review time, and the shape of the fix usually needs to change as a result.
+- Example: `IX_MetaverseObjectChanges_ActivityRunProfileExecutionItemId` is `unique: true`. That meant "merge cross-page reference flow into the existing RPEI" required routing the *new* attribute rows under the *existing* MvoChange parent, not creating a second parent row under the same RPEI FK.
+
+**Prefer FK Scalars Over Navigation Checks Under AsNoTracking:**
+- When testing whether a related entity exists, prefer the FK scalar property (`parent.ChildId.HasValue`) over the navigation property (`parent.Child != null`).
+- FK columns are always populated from the row data; navigation properties require the query to have `.Include(...)`-d them. If a future optimisation switches a query to `AsNoTracking()` without the right `ThenInclude(...)`, the navigation silently becomes null and every `!= null` check flips to a false negative - bugs that are invisible in unit tests that use the full entity graph.
+- Applies especially in `src/JIM.Worker/` where queries routinely use `AsNoTracking()` and selective `.Include` for performance. Example: use `o.ParentSyncOutcomeId.HasValue` in `SyncTaskProcessorBase` rather than `o.ParentSyncOutcome != null`.
+
 **Code Quality (github-code-quality / CodeQL):**
 
 CodeQL runs on every PR via the github-code-quality bot and comments on rule violations. Write code that avoids its common triggers up front rather than fixing after review:
