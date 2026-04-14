@@ -288,6 +288,6 @@ body:has(.jim-home) .md-content__button {
 }
 
 /* Hide the auto-generated "Home" h1 (the hero already serves as the page title) */
-body:has(.jim-home) .md-content__inner > h1:first-child {
+.jim-home > h1:first-of-type {
   display: none;
 }
