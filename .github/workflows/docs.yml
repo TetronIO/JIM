@@ -17,6 +17,12 @@ jobs:
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+      - name: Setup .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
+        with:
+          dotnet-version: 10.0.x
+      - name: Generate OpenAPI document
+        run: pwsh -File ./scripts/Generate-OpenApiDoc.ps1 -OutputPath "$PWD/docs/api/reference/v1.json"
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: 3.x
