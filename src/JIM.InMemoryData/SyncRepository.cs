@@ -3,6 +3,7 @@
 
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
@@ -1085,26 +1086,36 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
-    public Task<List<ActivityRunProfileExecutionItem>> GetActivityRpeisByCsoIdsForCrossPageMergeAsync(
+    public Task<List<CrossPageMergeRpei>> GetRpeisWithMvoChangeIdsForCrossPageMergeAsync(
         Guid activityId, IReadOnlyCollection<Guid> csoIds)
     {
+        if (csoIds.Count == 0)
+            return Task.FromResult(new List<CrossPageMergeRpei>());
+
         var csoIdSet = csoIds as HashSet<Guid> ?? csoIds.ToHashSet();
-        var matches = _rpeis.Values
+        var matchingRpeis = _rpeis.Values
             .Where(r => r.ActivityId == activityId
                         && r.ConnectedSystemObjectId.HasValue
                         && csoIdSet.Contains(r.ConnectedSystemObjectId.Value))
             .ToList();
-        return Task.FromResult(matches);
-    }
 
-    public Task<Dictionary<Guid, Guid>> GetRpeiToMvoChangeIdMapAsync(IReadOnlyCollection<Guid> rpeiIds)
-    {
-        var rpeiIdSet = rpeiIds as HashSet<Guid> ?? rpeiIds.ToHashSet();
-        var map = _mvoChanges.Values
+        var rpeiIds = matchingRpeis.Select(r => r.Id).ToHashSet();
+        var mvoChangeIdByRpeiId = _mvoChanges.Values
             .Where(c => c.ActivityRunProfileExecutionItemId.HasValue
-                        && rpeiIdSet.Contains(c.ActivityRunProfileExecutionItemId.Value))
+                        && rpeiIds.Contains(c.ActivityRunProfileExecutionItemId.Value))
             .ToDictionary(c => c.ActivityRunProfileExecutionItemId!.Value, c => c.Id);
-        return Task.FromResult(map);
+
+        var results = matchingRpeis
+            .Select(r => new CrossPageMergeRpei
+            {
+                Rpei = r,
+                ExistingMvoChangeId = mvoChangeIdByRpeiId.TryGetValue(r.Id, out var mvoChangeId)
+                    ? mvoChangeId
+                    : null
+            })
+            .ToList();
+
+        return Task.FromResult(results);
     }
 
     public Task PersistPendingMvoChangeAttributesAsync(List<MetaverseObjectChange> mvoChanges)

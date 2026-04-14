@@ -1699,27 +1699,21 @@ public abstract class SyncTaskProcessorBase
         // each per-page FlushRpeisAsync, so the lookup has to come from the database — reading
         // from the in-memory collection would produce an empty lookup and cause cross-page
         // resolution to create duplicate AttributeFlow RPEIs instead of merging into existing ones.
+        // Single-round-trip fetch: RPEIs + SyncOutcomes + RPEI→MvoChange ids via NpgsqlBatch.
+        // The MvoChange ids let cross-page attribute flows be persisted as children of the
+        // already-existing parent MvoChange (enforced by the unique-per-RPEI index on
+        // MetaverseObjectChanges).
         var unresolvedCsoIds = _unresolvedCrossPageReferences.Select(x => x.CsoId).ToHashSet();
         var rpeiLoadStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var existingRpeis = await _syncRepo.GetActivityRpeisByCsoIdsForCrossPageMergeAsync(
+        var crossPageMergeRpeis = await _syncRepo.GetRpeisWithMvoChangeIdsForCrossPageMergeAsync(
             _activity.Id, unresolvedCsoIds);
         rpeiLoadStopwatch.Stop();
-        var existingRpeisByCsoId = existingRpeis.ToDictionary(r => r.ConnectedSystemObjectId!.Value);
+        var existingRpeisByCsoId = crossPageMergeRpeis.ToDictionary(x => x.Rpei.ConnectedSystemObjectId!.Value);
+        var mvoChangeIdCount = crossPageMergeRpeis.Count(x => x.ExistingMvoChangeId.HasValue);
         Log.Information(
-            "ResolveCrossPageReferences: Loaded {RpeiCount} existing RPEIs for {CsoCount} cross-page CSOs from database in {ElapsedMs} ms (lookup hit rate {HitRate:P0})",
-            existingRpeis.Count, unresolvedCsoIds.Count, rpeiLoadStopwatch.ElapsedMilliseconds,
-            unresolvedCsoIds.Count > 0 ? (double)existingRpeis.Count / unresolvedCsoIds.Count : 1.0);
-
-        // Build RPEI-id → existing MvoChange-id map so cross-page attribute flows can be
-        // persisted as children of the already-existing parent MvoChange (enforced by the
-        // unique-per-RPEI index on MetaverseObjectChanges).
-        var rpeiIdsToLookUp = existingRpeis.Select(r => r.Id).ToList();
-        var mvoChangeIdLookupStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var rpeiIdToMvoChangeId = await _syncRepo.GetRpeiToMvoChangeIdMapAsync(rpeiIdsToLookUp);
-        mvoChangeIdLookupStopwatch.Stop();
-        Log.Information(
-            "ResolveCrossPageReferences: Loaded {MapCount} existing MvoChange ids for {RpeiCount} RPEIs in {ElapsedMs} ms",
-            rpeiIdToMvoChangeId.Count, rpeiIdsToLookUp.Count, mvoChangeIdLookupStopwatch.ElapsedMilliseconds);
+            "ResolveCrossPageReferences: Loaded {RpeiCount} existing RPEIs ({MvoChangeCount} with MvoChange ids) for {CsoCount} cross-page CSOs from database in {ElapsedMs} ms (lookup hit rate {HitRate:P0})",
+            crossPageMergeRpeis.Count, mvoChangeIdCount, unresolvedCsoIds.Count, rpeiLoadStopwatch.ElapsedMilliseconds,
+            unresolvedCsoIds.Count > 0 ? (double)crossPageMergeRpeis.Count / unresolvedCsoIds.Count : 1.0);
 
         // Clear the change tracker to prevent performance degradation.
         // After processing all pages, the change tracker accumulates thousands of tracked entities
@@ -1837,11 +1831,10 @@ public abstract class SyncTaskProcessorBase
                     // attribute additions are written as children of that row rather than a new one.
                     ActivityRunProfileExecutionItem rpei;
                     Guid? existingMvoChangeId = null;
-                    if (existingRpeisByCsoId.TryGetValue(csoId, out var existingRpei))
+                    if (existingRpeisByCsoId.TryGetValue(csoId, out var existingMergeRpei))
                     {
-                        rpei = existingRpei;
-                        rpeiIdToMvoChangeId.TryGetValue(rpei.Id, out var mvoChangeId);
-                        existingMvoChangeId = mvoChangeId == Guid.Empty ? null : mvoChangeId;
+                        rpei = existingMergeRpei.Rpei;
+                        existingMvoChangeId = existingMergeRpei.ExistingMvoChangeId;
                         rpei.AttributeFlowCount = (rpei.AttributeFlowCount ?? 0) + additionsCount + removalsCount;
 
                         // Update outcome tree: add or update the AttributeFlow child node

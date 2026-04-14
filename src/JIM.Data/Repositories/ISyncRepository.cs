@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -431,27 +432,21 @@ public interface ISyncRepository
     Task BulkUpdateRpeiOutcomesAsync(List<ActivityRunProfileExecutionItem> rpeis, List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes);
 
     /// <summary>
-    /// Loads persisted RPEIs and their SyncOutcomes for the specified CSO ids, for use by
-    /// cross-page reference resolution to merge reference attribute flow into existing RPEIs
-    /// rather than creating duplicates. Previous implementations relied on
-    /// <c>_activity.RunProfileExecutionItems</c> as a lookup source, but per-page raw-SQL flushes
-    /// clear that collection so the lookup has to come from the database.
-    /// </summary>
-    Task<List<ActivityRunProfileExecutionItem>> GetActivityRpeisByCsoIdsForCrossPageMergeAsync(
-        Guid activityId, IReadOnlyCollection<Guid> csoIds);
-
-    /// <summary>
-    /// Returns a dictionary mapping RPEI id → existing MetaverseObjectChange id for the
-    /// supplied RPEI ids. Used by cross-page reference resolution so that the reference
-    /// attribute flows added to an already-persisted Projected/Joined RPEI can be written
-    /// as new attribute rows under the existing MvoChange parent — respecting the unique
-    /// constraint <c>IX_MetaverseObjectChanges_ActivityRunProfileExecutionItemId</c>.
+    /// Loads persisted RPEIs (with their SyncOutcomes) and the id of each RPEI's existing
+    /// MetaverseObjectChange, in a single round-trip. Used by cross-page reference resolution to
+    /// merge reference attribute flow into existing RPEIs and to route the new attribute rows
+    /// under the already-persisted MvoChange parent (respecting the unique constraint
+    /// <c>IX_MetaverseObjectChanges_ActivityRunProfileExecutionItemId</c>). Previous implementations
+    /// relied on <c>_activity.RunProfileExecutionItems</c> as a lookup source, but per-page raw-SQL
+    /// flushes clear that collection so the lookup has to come from the database.
     ///
-    /// PostgreSQL implementation uses raw Npgsql (not EF projection): measured ~3.5× faster
-    /// on Medium-scale cross-page loads (2 ms vs 7 ms for 113 RPEIs), with the gap widening
-    /// at higher scales where EF materialisation overhead dominates.
+    /// PostgreSQL implementation uses a single <c>NpgsqlBatch</c> (RPEIs joined LEFT to
+    /// <c>MetaverseObjectChanges</c> + a second statement for <c>SyncOutcomes</c>) in one network
+    /// round-trip. Replaces the previous two-call pattern (EF Include for RPEIs + a separate raw-SQL
+    /// map lookup for MvoChange ids).
     /// </summary>
-    Task<Dictionary<Guid, Guid>> GetRpeiToMvoChangeIdMapAsync(IReadOnlyCollection<Guid> rpeiIds);
+    Task<List<CrossPageMergeRpei>> GetRpeisWithMvoChangeIdsForCrossPageMergeAsync(
+        Guid activityId, IReadOnlyCollection<Guid> csoIds);
 
     /// <summary>
     /// Persists only the attribute + value rows of pending MVO changes whose parent

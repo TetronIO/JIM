@@ -3068,8 +3068,10 @@ public class FullSyncTests
 
         // Assert against the persisted RPEI store (simulating the production DB), not the
         // activity's in-memory collection — which is cleared by per-page raw-SQL flushes.
-        var persistedRpeis = await SyncRepo.GetActivityRpeisByCsoIdsForCrossPageMergeAsync(
-            activity.Id, new[] { csoA.Id, csoB.Id });
+        var persistedRpeis = (await SyncRepo.GetRpeisWithMvoChangeIdsForCrossPageMergeAsync(
+            activity.Id, new[] { csoA.Id, csoB.Id }))
+            .Select(x => x.Rpei)
+            .ToList();
 
         var csoAPersistedRpeis = persistedRpeis.Where(r => r.ConnectedSystemObjectId == csoA.Id).ToList();
         Assert.That(csoAPersistedRpeis, Has.Count.EqualTo(1),
