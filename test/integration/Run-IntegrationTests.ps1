@@ -2438,6 +2438,17 @@ if ($metricsStreamingEnabled) {
     Write-Success "Metrics streaming started (Run ID: $metricsRunId)"
 }
 
+# Start docker stats capture in the background so we can correlate per-container memory
+# and CPU with the scenario phases. Cheap to leave running for a short scenario; skipped
+# automatically when `docker` isn't on PATH.
+$dockerStatsJob = $null
+$dockerStatsPath = $null
+if (Get-Command docker -ErrorAction SilentlyContinue) {
+    $dockerStatsPath = Join-Path $scriptRoot "results" "docker-stats-$Scenario-$Template-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').csv"
+    Write-Step "Starting docker stats capture -> $dockerStatsPath"
+    $dockerStatsJob = Start-Job -FilePath "$scriptRoot/Capture-DockerStats.ps1" -ArgumentList @($dockerStatsPath, 2)
+}
+
 try {
     & $scenarioScript @scenarioParams
     $scenarioExitCode = $LASTEXITCODE
@@ -2447,6 +2458,16 @@ catch {
     Write-Host ""
     Write-Host "${RED}✗ Scenario failed with error: $_${NC}"
     Write-Host ""
+}
+finally {
+    if ($dockerStatsJob) {
+        Stop-Job $dockerStatsJob -ErrorAction SilentlyContinue | Out-Null
+        Remove-Job $dockerStatsJob -Force -ErrorAction SilentlyContinue | Out-Null
+        if ($dockerStatsPath -and (Test-Path $dockerStatsPath)) {
+            $rowCount = (Get-Content $dockerStatsPath).Count - 1
+            Write-Step "Docker stats capture stopped ($rowCount samples recorded)"
+        }
+    }
 }
 $timings["5. Run Tests"] = (Get-Date) - $step5Start
 

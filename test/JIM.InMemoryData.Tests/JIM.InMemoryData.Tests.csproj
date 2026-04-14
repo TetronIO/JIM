@@ -24,6 +24,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\JIM.InMemoryData\JIM.InMemoryData.csproj" />
     <ProjectReference Include="..\..\src\JIM.Models\JIM.Models.csproj" />
+    <ProjectReference Include="..\JIM.TestSupport\JIM.TestSupport.csproj" />
   </ItemGroup>
 
 </Project>

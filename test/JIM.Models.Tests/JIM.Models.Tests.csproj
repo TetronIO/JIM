@@ -20,6 +20,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\JIM.Models\JIM.Models.csproj" />
     <ProjectReference Include="..\..\src\JIM.Utilities\JIM.Utilities.csproj" />
+    <ProjectReference Include="..\JIM.TestSupport\JIM.TestSupport.csproj" />
   </ItemGroup>
 
 </Project>
