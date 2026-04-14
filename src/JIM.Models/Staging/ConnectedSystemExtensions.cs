@@ -123,4 +123,56 @@ public static class ConnectedSystemExtensions
 
         return false;
     }
+
+    /// <summary>
+    /// Produces a diagnostic description of why <see cref="HasPartitionsOrContainersSelected"/> would return <c>false</c>,
+    /// suitable for embedding in user-facing error and warning messages.
+    /// </summary>
+    /// <remarks>
+    /// The returned string identifies which stage of partition configuration is incomplete:
+    /// the hierarchy has not been imported, partitions have been enumerated but none are selected,
+    /// or a partition is selected but no container within it is. Callers are expected to have already
+    /// determined that selection is incomplete; the return value for a valid configuration is undefined.
+    /// </remarks>
+    public static string BuildPartitionSelectionDiagnostic(this ConnectedSystem connectedSystem)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+
+        var partitions = connectedSystem.Partitions;
+        if (partitions == null || partitions.Count == 0)
+            return "the partition hierarchy has not been imported: run a partition hierarchy import before selecting partitions";
+
+        var selectedPartitions = partitions.Where(p => p.Selected).ToList();
+        if (selectedPartitions.Count == 0)
+            return $"{partitions.Count} partition(s) are available but none are selected";
+
+        var supportsContainers = connectedSystem.ConnectorDefinition?.SupportsPartitionContainers ?? false;
+        if (!supportsContainers)
+        {
+            // HasPartitionsOrContainersSelected would have returned true in this path; retain a sensible fallback.
+            return $"{selectedPartitions.Count} partition(s) are selected but validation still reports the configuration as incomplete";
+        }
+
+        var selectedNames = string.Join(", ", selectedPartitions.Select(p => $"'{p.Name}'"));
+        var totalContainers = selectedPartitions.Sum(p => p.Containers != null ? CountContainersRecursively(p.Containers) : 0);
+        if (totalContainers == 0)
+            return $"selected partition(s) {selectedNames} contain no enumerated containers: import the partition hierarchy to populate containers";
+
+        return $"{totalContainers} container(s) exist under selected partition(s) {selectedNames} but none are selected";
+    }
+
+    /// <summary>
+    /// Counts every container in the tree rooted at the supplied collection, including nested descendants.
+    /// </summary>
+    private static int CountContainersRecursively(IEnumerable<ConnectedSystemContainer> containers)
+    {
+        var count = 0;
+        foreach (var container in containers)
+        {
+            count++;
+            if (container.ChildContainers.Count > 0)
+                count += CountContainersRecursively(container.ChildContainers);
+        }
+        return count;
+    }
 }
