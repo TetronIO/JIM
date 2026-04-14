@@ -94,7 +94,7 @@ public class SecurityRepository : ISecurityRepository
         return await Repository.Database.MetaverseObjects
             .Include(mo => mo.Type)
             .Where(mo => mo.Roles.Any(r => r.Id == roleId))
-            .OrderBy(mo => mo.DisplayName)
+            .OrderBy(mo => mo.CachedDisplayName)
             .ToListAsync();
     }
 }
