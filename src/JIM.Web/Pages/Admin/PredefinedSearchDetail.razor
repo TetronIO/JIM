@@ -41,7 +41,7 @@
             <MudItem xs="12" sm="6" md="4">
                 <MudSwitch T="bool" Value="_predefinedSearch.IsEnabled" Color="Color.Success"
                            Label="Enabled" ValueChanged="async (bool val) => await ToggleEnabledAsync(val)" />
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">Disabled searches are hidden from end users but remain visible to administrators.</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Disabled searches don't appear on the portal.</MudText>
             </MudItem>
         </MudGrid>
     </MudPaper>
@@ -122,7 +122,15 @@
         try
         {
             using var jim = JimFactory.Create();
-            await jim.Search.SetEnabledAsync(_predefinedSearch.Id, isEnabled);
+            var core = await jim.Search.GetPredefinedSearchCoreAsync(_predefinedSearch.Id);
+            if (core == null)
+            {
+                Snackbar.Add("Predefined search no longer exists.", Severity.Error);
+                return;
+            }
+
+            core.IsEnabled = isEnabled;
+            await jim.Search.UpdatePredefinedSearchAsync(core);
             _predefinedSearch.IsEnabled = isEnabled;
             Snackbar.Add($"Predefined search '{_predefinedSearch.Name}' {(isEnabled ? "enabled" : "disabled")}.", Severity.Success);
         }

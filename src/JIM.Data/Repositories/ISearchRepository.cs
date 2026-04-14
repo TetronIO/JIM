@@ -9,7 +9,20 @@ namespace JIM.Data.Repositories;
 public interface ISearchRepository
 {
     public Task<IList<PredefinedSearchHeader>> GetPredefinedSearchHeadersAsync();
+
     public Task<PredefinedSearch?> GetPredefinedSearchAsync(string uri);
+
     public Task<PredefinedSearch?> GetPredefinedSearchAsync(MetaverseObjectType metaverseObjectType);
-    public Task SetEnabledAsync(int id, bool isEnabled);
+
+    /// <summary>
+    /// Lightweight retrieval of a predefined search by ID, without the attributes or criteria graph.
+    /// Intended for write-path lookups (e.g. a PATCH endpoint loading the entity before mutation).
+    /// </summary>
+    public Task<PredefinedSearch?> GetPredefinedSearchCoreAsync(int id);
+
+    /// <summary>
+    /// Persists changes to a predefined search entity. Attaches detached entities and marks all
+    /// scalar fields as modified, matching the repository convention used for Schedules, API Keys, etc.
+    /// </summary>
+    public Task UpdatePredefinedSearchAsync(PredefinedSearch predefinedSearch);
 }

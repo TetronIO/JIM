@@ -169,7 +169,15 @@
         try
         {
             using var jim = JimFactory.Create();
-            await jim.Search.SetEnabledAsync(header.Id, isEnabled);
+            var core = await jim.Search.GetPredefinedSearchCoreAsync(header.Id);
+            if (core == null)
+            {
+                Snackbar.Add("Predefined search no longer exists.", Severity.Error);
+                return;
+            }
+
+            core.IsEnabled = isEnabled;
+            await jim.Search.UpdatePredefinedSearchAsync(core);
             header.IsEnabled = isEnabled;
             Snackbar.Add($"Predefined search '{header.Name}' {(isEnabled ? "enabled" : "disabled")}.", Severity.Success);
         }

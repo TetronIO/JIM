@@ -12,14 +12,26 @@
 
     <MudNavGroup Title="Users" Expanded="_usersExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "users"))" Icon="@_userIcon" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
         <MudNavLink Href="/t/users" Match="NavLinkMatch.All" Class="jim-nowrap jim-nav-child">All Users</MudNavLink>
-        <MudNavLink Href="/t/users/s/people" Match="NavLinkMatch.Prefix" Class="jim-nav-child">People</MudNavLink>
-        <MudNavLink Href="/t/users/s/service-principals" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Service Principals</MudNavLink>
+        @if (_peopleEnabled)
+        {
+            <MudNavLink Href="/t/users/s/people" Match="NavLinkMatch.Prefix" Class="jim-nav-child">People</MudNavLink>
+        }
+        @if (_servicePrincipalsEnabled)
+        {
+            <MudNavLink Href="/t/users/s/service-principals" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Service Principals</MudNavLink>
+        }
     </MudNavGroup>
 
     <MudNavGroup Title="Groups" Expanded="_groupsExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "groups"))" Icon="@_groupIcon" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
         <MudNavLink Href="/t/groups" Match="NavLinkMatch.All" Class="jim-nowrap jim-nav-child">All Groups</MudNavLink>
-        <MudNavLink Href="/t/groups/s/security-groups" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Security Groups</MudNavLink>
-        <MudNavLink Href="/t/groups/s/distribution-groups" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Distribution Groups</MudNavLink>
+        @if (_securityGroupsEnabled)
+        {
+            <MudNavLink Href="/t/groups/s/security-groups" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Security Groups</MudNavLink>
+        }
+        @if (_distributionGroupsEnabled)
+        {
+            <MudNavLink Href="/t/groups/s/distribution-groups" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Distribution Groups</MudNavLink>
+        }
     </MudNavGroup>
 
     @* Dashboard - Hidden until implemented
@@ -62,6 +74,13 @@
     private string _userIcon = Icons.Material.Filled.Person;
     private string _groupIcon = Icons.Material.Filled.Groups;
 
+    // Predefined-search visibility for the hardcoded child nav links (loaded once per circuit).
+    // Default to true so the links render if a search isn't found, matching pre-toggle behaviour.
+    private bool _peopleEnabled = true;
+    private bool _servicePrincipalsEnabled = true;
+    private bool _securityGroupsEnabled = true;
+    private bool _distributionGroupsEnabled = true;
+
     // Track expanded state for each nav group
     private bool _usersExpanded;
     private bool _groupsExpanded;
@@ -80,6 +99,14 @@
         var groupType = await jim.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Group, includeChildObjects: false);
         _userIcon = Helpers.ResolveObjectTypeIcon(userType?.Icon);
         _groupIcon = Helpers.ResolveObjectTypeIcon(groupType?.Icon);
+
+        // Resolve visibility for the hardcoded child nav links against the current predefined-search state.
+        // One DB round-trip per circuit; headers are already projected to a lightweight DTO.
+        var headers = await jim.Search.GetPredefinedSearchHeadersAsync();
+        _peopleEnabled = headers.FirstOrDefault(h => h.Uri == "people")?.IsEnabled ?? true;
+        _servicePrincipalsEnabled = headers.FirstOrDefault(h => h.Uri == "service-principals")?.IsEnabled ?? true;
+        _securityGroupsEnabled = headers.FirstOrDefault(h => h.Uri == "security-groups")?.IsEnabled ?? true;
+        _distributionGroupsEnabled = headers.FirstOrDefault(h => h.Uri == "distribution-groups")?.IsEnabled ?? true;
 
         // Initialize expanded states based on current URL if drawer starts open
         // Saved preferences will be loaded in OnAfterRenderAsync when JS interop is available

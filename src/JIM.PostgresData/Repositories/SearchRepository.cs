@@ -61,14 +61,16 @@ public class SearchRepository : ISearchRepository
             SingleOrDefaultAsync(q => q.MetaverseObjectType.Id == metaverseObjectType.Id && q.IsDefaultForMetaverseObjectType && q.IsEnabled);
     }
 
-    public async Task SetEnabledAsync(int id, bool isEnabled)
+    public async Task<PredefinedSearch?> GetPredefinedSearchCoreAsync(int id)
     {
-        var predefinedSearch = await Repository.Database.PredefinedSearches
-            .AsTracking()
-            .SingleOrDefaultAsync(ps => ps.Id == id)
-            ?? throw new InvalidOperationException($"Predefined search with ID {id} not found.");
+        return await Repository.Database.PredefinedSearches
+            .AsNoTracking()
+            .SingleOrDefaultAsync(ps => ps.Id == id);
+    }
 
-        predefinedSearch.IsEnabled = isEnabled;
+    public async Task UpdatePredefinedSearchAsync(PredefinedSearch predefinedSearch)
+    {
+        Repository.Database.PredefinedSearches.Update(predefinedSearch);
         await Repository.Database.SaveChangesAsync();
     }
 }
