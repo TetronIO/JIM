@@ -281,6 +281,26 @@ public partial class SyncRepository
         _context.Database.SetCommandTimeout(previousTimeout);
     }
 
+    public async Task<List<ActivityRunProfileExecutionItem>> GetActivityRpeisByCsoIdsForCrossPageMergeAsync(
+        Guid activityId, IReadOnlyCollection<Guid> csoIds)
+    {
+        if (csoIds.Count == 0)
+            return [];
+
+        var csoIdArray = csoIds as Guid[] ?? csoIds.ToArray();
+
+        // AsNoTracking: the worker mutates the returned RPEIs (AttributeFlowCount, OutcomeSummary,
+        // new child outcomes) but persists those changes via raw SQL (BulkUpdateRpeiFieldsRawAsync
+        // and BulkInsertSyncOutcomesRawAsync), not via EF. Change tracking would be pure overhead.
+        return await _context.ActivityRunProfileExecutionItems
+            .AsNoTracking()
+            .Include(r => r.SyncOutcomes)
+            .Where(r => r.ActivityId == activityId
+                        && r.ConnectedSystemObjectId.HasValue
+                        && csoIdArray.Contains(r.ConnectedSystemObjectId.Value))
+            .ToListAsync();
+    }
+
     public async Task BulkUpdateRpeiOutcomesAsync(
         List<ActivityRunProfileExecutionItem> rpeis,
         List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes)

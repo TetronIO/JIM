@@ -1683,34 +1683,34 @@ public abstract class SyncTaskProcessorBase
             $"Resolving cross-page references (0 / {totalCrossPagesToResolve})");
 
         // Build a lookup of CSO ID → existing RPEI for CSOs that need cross-page resolution.
-        // These RPEIs were created during initial page processing (e.g., Projected, Joined) and have
-        // already been persisted to the database. We save references BEFORE clearing the in-memory
-        // collection so that cross-page resolution can merge reference attribute flows into the
-        // existing RPEIs rather than creating duplicates.
+        // These RPEIs were created during initial page processing (e.g., Projected, Joined) and
+        // were persisted to the database *and* cleared from _activity.RunProfileExecutionItems by
+        // each per-page FlushRpeisAsync, so the lookup has to come from the database — reading
+        // from the in-memory collection would produce an empty lookup and cause cross-page
+        // resolution to create duplicate AttributeFlow RPEIs instead of merging into existing ones.
         var unresolvedCsoIds = _unresolvedCrossPageReferences.Select(x => x.CsoId).ToHashSet();
-        var existingRpeisByCsoId = new Dictionary<Guid, ActivityRunProfileExecutionItem>();
-        foreach (var rpei in _activity.RunProfileExecutionItems)
-        {
-            if (rpei.ConnectedSystemObjectId.HasValue && unresolvedCsoIds.Contains(rpei.ConnectedSystemObjectId.Value))
-                existingRpeisByCsoId[rpei.ConnectedSystemObjectId.Value] = rpei;
-        }
+        var rpeiLoadStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var existingRpeis = await _syncRepo.GetActivityRpeisByCsoIdsForCrossPageMergeAsync(
+            _activity.Id, unresolvedCsoIds);
+        rpeiLoadStopwatch.Stop();
+        var existingRpeisByCsoId = existingRpeis.ToDictionary(r => r.ConnectedSystemObjectId!.Value);
+        Log.Information(
+            "ResolveCrossPageReferences: Loaded {RpeiCount} existing RPEIs for {CsoCount} cross-page CSOs from database in {ElapsedMs} ms (lookup hit rate {HitRate:P0})",
+            existingRpeis.Count, unresolvedCsoIds.Count, rpeiLoadStopwatch.ElapsedMilliseconds,
+            unresolvedCsoIds.Count > 0 ? (double)existingRpeis.Count / unresolvedCsoIds.Count : 1.0);
 
         // Clear the change tracker to prevent performance degradation.
         // After processing all pages, the change tracker accumulates thousands of tracked entities
         // (MVOs, CSOs, attribute values, etc.). This causes EF Core's identity resolution to become
         // extremely slow when loading the cross-page reference CSOs with deep Include chains.
-        // All previous page data has been fully persisted, so clearing is safe.
         //
-        // IMPORTANT: Also clear the Activity's in-memory RPEI collection. RPEIs from all pages have
-        // been persisted to the database, but the in-memory list still holds references to detached
-        // entities (CSO → MVO → Type → Attributes). If any subsequent EF operation (Update, Remove,
-        // SaveChanges) triggers change detection on the Activity, EF will try to re-track those stale
-        // entity references, causing identity conflicts with freshly loaded entities from the
-        // cross-page resolution query.
+        // The Activity's in-memory RPEI collection is also defensively cleared. In production it's
+        // already empty (per-page raw-SQL flushes clear it); in test environments using the EF
+        // fallback path it may still hold stragglers.
         var rpeiCountBeforeClear = _activity.RunProfileExecutionItems.Count;
         _activity.RunProfileExecutionItems.Clear();
         _syncRepo.ClearChangeTracker();
-        Log.Debug("ResolveCrossPageReferences: Cleared change tracker and {RpeiCount} persisted RPEIs from activity",
+        Log.Debug("ResolveCrossPageReferences: Cleared change tracker and {RpeiCount} in-memory RPEIs from activity",
             rpeiCountBeforeClear);
 
         // Build sync rule lookup (keyed by ID) for O(1) access
@@ -1820,16 +1820,20 @@ public abstract class SyncTaskProcessorBase
                         if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
                             && rpei.ObjectChangeType is ObjectChangeType.Projected or ObjectChangeType.Joined)
                         {
+                            // Use the FK (ParentSyncOutcomeId) rather than the navigation property
+                            // so the check works whether or not EF populated ParentSyncOutcome —
+                            // AsNoTracking + Include(SyncOutcomes) loads the list but not the
+                            // per-node parent navigation.
                             var attrFlowChild = rpei.SyncOutcomes.FirstOrDefault(o =>
                                 o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
-                                && o.ParentSyncOutcome != null);
+                                && o.ParentSyncOutcomeId.HasValue);
                             if (attrFlowChild != null)
                                 attrFlowChild.DetailCount = rpei.AttributeFlowCount;
                             else
                             {
                                 // No child yet (e.g., initial projection had no scalar attribute changes).
                                 // Add an AttributeFlow child under the root Projected/Joined outcome.
-                                var rootOutcome = rpei.SyncOutcomes.FirstOrDefault(o => o.ParentSyncOutcome == null);
+                                var rootOutcome = rpei.SyncOutcomes.FirstOrDefault(o => !o.ParentSyncOutcomeId.HasValue);
                                 if (rootOutcome != null)
                                 {
                                     SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
@@ -2551,10 +2555,16 @@ public abstract class SyncTaskProcessorBase
                 attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, metaverseObjectAttributeValue.ReferenceValue));
                 break;
             case AttributeDataType.Reference when metaverseObjectAttributeValue.ReferenceValueId.HasValue:
-                // Navigation property not loaded but FK is set — record the referenced MVO ID as a GUID.
-                // This happens when ReferenceValue navigations are not loaded via EF Include
+                // Navigation property not loaded but FK is set — record the FK directly on the
+                // change record so the ReferenceValue navigation can be materialised later via
+                // .Include. Happens when ReferenceValue navigations aren't loaded via EF Include
                 // (replaced by direct SQL PopulateReferenceValuesAsync on the CSO side).
-                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, metaverseObjectAttributeValue.ReferenceValueId.Value));
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue
+                {
+                    MetaverseObjectChangeAttribute = attributeChange,
+                    ValueChangeType = valueChangeType,
+                    ReferenceValueId = metaverseObjectAttributeValue.ReferenceValueId.Value
+                });
                 break;
             case AttributeDataType.Reference when metaverseObjectAttributeValue.UnresolvedReferenceValue != null:
                 // We do not log changes for unresolved references. Only resolved references get change tracked.

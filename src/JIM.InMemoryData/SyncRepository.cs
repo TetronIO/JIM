@@ -32,6 +32,16 @@ public class SyncRepository : ISyncRepository
     private readonly Dictionary<Guid, PendingExport> _pendingExports = new();
     private readonly Dictionary<Guid, Activity> _activities = new();
     private readonly Dictionary<Guid, ActivityRunProfileExecutionItem> _rpeis = new();
+
+    /// <summary>
+    /// When true, <see cref="BulkInsertRpeisAsync"/> returns true (simulating the production
+    /// raw-SQL path) so the processor clears <c>_activity.RunProfileExecutionItems</c> after each
+    /// page. Off by default because most existing tests assert against that in-memory collection.
+    /// Tests exercising cross-page RPEI behaviour should opt in so the test exercises the code
+    /// path used in production.
+    /// </summary>
+    public bool SimulateRawSqlPersistence { get; set; }
+
     private readonly Dictionary<int, ConnectedSystem> _connectedSystems = new();
     private readonly Dictionary<int, SyncRule> _syncRules = new();
     private readonly Dictionary<int, ConnectedSystemObjectType> _objectTypes = new();
@@ -1039,10 +1049,11 @@ public class SyncRepository : ISyncRepository
             // Generate IDs for SyncOutcomes (matches PostgresDataRepository.FlattenSyncOutcomes behaviour)
             AssignSyncOutcomeIds(rpei.SyncOutcomes, rpei.Id, null);
         }
-        // Return false to indicate "not raw SQL" — tells the processor to keep RPEIs in
-        // the activity's RunProfileExecutionItems collection for test assertions, rather
-        // than clearing them (which is the production raw SQL path).
-        return Task.FromResult(false);
+        // When SimulateRawSqlPersistence is off (default), return false so the processor keeps
+        // RPEIs in the activity's RunProfileExecutionItems collection for simpler test assertions.
+        // When on, return true so the processor clears that collection after each page — matching
+        // the production raw-SQL path and exposing cross-page lookup bugs.
+        return Task.FromResult(SimulateRawSqlPersistence);
     }
 
     private static void AssignSyncOutcomeIds(
@@ -1072,6 +1083,18 @@ public class SyncRepository : ISyncRepository
         foreach (var rpei in rpeis)
             _rpeis[rpei.Id] = rpei;
         return Task.CompletedTask;
+    }
+
+    public Task<List<ActivityRunProfileExecutionItem>> GetActivityRpeisByCsoIdsForCrossPageMergeAsync(
+        Guid activityId, IReadOnlyCollection<Guid> csoIds)
+    {
+        var csoIdSet = csoIds as HashSet<Guid> ?? csoIds.ToHashSet();
+        var matches = _rpeis.Values
+            .Where(r => r.ActivityId == activityId
+                        && r.ConnectedSystemObjectId.HasValue
+                        && csoIdSet.Contains(r.ConnectedSystemObjectId.Value))
+            .ToList();
+        return Task.FromResult(matches);
     }
 
     public void DetachRpeisFromChangeTracker(List<ActivityRunProfileExecutionItem> rpeis)

@@ -2807,6 +2807,11 @@ public class FullSyncTests
         // Apply the page size override so CSOs are split across pages as the test requires
         SyncRepo.SetSyncPageSize(1);
 
+        // Opt into the production raw-SQL persistence path so per-page flushes clear the
+        // activity's in-memory RPEI collection. Without this, the test runs an EF-fallback
+        // path not used in production and misses cross-page RPEI bugs.
+        SyncRepo.SimulateRawSqlPersistence = true;
+
         // Recreate Jim with updated mocks and the new SyncRepo
         Jim?.Dispose();
         Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
@@ -2996,6 +3001,11 @@ public class FullSyncTests
         // Apply the page size override so CSOs are split across pages as the test requires
         SyncRepo.SetSyncPageSize(1);
 
+        // Opt into the production raw-SQL persistence path so per-page flushes clear the
+        // activity's in-memory RPEI collection. Without this, the test runs an EF-fallback
+        // path not used in production and misses cross-page RPEI bugs.
+        SyncRepo.SimulateRawSqlPersistence = true;
+
         // Recreate Jim with updated mocks and the new SyncRepo
         Jim?.Dispose();
         Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
@@ -3056,27 +3066,27 @@ public class FullSyncTests
             .FirstOrDefault(av => av.AttributeId == (int)MockMetaverseAttributeName.Manager);
         Assert.That(managerValue, Is.Not.Null, "Manager reference should be resolved.");
 
-        // Assert: Each CSO should have exactly ONE RPEI — no duplicates from cross-page resolution
-        var csoARpeis = activity.RunProfileExecutionItems
-            .Where(r => r.ConnectedSystemObjectId == csoA.Id ||
-                        (r.ConnectedSystemObject != null && r.ConnectedSystemObject.Id == csoA.Id))
-            .ToList();
-        Assert.That(csoARpeis, Has.Count.EqualTo(1),
-            "CSO-A should have exactly one RPEI. Cross-page reference resolution should merge " +
+        // Assert against the persisted RPEI store (simulating the production DB), not the
+        // activity's in-memory collection — which is cleared by per-page raw-SQL flushes.
+        var persistedRpeis = await SyncRepo.GetActivityRpeisByCsoIdsForCrossPageMergeAsync(
+            activity.Id, new[] { csoA.Id, csoB.Id });
+
+        var csoAPersistedRpeis = persistedRpeis.Where(r => r.ConnectedSystemObjectId == csoA.Id).ToList();
+        Assert.That(csoAPersistedRpeis, Has.Count.EqualTo(1),
+            "CSO-A should have exactly one persisted RPEI. Cross-page reference resolution should merge " +
             "into the existing Projected RPEI, not create a duplicate.");
 
         // The single RPEI should be Projected (not a standalone AttributeFlow)
-        Assert.That(csoARpeis[0].ObjectChangeType, Is.EqualTo(ObjectChangeType.Projected),
+        Assert.That(csoAPersistedRpeis[0].ObjectChangeType, Is.EqualTo(ObjectChangeType.Projected),
             "CSO-A's RPEI should retain its original Projected change type, not be replaced by AttributeFlow.");
 
         // The RPEI should include the reference attribute flow count (scalar + reference)
-        Assert.That(csoARpeis[0].AttributeFlowCount, Is.Not.Null.And.GreaterThan(0),
+        Assert.That(csoAPersistedRpeis[0].AttributeFlowCount, Is.Not.Null.And.GreaterThan(0),
             "CSO-A's RPEI AttributeFlowCount should include both scalar and reference attribute flows.");
 
-        // CSO-B's RPEI is not in the in-memory collection because ResolveCrossPageReferencesAsync
-        // clears the collection before cross-page resolution (CSO-B is not in the unresolved list).
-        // In production, CSO-B's RPEI is persisted to the database and unaffected by this bug.
-        // The key assertion above (CSO-A has exactly 1 Projected RPEI) is the regression guard.
+        // CSO-B should also have exactly one persisted RPEI (Projected, no cross-page reference flow).
+        var csoBPersistedRpeis = persistedRpeis.Where(r => r.ConnectedSystemObjectId == csoB.Id).ToList();
+        Assert.That(csoBPersistedRpeis, Has.Count.EqualTo(1), "CSO-B should have exactly one persisted RPEI.");
     }
 
     #endregion

@@ -431,6 +431,16 @@ public interface ISyncRepository
     Task BulkUpdateRpeiOutcomesAsync(List<ActivityRunProfileExecutionItem> rpeis, List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes);
 
     /// <summary>
+    /// Loads persisted RPEIs and their SyncOutcomes for the specified CSO ids, for use by
+    /// cross-page reference resolution to merge reference attribute flow into existing RPEIs
+    /// rather than creating duplicates. Previous implementations relied on
+    /// <c>_activity.RunProfileExecutionItems</c> as a lookup source, but per-page raw-SQL flushes
+    /// clear that collection so the lookup has to come from the database.
+    /// </summary>
+    Task<List<ActivityRunProfileExecutionItem>> GetActivityRpeisByCsoIdsForCrossPageMergeAsync(
+        Guid activityId, IReadOnlyCollection<Guid> csoIds);
+
+    /// <summary>
     /// Detaches RPEIs from the EF change tracker so they are not persisted by subsequent
     /// SaveChangesAsync calls. Call after raw SQL bulk insert has persisted them.
     /// </summary>
