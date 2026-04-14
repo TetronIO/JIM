@@ -164,3 +164,125 @@
   background-color: #051526;
   border-radius: 4px;
 }
+
+/* ========================================
+   Homepage hero (full-bleed) and layout
+   Scoped via .jim-hero / .jim-home from
+   docs/overrides/home.html
+   ======================================== */
+
+.jim-hero {
+  width: 100%;
+  padding: 4.5rem 1rem 3.5rem;
+  background: linear-gradient(135deg, #5A45A2 0%, #483790 60%, #2f2466 100%);
+  color: #ffffff;
+  text-align: center;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+.jim-hero__inner {
+  max-width: 56rem;
+  margin: 0 auto;
+}
+
+.jim-hero__logo {
+  width: 96px;
+  height: auto;
+  margin: 0 auto 1.5rem;
+  display: block;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.25));
+}
+
+.jim-hero__title {
+  font-size: 3rem;
+  font-weight: 700;
+  margin: 0 0 1rem;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+}
+
+.jim-hero__tagline {
+  font-size: 1.2rem;
+  line-height: 1.55;
+  margin: 0 auto 2.25rem;
+  max-width: 42rem;
+  opacity: 0.92;
+}
+
+.jim-hero__ctas {
+  display: flex;
+  gap: 0.85rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.jim-hero__cta {
+  display: inline-block;
+  padding: 0.75rem 1.75rem;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-decoration: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.jim-hero__cta--primary {
+  background: #ffffff;
+  color: #5A45A2;
+}
+
+.jim-hero__cta--primary:hover {
+  background: #f5f3fa;
+  color: #483790;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.jim-hero__cta--secondary {
+  background: transparent;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+}
+
+.jim-hero__cta--secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+/* Smaller hero on mobile/tablet */
+@media screen and (max-width: 76.1875em) {
+  .jim-hero {
+    padding: 2.75rem 1rem 2.25rem;
+  }
+  .jim-hero__logo {
+    width: 72px;
+    margin-bottom: 1rem;
+  }
+  .jim-hero__title {
+    font-size: 2rem;
+  }
+  .jim-hero__tagline {
+    font-size: 1rem;
+    margin-bottom: 1.75rem;
+  }
+}
+
+/* Widen the content grid on the homepage only.
+   Targets the page rendered with overrides/home.html via :has(). */
+body:has(.jim-home) .md-main__inner.md-grid,
+body:has(.jim-home) .md-content {
+  max-width: none;
+}
+
+body:has(.jim-home) .md-content__inner {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding-top: 2rem;
+}
+
+/* Hide the auto-generated edit button on the homepage; it looks odd under the hero */
+body:has(.jim-home) .md-content__button {
+  display: none;
+}

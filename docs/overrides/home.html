@@ -1,0 +1,26 @@
+{% extends "main.html" %}
+
+{% block tabs %}
+  {{ super() }}
+  <section class="jim-hero">
+    <div class="jim-hero__inner">
+      <img src="{{ 'assets/images/jim-logo.png' | url }}" alt="" class="jim-hero__logo">
+      <h1 class="jim-hero__title">Junctional Identity Manager</h1>
+      <p class="jim-hero__tagline">
+        A modern, self-hosted Identity Management system for organisations with
+        complex identity synchronisation requirements. Container-deployable and
+        air-gap ready.
+      </p>
+      <div class="jim-hero__ctas">
+        <a href="{{ 'getting-started/' | url }}" class="jim-hero__cta jim-hero__cta--primary">Get started</a>
+        <a href="{{ 'concepts/' | url }}" class="jim-hero__cta jim-hero__cta--secondary">Learn the concepts</a>
+      </div>
+    </div>
+  </section>
+{% endblock %}
+
+{% block content %}
+  <div class="jim-home">
+    {{ super() }}
+  </div>
+{% endblock %}
