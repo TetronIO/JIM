@@ -1690,6 +1690,17 @@ public abstract class SyncTaskProcessorBase
         Log.Information("ResolveCrossPageReferences: Resolving cross-page references for {Count} CSOs",
             totalCrossPagesToResolve);
 
+        // Memory snapshot at phase entry — cross-page resolution reloads CSO graphs with deep
+        // includes, rebuilds outcome trees, and re-evaluates exports, so its memory footprint
+        // is distinctive from the main sync loop. The matching snapshot at phase exit lets us
+        // size the headroom it takes at a glance; combined with docker stats externally this
+        // short-circuits future memory investigations into this phase.
+        var managedBytesAtStart = GC.GetTotalMemory(forceFullCollection: false);
+        var workingSetBytesAtStart = Environment.WorkingSet;
+        Log.Information("ResolveCrossPageReferences: Memory at phase entry — Managed: {ManagedMb:F1} MB, WorkingSet: {WorkingSetMb:F1} MB",
+            managedBytesAtStart / (1024.0 * 1024.0),
+            workingSetBytesAtStart / (1024.0 * 1024.0));
+
         await _syncRepo.UpdateActivityMessageAsync(_activity,
             $"Resolving cross-page references (0 / {totalCrossPagesToResolve})");
 
@@ -2079,6 +2090,15 @@ public abstract class SyncTaskProcessorBase
 
         Log.Information("ResolveCrossPageReferences: Completed cross-page reference resolution for {Count} CSOs",
             totalCrossPagesToResolve);
+
+        // Memory snapshot at phase exit, with deltas against the entry snapshot.
+        var managedBytesAtEnd = GC.GetTotalMemory(forceFullCollection: false);
+        var workingSetBytesAtEnd = Environment.WorkingSet;
+        Log.Information("ResolveCrossPageReferences: Memory at phase exit — Managed: {ManagedMb:F1} MB (Δ {ManagedDeltaMb:+0.0;-0.0;0.0} MB), WorkingSet: {WorkingSetMb:F1} MB (Δ {WorkingSetDeltaMb:+0.0;-0.0;0.0} MB)",
+            managedBytesAtEnd / (1024.0 * 1024.0),
+            (managedBytesAtEnd - managedBytesAtStart) / (1024.0 * 1024.0),
+            workingSetBytesAtEnd / (1024.0 * 1024.0),
+            (workingSetBytesAtEnd - workingSetBytesAtStart) / (1024.0 * 1024.0));
 
         _unresolvedCrossPageReferences.Clear();
 
