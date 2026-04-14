@@ -8,6 +8,14 @@ JIM provides a comprehensive REST API for programmatic access to all identity ma
 
 The API is served from the same application as the web UI; there is no separate service to deploy.
 
+!!! tip "Interactive API Reference"
+
+    For a complete, searchable endpoint reference with request/response schemas and an interactive "Try It" feature, see the **[Interactive API Reference](reference/)** (generated from the latest release).
+
+    The same reference is also available on every JIM instance at `/api/reference` — ideal for air-gapped environments.
+
+    The pages below focus on setup, authentication, and end-to-end examples; use the interactive reference for detailed endpoint specifications.
+
 ## Quick Start
 
 **Base URL:**
