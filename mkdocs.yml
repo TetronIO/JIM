@@ -205,6 +205,7 @@ nav:
           - api/system/index.md
   - PowerShell Module:
       - powershell/index.md
+      - System: powershell/system.md
       - Connection: powershell/connection.md
       - Connected Systems: powershell/connected-systems.md
       - Run Profiles: powershell/run-profiles.md
