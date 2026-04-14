@@ -86,24 +86,29 @@ The File Connector imports from and exports to **CSV and delimited text files**.
 - Auto-confirm export (changes are written directly to the output file)
 - Suitable for integrating with systems that produce flat-file extracts (HR exports, batch feeds, etc.)
 
-### JIM LDAP Connector (Active Directory)
+### JIM LDAP Connector
 
-The LDAP Connector supports **Active Directory** and **Samba AD** directories. It provides:
+The LDAP Connector is a single, unified connector for **LDAP-compliant directories**. Supported directory servers include:
 
-- Full import and export (create, update, delete)
+- **Microsoft Active Directory**
+- **Samba AD**
+- **OpenLDAP**
+- **389 Directory Server** and other RFC 4512-compliant directories
+
+The connector adapts its behaviour to the target directory type (for example, using Active Directory-specific features where available, or RFC-standard behaviour for generic directories). Key capabilities:
+
+- Full and delta import
+- Full export (create, update, delete)
 - SSL/TLS and StartTLS support
+- Partition and container discovery
 - Container creation during provisioning
-- Schema discovery for available object types and attributes
-- Active Directory-specific features (userAccountControl, FILETIME dates, etc.)
-
-### JIM LDAP Connector (OpenLDAP / RFC 4512)
-
-The OpenLDAP Connector supports **OpenLDAP**, **389 Directory Server**, and other **RFC 4512-compliant** directories. It includes:
-
+- Schema discovery for **both structural and auxiliary object classes**, so objects whose primary class is auxiliary are first-class citizens
 - Parallel imports for large directories
-- Delta import via the accesslog overlay
-- Partition-scoped imports
-- Full export support (create, update, delete)
+- Delta import via the accesslog overlay (OpenLDAP and compatible directories)
+- Active Directory-specific features (`userAccountControl`, FILETIME dates, etc.)
+
+!!! tip "Auxiliary classes are fully supported"
+    Some traditional ILM solutions only discover **structural** object classes, which forces customers whose directories rely on **auxiliary** classes as primary classes to build and maintain their own connectors at significant cost. JIM handles this out of the box: enable **Include Auxiliary Classes** on the LDAP connector and auxiliary classes, along with any attributes they contribute, are brought into schema discovery alongside structural classes.
 
 ## Planned Connectors
 
