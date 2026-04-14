@@ -132,6 +132,10 @@
 
         # Security
         'Get-JIMRole',
+        'Get-JIMRoleMember',
+        'Get-JIMMetaverseObjectRole',
+        'Add-JIMRoleMember',
+        'Remove-JIMRoleMember',
 
         # Data Generation
         'Get-JIMExampleDataSet',
