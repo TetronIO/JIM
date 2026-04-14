@@ -5,6 +5,7 @@
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject IUserPreferenceService PreferenceService
+@inject ISnackbar Snackbar
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -25,6 +26,7 @@
           Filter="new Func<PredefinedSearchHeader, bool>(FilterFunc)"
           OnRowClick="HandleRowClick"
           RowClass="cursor-pointer"
+          RowStyleFunc="@(new Func<PredefinedSearchHeader, int, string>(RowStyleFunc))"
           Loading="@_loading"
           LoadingProgressColor="Color.Primary">
     <ToolBarContent>
@@ -70,6 +72,11 @@
             </MudTableSortLabel>
         </MudTh>
         <MudTh>
+            <MudTableSortLabel SortBy="new Func<PredefinedSearchHeader, object>(x => x.IsEnabled)">
+                <MudText Typo="Typo.button">Enabled</MudText>
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
             <MudTableSortLabel SortBy="new Func<PredefinedSearchHeader, object>(x => x.MetaverseAttributeCount)">
                 <MudText Typo="Typo.button">Attributes</MudText>
             </MudTableSortLabel>
@@ -88,6 +95,10 @@
         <MudTd DataLabel="Object Type">@context.MetaverseObjectTypeName</MudTd>
         <MudTd DataLabel="Default?">@(context.IsDefaultForMetaverseObjectType ? "Yes" : "No")</MudTd>
         <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
+        <MudTd DataLabel="Enabled" @onclick:stopPropagation="true">
+            <MudSwitch T="bool" Value="context.IsEnabled" Color="Color.Success"
+                       ValueChanged="async (bool val) => await ToggleEnabledAsync(context, val)" />
+        </MudTd>
         <MudTd DataLabel="Attributes">@context.MetaverseAttributeCount</MudTd>
         <MudTd DataLabel="Created">
             <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
@@ -151,5 +162,33 @@
     {
         if (args.Item != null)
             NavManager.NavigateTo($"/admin/predefined-searches/{args.Item.Uri}");
+    }
+
+    private async Task ToggleEnabledAsync(PredefinedSearchHeader header, bool isEnabled)
+    {
+        try
+        {
+            using var jim = JimFactory.Create();
+            var core = await jim.Search.GetPredefinedSearchCoreAsync(header.Id);
+            if (core == null)
+            {
+                Snackbar.Add("Predefined search no longer exists.", Severity.Error);
+                return;
+            }
+
+            core.IsEnabled = isEnabled;
+            await jim.Search.UpdatePredefinedSearchAsync(core);
+            header.IsEnabled = isEnabled;
+            Snackbar.Add($"Predefined search '{header.Name}' {(isEnabled ? "enabled" : "disabled")}.", Severity.Success);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add($"Failed to update predefined search: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private static string RowStyleFunc(PredefinedSearchHeader header, int index)
+    {
+        return header.IsEnabled ? "" : "opacity: 0.5;";
     }
 }

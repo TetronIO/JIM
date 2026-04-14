@@ -17,6 +17,8 @@ public class PredefinedSearchHeader
 
     public bool BuiltIn { get; set; }
 
+    public bool IsEnabled { get; set; }
+
     public int MetaverseAttributeCount { get; set; }
 
     public DateTime Created { get; set; } = DateTime.UtcNow;

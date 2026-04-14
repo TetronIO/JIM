@@ -484,7 +484,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             LogSanitiser.Sanitise(predefinedSearchUri), pagination.Page, pagination.PageSize, LogSanitiser.Sanitise(search));
 
         var predefinedSearch = await _application.Search.GetPredefinedSearchAsync(predefinedSearchUri);
-        if (predefinedSearch == null)
+        if (predefinedSearch == null || !predefinedSearch.IsEnabled)
             return NotFound(ApiErrorResponse.NotFound($"Predefined search '{predefinedSearchUri}' not found."));
 
         var result = await _application.Metaverse.GetMetaverseObjectHeadersPagedAsync(

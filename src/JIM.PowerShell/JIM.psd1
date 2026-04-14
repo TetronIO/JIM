@@ -102,6 +102,10 @@
         'Get-JIMActivity',
         'Get-JIMActivityStats',
 
+        # Predefined Searches
+        'Get-JIMPredefinedSearch',
+        'Set-JIMPredefinedSearch',
+
         # Metaverse
         'Get-JIMMetaverseObject',
         'Search-JIMMetaverseObject',
