@@ -210,41 +210,36 @@ $crossDomainHeaders = @(
 # Write header row only (file connector will append exports)
 $crossDomainHeaders -join "," | Set-Content -Path $crossDomainCsvPath -Encoding UTF8
 
-# Grant world write permission so the JIM worker container (running as non-root 'app' user, UID 1654)
-# can write to this file when performing exports. Host files owned by the devcontainer 'vscode' user
-# (UID 1000) with default 0644 permissions are otherwise read-only to the container user.
-# Production deployments use customer-managed volumes and do not hit this issue.
-if (-not $IsWindows) {
-    chmod 666 $crossDomainCsvPath
-}
-
 Write-Host "  ✓ Created $crossDomainCsvPath (empty export target)" -ForegroundColor Green
 
-# Copy to Docker volume (if running in container environment)
-Write-TestStep "Step 5" "Copying files to Docker volume"
+# Copy to the jim-connector-files-volume named Docker volume via jim.worker.
+# jim.worker is always running during integration tests and has the volume mounted
+# at /connector-files. Docker-managed volume ownership eliminates the UID mismatch
+# between the host user and the container's non-root 'app' user (UID 1654).
+Write-TestStep "Step 5" "Copying files to jim-connector-files-volume"
 
 try {
-    # Check if samba-ad-primary container exists and is running
-    $containerRunning = docker ps --filter "name=samba-ad-primary" --filter "status=running" --format "{{.Names}}" 2>$null
+    $containerRunning = docker ps --filter "name=jim.worker" --filter "status=running" --format "{{.Names}}" 2>$null
 
-    if ($containerRunning -eq "samba-ad-primary") {
-        Write-Host "  Copying CSV files to container volume..." -ForegroundColor Gray
+    if ($containerRunning -eq "jim.worker") {
+        Write-Host "  Ensuring /connector-files/test-data subdirectory exists..." -ForegroundColor Gray
+        docker exec jim.worker mkdir -p /connector-files/test-data 2>$null
 
-        # Copy files into the shared volume via container
-        docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
-        docker cp $deptCsvPath samba-ad-primary:/connector-files/departments.csv
-        docker cp $trainingCsvPath samba-ad-primary:/connector-files/training-records.csv
-        docker cp $crossDomainCsvPath samba-ad-primary:/connector-files/cross-domain-users.csv
+        Write-Host "  Copying CSV files to volume via jim.worker..." -ForegroundColor Gray
+        docker cp $csvPath jim.worker:/connector-files/test-data/hr-users.csv
+        docker cp $deptCsvPath jim.worker:/connector-files/test-data/departments.csv
+        docker cp $trainingCsvPath jim.worker:/connector-files/test-data/training-records.csv
+        docker cp $crossDomainCsvPath jim.worker:/connector-files/test-data/cross-domain-users.csv
 
-        Write-Host "  ✓ Files copied to /connector-files in container" -ForegroundColor Green
+        Write-Host "  ✓ Files copied to /connector-files/test-data in jim-connector-files-volume" -ForegroundColor Green
     }
     else {
-        Write-Host "  ⚠ Container not running, files only in local directory" -ForegroundColor Yellow
-        Write-Host "    Start containers and re-run to copy to volume" -ForegroundColor Yellow
+        Write-Host "  ⚠ jim.worker not running, files only in local directory" -ForegroundColor Yellow
+        Write-Host "    Start JIM stack and re-run to copy to the volume" -ForegroundColor Yellow
     }
 }
 catch {
-    Write-Host "  ⚠ Could not copy to container: $_" -ForegroundColor Yellow
+    Write-Host "  ⚠ Could not copy to jim.worker: $_" -ForegroundColor Yellow
 }
 
 # Summary

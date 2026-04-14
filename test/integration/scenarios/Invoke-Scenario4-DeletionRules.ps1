@@ -196,7 +196,7 @@ function Invoke-ProvisionUser {
     }
     $csv = @($csv) + $newUser
     $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
-        # No docker cp needed — test-data is bind-mounted into JIM containers
+    Copy-CsvToConnectorFiles -SourcePath $csvPath
     Write-Host "  Added $SamAccountName to CSV" -ForegroundColor Gray
 
     # Import + Sync + Export + Confirm
@@ -264,7 +264,7 @@ function Invoke-RemoveUserFromSource {
     $csv = Import-Csv $csvPath
     $csv = @($csv | Where-Object { $_.samAccountName -ne $SamAccountName })
     $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
-        # No docker cp needed — test-data is bind-mounted into JIM containers
+    Copy-CsvToConnectorFiles -SourcePath $csvPath
     Write-Host "  Removed $SamAccountName from CSV" -ForegroundColor Gray
 
     if ($FullCycle) {
@@ -339,7 +339,7 @@ function Invoke-ProvisionTrainingData {
     }
     $csv = @($csv) + $newRecord
     $csv | Export-Csv -Path $trainingCsvPath -NoTypeInformation -Encoding UTF8
-        # No docker cp needed — test-data is bind-mounted into JIM containers
+    Copy-CsvToConnectorFiles -SourcePath $trainingCsvPath
     Write-Host "  Added training record for $SamAccountName to Training CSV" -ForegroundColor Gray
 
     # Training Import + Sync (joins Training CSO to existing MVO)
@@ -394,7 +394,7 @@ function Invoke-RemoveTrainingData {
     $csv = Import-Csv $trainingCsvPath
     $csv = @($csv | Where-Object { $_.employeeId -ne $EmployeeId })
     $csv | Export-Csv -Path $trainingCsvPath -NoTypeInformation -Encoding UTF8
-        # No docker cp needed — test-data is bind-mounted into JIM containers
+    Copy-CsvToConnectorFiles -SourcePath $trainingCsvPath
     Write-Host "  Removed training record for $EmployeeId from Training CSV" -ForegroundColor Gray
 
     # Training Import + Sync (obsoletes Training CSO, triggers recall if configured)
@@ -585,8 +585,8 @@ try {
     # Copy to container volume
     $csvPath = "$testDataPath/hr-users.csv"
     $trainingCsvPath = "$testDataPath/training-records.csv"
-        # No docker cp needed — test-data is bind-mounted into JIM containers
-        # No docker cp needed — test-data is bind-mounted into JIM containers
+    Copy-CsvToConnectorFiles -SourcePath $csvPath
+    Copy-CsvToConnectorFiles -SourcePath $trainingCsvPath
     Write-Host "  CSVs initialised (HR + Training, 1 baseline user each)" -ForegroundColor Green
 
     # Clean up test-specific directory users from previous test runs

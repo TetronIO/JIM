@@ -639,7 +639,7 @@ try {
         Write-Host "  ✓ Changed $moverSamAccountName title to 'Senior Developer'" -ForegroundColor Green
 
         # Copy updated CSV
-        docker cp $csvPath "$($DirectoryConfig.ContainerName):/connector-files/hr-users.csv"
+        Copy-CsvToConnectorFiles -SourcePath $csvPath
 
         # Trigger sync sequence with progress output
         Write-Host "Triggering sync sequence:" -ForegroundColor Gray
@@ -703,7 +703,7 @@ try {
         Write-Host "  ✓ Changed $moverSamAccountName display name to '$newDisplayName'" -ForegroundColor Green
 
         # Copy updated CSV
-        docker cp $csvPath "$($DirectoryConfig.ContainerName):/connector-files/hr-users.csv"
+        Copy-CsvToConnectorFiles -SourcePath $csvPath
 
         # Trigger sync sequence with progress output
         Write-Host "Triggering sync sequence:" -ForegroundColor Gray
@@ -785,7 +785,7 @@ try {
         Write-Host "  ✓ Changed $moverSamAccountName department to Finance (triggers OU move)" -ForegroundColor Green
 
         # Copy updated CSV
-        docker cp $csvPath "$($DirectoryConfig.ContainerName):/connector-files/hr-users.csv"
+        Copy-CsvToConnectorFiles -SourcePath $csvPath
 
         # Trigger sync sequence with progress output
         Write-Host "Triggering sync sequence:" -ForegroundColor Gray
@@ -876,7 +876,7 @@ try {
         Write-Host "  ✓ Changed $disableSamAccountName status to 'Archived'" -ForegroundColor Green
 
         # Copy updated CSV
-        docker cp $csvPath "$($DirectoryConfig.ContainerName):/connector-files/hr-users.csv"
+        Copy-CsvToConnectorFiles -SourcePath $csvPath
 
         # Trigger sync sequence with progress output
         Write-Host "Triggering sync sequence:" -ForegroundColor Gray
@@ -950,7 +950,7 @@ try {
         Write-Host "  ✓ Changed $enableSamAccountName status to 'Active'" -ForegroundColor Green
 
         # Copy updated CSV
-        docker cp $csvPath "$($DirectoryConfig.ContainerName):/connector-files/hr-users.csv"
+        Copy-CsvToConnectorFiles -SourcePath $csvPath
 
         # Trigger sync sequence with progress output
         Write-Host "Triggering sync sequence:" -ForegroundColor Gray
@@ -1011,7 +1011,7 @@ try {
         Write-Host "  ✓ Removed $userToRemove from CSV" -ForegroundColor Green
 
         # Copy updated CSV
-        docker cp $csvPath "$($DirectoryConfig.ContainerName):/connector-files/hr-users.csv"
+        Copy-CsvToConnectorFiles -SourcePath $csvPath
 
         # Trigger sync sequence with progress output
         Write-Host "Triggering sync sequence:" -ForegroundColor Gray
@@ -1090,7 +1090,7 @@ try {
         }
         $csv = @($csv) + $newUser
         $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
-        docker cp $csvPath "$($DirectoryConfig.ContainerName):/connector-files/hr-users.csv"
+        Copy-CsvToConnectorFiles -SourcePath $csvPath
 
         # Initial sync - uses Delta Sync for efficiency (baseline already established)
         Write-Host "  Initial sync (provisioning new user):" -ForegroundColor Gray
@@ -1116,7 +1116,7 @@ try {
             Write-Host "  Removing user (simulating quit)..." -ForegroundColor Gray
             $csvContent = Get-Content $csvPath | Where-Object { $_ -notmatch "test.reconnect" }
             $csvContent | Set-Content $csvPath
-            docker cp $csvPath "$($DirectoryConfig.ContainerName):/connector-files/hr-users.csv"
+            Copy-CsvToConnectorFiles -SourcePath $csvPath
 
             # Only need CSV import/sync for removal - no LDAP export needed
             Write-Host "    [1/2] CSV Full Import..." -ForegroundColor DarkGray
@@ -1142,7 +1142,7 @@ try {
             $csv = Import-Csv $csvPath
             $csv = @($csv) + $newUser
             $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
-            docker cp $csvPath "$($DirectoryConfig.ContainerName):/connector-files/hr-users.csv"
+            Copy-CsvToConnectorFiles -SourcePath $csvPath
 
             Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus | Out-Null
             Write-Host "  ✓ Restore sync completed" -ForegroundColor Green
