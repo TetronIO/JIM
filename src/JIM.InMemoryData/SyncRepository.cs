@@ -1118,29 +1118,22 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(results);
     }
 
-    public Task PersistPendingMvoChangeAttributesAsync(List<MetaverseObjectChange> mvoChanges)
+    private void AppendAttributeChildrenToExistingMvoChange(MetaverseObjectChange incoming)
     {
-        // In-memory model: the existing MvoChange is already in _mvoChanges (keyed by Id).
-        // Append the new AttributeChanges to the existing record and assign ids for children.
-        foreach (var incoming in mvoChanges)
+        if (!_mvoChanges.TryGetValue(incoming.Id, out var existing))
         {
-            if (!_mvoChanges.TryGetValue(incoming.Id, out var existing))
-            {
-                throw new InvalidOperationException(
-                    $"PersistPendingMvoChangeAttributesAsync: no existing MvoChange with Id {incoming.Id}");
-            }
-
-            foreach (var attrChange in incoming.AttributeChanges)
-            {
-                if (attrChange.Id == Guid.Empty)
-                    attrChange.Id = Guid.NewGuid();
-                foreach (var valueChange in attrChange.ValueChanges.Where(vc => vc.Id == Guid.Empty))
-                    valueChange.Id = Guid.NewGuid();
-                existing.AttributeChanges.Add(attrChange);
-            }
+            throw new InvalidOperationException(
+                $"PersistPendingMvoChangesAsync (append): no existing MvoChange with Id {incoming.Id}");
         }
 
-        return Task.CompletedTask;
+        foreach (var attrChange in incoming.AttributeChanges)
+        {
+            if (attrChange.Id == Guid.Empty)
+                attrChange.Id = Guid.NewGuid();
+            foreach (var valueChange in attrChange.ValueChanges.Where(vc => vc.Id == Guid.Empty))
+                valueChange.Id = Guid.NewGuid();
+            existing.AttributeChanges.Add(attrChange);
+        }
     }
 
     public void DetachRpeisFromChangeTracker(List<ActivityRunProfileExecutionItem> rpeis)
@@ -1288,9 +1281,11 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
-    public Task PersistPendingMvoChangesAsync(List<MetaverseObjectChange> mvoChanges)
+    public Task PersistPendingMvoChangesAsync(
+        List<MetaverseObjectChange> newChanges,
+        List<MetaverseObjectChange> attributeAppendsToExistingChanges)
     {
-        foreach (var change in mvoChanges)
+        foreach (var change in newChanges)
         {
             if (change.Id == Guid.Empty)
                 change.Id = Guid.NewGuid();
@@ -1314,6 +1309,9 @@ public class SyncRepository : ISyncRepository
             if (change.MetaverseObject != null && !change.MetaverseObject.Changes.Contains(change))
                 change.MetaverseObject.Changes.Add(change);
         }
+
+        foreach (var append in attributeAppendsToExistingChanges)
+            AppendAttributeChildrenToExistingMvoChange(append);
 
         return Task.CompletedTask;
     }

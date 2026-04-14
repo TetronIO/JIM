@@ -449,18 +449,6 @@ public interface ISyncRepository
         Guid activityId, IReadOnlyCollection<Guid> csoIds);
 
     /// <summary>
-    /// Persists only the attribute + value rows of pending MVO changes whose parent
-    /// MetaverseObjectChange record already exists in the database (i.e. from an earlier
-    /// page flush). Used by cross-page reference resolution after merging reference
-    /// attribute flows into an already-persisted Projected/Joined RPEI.
-    ///
-    /// Each change in <paramref name="mvoChanges"/> must already have its <c>Id</c> set
-    /// to the existing parent's id; the method skips the parent INSERT and writes only the
-    /// attribute and attribute-value children via COPY.
-    /// </summary>
-    Task PersistPendingMvoChangeAttributesAsync(List<MetaverseObjectChange> mvoChanges);
-
-    /// <summary>
     /// Detaches RPEIs from the EF change tracker so they are not persisted by subsequent
     /// SaveChangesAsync calls. Call after raw SQL bulk insert has persisted them.
     /// </summary>
@@ -549,11 +537,23 @@ public interface ISyncRepository
     Task CreateMetaverseObjectChangeDirectAsync(MetaverseObjectChange change);
 
     /// <summary>
-    /// Persists pending MVO change records (and their attribute and value children) via raw SQL.
+    /// Persists pending MVO change records in a single outer transaction. Handles both sets
+    /// in one round-trip so the pair is atomic and the per-flush BEGIN/COMMIT overhead is halved
+    /// when the cross-page phase produces both:
+    /// <list type="bullet">
+    ///   <item><paramref name="newChanges"/> — new parent <c>MetaverseObjectChange</c> rows plus
+    ///     their attribute and value children (written via raw SQL COPY).</item>
+    ///   <item><paramref name="attributeAppendsToExistingChanges"/> — attribute and value children
+    ///     appended to parents already persisted in an earlier page flush. Each change must have
+    ///     its <c>Id</c> set to the existing parent's id; the parent row itself is not re-inserted
+    ///     (respecting <c>IX_MetaverseObjectChanges_ActivityRunProfileExecutionItemId</c>).</item>
+    /// </list>
     /// Used by sync processors to persist changes collected during page processing, bypassing the
     /// EF change tracker which is cleared at page boundaries.
     /// </summary>
-    Task PersistPendingMvoChangesAsync(List<MetaverseObjectChange> mvoChanges);
+    Task PersistPendingMvoChangesAsync(
+        List<MetaverseObjectChange> newChanges,
+        List<MetaverseObjectChange> attributeAppendsToExistingChanges);
 
     #endregion
 

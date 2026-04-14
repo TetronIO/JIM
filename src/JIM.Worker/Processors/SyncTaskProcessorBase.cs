@@ -2520,24 +2520,21 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Persists pending MVO change records via raw SQL bulk insert.
+    /// Persists pending MVO change records via raw SQL bulk insert in a single outer transaction.
     /// Must be called after CreatePendingMvoChangeObjectsAsync and before ClearChangeTracker.
     /// Handles both initial-page inserts (full parent + child rows) and cross-page-merge
-    /// appends (child rows only under already-persisted parents).
+    /// appends (child rows only under already-persisted parents) atomically.
     /// </summary>
     protected async Task FlushPendingMvoChangesAsync()
     {
-        if (_pendingMvoChangesToPersist.Count > 0)
-        {
-            await _syncRepo.PersistPendingMvoChangesAsync(_pendingMvoChangesToPersist);
-            _pendingMvoChangesToPersist.Clear();
-        }
+        if (_pendingMvoChangesToPersist.Count == 0 && _pendingMvoChangeAttributesToPersist.Count == 0)
+            return;
 
-        if (_pendingMvoChangeAttributesToPersist.Count > 0)
-        {
-            await _syncRepo.PersistPendingMvoChangeAttributesAsync(_pendingMvoChangeAttributesToPersist);
-            _pendingMvoChangeAttributesToPersist.Clear();
-        }
+        await _syncRepo.PersistPendingMvoChangesAsync(
+            _pendingMvoChangesToPersist,
+            _pendingMvoChangeAttributesToPersist);
+        _pendingMvoChangesToPersist.Clear();
+        _pendingMvoChangeAttributesToPersist.Clear();
     }
 
     /// <summary>
