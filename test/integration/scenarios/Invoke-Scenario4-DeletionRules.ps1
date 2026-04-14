@@ -208,7 +208,7 @@ function Invoke-ProvisionUser {
     Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Sync ($TestName provision)"
 
     $exportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPExportProfileId -Wait -PassThru
-    Assert-ActivitySuccess -ActivityId $exportResult.activityId -Name "LDAP Export ($TestName provision)"
+    Assert-ExportSuccess -ActivityId $exportResult.activityId -Name "LDAP Export ($TestName provision)"
 
     # Confirm export with LDAP import
     $ldapImportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPFullImportProfileId -Wait -PassThru
@@ -281,7 +281,7 @@ function Invoke-RemoveUserFromSource {
 
         # Step 3: LDAP Export - deprovisions user from AD
         $exportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPExportProfileId -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $exportResult.activityId -Name "LDAP Export ($TestName removal)"
+        Assert-ExportSuccess -ActivityId $exportResult.activityId -Name "LDAP Export ($TestName removal)"
 
         # Wait for AD replication
         Start-Sleep -Seconds 5
@@ -352,7 +352,7 @@ function Invoke-ProvisionTrainingData {
 
     # LDAP Export to push Training attributes (description) to AD
     $exportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPExportProfileId -Wait -PassThru
-    Assert-ActivitySuccess -ActivityId $exportResult.activityId -Name "LDAP Export ($TestName training)"
+    Assert-ExportSuccess -ActivityId $exportResult.activityId -Name "LDAP Export ($TestName training)"
 
     # Confirming import: updates the LDAP CSO attribute cache with exported Training values.
     # Without this, the no-net-change detection during recall would see the CSO as having no
@@ -781,7 +781,7 @@ try {
         # Assert 5: Run LDAP Export and verify AD user is still functional with Training attrs cleared
         Write-Host "  Running LDAP export to apply recall exports..." -ForegroundColor Gray
         $recallExport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $recallExport.activityId -Name "LDAP Export (Test1 recall)"
+        Assert-ExportSuccess -ActivityId $recallExport.activityId -Name "LDAP Export (Test1 recall)"
 
         Start-Sleep -Seconds 3
 
@@ -968,7 +968,7 @@ try {
             # Assert 3: Run LDAP export to verify deprovisioning pending export was created
             Write-Host "  Running LDAP export to deprovision orphaned AD user..." -ForegroundColor Gray
             $cleanupExport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $cleanupExport.activityId -Name "LDAP Export (Test3 deprovisioning)"
+            Assert-ExportSuccess -ActivityId $cleanupExport.activityId -Name "LDAP Export (Test3 deprovisioning)"
 
             # Run confirming import to reconcile the Exported Delete PE.
             # Without this, the Delete PE remains in Exported status and accumulates
@@ -1203,7 +1203,7 @@ try {
         # Assert 5: Run LDAP Export and verify AD user is still functional with Training attrs cleared
         Write-Host "  Running LDAP export to apply recall exports..." -ForegroundColor Gray
         $recallExport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $recallExport.activityId -Name "LDAP Export (Test5 recall)"
+        Assert-ExportSuccess -ActivityId $recallExport.activityId -Name "LDAP Export (Test5 recall)"
 
         Start-Sleep -Seconds 3
 

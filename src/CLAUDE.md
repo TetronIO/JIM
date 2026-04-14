@@ -51,7 +51,13 @@
 **Exception Handling:**
 - NEVER use generic `catch` or `catch (Exception)` clauses; always catch a specific exception type
 - For JS interop retry patterns in `OnAfterRenderAsync` (e.g. loading user preferences), catch `InvalidOperationException` specifically; this is the exception Blazor throws when JS interop is invoked before the runtime is ready
-- Do NOT use `?.` on a variable that has already been null-checked with an early return; the null-conditional is redundant and triggers code quality warnings
+
+**Code Quality (github-code-quality / CodeQL):**
+
+CodeQL runs on every PR via the github-code-quality bot and comments on rule violations. Write code that avoids its common triggers up front rather than fixing after review:
+
+- **Unused loop variables**: do not write `foreach (var x in collection)` when `x` is never read. CodeQL flags this as "Useless assignment to local variable" (`cs/useless-assignment-to-local`). Use `for (var i = 0; i < collection.Count; i++)` when you only need iteration count, or refactor to actually use the variable.
+- **Redundant null-conditional**: do not use `?.` on a variable that has already been null-checked with an early return. The `?.` is redundant once control flow guarantees non-null, and CodeQL flags it.
 
 **Nullable Dereference in Razor:**
 - When accessing a nullable `.Value` property in Razor markup (e.g. `context.LastUpdated.Value`), capture it into a local variable inside the `@if (x.HasValue)` block: `var lastUpdated = context.LastUpdated.Value;` then use the local variable in markup expressions. This avoids repeated nullable dereference warnings from code analysis.

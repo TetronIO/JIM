@@ -210,6 +210,14 @@ $crossDomainHeaders = @(
 # Write header row only (file connector will append exports)
 $crossDomainHeaders -join "," | Set-Content -Path $crossDomainCsvPath -Encoding UTF8
 
+# Grant world write permission so the JIM worker container (running as non-root 'app' user, UID 1654)
+# can write to this file when performing exports. Host files owned by the devcontainer 'vscode' user
+# (UID 1000) with default 0644 permissions are otherwise read-only to the container user.
+# Production deployments use customer-managed volumes and do not hit this issue.
+if (-not $IsWindows) {
+    chmod 666 $crossDomainCsvPath
+}
+
 Write-Host "  ✓ Created $crossDomainCsvPath (empty export target)" -ForegroundColor Green
 
 # Copy to Docker volume (if running in container environment)

@@ -1133,6 +1133,46 @@ function Assert-ActivitySuccess {
     throw "Activity '$Name' did not complete successfully. Status: $status (ActivityId: $ActivityId)"
 }
 
+function Assert-ExportSuccess {
+    <#
+    .SYNOPSIS
+        Assert that an export Activity completed successfully with no export failures.
+
+    .DESCRIPTION
+        Validates both the activity status (must be 'Complete') AND the export outcome
+        (no failures reported in the activity message). This catches cases where the
+        activity status is 'Complete' but exports actually failed silently.
+
+    .PARAMETER ActivityId
+        The Activity ID (GUID) to validate
+
+    .PARAMETER Name
+        A friendly name for the operation (used in error messages)
+
+    .EXAMPLE
+        Assert-ExportSuccess -ActivityId $exportResult.activityId -Name "LDAP Export (Joiner)"
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ActivityId,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Name
+    )
+
+    # First validate activity status
+    Assert-ActivitySuccess -ActivityId $ActivityId -Name $Name
+
+    # Then validate no export failures in the activity message
+    $activity = Get-JIMActivity -Id $ActivityId
+    if ($activity.message -match '(\d+) failed' -and [int]$Matches[1] -gt 0) {
+        Write-Host "  ✗ $Name had $($Matches[1]) export failure(s)" -ForegroundColor Red
+        Write-Host "    Activity message: $($activity.message)" -ForegroundColor Red
+        Write-Host "    Activity ID: $ActivityId" -ForegroundColor Red
+        throw "Export '$Name' had $($Matches[1]) failure(s). Activity message: $($activity.message) (ActivityId: $ActivityId)"
+    }
+}
+
 function Assert-ActivityHasChanges {
     <#
     .SYNOPSIS

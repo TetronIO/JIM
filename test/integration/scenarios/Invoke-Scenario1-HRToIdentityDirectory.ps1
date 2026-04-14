@@ -133,7 +133,7 @@ function Invoke-SyncSequence {
     $exportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPExportProfileId -Wait -PassThru
     $results.Steps += @{ Name = "LDAP Export"; ActivityId = $exportResult.activityId }
     if ($ValidateActivityStatus) {
-        Assert-ActivitySuccess -ActivityId $exportResult.activityId -Name "LDAP Export"
+        Assert-ExportSuccess -ActivityId $exportResult.activityId -Name "LDAP Export"
     }
 
     # Wait for AD replication
@@ -163,7 +163,7 @@ function Invoke-SyncSequence {
         $crossDomainExportResult = Start-JIMRunProfile -ConnectedSystemId $Config.CrossDomainSystemId -RunProfileId $Config.CrossDomainExportProfileId -Wait -PassThru
         $results.Steps += @{ Name = "Cross-Domain Export"; ActivityId = $crossDomainExportResult.activityId }
         if ($ValidateActivityStatus) {
-            Assert-ActivitySuccess -ActivityId $crossDomainExportResult.activityId -Name "Cross-Domain Export"
+            Assert-ExportSuccess -ActivityId $crossDomainExportResult.activityId -Name "Cross-Domain Export"
         }
 
         # Step 7: Cross-Domain Full Import (confirming export - CSV uses Full Import, not Delta)
@@ -421,7 +421,7 @@ try {
         # Trigger LDAP Export
         Write-Host "Triggering LDAP export..." -ForegroundColor Gray
         $exportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $exportResult.activityId -Name "LDAP Export (Joiner)"
+        Assert-ExportSuccess -ActivityId $exportResult.activityId -Name "LDAP Export (Joiner)"
         # Outcome graph: validate export outcomes (#363 Phase 4b)
         Assert-ActivityItemsHaveOutcomeSummary -ActivityId $exportResult.activityId -Name "LDAP Export (Joiner)" -ExpectedOutcomeType "Exported"
 
@@ -573,7 +573,7 @@ try {
             Write-Host "Exporting to Cross-Domain target..." -ForegroundColor Gray
             Write-Host "  Running Cross-Domain Export..." -ForegroundColor DarkGray
             $crossDomainExportResult = Start-JIMRunProfile -ConnectedSystemId $config.CrossDomainSystemId -RunProfileId $config.CrossDomainExportProfileId -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $crossDomainExportResult.activityId -Name "Cross-Domain Export (Joiner)"
+            Assert-ExportSuccess -ActivityId $crossDomainExportResult.activityId -Name "Cross-Domain Export (Joiner)"
 
             Write-Host "  Running Cross-Domain Full Import (confirming)..." -ForegroundColor DarkGray
             $crossDomainImportResult = Start-JIMRunProfile -ConnectedSystemId $config.CrossDomainSystemId -RunProfileId $config.CrossDomainImportProfileId -Wait -PassThru
