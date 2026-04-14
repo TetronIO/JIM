@@ -197,18 +197,39 @@
   display: block;
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.25));
   transform-origin: 50% 50%;
-  animation: jim-logo-pulse 12s ease-in-out infinite;
+  animation: jim-logo-pulse 48s ease-in-out infinite;
 }
 
+/* Four "pick up, quarter-turn, set down" actions per cycle.
+   Each action takes ~3s, followed by a ~9s rest. The logo never
+   rotates backwards and never moves while at rest. After four
+   actions the cumulative rotation reaches 360° which equals 0°,
+   so the iteration boundary is visually seamless. */
 @keyframes jim-logo-pulse {
-  0%,
-  100% { transform: scale(1)    rotate(0); }
-  8%   { transform: scale(1.15) rotate(0); }       /* grow */
-  17%  { transform: scale(1.15) rotate(90deg); }   /* rotate while enlarged */
-  25%  { transform: scale(1)    rotate(90deg); }   /* shrink, hold rotation */
-  /* 25% -> 100%: long quiet rest. The implicit reset to 0deg at the
-     next iteration is visually invisible because the logo is
-     rotationally symmetric. */
+  /* --- Quarter-turn 1 (0deg -> 90deg) --- */
+  0%   { transform: scale(1)    rotate(0); }
+  2%   { transform: scale(1.15) rotate(0); }       /* grow */
+  4%   { transform: scale(1.15) rotate(90deg); }   /* rotate while enlarged */
+  6%   { transform: scale(1)    rotate(90deg); }   /* shrink, hold rotation */
+  25%  { transform: scale(1)    rotate(90deg); }   /* rest */
+
+  /* --- Quarter-turn 2 (90deg -> 180deg) --- */
+  27%  { transform: scale(1.15) rotate(90deg); }
+  29%  { transform: scale(1.15) rotate(180deg); }
+  31%  { transform: scale(1)    rotate(180deg); }
+  50%  { transform: scale(1)    rotate(180deg); }  /* rest */
+
+  /* --- Quarter-turn 3 (180deg -> 270deg) --- */
+  52%  { transform: scale(1.15) rotate(180deg); }
+  54%  { transform: scale(1.15) rotate(270deg); }
+  56%  { transform: scale(1)    rotate(270deg); }
+  75%  { transform: scale(1)    rotate(270deg); }  /* rest */
+
+  /* --- Quarter-turn 4 (270deg -> 360deg) --- */
+  77%  { transform: scale(1.15) rotate(270deg); }
+  79%  { transform: scale(1.15) rotate(360deg); }
+  81%  { transform: scale(1)    rotate(360deg); }
+  100% { transform: scale(1)    rotate(360deg); }  /* rest; equals rotate(0) */
 }
 
 @media (prefers-reduced-motion: reduce) {
