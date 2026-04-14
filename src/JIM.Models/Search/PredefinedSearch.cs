@@ -85,6 +85,12 @@ public class PredefinedSearch : IAuditable
     public bool BuiltIn { get; set; }
 
     /// <summary>
+    /// Whether this predefined search is enabled and visible to end users.
+    /// Disabled searches remain visible to administrators but are hidden from portal and API consumers.
+    /// </summary>
+    public bool IsEnabled { get; set; } = true;
+
+    /// <summary>
     /// The attribute(s) to return in the result of the search. They can be different for each predefined search.
     /// </summary>
     public List<PredefinedSearchAttribute> Attributes { get; set; } = new();

@@ -46,6 +46,23 @@ public class SearchServer
         return predefinedSearch;
     }
 
+    /// <summary>
+    /// Lightweight retrieval of a predefined search by ID, without the attributes or criteria graph.
+    /// Use for write-path lookups where the expensive graph is not needed.
+    /// </summary>
+    public async Task<PredefinedSearch?> GetPredefinedSearchCoreAsync(int id)
+    {
+        return await Application.Repository.Search.GetPredefinedSearchCoreAsync(id);
+    }
+
+    /// <summary>
+    /// Persists changes to a predefined search entity.
+    /// </summary>
+    public async Task UpdatePredefinedSearchAsync(PredefinedSearch predefinedSearch)
+    {
+        await Application.Repository.Search.UpdatePredefinedSearchAsync(predefinedSearch);
+    }
+
     private static PredefinedSearch PostProcessPredefinedSearch(PredefinedSearch predefinedSearch)
     {
         predefinedSearch.Attributes = predefinedSearch.Attributes.OrderBy(q => q.Position).ToList();

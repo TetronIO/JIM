@@ -102,6 +102,10 @@
         'Get-JIMActivity',
         'Get-JIMActivityStats',
 
+        # Predefined Searches
+        'Get-JIMPredefinedSearch',
+        'Set-JIMPredefinedSearch',
+
         # Metaverse
         'Get-JIMMetaverseObject',
         'Search-JIMMetaverseObject',
@@ -148,7 +152,13 @@
         # Service Settings
         'Get-JIMServiceSetting',
         'Set-JIMServiceSetting',
-        'Reset-JIMServiceSetting'
+        'Reset-JIMServiceSetting',
+
+        # System
+        'Get-JIMHealth',
+        'Get-JIMVersion',
+        'Get-JIMAuthConfig',
+        'Get-JIMUserInfo'
     )
 
     # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.

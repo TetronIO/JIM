@@ -89,6 +89,10 @@ CodeQL runs on every PR via the github-code-quality bot and comments on rule vio
   - Exceptions: UI-specific models may live in `JIM.Web/Models/`, and API DTOs in `JIM.Web/Models/Api/`
   - If a service method needs a result type, create it as its own file in the appropriate `JIM.Models/` subdirectory
 
+**Method Spacing:**
+- Every method must have a blank line above it, or above its XML doc comment block if one is present. The only exception is the first method in a class.
+- This applies to interfaces, abstract classes, and concrete classes alike; XML doc comments attach to the method below, so the blank line goes *above* the comment, not between the comment and the method.
+
 **Naming Patterns:**
 - Methods: `GetObjectAsync`, `CreateMetaverseObjectAsync`
 - Classes: Full descriptive names (avoid abbreviations)
@@ -228,6 +232,16 @@ var schedule = await Jim.Scheduler.GetScheduleAsync(id);
 2. Use DTOs for request/response (in `JIM.Web/Models/Api/`)
 3. Add XML comments for OpenAPI documentation
 4. Test via the Scalar API reference at `/api/reference`
+
+**API Endpoint Identifier Rules (MUST follow):**
+
+These rules apply across the REST API (`JIM.Web/Controllers/Api/`), the application and repository layers that back it, and any PowerShell cmdlet that wraps an endpoint.
+
+- **GET (single-entity retrieval) MUST expose an ID-based signature.** The canonical route is `GET /resource/{id}` (or `{id:int}` / `{id:guid}` as appropriate). The ID is the only identifier guaranteed to be immutable and globally unique across the lifetime of the object.
+- **GET SHOULD also expose a name-based overload** for discoverability, where "name" is whichever human-readable immutable-ish slug the resource uses: `Name` for most objects, `Uri` for `PredefinedSearch`, `Key` for `ServiceSetting`, etc. Route the overload under a distinct path (e.g. `GET /resource/by-uri/{uri}`) so ASP.NET Core routing can disambiguate, or use a different type constraint on `{id}` that prevents the name from matching.
+- **PATCH / PUT / DELETE MUST use the ID-based signature only.** Name-based overloads for write operations are **not allowed**, because the "name" field is itself mutable — a PATCH that renames the resource via a URI-keyed route would invalidate the very key used to locate it, and a DELETE keyed by name is racy against concurrent renames. Clients that only know the name must resolve it to an ID via a GET first.
+- **List endpoints** (`GET /resource`) SHOULD return headers that include the ID, so that automation and PowerShell callers can discover IDs for subsequent PATCH/DELETE calls.
+- These rules apply to the server (`JIM.Application/Servers/`) and repository (`JIM.Data/Repositories/`) layers too: `UpdateXxxAsync` / `DeleteXxxAsync` methods take `int`/`Guid` IDs, never name strings.
 
 **Modifying Database Schema:**
 1. Update entity in `JIM.Models/`
