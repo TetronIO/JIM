@@ -49,15 +49,29 @@ CSOs have a lifecycle:
 
 ## Partitions
 
-A **partition** is a logical division within a connected system. Partitions allow you to scope imports and exports to specific subsets of the external system's data.
+A **partition** is a top-level logical division of a connector space that mirrors a boundary defined by the external system. Partitions exist in JIM primarily to service **LDAP directories** and their **naming contexts** (NCs): the discrete directory trees that an LDAP server hosts. For example, the separate domain partitions within an Active Directory forest, or the distinct naming contexts exposed by an OpenLDAP server, each surface as a partition in JIM.
 
-For example, in an LDAP directory, partitions typically correspond to organisational units (OUs) or containers. You might configure JIM to import only from `OU=Users,DC=company,DC=local` rather than the entire directory tree.
+Most connected systems do not support partitions. A flat file, a SQL table, or a SCIM endpoint has no concept of multiple naming contexts, so its connector space has no partitions. Partitions are primarily a feature of LDAP-style directory connectors, where the directory itself is divided into separate trees.
 
-Partitions are particularly useful for:
+Where they do apply, partitions let JIM scope imports, exports, and sync rules to a specific naming context. Multi-domain directories are a common example; each partition can be targeted by its own run profile or sync rules.
 
-- **Performance** -- importing only the data you need rather than the entire directory
-- **Scoping** -- limiting JIM's visibility to specific parts of a connected system
-- **Multi-tenant scenarios** -- different partitions can be handled by different sync rules
+!!! note "Partitions and OUs are different concepts"
+    Partitions and organisational units (OUs) are distinct. A partition is a top-level boundary on the external system; an OU is a sub-tree *within* a partition and is modelled in JIM as a [container](#containers).
+
+### Containers
+
+Inside a partition, or directly inside the connector space of a connector that does not support partitions, you can have **containers**. Containers are a separate, lower-order logical construct that sits beneath partitions. They exist mainly to support LDAP **organisational units (OUs)** and similar hierarchical groupings.
+
+Containers are what you use to narrow imports and exports to a subset of data. For example, you might configure JIM to import only from `OU=Users,DC=company,DC=local` rather than the entire domain partition.
+
+### Partitions vs. containers at a glance
+
+| Construct | Scope | Example | Available on |
+|-----------|-------|---------|--------------|
+| **Partition** | Top-level boundary defined by the external system; discovered, not invented, by JIM | An Active Directory domain naming context (`DC=company,DC=local`) | LDAP-style connectors only |
+| **Container** | Sub-tree within a partition, or within the connector space of a non-partitioned system | An OU (`OU=Users,DC=company,DC=local`) | Most connectors that expose hierarchy |
+
+In practice, selecting a partition brings an entire naming context into scope, while selecting containers narrows what is imported within that partition (or within the connector space for connectors that have no partitions).
 
 ## Available Connectors
 
