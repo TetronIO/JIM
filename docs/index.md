@@ -1,5 +1,5 @@
 ---
-title: Junctional Identity Manager (JIM)
+title: Junctional Identity Manager Docs
 description: A modern, self-hosted Identity Management system for organisations with complex identity synchronisation requirements.
 template: home.html
 hide:
