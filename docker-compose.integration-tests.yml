@@ -56,7 +56,7 @@ services:
       - samba-primary-data:/usr/local/samba/var
       - samba-primary-private:/usr/local/samba/private
       - samba-primary-etc:/usr/local/samba/etc
-      - test-csv-data:/connector-files
+      - jim-connector-files-volume:/connector-files
     hostname: dc1
     networks:
       - jim-network
@@ -260,7 +260,7 @@ services:
     # No ports exposed - internal to Docker network only for testing
     volumes:
       - openldap-primary-data:/bitnami/openldap
-      - test-csv-data:/connector-files
+      - jim-connector-files-volume:/connector-files
     networks:
       - jim-network
     profiles:
@@ -327,9 +327,11 @@ volumes:
     name: jim-integration-samba-target-private
   samba-target-etc:
     name: jim-integration-samba-target-etc
-  # Other volumes
-  test-csv-data:
-    name: jim-integration-csv-data
+  # Shared File Connector volume — must match the name declared in docker-compose.yml
+  # so jim.worker, jim.web, and the test directory containers all share the same storage.
+  jim-connector-files-volume:
+    name: jim-connector-files-volume
+    external: true
   openldap-primary-data:
     name: jim-integration-openldap-primary-data
   sqlserver-data:

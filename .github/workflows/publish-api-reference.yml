@@ -1,0 +1,53 @@
+name: Publish API Reference
+
+# Manually publish the JIM API Reference to GitHub Pages.
+#
+# This workflow regenerates the OpenAPI document from the current code on main
+# and deploys the MkDocs site, updating the public reference at
+# https://tetronio.github.io/JIM/api/reference/.
+#
+# Use this to:
+#   - Validate the API reference deploy process outside of a release
+#   - Refresh the published reference between releases (e.g. after a docs-only fix)
+#
+# The release workflow automatically updates the reference on every release by
+# extracting the baked-in OpenAPI JSON from the released jim-web Docker image.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Generate and publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - name: Configure Git
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Generate OpenAPI document
+        run: pwsh -File ./scripts/Generate-OpenApiDoc.ps1 -OutputPath "$PWD/docs/api/reference/v1.json"
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: 3.x
+
+      - name: Install MkDocs
+        run: pip install "mkdocs>=1.6,<2" "mkdocs-material>=9.7,<10" "mkdocs-glightbox>=0.4,<1"
+
+      - name: Deploy to GitHub Pages
+        run: mkdocs gh-deploy --force

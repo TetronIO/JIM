@@ -8,7 +8,7 @@
         "**/node_modules/**": true
     },
     "cSpell.words": [
-        "behavior",
+        "Blazor",
         "jsmith",
         "SCIM",
         "secretless",

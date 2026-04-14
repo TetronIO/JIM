@@ -13,9 +13,6 @@ services:
       - LDAPTLS_REQCERT=never
     ports:
       - "5200:80"
-    volumes:
-      # Map repo test data to connector-files/test-data for development
-      - ./test/test-data:/var/connector-files/test-data
     depends_on:
       jim.keycloak:
         condition: service_healthy
@@ -26,7 +23,6 @@ services:
       # OpenLDAP TLS configuration for LDAPS connections
       - LDAPTLS_REQCERT=never
     volumes:
-      - ./test/test-data:/var/connector-files/test-data
       # Expose worker logs for metrics streaming (integration tests)
       - ./test/integration/results/logs/worker:/var/log/jim
 

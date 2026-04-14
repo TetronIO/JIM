@@ -99,8 +99,19 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
     }
 
     /// <summary>
-    /// Get change history count for a Connected System
+    /// Get Change History count for a Connected System
     /// </summary>
+    /// <remarks>
+    /// Returns the total number of Connected System Object (CSO) change records currently retained
+    /// for the specified Connected System. Each record represents a tracked change (create, update,
+    /// or delete) captured during synchronisation, and contributes to the audit trail used for
+    /// reconciliation, compliance reporting, and troubleshooting.
+    ///
+    /// This count reflects records still within the configured history retention period; older
+    /// records are pruned automatically by housekeeping or via the cleanup endpoint. Use this
+    /// endpoint to gauge change volume per Connected System before triggering manual cleanup or
+    /// when monitoring synchronisation activity.
+    /// </remarks>
     /// <param name="connectedSystemId">The Connected System ID.</param>
     /// <returns>Count of CSO change records for the system.</returns>
     /// <response code="200">Returns the count of change records.</response>

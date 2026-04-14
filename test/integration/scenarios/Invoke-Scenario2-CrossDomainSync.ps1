@@ -274,7 +274,7 @@ try {
 
         # Step 3: Export to Target
         $exportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetExportProfile.id -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $exportResult.activityId -Name "Target Export$contextSuffix"
+        Assert-ExportSuccess -ActivityId $exportResult.activityId -Name "Target Export$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
         # Step 4: Confirming Import from Target (tells JIM the export succeeded)
@@ -314,7 +314,7 @@ try {
 
         # Step 3: Export to Source
         $exportResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceExportProfile.id -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $exportResult.activityId -Name "Source Export$contextSuffix"
+        Assert-ExportSuccess -ActivityId $exportResult.activityId -Name "Source Export$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
         # Step 4: Confirming Import from Source (tells JIM the export succeeded)

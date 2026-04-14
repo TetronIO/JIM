@@ -69,6 +69,29 @@ docker compose exec jim.worker bash -c 'cat /app/JIM.PostgresData.dll | tr -d "\
 - Add defensive null checks with logging for navigation properties to catch missing `.Include()` at runtime
 - See `docs/TESTING_STRATEGY.md` for full details and real-world example (Drift Detection bug January 2026)
 
+## Resource Usage Diagnostics
+
+### Per-test memory snapshots (unit + workflow tests)
+
+Every test project references `JIM.TestSupport`, which registers an assembly-level NUnit `TestActionAttribute` that snapshots process memory before and after each test. It's **opt-in** via an environment variable and a no-op otherwise, so normal runs incur no overhead.
+
+To capture:
+```bash
+export JIM_TEST_MEMORY_LOG=/tmp/jim-test-memory.csv
+dotnet test JIM.sln                          # or a specific test project
+```
+
+The CSV is **line-flushed** (`FileOptions.WriteThrough` + explicit flush after each row), so if a run OOMs you still have the last completed row on disk. Columns: `timestamp_utc, assembly, test, phase, managed_mb, working_set_mb, gen0_count, gen1_count, gen2_count`.
+
+Useful for:
+- Finding individual tests that leak memory (`managed_mb` delta between `before` and `after` rows)
+- Correlating Gen2 collections with memory spikes
+- Identifying which assembly dominates `dotnet test JIM.sln` peak RAM (compare `working_set_mb` across assemblies)
+
+### Container stats during integration runs
+
+`Run-IntegrationTests.ps1` automatically starts a `docker stats` sampler in a background job for every scenario invocation. Output goes to `test/integration/results/docker-stats-<scenario>-<template>-<timestamp>.csv`, one row per container per 2s. Covers `jim.worker`, `jim.web`, `jim.scheduler`, `jim.database`, directory containers, etc. Combine with the in-process `LogPageMemoryDiagnostics` lines in the worker log (set `-LogLevel Debug`) for the managed-heap view.
+
 ## Test Data Generation
 
 **Change History UI Test Data:**
