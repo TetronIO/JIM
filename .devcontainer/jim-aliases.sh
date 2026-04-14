@@ -16,6 +16,7 @@ alias jim='echo "JIM Development Aliases:
   jim-test-all       - Run ALL tests (incl. Explicit + Pester)
   jim-test-ps        - Run PowerShell Pester tests
   jim-clean          - dotnet clean && build
+  jim-msbuild-purge  - Kill cached MSBuild worker nodes (reclaims RAM)
   jim-web            - Run JIM.Web locally (sources .env)
   jim-worker         - Run JIM.Worker locally (sources .env)
   jim-scheduler      - Run JIM.Scheduler locally (sources .env)
@@ -106,6 +107,11 @@ jim-signing-status() {
 # .NET local development
 alias jim-compile='dotnet build JIM.sln'
 alias jim-test='dotnet test JIM.sln'
+# Kill cached MSBuild worker nodes that stack up across build/test iterations.
+# `dotnet` spawns these with `/nodemode:1 /nodeReuse:true` and they hang around holding
+# 150-220 MB each; `dotnet build-server shutdown` doesn't touch them. Safe to run at any
+# time — does not affect running JIM.Web/Worker/Scheduler processes or the language server.
+alias jim-msbuild-purge='count=$(pgrep -f "[M]SBuild.dll.*nodemode:1.*nodeReuse:true" 2>/dev/null | wc -l); if [ "$count" -gt 0 ]; then pkill -f "[M]SBuild.dll.*nodemode:1.*nodeReuse:true"; echo "Purged $count MSBuild worker node(s)."; else echo "No cached MSBuild worker nodes to purge."; fi'
 jim-test-all() {
   local dotnet_log pester_log dotnet_rc pester_rc dotnet_summary pester_summary
   dotnet_log=$(mktemp)
