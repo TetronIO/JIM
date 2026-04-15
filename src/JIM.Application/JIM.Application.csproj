@@ -16,6 +16,11 @@
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.Extensions" Version="10.0.5" />
     <PackageReference Include="NCrontab" Version="3.4.0" />
     <PackageReference Include="Serilog" Version="4.3.1" />
+    <!-- Transitive override: pulled in by Microsoft.AspNetCore.DataProtection.Extensions 10.0.5,
+         which carries System.Security.Cryptography.Xml 10.0.5 (CVE-2026-33116, GHSA-37gx-xxp4-5rgx,
+         GHSA-w3x6-4m5h-cxqf). DataProtection 10.0.6 has a regression breaking round-trip MAC
+         validation, so we pin the underlying package to 10.0.6 instead of bumping DataProtection. -->
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.6" />
   </ItemGroup>
 
   <ItemGroup>
