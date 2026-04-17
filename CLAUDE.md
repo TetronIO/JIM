@@ -263,7 +263,13 @@ JIM is deployed in high-trust/assurance customer environments, i.e. healthcare, 
 - Use AES-256-GCM for encryption at rest, minimum TLS 1.2 for transit
 - Use `System.Security.Cryptography.RandomNumberGenerator` for security-sensitive random values (never `System.Random`)
 
-> **Full security development guidelines, OWASP Top 10 details, Secure by Design principles, and compliance mapping:** See `engineering/COMPLIANCE_MAPPING.md` and `engineering/DEVELOPER_GUIDE.md`
+**CVE suppressions (`.trivyignore`):**
+- Only suppress a CVE when it is a verified false positive, already mitigated at the application layer, or genuinely unreachable in JIM's usage
+- Every entry MUST include a comment block with: CVE ID(s), affected component, why Trivy flags it, where the real mitigation lives, and a review date (~3 months out)
+- Never suppress to skip investigation. "Won't fix" dismissals belong in the GitHub Security tab, not in the codebase
+- When touching `.trivyignore` for any reason, re-evaluate entries whose review date has passed
+
+> **Full security development guidelines, OWASP Top 10 details, Secure by Design principles, and compliance mapping:** See `engineering/COMPLIANCE_MAPPING.md` and `engineering/DEVELOPER_GUIDE.md` (section: "Trivy CVE suppressions")
 
 ## Third-Party Dependency Governance
 
