@@ -6,6 +6,18 @@
 
 Always use Context7 MCP when you need library/API documentation, code generation, setup or configuration steps without the user having to explicitly ask. The MudBlazor library ID is `/mudblazor/mudblazor`.
 
+## Project Knowledge vs Personal Memory
+
+When you learn something worth preserving, decide where it lives:
+
+- **CLAUDE.md files** (this file, `src/CLAUDE.md`, `test/CLAUDE.md`, `engineering/CLAUDE.md`, `.devcontainer/CLAUDE.md`, `docs/CLAUDE.md`, `src/JIM.Application/CLAUDE.md`): project conventions, architectural rules, workflows, and domain knowledge that apply to **every contributor** working on JIM — human or AI. These are checked into the repo and travel with the codebase. If a new developer joining the project would benefit from knowing it, it belongs here.
+
+- **Personal memory** (under `~/.claude/projects/.../memory/`): AI-assistant-specific behaviour, the user's personal preferences and working style, and session-scoped context. Memory is per-devcontainer and does not reach other Claude instances or human contributors.
+
+**Default to CLAUDE.md.** If you catch yourself writing a memory entry about a project convention, coding rule, build workflow, naming pattern, or anything a reviewer would expect to enforce, put it in the appropriate CLAUDE.md instead. Memory is a narrow tool for things that genuinely only concern Claude's interaction with one specific user.
+
+When promoting knowledge from memory to CLAUDE.md, delete the memory entry afterwards — duplication causes drift.
+
 ## CRITICAL REQUIREMENTS
 
 **YOU MUST BUILD AND TEST BEFORE EVERY COMMIT AND PR (for .NET code):**
