@@ -6,6 +6,18 @@
 
 Always use Context7 MCP when you need library/API documentation, code generation, setup or configuration steps without the user having to explicitly ask. The MudBlazor library ID is `/mudblazor/mudblazor`.
 
+## Project Knowledge vs Personal Memory
+
+When you learn something worth preserving, decide where it lives:
+
+- **CLAUDE.md files** (this file, `src/CLAUDE.md`, `test/CLAUDE.md`, `engineering/CLAUDE.md`, `.devcontainer/CLAUDE.md`, `docs/CLAUDE.md`, `src/JIM.Application/CLAUDE.md`): project conventions, architectural rules, workflows, and domain knowledge that apply to **every contributor** working on JIM — human or AI. These are checked into the repo and travel with the codebase. If a new developer joining the project would benefit from knowing it, it belongs here.
+
+- **Personal memory** (under `~/.claude/projects/.../memory/`): AI-assistant-specific behaviour, the user's personal preferences and working style, and session-scoped context. Memory is per-devcontainer and does not reach other Claude instances or human contributors.
+
+**Default to CLAUDE.md.** If you catch yourself writing a memory entry about a project convention, coding rule, build workflow, naming pattern, or anything a reviewer would expect to enforce, put it in the appropriate CLAUDE.md instead. Memory is a narrow tool for things that genuinely only concern Claude's interaction with one specific user.
+
+When promoting knowledge from memory to CLAUDE.md, delete the memory entry afterwards — duplication causes drift.
+
 ## CRITICAL REQUIREMENTS
 
 **YOU MUST BUILD AND TEST BEFORE EVERY COMMIT AND PR (for .NET code):**
@@ -263,7 +275,13 @@ JIM is deployed in high-trust/assurance customer environments, i.e. healthcare, 
 - Use AES-256-GCM for encryption at rest, minimum TLS 1.2 for transit
 - Use `System.Security.Cryptography.RandomNumberGenerator` for security-sensitive random values (never `System.Random`)
 
-> **Full security development guidelines, OWASP Top 10 details, Secure by Design principles, and compliance mapping:** See `engineering/COMPLIANCE_MAPPING.md` and `engineering/DEVELOPER_GUIDE.md`
+**CVE suppressions (`.trivyignore`):**
+- Only suppress a CVE when it is a verified false positive, already mitigated at the application layer, or genuinely unreachable in JIM's usage
+- Every entry MUST include a comment block with: CVE ID(s), affected component, why Trivy flags it, where the real mitigation lives, and a review date (~3 months out)
+- Never suppress to skip investigation. "Won't fix" dismissals belong in the GitHub Security tab, not in the codebase
+- When touching `.trivyignore` for any reason, re-evaluate entries whose review date has passed
+
+> **Full security development guidelines, OWASP Top 10 details, Secure by Design principles, and compliance mapping:** See `engineering/COMPLIANCE_MAPPING.md` and `engineering/DEVELOPER_GUIDE.md` (section: "Trivy CVE suppressions")
 
 ## Third-Party Dependency Governance
 

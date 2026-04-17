@@ -999,15 +999,49 @@ When this happens, every PR and every push to `main` will fail the `scan-base-im
 
 1. **Wait for the Microsoft rebuild.** This is the default and best response when the CVE risk is acceptable to wait out. Check https://mcr.microsoft.com/en-us/product/dotnet/runtime/tags for the current published digest of `10.0-noble`. If it differs from what is pinned in the Dockerfiles, bump the digest manually (or wait for Dependabot to propose it). This typically takes a few days to a few weeks depending on Microsoft's release cadence.
 
-2. **Apply `apt-get upgrade` in the Dockerfile** as a temporary measure if the CVE is severe enough that waiting is not acceptable. This pulls current Ubuntu security patches at *build* time rather than at *base image publish* time. Trade-off: it weakens the reproducibility guarantee of pinning by digest. Only do this for genuinely urgent issues, and revert as soon as Microsoft publishes a refreshed image.
+2. **Suppress the CVE via [`.trivyignore`](../.trivyignore)** when the reported CVE is a verified false positive (the base image is already patched but Trivy over-reports) or when the vulnerability is already mitigated at the application layer (e.g., a NuGet pin overrides the in-box assembly). See "Trivy CVE suppressions" below for the required justification format. This is preferable to option 3 because it scopes the suppression to specific CVEs rather than lowering the entire threshold.
 
-3. **Temporarily lower the gate threshold from HIGH to CRITICAL** in `.github/workflows/ci.yml` (the `Fail build on fixable HIGH/CRITICAL Trivy findings` step) if the blocking CVE is HIGH but not CRITICAL and the work jam is unacceptable. Two-line change. **Revert as soon as the underlying CVE is resolved.**
+3. **Apply `apt-get upgrade` in the Dockerfile** as a temporary measure if the CVE is severe enough that waiting is not acceptable. This pulls current Ubuntu security patches at *build* time rather than at *base image publish* time. Trade-off: it weakens the reproducibility guarantee of pinning by digest. Only do this for genuinely urgent issues, and revert as soon as Microsoft publishes a refreshed image.
 
-4. **Dismiss the specific alert** in the GitHub Security tab with a "won't fix - upstream dependency" reason and a comment explaining why. This requires the alert to first reach the Security tab via SARIF upload, which it will on every CI run. Dismissal only suppresses the specific alert; if the same CVE is detected against a different package or a new base image, it reappears.
+4. **Temporarily lower the gate threshold from HIGH to CRITICAL** in `.github/workflows/ci.yml` (the `Fail build on fixable HIGH/CRITICAL Trivy findings` step) if the blocking CVE is HIGH but not CRITICAL and the work jam is unacceptable. Two-line change. **Revert as soon as the underlying CVE is resolved.**
+
+5. **Dismiss the specific alert** in the GitHub Security tab with a "won't fix - upstream dependency" reason and a comment explaining why. This requires the alert to first reach the Security tab via SARIF upload, which it will on every CI run. Dismissal only suppresses the specific alert; if the same CVE is detected against a different package or a new base image, it reappears.
 
 **Do not** add `continue-on-error: true` to the scan step. That permanently weakens the gate and is not the same as a documented temporary downgrade.
 
-The choice between options 1-4 depends on the specific CVE, its CVSS score, the nature of the affected component, and how long Microsoft is likely to take. There is no pre-baked policy because the right answer is genuinely case-dependent. When in doubt, escalate to a maintainer.
+The choice between options 1-5 depends on the specific CVE, its CVSS score, the nature of the affected component, and how long Microsoft is likely to take. There is no pre-baked policy because the right answer is genuinely case-dependent. When in doubt, escalate to a maintainer.
+
+##### Trivy CVE suppressions (`.trivyignore`)
+
+A repo-root [`.trivyignore`](../.trivyignore) file suppresses individual CVEs from the `scan-base-images` job. It is wired into `.github/workflows/ci.yml` via the `trivyignores: '.trivyignore'` input on the `aquasecurity/trivy-action` step; Trivy drops suppressed findings from the SARIF output entirely, so they do not reach the custom PowerShell filter or the GitHub Security tab.
+
+**When to add a suppression:**
+
+- **Verified false positive**: the base image is already patched but Trivy still reports the CVE (common with .NET in-box assemblies where the patched DLL's file version can still read as pre-patch, causing Trivy to match it against the GHSA's NuGet version range).
+- **Mitigated at the application layer**: JIM pins a newer NuGet version that overrides the in-box assembly at publish, eliminating the real exploit surface even though the base image still contains the older copy. Cross-reference the mitigating PR.
+- **Not exploitable in JIM's usage**: the vulnerable code path is not reached by JIM at runtime. Document which class/API is affected and why it is unreachable.
+
+**When NOT to add a suppression:**
+
+- The CVE is genuinely exploitable and no mitigation exists. Fix it (options 1, 3, or 4 above).
+- To skip the scan to unblock work without investigation. Always investigate first.
+- Without a concrete mitigation story. "Won't fix" dismissals belong in the GitHub Security tab (option 5), not in the codebase.
+
+**Required format:**
+
+Every CVE entry in `.trivyignore` MUST be preceded by a comment block containing:
+
+1. **CVE ID(s)** being suppressed
+2. **Affected component** (package name and version range)
+3. **Why Trivy flags it** (false positive mechanism or mitigation chain)
+4. **Where the real mitigation lives** (PR number, NuGet pin, or code reference)
+5. **Review date** — typically 3 months out. This is the hook to re-check whether the suppression is still needed (e.g., Trivy's matching may have been corrected, or the upstream image may have been rebuilt).
+
+See the existing entries in `.trivyignore` for the canonical format. PR [#581](https://github.com/TetronIO/JIM/pull/581) established this pattern for `CVE-2026-26171` and `CVE-2026-33116`.
+
+**Review discipline:**
+
+Suppressions that pass their review date without action are a quiet failure mode — stale suppressions silently mask real vulnerabilities. When touching `.trivyignore` for any reason, re-evaluate entries whose review date has passed. Remove entries that are no longer justified; extend the review date with a fresh justification if they still are.
 
 #### GitHub Actions
 
