@@ -7,7 +7,7 @@
 
 ARG VERSION=dev
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:c433886fdfe33c6427966a412328867b2be9a64f540a105d08943c2dc6fba39b AS base
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:9271888dde1f4408dfb7ce75bc0f513c903d20ff2f1287ab153b641d4588ec7d AS base
 ARG VERSION
 
 LABEL org.opencontainers.image.title="JIM Web"
@@ -73,7 +73,7 @@ RUN dotnet publish "JIM.Web.csproj" -c Release -o /app/publish /p:UseAppHost=fal
 # Generate OpenAPI document in lightweight mode (no DB or IdP required).
 # The app starts, generates the schema from controller metadata, writes the
 # JSON file, and exits. The generated file is copied into the final image.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:c433886fdfe33c6427966a412328867b2be9a64f540a105d08943c2dc6fba39b AS openapi-gen
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:9271888dde1f4408dfb7ce75bc0f513c903d20ff2f1287ab153b641d4588ec7d AS openapi-gen
 WORKDIR /app
 COPY --from=publish /app/publish .
 ENV JIM_OPENAPI_GENERATE=true \
