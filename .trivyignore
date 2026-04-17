@@ -1,0 +1,39 @@
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+# ============================================================================
+# Trivy vulnerability suppressions for base image scans.
+#
+# Each entry MUST include a CVE ID, justification, and review date. Entries
+# without justification will fail code review. Review dates give us a hook to
+# re-evaluate suppressions as the upstream ecosystem changes.
+#
+# Format: one CVE ID per line. Lines starting with # are comments.
+# See: https://aquasecurity.github.io/trivy/latest/docs/configuration/filtering/
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# CVE-2026-26171 / CVE-2026-33116 (System.Security.Cryptography.Xml)
+# ----------------------------------------------------------------------------
+# Both CVEs affect System.Security.Cryptography.Xml <= 10.0.5 (GHSA-w3x6-4m5h-cxqf
+# and GHSA-37gx-xxp4-5rgx respectively). Both are fixed in 10.0.6, which ships
+# in .NET runtime 10.0.6 / SDK 10.0.202 (the April 14 2026 servicing release).
+#
+# The mcr.microsoft.com/dotnet/sdk:10.0-noble image digest adc02be IS the
+# patched image (runtime 10.0.6, SDK 10.0.202). Trivy continues to flag both
+# CVEs because it matches the in-box shared-framework assembly file version
+# against the GHSA NuGet version range; the file version on the patched DLL
+# can read as a pre-patch value even though the fix is present. No newer
+# SDK base image exists to pull.
+#
+# JIM's application-level fix shipped in #580 (commit 60714da9), which pins
+# the System.Security.Cryptography.Xml NuGet to >= 10.0.6 in JIM.Application,
+# JIM.Worker, and JIM.Scheduler. The published assemblies override the in-box
+# version at runtime, so there is no real exploit surface in JIM binaries.
+#
+# JIM also does not use EncryptedXml (the affected class) at runtime.
+#
+# Review by: 2026-07-15 (re-check whether Microsoft has re-rolled the SDK
+# image or Trivy's matching has been corrected).
+CVE-2026-26171
+CVE-2026-33116

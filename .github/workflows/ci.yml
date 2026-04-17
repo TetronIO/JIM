@@ -124,6 +124,10 @@ jobs:
         # findings explicitly in the next step.
         exit-code: '0'
         cache: 'false'
+        # Repo-root .trivyignore suppresses CVEs that are false positives or
+        # already mitigated at the application layer. Every suppression MUST
+        # include a justification and review date in the file itself.
+        trivyignores: '.trivyignore'
 
     - name: Fail build on fixable HIGH/CRITICAL Trivy findings
       shell: pwsh
