@@ -280,5 +280,18 @@ public static class Constants
         /// Default: 1 second.
         /// </summary>
         public const string ProgressUpdateInterval = "UI.ProgressUpdateInterval";
+
+        // Instance Settings
+        /// <summary>
+        /// A friendly, editable name for this JIM instance.
+        /// Appears in the sidebar, browser tab title, and footer.
+        /// </summary>
+        public const string ServiceName = "Instance.Name";
+
+        /// <summary>
+        /// A stable, immutable GUID identifier for this JIM instance.
+        /// Generated exactly once on first startup; never changes thereafter.
+        /// </summary>
+        public const string ServiceId = "Instance.Id";
     }
 }

@@ -1,9 +1,10 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 @implements IDisposable
 @inject IJSRuntime JSRuntime
 @inject IUserPreferenceService PreferenceService
 @inject JIM.Web.Models.ThemeSettings ThemeSettings
 @inject NavigationManager NavigationManager
+@inject IJimApplicationFactory JimFactory
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -12,19 +13,43 @@
 <MudDialogProvider />
 <MudSnackbarProvider />
 
-<PageTitle>JIM</PageTitle>
+@if (!string.IsNullOrEmpty(_serviceName))
+{
+    <PageTitle>JIM - @_serviceName</PageTitle>
+}
+else
+{
+    <PageTitle>JIM</PageTitle>
+}
 
 <MudLayout>
 
-    <MudDrawerContainer Class="mud-height-full">
-        <MudDrawer @bind-Open="@IsDrawerOpen" Elevation="0" Variant="@DrawerVariant.Mini" Overlay="false"
-                   Class="jim-drawer" @onmouseenter="@OnDrawerMouseEnter" @onmouseleave="@OnDrawerMouseLeave">
+    @if (!string.IsNullOrEmpty(_serviceName))
+    {
+        <div class="jim-instance-bar">
+            <span class="jim-title-accent">@_serviceName</span>
+        </div>
+    }
 
-            <div class="jim-drawer-logo">
-                <MudImage Src="/images/jim-logo.png" Width="28" Class="mt-4 ms-4 mb-3" Alt="JIM Logo"></MudImage>
+    <MudDrawerContainer Class="mud-height-full" Style="@(!string.IsNullOrEmpty(_serviceName) ? "padding-top: var(--jim-instance-bar-height)" : null)">
+        <MudDrawer @bind-Open="@IsDrawerOpen" Elevation="0" Variant="@DrawerVariant.Mini" Overlay="false"
+                   Class="@($"jim-drawer{(!string.IsNullOrEmpty(_serviceName) ? " jim-drawer-with-bar" : "")}")"
+                   @onmouseenter="@OnDrawerMouseEnter" @onmouseleave="@OnDrawerMouseLeave">
+
+            <div class="jim-drawer-logo d-flex align-center">
+                @if (!IsDrawerOpen && !string.IsNullOrEmpty(_serviceName))
+                {
+                    <MudTooltip Text="@_serviceName" Arrow="true" Placement="Placement.Right">
+                        <MudImage Src="/images/jim-logo.png" Width="28" Class="mt-4 ms-4 mb-3" Alt="JIM Logo"></MudImage>
+                    </MudTooltip>
+                }
+                else
+                {
+                    <MudImage Src="/images/jim-logo.png" Width="28" Class="mt-4 ms-4 mb-3" Alt="JIM Logo"></MudImage>
+                }
                 @if (IsDrawerOpen)
                 {
-                    <MudText Inline="true">JIM</MudText>
+                    <MudText Class="ms-2">JIM</MudText>
                 }
             </div>
 
@@ -63,6 +88,11 @@
                             <span>All rights reserved</span>
                             <span class="jim-page-footer-sep">|</span>
                             <span>v@(AppVersion)</span>
+                            @if (!string.IsNullOrEmpty(_serviceName))
+                            {
+                                <span class="jim-page-footer-sep">|</span>
+                                <span>@_serviceName</span>
+                            }
                             <span class="jim-page-footer-sep">|</span>
                             <MudLink Href="https://github.com/TetronIO/JIM" Target="_blank"
                                      Color="Color.Inherit" Underline="Underline.Hover" Class="jim-page-footer-github">
@@ -127,6 +157,7 @@
     private const int LargeScreenBreakpoint = 1400;
     // Content container width - pages can request full width via SetFullWidth()
     private MaxWidth _contentMaxWidth = MaxWidth.ExtraLarge;
+    private string? _serviceName;
 
     /// <summary>
     /// Called by pages that implement IFullWidthPage to remove the max-width constraint.
@@ -213,8 +244,12 @@
         }
     }
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        using var jim = JimFactory.Create();
+        _serviceName = await jim.ServiceSettings.GetSettingValueAsync<string>(
+            JIM.Models.Core.Constants.SettingKeys.ServiceName);
+
         NavigationManager.LocationChanged += OnLocationChanged;
     }
 

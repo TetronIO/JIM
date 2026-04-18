@@ -124,6 +124,7 @@ html[lang] {
 
     /* === JIM Custom: Logo text (dark for light sidebar) === */
     --jim-logo-text-color: #2a2a30;
+    --jim-instance-bar-bg: #dde1e8;
 }
 
 /* Uncomment to lighten outlined/text primary button text for readability */

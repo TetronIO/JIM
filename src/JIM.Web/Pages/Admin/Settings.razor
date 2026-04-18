@@ -7,6 +7,7 @@
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject ICredentialProtectionService CredentialProtection
+@inject IJSRuntime JSRuntime
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -80,6 +81,18 @@
                     {
                         <span class="jim-text-code">********</span>
                         <MudIconButton Icon="@Icons.Material.Outlined.Visibility" Variant="Variant.Filled" Size="Size.Small" OnClick="() => RevealSecretAsync(settingContext.Key)" />
+                    }
+                }
+                else if (settingContext.ValueType == ServiceSettingValueType.Guid)
+                {
+                    var guidValue = settingContext.GetEffectiveValue();
+                    <span class="jim-text-code me-1">@(guidValue ?? "(not set)")</span>
+                    @if (!string.IsNullOrEmpty(guidValue))
+                    {
+                        <MudTooltip Text="Copy to clipboard" Arrow="true" Placement="Placement.Top">
+                            <MudIconButton Icon="@Icons.Material.Outlined.ContentCopy" Variant="Variant.Filled" Size="Size.Small"
+                                           OnClick="() => CopyToClipboardAsync(guidValue!)" />
+                        </MudTooltip>
                     }
                 }
                 else
@@ -222,6 +235,7 @@
             "Maintenance" => "Maintenance",
             "History" => "History",
             "Security" => "Security",
+            "Instance" => "Instance",
             _ => categoryString ?? "Unknown"
         };
     }
@@ -338,6 +352,19 @@
             {
                 Snackbar.Add($"Failed to revert setting: {ex.Message}", Severity.Error);
             }
+        }
+    }
+
+    private async Task CopyToClipboardAsync(string value)
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", value);
+            Snackbar.Add("Copied to clipboard.", Severity.Success);
+        }
+        catch (JSException)
+        {
+            Snackbar.Add("Failed to copy to clipboard.", Severity.Error);
         }
     }
 }

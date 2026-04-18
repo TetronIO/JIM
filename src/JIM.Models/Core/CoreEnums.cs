@@ -187,7 +187,13 @@ public enum ServiceSettingCategory
     /// <summary>
     /// User interface settings.
     /// </summary>
-    UI = 5
+    UI = 5,
+
+    /// <summary>
+    /// Instance identity settings (Service Name, Service ID).
+    /// Used by administrators to tell JIM instances apart.
+    /// </summary>
+    Instance = 6
 }
 
 /// <summary>
@@ -224,7 +230,13 @@ public enum ServiceSettingValueType
     /// Encrypted string value for secrets (passwords, API keys, etc.).
     /// Values are encrypted at rest using ASP.NET Core Data Protection.
     /// </summary>
-    StringEncrypted = 5
+    StringEncrypted = 5,
+
+    /// <summary>
+    /// GUID value. Stored as a string in standard GUID format.
+    /// Typically used for read-only, auto-generated identifiers.
+    /// </summary>
+    Guid = 6
 }
 
 /// <summary>
