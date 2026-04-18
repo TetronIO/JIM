@@ -143,6 +143,18 @@ When set, the test runner will:
 
 When not set, tests run normally with local-only results. Metrics streaming is purely additive and never affects test execution or results.
 
+### Provisioning CI Secrets
+
+The GitHub repo needs three values configured for CI runs and for the cross-repo sync workflow:
+
+| Name | Type | Purpose |
+|------|------|---------|
+| `JIM_BENCH_API_URL` | Actions variable | Ingestion base URL (non-sensitive) |
+| `JIM_BENCH_API_KEY` | Secret | `X-API-Key` for ingestion |
+| `JIM_BENCH_DISPATCH_TOKEN` | Secret (optional) | PAT used by `.github/workflows/bench-sync.yml` to notify `TetronIO/JIM-Bench` of contract changes |
+
+Run `./scripts/Set-JIMBenchSecrets.ps1` to provision them interactively via the GitHub CLI. The script is idempotent and hides secret input.
+
 ### What Gets Streamed
 
 | Data | Log Level Required | Description |
