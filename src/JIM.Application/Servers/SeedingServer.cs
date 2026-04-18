@@ -917,6 +917,29 @@ internal class SeedingServer
             IsReadOnly = false
         });
 
+        // Instance Settings
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.ServiceName,
+            DisplayName = "Service Name",
+            Description = "A friendly, editable name for this JIM instance. Appears in the sidebar, browser tab title, and footer so you can tell instances apart.",
+            Category = ServiceSettingCategory.Instance,
+            ValueType = ServiceSettingValueType.String,
+            DefaultValue = null,
+            IsReadOnly = false
+        });
+
+        await SeedSettingOnceAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.ServiceId,
+            DisplayName = "Service ID",
+            Description = "A stable, immutable identifier generated once when this JIM instance was created. Used by tooling, logs, and telemetry to identify this instance. Cannot be changed.",
+            Category = ServiceSettingCategory.Instance,
+            ValueType = ServiceSettingValueType.Guid,
+            DefaultValue = null,
+            IsReadOnly = true
+        }, () => Guid.NewGuid().ToString());
+
         stopwatch.Stop();
         Log.Information($"SyncServiceSettingsAsync: Completed in: {stopwatch.Elapsed}");
     }
@@ -928,6 +951,24 @@ internal class SeedingServer
     {
         await Application.ServiceSettings.CreateOrUpdateSettingAsync(setting);
         Log.Verbose($"SeedSettingAsync: Processed setting '{setting.Key}'");
+    }
+
+    /// <summary>
+    /// Seeds a single service setting exactly once. Creates the setting with a generated value
+    /// on first run; on subsequent runs, leaves the existing setting completely untouched.
+    /// Use for identifiers that must never be regenerated (e.g. Service ID).
+    /// </summary>
+    private async Task SeedSettingOnceAsync(ServiceSetting template, Func<string> valueFactory)
+    {
+        if (await Application.ServiceSettings.SettingExistsAsync(template.Key))
+        {
+            Log.Verbose($"SeedSettingOnceAsync: '{template.Key}' already exists; preserving existing value.");
+            return;
+        }
+
+        template.Value = valueFactory();
+        await Application.ServiceSettings.CreateSettingAsync(template);
+        Log.Information($"SeedSettingOnceAsync: Generated '{template.Key}' with value '{template.Value}'.");
     }
 
     /// <summary>

@@ -36,7 +36,7 @@ public class JimApplication : IDisposable
     /// </summary>
     public ISyncRepository SyncRepo { get; }
 
-    private SeedingServer Seeding { get; }
+    internal SeedingServer Seeding { get; }
     public ActivityServer Activities { get; }
     public CertificateServer Certificates { get; }
     public ChangeHistoryServer ChangeHistory { get; }
