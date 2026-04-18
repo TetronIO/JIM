@@ -1,0 +1,37 @@
+# CodeQL analysis configuration for JIM.
+#
+# Wired into .github/workflows/codeql.yml via the `config-file:` input on
+# codeql-action/init. Applies to every language in the matrix; query-filters
+# targeting a specific query id (e.g. cs/...) naturally only affect the
+# language that query belongs to.
+#
+# Disabled queries (with rationale):
+#
+#   cs/exposure-of-sensitive-information (CWE-359)
+#   -----------------------------------------------
+#   JIM is an identity management system. Logging identifiers and identity
+#   attribute values (External IDs, display names, email-shaped usernames,
+#   manager references, etc.) is core to operational diagnostics: without
+#   them, a sync failure in a customer environment cannot be traced back to
+#   the object that caused it.
+#
+#   CodeQL's heuristic source detection for this query flags any value
+#   whose parameter or property name matches tokens like "email", "name",
+#   "address" as private information, then reports every log call it
+#   flows into as an exposure sink. In an IDM codebase that produces a
+#   constant stream of false-positive-in-intent alerts across connectors,
+#   the sync engine, workers, and the web layer - all places where logging
+#   the identifier is the whole point.
+#
+#   Log injection (CWE-117) is addressed separately via LogSanitiser.Sanitise
+#   in JIM.Utilities, which is applied at every ILogger/Serilog call site
+#   that accepts user-controlled strings. That guardrail remains in force;
+#   only the private-information-exposure query is disabled here.
+#
+#   Customer-facing logs containing identity data are protected by
+#   deployment-level controls (file permissions, log retention, SIEM
+#   access controls) which are outside CodeQL's visibility.
+
+query-filters:
+  - exclude:
+      id: cs/exposure-of-sensitive-information
