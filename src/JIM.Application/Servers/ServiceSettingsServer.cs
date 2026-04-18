@@ -347,6 +347,9 @@ namespace JIM.Application.Servers
                 if (underlyingType == typeof(TimeSpan))
                     return (T)(object)TimeSpan.Parse(value);
 
+                if (underlyingType == typeof(Guid))
+                    return (T)(object)Guid.Parse(value);
+
                 if (underlyingType.IsEnum)
                     return (T)Enum.Parse(underlyingType, value);
 
