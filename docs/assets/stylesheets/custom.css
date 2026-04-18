@@ -325,6 +325,8 @@ body:has(.jim-home) .md-content__inner {
   max-width: 72rem;
   margin: 0 auto;
   padding-top: 2rem;
+  padding-left: 2rem;
+  padding-right: 2rem;
 }
 
 /* Hide the auto-generated edit button on the homepage; it looks odd under the hero */
@@ -335,4 +337,58 @@ body:has(.jim-home) .md-content__button {
 /* Hide the auto-generated "Home" h1 (the hero already serves as the page title) */
 .jim-home > h1:first-of-type {
   display: none;
+}
+
+/* ========================================
+   Homepage capability pills
+   ("What Makes JIM Different" section)
+   ======================================== */
+
+.jim-capabilities ul,
+.md-typeset .jim-capabilities ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 1.5rem 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.jim-capabilities li,
+.md-typeset .jim-capabilities ul li {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  background: var(--md-default-bg-color--light);
+  font-size: 0.9rem;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+/* Strip the <p> wrapper margin that python-markdown injects inside list items */
+.md-typeset .jim-capabilities ul li p {
+  margin: 0;
+}
+
+.jim-capabilities li .twemoji,
+.jim-capabilities li svg {
+  width: 1.1em;
+  height: 1.1em;
+  fill: #2e9e5a;       /* green check to reinforce the affirmative */
+  flex-shrink: 0;
+}
+
+/* Dark mode — soften the pill background and brighten the check */
+[data-md-color-scheme="slate"] .jim-capabilities li {
+  background: #0d1e30;
+  border-color: #243a52;
+}
+
+[data-md-color-scheme="slate"] .jim-capabilities li .twemoji,
+[data-md-color-scheme="slate"] .jim-capabilities li svg {
+  fill: #4ade80;
 }

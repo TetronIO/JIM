@@ -78,15 +78,15 @@ JIM supports common Identity Governance & Administration (IGA) scenarios:
 
 Enterprise identity synchronisation typically requires cloud connectivity, complex infrastructure, or expensive licensing. JIM takes a different approach: it deploys as a single Docker stack, runs entirely on-premises, and works in air-gapped networks with no external dependencies. Source-available code means you can inspect, audit, and verify everything JIM does with your identity data.
 
-| Capability | JIM |
-|---|---|
-| Air-gapped deployment | ✅ |
-| Cloud dependencies | None |
-| Container-native | ✅ |
-| Source available | ✅ |
-| SSO with any OIDC provider | ✅ |
-| Full REST API | ✅ |
-| PowerShell automation | ✅ |
+<div class="jim-capabilities" markdown>
+- :material-check-circle: Air-gapped deployment
+- :material-check-circle: No cloud dependencies
+- :material-check-circle: Container-native
+- :material-check-circle: Source available
+- :material-check-circle: SSO with any OIDC provider
+- :material-check-circle: Full REST API
+- :material-check-circle: PowerShell automation
+</div>
 
 ## 🗺️ Quick Links
 
