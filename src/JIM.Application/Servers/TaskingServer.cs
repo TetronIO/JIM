@@ -176,7 +176,8 @@ namespace JIM.Application.Servers
 
             // Connector supports partitions but none are selected - check the validation mode setting
             var validationMode = await Application.ServiceSettings.GetPartitionValidationModeAsync();
-            var message = $"Connected System '{connectedSystem.Name}' supports partitions but no partitions or containers have been selected. " +
+            var diagnostic = connectedSystem.BuildPartitionSelectionDiagnostic();
+            var message = $"Connected System '{connectedSystem.Name}' has incomplete partition configuration: {diagnostic}. " +
                           "Import operations will return no objects. Please configure partition and container selections on the Connected System's Partitions & Containers tab.";
 
             if (validationMode == PartitionValidationMode.Error)
