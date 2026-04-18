@@ -14,6 +14,14 @@ public class ConnectedSystemContainer
     public ConnectedSystemPartition? Partition { get; set; }
 
     /// <summary>
+    /// FK to <see cref="Partition"/>. Exposed as an explicit property (rather than a shadow FK) so that
+    /// repository queries can filter on it directly and unit tests can seed it without EF Core tracking.
+    /// Set only on top-level containers; null on nested descendants (whose partition is reached via
+    /// <see cref="ParentContainer"/>).
+    /// </summary>
+    public int? PartitionId { get; set; }
+
+    /// <summary>
     /// If this is a top-level container and the connector doesn't implement partitions then it'll be a child of a Connected System.
     /// If partitions are implemented, then a Partition reference is required on top-level containers.
     /// </summary>
@@ -54,6 +62,13 @@ public class ConnectedSystemContainer
 
     #region For MudBlazor TreeView
     public ConnectedSystemContainer? ParentContainer { get; set; }
+
+    /// <summary>
+    /// FK to <see cref="ParentContainer"/>. Exposed as an explicit property (rather than a shadow FK) so
+    /// that repository queries can filter on it directly and unit tests can seed it without EF Core tracking.
+    /// Null on top-level containers.
+    /// </summary>
+    public int? ParentContainerId { get; set; }
 
     [NotMapped]
     public bool Expanded { get; set; }
