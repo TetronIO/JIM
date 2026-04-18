@@ -1,7 +1,7 @@
-name: Metrics Schema Sync
+name: JIM-Bench Schema Sync
 
-# Notify the jim-metrics repo when JIM-side span enrichment, submission payload,
-# or host fingerprinting contracts change. The receiver workflow in jim-metrics
+# Notify the JIM-Bench repo when JIM-side span enrichment, submission payload,
+# or host fingerprinting contracts change. The receiver workflow in JIM-Bench
 # processes the change context and creates update PRs as needed.
 
 on:
@@ -15,13 +15,13 @@ on:
       - 'test/integration/Stream-WorkerLogs.ps1'
 
 # Principle of least privilege: this workflow only reads the repo (to checkout
-# and git diff) and dispatches to jim-metrics via a separate PAT stored in
-# secrets.METRICS_REPO_DISPATCH_TOKEN. The default GITHUB_TOKEN needs no writes.
+# and git diff) and dispatches to JIM-Bench via a separate PAT stored in
+# secrets.JIM_BENCH_DISPATCH_TOKEN. The default GITHUB_TOKEN needs no writes.
 permissions:
   contents: read
 
 jobs:
-  notify-metrics-repo:
+  notify-bench-repo:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -55,19 +55,19 @@ jobs:
       - name: Check for dispatch token
         id: check_token
         run: |
-          if [ -z "${{ secrets.METRICS_REPO_DISPATCH_TOKEN }}" ]; then
-            echo "::warning::METRICS_REPO_DISPATCH_TOKEN secret is not configured. Skipping dispatch to TetronIO/jim-metrics. This is expected if the jim-metrics repo has not yet been created. Configure the secret once jim-metrics exists to enable cross-repo sync."
+          if [ -z "${{ secrets.JIM_BENCH_DISPATCH_TOKEN }}" ]; then
+            echo "::warning::JIM_BENCH_DISPATCH_TOKEN secret is not configured. Skipping dispatch to TetronIO/JIM-Bench. Configure the secret (a GitHub PAT with repo scope on TetronIO/JIM-Bench) to enable cross-repo sync."
             echo "token_available=false" >> "$GITHUB_OUTPUT"
           else
             echo "token_available=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Dispatch to jim-metrics
+      - name: Dispatch to JIM-Bench
         if: steps.check_token.outputs.token_available == 'true'
         uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0  # v3.0.0
         with:
-          token: ${{ secrets.METRICS_REPO_DISPATCH_TOKEN }}
-          repository: TetronIO/jim-metrics
+          token: ${{ secrets.JIM_BENCH_DISPATCH_TOKEN }}
+          repository: TetronIO/JIM-Bench
           event-type: jim-contract-changed
           client-payload: |
             {

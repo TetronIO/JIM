@@ -200,7 +200,7 @@ cd /workspaces/JIM
 
 **For detailed integration testing guide, see:** [`docs/INTEGRATION_TESTING.md`](docs/INTEGRATION_TESTING.md)
 
-**Metrics streaming** (optional): Set `JIM_METRICS_API_URL` and `JIM_METRICS_API_KEY` environment variables to stream performance metrics to a central Metrics API during test runs. When set, the runner automatically:
+**Metrics streaming** (optional): Set `JIM_BENCH_API_URL` and `JIM_BENCH_API_KEY` environment variables to stream performance metrics to the JIM-Bench ingestion API during test runs. When set, the runner automatically:
 - Captures a host fingerprint at the start of the run
 - Streams diagnostic log lines to the API in the background (no post-run processing overhead)
 - Submits a final summary with pass/fail, duration, and host profile
