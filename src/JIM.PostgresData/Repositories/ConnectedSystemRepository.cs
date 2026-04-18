@@ -2361,14 +2361,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var parentIdByChildId = allContainers.ToDictionary(c => c.Id, c => c.ParentContainerId);
         var roots = BuildContainerTree(allContainers, parentIdByChildId);
 
-        foreach (var root in roots)
-        {
-            if (root.PartitionId == null)
-                continue;
-            if (!partitionsById.TryGetValue(root.PartitionId.Value, out var partition))
-                continue;
+        var rootPartitionPairs = roots
+            .Where(r => r.PartitionId != null)
+            .Select(r => (Root: r, Partition: partitionsById.TryGetValue(r.PartitionId!.Value, out var p) ? p : null))
+            .Where(pair => pair.Partition != null);
 
-            partition.Containers ??= new HashSet<ConnectedSystemContainer>();
+        foreach (var (root, partition) in rootPartitionPairs)
+        {
+            partition!.Containers ??= new HashSet<ConnectedSystemContainer>();
             partition.Containers.Add(root);
         }
     }
