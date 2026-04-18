@@ -456,8 +456,8 @@ public class ServiceSettingsControllerTests
 
         Assert.That(dto, Is.Not.Null);
         Assert.That(dto!.ValueType, Is.EqualTo("Guid"));
-        Assert.That(dto.EffectiveValue, Is.EqualTo(id.ToString()));
-        Assert.That(dto.IsReadOnly, Is.True);
+        Assert.That(dto!.EffectiveValue, Is.EqualTo(id.ToString()));
+        Assert.That(dto!.IsReadOnly, Is.True);
     }
 
     #endregion
