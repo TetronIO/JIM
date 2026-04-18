@@ -289,61 +289,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         var partitions = await partQuery.ToListAsync();
 
-        // Load all containers for the partitions in a single flat query, then rebuild the hierarchy
-        // in memory. This replaces the previous 11-level hard-coded Include chain, handles arbitrary
-        // hierarchy depth, and avoids the cartesian explosion that happens when a deeply joined
-        // query returns many duplicated rows. We only run the query when partitions exist, matching
-        // the prior behaviour of loading containers only through the partition graph.
-        //
-        // We load AsTracking so we can read the shadow FK properties (ParentContainerId, PartitionId)
-        // via the Entry API. If the caller requested no tracking, we detach the containers afterwards
-        // to preserve the overall contract of this method.
-        var partitionsById = partitions.ToDictionary(p => p.Id);
-        if (partitions.Count > 0)
-        {
-            var partitionIds = partitionsById.Keys.ToList();
-            var allContainers = await Repository.Database.ConnectedSystemContainers
-                .AsTracking()
-                .Where(c => c.Partition != null && partitionIds.Contains(c.Partition.Id))
-                .ToListAsync();
-
-            var parentIdByChildId = new Dictionary<int, int?>(allContainers.Count);
-            var partitionIdByContainerId = new Dictionary<int, int?>(allContainers.Count);
-            foreach (var container in allContainers)
-            {
-                var entry = Repository.Database.Entry(container);
-                parentIdByChildId[container.Id] = (int?)entry.Property("ParentContainerId").CurrentValue;
-                partitionIdByContainerId[container.Id] = (int?)entry.Property("PartitionId").CurrentValue;
-            }
-
-            // Rebuild the tree: every container gets its ChildContainers wired up, and roots
-            // (containers with no parent) are returned. We run this pass even though we only attach
-            // top-level roots to partitions below, because the ChildContainers collections on inner
-            // nodes must also be populated for consumers to traverse the hierarchy.
-            var rootContainers = BuildContainerTree(allContainers, parentIdByChildId);
-
-            // Group top-level containers (roots) by partition and attach them.
-            foreach (var root in rootContainers)
-            {
-                if (!partitionIdByContainerId.TryGetValue(root.Id, out var partitionId) || partitionId == null)
-                    continue;
-                if (!partitionsById.TryGetValue(partitionId.Value, out var partition))
-                    continue;
-
-                partition.Containers ??= new HashSet<ConnectedSystemContainer>();
-                partition.Containers.Add(root);
-            }
-
-            // If this connected system was loaded without tracking, detach the containers we just
-            // loaded with AsTracking so that subsequent operations on this context do not see
-            // residual tracking state (matching the semantics of the rest of this method when
-            // tracking is disabled).
-            if (!withChangeTracking)
-            {
-                foreach (var container in allContainers)
-                    Repository.Database.Entry(container).State = EntityState.Detached;
-            }
-        }
+        // Load every container reachable from these partitions and attach the stitched hierarchy.
+        // Walks roots first, then descendants layer by layer — see AttachFullContainerTreesAsync and
+        // issue #586.
+        await AttachFullContainerTreesAsync(partitions, withChangeTracking);
 
         // Collect and merge data onto the connected system.
         connectedSystem.RunProfiles = runProfiles;
@@ -352,6 +301,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         // With AsNoTracking, run profile Partition instances are separate from the partition
         // instances loaded above. Wire them up so callers see Containers via the run profile.
+        var partitionsById = partitions.ToDictionary(p => p.Id);
         foreach (var rp in runProfiles.Where(rp => rp.Partition != null))
         {
             if (partitionsById.TryGetValue(rp.Partition!.Id, out var fullPartition))
@@ -2340,24 +2290,87 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task<IList<ConnectedSystemPartition>> GetConnectedSystemPartitionsAsync(ConnectedSystem connectedSystem)
     {
-        return await Repository.Database.ConnectedSystemPartitions
-            .Include(csp => csp.Containers)
+        var partitions = await Repository.Database.ConnectedSystemPartitions
             .Where(q => q.ConnectedSystem.Id == connectedSystem.Id)
             .ToListAsync();
+
+        await AttachFullContainerTreesAsync(partitions, withChangeTracking: false);
+        return partitions;
     }
 
     public async Task<ConnectedSystemPartition?> GetConnectedSystemPartitionAsync(int id, bool withChangeTracking = false)
     {
         IQueryable<ConnectedSystemPartition> query = Repository.Database.ConnectedSystemPartitions
-            .AsSplitQuery()
             .Include(csp => csp.ConnectedSystem)
-            .Include(csp => csp.Containers)
-            .OrderBy(csp => csp.Id);
+            .Where(csp => csp.Id == id);
 
         if (withChangeTracking)
             query = query.AsTracking();
 
-        return await query.FirstOrDefaultAsync(csp => csp.Id == id);
+        var partition = await query.FirstOrDefaultAsync();
+        if (partition == null)
+            return null;
+
+        await AttachFullContainerTreesAsync(new[] { partition }, withChangeTracking);
+        return partition;
+    }
+
+    /// <summary>
+    /// Loads every container reachable from the supplied partitions and attaches the stitched hierarchy
+    /// to each partition's <see cref="ConnectedSystemPartition.Containers"/> collection. Walks the tree in
+    /// layers (roots first, then descendants by <see cref="ConnectedSystemContainer.ParentContainerId"/>)
+    /// so nested containers (whose <see cref="ConnectedSystemContainer.PartitionId"/> is null by schema
+    /// design) are loaded too. See issue #586.
+    /// </summary>
+    private async Task AttachFullContainerTreesAsync(
+        IReadOnlyCollection<ConnectedSystemPartition> partitions,
+        bool withChangeTracking)
+    {
+        if (partitions.Count == 0)
+            return;
+
+        var partitionsById = partitions.ToDictionary(p => p.Id);
+        var partitionIds = partitionsById.Keys.ToList();
+
+        IQueryable<ConnectedSystemContainer> rootQuery = Repository.Database.ConnectedSystemContainers
+            .Where(c => c.PartitionId != null && partitionIds.Contains(c.PartitionId.Value));
+        if (withChangeTracking)
+            rootQuery = rootQuery.AsTracking();
+
+        var rootContainers = await rootQuery.ToListAsync();
+
+        var allContainers = new List<ConnectedSystemContainer>(rootContainers);
+        var layerIds = rootContainers.Select(c => c.Id).ToList();
+
+        while (layerIds.Count > 0)
+        {
+            var layer = layerIds;
+            IQueryable<ConnectedSystemContainer> descendantsQuery = Repository.Database.ConnectedSystemContainers
+                .Where(c => c.ParentContainerId != null && layer.Contains(c.ParentContainerId.Value));
+            if (withChangeTracking)
+                descendantsQuery = descendantsQuery.AsTracking();
+
+            var descendants = await descendantsQuery.ToListAsync();
+            if (descendants.Count == 0)
+                break;
+
+            allContainers.AddRange(descendants);
+            layerIds = descendants.Select(c => c.Id).ToList();
+        }
+
+        var parentIdByChildId = allContainers.ToDictionary(c => c.Id, c => c.ParentContainerId);
+        var roots = BuildContainerTree(allContainers, parentIdByChildId);
+
+        foreach (var root in roots)
+        {
+            if (root.PartitionId == null)
+                continue;
+            if (!partitionsById.TryGetValue(root.PartitionId.Value, out var partition))
+                continue;
+
+            partition.Containers ??= new HashSet<ConnectedSystemContainer>();
+            partition.Containers.Add(root);
+        }
     }
 
     public async Task UpdateConnectedSystemPartitionAsync(ConnectedSystemPartition partition)
@@ -2393,14 +2406,37 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task<ConnectedSystemContainer?> GetConnectedSystemContainerAsync(int id)
     {
-        return await Repository.Database.ConnectedSystemContainers
+        var container = await Repository.Database.ConnectedSystemContainers
             .AsSplitQuery()
             .Include(c => c.Partition)
             .ThenInclude(p => p!.ConnectedSystem)
             .Include(c => c.ConnectedSystem)
             .Include(c => c.ChildContainers)
-            .OrderBy(c => c.Id)
             .FirstOrDefaultAsync(c => c.Id == id);
+
+        if (container == null)
+            return null;
+
+        // Walk up the parent chain so callers (e.g. container-update validation) can reach the owning
+        // connected system for nested containers whose Partition and ConnectedSystem navs are null.
+        // Bounded by hierarchy depth, not container count. See issue #586.
+        var current = container;
+        while (current.ParentContainerId != null && current.ParentContainer == null)
+        {
+            var parent = await Repository.Database.ConnectedSystemContainers
+                .Include(c => c.Partition)
+                .ThenInclude(p => p!.ConnectedSystem)
+                .Include(c => c.ConnectedSystem)
+                .FirstOrDefaultAsync(c => c.Id == current.ParentContainerId);
+
+            if (parent == null)
+                break;
+
+            current.ParentContainer = parent;
+            current = parent;
+        }
+
+        return container;
     }
 
     public async Task UpdateConnectedSystemContainerAsync(ConnectedSystemContainer container)

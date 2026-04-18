@@ -386,4 +386,357 @@ public class ConnectedSystemRepositoryCoreTests
     }
 
     #endregion
+
+    #region GetConnectedSystemAsync — nested container loading (issue #586)
+
+    [Test]
+    public async Task GetConnectedSystemAsync_LoadsNestedContainersBelowRootsAsync()
+    {
+        // Arrange: a connected system with one partition, one root container ("Corp"), and three
+        // nested descendants ("Users", "Groups", "Entitlements") whose PartitionId is null and
+        // whose ParentContainerId points at the root. This mirrors the shape that Samba AD / AD
+        // LDAP imports produce: only top-level containers carry a PartitionId FK; descendants are
+        // linked via ParentContainerId alone.
+        //
+        // Before the #586 fix, GetConnectedSystemAsync's flat-load filter matched only rows with
+        // PartitionId set, so the three nested rows were silently excluded. Callers received roots
+        // with empty ChildContainers and had no way to reach nested containers through the API.
+        var cs = CreateConnectedSystem(id: 1);
+        _connectedSystemsData.Add(cs);
+
+        var partition = new ConnectedSystemPartition
+        {
+            Id = 100,
+            ConnectedSystem = cs,
+            Name = "DC=resurgam,DC=local",
+            ExternalId = "DC=resurgam,DC=local",
+            Selected = true,
+            Containers = new HashSet<ConnectedSystemContainer>()
+        };
+        _partitionsData.Add(partition);
+
+        var corp = new ConnectedSystemContainer
+        {
+            Id = 200,
+            Name = "Corp",
+            ExternalId = "OU=Corp,DC=resurgam,DC=local",
+            PartitionId = partition.Id
+        };
+        var users = new ConnectedSystemContainer
+        {
+            Id = 201,
+            Name = "Users",
+            ExternalId = "OU=Users,OU=Corp,DC=resurgam,DC=local",
+            ParentContainerId = corp.Id
+        };
+        var groups = new ConnectedSystemContainer
+        {
+            Id = 202,
+            Name = "Groups",
+            ExternalId = "OU=Groups,OU=Corp,DC=resurgam,DC=local",
+            ParentContainerId = corp.Id
+        };
+        var entitlements = new ConnectedSystemContainer
+        {
+            Id = 203,
+            Name = "Entitlements",
+            ExternalId = "OU=Entitlements,OU=Corp,DC=resurgam,DC=local",
+            ParentContainerId = corp.Id
+        };
+        _containersData.Add(corp);
+        _containersData.Add(users);
+        _containersData.Add(groups);
+        _containersData.Add(entitlements);
+
+        BuildMocks();
+
+        // Act
+        var result = await _repository.ConnectedSystems.GetConnectedSystemAsync(1);
+
+        // Assert: Corp is attached to the partition, and its three nested children are reachable
+        // through ChildContainers.
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Partitions, Is.Not.Null);
+
+        var loadedPartition = result.Partitions!.Single(p => p.Id == partition.Id);
+        Assert.That(loadedPartition.Containers, Has.Count.EqualTo(1));
+
+        var loadedCorp = loadedPartition.Containers!.Single();
+        Assert.That(loadedCorp.Id, Is.EqualTo(corp.Id));
+        Assert.That(loadedCorp.ChildContainers, Has.Count.EqualTo(3), "Nested descendants must be loaded and stitched under their root");
+
+        var childIds = loadedCorp.ChildContainers.Select(c => c.Id).OrderBy(id => id).ToList();
+        Assert.That(childIds, Is.EquivalentTo(new[] { users.Id, groups.Id, entitlements.Id }));
+    }
+
+    [Test]
+    public async Task GetConnectedSystemAsync_LoadsMultiLevelNestedContainersAsync()
+    {
+        // Arrange: three-level hierarchy — Root -> Mid -> Leaf — to prove the BFS walk continues
+        // past the first layer of descendants.
+        var cs = CreateConnectedSystem(id: 1);
+        _connectedSystemsData.Add(cs);
+
+        var partition = new ConnectedSystemPartition
+        {
+            Id = 100,
+            ConnectedSystem = cs,
+            Name = "DC=example,DC=local",
+            ExternalId = "DC=example,DC=local",
+            Selected = true,
+            Containers = new HashSet<ConnectedSystemContainer>()
+        };
+        _partitionsData.Add(partition);
+
+        var root = new ConnectedSystemContainer { Id = 200, Name = "Root", ExternalId = "OU=Root", PartitionId = partition.Id };
+        var mid = new ConnectedSystemContainer { Id = 201, Name = "Mid", ExternalId = "OU=Mid,OU=Root", ParentContainerId = root.Id };
+        var leaf = new ConnectedSystemContainer { Id = 202, Name = "Leaf", ExternalId = "OU=Leaf,OU=Mid,OU=Root", ParentContainerId = mid.Id };
+        _containersData.AddRange(new[] { root, mid, leaf });
+
+        BuildMocks();
+
+        // Act
+        var result = await _repository.ConnectedSystems.GetConnectedSystemAsync(1);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        var loadedPartition = result!.Partitions!.Single(p => p.Id == partition.Id);
+        var loadedRoot = loadedPartition.Containers!.Single();
+        Assert.That(loadedRoot.Id, Is.EqualTo(root.Id));
+        Assert.That(loadedRoot.ChildContainers, Has.Count.EqualTo(1));
+
+        var loadedMid = loadedRoot.ChildContainers.Single();
+        Assert.That(loadedMid.Id, Is.EqualTo(mid.Id));
+        Assert.That(loadedMid.ChildContainers, Has.Count.EqualTo(1));
+        Assert.That(loadedMid.ChildContainers.Single().Id, Is.EqualTo(leaf.Id));
+    }
+
+    [Test]
+    public async Task GetConnectedSystemAsync_ExcludesContainersFromUnrelatedPartitionsAsync()
+    {
+        // Arrange: two connected systems (A and B), each with one partition and a Corp/Users tree.
+        // When loading system A, we must see A's tree only — B's containers must not leak in.
+        var systemA = CreateConnectedSystem(id: 1, name: "A");
+        var systemB = CreateConnectedSystem(id: 2, name: "B");
+        _connectedSystemsData.Add(systemA);
+        _connectedSystemsData.Add(systemB);
+
+        var partitionA = new ConnectedSystemPartition
+        {
+            Id = 100,
+            ConnectedSystem = systemA,
+            Name = "DC=a,DC=local",
+            ExternalId = "DC=a,DC=local",
+            Containers = new HashSet<ConnectedSystemContainer>()
+        };
+        var partitionB = new ConnectedSystemPartition
+        {
+            Id = 101,
+            ConnectedSystem = systemB,
+            Name = "DC=b,DC=local",
+            ExternalId = "DC=b,DC=local",
+            Containers = new HashSet<ConnectedSystemContainer>()
+        };
+        _partitionsData.Add(partitionA);
+        _partitionsData.Add(partitionB);
+
+        var corpA = new ConnectedSystemContainer { Id = 200, Name = "CorpA", ExternalId = "OU=Corp,DC=a", PartitionId = partitionA.Id };
+        var usersA = new ConnectedSystemContainer { Id = 201, Name = "UsersA", ExternalId = "OU=Users,OU=Corp,DC=a", ParentContainerId = corpA.Id };
+        var corpB = new ConnectedSystemContainer { Id = 300, Name = "CorpB", ExternalId = "OU=Corp,DC=b", PartitionId = partitionB.Id };
+        var usersB = new ConnectedSystemContainer { Id = 301, Name = "UsersB", ExternalId = "OU=Users,OU=Corp,DC=b", ParentContainerId = corpB.Id };
+        _containersData.AddRange(new[] { corpA, usersA, corpB, usersB });
+
+        BuildMocks();
+
+        // Act
+        var result = await _repository.ConnectedSystems.GetConnectedSystemAsync(1);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        var loadedPartitions = result!.Partitions!.ToList();
+        Assert.That(loadedPartitions, Has.Count.EqualTo(1));
+
+        var loadedPartition = loadedPartitions[0];
+        Assert.That(loadedPartition.Id, Is.EqualTo(partitionA.Id));
+
+        var allContainerIds = CollectAllContainerIds(loadedPartition.Containers!);
+        Assert.That(allContainerIds, Is.EquivalentTo(new[] { corpA.Id, usersA.Id }));
+        Assert.That(allContainerIds, Does.Not.Contain(corpB.Id));
+        Assert.That(allContainerIds, Does.Not.Contain(usersB.Id));
+    }
+
+    [Test]
+    public async Task GetConnectedSystemPartitionsAsync_LoadsNestedContainersBelowRootsAsync()
+    {
+        // Arrange: same shape as the GetConnectedSystemAsync test — one partition, one root Corp, three
+        // nested descendants. This endpoint powers the partitions-list API that scenario scripts use to
+        // select containers for import, so missing descendants here caused Scenario 8's silent failure
+        // even after GetConnectedSystemAsync was fixed (issue #586).
+        var cs = CreateConnectedSystem(id: 1);
+        _connectedSystemsData.Add(cs);
+
+        var partition = new ConnectedSystemPartition
+        {
+            Id = 100,
+            ConnectedSystem = cs,
+            Name = "DC=resurgam,DC=local",
+            ExternalId = "DC=resurgam,DC=local",
+            Selected = true,
+            Containers = new HashSet<ConnectedSystemContainer>()
+        };
+        _partitionsData.Add(partition);
+
+        var corp = new ConnectedSystemContainer
+        {
+            Id = 200,
+            Name = "Corp",
+            ExternalId = "OU=Corp,DC=resurgam,DC=local",
+            PartitionId = partition.Id
+        };
+        var users = new ConnectedSystemContainer
+        {
+            Id = 201,
+            Name = "Users",
+            ExternalId = "OU=Users,OU=Corp,DC=resurgam,DC=local",
+            ParentContainerId = corp.Id
+        };
+        var groups = new ConnectedSystemContainer
+        {
+            Id = 202,
+            Name = "Groups",
+            ExternalId = "OU=Groups,OU=Corp,DC=resurgam,DC=local",
+            ParentContainerId = corp.Id
+        };
+        _containersData.AddRange(new[] { corp, users, groups });
+
+        BuildMocks();
+
+        // Act
+        var partitions = await _repository.ConnectedSystems.GetConnectedSystemPartitionsAsync(cs);
+
+        // Assert
+        Assert.That(partitions, Has.Count.EqualTo(1));
+        var loadedPartition = partitions.Single();
+        Assert.That(loadedPartition.Containers, Has.Count.EqualTo(1));
+
+        var loadedCorp = loadedPartition.Containers!.Single();
+        Assert.That(loadedCorp.Id, Is.EqualTo(corp.Id));
+        Assert.That(loadedCorp.ChildContainers, Has.Count.EqualTo(2));
+
+        var childIds = loadedCorp.ChildContainers.Select(c => c.Id).OrderBy(id => id).ToList();
+        Assert.That(childIds, Is.EquivalentTo(new[] { users.Id, groups.Id }));
+    }
+
+    [Test]
+    public async Task GetConnectedSystemContainerAsync_WalksParentChainForNestedContainerAsync()
+    {
+        // Arrange: a nested container (Users under Corp under partition P) where the leaf has
+        // ParentContainerId set but no eager navigation. The controller's belongs-to check walks up
+        // ParentContainer to reach the owning ConnectedSystem via either Partition or ConnectedSystem;
+        // if the chain isn't hydrated, PUTs to nested containers 404. See issue #586.
+        var cs = CreateConnectedSystem(id: 1);
+        _connectedSystemsData.Add(cs);
+
+        var partition = new ConnectedSystemPartition
+        {
+            Id = 100,
+            ConnectedSystem = cs,
+            Name = "DC=example,DC=local",
+            ExternalId = "DC=example,DC=local",
+            Containers = new HashSet<ConnectedSystemContainer>()
+        };
+        _partitionsData.Add(partition);
+
+        var corp = new ConnectedSystemContainer
+        {
+            Id = 200,
+            Name = "Corp",
+            ExternalId = "OU=Corp,DC=example,DC=local",
+            PartitionId = partition.Id,
+            Partition = partition
+        };
+        var users = new ConnectedSystemContainer
+        {
+            Id = 201,
+            Name = "Users",
+            ExternalId = "OU=Users,OU=Corp,DC=example,DC=local",
+            ParentContainerId = corp.Id
+        };
+        _containersData.AddRange(new[] { corp, users });
+
+        BuildMocks();
+
+        // Act
+        var result = await _repository.ConnectedSystems.GetConnectedSystemContainerAsync(users.Id);
+
+        // Assert: the leaf is returned with its ParentContainer chain populated up to the root,
+        // and the root's Partition -> ConnectedSystem is reachable so belongs-to checks pass.
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Id, Is.EqualTo(users.Id));
+        Assert.That(result.ParentContainer, Is.Not.Null);
+        Assert.That(result.ParentContainer!.Id, Is.EqualTo(corp.Id));
+        Assert.That(result.ParentContainer.Partition, Is.Not.Null);
+        Assert.That(result.ParentContainer.Partition!.ConnectedSystem, Is.Not.Null);
+        Assert.That(result.ParentContainer.Partition.ConnectedSystem!.Id, Is.EqualTo(cs.Id));
+    }
+
+    [Test]
+    public async Task GetConnectedSystemPartitionAsync_LoadsNestedContainersBelowRootAsync()
+    {
+        // Arrange: same shape but via the single-partition endpoint used by the partition-update API.
+        var cs = CreateConnectedSystem(id: 1);
+        _connectedSystemsData.Add(cs);
+
+        var partition = new ConnectedSystemPartition
+        {
+            Id = 100,
+            ConnectedSystem = cs,
+            Name = "DC=resurgam,DC=local",
+            ExternalId = "DC=resurgam,DC=local",
+            Containers = new HashSet<ConnectedSystemContainer>()
+        };
+        _partitionsData.Add(partition);
+
+        var corp = new ConnectedSystemContainer
+        {
+            Id = 200,
+            Name = "Corp",
+            ExternalId = "OU=Corp,DC=resurgam,DC=local",
+            PartitionId = partition.Id
+        };
+        var users = new ConnectedSystemContainer
+        {
+            Id = 201,
+            Name = "Users",
+            ExternalId = "OU=Users,OU=Corp,DC=resurgam,DC=local",
+            ParentContainerId = corp.Id
+        };
+        _containersData.AddRange(new[] { corp, users });
+
+        BuildMocks();
+
+        // Act
+        var result = await _repository.ConnectedSystems.GetConnectedSystemPartitionAsync(partition.Id);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Containers, Has.Count.EqualTo(1));
+
+        var loadedCorp = result.Containers!.Single();
+        Assert.That(loadedCorp.ChildContainers, Has.Count.EqualTo(1));
+        Assert.That(loadedCorp.ChildContainers.Single().Id, Is.EqualTo(users.Id));
+    }
+
+    private static List<int> CollectAllContainerIds(IEnumerable<ConnectedSystemContainer> containers)
+    {
+        var ids = new List<int>();
+        foreach (var container in containers)
+        {
+            ids.Add(container.Id);
+            ids.AddRange(CollectAllContainerIds(container.ChildContainers));
+        }
+        return ids;
+    }
+
+    #endregion
 }
