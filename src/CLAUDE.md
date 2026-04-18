@@ -143,6 +143,7 @@ Repository and server methods that load a single entity follow a weight-based ta
 **Tooltips:**
 - ALWAYS use `Arrow="true" Placement="Placement.Top"` on all `<MudTooltip>` components
 - This ensures tooltips appear above the element with a downward-pointing arrow, consistent across the entire UI
+- **Exception:** tooltips anchored to elements inside the mini-drawer (e.g. the `DrawerUserMenu` avatar when the drawer is collapsed) should use `Placement.Right` so they emerge into the main content area rather than overlapping the drawer itself. This exception is scoped to drawer-anchored tooltips only; do not extend it to other contexts.
 
 **UI Element Sizing:**
 - ALWAYS use normal/default sizes for ALL UI elements when adding new components
