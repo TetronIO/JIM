@@ -357,4 +357,108 @@ public class ServiceSettingsControllerTests
     }
 
     #endregion
+
+    #region Instance settings tests (#583)
+
+    [Test]
+    public async Task UpdateAsync_ServiceName_UpdatesSuccessfullyAsync()
+    {
+        var setting = new ServiceSetting
+        {
+            Key = Constants.SettingKeys.ServiceName,
+            DisplayName = "Service Name",
+            Category = ServiceSettingCategory.Instance,
+            ValueType = ServiceSettingValueType.String,
+            Value = null,
+            IsReadOnly = false
+        };
+        _mockServiceSettingsRepo.Setup(r => r.GetSettingAsync(Constants.SettingKeys.ServiceName))
+            .ReturnsAsync(setting);
+        _mockServiceSettingsRepo.Setup(r => r.UpdateSettingAsync(It.IsAny<ServiceSetting>()))
+            .Returns(Task.CompletedTask);
+
+        var request = new ServiceSettingUpdateRequestDto { Value = "HQ-Production" };
+        var result = await _controller.UpdateAsync(Constants.SettingKeys.ServiceName, request);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mockServiceSettingsRepo.Verify(r => r.UpdateSettingAsync(
+            It.Is<ServiceSetting>(s => s.Key == Constants.SettingKeys.ServiceName && s.Value == "HQ-Production")),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task UpdateAsync_ServiceId_ReturnsBadRequestAsync()
+    {
+        var setting = new ServiceSetting
+        {
+            Key = Constants.SettingKeys.ServiceId,
+            DisplayName = "Service ID",
+            Category = ServiceSettingCategory.Instance,
+            ValueType = ServiceSettingValueType.Guid,
+            Value = Guid.NewGuid().ToString(),
+            IsReadOnly = true
+        };
+        _mockServiceSettingsRepo.Setup(r => r.GetSettingAsync(Constants.SettingKeys.ServiceId))
+            .ReturnsAsync(setting);
+
+        var request = new ServiceSettingUpdateRequestDto { Value = Guid.NewGuid().ToString() };
+        var result = await _controller.UpdateAsync(Constants.SettingKeys.ServiceId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        var body = ((BadRequestObjectResult)result).Value as ApiErrorResponse;
+        Assert.That(body, Is.Not.Null);
+        Assert.That(body!.Message, Does.Contain("read-only"));
+
+        _mockServiceSettingsRepo.Verify(r => r.UpdateSettingAsync(It.IsAny<ServiceSetting>()),
+            Times.Never);
+    }
+
+    [Test]
+    public async Task RevertAsync_ServiceId_ReturnsBadRequestAsync()
+    {
+        var setting = new ServiceSetting
+        {
+            Key = Constants.SettingKeys.ServiceId,
+            DisplayName = "Service ID",
+            Category = ServiceSettingCategory.Instance,
+            ValueType = ServiceSettingValueType.Guid,
+            Value = Guid.NewGuid().ToString(),
+            IsReadOnly = true
+        };
+        _mockServiceSettingsRepo.Setup(r => r.GetSettingAsync(Constants.SettingKeys.ServiceId))
+            .ReturnsAsync(setting);
+
+        var result = await _controller.RevertAsync(Constants.SettingKeys.ServiceId);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockServiceSettingsRepo.Verify(r => r.UpdateSettingAsync(It.IsAny<ServiceSetting>()),
+            Times.Never);
+    }
+
+    [Test]
+    public async Task GetByKeyAsync_ServiceId_ReturnsGuidStringAsync()
+    {
+        var id = Guid.NewGuid();
+        var setting = new ServiceSetting
+        {
+            Key = Constants.SettingKeys.ServiceId,
+            DisplayName = "Service ID",
+            Category = ServiceSettingCategory.Instance,
+            ValueType = ServiceSettingValueType.Guid,
+            Value = id.ToString(),
+            IsReadOnly = true
+        };
+        _mockServiceSettingsRepo.Setup(r => r.GetSettingAsync(Constants.SettingKeys.ServiceId))
+            .ReturnsAsync(setting);
+
+        var result = await _controller.GetByKeyAsync(Constants.SettingKeys.ServiceId) as OkObjectResult;
+        var dto = result?.Value as ServiceSettingDto;
+
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.ValueType, Is.EqualTo("Guid"));
+        Assert.That(dto.EffectiveValue, Is.EqualTo(id.ToString()));
+        Assert.That(dto.IsReadOnly, Is.True);
+    }
+
+    #endregion
 }
