@@ -1511,12 +1511,12 @@ if ($DisableChangeTracking) {
 }
 
 # Metrics streaming status
-$metricsStreamingEnabled = $env:JIM_METRICS_API_URL -and $env:JIM_METRICS_API_KEY
+$metricsStreamingEnabled = $env:JIM_BENCH_API_URL -and $env:JIM_BENCH_API_KEY
 if ($metricsStreamingEnabled) {
     Write-Host "  Metrics Streaming:       ${GREEN}Enabled${NC}"
-    Write-Host "                           ${GRAY}$($env:JIM_METRICS_API_URL)${NC}"
+    Write-Host "                           ${GRAY}$($env:JIM_BENCH_API_URL)${NC}"
 } else {
-    Write-Host "  Metrics Streaming:       ${GRAY}Disabled (set JIM_METRICS_API_URL and JIM_METRICS_API_KEY to enable)${NC}"
+    Write-Host "  Metrics Streaming:       ${GRAY}Disabled (set JIM_BENCH_API_URL and JIM_BENCH_API_KEY to enable)${NC}"
 }
 Write-Host ""
 
@@ -2371,7 +2371,7 @@ if ($CaptureMetrics) {
     Write-Host "  Capture Metrics:         Yes"
 }
 if ($metricsStreamingEnabled) {
-    Write-Host "  Metrics Streaming:       Enabled ($($env:JIM_METRICS_API_URL))"
+    Write-Host "  Metrics Streaming:       Enabled ($($env:JIM_BENCH_API_URL))"
     Write-Host "  Metrics Run ID:          $metricsRunId"
 }
 if ($IgnoreSnapshots) {
@@ -2425,11 +2425,11 @@ if ($metricsStreamingEnabled) {
         $workerLogFilePath = Join-Path $workerLogPath "jim.worker.$(Get-Date -Format 'yyyyMMdd').log"
     }
 
-    Write-Step "Starting metrics streaming to $($env:JIM_METRICS_API_URL)..."
+    Write-Step "Starting metrics streaming to $($env:JIM_BENCH_API_URL)..."
     $metricsStreamJob = Start-Job -FilePath "$scriptRoot/Stream-WorkerLogs.ps1" -ArgumentList @(
         $workerLogFilePath,
-        $env:JIM_METRICS_API_URL,
-        $env:JIM_METRICS_API_KEY,
+        $env:JIM_BENCH_API_URL,
+        $env:JIM_BENCH_API_KEY,
         $metricsRunId,
         $Scenario,
         $Template,
@@ -2858,7 +2858,7 @@ if ($metricsStreamJob) {
     }
     Remove-Job $metricsStreamJob -Force -ErrorAction SilentlyContinue
 
-    Write-Step "Submitting test results to Metrics API..."
+    Write-Step "Submitting test results to JIM-Bench..."
     $scenarioSuccess = ($scenarioExitCode -eq 0)
     $testDurationMs = $timings["5. Run Tests"].TotalMilliseconds
     try {
@@ -2872,8 +2872,8 @@ if ($metricsStreamJob) {
             -ExitCode $scenarioExitCode `
             -TestDurationMs $testDurationMs `
             -HostFingerprint $metricsHostFingerprint `
-            -ApiUrl $env:JIM_METRICS_API_URL `
-            -ApiKey $env:JIM_METRICS_API_KEY `
+            -ApiUrl $env:JIM_BENCH_API_URL `
+            -ApiKey $env:JIM_BENCH_API_KEY `
             -ResultFile $(if ($currentFile) { $currentFile } else { "" })
     }
     catch {

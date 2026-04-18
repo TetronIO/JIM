@@ -67,8 +67,11 @@ $ErrorActionPreference = "Continue"
 
 $apiEndpoint = "$($ApiUrl.TrimEnd('/'))/api/v1/runs/$RunId/complete"
 
-# Build the completion payload
+# Build the completion payload. schemaVersion is explicit so future server-side
+# contract bumps can reject or adapt based on the value rather than relying on
+# the "absent = 1 with deprecation warning" compatibility path.
 $payload = @{
+    schemaVersion   = 1
     runId           = $RunId
     scenario        = $Scenario
     template        = $Template
@@ -103,16 +106,11 @@ try {
 
     $response = Invoke-RestMethod -Uri $apiEndpoint -Method POST -Headers $headers -Body $body -TimeoutSec 15
 
-    # Build and display Grafana dashboard URL
-    $grafanaUrl = $ApiUrl -replace '/api$', '' -replace ':5000', ':3000'  # Convention: Grafana on port 3000
-    if ($response.grafanaUrl) {
-        $grafanaUrl = $response.grafanaUrl
-    }
-    $dashboardUrl = "$($grafanaUrl.TrimEnd('/'))/d/run-detail?var-runId=$RunId"
-
     Write-Host ""
     Write-Host "  Metrics submitted successfully" -ForegroundColor Green
-    Write-Host "  Dashboard: $dashboardUrl" -ForegroundColor Cyan
+    if ($response.grafanaUrl) {
+        Write-Host "  Dashboard: $($response.grafanaUrl)" -ForegroundColor Cyan
+    }
     Write-Host ""
 }
 catch {

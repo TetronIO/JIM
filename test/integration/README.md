@@ -124,15 +124,15 @@ pwsh test/integration/Invoke-IntegrationTests.ps1 -ScenariosOnly
 
 ## Metrics Streaming
 
-Integration test results can be automatically streamed to a central Metrics API for Grafana dashboards, enabling historical trending, cross-host comparison, and throughput profiling.
+Integration test results can be automatically streamed to the JIM-Bench ingestion API for Grafana dashboards, enabling historical trending, cross-host comparison, and throughput profiling.
 
 ### Enabling Metrics Streaming
 
 Set two environment variables (in `.env` or export them in your shell):
 
 ```bash
-export JIM_METRICS_API_URL=https://metrics.tetron.io
-export JIM_METRICS_API_KEY=your-api-key
+export JIM_BENCH_API_URL=https://bench-api.junctional.io
+export JIM_BENCH_API_KEY=your-api-key
 ```
 
 When set, the test runner will:
