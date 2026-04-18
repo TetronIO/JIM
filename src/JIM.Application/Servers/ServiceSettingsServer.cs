@@ -355,7 +355,15 @@ namespace JIM.Application.Servers
 
                 return default;
             }
-            catch
+            catch (FormatException)
+            {
+                return default;
+            }
+            catch (OverflowException)
+            {
+                return default;
+            }
+            catch (ArgumentException)
             {
                 return default;
             }
