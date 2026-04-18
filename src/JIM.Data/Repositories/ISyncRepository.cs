@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -431,39 +432,21 @@ public interface ISyncRepository
     Task BulkUpdateRpeiOutcomesAsync(List<ActivityRunProfileExecutionItem> rpeis, List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes);
 
     /// <summary>
-    /// Loads persisted RPEIs and their SyncOutcomes for the specified CSO ids, for use by
-    /// cross-page reference resolution to merge reference attribute flow into existing RPEIs
-    /// rather than creating duplicates. Previous implementations relied on
-    /// <c>_activity.RunProfileExecutionItems</c> as a lookup source, but per-page raw-SQL flushes
-    /// clear that collection so the lookup has to come from the database.
+    /// Loads persisted RPEIs (with their SyncOutcomes) and the id of each RPEI's existing
+    /// MetaverseObjectChange, in a single round-trip. Used by cross-page reference resolution to
+    /// merge reference attribute flow into existing RPEIs and to route the new attribute rows
+    /// under the already-persisted MvoChange parent (respecting the unique constraint
+    /// <c>IX_MetaverseObjectChanges_ActivityRunProfileExecutionItemId</c>). Previous implementations
+    /// relied on <c>_activity.RunProfileExecutionItems</c> as a lookup source, but per-page raw-SQL
+    /// flushes clear that collection so the lookup has to come from the database.
+    ///
+    /// PostgreSQL implementation uses a single <c>NpgsqlBatch</c> (RPEIs joined LEFT to
+    /// <c>MetaverseObjectChanges</c> + a second statement for <c>SyncOutcomes</c>) in one network
+    /// round-trip. Replaces the previous two-call pattern (EF Include for RPEIs + a separate raw-SQL
+    /// map lookup for MvoChange ids).
     /// </summary>
-    Task<List<ActivityRunProfileExecutionItem>> GetActivityRpeisByCsoIdsForCrossPageMergeAsync(
+    Task<List<CrossPageMergeRpei>> GetRpeisWithMvoChangeIdsForCrossPageMergeAsync(
         Guid activityId, IReadOnlyCollection<Guid> csoIds);
-
-    /// <summary>
-    /// Returns a dictionary mapping RPEI id → existing MetaverseObjectChange id for the
-    /// supplied RPEI ids. Used by cross-page reference resolution so that the reference
-    /// attribute flows added to an already-persisted Projected/Joined RPEI can be written
-    /// as new attribute rows under the existing MvoChange parent — respecting the unique
-    /// constraint <c>IX_MetaverseObjectChanges_ActivityRunProfileExecutionItemId</c>.
-    ///
-    /// PostgreSQL implementation uses raw Npgsql (not EF projection): measured ~3.5× faster
-    /// on Medium-scale cross-page loads (2 ms vs 7 ms for 113 RPEIs), with the gap widening
-    /// at higher scales where EF materialisation overhead dominates.
-    /// </summary>
-    Task<Dictionary<Guid, Guid>> GetRpeiToMvoChangeIdMapAsync(IReadOnlyCollection<Guid> rpeiIds);
-
-    /// <summary>
-    /// Persists only the attribute + value rows of pending MVO changes whose parent
-    /// MetaverseObjectChange record already exists in the database (i.e. from an earlier
-    /// page flush). Used by cross-page reference resolution after merging reference
-    /// attribute flows into an already-persisted Projected/Joined RPEI.
-    ///
-    /// Each change in <paramref name="mvoChanges"/> must already have its <c>Id</c> set
-    /// to the existing parent's id; the method skips the parent INSERT and writes only the
-    /// attribute and attribute-value children via COPY.
-    /// </summary>
-    Task PersistPendingMvoChangeAttributesAsync(List<MetaverseObjectChange> mvoChanges);
 
     /// <summary>
     /// Detaches RPEIs from the EF change tracker so they are not persisted by subsequent
@@ -554,11 +537,23 @@ public interface ISyncRepository
     Task CreateMetaverseObjectChangeDirectAsync(MetaverseObjectChange change);
 
     /// <summary>
-    /// Persists pending MVO change records (and their attribute and value children) via raw SQL.
+    /// Persists pending MVO change records in a single outer transaction. Handles both sets
+    /// in one round-trip so the pair is atomic and the per-flush BEGIN/COMMIT overhead is halved
+    /// when the cross-page phase produces both:
+    /// <list type="bullet">
+    ///   <item><paramref name="newChanges"/> — new parent <c>MetaverseObjectChange</c> rows plus
+    ///     their attribute and value children (written via raw SQL COPY).</item>
+    ///   <item><paramref name="attributeAppendsToExistingChanges"/> — attribute and value children
+    ///     appended to parents already persisted in an earlier page flush. Each change must have
+    ///     its <c>Id</c> set to the existing parent's id; the parent row itself is not re-inserted
+    ///     (respecting <c>IX_MetaverseObjectChanges_ActivityRunProfileExecutionItemId</c>).</item>
+    /// </list>
     /// Used by sync processors to persist changes collected during page processing, bypassing the
     /// EF change tracker which is cleared at page boundaries.
     /// </summary>
-    Task PersistPendingMvoChangesAsync(List<MetaverseObjectChange> mvoChanges);
+    Task PersistPendingMvoChangesAsync(
+        List<MetaverseObjectChange> newChanges,
+        List<MetaverseObjectChange> attributeAppendsToExistingChanges);
 
     #endregion
 

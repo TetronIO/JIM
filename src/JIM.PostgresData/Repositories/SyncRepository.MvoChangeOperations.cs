@@ -11,14 +11,16 @@ namespace JIM.PostgresData.Repositories;
 public partial class SyncRepository
 {
     /// <inheritdoc />
-    public async Task PersistPendingMvoChangesAsync(List<MetaverseObjectChange> mvoChanges)
+    public async Task PersistPendingMvoChangesAsync(
+        List<MetaverseObjectChange> newChanges,
+        List<MetaverseObjectChange> attributeAppendsToExistingChanges)
     {
-        if (mvoChanges.Count == 0)
+        if (newChanges.Count == 0 && attributeAppendsToExistingChanges.Count == 0)
             return;
 
-        // Pre-generate IDs for all entities in the graph so FK relationships are known
-        // before we build the COPY binary import statements.
-        foreach (var change in mvoChanges)
+        // Pre-generate IDs for new-change graph entities so FK relationships are known
+        // before building the COPY binary import statements.
+        foreach (var change in newChanges)
         {
             if (change.Id == Guid.Empty)
                 change.Id = Guid.NewGuid();
@@ -36,57 +38,14 @@ public partial class SyncRepository
             }
         }
 
-        // Increase command timeout for large change record persistence.
-        var previousTimeout = _context.Database.GetCommandTimeout();
-        _context.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
-
-        // Use an EF transaction for atomicity — COPY binary imports on the underlying
-        // NpgsqlConnection participate in the active transaction automatically.
-        await using var transaction = await _context.Database.BeginTransactionAsync();
-
-        // Step 1: INSERT parent MetaverseObjectChange rows
-        await BulkInsertMvoChangesRawAsync(mvoChanges);
-
-        // Step 2: INSERT MetaverseObjectChangeAttribute rows
-        var allAttrChanges = mvoChanges
-            .SelectMany(c => c.AttributeChanges.Select(ac =>
-                (ChangeId: c.Id, AttributeId: ac.Attribute?.Id, AttrChange: ac)))
-            .ToList();
-
-        if (allAttrChanges.Count > 0)
-            await BulkInsertMvoChangeAttributesRawAsync(allAttrChanges);
-
-        // Step 3: INSERT MetaverseObjectChangeAttributeValue rows
-        var allValueChanges = mvoChanges
-            .SelectMany(c => c.AttributeChanges
-                .SelectMany(ac => ac.ValueChanges.Select(vc => (AttrChangeId: ac.Id, Value: vc))))
-            .ToList();
-
-        if (allValueChanges.Count > 0)
-            await BulkInsertMvoChangeAttributeValuesRawAsync(allValueChanges);
-
-        await transaction.CommitAsync();
-        _context.Database.SetCommandTimeout(previousTimeout);
-
-        Log.Debug("PersistPendingMvoChangesAsync: Persisted {ChangeCount} MVO changes with {AttrCount} attribute changes and {ValueCount} value changes",
-            mvoChanges.Count, allAttrChanges.Count, allValueChanges.Count);
-    }
-
-    /// <inheritdoc />
-    public async Task PersistPendingMvoChangeAttributesAsync(List<MetaverseObjectChange> mvoChanges)
-    {
-        if (mvoChanges.Count == 0)
-            return;
-
-        // Each change's Id is assumed to already be set to the existing parent MvoChange id.
-        // We ONLY pre-generate ids for the attribute + value children, because the parent
-        // rows already exist in the database (written on an earlier page flush) and must
-        // not be re-inserted under the unique (ActivityRunProfileExecutionItemId) constraint.
-        foreach (var change in mvoChanges)
+        // For appends, the parent id must already be set (it's the existing MvoChange row).
+        // Only the attribute/value children need id generation — writing a new parent here
+        // would violate IX_MetaverseObjectChanges_ActivityRunProfileExecutionItemId.
+        foreach (var change in attributeAppendsToExistingChanges)
         {
             if (change.Id == Guid.Empty)
                 throw new InvalidOperationException(
-                    "PersistPendingMvoChangeAttributesAsync requires each MvoChange to already have its existing parent Id set.");
+                    "PersistPendingMvoChangesAsync (append): each MvoChange must already have its existing parent Id set.");
 
             foreach (var attrChange in change.AttributeChanges)
             {
@@ -101,10 +60,18 @@ public partial class SyncRepository
         var previousTimeout = _context.Database.GetCommandTimeout();
         _context.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
 
+        // One outer transaction for both the new-parent inserts and the append-only
+        // attribute/value writes. Halves the per-flush BEGIN/COMMIT overhead when the
+        // cross-page phase produces both, and makes the pair atomic: either the new page
+        // of changes AND its cross-page appends land together, or neither does.
         await using var transaction = await _context.Database.BeginTransactionAsync();
 
-        // Skip parent INSERT. Write only attribute + value children under the existing parent Ids.
-        var allAttrChanges = mvoChanges
+        if (newChanges.Count > 0)
+            await BulkInsertMvoChangesRawAsync(newChanges);
+
+        // Attribute rows from BOTH sets write to the same table in one COPY call.
+        var allAttrChanges = newChanges
+            .Concat(attributeAppendsToExistingChanges)
             .SelectMany(c => c.AttributeChanges.Select(ac =>
                 (ChangeId: c.Id, AttributeId: ac.Attribute?.Id, AttrChange: ac)))
             .ToList();
@@ -112,7 +79,8 @@ public partial class SyncRepository
         if (allAttrChanges.Count > 0)
             await BulkInsertMvoChangeAttributesRawAsync(allAttrChanges);
 
-        var allValueChanges = mvoChanges
+        var allValueChanges = newChanges
+            .Concat(attributeAppendsToExistingChanges)
             .SelectMany(c => c.AttributeChanges
                 .SelectMany(ac => ac.ValueChanges.Select(vc => (AttrChangeId: ac.Id, Value: vc))))
             .ToList();
@@ -123,8 +91,8 @@ public partial class SyncRepository
         await transaction.CommitAsync();
         _context.Database.SetCommandTimeout(previousTimeout);
 
-        Log.Debug("PersistPendingMvoChangeAttributesAsync: Appended {AttrCount} attribute changes and {ValueCount} value changes to {ChangeCount} existing MVO changes",
-            allAttrChanges.Count, allValueChanges.Count, mvoChanges.Count);
+        Log.Debug("PersistPendingMvoChangesAsync: Persisted {NewCount} new MVO changes and appended children to {AppendCount} existing; {AttrCount} attribute changes, {ValueCount} value changes",
+            newChanges.Count, attributeAppendsToExistingChanges.Count, allAttrChanges.Count, allValueChanges.Count);
     }
 
     /// <summary>

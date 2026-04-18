@@ -3,6 +3,7 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Enums;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -236,6 +237,96 @@ public class SyncRepositoryMvoTests
         var rule = CreateMatchingRule(1, 10, 5);
         var result = await _repo.FindMatchingMetaverseObjectAsync(cso, new List<ObjectMatchingRule> { rule });
         Assert.That(result, Is.Null);
+    }
+
+    #endregion
+
+    #region PersistPendingMvoChangesAsync (combined new + append)
+
+    [Test]
+    public async Task PersistPendingMvoChangesAsync_BothListsEmpty_NoOpAsync()
+    {
+        await _repo.PersistPendingMvoChangesAsync(
+            new List<MetaverseObjectChange>(),
+            new List<MetaverseObjectChange>());
+
+        Assert.That(_repo.MetaverseObjectChanges, Is.Empty);
+    }
+
+    [Test]
+    public async Task PersistPendingMvoChangesAsync_OnlyNewChanges_InsertsParentsAndChildrenAsync()
+    {
+        var change = BuildNewMvoChange(Guid.NewGuid());
+
+        await _repo.PersistPendingMvoChangesAsync(
+            new List<MetaverseObjectChange> { change },
+            new List<MetaverseObjectChange>());
+
+        Assert.That(change.Id, Is.Not.EqualTo(Guid.Empty));
+        Assert.That(_repo.MetaverseObjectChanges, Has.Count.EqualTo(1));
+        Assert.That(_repo.MetaverseObjectChanges.ContainsKey(change.Id), Is.True);
+    }
+
+    [Test]
+    public async Task PersistPendingMvoChangesAsync_OnlyAppends_AddsAttributeChildrenToExistingParentAsync()
+    {
+        var parent = BuildNewMvoChange(Guid.NewGuid());
+        parent.Id = Guid.NewGuid();
+        await _repo.CreateMetaverseObjectChangeDirectAsync(parent);
+        Assume.That(parent.AttributeChanges, Is.Empty, "Parent starts with no attribute children.");
+
+        var append = new MetaverseObjectChange { Id = parent.Id };
+        append.AttributeChanges.Add(new MetaverseObjectChangeAttribute
+        {
+            AttributeName = "DisplayName",
+            AttributeType = AttributeDataType.Text
+        });
+
+        await _repo.PersistPendingMvoChangesAsync(
+            new List<MetaverseObjectChange>(),
+            new List<MetaverseObjectChange> { append });
+
+        Assert.That(_repo.MetaverseObjectChanges[parent.Id].AttributeChanges, Has.Count.EqualTo(1));
+        Assert.That(_repo.MetaverseObjectChanges[parent.Id].AttributeChanges[0].AttributeName, Is.EqualTo("DisplayName"));
+    }
+
+    [Test]
+    public async Task PersistPendingMvoChangesAsync_BothLists_PersistsAtomicallyAsync()
+    {
+        // Existing parent (from a prior page) receives an attribute append.
+        var existingParent = BuildNewMvoChange(Guid.NewGuid());
+        existingParent.Id = Guid.NewGuid();
+        await _repo.CreateMetaverseObjectChangeDirectAsync(existingParent);
+
+        var append = new MetaverseObjectChange { Id = existingParent.Id };
+        append.AttributeChanges.Add(new MetaverseObjectChangeAttribute
+        {
+            AttributeName = "Manager",
+            AttributeType = AttributeDataType.Reference
+        });
+
+        // New parent for an RPEI persisted this round.
+        var newParent = BuildNewMvoChange(Guid.NewGuid());
+
+        await _repo.PersistPendingMvoChangesAsync(
+            new List<MetaverseObjectChange> { newParent },
+            new List<MetaverseObjectChange> { append });
+
+        Assert.That(_repo.MetaverseObjectChanges, Has.Count.EqualTo(2));
+        Assert.That(_repo.MetaverseObjectChanges[existingParent.Id].AttributeChanges, Has.Count.EqualTo(1));
+        Assert.That(_repo.MetaverseObjectChanges[newParent.Id], Is.Not.Null);
+    }
+
+    private static MetaverseObjectChange BuildNewMvoChange(Guid rpeiId)
+    {
+        return new MetaverseObjectChange
+        {
+            ActivityRunProfileExecutionItemId = rpeiId,
+            ChangeTime = DateTime.UtcNow,
+            ChangeType = ObjectChangeType.Projected,
+            ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule,
+            InitiatedByType = ActivityInitiatorType.System
+        };
     }
 
     #endregion

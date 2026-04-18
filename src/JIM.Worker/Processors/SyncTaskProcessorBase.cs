@@ -1230,10 +1230,10 @@ public abstract class SyncTaskProcessorBase
                 // Prefer the AttributeFlow child as parent (MVO is fully formed after attribute flow),
                 // fall back to root outcome, fall back to creating outcomes at root level.
                 var rootOutcome = originatingRpei.SyncOutcomes.FirstOrDefault(o =>
-                    o.ParentSyncOutcome == null && o.ParentSyncOutcomeId == null);
+                    !o.ParentSyncOutcomeId.HasValue);
                 var attributeFlowChild = originatingRpei.SyncOutcomes.FirstOrDefault(o =>
                     o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
-                    && o.ParentSyncOutcome != null);
+                    && o.ParentSyncOutcomeId.HasValue);
                 var exportParent = attributeFlowChild ?? rootOutcome;
 
                 // Track Provisioned outcomes by CS ID so we can nest Pending Exports under them
@@ -1614,7 +1614,7 @@ public abstract class SyncTaskProcessorBase
                                 {
                                     var attrFlowChild = existingChangeEntry.Rpei.SyncOutcomes.FirstOrDefault(o =>
                                         o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
-                                        && o.ParentSyncOutcome != null);
+                                        && o.ParentSyncOutcomeId.HasValue);
                                     if (attrFlowChild != null)
                                         attrFlowChild.DetailCount = existingChangeEntry.Rpei.AttributeFlowCount;
                                 }
@@ -1690,6 +1690,17 @@ public abstract class SyncTaskProcessorBase
         Log.Information("ResolveCrossPageReferences: Resolving cross-page references for {Count} CSOs",
             totalCrossPagesToResolve);
 
+        // Memory snapshot at phase entry — cross-page resolution reloads CSO graphs with deep
+        // includes, rebuilds outcome trees, and re-evaluates exports, so its memory footprint
+        // is distinctive from the main sync loop. The matching snapshot at phase exit lets us
+        // size the headroom it takes at a glance; combined with docker stats externally this
+        // short-circuits future memory investigations into this phase.
+        var managedBytesAtStart = GC.GetTotalMemory(forceFullCollection: false);
+        var workingSetBytesAtStart = Environment.WorkingSet;
+        Log.Information("ResolveCrossPageReferences: Memory at phase entry — Managed: {ManagedMb:F1} MB, WorkingSet: {WorkingSetMb:F1} MB",
+            managedBytesAtStart / (1024.0 * 1024.0),
+            workingSetBytesAtStart / (1024.0 * 1024.0));
+
         await _syncRepo.UpdateActivityMessageAsync(_activity,
             $"Resolving cross-page references (0 / {totalCrossPagesToResolve})");
 
@@ -1699,27 +1710,21 @@ public abstract class SyncTaskProcessorBase
         // each per-page FlushRpeisAsync, so the lookup has to come from the database — reading
         // from the in-memory collection would produce an empty lookup and cause cross-page
         // resolution to create duplicate AttributeFlow RPEIs instead of merging into existing ones.
+        // Single-round-trip fetch: RPEIs + SyncOutcomes + RPEI→MvoChange ids via NpgsqlBatch.
+        // The MvoChange ids let cross-page attribute flows be persisted as children of the
+        // already-existing parent MvoChange (enforced by the unique-per-RPEI index on
+        // MetaverseObjectChanges).
         var unresolvedCsoIds = _unresolvedCrossPageReferences.Select(x => x.CsoId).ToHashSet();
         var rpeiLoadStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var existingRpeis = await _syncRepo.GetActivityRpeisByCsoIdsForCrossPageMergeAsync(
+        var crossPageMergeRpeis = await _syncRepo.GetRpeisWithMvoChangeIdsForCrossPageMergeAsync(
             _activity.Id, unresolvedCsoIds);
         rpeiLoadStopwatch.Stop();
-        var existingRpeisByCsoId = existingRpeis.ToDictionary(r => r.ConnectedSystemObjectId!.Value);
+        var existingRpeisByCsoId = crossPageMergeRpeis.ToDictionary(x => x.Rpei.ConnectedSystemObjectId!.Value);
+        var mvoChangeIdCount = crossPageMergeRpeis.Count(x => x.ExistingMvoChangeId.HasValue);
         Log.Information(
-            "ResolveCrossPageReferences: Loaded {RpeiCount} existing RPEIs for {CsoCount} cross-page CSOs from database in {ElapsedMs} ms (lookup hit rate {HitRate:P0})",
-            existingRpeis.Count, unresolvedCsoIds.Count, rpeiLoadStopwatch.ElapsedMilliseconds,
-            unresolvedCsoIds.Count > 0 ? (double)existingRpeis.Count / unresolvedCsoIds.Count : 1.0);
-
-        // Build RPEI-id → existing MvoChange-id map so cross-page attribute flows can be
-        // persisted as children of the already-existing parent MvoChange (enforced by the
-        // unique-per-RPEI index on MetaverseObjectChanges).
-        var rpeiIdsToLookUp = existingRpeis.Select(r => r.Id).ToList();
-        var mvoChangeIdLookupStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var rpeiIdToMvoChangeId = await _syncRepo.GetRpeiToMvoChangeIdMapAsync(rpeiIdsToLookUp);
-        mvoChangeIdLookupStopwatch.Stop();
-        Log.Information(
-            "ResolveCrossPageReferences: Loaded {MapCount} existing MvoChange ids for {RpeiCount} RPEIs in {ElapsedMs} ms",
-            rpeiIdToMvoChangeId.Count, rpeiIdsToLookUp.Count, mvoChangeIdLookupStopwatch.ElapsedMilliseconds);
+            "ResolveCrossPageReferences: Loaded {RpeiCount} existing RPEIs ({MvoChangeCount} with MvoChange ids) for {CsoCount} cross-page CSOs from database in {ElapsedMs} ms (lookup hit rate {HitRate:P0})",
+            crossPageMergeRpeis.Count, mvoChangeIdCount, unresolvedCsoIds.Count, rpeiLoadStopwatch.ElapsedMilliseconds,
+            unresolvedCsoIds.Count > 0 ? (double)crossPageMergeRpeis.Count / unresolvedCsoIds.Count : 1.0);
 
         // Clear the change tracker to prevent performance degradation.
         // After processing all pages, the change tracker accumulates thousands of tracked entities
@@ -1837,11 +1842,10 @@ public abstract class SyncTaskProcessorBase
                     // attribute additions are written as children of that row rather than a new one.
                     ActivityRunProfileExecutionItem rpei;
                     Guid? existingMvoChangeId = null;
-                    if (existingRpeisByCsoId.TryGetValue(csoId, out var existingRpei))
+                    if (existingRpeisByCsoId.TryGetValue(csoId, out var existingMergeRpei))
                     {
-                        rpei = existingRpei;
-                        rpeiIdToMvoChangeId.TryGetValue(rpei.Id, out var mvoChangeId);
-                        existingMvoChangeId = mvoChangeId == Guid.Empty ? null : mvoChangeId;
+                        rpei = existingMergeRpei.Rpei;
+                        existingMvoChangeId = existingMergeRpei.ExistingMvoChangeId;
                         rpei.AttributeFlowCount = (rpei.AttributeFlowCount ?? 0) + additionsCount + removalsCount;
 
                         // Update outcome tree: add or update the AttributeFlow child node
@@ -2086,6 +2090,15 @@ public abstract class SyncTaskProcessorBase
 
         Log.Information("ResolveCrossPageReferences: Completed cross-page reference resolution for {Count} CSOs",
             totalCrossPagesToResolve);
+
+        // Memory snapshot at phase exit, with deltas against the entry snapshot.
+        var managedBytesAtEnd = GC.GetTotalMemory(forceFullCollection: false);
+        var workingSetBytesAtEnd = Environment.WorkingSet;
+        Log.Information("ResolveCrossPageReferences: Memory at phase exit — Managed: {ManagedMb:F1} MB (Δ {ManagedDeltaMb:+0.0;-0.0;0.0} MB), WorkingSet: {WorkingSetMb:F1} MB (Δ {WorkingSetDeltaMb:+0.0;-0.0;0.0} MB)",
+            managedBytesAtEnd / (1024.0 * 1024.0),
+            (managedBytesAtEnd - managedBytesAtStart) / (1024.0 * 1024.0),
+            workingSetBytesAtEnd / (1024.0 * 1024.0),
+            (workingSetBytesAtEnd - workingSetBytesAtStart) / (1024.0 * 1024.0));
 
         _unresolvedCrossPageReferences.Clear();
 
@@ -2527,24 +2540,21 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Persists pending MVO change records via raw SQL bulk insert.
+    /// Persists pending MVO change records via raw SQL bulk insert in a single outer transaction.
     /// Must be called after CreatePendingMvoChangeObjectsAsync and before ClearChangeTracker.
     /// Handles both initial-page inserts (full parent + child rows) and cross-page-merge
-    /// appends (child rows only under already-persisted parents).
+    /// appends (child rows only under already-persisted parents) atomically.
     /// </summary>
     protected async Task FlushPendingMvoChangesAsync()
     {
-        if (_pendingMvoChangesToPersist.Count > 0)
-        {
-            await _syncRepo.PersistPendingMvoChangesAsync(_pendingMvoChangesToPersist);
-            _pendingMvoChangesToPersist.Clear();
-        }
+        if (_pendingMvoChangesToPersist.Count == 0 && _pendingMvoChangeAttributesToPersist.Count == 0)
+            return;
 
-        if (_pendingMvoChangeAttributesToPersist.Count > 0)
-        {
-            await _syncRepo.PersistPendingMvoChangeAttributesAsync(_pendingMvoChangeAttributesToPersist);
-            _pendingMvoChangeAttributesToPersist.Clear();
-        }
+        await _syncRepo.PersistPendingMvoChangesAsync(
+            _pendingMvoChangesToPersist,
+            _pendingMvoChangeAttributesToPersist);
+        _pendingMvoChangesToPersist.Clear();
+        _pendingMvoChangeAttributesToPersist.Clear();
     }
 
     /// <summary>

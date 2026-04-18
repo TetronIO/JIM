@@ -49,15 +49,29 @@ CSOs have a lifecycle:
 
 ## Partitions
 
-A **partition** is a logical division within a connected system. Partitions allow you to scope imports and exports to specific subsets of the external system's data.
+A **partition** is a top-level logical division of a connector space that mirrors a boundary defined by the external system. Partitions exist in JIM primarily to service **LDAP directories** and their **naming contexts** (NCs): the discrete directory trees that an LDAP server hosts. For example, the separate domain partitions within an Active Directory forest, or the distinct naming contexts exposed by an OpenLDAP server, each surface as a partition in JIM.
 
-For example, in an LDAP directory, partitions typically correspond to organisational units (OUs) or containers. You might configure JIM to import only from `OU=Users,DC=company,DC=local` rather than the entire directory tree.
+Most connected systems do not support partitions. A flat file, a SQL table, or a SCIM endpoint has no concept of multiple naming contexts, so its connector space has no partitions. Partitions are primarily a feature of LDAP-style directory connectors, where the directory itself is divided into separate trees.
 
-Partitions are particularly useful for:
+Where they do apply, partitions let JIM scope imports, exports, and sync rules to a specific naming context. Multi-domain directories are a common example; each partition can be targeted by its own run profile or sync rules.
 
-- **Performance** -- importing only the data you need rather than the entire directory
-- **Scoping** -- limiting JIM's visibility to specific parts of a connected system
-- **Multi-tenant scenarios** -- different partitions can be handled by different sync rules
+!!! note "Partitions and OUs are different concepts"
+    Partitions and organisational units (OUs) are distinct. A partition is a top-level boundary on the external system; an OU is a sub-tree *within* a partition and is modelled in JIM as a [container](#containers).
+
+### Containers
+
+Inside a partition, or directly inside the connector space of a connector that does not support partitions, you can have **containers**. Containers are a separate, lower-order logical construct that sits beneath partitions. They exist mainly to support LDAP **organisational units (OUs)** and similar hierarchical groupings.
+
+Containers are what you use to narrow imports and exports to a subset of data. For example, you might configure JIM to import only from `OU=Users,DC=company,DC=local` rather than the entire domain partition.
+
+### Partitions vs. containers at a glance
+
+| Construct | Scope | Example | Available on |
+|-----------|-------|---------|--------------|
+| **Partition** | Top-level boundary defined by the external system; discovered, not invented, by JIM | An Active Directory domain naming context (`DC=company,DC=local`) | LDAP-style connectors only |
+| **Container** | Sub-tree within a partition, or within the connector space of a non-partitioned system | An OU (`OU=Users,DC=company,DC=local`) | Most connectors that expose hierarchy |
+
+In practice, selecting a partition brings an entire naming context into scope, while selecting containers narrows what is imported within that partition (or within the connector space for connectors that have no partitions).
 
 ## Available Connectors
 
@@ -72,24 +86,29 @@ The File Connector imports from and exports to **CSV and delimited text files**.
 - Auto-confirm export (changes are written directly to the output file)
 - Suitable for integrating with systems that produce flat-file extracts (HR exports, batch feeds, etc.)
 
-### JIM LDAP Connector (Active Directory)
+### JIM LDAP Connector
 
-The LDAP Connector supports **Active Directory** and **Samba AD** directories. It provides:
+The LDAP Connector is a single, unified connector for **LDAP-compliant directories**. Supported directory servers include:
 
-- Full import and export (create, update, delete)
+- **Microsoft Active Directory**
+- **Samba AD**
+- **OpenLDAP**
+- **389 Directory Server** and other RFC 4512-compliant directories
+
+The connector adapts its behaviour to the target directory type (for example, using Active Directory-specific features where available, or RFC-standard behaviour for generic directories). Key capabilities:
+
+- Full and delta import
+- Full export (create, update, delete)
 - SSL/TLS and StartTLS support
+- Partition and container discovery
 - Container creation during provisioning
-- Schema discovery for available object types and attributes
-- Active Directory-specific features (userAccountControl, FILETIME dates, etc.)
-
-### JIM LDAP Connector (OpenLDAP / RFC 4512)
-
-The OpenLDAP Connector supports **OpenLDAP**, **389 Directory Server**, and other **RFC 4512-compliant** directories. It includes:
-
+- Schema discovery for **both structural and auxiliary object classes**, so objects whose primary class is auxiliary are first-class citizens
 - Parallel imports for large directories
-- Delta import via the accesslog overlay
-- Partition-scoped imports
-- Full export support (create, update, delete)
+- Delta import via the accesslog overlay (OpenLDAP and compatible directories)
+- Active Directory-specific features (`userAccountControl`, FILETIME dates, etc.)
+
+!!! tip "Auxiliary classes are fully supported"
+    Some traditional ILM solutions only discover **structural** object classes, which forces customers whose directories rely on **auxiliary** classes as primary classes to build and maintain their own connectors at significant cost. JIM handles this out of the box: enable **Include Auxiliary Classes** on the LDAP connector and auxiliary classes, along with any attributes they contribute, are brought into schema discovery alongside structural classes.
 
 ## Planned Connectors
 

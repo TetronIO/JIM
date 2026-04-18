@@ -2,6 +2,8 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
+using JIM.Models.Enums;
 using JIM.Models.Staging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -282,16 +284,19 @@ public partial class SyncRepository
     }
 
     /// <remarks>
-    /// Scale note: this EF materialisation approach is confirmed fast for the current
-    /// supported ceiling (Scale100K) — observed baseline is ~26 ms for 103 cross-page
-    /// CSOs on the Medium template, and the cost scales roughly linearly with the
-    /// cross-page CSO count. Above Scale100K the Include(SyncOutcomes) materialisation
-    /// becomes the dominant cost and this method should be rewritten as a raw-SQL
-    /// projection into a purpose-built DTO (carry only Id, ConnectedSystemObjectId,
-    /// AttributeFlowCount, ObjectChangeType, OutcomeSummary, plus a flat outcomes bag).
-    /// Tracked as a follow-up in GitHub issue #565.
+    /// Replaces the earlier two-call pattern (EF-projected RPEIs + Include(SyncOutcomes),
+    /// followed by a separate raw-SQL RPEI→MvoChange-id map lookup) with a single
+    /// <see cref="NpgsqlBatch"/> that ships two statements in one network round-trip:
+    /// <list type="number">
+    ///   <item>RPEI scalars LEFT JOINed to <c>MetaverseObjectChanges</c> (one row per RPEI).</item>
+    ///   <item>Matching <c>ActivityRunProfileExecutionItemSyncOutcomes</c> stitched onto the RPEIs in memory.</item>
+    /// </list>
+    /// Measured sibling comparison (<c>GetRpeiToMvoChangeIdMapAsync</c>) showed raw Npgsql ~3.5×
+    /// faster than EF projection on the same workload; the gap widens with row count because
+    /// EF materialisation scales harder than the query itself. Carries only the columns the
+    /// worker actually reads and mutates — no navigation properties, no change tracking.
     /// </remarks>
-    public async Task<List<ActivityRunProfileExecutionItem>> GetActivityRpeisByCsoIdsForCrossPageMergeAsync(
+    public async Task<List<CrossPageMergeRpei>> GetRpeisWithMvoChangeIdsForCrossPageMergeAsync(
         Guid activityId, IReadOnlyCollection<Guid> csoIds)
     {
         if (csoIds.Count == 0)
@@ -299,60 +304,110 @@ public partial class SyncRepository
 
         var csoIdArray = csoIds as Guid[] ?? csoIds.ToArray();
 
-        // AsNoTracking: the worker mutates the returned RPEIs (AttributeFlowCount, OutcomeSummary,
-        // new child outcomes) but persists those changes via raw SQL (BulkUpdateRpeiFieldsRawAsync
-        // and BulkInsertSyncOutcomesRawAsync), not via EF. Change tracking would be pure overhead.
-        return await _context.ActivityRunProfileExecutionItems
-            .AsNoTracking()
-            .Include(r => r.SyncOutcomes)
-            .Where(r => r.ActivityId == activityId
-                        && r.ConnectedSystemObjectId.HasValue
-                        && csoIdArray.Contains(r.ConnectedSystemObjectId.Value))
-            .ToListAsync();
-    }
-
-    /// <remarks>
-    /// Raw Npgsql SELECT rather than EF projection — measured ~3.5× faster on the Medium-scale
-    /// cross-page load (2 ms vs 7 ms for 113 RPEIs). Chosen during the initial integration run
-    /// of <c>feature/sync-integrity-and-diagnostics</c>; the EF projection sibling was removed
-    /// once the delta was confirmed. Keep this as raw-SQL — the gap widens at higher scales
-    /// where EF materialisation overhead grows faster than the query itself.
-    /// </remarks>
-    public async Task<Dictionary<Guid, Guid>> GetRpeiToMvoChangeIdMapAsync(IReadOnlyCollection<Guid> rpeiIds)
-    {
-        if (rpeiIds.Count == 0)
-            return [];
-
-        var rpeiIdArray = rpeiIds as Guid[] ?? rpeiIds.ToArray();
-
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
         if (npgsqlConn.State != System.Data.ConnectionState.Open)
             await npgsqlConn.OpenAsync();
 
         var npgsqlTx = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
 
-        await using var cmd = new NpgsqlCommand(
-            """
-            SELECT "ActivityRunProfileExecutionItemId", "Id"
-            FROM "MetaverseObjectChanges"
-            WHERE "ActivityRunProfileExecutionItemId" = ANY(@rpeiIds)
-            """,
-            npgsqlConn,
-            npgsqlTx);
-        cmd.Parameters.Add(new NpgsqlParameter("rpeiIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
-        {
-            Value = rpeiIdArray
-        });
+        // Ship both statements in one round-trip. Statement 1 = RPEI scalars LEFT JOIN
+        // MvoChange.Id (one row per RPEI). Statement 2 = the SyncOutcomes for those RPEIs
+        // (stitched in memory below). Both filter by the same (ActivityId, CsoIds) predicate
+        // so we can parameterise them independently.
+        await using var batch = new NpgsqlBatch(npgsqlConn, npgsqlTx);
 
-        var map = new Dictionary<Guid, Guid>(capacity: rpeiIdArray.Length);
-        await using var reader = await cmd.ExecuteReaderAsync();
+        var rpeiCommand = new NpgsqlBatchCommand(
+            """
+            SELECT rpei."Id", rpei."ActivityId", rpei."ObjectChangeType", rpei."NoChangeReason",
+                   rpei."ConnectedSystemObjectId", rpei."ExternalIdSnapshot", rpei."DisplayNameSnapshot",
+                   rpei."ObjectTypeSnapshot", rpei."ErrorType", rpei."ErrorMessage", rpei."ErrorStackTrace",
+                   rpei."AttributeFlowCount", rpei."OutcomeSummary",
+                   mvoc."Id" AS "MvoChangeId"
+            FROM "ActivityRunProfileExecutionItems" rpei
+            LEFT JOIN "MetaverseObjectChanges" mvoc
+                ON mvoc."ActivityRunProfileExecutionItemId" = rpei."Id"
+            WHERE rpei."ActivityId" = @activityId
+              AND rpei."ConnectedSystemObjectId" = ANY(@csoIds)
+            """);
+        rpeiCommand.Parameters.Add(new NpgsqlParameter("activityId", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = activityId });
+        rpeiCommand.Parameters.Add(new NpgsqlParameter("csoIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = csoIdArray });
+        batch.BatchCommands.Add(rpeiCommand);
+
+        var outcomesCommand = new NpgsqlBatchCommand(
+            """
+            SELECT so."Id", so."ActivityRunProfileExecutionItemId", so."ParentSyncOutcomeId",
+                   so."OutcomeType", so."TargetEntityId", so."TargetEntityDescription",
+                   so."DetailCount", so."DetailMessage", so."Ordinal", so."ConnectedSystemObjectChangeId"
+            FROM "ActivityRunProfileExecutionItemSyncOutcomes" so
+            INNER JOIN "ActivityRunProfileExecutionItems" rpei
+                ON rpei."Id" = so."ActivityRunProfileExecutionItemId"
+            WHERE rpei."ActivityId" = @activityId
+              AND rpei."ConnectedSystemObjectId" = ANY(@csoIds)
+            """);
+        outcomesCommand.Parameters.Add(new NpgsqlParameter("activityId", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = activityId });
+        outcomesCommand.Parameters.Add(new NpgsqlParameter("csoIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = csoIdArray });
+        batch.BatchCommands.Add(outcomesCommand);
+
+        var resultsByRpeiId = new Dictionary<Guid, CrossPageMergeRpei>();
+        var results = new List<CrossPageMergeRpei>();
+
+        await using var reader = await batch.ExecuteReaderAsync();
+
+        // Result set 1 — RPEI row per RPEI (LEFT JOIN guarantees one row per RPEI since the
+        // MvoChange→RPEI FK is unique).
         while (await reader.ReadAsync())
         {
-            // Column 0 is nullable in the schema but the WHERE clause guarantees non-null here.
-            map[reader.GetGuid(0)] = reader.GetGuid(1);
+            var rpei = new ActivityRunProfileExecutionItem
+            {
+                Id = reader.GetGuid(0),
+                ActivityId = reader.GetGuid(1),
+                ObjectChangeType = (ObjectChangeType)reader.GetInt32(2),
+                NoChangeReason = reader.IsDBNull(3) ? null : (NoChangeReason)reader.GetInt32(3),
+                ConnectedSystemObjectId = reader.IsDBNull(4) ? null : reader.GetGuid(4),
+                ExternalIdSnapshot = reader.IsDBNull(5) ? null : reader.GetString(5),
+                DisplayNameSnapshot = reader.IsDBNull(6) ? null : reader.GetString(6),
+                ObjectTypeSnapshot = reader.IsDBNull(7) ? null : reader.GetString(7),
+                ErrorType = reader.IsDBNull(8) ? null : (ActivityRunProfileExecutionItemErrorType)reader.GetInt32(8),
+                ErrorMessage = reader.IsDBNull(9) ? null : reader.GetString(9),
+                ErrorStackTrace = reader.IsDBNull(10) ? null : reader.GetString(10),
+                AttributeFlowCount = reader.IsDBNull(11) ? null : reader.GetInt32(11),
+                OutcomeSummary = reader.IsDBNull(12) ? null : reader.GetString(12)
+            };
+            var existingMvoChangeId = reader.IsDBNull(13) ? (Guid?)null : reader.GetGuid(13);
+
+            var entry = new CrossPageMergeRpei
+            {
+                Rpei = rpei,
+                ExistingMvoChangeId = existingMvoChangeId
+            };
+            results.Add(entry);
+            resultsByRpeiId[rpei.Id] = entry;
         }
 
-        return map;
+        // Result set 2 — SyncOutcome rows, attached to their parent RPEI.
+        await reader.NextResultAsync();
+        while (await reader.ReadAsync())
+        {
+            var rpeiId = reader.GetGuid(1);
+            if (!resultsByRpeiId.TryGetValue(rpeiId, out var entry))
+                continue;
+
+            entry.Rpei.SyncOutcomes.Add(new ActivityRunProfileExecutionItemSyncOutcome
+            {
+                Id = reader.GetGuid(0),
+                ActivityRunProfileExecutionItemId = rpeiId,
+                ParentSyncOutcomeId = reader.IsDBNull(2) ? null : reader.GetGuid(2),
+                OutcomeType = (ActivityRunProfileExecutionItemSyncOutcomeType)reader.GetInt32(3),
+                TargetEntityId = reader.IsDBNull(4) ? null : reader.GetGuid(4),
+                TargetEntityDescription = reader.IsDBNull(5) ? null : reader.GetString(5),
+                DetailCount = reader.IsDBNull(6) ? null : reader.GetInt32(6),
+                DetailMessage = reader.IsDBNull(7) ? null : reader.GetString(7),
+                Ordinal = reader.GetInt32(8),
+                ConnectedSystemObjectChangeId = reader.IsDBNull(9) ? null : reader.GetGuid(9)
+            });
+        }
+
+        return results;
     }
 
     public async Task BulkUpdateRpeiOutcomesAsync(

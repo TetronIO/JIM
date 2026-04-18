@@ -3,6 +3,7 @@
 
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
@@ -1085,51 +1086,54 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
-    public Task<List<ActivityRunProfileExecutionItem>> GetActivityRpeisByCsoIdsForCrossPageMergeAsync(
+    public Task<List<CrossPageMergeRpei>> GetRpeisWithMvoChangeIdsForCrossPageMergeAsync(
         Guid activityId, IReadOnlyCollection<Guid> csoIds)
     {
+        if (csoIds.Count == 0)
+            return Task.FromResult(new List<CrossPageMergeRpei>());
+
         var csoIdSet = csoIds as HashSet<Guid> ?? csoIds.ToHashSet();
-        var matches = _rpeis.Values
+        var matchingRpeis = _rpeis.Values
             .Where(r => r.ActivityId == activityId
                         && r.ConnectedSystemObjectId.HasValue
                         && csoIdSet.Contains(r.ConnectedSystemObjectId.Value))
             .ToList();
-        return Task.FromResult(matches);
-    }
 
-    public Task<Dictionary<Guid, Guid>> GetRpeiToMvoChangeIdMapAsync(IReadOnlyCollection<Guid> rpeiIds)
-    {
-        var rpeiIdSet = rpeiIds as HashSet<Guid> ?? rpeiIds.ToHashSet();
-        var map = _mvoChanges.Values
+        var rpeiIds = matchingRpeis.Select(r => r.Id).ToHashSet();
+        var mvoChangeIdByRpeiId = _mvoChanges.Values
             .Where(c => c.ActivityRunProfileExecutionItemId.HasValue
-                        && rpeiIdSet.Contains(c.ActivityRunProfileExecutionItemId.Value))
+                        && rpeiIds.Contains(c.ActivityRunProfileExecutionItemId.Value))
             .ToDictionary(c => c.ActivityRunProfileExecutionItemId!.Value, c => c.Id);
-        return Task.FromResult(map);
+
+        var results = matchingRpeis
+            .Select(r => new CrossPageMergeRpei
+            {
+                Rpei = r,
+                ExistingMvoChangeId = mvoChangeIdByRpeiId.TryGetValue(r.Id, out var mvoChangeId)
+                    ? mvoChangeId
+                    : null
+            })
+            .ToList();
+
+        return Task.FromResult(results);
     }
 
-    public Task PersistPendingMvoChangeAttributesAsync(List<MetaverseObjectChange> mvoChanges)
+    private void AppendAttributeChildrenToExistingMvoChange(MetaverseObjectChange incoming)
     {
-        // In-memory model: the existing MvoChange is already in _mvoChanges (keyed by Id).
-        // Append the new AttributeChanges to the existing record and assign ids for children.
-        foreach (var incoming in mvoChanges)
+        if (!_mvoChanges.TryGetValue(incoming.Id, out var existing))
         {
-            if (!_mvoChanges.TryGetValue(incoming.Id, out var existing))
-            {
-                throw new InvalidOperationException(
-                    $"PersistPendingMvoChangeAttributesAsync: no existing MvoChange with Id {incoming.Id}");
-            }
-
-            foreach (var attrChange in incoming.AttributeChanges)
-            {
-                if (attrChange.Id == Guid.Empty)
-                    attrChange.Id = Guid.NewGuid();
-                foreach (var valueChange in attrChange.ValueChanges.Where(vc => vc.Id == Guid.Empty))
-                    valueChange.Id = Guid.NewGuid();
-                existing.AttributeChanges.Add(attrChange);
-            }
+            throw new InvalidOperationException(
+                $"PersistPendingMvoChangesAsync (append): no existing MvoChange with Id {incoming.Id}");
         }
 
-        return Task.CompletedTask;
+        foreach (var attrChange in incoming.AttributeChanges)
+        {
+            if (attrChange.Id == Guid.Empty)
+                attrChange.Id = Guid.NewGuid();
+            foreach (var valueChange in attrChange.ValueChanges.Where(vc => vc.Id == Guid.Empty))
+                valueChange.Id = Guid.NewGuid();
+            existing.AttributeChanges.Add(attrChange);
+        }
     }
 
     public void DetachRpeisFromChangeTracker(List<ActivityRunProfileExecutionItem> rpeis)
@@ -1277,9 +1281,11 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
-    public Task PersistPendingMvoChangesAsync(List<MetaverseObjectChange> mvoChanges)
+    public Task PersistPendingMvoChangesAsync(
+        List<MetaverseObjectChange> newChanges,
+        List<MetaverseObjectChange> attributeAppendsToExistingChanges)
     {
-        foreach (var change in mvoChanges)
+        foreach (var change in newChanges)
         {
             if (change.Id == Guid.Empty)
                 change.Id = Guid.NewGuid();
@@ -1303,6 +1309,9 @@ public class SyncRepository : ISyncRepository
             if (change.MetaverseObject != null && !change.MetaverseObject.Changes.Contains(change))
                 change.MetaverseObject.Changes.Add(change);
         }
+
+        foreach (var append in attributeAppendsToExistingChanges)
+            AppendAttributeChildrenToExistingMvoChange(append);
 
         return Task.CompletedTask;
     }
