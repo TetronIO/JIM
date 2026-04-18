@@ -1,5 +1,9 @@
 /* reference: https://github.com/MudBlazor/MudBlazor/blob/ff672a8b988fdfb1f5ab9f556813823d885118d4/src/MudBlazor.UnitTests/Components/ThemeProviderTests.cs#L92 */
 
+:root {
+    --jim-instance-bar-height: 28px;
+}
+
 /* MUDBLAZOR CUSTOMISATIONS */
 /* Note: Colour palettes are defined in css/themes/ files, not here. */
 
@@ -497,17 +501,42 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     overflow-y: auto;
 }
 
-.jim-drawer-logo img {
-    vertical-align: middle;
+.jim-drawer.jim-drawer-with-bar {
+    top: var(--jim-instance-bar-height);
+    height: calc(100vh - var(--jim-instance-bar-height));
 }
+
 
 .jim-drawer-logo p,
 .jim-drawer-logo span {
-    margin: 4px 0 0 10px;
     font-size: 1rem;
     font-weight: 500;
-    vertical-align: sub;
     color: var(--jim-logo-text-color, #ffffff) !important;
+}
+
+.jim-instance-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1400;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: var(--jim-instance-bar-height);
+    background-color: var(--jim-instance-bar-bg);
+    border-bottom: 1px solid var(--mud-palette-divider);
+    font-size: 0.78rem;
+    color: var(--mud-palette-text-primary);
+    letter-spacing: 0.03em;
+}
+
+.jim-instance-bar .jim-title-accent {
+    color: var(--mud-palette-text-primary);
+}
+
+body.jim-dark-mode .jim-instance-bar .jim-title-accent {
+    color: var(--mud-palette-tertiary);
 }
 
 .jim-drawer-footer {

@@ -24,11 +24,19 @@ else
 
 <MudLayout>
 
-    <MudDrawerContainer Class="mud-height-full">
-        <MudDrawer @bind-Open="@IsDrawerOpen" Elevation="0" Variant="@DrawerVariant.Mini" Overlay="false"
-                   Class="jim-drawer" @onmouseenter="@OnDrawerMouseEnter" @onmouseleave="@OnDrawerMouseLeave">
+    @if (!string.IsNullOrEmpty(_serviceName))
+    {
+        <div class="jim-instance-bar">
+            <span class="jim-title-accent">@_serviceName</span>
+        </div>
+    }
 
-            <div class="jim-drawer-logo">
+    <MudDrawerContainer Class="mud-height-full" Style="@(!string.IsNullOrEmpty(_serviceName) ? "padding-top: var(--jim-instance-bar-height)" : null)">
+        <MudDrawer @bind-Open="@IsDrawerOpen" Elevation="0" Variant="@DrawerVariant.Mini" Overlay="false"
+                   Class="@($"jim-drawer{(!string.IsNullOrEmpty(_serviceName) ? " jim-drawer-with-bar" : "")}")"
+                   @onmouseenter="@OnDrawerMouseEnter" @onmouseleave="@OnDrawerMouseLeave">
+
+            <div class="jim-drawer-logo d-flex align-center">
                 @if (!IsDrawerOpen && !string.IsNullOrEmpty(_serviceName))
                 {
                     <MudTooltip Text="@_serviceName" Arrow="true" Placement="Placement.Right">
@@ -41,13 +49,7 @@ else
                 }
                 @if (IsDrawerOpen)
                 {
-                    <div class="d-flex flex-column">
-                        <MudText Inline="true">JIM</MudText>
-                        @if (!string.IsNullOrEmpty(_serviceName))
-                        {
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary jim-text-code">@_serviceName</MudText>
-                        }
-                    </div>
+                    <MudText Class="ms-2">JIM</MudText>
                 }
             </div>
 

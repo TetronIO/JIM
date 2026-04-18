@@ -86,7 +86,7 @@
                 else if (settingContext.ValueType == ServiceSettingValueType.Guid)
                 {
                     var guidValue = settingContext.GetEffectiveValue();
-                    <span class="jim-text-code">@(guidValue ?? "(not set)")</span>
+                    <span class="jim-text-code me-1">@(guidValue ?? "(not set)")</span>
                     @if (!string.IsNullOrEmpty(guidValue))
                     {
                         <MudTooltip Text="Copy to clipboard" Arrow="true" Placement="Placement.Top">

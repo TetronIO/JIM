@@ -124,6 +124,7 @@ html[lang] {
 
     /* === JIM Custom: Logo text === */
     --jim-logo-text-color: #ffffff;
+    --jim-instance-bar-bg: #d8d8ec;
 }
 
 /* Uncomment to lighten outlined/text primary button text for readability */
