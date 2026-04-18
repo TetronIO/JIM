@@ -586,6 +586,130 @@ public class ConnectedSystemExtensionsTests
 
     #endregion
 
+    #region BuildPartitionSelectionDiagnostic Tests
+
+    [Test]
+    public void BuildPartitionSelectionDiagnostic_WhenNoPartitionsEnumerated_ReportsMissingEnumeration()
+    {
+        // Arrange - Connector supports partitions but none have been imported/enumerated yet
+        var connectedSystem = CreateConnectedSystemWithPartitionSupport(supportsPartitions: true, supportsContainers: true);
+        connectedSystem.Partitions = null;
+
+        // Act
+        var result = connectedSystem.BuildPartitionSelectionDiagnostic();
+
+        // Assert - message must indicate the hierarchy has not been imported
+        Assert.That(result, Does.Contain("hierarchy"));
+        Assert.That(result, Does.Contain("not").IgnoreCase.Or.Contain("before").IgnoreCase);
+    }
+
+    [Test]
+    public void BuildPartitionSelectionDiagnostic_WhenPartitionsEmpty_ReportsMissingEnumeration()
+    {
+        // Arrange - Partitions list exists but is empty (enumeration ran and returned nothing)
+        var connectedSystem = CreateConnectedSystemWithPartitionSupport(supportsPartitions: true, supportsContainers: true);
+        connectedSystem.Partitions = new List<ConnectedSystemPartition>();
+
+        // Act
+        var result = connectedSystem.BuildPartitionSelectionDiagnostic();
+
+        // Assert
+        Assert.That(result, Does.Contain("hierarchy"));
+    }
+
+    [Test]
+    public void BuildPartitionSelectionDiagnostic_WhenPartitionsExistButNoneSelected_ReportsAvailableCount()
+    {
+        // Arrange - Hierarchy enumerated, multiple partitions present, none selected
+        var connectedSystem = CreateConnectedSystemWithPartitionSupport(supportsPartitions: true, supportsContainers: true);
+        connectedSystem.Partitions = new List<ConnectedSystemPartition>
+        {
+            new() { Name = "DC=resurgam,DC=local", Selected = false },
+            new() { Name = "CN=Configuration,DC=resurgam,DC=local", Selected = false },
+            new() { Name = "CN=Schema,CN=Configuration,DC=resurgam,DC=local", Selected = false }
+        };
+
+        // Act
+        var result = connectedSystem.BuildPartitionSelectionDiagnostic();
+
+        // Assert - must report how many partitions were available to aid diagnosis
+        Assert.That(result, Does.Contain("3"));
+        Assert.That(result, Does.Contain("partition").IgnoreCase);
+        Assert.That(result, Does.Contain("none").IgnoreCase.Or.Contain("0 selected").IgnoreCase);
+    }
+
+    [Test]
+    public void BuildPartitionSelectionDiagnostic_WhenPartitionSelectedButContainersNull_ReportsMissingContainers()
+    {
+        // Arrange - Partition selected, containers under it have not been enumerated
+        var connectedSystem = CreateConnectedSystemWithPartitionSupport(supportsPartitions: true, supportsContainers: true);
+        connectedSystem.Partitions = new List<ConnectedSystemPartition>
+        {
+            new() { Name = "DC=resurgam,DC=local", Selected = true, Containers = null }
+        };
+
+        // Act
+        var result = connectedSystem.BuildPartitionSelectionDiagnostic();
+
+        // Assert
+        Assert.That(result, Does.Contain("container").IgnoreCase);
+        Assert.That(result, Does.Contain("DC=resurgam,DC=local"));
+    }
+
+    [Test]
+    public void BuildPartitionSelectionDiagnostic_WhenPartitionSelectedButNoContainersSelected_ReportsAvailableContainerCount()
+    {
+        // Arrange - Partition selected, containers available but none selected
+        var connectedSystem = CreateConnectedSystemWithPartitionSupport(supportsPartitions: true, supportsContainers: true);
+        var partition = new ConnectedSystemPartition
+        {
+            Name = "DC=resurgam,DC=local",
+            Selected = true,
+            Containers = new HashSet<ConnectedSystemContainer>
+            {
+                new() { Name = "OU=Corp", Selected = false },
+                new() { Name = "OU=Other", Selected = false }
+            }
+        };
+        connectedSystem.Partitions = new List<ConnectedSystemPartition> { partition };
+
+        // Act
+        var result = connectedSystem.BuildPartitionSelectionDiagnostic();
+
+        // Assert - must tell the admin containers exist and need selecting, and how many
+        Assert.That(result, Does.Contain("container").IgnoreCase);
+        Assert.That(result, Does.Contain("2"));
+        Assert.That(result, Does.Contain("DC=resurgam,DC=local"));
+    }
+
+    [Test]
+    public void BuildPartitionSelectionDiagnostic_CountsContainersRecursively()
+    {
+        // Arrange - Nested container tree (matches Samba AD "OU=Users,OU=Corp" layout)
+        var connectedSystem = CreateConnectedSystemWithPartitionSupport(supportsPartitions: true, supportsContainers: true);
+        var corp = new ConnectedSystemContainer { Name = "OU=Corp", Selected = false };
+        var users = new ConnectedSystemContainer { Name = "OU=Users", Selected = false };
+        var entitlements = new ConnectedSystemContainer { Name = "OU=Entitlements", Selected = false };
+        corp.AddChildContainer(users);
+        corp.AddChildContainer(entitlements);
+
+        var partition = new ConnectedSystemPartition
+        {
+            Name = "DC=resurgam,DC=local",
+            Selected = true,
+            Containers = new HashSet<ConnectedSystemContainer> { corp }
+        };
+        connectedSystem.Partitions = new List<ConnectedSystemPartition> { partition };
+
+        // Act
+        var result = connectedSystem.BuildPartitionSelectionDiagnostic();
+
+        // Assert - must count corp + users + entitlements = 3 containers in the tree
+        Assert.That(result, Does.Contain("3"));
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static ConnectedSystem CreateConnectedSystemWithMode(string mode)
