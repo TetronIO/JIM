@@ -82,21 +82,10 @@ public class SeedingServerInstanceSettingsTests
     [Test]
     public async Task SyncServiceSettings_SecondRun_PreservesExistingServiceIdAsync()
     {
-        var existingId = Guid.NewGuid().ToString();
         _mockServiceSettingsRepo.Setup(r => r.SettingExistsAsync(It.IsAny<string>()))
             .ReturnsAsync(false);
         _mockServiceSettingsRepo.Setup(r => r.SettingExistsAsync(Constants.SettingKeys.ServiceId))
             .ReturnsAsync(true);
-        _mockServiceSettingsRepo.Setup(r => r.GetSettingAsync(Constants.SettingKeys.ServiceId))
-            .ReturnsAsync(new ServiceSetting
-            {
-                Key = Constants.SettingKeys.ServiceId,
-                DisplayName = "Service ID",
-                Category = ServiceSettingCategory.Instance,
-                ValueType = ServiceSettingValueType.Guid,
-                Value = existingId,
-                IsReadOnly = true
-            });
         _mockServiceSettingsRepo.Setup(r => r.CreateSettingAsync(It.IsAny<ServiceSetting>()))
             .Returns(Task.CompletedTask);
         _mockServiceSettingsRepo.Setup(r => r.UpdateSettingAsync(It.IsAny<ServiceSetting>()))

@@ -962,13 +962,14 @@ internal class SeedingServer
     {
         if (await Application.ServiceSettings.SettingExistsAsync(template.Key))
         {
-            Log.Verbose($"SeedSettingOnceAsync: '{template.Key}' already exists; preserving existing value.");
+            Log.Verbose("SeedSettingOnceAsync: '{Key}' already exists; preserving existing value.", template.Key);
             return;
         }
 
         template.Value = valueFactory();
         await Application.ServiceSettings.CreateSettingAsync(template);
-        Log.Information($"SeedSettingOnceAsync: Generated '{template.Key}' with value '{template.Value}'.");
+        Log.Information("SeedSettingOnceAsync: Generated '{Key}'.", template.Key);
+        Log.Verbose("SeedSettingOnceAsync: '{Key}' value is '{Value}'.", template.Key, template.Value);
     }
 
     /// <summary>
