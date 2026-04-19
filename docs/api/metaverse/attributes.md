@@ -53,7 +53,7 @@ Attributes exist independently of object types. The `objectTypeIds` field on cre
 JIM enforces the following rules to protect data integrity:
 
 - **An attribute cannot be deleted** if it has values stored on any metaverse objects. Remove the values first.
-- **An attribute cannot be deleted** if it is referenced by any sync rule mappings, scoping criteria, or object matching rules. Remove the references first.
+- **An attribute cannot be deleted** if it is referenced by any synchronisation rule mappings, scoping criteria, or object matching rules. Remove the references first.
 - **An object type mapping cannot be removed** from an attribute if metaverse objects of that type have values stored for the attribute. Remove the values first.
 - **Built-in attributes** cannot be deleted or have their type changed.
 
@@ -256,7 +256,7 @@ The `objectTypeIds` field **replaces** all existing mappings with the provided s
 - **Clear all mappings**: pass an empty array `[]`
 
 !!! warning
-    You cannot remove an object type mapping if metaverse objects of that type have values stored for this attribute. The API returns a `400 VALIDATION_ERROR` indicating which type cannot be removed and how many objects are affected. Remove the attribute values first (e.g. by removing the sync rule mapping that flows data into this attribute, then running a full sync).
+    You cannot remove an object type mapping if metaverse objects of that type have values stored for this attribute. The API returns a `400 VALIDATION_ERROR` indicating which type cannot be removed and how many objects are affected. Remove the attribute values first (e.g. by removing the synchronisation rule mapping that flows data into this attribute, then running a full sync).
 
 === "curl"
 
@@ -318,9 +318,9 @@ Permanently deletes an attribute. An attribute cannot be deleted if:
 
 - It is a built-in attribute
 - It has values stored on any metaverse objects
-- It is referenced by any sync rule mappings, scoping criteria, or object matching rules
+- It is referenced by any synchronisation rule mappings, scoping criteria, or object matching rules
 
-To delete an attribute that is in use, first remove all references to it from sync rule configuration, then ensure no metaverse objects have values for it (e.g. by running a full sync after removing the sync rule mappings).
+To delete an attribute that is in use, first remove all references to it from synchronisation rule configuration, then ensure no metaverse objects have values for it (e.g. by running a full sync after removing the synchronisation rule mappings).
 
 ```
 DELETE /api/v1/metaverse/attributes/{id}
@@ -351,7 +351,7 @@ Returns `204 No Content` on success.
 
 | Status | Code | Description |
 |--------|------|-------------|
-| `400` | `VALIDATION_ERROR` | Cannot delete: attribute is built-in, has stored values on metaverse objects (error includes affected object count), or is referenced by sync rule configuration (error lists the referencing sync rules) |
+| `400` | `VALIDATION_ERROR` | Cannot delete: attribute is built-in, has stored values on metaverse objects (error includes affected object count), or is referenced by synchronisation rule configuration (error lists the referencing synchronisation rules) |
 | `401` | `UNAUTHORISED` | Authentication required |
 | `403` | `FORBIDDEN` | Insufficient permissions (Administrator role required) |
 | `404` | `NOT_FOUND` | Attribute does not exist |

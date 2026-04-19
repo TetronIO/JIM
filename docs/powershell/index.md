@@ -72,7 +72,7 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [Connection](connection.md) | 3 | Connect, disconnect, and test JIM sessions |
 | [Connected Systems](connected-systems.md) | 19 | Manage connected systems, schemas, partitions, and connector space objects |
 | [Run Profiles](run-profiles.md) | 5 | Create and execute import, sync, and export operations |
-| [Sync Rules](sync-rules.md) | 17 | Define attribute mappings, scoping criteria, and object matching rules |
+| [Synchronisation Rules](sync-rules.md) | 17 | Define attribute mappings, scoping criteria, and object matching rules |
 | [Metaverse](metaverse.md) | 8 | Query objects, manage schema types and attributes, review pending deletions |
 | [Predefined Searches](predefined-searches.md) | 2 | List and toggle the searches that drive portal list views and the fast search API |
 | [Schedules](schedules.md) | 11 | Automate synchronisation workflows with scheduled execution |
@@ -83,7 +83,7 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [Security](security.md) | 5 | Manage security roles and their memberships, including listing the roles a metaverse object is in |
 | [History](history.md) | 3 | Query deleted objects and manage change history retention |
 | [Example Data](example-data.md) | 3 | Generate sample data for testing and evaluation |
-| [Expressions](expressions.md) | 1 | Test sync rule expressions before deployment |
+| [Expressions](expressions.md) | 1 | Test synchronisation rule expressions before deployment |
 
 ## Quick Start
 

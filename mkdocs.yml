@@ -98,7 +98,7 @@ nav:
       - Architecture: concepts/architecture.md
       - Connected Systems: concepts/connected-systems.md
       - Sync Pipeline: concepts/sync-pipeline.md
-      - Sync Rules: concepts/sync-rules.md
+      - Synchronisation Rule: concepts/sync-rules.md
       - JML Lifecycle: concepts/jml-lifecycle.md
       - Expressions: concepts/expressions.md
   - Administration:
@@ -150,7 +150,7 @@ nav:
           - Update: api/run-profiles/update.md
           - Delete: api/run-profiles/delete.md
           - Execute: api/run-profiles/execute.md
-      - Sync Rules:
+      - Synchronisation Rule:
           - api/sync-rules/index.md
           - List: api/sync-rules/list.md
           - Create: api/sync-rules/create.md
@@ -211,7 +211,7 @@ nav:
       - Connection: powershell/connection.md
       - Connected Systems: powershell/connected-systems.md
       - Run Profiles: powershell/run-profiles.md
-      - Sync Rules: powershell/sync-rules.md
+      - Synchronisation Rule: powershell/sync-rules.md
       - Metaverse: powershell/metaverse.md
       - Predefined Searches: powershell/predefined-searches.md
       - Schedules: powershell/schedules.md

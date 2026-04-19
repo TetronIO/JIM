@@ -17,9 +17,9 @@ A **connected system** represents any external directory, database, or file that
 
 JIM processes identity data in three distinct phases: **Import**, **Sync**, and **Export**. This pipeline ensures data is validated, transformed, and reconciled at each stage before reaching its destination. The [Sync Pipeline](sync-pipeline.md) page explains each phase in detail.
 
-## 📋 Sync Rules
+## 📋 Synchronisation Rules
 
-**Sync rules** define the relationship between connected systems and the metaverse. They control which objects are in scope, how objects are matched (joined), when new metaverse objects are created (projected), and how attributes flow between systems. See [Sync Rules](sync-rules.md) for the full breakdown.
+**Synchronisation rules** define the relationship between connected systems and the metaverse. They control which objects are in scope, how objects are matched (joined), when new metaverse objects are created (projected), and how attributes flow between systems. See [Synchronisation Rules](sync-rules.md) for the full breakdown.
 
 ## 🔄 JML Lifecycle
 

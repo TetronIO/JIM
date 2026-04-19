@@ -10,7 +10,7 @@ A connected system in JIM represents the configuration and state for a single ex
 - **Schema** -- the object types and attributes available in the external system
 - **Connector space** -- a staging area that holds a local copy of the external system's data
 - **Run profiles** -- configured operations (import, export) that can be executed against the system
-- **Sync rules** -- the rules that govern how data flows between this system and the metaverse
+- **Synchronisation rules** -- the rules that govern how data flows between this system and the metaverse
 
 ## Connector Space
 
@@ -53,7 +53,7 @@ A **partition** is a top-level logical division of a connector space that mirror
 
 Most connected systems do not support partitions. A flat file, a SQL table, or a SCIM endpoint has no concept of multiple naming contexts, so its connector space has no partitions. Partitions are primarily a feature of LDAP-style directory connectors, where the directory itself is divided into separate trees.
 
-Where they do apply, partitions let JIM scope imports, exports, and sync rules to a specific naming context. Multi-domain directories are a common example; each partition can be targeted by its own run profile or sync rules.
+Where they do apply, partitions let JIM scope imports, exports, and synchronisation rules to a specific naming context. Multi-domain directories are a common example; each partition can be targeted by its own run profile or synchronisation rules.
 
 !!! note "Partitions and OUs are different concepts"
     Partitions and organisational units (OUs) are distinct. A partition is a top-level boundary on the external system; an OU is a sub-tree *within* a partition and is modelled in JIM as a [container](#containers).

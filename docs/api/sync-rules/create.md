@@ -1,10 +1,10 @@
 ---
-title: Create a Sync Rule
+title: Create a Synchronisation Rule
 ---
 
-# Create a Sync Rule
+# Create a Synchronisation Rule
 
-Creates a new sync rule linking a connected system object type to a metaverse object type.
+Creates a new synchronisation rule linking a connected system object type to a metaverse object type.
 
 ```
 POST /api/v1/synchronisation/sync-rules
@@ -14,7 +14,7 @@ POST /api/v1/synchronisation/sync-rules
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `name` | string | Yes | Sync rule name (1-200 characters) |
+| `name` | string | Yes | Synchronisation rule name (1-200 characters) |
 | `connectedSystemId` | integer | Yes | Connected system ID |
 | `connectedSystemObjectTypeId` | integer | Yes | Connected system object type ID |
 | `metaverseObjectTypeId` | integer | Yes | Metaverse object type ID |
@@ -81,7 +81,7 @@ POST /api/v1/synchronisation/sync-rules
 
 ## Response
 
-Returns `201 Created` with the [Sync Rule object](index.md#the-sync-rule-object).
+Returns `201 Created` with the [Synchronisation Rule object](index.md#the-synchronisation-rule-object).
 
 ## Errors
 

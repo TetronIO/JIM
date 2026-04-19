@@ -70,7 +70,7 @@ Returns `200 OK` with the deletion impact analysis.
 | `connectedSystemId` | integer | ID of the connected system |
 | `connectedSystemName` | string | Name of the connected system |
 | `connectedSystemObjectCount` | integer | Number of objects in the connector space that will be removed |
-| `syncRuleCount` | integer | Number of sync rules referencing this system |
+| `syncRuleCount` | integer | Number of synchronisation rules referencing this system |
 | `runProfileCount` | integer | Number of run profiles that will be deleted |
 | `partitionCount` | integer | Number of partitions that will be removed |
 | `containerCount` | integer | Number of containers that will be removed |

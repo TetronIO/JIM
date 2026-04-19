@@ -1,22 +1,22 @@
 ---
-title: Sync Rules
+title: Synchronisation Rules
 ---
 
-# Sync Rules
+# Synchronisation Rules
 
-Sync rules define how data flows between connected systems and the metaverse. They control attribute mappings, scoping criteria, and object matching logic. The cmdlets on this page cover the full lifecycle of sync rule configuration.
+Synchronisation rules define how data flows between connected systems and the metaverse. They control attribute mappings, scoping criteria, and object matching logic. The cmdlets on this page cover the full lifecycle of synchronisation rule configuration.
 
 ---
 
-### Sync Rule CRUD
+### Synchronisation Rule CRUD
 
-Create, retrieve, update, and delete sync rules.
+Create, retrieve, update, and delete synchronisation rules.
 
 ---
 
 ## Get-JIMSyncRule
 
-Retrieves one or more sync rules. When called without parameters, returns all sync rules. Use the parameter sets to filter by ID, connected system ID, or connected system name.
+Retrieves one or more synchronisation rules. When called without parameters, returns all synchronisation rules. Use the parameter sets to filter by ID, connected system ID, or connected system name.
 
 ### Syntax
 
@@ -38,22 +38,22 @@ Get-JIMSyncRule -ConnectedSystemName <string> [-Name <string>]
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById set) | | The ID of a specific sync rule to retrieve |
-| `ConnectedSystemId` | `int` | No | | Filter sync rules by connected system ID. Accepts pipeline input. |
-| `ConnectedSystemName` | `string` | No | | Filter sync rules by connected system name. Must be an exact match. |
-| `Name` | `string` | No | | Filter sync rules by name. Supports wildcards (e.g., `"Inbound*"`). |
+| `Id` | `int` | Yes (ById set) | | The ID of a specific synchronisation rule to retrieve |
+| `ConnectedSystemId` | `int` | No | | Filter synchronisation rules by connected system ID. Accepts pipeline input. |
+| `ConnectedSystemName` | `string` | No | | Filter synchronisation rules by connected system name. Must be an exact match. |
+| `Name` | `string` | No | | Filter synchronisation rules by name. Supports wildcards (e.g., `"Inbound*"`). |
 
 ### Output
 
-Returns one or more sync rule objects containing the rule configuration, direction, projection/provisioning settings, and enabled state.
+Returns one or more synchronisation rule objects containing the rule configuration, direction, projection/provisioning settings, and enabled state.
 
 ### Examples
 
-```powershell title="List all sync rules"
+```powershell title="List all synchronisation rules"
 Get-JIMSyncRule
 ```
 
-```powershell title="Get a specific sync rule by ID"
+```powershell title="Get a specific synchronisation rule by ID"
 Get-JIMSyncRule -Id 5
 ```
 
@@ -61,7 +61,7 @@ Get-JIMSyncRule -Id 5
 Get-JIMSyncRule -Name "Inbound*"
 ```
 
-```powershell title="Get sync rules for a connected system"
+```powershell title="Get synchronisation rules for a connected system"
 Get-JIMSyncRule -ConnectedSystemName "Active Directory"
 ```
 
@@ -74,7 +74,7 @@ Get-JIMSyncRule -ConnectedSystemId $cs.Id
 
 ## New-JIMSyncRule
 
-Creates a new sync rule for a connected system. The rule defines how objects flow between the connected system and the metaverse.
+Creates a new synchronisation rule for a connected system. The rule defines how objects flow between the connected system and the metaverse.
 
 ### Syntax
 
@@ -96,7 +96,7 @@ New-JIMSyncRule -Name <string> -ConnectedSystemName <string>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Name` | `string` | Yes (Position 0) | | Display name for the sync rule |
+| `Name` | `string` | Yes (Position 0) | | Display name for the synchronisation rule |
 | `ConnectedSystemId` | `int` | Yes (ById set) | | The ID of the connected system this rule belongs to |
 | `ConnectedSystemName` | `string` | Yes (ByName set) | | The name of the connected system this rule belongs to |
 | `ConnectedSystemObjectTypeId` | `int` | Yes | | The object type ID on the connected system side |
@@ -104,18 +104,18 @@ New-JIMSyncRule -Name <string> -ConnectedSystemName <string>
 | `Direction` | `string` | Yes | | Data flow direction. Valid values: `Import`, `Export` |
 | `ProjectToMetaverse` | `switch` | No | `$false` | When set, import rules will project new metaverse objects. Only applicable when Direction is `Import`. |
 | `ProvisionToConnectedSystem` | `switch` | No | `$false` | When set, export rules will provision new connected system objects. Only applicable when Direction is `Export`. |
-| `Enabled` | `bool` | No | `$true` | Whether the sync rule is active |
-| `PassThru` | `switch` | No | `$false` | Returns the created sync rule object |
+| `Enabled` | `bool` | No | `$true` | Whether the synchronisation rule is active |
+| `PassThru` | `switch` | No | `$false` | Returns the created synchronisation rule object |
 
 ### Output
 
-With `-PassThru`, returns the created sync rule object. Without it, returns nothing.
+With `-PassThru`, returns the created synchronisation rule object. Without it, returns nothing.
 
 **ShouldProcess impact level:** Medium.
 
 ### Examples
 
-```powershell title="Create an import sync rule with projection"
+```powershell title="Create an import synchronisation rule with projection"
 New-JIMSyncRule -Name "AD User Import" `
     -ConnectedSystemId 1 `
     -ConnectedSystemObjectTypeId 3 `
@@ -125,7 +125,7 @@ New-JIMSyncRule -Name "AD User Import" `
     -PassThru
 ```
 
-```powershell title="Create an export sync rule by connected system name"
+```powershell title="Create an export synchronisation rule by connected system name"
 New-JIMSyncRule -Name "AD User Export" `
     -ConnectedSystemName "Active Directory" `
     -ConnectedSystemObjectTypeId 3 `
@@ -134,7 +134,7 @@ New-JIMSyncRule -Name "AD User Export" `
     -ProvisionToConnectedSystem
 ```
 
-```powershell title="Create a disabled sync rule"
+```powershell title="Create a disabled synchronisation rule"
 New-JIMSyncRule -Name "HR Import (Draft)" `
     -ConnectedSystemId 2 `
     -ConnectedSystemObjectTypeId 5 `
@@ -147,7 +147,7 @@ New-JIMSyncRule -Name "HR Import (Draft)" `
 
 ## Set-JIMSyncRule
 
-Modifies an existing sync rule. Supports renaming, toggling enabled state, and changing projection/provisioning settings.
+Modifies an existing synchronisation rule. Supports renaming, toggling enabled state, and changing projection/provisioning settings.
 
 ### Syntax
 
@@ -172,36 +172,36 @@ Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>]
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById, Enable, Disable sets) | | The ID of the sync rule to modify. Accepts pipeline input. |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject set) | | A sync rule object from `Get-JIMSyncRule`. Accepts pipeline input. |
-| `Name` | `string` | No | | New display name for the sync rule |
-| `Enable` | `switch` | Yes (Enable set) | | Enables the sync rule |
-| `Disable` | `switch` | Yes (Disable set) | | Disables the sync rule |
+| `Id` | `int` | Yes (ById, Enable, Disable sets) | | The ID of the synchronisation rule to modify. Accepts pipeline input. |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject set) | | A synchronisation rule object from `Get-JIMSyncRule`. Accepts pipeline input. |
+| `Name` | `string` | No | | New display name for the synchronisation rule |
+| `Enable` | `switch` | Yes (Enable set) | | Enables the synchronisation rule |
+| `Disable` | `switch` | Yes (Disable set) | | Disables the synchronisation rule |
 | `ProjectToMetaverse` | `bool` | No | | Controls whether the rule projects new metaverse objects |
 | `ProvisionToConnectedSystem` | `bool` | No | | Controls whether the rule provisions new connected system objects |
-| `PassThru` | `switch` | No | `$false` | Returns the updated sync rule object |
+| `PassThru` | `switch` | No | `$false` | Returns the updated synchronisation rule object |
 
 ### Output
 
-With `-PassThru`, returns the updated sync rule object. Without it, returns nothing.
+With `-PassThru`, returns the updated synchronisation rule object. Without it, returns nothing.
 
 **ShouldProcess impact level:** Medium.
 
 ### Examples
 
-```powershell title="Rename a sync rule"
+```powershell title="Rename a synchronisation rule"
 Set-JIMSyncRule -Id 5 -Name "AD User Import (Production)"
 ```
 
-```powershell title="Enable a sync rule"
+```powershell title="Enable a synchronisation rule"
 Set-JIMSyncRule -Id 5 -Enable
 ```
 
-```powershell title="Disable a sync rule"
+```powershell title="Disable a synchronisation rule"
 Set-JIMSyncRule -Id 5 -Disable
 ```
 
-```powershell title="Pipeline: disable all sync rules for a connected system"
+```powershell title="Pipeline: disable all synchronisation rules for a connected system"
 Get-JIMSyncRule -ConnectedSystemName "HR System" | Set-JIMSyncRule -Disable
 ```
 
@@ -213,7 +213,7 @@ Set-JIMSyncRule -Id 5 -ProjectToMetaverse $true -PassThru
 
 ## Remove-JIMSyncRule
 
-Deletes a sync rule and all associated configuration, including attribute mappings, scoping criteria, and matching rules.
+Deletes a synchronisation rule and all associated configuration, including attribute mappings, scoping criteria, and matching rules.
 
 ### Syntax
 
@@ -229,20 +229,20 @@ Remove-JIMSyncRule -InputObject <PSCustomObject> [-Force] [-PassThru]
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById set) | | The ID of the sync rule to delete. Accepts pipeline input. |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject set) | | A sync rule object from `Get-JIMSyncRule`. Accepts pipeline input. |
+| `Id` | `int` | Yes (ById set) | | The ID of the synchronisation rule to delete. Accepts pipeline input. |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject set) | | A synchronisation rule object from `Get-JIMSyncRule`. Accepts pipeline input. |
 | `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt |
-| `PassThru` | `switch` | No | `$false` | Returns the deleted sync rule object before removal |
+| `PassThru` | `switch` | No | `$false` | Returns the deleted synchronisation rule object before removal |
 
 ### Output
 
-With `-PassThru`, returns the sync rule object that was deleted. Without it, returns nothing.
+With `-PassThru`, returns the synchronisation rule object that was deleted. Without it, returns nothing.
 
 **ShouldProcess impact level:** High. Prompts for confirmation unless `-Force` is specified.
 
 ### Examples
 
-```powershell title="Delete a sync rule with confirmation"
+```powershell title="Delete a synchronisation rule with confirmation"
 Remove-JIMSyncRule -Id 5
 ```
 
@@ -250,7 +250,7 @@ Remove-JIMSyncRule -Id 5
 Remove-JIMSyncRule -Id 5 -Force
 ```
 
-```powershell title="Pipeline: remove all disabled sync rules for a connected system"
+```powershell title="Pipeline: remove all disabled synchronisation rules for a connected system"
 Get-JIMSyncRule -ConnectedSystemName "Legacy HR" |
     Where-Object { -not $_.Enabled } |
     Remove-JIMSyncRule -Force
@@ -260,13 +260,13 @@ Get-JIMSyncRule -ConnectedSystemName "Legacy HR" |
 
 ### Attribute Mappings
 
-Configure how attributes flow between connected system objects and metaverse objects within a sync rule. Mappings can use direct attribute-to-attribute flows or expression-based transformations.
+Configure how attributes flow between connected system objects and metaverse objects within a synchronisation rule. Mappings can use direct attribute-to-attribute flows or expression-based transformations.
 
 ---
 
 ## Get-JIMSyncRuleMapping
 
-Retrieves attribute flow mappings for a sync rule. Returns all mappings for the rule, or a specific mapping by ID.
+Retrieves attribute flow mappings for a synchronisation rule. Returns all mappings for the rule, or a specific mapping by ID.
 
 ### Syntax
 
@@ -282,7 +282,7 @@ Get-JIMSyncRuleMapping -SyncRuleId <int> -MappingId <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the sync rule. Accepts pipeline input. Alias: `Id`. |
+| `SyncRuleId` | `int` | Yes | | The ID of the synchronisation rule. Accepts pipeline input. Alias: `Id`. |
 | `MappingId` | `int` | No | | The ID of a specific mapping to retrieve |
 
 ### Output
@@ -291,7 +291,7 @@ Returns one or more mapping objects representing attribute flow rules. Each mapp
 
 ### Examples
 
-```powershell title="List all mappings for a sync rule"
+```powershell title="List all mappings for a synchronisation rule"
 Get-JIMSyncRuleMapping -SyncRuleId 5
 ```
 
@@ -307,7 +307,7 @@ Get-JIMSyncRule -Id 5 | Get-JIMSyncRuleMapping
 
 ## New-JIMSyncRuleMapping
 
-Creates a new attribute flow mapping on a sync rule. Mappings can be direct attribute flows (one or more source attributes to a target) or expression-based transformations.
+Creates a new attribute flow mapping on a synchronisation rule. Mappings can be direct attribute flows (one or more source attributes to a target) or expression-based transformations.
 
 ### Syntax
 
@@ -337,7 +337,7 @@ New-JIMSyncRuleMapping -SyncRuleId <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the sync rule. Accepts pipeline input. Alias: `Id`. |
+| `SyncRuleId` | `int` | Yes | | The ID of the synchronisation rule. Accepts pipeline input. Alias: `Id`. |
 | `TargetMetaverseAttributeId` | `int` | Yes (Import sets) | | The metaverse attribute to write to (import direction) |
 | `TargetConnectedSystemAttributeId` | `int` | Yes (Export sets) | | The connected system attribute to write to (export direction) |
 | `SourceConnectedSystemAttributeId` | `int[]` | Yes (ImportAttribute set) | | One or more connected system attribute IDs to read from |
@@ -385,7 +385,7 @@ New-JIMSyncRuleMapping -SyncRuleId 5 `
 
 ## Remove-JIMSyncRuleMapping
 
-Deletes an attribute flow mapping from a sync rule.
+Deletes an attribute flow mapping from a synchronisation rule.
 
 ### Syntax
 
@@ -401,7 +401,7 @@ Remove-JIMSyncRuleMapping -SyncRuleId <int> -InputObject <PSCustomObject> [-Forc
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the sync rule |
+| `SyncRuleId` | `int` | Yes | | The ID of the synchronisation rule |
 | `MappingId` | `int` | Yes (by ID) | | The ID of the mapping to delete. Accepts pipeline input. Alias: `Id`. |
 | `InputObject` | `PSCustomObject` | Yes (by object) | | A mapping object from `Get-JIMSyncRuleMapping`. Accepts pipeline input. |
 | `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt |
@@ -422,7 +422,7 @@ Remove-JIMSyncRuleMapping -SyncRuleId 5 -MappingId 12
 Remove-JIMSyncRuleMapping -SyncRuleId 5 -MappingId 12 -Force
 ```
 
-```powershell title="Pipeline: remove all mappings for a sync rule"
+```powershell title="Pipeline: remove all mappings for a synchronisation rule"
 Get-JIMSyncRuleMapping -SyncRuleId 5 |
     Remove-JIMSyncRuleMapping -SyncRuleId 5 -Force
 ```
@@ -431,13 +431,13 @@ Get-JIMSyncRuleMapping -SyncRuleId 5 |
 
 ### Scoping Criteria
 
-Scoping criteria control which objects a sync rule processes. Criteria are organised into groups that evaluate as `All` (AND) or `Any` (OR), and groups can be nested for complex logic.
+Scoping criteria control which objects a synchronisation rule processes. Criteria are organised into groups that evaluate as `All` (AND) or `Any` (OR), and groups can be nested for complex logic.
 
 ---
 
 ## Get-JIMScopingCriteria
 
-Retrieves scoping criteria groups and their nested criteria for a sync rule.
+Retrieves scoping criteria groups and their nested criteria for a synchronisation rule.
 
 ### Syntax
 
@@ -453,7 +453,7 @@ Get-JIMScopingCriteria -SyncRuleId <int> -GroupId <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the sync rule. Accepts pipeline input. Alias: `Id`. |
+| `SyncRuleId` | `int` | Yes | | The ID of the synchronisation rule. Accepts pipeline input. Alias: `Id`. |
 | `GroupId` | `int` | No | | The ID of a specific scoping criteria group to retrieve |
 
 ### Output
@@ -462,7 +462,7 @@ Returns one or more scoping criteria group objects. Each group contains its type
 
 ### Examples
 
-```powershell title="List all scoping criteria for a sync rule"
+```powershell title="List all scoping criteria for a synchronisation rule"
 Get-JIMScopingCriteria -SyncRuleId 5
 ```
 
@@ -478,7 +478,7 @@ Get-JIMSyncRule -Id 5 | Get-JIMScopingCriteria
 
 ## New-JIMScopingCriteriaGroup
 
-Creates a new scoping criteria group on a sync rule. Groups evaluate their contents using either `All` (AND) or `Any` (OR) logic. Groups can be nested within other groups to build complex scoping expressions.
+Creates a new scoping criteria group on a synchronisation rule. Groups evaluate their contents using either `All` (AND) or `Any` (OR) logic. Groups can be nested within other groups to build complex scoping expressions.
 
 ### Syntax
 
@@ -491,7 +491,7 @@ New-JIMScopingCriteriaGroup -SyncRuleId <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the sync rule. Accepts pipeline input. |
+| `SyncRuleId` | `int` | Yes | | The ID of the synchronisation rule. Accepts pipeline input. |
 | `ParentGroupId` | `int` | No | | The ID of a parent group to nest this group within |
 | `Type` | `string` | No | `All` | Evaluation logic for the group. Valid values: `All` (AND), `Any` (OR). |
 | `Position` | `int` | No | `0` | Display order position within the parent context |
@@ -534,7 +534,7 @@ Set-JIMScopingCriteriaGroup -SyncRuleId <int> -GroupId <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the sync rule. Accepts pipeline input. |
+| `SyncRuleId` | `int` | Yes | | The ID of the synchronisation rule. Accepts pipeline input. |
 | `GroupId` | `int` | Yes | | The ID of the group to modify. Accepts pipeline input. Alias: `Id`. |
 | `Type` | `string` | No | | Evaluation logic. Valid values: `All` (AND), `Any` (OR). |
 | `Position` | `int` | No | | Display order position |
@@ -572,7 +572,7 @@ Remove-JIMScopingCriteriaGroup -SyncRuleId <int> -GroupId <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the sync rule. Accepts pipeline input. |
+| `SyncRuleId` | `int` | Yes | | The ID of the synchronisation rule. Accepts pipeline input. |
 | `GroupId` | `int` | Yes | | The ID of the group to delete. Accepts pipeline input. Alias: `Id`. |
 
 ### Output
@@ -629,7 +629,7 @@ New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the sync rule |
+| `SyncRuleId` | `int` | Yes | | The ID of the synchronisation rule |
 | `GroupId` | `int` | Yes | | The ID of the scoping criteria group to add this criterion to |
 | `MetaverseAttributeId` | `int` | Yes (ByMvId set) | | The metaverse attribute ID to evaluate (export rules only) |
 | `MetaverseAttributeName` | `string` | Yes (ByMvName set) | | The metaverse attribute name to evaluate; auto-resolves to ID (export rules only) |
@@ -707,7 +707,7 @@ Remove-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the sync rule |
+| `SyncRuleId` | `int` | Yes | | The ID of the synchronisation rule |
 | `GroupId` | `int` | Yes | | The ID of the scoping criteria group |
 | `CriterionId` | `int` | Yes | | The ID of the criterion to delete. Alias: `Id`. |
 
@@ -729,8 +729,8 @@ Remove-JIMScopingCriterion -SyncRuleId 5 -GroupId 2 -CriterionId 7
 
 Matching rules determine how JIM links connected system objects to metaverse objects during synchronisation. JIM supports two matching modes:
 
-- **Per-object-type (simple):** matching rules are defined at the connected system level and apply to all sync rules for a given object type. This is the default mode.
-- **Per-sync-rule (advanced):** each sync rule has its own independent matching rules, allowing different sync rules to use different join criteria.
+- **Per-object-type (simple):** matching rules are defined at the connected system level and apply to all synchronisation rules for a given object type. This is the default mode.
+- **Per-sync-rule (advanced):** each synchronisation rule has its own independent matching rules, allowing different synchronisation rules to use different join criteria.
 
 Use [Switch-JIMMatchingMode](#switch-jimmatchingmode) to change between modes. The current mode determines which set of cmdlets to use.
 
@@ -762,8 +762,8 @@ With `-PassThru`, returns the connected system object reflecting the new mode. W
 
 ### Notes
 
-- `ConnectedSystem` mode defines matching rules at the object type level; all sync rules for that object type share the same matching configuration.
-- `SyncRule` mode defines matching rules on each sync rule independently, providing fine-grained control.
+- `ConnectedSystem` mode defines matching rules at the object type level; all synchronisation rules for that object type share the same matching configuration.
+- `SyncRule` mode defines matching rules on each synchronisation rule independently, providing fine-grained control.
 - When switching modes, existing rules are migrated automatically. Review the migrated rules after switching to confirm they are correct.
 
 ### Examples
@@ -955,11 +955,11 @@ Remove-JIMMatchingRule -ConnectedSystemId 1 -Id 5 -Force
 
 ## Per-Sync-Rule Matching Rules
 
-These cmdlets manage matching rules in advanced (per-sync-rule) mode, where each sync rule defines its own matching configuration independently.
+These cmdlets manage matching rules in advanced (per-sync-rule) mode, where each synchronisation rule defines its own matching configuration independently.
 
 ### Get-JIMSyncRuleMatchingRule
 
-Retrieves matching rules for a specific sync rule.
+Retrieves matching rules for a specific synchronisation rule.
 
 #### Syntax
 
@@ -975,7 +975,7 @@ Get-JIMSyncRuleMatchingRule -SyncRuleId <int> -Id <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the sync rule. Accepts pipeline input. |
+| `SyncRuleId` | `int` | Yes | | The ID of the synchronisation rule. Accepts pipeline input. |
 | `Id` | `int` | No | | The ID of a specific matching rule to retrieve |
 
 #### Output
@@ -984,7 +984,7 @@ Returns one or more matching rule objects.
 
 #### Examples
 
-```powershell title="List matching rules for a sync rule"
+```powershell title="List matching rules for a synchronisation rule"
 Get-JIMSyncRuleMatchingRule -SyncRuleId 5
 ```
 
@@ -996,7 +996,7 @@ Get-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 3
 
 ### New-JIMSyncRuleMatchingRule
 
-Creates a new matching rule on a specific sync rule. The metaverse object type is derived automatically from the sync rule configuration.
+Creates a new matching rule on a specific synchronisation rule. The metaverse object type is derived automatically from the synchronisation rule configuration.
 
 #### Syntax
 
@@ -1016,7 +1016,7 @@ New-JIMSyncRuleMatchingRule -SyncRuleId <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the sync rule |
+| `SyncRuleId` | `int` | Yes | | The ID of the synchronisation rule |
 | `SourceAttributeId` | `int` | Yes (CSAttribute set) | | The connected system attribute ID to use as the match source |
 | `SourceMetaverseAttributeId` | `int` | Yes (MVAttribute set) | | The metaverse attribute ID to use as the match source |
 | `TargetMetaverseAttributeId` | `int` | Yes | | The metaverse attribute ID to match against |
@@ -1026,11 +1026,11 @@ New-JIMSyncRuleMatchingRule -SyncRuleId <int>
 
 #### Notes
 
-- The metaverse object type is derived from the sync rule, so you do not need to specify it explicitly.
+- The metaverse object type is derived from the synchronisation rule, so you do not need to specify it explicitly.
 
 #### Examples
 
-```powershell title="Match CS employeeId to MV employeeId on a sync rule"
+```powershell title="Match CS employeeId to MV employeeId on a synchronisation rule"
 New-JIMSyncRuleMatchingRule -SyncRuleId 5 `
     -SourceAttributeId 10 `
     -TargetMetaverseAttributeId 5 `
@@ -1063,7 +1063,7 @@ Set-JIMSyncRuleMatchingRule -SyncRuleId <int> -Id <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the sync rule |
+| `SyncRuleId` | `int` | Yes | | The ID of the synchronisation rule |
 | `Id` | `int` | Yes | | The ID of the matching rule to modify |
 | `Order` | `int` | No | | New evaluation order |
 | `TargetMetaverseAttributeId` | `int` | No | | New target metaverse attribute ID |
@@ -1100,7 +1100,7 @@ Remove-JIMSyncRuleMatchingRule -SyncRuleId <int> -Id <int> [-Force]
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `SyncRuleId` | `int` | Yes | | The ID of the sync rule |
+| `SyncRuleId` | `int` | Yes | | The ID of the synchronisation rule |
 | `Id` | `int` | Yes | | The ID of the matching rule to delete |
 | `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt |
 
@@ -1112,7 +1112,7 @@ None.
 
 #### Examples
 
-```powershell title="Delete a sync rule matching rule"
+```powershell title="Delete a synchronisation rule matching rule"
 Remove-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 3
 ```
 
@@ -1124,6 +1124,6 @@ Remove-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 3 -Force
 
 ## See also
 
-- [API Sync Rules](../api/sync-rules/index.md): REST API reference for sync rule endpoints
+- [API Synchronisation Rules](../api/sync-rules/index.md): REST API reference for synchronisation rule endpoints
 - [Connected Systems](connected-systems.md): PowerShell cmdlets for managing connected systems
 - [Metaverse](metaverse.md): PowerShell cmdlets for managing the metaverse

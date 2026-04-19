@@ -1,10 +1,10 @@
 ---
-title: Delete a Sync Rule
+title: Delete a Synchronisation Rule
 ---
 
-# Delete a Sync Rule
+# Delete a Synchronisation Rule
 
-Permanently deletes a sync rule and all its associated mappings, scoping criteria, and object matching rules.
+Permanently deletes a synchronisation rule and all its associated mappings, scoping criteria, and object matching rules.
 
 ```
 DELETE /api/v1/synchronisation/sync-rules/{id}
@@ -14,7 +14,7 @@ DELETE /api/v1/synchronisation/sync-rules/{id}
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `id` | integer | ID of the sync rule |
+| `id` | integer | ID of the synchronisation rule |
 
 ## Examples
 
@@ -46,4 +46,4 @@ Returns `204 No Content` on success.
 |--------|------|-------------|
 | `401` | `UNAUTHORISED` | Authentication required |
 | `403` | `FORBIDDEN` | Insufficient permissions (Administrator role required) |
-| `404` | `NOT_FOUND` | Sync rule does not exist |
+| `404` | `NOT_FOUND` | Synchronisation rule does not exist |

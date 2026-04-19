@@ -35,7 +35,7 @@ JIM is deployed as a set of Docker containers, each with a distinct responsibili
 
 ### JIM.Web
 
-The web application provides both the **administrative user interface** (built with Blazor Server and MudBlazor) and the **REST API** (at `/api/`). Administrators use the UI to configure connected systems, define sync rules, monitor operations, and browse identity data. The API enables automation and integration with external tools.
+The web application provides both the **administrative user interface** (built with Blazor Server and MudBlazor) and the **REST API** (at `/api/`). Administrators use the UI to configure connected systems, define synchronisation rules, monitor operations, and browse identity data. The API enables automation and integration with external tools.
 
 ### JIM.Worker
 
@@ -51,7 +51,7 @@ A PowerShell module for automation and scripting. It wraps the REST API and prov
 
 ### PostgreSQL Database
 
-JIM uses PostgreSQL as its sole data store. The database holds all configuration, identity data (metaverse objects, connected system objects), sync rules, activity history, and credentials (encrypted at rest with AES-256-GCM).
+JIM uses PostgreSQL as its sole data store. The database holds all configuration, identity data (metaverse objects, connected system objects), synchronisation rules, activity history, and credentials (encrypted at rest with AES-256-GCM).
 
 ## Layered Architecture
 
