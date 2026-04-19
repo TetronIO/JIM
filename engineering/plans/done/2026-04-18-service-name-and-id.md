@@ -1,5 +1,8 @@
 # Service Name and Service ID Implementation Plan
 
+- **Status:** Done
+- **Issue:** [#583](https://github.com/TetronIO/JIM/issues/583)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a user-editable Service Name and a read-only auto-generated Service ID so administrators can identify individual JIM instances at a glance, via the portal chrome (sidebar, browser tab, footer), the Web API, and the PowerShell module. Resolves [#583](https://github.com/TetronIO/JIM/issues/583).
@@ -8,7 +11,7 @@
 
 **Tech Stack:** C# / .NET 10, EF Core, PostgreSQL, Blazor Server, MudBlazor, NUnit + Moq, PowerShell.
 
-**Spec:** [`docs/superpowers/specs/2026-04-18-service-name-and-id-design.md`](../specs/2026-04-18-service-name-and-id-design.md)
+**Spec:** [`engineering/plans/done/2026-04-18-service-name-and-id-design.md`](2026-04-18-service-name-and-id-design.md)
 
 ---
 
@@ -1092,7 +1095,7 @@ jim-stack  # or jim-build-light
 
 - [ ] **Step 4: Confirm acceptance criteria**
 
-Re-read [`docs/superpowers/specs/2026-04-18-service-name-and-id-design.md`](../specs/2026-04-18-service-name-and-id-design.md) Acceptance section. Tick off each item.
+Re-read [`engineering/plans/done/2026-04-18-service-name-and-id-design.md`](2026-04-18-service-name-and-id-design.md) Acceptance section. Tick off each item.
 
 - [ ] **Step 5: Push and open PR (only on explicit user instruction)**
 
