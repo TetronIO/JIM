@@ -13,13 +13,13 @@ JIM follows a hub-and-spoke **metaverse pattern** where all identity data flows 
 
 A **connected system** represents any external directory, database, or file that JIM synchronises with. Each connected system has a connector space that stages data before it enters the metaverse. Read about connectors, connector spaces, and partitions in [Connected Systems](connected-systems.md).
 
-## ⚙️ Sync Pipeline
+## ⚙️ Synchronisation Pipeline
 
-JIM processes identity data in three distinct phases: **Import**, **Sync**, and **Export**. This pipeline ensures data is validated, transformed, and reconciled at each stage before reaching its destination. The [Sync Pipeline](sync-pipeline.md) page explains each phase in detail.
+JIM processes identity data in three distinct phases: **Import**, **Sync**, and **Export**. This pipeline ensures data is validated, transformed, and reconciled at each stage before reaching its destination. The [Synchronisation Pipeline](synchronisation-pipeline.md) page explains each phase in detail.
 
 ## 📋 Synchronisation Rules
 
-**Synchronisation rules** define the relationship between connected systems and the metaverse. They control which objects are in scope, how objects are matched (joined), when new metaverse objects are created (projected), and how attributes flow between systems. See [Synchronisation Rules](sync-rules.md) for the full breakdown.
+**Synchronisation rules** define the relationship between connected systems and the metaverse. They control which objects are in scope, how objects are matched (joined), when new metaverse objects are created (projected), and how attributes flow between systems. See [Synchronisation Rules](synchronisation-rules.md) for the full breakdown.
 
 ## 🔄 JML Lifecycle
 

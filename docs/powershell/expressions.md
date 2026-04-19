@@ -71,4 +71,4 @@ if (-not $result.IsValid) {
 ## See also
 
 - [Concepts: Expressions](../concepts/expressions.md)
-- [Synchronisation Rules](sync-rules.md)
+- [Synchronisation Rules](synchronisation-rules.md)

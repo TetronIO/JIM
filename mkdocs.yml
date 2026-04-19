@@ -92,13 +92,13 @@ nav:
       - getting-started/index.md
       - Prerequisites: getting-started/prerequisites.md
       - Quick Start: getting-started/quickstart.md
-      - Your First Sync: getting-started/first-sync.md
+      - Your First Synchronisation: getting-started/first-synchronisation.md
   - Concepts:
       - concepts/index.md
       - Architecture: concepts/architecture.md
       - Connected Systems: concepts/connected-systems.md
-      - Sync Pipeline: concepts/sync-pipeline.md
-      - Synchronisation Rule: concepts/sync-rules.md
+      - Synchronisation Pipeline: concepts/synchronisation-pipeline.md
+      - Synchronisation Rule: concepts/synchronisation-rules.md
       - JML Lifecycle: concepts/jml-lifecycle.md
       - Expressions: concepts/expressions.md
   - Administration:
@@ -151,15 +151,15 @@ nav:
           - Delete: api/run-profiles/delete.md
           - Execute: api/run-profiles/execute.md
       - Synchronisation Rule:
-          - api/sync-rules/index.md
-          - List: api/sync-rules/list.md
-          - Create: api/sync-rules/create.md
-          - Retrieve: api/sync-rules/retrieve.md
-          - Update: api/sync-rules/update.md
-          - Delete: api/sync-rules/delete.md
-          - Attribute Mappings: api/sync-rules/mappings.md
-          - Scoping Criteria: api/sync-rules/scoping-criteria.md
-          - Object Matching Rules: api/sync-rules/matching-rules.md
+          - api/synchronisation-rules/index.md
+          - List: api/synchronisation-rules/list.md
+          - Create: api/synchronisation-rules/create.md
+          - Retrieve: api/synchronisation-rules/retrieve.md
+          - Update: api/synchronisation-rules/update.md
+          - Delete: api/synchronisation-rules/delete.md
+          - Attribute Mappings: api/synchronisation-rules/mappings.md
+          - Scoping Criteria: api/synchronisation-rules/scoping-criteria.md
+          - Object Matching Rules: api/synchronisation-rules/matching-rules.md
       - Metaverse:
           - api/metaverse/index.md
           - Object Types: api/metaverse/object-types.md
@@ -211,7 +211,7 @@ nav:
       - Connection: powershell/connection.md
       - Connected Systems: powershell/connected-systems.md
       - Run Profiles: powershell/run-profiles.md
-      - Synchronisation Rule: powershell/sync-rules.md
+      - Synchronisation Rule: powershell/synchronisation-rules.md
       - Metaverse: powershell/metaverse.md
       - Predefined Searches: powershell/predefined-searches.md
       - Schedules: powershell/schedules.md

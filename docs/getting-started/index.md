@@ -35,7 +35,7 @@ Whether you are deploying JIM for production use or setting up a development env
 
     Set up a connected system, configure a synchronisation rule, and run your first import, sync, and export cycle.
 
-    [:octicons-arrow-right-24: Your First Sync](first-sync.md)
+    [:octicons-arrow-right-24: Your First Synchronisation](first-synchronisation.md)
 
 </div>
 

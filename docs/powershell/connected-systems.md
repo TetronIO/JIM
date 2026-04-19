@@ -920,5 +920,5 @@ Get-JIMConnectedSystem | ForEach-Object {
 
 - [API: Connected Systems](../api/connected-systems/index.md): REST API reference for connected system endpoints
 - [Run Profiles](run-profiles.md): execute import, sync, and export operations on connected systems
-- [Synchronisation Rules](sync-rules.md): define attribute mappings and scoping for connected system synchronisation
+- [Synchronisation Rules](synchronisation-rules.md): define attribute mappings and scoping for connected system synchronisation
 - [Connection](connection.md): establish a session before using these cmdlets

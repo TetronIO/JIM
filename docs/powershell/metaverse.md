@@ -489,5 +489,5 @@ Get-JIMPendingDeletion -Summary
 ## See also
 
 - [Metaverse API Reference](../api/metaverse/index.md)
-- [Synchronisation Rules](sync-rules.md)
+- [Synchronisation Rules](synchronisation-rules.md)
 - [Connected Systems](connected-systems.md)
