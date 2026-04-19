@@ -78,6 +78,13 @@
     services are ready. This reduces database writes during large test runs.
     Change tracking is enabled by default.
 
+.PARAMETER ContinueOnFailure
+    When running multiple scenarios (-Scenario All or -DirectoryType All), keep
+    running subsequent scenarios after one fails instead of aborting immediately.
+    The default is fail-fast: as soon as a scenario fails the runner prints the
+    summary of what ran and exits non-zero. Use -ContinueOnFailure when you are
+    diagnosing whether a regression is localised to one scenario or widespread.
+
 .EXAMPLE
     ./Run-IntegrationTests.ps1
 
@@ -216,7 +223,10 @@ param(
     [string]$TemplateOpenLDAP,
 
     [Parameter(Mandatory=$false)]
-    [switch]$PreRelease
+    [switch]$PreRelease,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$ContinueOnFailure
 )
 
 Set-StrictMode -Version Latest
@@ -1046,6 +1056,7 @@ if ($DirectoryType -eq "All") {
     if ($IgnoreSnapshots)                                       { $passThruParams.IgnoreSnapshots = $true }
     if ($LogLevel)                                              { $passThruParams.LogLevel = $LogLevel }
     if ($DisableChangeTracking)                                 { $passThruParams.DisableChangeTracking = $true }
+    if ($ContinueOnFailure)                                     { $passThruParams.ContinueOnFailure = $true }
 
     # Resolve per-directory-type templates. -TemplateSambaAD/-TemplateOpenLDAP
     # override the base -Template for the respective directory type.
@@ -1099,12 +1110,24 @@ if ($DirectoryType -eq "All") {
             Duration        = $dtDuration.ToString('hh\:mm\:ss')
             DurationSeconds = $dtDuration.TotalSeconds
         }
-        if (-not $dtPassed) { $anyFailed = $true }
+        if (-not $dtPassed) {
+            $anyFailed = $true
+
+            # Fail-fast: don't run the next directory type when one has already failed.
+            if (-not $ContinueOnFailure) {
+                Write-Host ""
+                Write-Host "${RED}Aborting remaining directory types after '$dt' failure (fail-fast default).${NC}"
+                Write-Host "${GRAY}Pass -ContinueOnFailure to run all directory types regardless.${NC}"
+                Write-Host ""
+                break
+            }
+        }
     }
 
-    # Print summary
+    # Print summary. Wrap with @(...) so Where-Object returning $null (zero matches)
+    # or a single hashtable (unwrapped on exactly one match) doesn't trip Set-StrictMode.
     $allDuration = (Get-Date) - $allStart
-    $passCount = ($allResults | Where-Object { $_.Success }).Count
+    $passCount = @($allResults | Where-Object { $_.Success }).Count
 
     Write-Host ""
     Write-Host "${CYAN}$("=" * 65)${NC}"
@@ -1431,9 +1454,38 @@ if ($Scenario -eq "All") {
             Duration        = $scenarioDuration.ToString('hh\:mm\:ss')
             DurationSeconds = $scenarioDuration.TotalSeconds
             Error           = if ($scenarioError) { $scenarioError.Exception.Message } else { $null }
+            Skipped         = $false
         }
         $regressionTimings[$scenarioName] = $scenarioDuration.TotalSeconds
-        if (-not $passed) { $anyFailed = $true }
+        if (-not $passed) {
+            $anyFailed = $true
+
+            # Fail-fast (default): abort the regression the moment one scenario fails.
+            # Record the remaining scenarios as skipped so the summary is honest about
+            # what ran vs what was intentionally not run. Pass -ContinueOnFailure to
+            # run every scenario regardless, which is useful when diagnosing whether
+            # a regression is localised or widespread.
+            if (-not $ContinueOnFailure) {
+                Write-Host ""
+                Write-Host "${RED}Aborting regression after failure of '$scenarioName' (fail-fast default).${NC}"
+                Write-Host "${GRAY}Pass -ContinueOnFailure to run remaining scenarios anyway.${NC}"
+                Write-Host ""
+
+                for ($j = $i + 1; $j -lt $implementedScenarios.Count; $j++) {
+                    $skippedName = $implementedScenarios[$j]
+                    $results += @{
+                        Name            = $skippedName
+                        Success         = $false
+                        ExitCode        = $null
+                        Duration        = "00:00:00"
+                        DurationSeconds = 0
+                        Error           = $null
+                        Skipped         = $true
+                    }
+                }
+                break
+            }
+        }
 
     }
 
@@ -1443,7 +1495,8 @@ if ($Scenario -eq "All") {
     # either throws or returns the wrong value.
     $allDuration = (Get-Date) - $allStart
     $passCount = @($results | Where-Object { $_.Success }).Count
-    $failCount = @($results).Count - $passCount
+    $skipCount = @($results | Where-Object { $_.Skipped }).Count
+    $failCount = @($results).Count - $passCount - $skipCount
 
     # Print summary
     Write-Host ""
@@ -1453,13 +1506,25 @@ if ($Scenario -eq "All") {
     Write-Host ""
 
     foreach ($r in $results) {
-        $icon = if ($r.Success) { "${GREEN}PASS${NC}" } else { "${RED}FAIL${NC}" }
+        $icon = if ($r.Skipped) {
+            "${YELLOW}SKIP${NC}"
+        } elseif ($r.Success) {
+            "${GREEN}PASS${NC}"
+        } else {
+            "${RED}FAIL${NC}"
+        }
         Write-Host ("  [{0}]  {1,-50} {2}" -f $icon, $r.Name, $r.Duration)
     }
 
     Write-Host ""
     Write-Host "${CYAN}Total Duration: ${NC}$($allDuration.ToString('hh\:mm\:ss'))"
-    Write-Host "${CYAN}Passed: ${NC}$passCount / $($results.Count)    ${CYAN}Failed: ${NC}$failCount / $($results.Count)"
+    $totalCount = @($results).Count
+    if ($skipCount -gt 0) {
+        Write-Host "${CYAN}Passed: ${NC}$passCount / $totalCount    ${CYAN}Failed: ${NC}$failCount / $totalCount    ${CYAN}Skipped (fail-fast): ${NC}$skipCount / $totalCount"
+    }
+    else {
+        Write-Host "${CYAN}Passed: ${NC}$passCount / $totalCount    ${CYAN}Failed: ${NC}$failCount / $totalCount"
+    }
     Write-Host ""
 
     # Write aggregated results JSON
@@ -1479,12 +1544,15 @@ if ($Scenario -eq "All") {
         StartTime         = $allStart.ToString("yyyy-MM-dd HH:mm:ss")
         Duration          = $allDuration.ToString('hh\:mm\:ss')
         OverallSuccess    = (-not $anyFailed)
+        AbortedEarly      = ($skipCount -gt 0)
+        ContinueOnFailure = [bool]$ContinueOnFailure
         Scenarios         = @($results | ForEach-Object {
             @{
                 Name     = $_.Name
                 Success  = $_.Success
                 Duration = $_.Duration
                 ExitCode = $_.ExitCode
+                Skipped  = [bool]$_.Skipped
             }
         })
         Timings        = $regressionTimings
@@ -2587,7 +2655,11 @@ finally {
         Stop-Process -Id $dockerStatsProcess.Id -Force -ErrorAction SilentlyContinue
     }
     if ($dockerStatsPath -and (Test-Path $dockerStatsPath)) {
-        $rowCount = (Get-Content $dockerStatsPath).Count - 1
+        # Wrap with @(...) so a zero- or one-line file doesn't trip Set-StrictMode:
+        # Get-Content returns $null for an empty file and a single string for a
+        # one-line file, neither of which expose a usable .Count property.
+        $rowCount = @(Get-Content $dockerStatsPath).Count - 1
+        if ($rowCount -lt 0) { $rowCount = 0 }
         Write-Step "Docker stats capture stopped ($rowCount samples recorded)"
     }
 

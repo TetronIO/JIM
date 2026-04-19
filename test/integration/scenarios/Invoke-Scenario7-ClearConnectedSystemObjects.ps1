@@ -129,6 +129,15 @@ try {
         throw "API key required for authentication"
     }
 
+    # Seed CSV test data before Setup-Scenario1.ps1 runs — its schema-import step
+    # opens hr-users.csv to discover columns, so the file must exist before setup.
+    # Each scenario seeds its own data so scenario ordering is irrelevant; prior
+    # to this the suite was relying on files leaking across scenarios through the
+    # shared jim-connector-files-volume.
+    Write-Host "Seeding CSV test data..." -ForegroundColor Gray
+    & "$PSScriptRoot/../Generate-TestCSV.ps1" -Template $Template -OutputPath "$PSScriptRoot/../../test-data"
+    Write-Host "  ✓ CSV test data seeded" -ForegroundColor Green
+
     # Setup scenario configuration (reuse Scenario 1 setup for CSV connected system)
     $setupParams = @{ JIMUrl = $JIMUrl; ApiKey = $ApiKey; Template = $Template }
     if ($DirectoryConfig) { $setupParams.DirectoryConfig = $DirectoryConfig }
