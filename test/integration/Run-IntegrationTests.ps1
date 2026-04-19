@@ -152,6 +152,13 @@
 
     Runs all scenarios against both directory types with different template sizes.
     Samba AD uses Medium (faster population), OpenLDAP uses Scale100K.
+
+.EXAMPLE
+    ./Run-IntegrationTests.ps1 -PreRelease
+
+    Runs the full pre-release regression: every implemented scenario against both
+    directory types, with Samba AD at the Large template and OpenLDAP at Scale100K.
+    Equivalent to: -Scenario All -DirectoryType All -TemplateSambaAD Large -TemplateOpenLDAP Scale100K.
 #>
 
 param(
@@ -206,7 +213,10 @@ param(
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
-    [string]$TemplateOpenLDAP
+    [string]$TemplateOpenLDAP,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$PreRelease
 )
 
 Set-StrictMode -Version Latest
@@ -395,27 +405,40 @@ function Show-ScenarioMenu {
         exit 1
     }
 
-    # Build scenario list with descriptions — "All Scenarios" first
+    # Build scenario list with descriptions — "All Scenarios" first, then "Pre-Release"
     $scenarios = @(
         @{
             Name = "All"
             Description = "Run every implemented scenario sequentially (full regression)"
             Disabled = $false
+            SeparatorAfter = $false
+        }
+        @{
+            Name = "Pre-Release"
+            Description = "Runs every implemented scenario sequentially for both Samba AD and OpenLDAP at Large and Scale100K templates, respectively"
+            Disabled = $false
+            SeparatorAfter = $true
         }
     )
     foreach ($file in $scenarioFiles) {
         $scenarioName = $file.BaseName -replace '^Invoke-', ''
 
-        # Extract description from script comments
+        # Extract description from the .SYNOPSIS block inside the script's comment-based help.
+        # The first `# ...` line in a scenario file is the copyright header, so we explicitly
+        # look inside the <# ... #> block for the line following `.SYNOPSIS`.
         $description = ""
-        $content = Get-Content $file.FullName -TotalCount 20
-        foreach ($line in $content) {
-            if ($line -match '^\s*#\s*(.+)') {
-                $comment = $Matches[1].Trim()
-                if ($comment -and $comment -notmatch '^\.SYNOPSIS|^\.DESCRIPTION|^\.PARAMETER|^\.EXAMPLE|^<#|^#>') {
-                    $description = $comment
+        $content = Get-Content $file.FullName -TotalCount 40
+        for ($i = 0; $i -lt $content.Count; $i++) {
+            if ($content[$i] -match '^\s*\.SYNOPSIS\s*$') {
+                # Take the first non-empty line after .SYNOPSIS that isn't another help tag or block terminator
+                for ($j = $i + 1; $j -lt $content.Count; $j++) {
+                    $line = $content[$j].Trim()
+                    if (-not $line) { continue }
+                    if ($line -match '^\.[A-Z]+' -or $line -match '^#>') { break }
+                    $description = $line
                     break
                 }
+                break
             }
         }
 
@@ -449,6 +472,7 @@ function Show-ScenarioMenu {
             Name = $scenarioName
             Description = $description
             Disabled = $disabled
+            SeparatorAfter = $false
         }
     }
 
@@ -509,8 +533,8 @@ function Show-ScenarioMenu {
                 }
                 Write-Host ""
 
-                # Separator after "All" option
-                if ($i -eq 0) {
+                # Separator after designated items (e.g. the "special" group above the scenario list)
+                if ($scenario.SeparatorAfter) {
                     Write-Host "${GRAY}  $("-" * 60)${NC}"
                     Write-Host ""
                 }
@@ -947,9 +971,31 @@ function Test-TemplateRelevant {
     return $true
 }
 
+# -PreRelease is shorthand for: -Scenario All -DirectoryType All -TemplateSambaAD Large -TemplateOpenLDAP Scale100K
+if ($PreRelease) {
+    $Scenario               = "All"
+    $DirectoryType          = "All"
+    $TemplateSambaAD        = "Large"
+    $TemplateOpenLDAP       = "Scale100K"
+    $DirectoryTypeWasExplicitlySet = $true
+    $TemplateWasExplicitlySet      = $true
+}
+
 # If no scenario specified, show interactive menu
 if (-not $Scenario) {
     $Scenario = Show-ScenarioMenu
+
+    # "Pre-Release" is a special menu entry that expands to all-scenarios, both directory
+    # types, with Samba AD at Large and OpenLDAP at Scale100K. It bypasses the Template
+    # and DirectoryType sub-menus since those are fixed by the Pre-Release preset.
+    if ($Scenario -eq "Pre-Release") {
+        $Scenario                      = "All"
+        $DirectoryType                 = "All"
+        $TemplateSambaAD               = "Large"
+        $TemplateOpenLDAP              = "Scale100K"
+        $DirectoryTypeWasExplicitlySet = $true
+        $TemplateWasExplicitlySet      = $true
+    }
 
     # Show template menu only if Template wasn't explicitly provided AND the scenario uses it
     if (-not $TemplateWasExplicitlySet) {
