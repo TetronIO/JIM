@@ -33,9 +33,9 @@ Whether you are deploying JIM for production use or setting up a development env
 
     ---
 
-    Set up a connected system, configure a sync rule, and run your first import, sync, and export cycle.
+    Set up a connected system, configure a synchronisation rule, and run your first import, sync, and export cycle.
 
-    [:octicons-arrow-right-24: Your First Sync](first-sync.md)
+    [:octicons-arrow-right-24: Your First Synchronisation](first-synchronisation.md)
 
 </div>
 
@@ -45,6 +45,6 @@ Getting JIM running involves three main steps:
 
 1. **Prepare your environment:** Ensure Docker is installed and you have access to an OpenID Connect identity provider for authentication.
 2. **Deploy JIM:** Choose from automated setup, manual Docker Compose, or air-gapped deployment depending on your environment.
-3. **Configure your first synchronisation:** Connect a source system, define sync rules, and verify data flows correctly through the metaverse.
+3. **Configure your first synchronisation:** Connect a source system, define synchronisation rules, and verify data flows correctly through the metaverse.
 
 Once deployed, JIM is accessible via a web portal at `http://localhost:5200` by default. You can also interact with JIM through its REST API or the cross-platform PowerShell module.

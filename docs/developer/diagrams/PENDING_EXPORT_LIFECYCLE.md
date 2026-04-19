@@ -195,7 +195,7 @@ This prevents silent loss of drift corrections when merging with export evaluati
 
 - **No-net-change detection**: Before creating a PE during sync, the system checks if the target CSO already has the expected values (using pre-cached data in `ExportEvaluationCache`). This avoids unnecessary export operations and reduces connector load.
 
-- **Drift correction**: When `EnforceState` is enabled on an export sync rule and the CSO has values that don't match the MVO, a corrective PE is created to reassert the correct values. This detects and corrects unauthorised changes made directly in target systems.
+- **Drift correction**: When `EnforceState` is enabled on an export synchronisation rule and the CSO has values that don't match the MVO, a corrective PE is created to reassert the correct values. This detects and corrects unauthorised changes made directly in target systems.
 
 - **Pure recall skip**: When all changed attributes on an MVO are removals (attribute recall due to CSO disconnection), export evaluation is skipped entirely. Expression-based mappings (e.g., DN templates) would evaluate against post-recall null attributes and produce invalid values. Target systems retain their existing attribute values until attribute priority (Issue #91) enables replacement value resolution.
 

@@ -8,8 +8,8 @@ Object matching rules determine how connector space objects are matched to exist
 
 JIM supports two matching modes:
 
-- **Simple mode** (default): Matching rules are configured per object type on the connected system. All sync rules for that object type share the same matching rules.
-- **Advanced mode**: Matching rules are configured per sync rule, allowing different matching logic for different sync rules on the same object type.
+- **Simple mode** (default): Matching rules are configured per object type on the connected system. All synchronisation rules for that object type share the same matching rules.
+- **Advanced mode**: Matching rules are configured per synchronisation rule, allowing different matching logic for different synchronisation rules on the same object type.
 
 Use the [Switch Matching Mode](#switch-matching-mode) endpoint to change between modes.
 
@@ -49,7 +49,7 @@ Use the [Switch Matching Mode](#switch-matching-mode) endpoint to change between
 | `connectedSystemObjectTypeName` | string, nullable | Object type name |
 | `metaverseObjectTypeId` | integer, nullable | Metaverse object type to search |
 | `metaverseObjectTypeName` | string, nullable | Metaverse object type name |
-| `syncRuleId` | integer, nullable | Associated sync rule (advanced mode only) |
+| `syncRuleId` | integer, nullable | Associated synchronisation rule (advanced mode only) |
 | `targetMetaverseAttributeId` | integer, nullable | MV attribute to match against |
 | `targetMetaverseAttributeName` | string, nullable | Target MV attribute name |
 | `sources` | array | Source attributes to match from |
@@ -215,7 +215,7 @@ DELETE /api/v1/synchronisation/connected-systems/{connectedSystemId}/matching-ru
 
 ## List Matching Rules (Advanced Mode)
 
-Returns matching rules configured on a specific sync rule.
+Returns matching rules configured on a specific synchronisation rule.
 
 ```
 GET /api/v1/synchronisation/sync-rules/{syncRuleId}/matching-rules
@@ -242,7 +242,7 @@ GET /api/v1/synchronisation/sync-rules/{syncRuleId}/matching-rules
 
 ## Create a Matching Rule (Advanced Mode)
 
-Creates a matching rule on a specific sync rule. The metaverse object type is derived from the sync rule.
+Creates a matching rule on a specific synchronisation rule. The metaverse object type is derived from the synchronisation rule.
 
 ```
 POST /api/v1/synchronisation/sync-rules/{syncRuleId}/matching-rules
@@ -292,7 +292,7 @@ POST /api/v1/synchronisation/sync-rules/{syncRuleId}/matching-rules
 
 ## Switch Matching Mode
 
-Switches a connected system between simple mode (matching rules per object type) and advanced mode (matching rules per sync rule).
+Switches a connected system between simple mode (matching rules per object type) and advanced mode (matching rules per synchronisation rule).
 
 ```
 POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/matching-mode

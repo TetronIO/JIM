@@ -45,7 +45,7 @@ Returns `200 OK` with the full [Activity object](index.md#the-activity-object), 
 | `errorStackTrace` | string, nullable | Stack trace for debugging |
 | `connectedSystemId` | integer, nullable | Associated connected system |
 | `connectedSystemRunProfileId` | integer, nullable | Associated run profile |
-| `syncRuleId` | integer, nullable | Associated sync rule |
+| `syncRuleId` | integer, nullable | Associated synchronisation rule |
 | `metaverseObjectId` | guid, nullable | Associated metaverse object |
 | `executionStats` | object, nullable | Execution statistics (run profile activities only; see [Stats](stats.md)) |
 

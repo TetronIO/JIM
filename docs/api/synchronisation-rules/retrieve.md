@@ -1,10 +1,10 @@
 ---
-title: Retrieve a Sync Rule
+title: Retrieve a Synchronisation Rule
 ---
 
-# Retrieve a Sync Rule
+# Retrieve a Synchronisation Rule
 
-Returns the details of a sync rule.
+Returns the details of a synchronisation rule.
 
 ```
 GET /api/v1/synchronisation/sync-rules/{id}
@@ -14,7 +14,7 @@ GET /api/v1/synchronisation/sync-rules/{id}
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `id` | integer | ID of the sync rule |
+| `id` | integer | ID of the synchronisation rule |
 
 ## Examples
 
@@ -35,7 +35,7 @@ GET /api/v1/synchronisation/sync-rules/{id}
 
 ## Response
 
-Returns `200 OK` with the [Sync Rule object](index.md#the-sync-rule-object).
+Returns `200 OK` with the [Synchronisation Rule object](index.md#the-synchronisation-rule-object).
 
 ## Errors
 
@@ -43,4 +43,4 @@ Returns `200 OK` with the [Sync Rule object](index.md#the-sync-rule-object).
 |--------|------|-------------|
 | `401` | `UNAUTHORISED` | Authentication required |
 | `403` | `FORBIDDEN` | Insufficient permissions (Administrator role required) |
-| `404` | `NOT_FOUND` | Sync rule does not exist |
+| `404` | `NOT_FOUND` | Synchronisation rule does not exist |

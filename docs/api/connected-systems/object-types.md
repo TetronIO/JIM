@@ -82,7 +82,7 @@ Returns `200 OK` with an array of object types.
 | `name` | string | Object type name |
 | `created` | datetime | UTC timestamp when discovered |
 | `selected` | boolean | Whether this type is included in synchronisation |
-| `removeContributedAttributesOnObsoletion` | boolean | Remove contributed attributes when a sync rule no longer applies |
+| `removeContributedAttributesOnObsoletion` | boolean | Remove contributed attributes when a synchronisation rule no longer applies |
 | `attributeCount` | integer | Total number of attributes |
 | `attributes` | array | Full list of attributes (see [Attributes](attributes.md)) |
 
@@ -116,7 +116,7 @@ PUT /api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types/{
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `selected` | boolean | No | Include this object type in synchronisation |
-| `removeContributedAttributesOnObsoletion` | boolean | No | Remove contributed attributes from metaverse objects when a sync rule no longer applies |
+| `removeContributedAttributesOnObsoletion` | boolean | No | Remove contributed attributes from metaverse objects when a synchronisation rule no longer applies |
 
 ### Examples
 

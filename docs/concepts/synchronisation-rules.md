@@ -1,10 +1,10 @@
-# Sync Rules
+# Synchronisation Rules
 
-A **sync rule** defines the complete relationship between a connected system and the metaverse. It controls which objects are in scope, how objects are matched, when new metaverse objects are created, and how attributes flow between systems. Sync rules are the central configuration mechanism for identity synchronisation in JIM.
+A **synchronisation rule** defines the complete relationship between a connected system and the metaverse. It controls which objects are in scope, how objects are matched, when new metaverse objects are created, and how attributes flow between systems. Synchronisation rules are the central configuration mechanism for identity synchronisation in JIM.
 
 ## Overview
 
-Every connected system needs at least one sync rule to participate in synchronisation. A sync rule ties together five key components:
+Every connected system needs at least one synchronisation rule to participate in synchronisation. A synchronisation rule ties together five key components:
 
 1. **Direction** -- whether data flows inbound (source to metaverse) or outbound (metaverse to target)
 2. **Scoping filters** -- which objects the rule applies to
@@ -14,13 +14,13 @@ Every connected system needs at least one sync rule to participate in synchronis
 
 ## Direction
 
-Each sync rule has a **direction** that determines the flow of data:
+Each synchronisation rule has a **direction** that determines the flow of data:
 
 ### Inbound (Source to Metaverse)
 
-Inbound sync rules process data from a connected system into the metaverse. They are used with **source systems** -- systems that provide authoritative identity data (e.g., HR databases, badge systems).
+Inbound synchronisation rules process data from a connected system into the metaverse. They are used with **source systems** -- systems that provide authoritative identity data (e.g., HR databases, badge systems).
 
-An inbound sync rule:
+An inbound synchronisation rule:
 
 - Reads CSOs from the connected system's connector space
 - Attempts to join each CSO to an existing MVO
@@ -29,9 +29,9 @@ An inbound sync rule:
 
 ### Outbound (Metaverse to Target)
 
-Outbound sync rules push data from the metaverse to a connected system. They are used with **target systems** -- systems that receive provisioned identity data (e.g., Active Directory, email systems).
+Outbound synchronisation rules push data from the metaverse to a connected system. They are used with **target systems** -- systems that receive provisioned identity data (e.g., Active Directory, email systems).
 
-An outbound sync rule:
+An outbound synchronisation rule:
 
 - Evaluates MVOs in the metaverse against the rule's scoping filter
 - Provisions a new CSO in the target system's connector space if one does not exist
@@ -40,7 +40,7 @@ An outbound sync rule:
 
 ## Scoping Filters
 
-Scoping filters determine **which objects** a sync rule applies to. Only objects that match the scoping filter are processed by the rule.
+Scoping filters determine **which objects** a synchronisation rule applies to. Only objects that match the scoping filter are processed by the rule.
 
 For inbound rules, scoping filters evaluate CSO attributes:
 
@@ -54,13 +54,13 @@ For outbound rules, scoping filters evaluate MVO attributes:
 mv["Object Type"] = "Person" AND mv["Employee Status"] = "Active"
 ```
 
-Objects that fall out of scope are **disconnected** from the sync rule. This is important for the [JML lifecycle](jml-lifecycle.md) -- when an employee's status changes to "Leaver", they may fall out of scope for an outbound rule, triggering deprovisioning.
+Objects that fall out of scope are **disconnected** from the synchronisation rule. This is important for the [JML lifecycle](jml-lifecycle.md) -- when an employee's status changes to "Leaver", they may fall out of scope for an outbound rule, triggering deprovisioning.
 
 Scoping filters support the JIM [expression language](expressions.md), allowing complex conditions to be evaluated.
 
 ## Join Rules
 
-Join rules define **how to match** a Connected System Object to an existing Metaverse Object. When a CSO is processed by an inbound sync rule, JIM evaluates the join rules to find the correct MVO.
+Join rules define **how to match** a Connected System Object to an existing Metaverse Object. When a CSO is processed by an inbound synchronisation rule, JIM evaluates the join rules to find the correct MVO.
 
 ### How Joining Works
 
@@ -95,12 +95,12 @@ JIM evaluates the rules in order and uses the first match found.
 
 Projection rules determine **what happens when no matching MVO is found** during join resolution.
 
-If projection is enabled on the sync rule, JIM creates a new MVO of the specified object type and links the CSO to it. This is how new identities enter the metaverse for the first time.
+If projection is enabled on the synchronisation rule, JIM creates a new MVO of the specified object type and links the CSO to it. This is how new identities enter the metaverse for the first time.
 
 For example, when a new employee appears in the HR system:
 
 1. The HR import creates a new CSO
-2. The inbound sync rule attempts to join the CSO to an existing MVO
+2. The inbound synchronisation rule attempts to join the CSO to an existing MVO
 3. No match is found (the employee is new)
 4. The projection rule creates a new MVO of type "Person"
 5. Attribute flows populate the new MVO with the employee's data
@@ -145,18 +145,18 @@ Attribute flows support both single-valued and multi-valued attributes. Multi-va
 
 ## Precedence
 
-When multiple inbound sync rules write to the same MVO attribute, **precedence** determines which rule's value wins. Each sync rule has a precedence level, and the rule with the highest precedence takes priority.
+When multiple inbound synchronisation rules write to the same MVO attribute, **precedence** determines which rule's value wins. Each synchronisation rule has a precedence level, and the rule with the highest precedence takes priority.
 
 This is important when an identity has data flowing from multiple source systems. For example:
 
 - HR system provides `First Name` and `Last Name` (high precedence -- authoritative)
 - Badge system also provides `First Name` (lower precedence -- secondary)
 
-The HR system's values take precedence because its sync rule has a higher priority.
+The HR system's values take precedence because its synchronisation rule has a higher priority.
 
-## Example: Complete Sync Rule
+## Example: Complete Synchronisation Rule
 
-Here is an example of how a complete inbound sync rule for an HR system might be configured:
+Here is an example of how a complete inbound synchronisation rule for an HR system might be configured:
 
 | Component | Configuration |
 |-----------|---------------|

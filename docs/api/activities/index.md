@@ -119,7 +119,7 @@ Activities include summary counters relevant to their operation type:
 |------|-------------|
 | `ConnectedSystemRunProfile` | Run profile execution (import, sync, export) |
 | `ConnectedSystem` | Connected system operation (schema import, hierarchy import, delete, clear) |
-| `SyncRule` | Sync rule modification |
+| `SyncRule` | Synchronisation rule modification |
 | `MetaverseObject` | Metaverse object operation |
 | `MetaverseAttribute` | Metaverse attribute modification |
 | `TrustedCertificate` | Certificate management |

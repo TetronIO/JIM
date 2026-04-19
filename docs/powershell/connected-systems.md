@@ -252,7 +252,7 @@ New-JIMConnectedSystem "LDAP Directory" -ConnectorDefinitionId 1 -PassThru |
 ### Notes
 
 - This operation is **destructive**: it replaces the existing schema. Any object type or attribute selections that no longer match the new schema are removed.
-- Schema import is required before creating sync rules for a connected system.
+- Schema import is required before creating synchronisation rules for a connected system.
 - Supports `ShouldProcess` (Medium impact).
 
 ---
@@ -754,7 +754,7 @@ Get-JIMConnectedSystem | ForEach-Object {
 
 ## Clear-JIMConnectedSystem
 
-Removes all connector space objects (CSOs) and associated data from a connected system without deleting the system itself. The connected system configuration, schema, and sync rules are preserved.
+Removes all connector space objects (CSOs) and associated data from a connected system without deleting the system itself. The connected system configuration, schema, and synchronisation rules are preserved.
 
 ### Syntax
 
@@ -891,7 +891,7 @@ Get-JIMConnectedSystemDeletionPreview -ConnectedSystemId <int>
 
 ### Output
 
-A deletion impact preview object with counts of connector space objects, pending exports, sync rules, and other dependent data that would be removed.
+A deletion impact preview object with counts of connector space objects, pending exports, synchronisation rules, and other dependent data that would be removed.
 
 ### Examples
 
@@ -920,5 +920,5 @@ Get-JIMConnectedSystem | ForEach-Object {
 
 - [API: Connected Systems](../api/connected-systems/index.md): REST API reference for connected system endpoints
 - [Run Profiles](run-profiles.md): execute import, sync, and export operations on connected systems
-- [Sync Rules](sync-rules.md): define attribute mappings and scoping for connected system synchronisation
+- [Synchronisation Rules](synchronisation-rules.md): define attribute mappings and scoping for connected system synchronisation
 - [Connection](connection.md): establish a session before using these cmdlets

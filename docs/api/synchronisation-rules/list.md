@@ -1,10 +1,10 @@
 ---
-title: List Sync Rules
+title: List Synchronisation Rules
 ---
 
-# List Sync Rules
+# List Synchronisation Rules
 
-Returns a paginated list of sync rules.
+Returns a paginated list of synchronisation rules.
 
 ```
 GET /api/v1/synchronisation/sync-rules
@@ -43,7 +43,7 @@ GET /api/v1/synchronisation/sync-rules
 
 ## Response
 
-Returns `200 OK` with a paginated list of [Sync Rule objects](index.md#the-sync-rule-object).
+Returns `200 OK` with a paginated list of [Synchronisation Rule objects](index.md#the-synchronisation-rule-object).
 
 ## Errors
 

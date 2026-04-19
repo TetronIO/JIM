@@ -1,10 +1,10 @@
 ---
-title: Update a Sync Rule
+title: Update a Synchronisation Rule
 ---
 
-# Update a Sync Rule
+# Update a Synchronisation Rule
 
-Updates a sync rule's name, enabled state, or behaviour flags. The direction, connected system, and object type mappings cannot be changed after creation.
+Updates a synchronisation rule's name, enabled state, or behaviour flags. The direction, connected system, and object type mappings cannot be changed after creation.
 
 ```
 PUT /api/v1/synchronisation/sync-rules/{id}
@@ -14,14 +14,14 @@ PUT /api/v1/synchronisation/sync-rules/{id}
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `id` | integer | ID of the sync rule |
+| `id` | integer | ID of the synchronisation rule |
 
 ## Request Body
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `name` | string | No | Sync rule name (1-200 characters) |
-| `enabled` | boolean | No | Enable or disable the sync rule |
+| `name` | string | No | Synchronisation rule name (1-200 characters) |
+| `enabled` | boolean | No | Enable or disable the synchronisation rule |
 | `projectToMetaverse` | boolean | No | Update projection setting (import rules) |
 | `provisionToConnectedSystem` | boolean | No | Update provisioning setting (export rules) |
 | `enforceState` | boolean | No | Update drift enforcement (export rules) |
@@ -54,7 +54,7 @@ PUT /api/v1/synchronisation/sync-rules/{id}
 
 ## Response
 
-Returns `200 OK` with the updated [Sync Rule object](index.md#the-sync-rule-object).
+Returns `200 OK` with the updated [Synchronisation Rule object](index.md#the-synchronisation-rule-object).
 
 ## Errors
 
@@ -63,4 +63,4 @@ Returns `200 OK` with the updated [Sync Rule object](index.md#the-sync-rule-obje
 | `400` | `VALIDATION_ERROR` | Invalid fields |
 | `401` | `UNAUTHORISED` | Authentication required |
 | `403` | `FORBIDDEN` | Insufficient permissions (Administrator role required) |
-| `404` | `NOT_FOUND` | Sync rule does not exist |
+| `404` | `NOT_FOUND` | Synchronisation rule does not exist |

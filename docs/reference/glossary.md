@@ -45,13 +45,13 @@ Pending Export
 :   A queued change waiting to be sent to a target system. Pending exports are created during synchronisation and held until an export run profile is executed, at which point they are applied to the connected system.
 
 Projection
-:   The process of creating a new Metaverse Object when no existing match is found for an incoming Connected System Object. Projection establishes a new identity in the metaverse based on the sync rule configuration.
+:   The process of creating a new Metaverse Object when no existing match is found for an incoming Connected System Object. Projection establishes a new identity in the metaverse based on the synchronisation rule configuration.
 
 Provisioning
-:   The process of creating accounts in target systems when a new identity meets the criteria defined by export sync rules. Provisioning ensures that identities are represented in all systems where they require access.
+:   The process of creating accounts in target systems when a new identity meets the criteria defined by export synchronisation rules. Provisioning ensures that identities are represented in all systems where they require access.
 
 Run Profile
 :   A configured operation that defines what action to perform on a connected system. Run profiles include Full Import, Delta Import, Full Sync, Delta Sync, and Export, each with configurable parameters such as page size and target partition.
 
-Sync Rule
-:   A complete mapping configuration between a connected system and the metaverse. Sync rules define object type mappings, attribute flows, scoping criteria, object matching rules, and the direction of data flow (inbound or outbound).
+Synchronisation Rule
+:   A complete mapping configuration between a connected system and the metaverse. Synchronisation rules define object type mappings, attribute flows, scoping criteria, object matching rules, and the direction of data flow (inbound or outbound).

@@ -4,7 +4,7 @@ title: Expressions
 
 # Expressions
 
-Test sync rule expressions with sample data before deploying them to production mappings. Expressions use DynamicExpresso syntax with `mv["AttributeName"]` and `cs["AttributeName"]` for attribute access.
+Test synchronisation rule expressions with sample data before deploying them to production mappings. Expressions use DynamicExpresso syntax with `mv["AttributeName"]` and `cs["AttributeName"]` for attribute access.
 
 ## Test-JIMExpression
 
@@ -71,4 +71,4 @@ if (-not $result.IsValid) {
 ## See also
 
 - [Concepts: Expressions](../concepts/expressions.md)
-- [Sync Rules](sync-rules.md)
+- [Synchronisation Rules](synchronisation-rules.md)

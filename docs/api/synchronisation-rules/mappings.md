@@ -52,7 +52,7 @@ Attribute mappings define how individual attributes flow between a connected sys
 
 ## List Mappings
 
-Returns all attribute mappings for a sync rule.
+Returns all attribute mappings for a synchronisation rule.
 
 ```
 GET /api/v1/synchronisation/sync-rules/{syncRuleId}/mappings
@@ -62,7 +62,7 @@ GET /api/v1/synchronisation/sync-rules/{syncRuleId}/mappings
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `syncRuleId` | integer | ID of the sync rule |
+| `syncRuleId` | integer | ID of the synchronisation rule |
 
 ### Examples
 
@@ -91,7 +91,7 @@ Returns `200 OK` with an array of mapping objects.
 |--------|------|-------------|
 | `401` | `UNAUTHORISED` | Authentication required |
 | `403` | `FORBIDDEN` | Insufficient permissions (Administrator role required) |
-| `404` | `NOT_FOUND` | Sync rule does not exist |
+| `404` | `NOT_FOUND` | Synchronisation rule does not exist |
 
 ---
 
@@ -123,13 +123,13 @@ GET /api/v1/synchronisation/sync-rules/{syncRuleId}/mappings/{mappingId}
 | Status | Code | Description |
 |--------|------|-------------|
 | `401` | `UNAUTHORISED` | Authentication required |
-| `404` | `NOT_FOUND` | Sync rule or mapping does not exist |
+| `404` | `NOT_FOUND` | Synchronisation rule or mapping does not exist |
 
 ---
 
 ## Create a Mapping
 
-Creates a new attribute mapping for a sync rule.
+Creates a new attribute mapping for a synchronisation rule.
 
 ```
 POST /api/v1/synchronisation/sync-rules/{syncRuleId}/mappings
@@ -231,7 +231,7 @@ Returns `201 Created` with the mapping object.
 |--------|------|-------------|
 | `400` | `VALIDATION_ERROR` | Invalid mapping configuration (e.g. missing target, invalid expression) |
 | `401` | `UNAUTHORISED` | Authentication required |
-| `404` | `NOT_FOUND` | Sync rule does not exist |
+| `404` | `NOT_FOUND` | Synchronisation rule does not exist |
 
 ---
 
@@ -267,4 +267,4 @@ Returns `204 No Content` on success.
 | Status | Code | Description |
 |--------|------|-------------|
 | `401` | `UNAUTHORISED` | Authentication required |
-| `404` | `NOT_FOUND` | Sync rule or mapping does not exist |
+| `404` | `NOT_FOUND` | Synchronisation rule or mapping does not exist |

@@ -85,7 +85,7 @@ Each object type in the `objectTypes` array contains:
 | `name` | string | Object type name (e.g. `user`, `group`) |
 | `created` | datetime | UTC timestamp when discovered |
 | `selected` | boolean | Whether this type is included in synchronisation |
-| `removeContributedAttributesOnObsoletion` | boolean | Remove contributed attributes when a sync rule no longer applies |
+| `removeContributedAttributesOnObsoletion` | boolean | Remove contributed attributes when a synchronisation rule no longer applies |
 | `attributeCount` | integer | Number of attributes in this object type |
 
 ## Endpoints

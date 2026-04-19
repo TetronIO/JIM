@@ -44,25 +44,25 @@ Import does **not** modify the metaverse. The connector space acts as a staging 
 
 ## 🔀 Phase 2: Sync (Synchronisation)
 
-Sync is the core phase where JIM reconciles connector space data with the metaverse. It applies **sync rules** to determine how CSOs relate to MetaverseObjects (MVOs) and how attributes flow between them.
+Sync is the core phase where JIM reconciles connector space data with the metaverse. It applies **synchronisation rules** to determine how CSOs relate to MetaverseObjects (MVOs) and how attributes flow between them.
 
 ### Inbound Sync (Source to Metaverse)
 
 Inbound sync processes CSOs from source systems and updates the metaverse. For each CSO in scope:
 
-1. **Scoping** -- JIM evaluates the sync rule's scoping filter to determine whether this CSO should be processed. Objects that fall out of scope are disconnected from the metaverse.
+1. **Scoping** -- JIM evaluates the synchronisation rule's scoping filter to determine whether this CSO should be processed. Objects that fall out of scope are disconnected from the metaverse.
 
-2. **Join resolution** -- JIM checks the sync rule's join rules to find a matching MVO. Join rules define how to correlate a CSO with an existing metaverse object (e.g., match on employee ID, email address, or a combination of attributes).
+2. **Join resolution** -- JIM checks the synchronisation rule's join rules to find a matching MVO. Join rules define how to correlate a CSO with an existing metaverse object (e.g., match on employee ID, email address, or a combination of attributes).
 
-3. **Projection** -- If no matching MVO is found and the sync rule allows projection, JIM creates a new MVO. The projected MVO is linked to the CSO.
+3. **Projection** -- If no matching MVO is found and the synchronisation rule allows projection, JIM creates a new MVO. The projected MVO is linked to the CSO.
 
 4. **Attribute flow** -- Once a CSO is joined or projected to an MVO, JIM applies the attribute flow rules. Inbound attribute flows copy values from the CSO to the MVO, optionally transforming them using [expressions](expressions.md).
 
 ### Outbound Sync (Metaverse to Target)
 
-Outbound sync evaluates MVOs against outbound sync rules and determines what changes need to be exported to target systems. For each MVO in scope:
+Outbound sync evaluates MVOs against outbound synchronisation rules and determines what changes need to be exported to target systems. For each MVO in scope:
 
-1. **Scoping** -- JIM evaluates which MVOs are in scope for the outbound sync rule.
+1. **Scoping** -- JIM evaluates which MVOs are in scope for the outbound synchronisation rule.
 
 2. **Provisioning** -- If an MVO is in scope but does not have a corresponding CSO in the target connected system, JIM provisions (creates) a new CSO.
 
@@ -72,7 +72,7 @@ Outbound sync evaluates MVOs against outbound sync rules and determines what cha
 
 ### Full Sync vs Delta Sync
 
-- **Full Sync** re-evaluates every CSO against the sync rules. Use this after changing sync rule configuration or for periodic reconciliation.
+- **Full Sync** re-evaluates every CSO against the synchronisation rules. Use this after changing synchronisation rule configuration or for periodic reconciliation.
 - **Delta Sync** processes only CSOs that have changed since the last sync. This is faster and is the normal operational mode.
 
 ## 📤 Phase 3: Export
@@ -115,7 +115,7 @@ sequenceDiagram
 
 1. **Import** from the HR system brings employee records into the HR connector space
 2. **Inbound sync** joins or projects those records to metaverse objects and flows attributes inward
-3. **Outbound sync** evaluates the metaverse objects against Active Directory sync rules and creates pending exports
+3. **Outbound sync** evaluates the metaverse objects against Active Directory synchronisation rules and creates pending exports
 4. **Export** sends the pending changes to Active Directory (creating accounts, updating attributes, etc.)
 
 This cycle can be automated using the **Scheduler** service, which supports cron expressions and interval-based triggers with multi-step execution.
@@ -128,7 +128,7 @@ Each phase is executed through a **run profile** -- a configured operation on a 
 |-------------|-------|-------------|
 | Full Import | Import | Read all objects from the connected system |
 | Delta Import | Import | Read only changed objects |
-| Full Sync | Sync | Re-evaluate all objects against sync rules |
+| Full Sync | Sync | Re-evaluate all objects against synchronisation rules |
 | Delta Sync | Sync | Process only changed objects |
 | Export | Export | Send pending changes to the connected system |
 

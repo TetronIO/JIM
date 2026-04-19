@@ -104,7 +104,7 @@ Enterprise identity synchronisation typically requires cloud connectivity, compl
 
     ---
 
-    Understand the metaverse, connected systems, sync rules, and more.
+    Understand the metaverse, connected systems, synchronisation rules, and more.
 
     [:octicons-arrow-right-24: Concepts](concepts/index.md)
 

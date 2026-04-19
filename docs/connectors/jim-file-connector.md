@@ -123,7 +123,7 @@ When you configure a File Connector connected system and trigger schema discover
 3. **Infers data types** -- JIM reads up to 50 data rows and attempts to parse each column's values as Number, Boolean, Guid, or DateTime. If none of these match, the attribute defaults to Text.
 4. **Discovers object types** -- if an Object Type Column is configured, JIM reads through the file to find all unique object type values. Otherwise, it uses the fixed Object Type setting.
 
-In **Export Only** mode where no file exists yet, schema discovery creates a minimal schema with just the specified object type. Attributes are defined later by sync rules.
+In **Export Only** mode where no file exists yet, schema discovery creates a minimal schema with just the specified object type. Attributes are defined later by synchronisation rules.
 
 ## Troubleshooting
 

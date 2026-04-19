@@ -4,7 +4,7 @@ title: Scoping Criteria
 
 # Scoping Criteria
 
-Scoping criteria control which objects are in scope for a sync rule. They are organised into groups that use AND (`All`) or OR (`Any`) logic, and groups can be nested for complex conditions.
+Scoping criteria control which objects are in scope for a synchronisation rule. They are organised into groups that use AND (`All`) or OR (`Any`) logic, and groups can be nested for complex conditions.
 
 Scoping works in both directions:
 
@@ -60,7 +60,7 @@ Scoping works in both directions:
 
 ## List Scoping Criteria Groups
 
-Returns all scoping criteria groups for a sync rule.
+Returns all scoping criteria groups for a synchronisation rule.
 
 ```
 GET /api/v1/synchronisation/sync-rules/{syncRuleId}/scoping-criteria
@@ -88,7 +88,7 @@ GET /api/v1/synchronisation/sync-rules/{syncRuleId}/scoping-criteria
 | Status | Code | Description |
 |--------|------|-------------|
 | `401` | `UNAUTHORISED` | Authentication required |
-| `404` | `NOT_FOUND` | Sync rule does not exist |
+| `404` | `NOT_FOUND` | Synchronisation rule does not exist |
 
 ---
 

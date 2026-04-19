@@ -1,6 +1,6 @@
 # Expression Language Guide
 
-This guide covers JIM's expression language -- a simple, readable syntax for transforming and mapping identity attributes in sync rules. No programming experience is required.
+This guide covers JIM's expression language -- a simple, readable syntax for transforming and mapping identity attributes in synchronisation rules. No programming experience is required.
 
 ## Overview
 
@@ -11,7 +11,7 @@ Expressions are used in:
 - **Export attribute mappings** -- transform metaverse attributes before sending them to a connected system
 - **Import attribute mappings** -- transform connected system attributes before storing them in the metaverse
 - **Conditional logic** -- choose different values based on conditions (e.g., enable or disable an account based on employee status)
-- **Scoping filters** -- determine which objects are in scope for a sync rule
+- **Scoping filters** -- determine which objects are in scope for a synchronisation rule
 
 ## Quick Examples
 
@@ -360,7 +360,7 @@ If the attribute has the values Admin, Users, and Developers, this produces: `Ad
 
 ### Validation
 
-JIM validates expressions when you save a sync rule. If an expression has a syntax error, you will see an error message indicating what went wrong and where in the expression the problem is.
+JIM validates expressions when you save a synchronisation rule. If an expression has a syntax error, you will see an error message indicating what went wrong and where in the expression the problem is.
 
 Common errors:
 
@@ -376,7 +376,7 @@ When an expression does not produce the result you expect:
 1. **Check attribute names carefully** -- names must match the exact casing shown in the JIM admin UI, so `mv["department"]` and `mv["Department"]` are treated differently
 2. **Use `Eq()` for text comparisons** -- using `==` for text is a common mistake (see [String Comparison](#string-comparison))
 3. **Check for missing values** -- if an attribute does not exist on the object, it returns nothing (null), which can affect the result. Use `Coalesce()` or `IsNullOrEmpty()` to handle this
-4. **Test with sample data** -- use the expression test feature in the sync rule editor to try your expression with real attribute values before saving
+4. **Test with sample data** -- use the expression test feature in the synchronisation rule editor to try your expression with real attribute values before saving
 5. **Check the worker logs** -- if expressions fail during sync, the worker service logs the error details
 
 ## Best Practices
@@ -391,4 +391,4 @@ When an expression does not produce the result you expect:
 
 5. **Keep expressions simple** -- if an expression is getting complex, consider splitting the logic across multiple attribute mappings.
 
-6. **Document complex expressions** -- add a note in the sync rule's description explaining what complex expressions do, so the next person can understand them.
+6. **Document complex expressions** -- add a note in the synchronisation rule's description explaining what complex expressions do, so the next person can understand them.
