@@ -95,6 +95,19 @@ When moving a document between `docs/plans/`, `docs/plans/doing/`, and `docs/pla
 
 Use `grep` or equivalent to find all references to the filename before completing the move.
 
+### Plans and specs never belong under `docs/`
+
+The `docs/` directory is reserved for the customer-facing MkDocs site. Implementation plans, design specs, and any other internal engineering artefacts MUST live under `engineering/plans/` (or the appropriate `engineering/` subdirectory), never under `docs/`.
+
+If a Claude Code plugin or agent skill (for example, the `superpowers` plugin's plan/spec generators) proposes writing to a path like `docs/superpowers/plans/…` or `docs/superpowers/specs/…`, **redirect the output to `engineering/plans/`** (or `engineering/plans/done/` if the plan is already implemented). Do not accept the plugin default.
+
+Symptoms that indicate this has happened:
+- A new `docs/superpowers/` (or any other top-level `docs/<tool-name>/`) directory appears
+- `mkdocs build --strict` warns "The following pages exist in the docs directory, but are not included in the 'nav' configuration" for files under that directory
+- Internal plan or spec content becomes publicly reachable at `https://tetronio.github.io/JIM/<tool-name>/...`
+
+The fix is the same in each case: `git mv` the files into `engineering/plans/` (matching the `Status` of the work: top-level for planned, `doing/` for in-progress, `done/` for completed), remove the now-empty `docs/<tool-name>/` tree, and add the standard Status + Issue header to the plan document.
+
 ### Document Header
 
 Every plan document must include a status line and an issue link near the top:
