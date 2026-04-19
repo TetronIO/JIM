@@ -548,7 +548,7 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ErrorMessage = joinEx.Message;
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
-            Log.Warning(joinEx, "ProcessActiveConnectedSystemObjectAsync: Join error for {Cso}: {Message}",
+            Log.Warning("ProcessActiveConnectedSystemObjectAsync: Join error for {Cso}: {Message}",
                 connectedSystemObject, joinEx.Message);
         }
         catch (Exception e)
