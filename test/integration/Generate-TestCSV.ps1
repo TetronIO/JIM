@@ -222,71 +222,11 @@ Write-Host "  ✓ Created $crossDomainCsvPath (empty export target)" -Foreground
 # the cross-domain export target. See docker-compose.yml and src/JIM.Worker/Dockerfile.
 Write-TestStep "Step 5" "Seeding files into jim-connector-files-volume"
 
-function Copy-FileToWorker {
-    param(
-        [Parameter(Mandatory=$true)][string]$SourcePath,
-        [Parameter(Mandatory=$true)][string]$DestPath
-    )
-
-    # Stream via stdin so ownership becomes app:app inside the container.
-    # Use cmd-style redirection so PowerShell doesn't convert the binary stream
-    # into string objects (which would mangle line endings on Windows hosts).
-    $fileStream = [System.IO.File]::OpenRead($SourcePath)
-    try {
-        # Pipe the file stream directly to docker exec's stdin.
-        $psi = New-Object System.Diagnostics.ProcessStartInfo
-        $psi.FileName = "docker"
-        $psi.ArgumentList.Add("exec")
-        $psi.ArgumentList.Add("-i")
-        $psi.ArgumentList.Add("-u")
-        $psi.ArgumentList.Add("app")
-        $psi.ArgumentList.Add("jim.worker")
-        $psi.ArgumentList.Add("sh")
-        $psi.ArgumentList.Add("-c")
-        # `rm -f` before `cat >` ensures we always create a fresh inode owned by the
-        # `app` user, even if a stale file with different ownership is already present
-        # (e.g. a leftover from an older docker-cp-based seed flow that survived a
-        # light reset because Samba AD was still mounting the shared volume).
-        $psi.ArgumentList.Add("rm -f '$DestPath' && cat > '$DestPath'")
-        $psi.RedirectStandardInput = $true
-        $psi.UseShellExecute = $false
-
-        $proc = [System.Diagnostics.Process]::Start($psi)
-        try {
-            $fileStream.CopyTo($proc.StandardInput.BaseStream)
-            $proc.StandardInput.Close()
-            $proc.WaitForExit()
-            if ($proc.ExitCode -ne 0) {
-                throw "docker exec returned exit code $($proc.ExitCode) while writing $DestPath"
-            }
-        }
-        finally {
-            $proc.Dispose()
-        }
-    }
-    finally {
-        $fileStream.Dispose()
-    }
-}
-
-$containerRunning = docker ps --filter "name=jim.worker" --filter "status=running" --format "{{.Names}}" 2>$null
-
-if ($containerRunning -ne "jim.worker") {
-    Write-Host "  ✗ jim.worker is not running. Start the JIM stack first." -ForegroundColor Red
-    throw "jim.worker container must be running to seed test data."
-}
-
-Write-Host "  Ensuring /connector-files/test-data exists (owned by app:app)..." -ForegroundColor Gray
-docker exec -u app jim.worker mkdir -p /connector-files/test-data
-if ($LASTEXITCODE -ne 0) {
-    throw "Failed to create /connector-files/test-data in jim.worker container."
-}
-
-Write-Host "  Streaming CSV files into the container..." -ForegroundColor Gray
-Copy-FileToWorker -SourcePath $csvPath            -DestPath "/connector-files/test-data/hr-users.csv"
-Copy-FileToWorker -SourcePath $deptCsvPath        -DestPath "/connector-files/test-data/departments.csv"
-Copy-FileToWorker -SourcePath $trainingCsvPath    -DestPath "/connector-files/test-data/training-records.csv"
-Copy-FileToWorker -SourcePath $crossDomainCsvPath -DestPath "/connector-files/test-data/cross-domain-users.csv"
+Write-Host "  Streaming CSV files into jim.worker..." -ForegroundColor Gray
+Write-FileToConnectorVolume -SourcePath $csvPath            -DestinationPath "/connector-files/test-data/hr-users.csv"
+Write-FileToConnectorVolume -SourcePath $deptCsvPath        -DestinationPath "/connector-files/test-data/departments.csv"
+Write-FileToConnectorVolume -SourcePath $trainingCsvPath    -DestinationPath "/connector-files/test-data/training-records.csv"
+Write-FileToConnectorVolume -SourcePath $crossDomainCsvPath -DestinationPath "/connector-files/test-data/cross-domain-users.csv"
 
 Write-Host "  ✓ Files seeded into /connector-files/test-data (owned by app:app)" -ForegroundColor Green
 

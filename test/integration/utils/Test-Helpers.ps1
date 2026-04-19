@@ -718,29 +718,112 @@ function Get-RandomSubset {
 
 # Progress bar functions for visual feedback during long operations
 
+function Write-FileToConnectorVolume {
+    <#
+    .SYNOPSIS
+        Stream a host file into /connector-files inside jim.worker with correct ownership.
+
+    .DESCRIPTION
+        The only safe way to put a file into the shared jim-connector-files-volume for
+        testing is to stream it in through a non-root shell inside jim.worker so the
+        file lands owned by the worker's `app` user (UID 1654). We cannot use
+        `docker cp` — it preserves the host UID/GID, which leaves files the container
+        user can't overwrite when the File connector next exports.
+
+        This helper:
+          1. Verifies jim.worker is running.
+          2. Ensures the destination directory exists (owned by app:app).
+          3. Unlinks the destination file if present, then creates a fresh inode by
+             streaming the source via `docker exec -i -u app jim.worker sh -c 'cat > ...'`.
+
+        Use this anywhere a test needs to seed or refresh a file under /connector-files.
+
+    .PARAMETER SourcePath
+        Host path to the file to copy in.
+
+    .PARAMETER DestinationPath
+        Absolute path inside the container, e.g. /connector-files/test-data/hr-users.csv.
+        The parent directory is created if missing.
+
+    .EXAMPLE
+        Write-FileToConnectorVolume -SourcePath $csvPath -DestinationPath /connector-files/test-data/hr-users.csv
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$SourcePath,
+
+        [Parameter(Mandatory=$true)]
+        [string]$DestinationPath
+    )
+
+    if (-not (Test-Path $SourcePath)) {
+        throw "Source file not found: $SourcePath"
+    }
+
+    if (-not $DestinationPath.StartsWith('/')) {
+        throw "DestinationPath must be absolute (got '$DestinationPath')."
+    }
+
+    $containerRunning = docker ps --filter "name=jim.worker" --filter "status=running" --format "{{.Names}}" 2>$null
+    if ($containerRunning -ne "jim.worker") {
+        throw "jim.worker container is not running; cannot write $DestinationPath."
+    }
+
+    $destDir = [System.IO.Path]::GetDirectoryName($DestinationPath).Replace('\','/')
+    if ($destDir -and $destDir -ne '/') {
+        docker exec -u app jim.worker mkdir -p $destDir | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to create directory '$destDir' in jim.worker."
+        }
+    }
+
+    # Stream the file via docker exec stdin so the resulting file is owned by `app`.
+    # `rm -f` first guarantees a fresh inode even if a stale file with different
+    # ownership is already present (e.g. a customer or earlier test wrote through
+    # a different UID via `docker cp` or via the Samba/OpenLDAP side of the volume).
+    $fileStream = [System.IO.File]::OpenRead($SourcePath)
+    try {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = "docker"
+        $psi.ArgumentList.Add("exec")
+        $psi.ArgumentList.Add("-i")
+        $psi.ArgumentList.Add("-u")
+        $psi.ArgumentList.Add("app")
+        $psi.ArgumentList.Add("jim.worker")
+        $psi.ArgumentList.Add("sh")
+        $psi.ArgumentList.Add("-c")
+        $psi.ArgumentList.Add("rm -f '$DestinationPath' && cat > '$DestinationPath'")
+        $psi.RedirectStandardInput = $true
+        $psi.UseShellExecute = $false
+
+        $proc = [System.Diagnostics.Process]::Start($psi)
+        try {
+            $fileStream.CopyTo($proc.StandardInput.BaseStream)
+            $proc.StandardInput.Close()
+            $proc.WaitForExit()
+            if ($proc.ExitCode -ne 0) {
+                throw "docker exec returned exit code $($proc.ExitCode) while writing $DestinationPath."
+            }
+        }
+        finally {
+            $proc.Dispose()
+        }
+    }
+    finally {
+        $fileStream.Dispose()
+    }
+}
+
 function Copy-CsvToConnectorFiles {
     <#
     .SYNOPSIS
-        Copy a CSV file from the host to /connector-files/test-data in the jim-connector-files-volume.
+        Seed a CSV file into /connector-files/test-data/ with correct ownership.
 
     .DESCRIPTION
-        Uses `docker cp` via the jim.worker container to push a host file into the named
-        Docker volume at /connector-files/test-data/<filename>. The destination filename
-        defaults to the source file's basename, or can be overridden.
-
-        This is the integration-test equivalent of the customer "drop a file into the
-        File Connector volume" step. It mirrors the pattern used in Generate-TestCSV.ps1.
-
-    .PARAMETER SourcePath
-        The host path to the CSV file to copy.
-
-    .PARAMETER DestinationName
-        Optional override for the target filename. Defaults to the basename of SourcePath.
-
-    .EXAMPLE
-        Copy-CsvToConnectorFiles -SourcePath "$testDataPath/hr-users.csv"
-
-        Copies to jim.worker:/connector-files/test-data/hr-users.csv
+        Thin wrapper around Write-FileToConnectorVolume that defaults the destination
+        to /connector-files/test-data/<SourceBasename>. Preserved for backwards
+        compatibility with existing scenario scripts; new callers can use
+        Write-FileToConnectorVolume directly when they need a non-standard destination.
     #>
     param(
         [Parameter(Mandatory=$true)]
@@ -750,18 +833,11 @@ function Copy-CsvToConnectorFiles {
         [string]$DestinationName
     )
 
-    if (-not (Test-Path $SourcePath)) {
-        throw "Source file not found: $SourcePath"
-    }
-
     if (-not $DestinationName) {
         $DestinationName = [System.IO.Path]::GetFileName($SourcePath)
     }
 
-    $result = docker cp $SourcePath "jim.worker:/connector-files/test-data/$DestinationName" 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to copy $SourcePath to jim.worker:/connector-files/test-data/${DestinationName}: $result"
-    }
+    Write-FileToConnectorVolume -SourcePath $SourcePath -DestinationPath "/connector-files/test-data/$DestinationName"
 }
 
 function Write-ProgressBar {
@@ -2077,11 +2153,11 @@ function Assert-NoWorkerErrors {
         # 2>&1 merges stderr (where some log sinks write) into stdout so the
         # Select-String below sees every log line, not just stdout.
         $output = docker logs --since $sinceString $container 2>&1
-        $matches = $output | Where-Object { $_ -match '\[ERR\]' }
+        $errorLines = $output | Where-Object { $_ -match '\[ERR\]' }
         if ($AllowPattern) {
-            $matches = $matches | Where-Object { $_ -notmatch $AllowPattern }
+            $errorLines = $errorLines | Where-Object { $_ -notmatch $AllowPattern }
         }
-        foreach ($line in $matches) {
+        foreach ($line in $errorLines) {
             $allErrors += "[$container] $line"
         }
     }
