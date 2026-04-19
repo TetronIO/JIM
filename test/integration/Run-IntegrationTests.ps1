@@ -1166,9 +1166,45 @@ function Reset-JIMForNextScenario {
     Write-Host ""
     Write-Host "${BLUE}--- Lightweight Reset ---${NC}"
 
+    # 0. Empty the shared File Connector volume in place.
+    #
+    # `docker compose down -v` below will try to delete jim-connector-files-volume,
+    # but Samba AD and OpenLDAP (started from docker-compose.integration-tests.yml
+    # and kept running across scenarios for performance) also mount this volume.
+    # Docker refuses to delete a volume that's still mounted, so without this step
+    # the volume silently persists between scenarios and accumulates stale files —
+    # including CSVs and subdirectories created by Samba/OpenLDAP with host UIDs
+    # (e.g. 1000/ubuntu) that the next run's non-root worker can't overwrite.
+    #
+    # We can't `docker exec` this inside jim.worker: Samba writes to the shared
+    # volume as root/ubuntu, and jim.worker drops CAP_DAC_OVERRIDE, so even its
+    # root user can't rmdir Samba-created subdirectories. Instead we launch a
+    # one-off throwaway container from the worker's own image (already pulled,
+    # no extra network fetch) with default (non-restricted) capabilities, mount
+    # the volume, and rm -rf its contents as root.
+    $workerImage = (docker inspect jim.worker --format '{{.Config.Image}}' 2>$null)
+    if (-not $workerImage) {
+        # Fall back to the compose-project image name if the container isn't up.
+        $workerImage = 'jim-worker'
+    }
+    Write-Host "${GRAY}  Emptying jim-connector-files-volume contents (via throwaway $workerImage container)...${NC}"
+    docker run --rm --user 0 --entrypoint sh -v jim-connector-files-volume:/vol $workerImage -c 'rm -rf /vol/* /vol/.[!.]* 2>/dev/null; true' 2>&1 | Out-Null
+
     # 1. Stop JIM containers (keep Samba AD running)
     Write-Host "${GRAY}  Stopping JIM containers...${NC}"
-    docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down -v 2>&1 | Out-Null
+    $downOutput = docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down -v 2>&1
+    # Surface any "Resource is still in use" lines. Seeing these here means a container
+    # outside the JIM compose file is mounting one of the JIM volumes (typically
+    # jim-connector-files-volume via Samba AD / OpenLDAP) — investigate before the
+    # stale contents cause a later scenario to fail.
+    $stuckVolumes = $downOutput | Where-Object { $_ -match 'Resource is still in use' }
+    if ($stuckVolumes) {
+        Write-Host "${YELLOW}  Warning: one or more JIM volumes could not be removed during reset:${NC}"
+        foreach ($line in $stuckVolumes) {
+            Write-Host "${YELLOW}    $line${NC}"
+        }
+        Write-Host "${YELLOW}    (contents were emptied in step 0, so the next scenario should still start clean)${NC}"
+    }
 
     # 2. Remove JIM database volume (ensures clean schema + data)
     Write-Host "${GRAY}  Removing JIM database volume...${NC}"
@@ -1364,8 +1400,22 @@ if ($Scenario -eq "All") {
             $scenarioParams.SkipBuild = $true
         }
 
-        & $selfScript @scenarioParams
-        $exitCode = $LASTEXITCODE
+        $scenarioError = $null
+        try {
+            & $selfScript @scenarioParams
+            $exitCode = $LASTEXITCODE
+        }
+        catch {
+            # The child invocation threw an unhandled exception. Record the failure
+            # in $results so the regression summary below still runs, rather than
+            # letting the exception propagate and kill the whole loop.
+            $scenarioError = $_
+            $exitCode = 1
+            Write-Host ""
+            Write-Host "${RED}  ✗ Scenario invocation raised an exception:${NC}"
+            Write-Host "${RED}    $($_.Exception.Message)${NC}"
+            Write-Host ""
+        }
         $scenarioDuration = (Get-Date) - $scenarioStart
 
         $passed = ($exitCode -eq 0)
@@ -1380,16 +1430,20 @@ if ($Scenario -eq "All") {
             ExitCode        = $exitCode
             Duration        = $scenarioDuration.ToString('hh\:mm\:ss')
             DurationSeconds = $scenarioDuration.TotalSeconds
+            Error           = if ($scenarioError) { $scenarioError.Exception.Message } else { $null }
         }
         $regressionTimings[$scenarioName] = $scenarioDuration.TotalSeconds
         if (-not $passed) { $anyFailed = $true }
 
     }
 
-    # Calculate totals
+    # Calculate totals. Wrap the Where-Object and the outer array with @(...) so
+    # we always get an array: under Set-StrictMode, calling .Count on $null (zero
+    # matches) or on a single hashtable (exactly one match, unwrapped by Where-Object)
+    # either throws or returns the wrong value.
     $allDuration = (Get-Date) - $allStart
-    $passCount = ($results | Where-Object { $_.Success }).Count
-    $failCount = $results.Count - $passCount
+    $passCount = @($results | Where-Object { $_.Success }).Count
+    $failCount = @($results).Count - $passCount
 
     # Print summary
     Write-Host ""
@@ -2236,8 +2290,14 @@ if ($SetupOnly) {
         # Generate test data (CSV files) if scenario uses template-based data
         if ($templateRelevant) {
             Write-Step "Generating test data (Template: $Template)..."
-            & "$scriptRoot/Generate-TestCSV.ps1" -Template $Template -OutputPath "$scriptRoot/../test-data"
-            Write-Success "Test data generated"
+            try {
+                & "$scriptRoot/Generate-TestCSV.ps1" -Template $Template -OutputPath "$scriptRoot/../test-data"
+                Write-Success "Test data generated"
+            }
+            catch {
+                Write-Failure "Test data generation failed: $($_.Exception.Message)"
+                exit 1
+            }
         }
 
         # Run the scenario setup script to configure connected systems, sync rules, and run profiles

@@ -243,7 +243,11 @@ function Copy-FileToWorker {
         $psi.ArgumentList.Add("jim.worker")
         $psi.ArgumentList.Add("sh")
         $psi.ArgumentList.Add("-c")
-        $psi.ArgumentList.Add("cat > '$DestPath'")
+        # `rm -f` before `cat >` ensures we always create a fresh inode owned by the
+        # `app` user, even if a stale file with different ownership is already present
+        # (e.g. a leftover from an older docker-cp-based seed flow that survived a
+        # light reset because Samba AD was still mounting the shared volume).
+        $psi.ArgumentList.Add("rm -f '$DestPath' && cat > '$DestPath'")
         $psi.RedirectStandardInput = $true
         $psi.UseShellExecute = $false
 
