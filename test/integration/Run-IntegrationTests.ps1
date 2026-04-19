@@ -2502,6 +2502,16 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
     ) -PassThru -RedirectStandardOutput "$dockerStatsPath.stdout.log" -RedirectStandardError "$dockerStatsPath.stderr.log"
 }
 
+# Start the JIM error watcher. This tails jim.web / jim.worker / jim.scheduler
+# logs for [ERR] lines and writes any matches to a sentinel file. Start-JIMRunProfile
+# -Wait loops check the sentinel between polls (via the JIM_RUNPROFILE_ABORT_SENTINEL
+# env var) so a stalled activity accompanied by an [ERR] aborts immediately rather
+# than polling forever.
+$errWatcherSentinel = Join-Path $scriptRoot "results" "errors-$Scenario-$Template-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').log"
+Write-Step "Starting JIM error watcher (sentinel: $errWatcherSentinel)"
+$errWatcher = Start-JimErrorWatcher -SentinelPath $errWatcherSentinel -Since $step5Start
+$env:JIM_RUNPROFILE_ABORT_SENTINEL = $errWatcherSentinel
+
 try {
     & $scenarioScript @scenarioParams
     $scenarioExitCode = $LASTEXITCODE
@@ -2519,6 +2529,37 @@ finally {
     if ($dockerStatsPath -and (Test-Path $dockerStatsPath)) {
         $rowCount = (Get-Content $dockerStatsPath).Count - 1
         Write-Step "Docker stats capture stopped ($rowCount samples recorded)"
+    }
+
+    # Stop the live watcher and run the post-scenario belt-and-braces scan.
+    # Always run these, even if the scenario threw; we want to know whether JIM
+    # logged errors regardless of how the scenario ended.
+    $capturedLines = @()
+    if ($errWatcher) {
+        $capturedLines = @(Stop-JimErrorWatcher -Handle $errWatcher)
+    }
+    Remove-Item Env:JIM_RUNPROFILE_ABORT_SENTINEL -ErrorAction SilentlyContinue
+
+    if ($capturedLines.Count -gt 0) {
+        Write-Host ""
+        Write-Host "${RED}✗ JIM error watcher captured $($capturedLines.Count) [ERR] line(s) during the scenario:${NC}"
+        foreach ($line in $capturedLines | Select-Object -First 10) {
+            Write-Host "    $line" -ForegroundColor Red
+        }
+        if ($capturedLines.Count -gt 10) {
+            Write-Host "    ... ($($capturedLines.Count - 10) more in $errWatcherSentinel)" -ForegroundColor Red
+        }
+        Write-Host ""
+        $scenarioExitCode = 1
+    }
+
+    # Belt-and-braces: one-shot scan in case the live watcher missed shutdown-race lines.
+    try {
+        Assert-NoWorkerErrors -Since $step5Start
+    }
+    catch {
+        Write-Host "${RED}✗ Post-scenario log scan failed: $_${NC}"
+        $scenarioExitCode = 1
     }
 }
 $timings["5. Run Tests"] = (Get-Date) - $step5Start

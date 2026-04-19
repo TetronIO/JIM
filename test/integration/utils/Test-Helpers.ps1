@@ -1870,5 +1870,235 @@ function Assert-ActivityItemsHaveOutcomeSummary {
     }
 }
 
+function Start-JimErrorWatcher {
+    <#
+    .SYNOPSIS
+        Starts background jobs that tail JIM container logs for [ERR] lines.
+
+    .DESCRIPTION
+        Spawns one background job per target container (jim.web, jim.worker,
+        jim.scheduler) that runs `docker logs --since <time> -f <container>` and
+        appends any line containing '[ERR]' to a shared sentinel file.
+
+        Returns a handle object containing the jobs, the sentinel file path, the
+        start time, and an optional regex of allowed patterns to ignore.
+
+        The sentinel file is plain text; each line is prefixed with the container
+        name and a UTC timestamp so callers can tell where the error came from.
+
+        This is the live half of the two-layer error detection strategy; the
+        post-scenario scan via Assert-NoWorkerErrors is the belt-and-braces layer.
+
+    .PARAMETER SentinelPath
+        Path to the sentinel file where detected error lines are written.
+        The file is created empty at start time.
+
+    .PARAMETER Since
+        DateTime marking the start of the log window. Passed to `docker logs --since`.
+        Use the scenario start time so we don't pick up lines from earlier phases.
+
+    .PARAMETER AllowPattern
+        Optional regex. Lines matching this pattern are NOT written to the sentinel
+        file, even if they contain '[ERR]'. Use sparingly and only for genuinely
+        benign patterns confirmed to not indicate a real failure.
+
+    .PARAMETER Containers
+        Container names to tail. Defaults to jim.web, jim.worker, jim.scheduler.
+
+    .OUTPUTS
+        PSCustomObject with Jobs, SentinelPath, StartTime, AllowPattern.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$SentinelPath,
+
+        [Parameter(Mandatory=$true)]
+        [datetime]$Since,
+
+        [Parameter(Mandatory=$false)]
+        [string]$AllowPattern = '',
+
+        [Parameter(Mandatory=$false)]
+        [string[]]$Containers = @('jim.web', 'jim.worker', 'jim.scheduler')
+    )
+
+    # Ensure sentinel file exists and is empty
+    $sentinelDir = Split-Path -Parent $SentinelPath
+    if ($sentinelDir -and -not (Test-Path $sentinelDir)) {
+        New-Item -ItemType Directory -Path $sentinelDir -Force | Out-Null
+    }
+    Set-Content -Path $SentinelPath -Value '' -NoNewline -Encoding UTF8
+
+    # `docker logs --since` expects RFC3339 or a Go duration. Use RFC3339 with
+    # a 1-second cushion so we don't miss any line racing the watcher start.
+    $sinceString = $Since.AddSeconds(-1).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+
+    $jobs = @()
+    foreach ($container in $Containers) {
+        $job = Start-Job -Name "jim-err-watcher-$container" -ScriptBlock {
+            param($containerName, $since, $sentinel, $allowPattern)
+
+            # `docker logs -f ... 2>&1` merges stderr into stdout so the pipeline
+            # sees every log line regardless of which stream the sink uses. The
+            # pipeline is line-buffered, so each match is written to the sentinel
+            # the moment it arrives.
+            & docker logs --since $since -f $containerName 2>&1 | ForEach-Object {
+                $line = $_
+                if ($null -eq $line) { return }
+                if ($line -match '\[ERR\]') {
+                    if ($allowPattern -and ($line -match $allowPattern)) { return }
+                    $stamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+                    # Open/append/close per line so the sentinel is durable even
+                    # if the watcher is killed mid-stream.
+                    [System.IO.File]::AppendAllText($sentinel, "[$stamp] [$containerName] $line`n")
+                }
+            }
+        } -ArgumentList $container, $sinceString, $SentinelPath, $AllowPattern
+
+        $jobs += $job
+    }
+
+    return [PSCustomObject]@{
+        Jobs         = $jobs
+        SentinelPath = $SentinelPath
+        StartTime    = $Since
+        AllowPattern = $AllowPattern
+        Containers   = $Containers
+    }
+}
+
+function Test-JimErrorWatcher {
+    <#
+    .SYNOPSIS
+        Returns $true if the watcher sentinel file contains any entries.
+
+    .DESCRIPTION
+        Lightweight check callable from polling loops. Does not stop the watcher
+        or drain jobs; safe to call as often as needed.
+
+    .PARAMETER Handle
+        The handle returned by Start-JimErrorWatcher.
+
+    .OUTPUTS
+        [bool] True if one or more error lines have been captured.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [PSCustomObject]$Handle
+    )
+
+    if (-not (Test-Path $Handle.SentinelPath)) {
+        return $false
+    }
+
+    $info = Get-Item $Handle.SentinelPath
+    return ($info.Length -gt 0)
+}
+
+function Stop-JimErrorWatcher {
+    <#
+    .SYNOPSIS
+        Stops the watcher jobs and returns captured error lines.
+
+    .DESCRIPTION
+        Stops and removes the background docker-logs jobs, then reads the
+        sentinel file and returns its lines. Call this from a `finally` block
+        so the jobs are always cleaned up, even when the scenario throws.
+
+    .PARAMETER Handle
+        The handle returned by Start-JimErrorWatcher.
+
+    .OUTPUTS
+        [string[]] Array of captured error lines (empty if no errors were seen).
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [PSCustomObject]$Handle
+    )
+
+    foreach ($job in $Handle.Jobs) {
+        try {
+            Stop-Job -Job $job -ErrorAction SilentlyContinue
+            Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+        }
+        catch {
+            # Best-effort cleanup; swallow so we always attempt the next job.
+        }
+    }
+
+    if (-not (Test-Path $Handle.SentinelPath)) {
+        return @()
+    }
+
+    $lines = @(Get-Content -Path $Handle.SentinelPath -ErrorAction SilentlyContinue | Where-Object { $_ -ne '' })
+    return $lines
+}
+
+function Assert-NoWorkerErrors {
+    <#
+    .SYNOPSIS
+        Post-scenario scan of JIM container logs for [ERR] lines.
+
+    .DESCRIPTION
+        Belt-and-braces companion to the live watcher. Runs a one-shot
+        `docker logs --since <time>` against each target container and fails the
+        scenario if any line containing '[ERR]' is found. Use this even if the
+        live watcher reported nothing, to catch lines that raced the watcher's
+        start-up or shutdown.
+
+    .PARAMETER Since
+        DateTime marking the start of the log window.
+
+    .PARAMETER AllowPattern
+        Optional regex; matching lines are ignored.
+
+    .PARAMETER Containers
+        Containers to scan. Defaults to jim.web, jim.worker, jim.scheduler.
+
+    .OUTPUTS
+        Throws if any [ERR] line is found (outside the allowlist). Returns
+        quietly on success.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [datetime]$Since,
+
+        [Parameter(Mandatory=$false)]
+        [string]$AllowPattern = '',
+
+        [Parameter(Mandatory=$false)]
+        [string[]]$Containers = @('jim.web', 'jim.worker', 'jim.scheduler')
+    )
+
+    $sinceString = $Since.AddSeconds(-1).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $allErrors = @()
+
+    foreach ($container in $Containers) {
+        # 2>&1 merges stderr (where some log sinks write) into stdout so the
+        # Select-String below sees every log line, not just stdout.
+        $output = docker logs --since $sinceString $container 2>&1
+        $matches = $output | Where-Object { $_ -match '\[ERR\]' }
+        if ($AllowPattern) {
+            $matches = $matches | Where-Object { $_ -notmatch $AllowPattern }
+        }
+        foreach ($line in $matches) {
+            $allErrors += "[$container] $line"
+        }
+    }
+
+    if ($allErrors.Count -gt 0) {
+        Write-Host "✗ FAILED: Detected $($allErrors.Count) [ERR] line(s) in JIM container logs:" -ForegroundColor Red
+        foreach ($line in $allErrors | Select-Object -First 20) {
+            Write-Host "    $line" -ForegroundColor Red
+        }
+        if ($allErrors.Count -gt 20) {
+            Write-Host "    ... ($($allErrors.Count - 20) more not shown)" -ForegroundColor Red
+        }
+        throw "JIM logged $($allErrors.Count) [ERR] line(s) during the scenario. See output above."
+    }
+
+    Write-Host "✓ PASSED: No [ERR] lines in jim.web, jim.worker, or jim.scheduler logs" -ForegroundColor Green
+}
+
 # Functions are automatically available when dot-sourced
 # No need for Export-ModuleMember
