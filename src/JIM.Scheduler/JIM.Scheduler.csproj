@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.DataProtection.Extensions" Version="10.0.5" />
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.Extensions" Version="10.0.6" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.6" />
     <!-- Transitive override: see JIM.Application.csproj for rationale (CVE-2026-33116). -->
     <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.6" />
