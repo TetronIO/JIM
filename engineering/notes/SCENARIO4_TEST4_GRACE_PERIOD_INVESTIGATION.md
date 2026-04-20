@@ -2,6 +2,36 @@
 
 > Engineering note — investigation handover. Root cause not yet confirmed; this document records everything learned so another agent can pick up without re-tracing.
 
+## 2026-04-20 follow-up: could not reproduce
+
+Ran Scenario 4 on `feature/integration-test-error-detection` @ bae58cd8 against a clean SambaAD stack four times at `-LogLevel Information`:
+
+| Template | Step | Result | Log |
+|----------|------|--------|-----|
+| Nano | `-Step AuthoritativeGracePeriod` only | PASS | [Scenario4-DeletionRules-Nano-2026-04-20_073914.log](../../test/integration/results/logs/Scenario4-DeletionRules-Nano-2026-04-20_073914.log) |
+| Nano | Full scenario (Tests 1-7) | PASS | [Scenario4-DeletionRules-Nano-2026-04-20_084749.log](../../test/integration/results/logs/Scenario4-DeletionRules-Nano-2026-04-20_084749.log) |
+| Medium | Full scenario | PASS | [Scenario4-DeletionRules-Medium-2026-04-20_085924.log](../../test/integration/results/logs/Scenario4-DeletionRules-Medium-2026-04-20_085924.log) |
+| Large | Full scenario | PASS | [Scenario4-DeletionRules-Large-2026-04-20_091024.log](../../test/integration/results/logs/Scenario4-DeletionRules-Large-2026-04-20_091024.log) |
+
+At Large specifically — the template where the failure was originally reported — both Test 4 assertions now pass: `MVO still exists (grace period not yet elapsed)` and `MVO deleted after grace period elapsed (housekeeping processed it)`. `errors-*.log` for all four runs is empty.
+
+### Code review conclusions while attempting to reproduce
+
+- **Hypothesis #1 (stale `mvo.Type.DeletionGracePeriod`)** — unlikely by construction. Each sync task gets a fresh `JimApplication` transient ([src/JIM.Worker/Program.cs:66](../../src/JIM.Worker/Program.cs#L66)) with a fresh `DbContext` from `IDbContextFactory` ([src/JIM.Worker/Program.cs:30](../../src/JIM.Worker/Program.cs#L30)). `LoadSyncRules` runs at the start of every sync task ([src/JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs:66](../../src/JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs#L66)), pulling a fresh `MetaverseObjectType` via `.Include(sr => sr.MetaverseObjectType)`. The MVO's `Type` navigation is loaded with `.Include(mvo => mvo.Type)` in the same fresh context, so EF's identity map unifies them to the freshly-read values.
+- **Stale `Type` on the long-lived `mainLoopJim`** (housekeeping path) — considered and ruled out. The long-lived DbContext at [src/JIM.Worker/Worker.cs:93](../../src/JIM.Worker/Worker.cs#L93) could theoretically cache a stale tracked `MetaverseObjectType` instance across API updates, but the eligibility WHERE clause at [MetaverseRepository.cs:1518-1520](../../src/JIM.PostgresData/Repositories/MetaverseRepository.cs#L1518-L1520) evaluates `DeletionGracePeriod` server-side. A stale in-memory Type instance cannot fool the SQL filter.
+- **Hypothesis #3 (`Test-MvoExists` false negative on display name)** — not applicable: Test 4 runs with `RemoveContributedAttributesOnObsoletion=false`, so the display name is retained during the grace period.
+- **Hypothesis #4 (swallowed exception in DB-update path)** — no supporting evidence; `errors-*.log` is empty in every re-run.
+
+### Working theory
+
+The original Large-template failure was most likely a **timing artefact in the full pre-release regression** (long-running, concurrent activities against Samba AD) rather than a deterministic product bug. If a future regression hits the same assertion, the cheapest next step is capturing the worker log at `Information` level around the Test 4 timestamp: the `EvaluateMvoDeletionRule:` and `MarkMvoForDeletionAsync:` lines deterministically distinguish "decision was wrong" (stale-type bug) from "decision was right, test raced housekeeping" (timing).
+
+A small belt-and-braces improvement is still worth considering: add an `Assert-MvoExistsById` fallback in Test 4 Assert 1 so a future failure immediately rules out hypothesis #3.
+
+---
+
+## Original investigation notes (pre-2026-04-20)
+
 ## Symptom
 
 `Invoke-Scenario4-DeletionRules.ps1` Test 4 ("WhenAuthoritativeSourceDisconnected + 1-Minute Grace Period") asserts that the MVO **still exists** three seconds after the authoritative CSV source disconnects — because the 1-minute grace period has not yet elapsed. The assertion fails:

@@ -1042,12 +1042,20 @@ try {
         Start-Sleep -Seconds 3
 
         # Assert 1: MVO should still exist (grace period not yet elapsed)
-        # With recall=false, display name is retained so we can search by name
+        # With recall=false, display name is retained so we can search by name.
+        # On miss, fall back to an ID lookup to distinguish a real deletion from a
+        # display-name search miss (see engineering/notes/SCENARIO4_TEST4_GRACE_PERIOD_INVESTIGATION.md,
+        # hypothesis #3). Different error messages let a future regression self-diagnose.
         $mvoStillExists = Test-MvoExists -DisplayName "Test Auth Grace" -ObjectTypeName "User"
 
         if (-not $mvoStillExists) {
-            $testResults.Steps += @{ Name = "AuthoritativeGracePeriod"; Success = $false; Error = "MVO deleted immediately despite grace period" }
-            throw "Test 4 Assert 1 failed: MVO was deleted immediately despite 1-minute grace period"
+            $mvoStillExistsById = Test-MvoExistsById -MvoId $test4MvoId
+            if ($mvoStillExistsById) {
+                $testResults.Steps += @{ Name = "AuthoritativeGracePeriod"; Success = $false; Error = "Display-name search missed MVO but ID lookup found it (hypothesis #3: not a real deletion)" }
+                throw "Test 4 Assert 1 inconclusive: display-name search missed MVO $test4MvoId but ID lookup found it. Likely a Test-MvoExists false negative (display name may have been altered), not a real deletion."
+            }
+            $testResults.Steps += @{ Name = "AuthoritativeGracePeriod"; Success = $false; Error = "MVO deleted immediately despite grace period (confirmed via ID lookup)" }
+            throw "Test 4 Assert 1 failed: MVO $test4MvoId was deleted immediately despite 1-minute grace period (confirmed via ID lookup)"
         }
         Write-Host "  PASSED: MVO still exists (grace period not yet elapsed)" -ForegroundColor Green
 
