@@ -195,42 +195,14 @@ Integration tests require a complete environment reset between runs to ensure re
 
 For developers running tests locally in a DevContainer or development environment:
 
-```
-+-----------------------------------------------------------------------------+
-|                         LOCAL DEVELOPMENT LIFECYCLE                         |
-+-----------------------------------------------------------------------------+
-|                                                                             |
-|  1. STAND UP                     2. POPULATE                                |
-|  +-------------------------+     +-------------------------+                |
-|  | # Start external systems|     | # Populate test data    |                |
-|  | docker compose -f       |     | ./Populate-SambaAD.ps1  |                |
-|  |   docker-compose.       | --> |   -Template Small       |                |
-|  |   integration-tests.yml |     | ./Generate-TestCSV.ps1  |                |
-|  |   up -d                 |     |   -Template Small       |                |
-|  +-------------------------+     +-------------------------+                |
-|                                            |                                |
-|                                            v                                |
-|  3. CONFIGURE JIM                4. EXECUTE TESTS                           |
-|  +-------------------------+     +-------------------------+                |
-|  | # Configure via API     |     | # Run scenario steps    |                |
-|  | ./Setup-Scenario1.ps1   | --> | ./Invoke-Scenario1...   |                |
-|  |   -ApiKey $key          |     |   -Step All             |                |
-|  |                         |     |   -Template Small       |                |
-|  +-------------------------+     +-------------------------+                |
-|                                            |                                |
-|                                            v                                |
-|  5. RESET (for next run)                                                    |
-|  +---------------------------------------------------------------------+    |
-|  | # Reset BOTH external systems AND JIM database                      |    |
-|  | docker compose -f docker-compose.integration-tests.yml down -v      |    |
-|  | docker compose -f docker-compose.yml down -v  # Reset JIM's DB      |    |
-|  |                                                                     |    |
-|  | # Then stand up fresh for next test run                             |    |
-|  | docker compose -f docker-compose.yml up -d    # JIM stack           |    |
-|  | docker compose -f docker-compose.integration-tests.yml up -d        |    |
-|  +---------------------------------------------------------------------+    |
-|                                                                             |
-+-----------------------------------------------------------------------------+
+```mermaid
+flowchart TD
+    A["<b>1. STAND UP</b><br/># Start external systems<br/>docker compose -f docker-compose.integration-tests.yml up -d"]
+    B["<b>2. POPULATE</b><br/># Populate test data<br/>./Populate-SambaAD.ps1 -Template Small<br/>./Generate-TestCSV.ps1 -Template Small"]
+    C["<b>3. CONFIGURE JIM</b><br/># Configure via API<br/>./Setup-Scenario1.ps1 -ApiKey $key"]
+    D["<b>4. EXECUTE TESTS</b><br/># Run scenario steps<br/>./Invoke-Scenario1... -Step All -Template Small"]
+    E["<b>5. RESET (for next run)</b><br/># Reset BOTH external systems AND JIM database<br/>docker compose -f docker-compose.integration-tests.yml down -v<br/>docker compose -f docker-compose.yml down -v<br/><br/># Then stand up fresh for next test run<br/>docker compose -f docker-compose.yml up -d<br/>docker compose -f docker-compose.integration-tests.yml up -d"]
+    A --> B --> C --> D --> E
 ```
 
 **Key Commands:**
@@ -249,38 +221,17 @@ For developers running tests locally in a DevContainer or development environmen
 
 For automated testing in GitHub Actions:
 
-```
-+-----------------------------------------------------------------------------+
-|                            CI/CD PIPELINE LIFECYCLE                         |
-+-----------------------------------------------------------------------------+
-|                                                                             |
-|  +----------------------------------------------------------------------+   |
-|  | WORKFLOW TRIGGER (Manual via workflow_dispatch)                      |   |
-|  | - Select Template: Micro / Small / Medium / Large / Scale100K-Scale1M |   |
-|  | - Select Phase: 1 (MVP) or 2 (Post-MVP)                              |   |
-|  +----------------------------------------------------------------------+   |
-|                                     |                                       |
-|                                     v                                       |
-|  +-----------------+  +-----------------+  +-----------------+              |
-|  | 1. STAND UP     |  | 2. BUILD JIM    |  | 3. CONFIGURE    |              |
-|  | - JIM stack     |->| - dotnet build  |->| - Setup scripts |              |
-|  | - External sys  |  | - Wait ready    |  | - Populate data |              |
-|  +-----------------+  +-----------------+  +-----------------+              |
-|                                                    |                        |
-|                                                    v                        |
-|  +-----------------+  +--------------------+  +-----------------+           |
-|  | 6. TEAR DOWN    |  | 5. COLLECT         |  | 4. EXECUTE      |           |
-|  | (always runs)   |<-| - Test results     |<-| - Run scenarios |           |
-|  | - down -v ALL   |  | - Upload artefacts |  | - Validate      |           |
-|  +-----------------+  +--------------------+  +-----------------+           |
-|         |                                                                   |
-|         v                                                                   |
-|  +----------------------------------------------------------------------+   |
-|  | CLEAN STATE: Runner is fresh for next workflow run                   |   |
-|  | No persistent volumes = automatic reset                              |   |
-|  +----------------------------------------------------------------------+   |
-|                                                                             |
-+-----------------------------------------------------------------------------+
+```mermaid
+flowchart TD
+    T["<b>WORKFLOW TRIGGER</b> (Manual via workflow_dispatch)<br/>- Select Template: Micro / Small / Medium / Large / Scale100K-Scale1M<br/>- Select Phase: 1 (MVP) or 2 (Post-MVP)"]
+    S1["<b>1. STAND UP</b><br/>- JIM stack<br/>- External systems"]
+    S2["<b>2. BUILD JIM</b><br/>- dotnet build<br/>- Wait ready"]
+    S3["<b>3. CONFIGURE</b><br/>- Setup scripts<br/>- Populate data"]
+    S4["<b>4. EXECUTE</b><br/>- Run scenarios<br/>- Validate"]
+    S5["<b>5. COLLECT</b><br/>- Test results<br/>- Upload artefacts"]
+    S6["<b>6. TEAR DOWN</b> (always runs)<br/>- down -v ALL"]
+    C["<b>CLEAN STATE:</b> Runner is fresh for next workflow run<br/>No persistent volumes = automatic reset"]
+    T --> S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> C
 ```
 
 **CI/CD Characteristics:**
@@ -374,71 +325,38 @@ Both stacks communicate via the shared `jim-network` (defined as `external: true
 
 All external systems run as Docker containers defined in `docker-compose.integration-tests.yml`:
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│                       Integration Test Stack                   │
-├────────────────────────────────────────────────────────────────┤
-│                                                                │
-│  Phase 1 (MVP):                                                │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────┐  │
-│  │ Panoply AD     │  │ Panoply │  │ Quantum      │  │
-│  │ (Scenarios 1&3)  │  │ APAC (Scen. 2)   │  │ Dynamics     │  │
-│  │ Port: 389/636    │  │ Port: 10389/636  │  │ EMEA: 11389  │  │
-│  └──────────────────┘  └──────────────────┘  └──────────────┘  │
-│                                                                │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │ CSV Files (mounted volume at /connector-files)           │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                                                                │
-│  Phase 2 (Post-MVP):                                           │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │ SQL Server   │  │ Oracle XE    │  │ PostgreSQL   │          │
-│  │ (HRIS A)     │  │ (HRIS B)     │  │ (Target)     │          │
-│  │ Port: 1433   │  │ Port: 1521   │  │ Port: 5433   │          │
-│  └──────────────┘  └──────────────┘  └──────────────┘          │
-│                                                                │
-│  ┌──────────────┐  ┌──────────────┐                            │
-│  │ OpenLDAP     │  │ MySQL        │                            │
-│  │ Port: 12389  │  │ Port: 3306   │                            │
-│  └──────────────┘  └──────────────┘                            │
-└────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Stack["Integration Test Stack"]
+        subgraph P1["Phase 1 (MVP)"]
+            direction TB
+            P1A["Panoply AD<br/>(Scenarios 1 & 3)<br/>Port: 389/636"]
+            P1B["Panoply APAC<br/>(Scenario 2)<br/>Port: 10389/636"]
+            P1C["Quantum Dynamics EMEA<br/>Port: 11389"]
+            CSV["CSV Files (mounted volume at /connector-files)"]
+        end
+        subgraph P2["Phase 2 (Post-MVP)"]
+            direction TB
+            P2A["SQL Server<br/>(HRIS A)<br/>Port: 1433"]
+            P2B["Oracle XE<br/>(HRIS B)<br/>Port: 1521"]
+            P2C["PostgreSQL<br/>(Target)<br/>Port: 5433"]
+            P2D["OpenLDAP<br/>Port: 12389"]
+            P2E["MySQL<br/>Port: 3306"]
+        end
+    end
 ```
 
 ### Test Flow
 
-```
-1. Stand Up Systems
-   └─> docker compose up (selected services based on phase/scenario)
-
-2. Populate Test Data
-   └─> PowerShell scripts generate realistic data
-       ├─> Populate-SambaAD.ps1 -Template Medium
-       ├─> Generate-TestCSV.ps1 -Template Medium
-       └─> Populate-SqlServer.ps1 -Template Medium (Phase 2)
-
-3. Configure JIM
-   └─> PowerShell module creates Connected Systems, Sync Rules, Run Profiles
-       ├─> Connect-JIM -ApiKey $env:JIM_API_KEY
-       ├─> New-JIMConnectedSystem (HR CSV, Samba AD)
-       ├─> New-JIMSyncRule (attribute flows)
-       └─> New-JIMRunProfile (import, sync, export steps)
-
-4. Execute Scenarios
-   └─> Run scenario scripts
-       ├─> Invoke-Scenario1-HRToIdentityDirectory.ps1
-       ├─> Invoke-Scenario2-CrossDomainSync.ps1
-       ├─> Invoke-Scenario3-GALSYNC.ps1
-       ├─> Invoke-Scenario7-ClearConnectedSystemObjects.ps1
-       └─> ...
-
-5. Validate Results
-   └─> Assertions check expected outcomes
-       ├─> User provisioned correctly?
-       ├─> Attributes flowed as configured?
-       └─> Performance within thresholds?
-
-6. Tear Down
-   └─> docker compose down -v (complete cleanup)
+```mermaid
+flowchart TD
+    A["<b>1. Stand Up Systems</b><br/>docker compose up (selected services based on phase/scenario)"]
+    B["<b>2. Populate Test Data</b><br/>PowerShell scripts generate realistic data:<br/>- Populate-SambaAD.ps1 -Template Medium<br/>- Generate-TestCSV.ps1 -Template Medium<br/>- Populate-SqlServer.ps1 -Template Medium (Phase 2)"]
+    C["<b>3. Configure JIM</b><br/>PowerShell module creates Connected Systems, Sync Rules, Run Profiles:<br/>- Connect-JIM -ApiKey $env:JIM_API_KEY<br/>- New-JIMConnectedSystem (HR CSV, Samba AD)<br/>- New-JIMSyncRule (attribute flows)<br/>- New-JIMRunProfile (import, sync, export steps)"]
+    D["<b>4. Execute Scenarios</b><br/>Run scenario scripts:<br/>- Invoke-Scenario1-HRToIdentityDirectory.ps1<br/>- Invoke-Scenario2-CrossDomainSync.ps1<br/>- Invoke-Scenario3-GALSYNC.ps1<br/>- Invoke-Scenario7-ClearConnectedSystemObjects.ps1<br/>- ..."]
+    E["<b>5. Validate Results</b><br/>Assertions check expected outcomes:<br/>- User provisioned correctly?<br/>- Attributes flowed as configured?<br/>- Performance within thresholds?"]
+    F["<b>6. Tear Down</b><br/>docker compose down -v (complete cleanup)"]
+    A --> B --> C --> D --> E --> F
 ```
 
 ---
