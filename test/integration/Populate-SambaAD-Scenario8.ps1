@@ -55,15 +55,27 @@ Write-TestSection "Scenario 8: Populating Samba AD ($Instance) with $Template te
 # Get scales
 $groupScale = Get-Scenario8GroupScale -Template $Template
 
-# Define consistent company and department lists for Scenario 8
-# These must match the lists used in group creation to ensure membership filtering works
-# Keys are technical names (no spaces), values are display names (with spaces)
+# Define consistent company and department lists for Scenario 8.
+# Keys are technical names (must match $script:CompanyNames / $script:DepartmentNames
+# in utils/Test-GroupHelpers.ps1 exactly); values are display names (with spaces).
+# Every entry in the source arrays must have a mapping here, otherwise the populate
+# step will throw rather than silently emit a "Company-" / "Dept-" displayName.
 $scenario8CompanyNames = @{
     "Panoply" = "Panoply"
     "NexusDynamics" = "Nexus Dynamics"
     "OrbitalSystems" = "Akinya"
     "QuantumBridge" = "Rockhopper"
     "StellarLogistics" = "Stellar Logistics"
+    "VortexTech" = "Vortex Tech"
+    "CatalystCorp" = "Catalyst Corp"
+    "HorizonIndustries" = "Horizon Industries"
+    "PulsarEnterprises" = "Pulsar Enterprises"
+    "NovaNetworks" = "Nova Networks"
+    "FusionCore" = "Fusion Core"
+    "CelestialSystems" = "Celestial Systems"
+    "NebulaWorks" = "Nebula Works"
+    "AtomicVentures" = "Atomic Ventures"
+    "CosmicPlatform" = "Cosmic Platform"
 }
 
 $scenario8DepartmentNames = @{
@@ -77,6 +89,16 @@ $scenario8DepartmentNames = @{
     "Procurement" = "Procurement"
     "Research-Development" = "Research & Development"
     "Sales" = "Sales"
+    "Customer-Support" = "Customer Support"
+    "Quality-Assurance" = "Quality Assurance"
+    "Product-Management" = "Product Management"
+    "Data-Science" = "Data Science"
+    "Security" = "Security"
+    "Facilities" = "Facilities"
+    "Executive" = "Executive"
+    "Compliance" = "Compliance"
+    "Communications" = "Communications"
+    "Training" = "Training"
 }
 
 # Container and domain mapping
@@ -347,11 +369,17 @@ for ($i = 0; $i -lt $groups.Count; $i++) {
 
     if ($group.Category -eq "Company") {
         $technicalName = $group.Name -replace "^Company-", ""
+        if (-not $scenario8CompanyNames.ContainsKey($technicalName)) {
+            throw "Scenario 8 populate: no pretty-name mapping for company technical name '$technicalName'. Add an entry to `$scenario8CompanyNames in Populate-SambaAD-Scenario8.ps1 to keep it in sync with `$script:CompanyNames in utils/Test-GroupHelpers.ps1."
+        }
         $displayName = "Company-" + ($scenario8CompanyNames[$technicalName] -replace " ", " ")
         $description = "Company-wide group for $($scenario8CompanyNames[$technicalName])"
     }
     elseif ($group.Category -eq "Department") {
         $technicalName = $group.Name -replace "^Dept-", ""
+        if (-not $scenario8DepartmentNames.ContainsKey($technicalName)) {
+            throw "Scenario 8 populate: no pretty-name mapping for department technical name '$technicalName'. Add an entry to `$scenario8DepartmentNames in Populate-SambaAD-Scenario8.ps1 to keep it in sync with `$script:DepartmentNames in utils/Test-GroupHelpers.ps1."
+        }
         $displayName = "Dept-" + ($scenario8DepartmentNames[$technicalName] -replace " ", " ")
         $description = "Department group for $($scenario8DepartmentNames[$technicalName])"
     }
