@@ -781,6 +781,26 @@ function Write-FileToConnectorVolume {
     # `rm -f` first guarantees a fresh inode even if a stale file with different
     # ownership is already present (e.g. a customer or earlier test wrote through
     # a different UID via `docker cp` or via the Samba/OpenLDAP side of the volume).
+    #
+    # Both steps use ArgumentList (no shell) so the path is passed verbatim and is
+    # safe against special characters (spaces, single quotes, etc.).
+
+    # Step 1: remove any stale file so tee always creates a fresh inode.
+    $rmPsi = New-Object System.Diagnostics.ProcessStartInfo
+    $rmPsi.FileName = "docker"
+    $rmPsi.ArgumentList.Add("exec")
+    $rmPsi.ArgumentList.Add("-u")
+    $rmPsi.ArgumentList.Add("app")
+    $rmPsi.ArgumentList.Add("jim.worker")
+    $rmPsi.ArgumentList.Add("rm")
+    $rmPsi.ArgumentList.Add("-f")
+    $rmPsi.ArgumentList.Add($DestinationPath)
+    $rmPsi.UseShellExecute = $false
+    $rmProc = [System.Diagnostics.Process]::Start($rmPsi)
+    $rmProc.WaitForExit()
+    $rmProc.Dispose()
+
+    # Step 2: stream file content via stdin into tee, which writes to the path directly.
     $fileStream = [System.IO.File]::OpenRead($SourcePath)
     try {
         $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -790,16 +810,17 @@ function Write-FileToConnectorVolume {
         $psi.ArgumentList.Add("-u")
         $psi.ArgumentList.Add("app")
         $psi.ArgumentList.Add("jim.worker")
-        $psi.ArgumentList.Add("sh")
-        $psi.ArgumentList.Add("-c")
-        $psi.ArgumentList.Add("rm -f '$DestinationPath' && cat > '$DestinationPath'")
+        $psi.ArgumentList.Add("tee")
+        $psi.ArgumentList.Add($DestinationPath)
         $psi.RedirectStandardInput = $true
+        $psi.RedirectStandardOutput = $true
         $psi.UseShellExecute = $false
 
         $proc = [System.Diagnostics.Process]::Start($psi)
         try {
             $fileStream.CopyTo($proc.StandardInput.BaseStream)
             $proc.StandardInput.Close()
+            $proc.StandardOutput.ReadToEnd() | Out-Null
             $proc.WaitForExit()
             if ($proc.ExitCode -ne 0) {
                 throw "docker exec returned exit code $($proc.ExitCode) while writing $DestinationPath."
