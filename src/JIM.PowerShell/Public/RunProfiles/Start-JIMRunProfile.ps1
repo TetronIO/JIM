@@ -148,8 +148,23 @@ function Start-JIMRunProfile {
                 $consecutiveAuthFailures = 0
                 $maxAuthFailures = 3
 
+                # Cooperative abort: if JIM_RUNPROFILE_ABORT_SENTINEL points to
+                # a file that exists and is non-empty, a test harness has decided
+                # the run should fail (typically because an error watcher saw an
+                # [ERR] line in JIM logs). Break out of the wait and throw so the
+                # scenario fails fast instead of polling indefinitely.
+                $abortSentinel = $env:JIM_RUNPROFILE_ABORT_SENTINEL
+
                 while (-not $completed -and (-not $hasTimeout -or ((Get-Date) - $startTime).TotalSeconds -lt $Timeout)) {
                     Start-Sleep -Seconds 2
+
+                    if ($abortSentinel -and (Test-Path $abortSentinel)) {
+                        $sentinelInfo = Get-Item $abortSentinel -ErrorAction SilentlyContinue
+                        if ($sentinelInfo -and $sentinelInfo.Length -gt 0) {
+                            Write-Progress -Activity "Executing Run Profile" -Completed
+                            throw "Run Profile wait aborted: JIM error watcher reported errors (see $abortSentinel). Activity ID: $activityId."
+                        }
+                    }
 
                     try {
                         $activity = Invoke-JIMApi -Endpoint "/api/v1/activities/$activityId"

@@ -78,6 +78,13 @@
     services are ready. This reduces database writes during large test runs.
     Change tracking is enabled by default.
 
+.PARAMETER ContinueOnFailure
+    When running multiple scenarios (-Scenario All or -DirectoryType All), keep
+    running subsequent scenarios after one fails instead of aborting immediately.
+    The default is fail-fast: as soon as a scenario fails the runner prints the
+    summary of what ran and exits non-zero. Use -ContinueOnFailure when you are
+    diagnosing whether a regression is localised to one scenario or widespread.
+
 .EXAMPLE
     ./Run-IntegrationTests.ps1
 
@@ -157,8 +164,8 @@
     ./Run-IntegrationTests.ps1 -PreRelease
 
     Runs the full pre-release regression: every implemented scenario against both
-    directory types, with Samba AD at the Large template and OpenLDAP at Scale100K.
-    Equivalent to: -Scenario All -DirectoryType All -TemplateSambaAD Large -TemplateOpenLDAP Scale100K.
+    directory types, with Samba AD at the MediumLarge template and OpenLDAP at Scale100K.
+    Equivalent to: -Scenario All -DirectoryType All -TemplateSambaAD MediumLarge -TemplateOpenLDAP Scale100K.
 #>
 
 param(
@@ -216,7 +223,10 @@ param(
     [string]$TemplateOpenLDAP,
 
     [Parameter(Mandatory=$false)]
-    [switch]$PreRelease
+    [switch]$PreRelease,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$ContinueOnFailure
 )
 
 Set-StrictMode -Version Latest
@@ -415,7 +425,7 @@ function Show-ScenarioMenu {
         }
         @{
             Name = "Pre-Release"
-            Description = "Runs every implemented scenario sequentially for both Samba AD and OpenLDAP at Large and Scale100K templates, respectively"
+            Description = "Runs every implemented scenario sequentially for both Samba AD and OpenLDAP at MediumLarge and Scale100K templates, respectively"
             Disabled = $false
             SeparatorAfter = $true
         }
@@ -971,11 +981,11 @@ function Test-TemplateRelevant {
     return $true
 }
 
-# -PreRelease is shorthand for: -Scenario All -DirectoryType All -TemplateSambaAD Large -TemplateOpenLDAP Scale100K
+# -PreRelease is shorthand for: -Scenario All -DirectoryType All -TemplateSambaAD MediumLarge -TemplateOpenLDAP Scale100K
 if ($PreRelease) {
     $Scenario               = "All"
     $DirectoryType          = "All"
-    $TemplateSambaAD        = "Large"
+    $TemplateSambaAD        = "MediumLarge"
     $TemplateOpenLDAP       = "Scale100K"
     $DirectoryTypeWasExplicitlySet = $true
     $TemplateWasExplicitlySet      = $true
@@ -986,12 +996,12 @@ if (-not $Scenario) {
     $Scenario = Show-ScenarioMenu
 
     # "Pre-Release" is a special menu entry that expands to all-scenarios, both directory
-    # types, with Samba AD at Large and OpenLDAP at Scale100K. It bypasses the Template
+    # types, with Samba AD at MediumLarge and OpenLDAP at Scale100K. It bypasses the Template
     # and DirectoryType sub-menus since those are fixed by the Pre-Release preset.
     if ($Scenario -eq "Pre-Release") {
         $Scenario                      = "All"
         $DirectoryType                 = "All"
-        $TemplateSambaAD               = "Large"
+        $TemplateSambaAD               = "MediumLarge"
         $TemplateOpenLDAP              = "Scale100K"
         $DirectoryTypeWasExplicitlySet = $true
         $TemplateWasExplicitlySet      = $true
@@ -1046,6 +1056,7 @@ if ($DirectoryType -eq "All") {
     if ($IgnoreSnapshots)                                       { $passThruParams.IgnoreSnapshots = $true }
     if ($LogLevel)                                              { $passThruParams.LogLevel = $LogLevel }
     if ($DisableChangeTracking)                                 { $passThruParams.DisableChangeTracking = $true }
+    if ($ContinueOnFailure)                                     { $passThruParams.ContinueOnFailure = $true }
 
     # Resolve per-directory-type templates. -TemplateSambaAD/-TemplateOpenLDAP
     # override the base -Template for the respective directory type.
@@ -1099,12 +1110,24 @@ if ($DirectoryType -eq "All") {
             Duration        = $dtDuration.ToString('hh\:mm\:ss')
             DurationSeconds = $dtDuration.TotalSeconds
         }
-        if (-not $dtPassed) { $anyFailed = $true }
+        if (-not $dtPassed) {
+            $anyFailed = $true
+
+            # Fail-fast: don't run the next directory type when one has already failed.
+            if (-not $ContinueOnFailure) {
+                Write-Host ""
+                Write-Host "${RED}Aborting remaining directory types after '$dt' failure (fail-fast default).${NC}"
+                Write-Host "${GRAY}Pass -ContinueOnFailure to run all directory types regardless.${NC}"
+                Write-Host ""
+                break
+            }
+        }
     }
 
-    # Print summary
+    # Print summary. Wrap with @(...) so Where-Object returning $null (zero matches)
+    # or a single hashtable (unwrapped on exactly one match) doesn't trip Set-StrictMode.
     $allDuration = (Get-Date) - $allStart
-    $passCount = ($allResults | Where-Object { $_.Success }).Count
+    $passCount = @($allResults | Where-Object { $_.Success }).Count
 
     Write-Host ""
     Write-Host "${CYAN}$("=" * 65)${NC}"
@@ -1166,9 +1189,45 @@ function Reset-JIMForNextScenario {
     Write-Host ""
     Write-Host "${BLUE}--- Lightweight Reset ---${NC}"
 
+    # 0. Empty the shared File Connector volume in place.
+    #
+    # `docker compose down -v` below will try to delete jim-connector-files-volume,
+    # but Samba AD and OpenLDAP (started from docker-compose.integration-tests.yml
+    # and kept running across scenarios for performance) also mount this volume.
+    # Docker refuses to delete a volume that's still mounted, so without this step
+    # the volume silently persists between scenarios and accumulates stale files —
+    # including CSVs and subdirectories created by Samba/OpenLDAP with host UIDs
+    # (e.g. 1000/ubuntu) that the next run's non-root worker can't overwrite.
+    #
+    # We can't `docker exec` this inside jim.worker: Samba writes to the shared
+    # volume as root/ubuntu, and jim.worker drops CAP_DAC_OVERRIDE, so even its
+    # root user can't rmdir Samba-created subdirectories. Instead we launch a
+    # one-off throwaway container from the worker's own image (already pulled,
+    # no extra network fetch) with default (non-restricted) capabilities, mount
+    # the volume, and rm -rf its contents as root.
+    $workerImage = (docker inspect jim.worker --format '{{.Config.Image}}' 2>$null)
+    if (-not $workerImage) {
+        # Fall back to the compose-project image name if the container isn't up.
+        $workerImage = 'jim-worker'
+    }
+    Write-Host "${GRAY}  Emptying jim-connector-files-volume contents (via throwaway $workerImage container)...${NC}"
+    docker run --rm --user 0 --entrypoint sh -v jim-connector-files-volume:/vol $workerImage -c 'rm -rf /vol/* /vol/.[!.]* 2>/dev/null; true' 2>&1 | Out-Null
+
     # 1. Stop JIM containers (keep Samba AD running)
     Write-Host "${GRAY}  Stopping JIM containers...${NC}"
-    docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down -v 2>&1 | Out-Null
+    $downOutput = docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down -v 2>&1
+    # Surface any "Resource is still in use" lines. Seeing these here means a container
+    # outside the JIM compose file is mounting one of the JIM volumes (typically
+    # jim-connector-files-volume via Samba AD / OpenLDAP) — investigate before the
+    # stale contents cause a later scenario to fail.
+    $stuckVolumes = $downOutput | Where-Object { $_ -match 'Resource is still in use' }
+    if ($stuckVolumes) {
+        Write-Host "${YELLOW}  Warning: one or more JIM volumes could not be removed during reset:${NC}"
+        foreach ($line in $stuckVolumes) {
+            Write-Host "${YELLOW}    $line${NC}"
+        }
+        Write-Host "${YELLOW}    (contents were emptied in step 0, so the next scenario should still start clean)${NC}"
+    }
 
     # 2. Remove JIM database volume (ensures clean schema + data)
     Write-Host "${GRAY}  Removing JIM database volume...${NC}"
@@ -1364,8 +1423,22 @@ if ($Scenario -eq "All") {
             $scenarioParams.SkipBuild = $true
         }
 
-        & $selfScript @scenarioParams
-        $exitCode = $LASTEXITCODE
+        $scenarioError = $null
+        try {
+            & $selfScript @scenarioParams
+            $exitCode = $LASTEXITCODE
+        }
+        catch {
+            # The child invocation threw an unhandled exception. Record the failure
+            # in $results so the regression summary below still runs, rather than
+            # letting the exception propagate and kill the whole loop.
+            $scenarioError = $_
+            $exitCode = 1
+            Write-Host ""
+            Write-Host "${RED}  ✗ Scenario invocation raised an exception:${NC}"
+            Write-Host "${RED}    $($_.Exception.Message)${NC}"
+            Write-Host ""
+        }
         $scenarioDuration = (Get-Date) - $scenarioStart
 
         $passed = ($exitCode -eq 0)
@@ -1380,16 +1453,50 @@ if ($Scenario -eq "All") {
             ExitCode        = $exitCode
             Duration        = $scenarioDuration.ToString('hh\:mm\:ss')
             DurationSeconds = $scenarioDuration.TotalSeconds
+            Error           = if ($scenarioError) { $scenarioError.Exception.Message } else { $null }
+            Skipped         = $false
         }
         $regressionTimings[$scenarioName] = $scenarioDuration.TotalSeconds
-        if (-not $passed) { $anyFailed = $true }
+        if (-not $passed) {
+            $anyFailed = $true
+
+            # Fail-fast (default): abort the regression the moment one scenario fails.
+            # Record the remaining scenarios as skipped so the summary is honest about
+            # what ran vs what was intentionally not run. Pass -ContinueOnFailure to
+            # run every scenario regardless, which is useful when diagnosing whether
+            # a regression is localised or widespread.
+            if (-not $ContinueOnFailure) {
+                Write-Host ""
+                Write-Host "${RED}Aborting regression after failure of '$scenarioName' (fail-fast default).${NC}"
+                Write-Host "${GRAY}Pass -ContinueOnFailure to run remaining scenarios anyway.${NC}"
+                Write-Host ""
+
+                for ($j = $i + 1; $j -lt $implementedScenarios.Count; $j++) {
+                    $skippedName = $implementedScenarios[$j]
+                    $results += @{
+                        Name            = $skippedName
+                        Success         = $false
+                        ExitCode        = $null
+                        Duration        = "00:00:00"
+                        DurationSeconds = 0
+                        Error           = $null
+                        Skipped         = $true
+                    }
+                }
+                break
+            }
+        }
 
     }
 
-    # Calculate totals
+    # Calculate totals. Wrap the Where-Object and the outer array with @(...) so
+    # we always get an array: under Set-StrictMode, calling .Count on $null (zero
+    # matches) or on a single hashtable (exactly one match, unwrapped by Where-Object)
+    # either throws or returns the wrong value.
     $allDuration = (Get-Date) - $allStart
-    $passCount = ($results | Where-Object { $_.Success }).Count
-    $failCount = $results.Count - $passCount
+    $passCount = @($results | Where-Object { $_.Success }).Count
+    $skipCount = @($results | Where-Object { $_.Skipped }).Count
+    $failCount = @($results).Count - $passCount - $skipCount
 
     # Print summary
     Write-Host ""
@@ -1399,13 +1506,25 @@ if ($Scenario -eq "All") {
     Write-Host ""
 
     foreach ($r in $results) {
-        $icon = if ($r.Success) { "${GREEN}PASS${NC}" } else { "${RED}FAIL${NC}" }
+        $icon = if ($r.Skipped) {
+            "${YELLOW}SKIP${NC}"
+        } elseif ($r.Success) {
+            "${GREEN}PASS${NC}"
+        } else {
+            "${RED}FAIL${NC}"
+        }
         Write-Host ("  [{0}]  {1,-50} {2}" -f $icon, $r.Name, $r.Duration)
     }
 
     Write-Host ""
     Write-Host "${CYAN}Total Duration: ${NC}$($allDuration.ToString('hh\:mm\:ss'))"
-    Write-Host "${CYAN}Passed: ${NC}$passCount / $($results.Count)    ${CYAN}Failed: ${NC}$failCount / $($results.Count)"
+    $totalCount = @($results).Count
+    if ($skipCount -gt 0) {
+        Write-Host "${CYAN}Passed: ${NC}$passCount / $totalCount    ${CYAN}Failed: ${NC}$failCount / $totalCount    ${CYAN}Skipped (fail-fast): ${NC}$skipCount / $totalCount"
+    }
+    else {
+        Write-Host "${CYAN}Passed: ${NC}$passCount / $totalCount    ${CYAN}Failed: ${NC}$failCount / $totalCount"
+    }
     Write-Host ""
 
     # Write aggregated results JSON
@@ -1425,12 +1544,15 @@ if ($Scenario -eq "All") {
         StartTime         = $allStart.ToString("yyyy-MM-dd HH:mm:ss")
         Duration          = $allDuration.ToString('hh\:mm\:ss')
         OverallSuccess    = (-not $anyFailed)
+        AbortedEarly      = ($skipCount -gt 0)
+        ContinueOnFailure = [bool]$ContinueOnFailure
         Scenarios         = @($results | ForEach-Object {
             @{
                 Name     = $_.Name
                 Success  = $_.Success
                 Duration = $_.Duration
                 ExitCode = $_.ExitCode
+                Skipped  = [bool]$_.Skipped
             }
         })
         Timings        = $regressionTimings
@@ -2236,8 +2358,14 @@ if ($SetupOnly) {
         # Generate test data (CSV files) if scenario uses template-based data
         if ($templateRelevant) {
             Write-Step "Generating test data (Template: $Template)..."
-            & "$scriptRoot/Generate-TestCSV.ps1" -Template $Template -OutputPath "$scriptRoot/../test-data"
-            Write-Success "Test data generated"
+            try {
+                & "$scriptRoot/Generate-TestCSV.ps1" -Template $Template -OutputPath "$scriptRoot/../test-data"
+                Write-Success "Test data generated"
+            }
+            catch {
+                Write-Failure "Test data generation failed: $($_.Exception.Message)"
+                exit 1
+            }
         }
 
         # Run the scenario setup script to configure connected systems, sync rules, and run profiles
@@ -2502,6 +2630,16 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
     ) -PassThru -RedirectStandardOutput "$dockerStatsPath.stdout.log" -RedirectStandardError "$dockerStatsPath.stderr.log"
 }
 
+# Start the JIM error watcher. This tails jim.web / jim.worker / jim.scheduler
+# logs for [ERR] lines and writes any matches to a sentinel file. Start-JIMRunProfile
+# -Wait loops check the sentinel between polls (via the JIM_RUNPROFILE_ABORT_SENTINEL
+# env var) so a stalled activity accompanied by an [ERR] aborts immediately rather
+# than polling forever.
+$errWatcherSentinel = Join-Path $scriptRoot "results" "errors-$Scenario-$Template-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').log"
+Write-Step "Starting JIM error watcher (sentinel: $errWatcherSentinel)"
+$errWatcher = Start-JimErrorWatcher -SentinelPath $errWatcherSentinel -Since $step5Start
+$env:JIM_RUNPROFILE_ABORT_SENTINEL = $errWatcherSentinel
+
 try {
     & $scenarioScript @scenarioParams
     $scenarioExitCode = $LASTEXITCODE
@@ -2517,8 +2655,43 @@ finally {
         Stop-Process -Id $dockerStatsProcess.Id -Force -ErrorAction SilentlyContinue
     }
     if ($dockerStatsPath -and (Test-Path $dockerStatsPath)) {
-        $rowCount = (Get-Content $dockerStatsPath).Count - 1
+        # Wrap with @(...) so a zero- or one-line file doesn't trip Set-StrictMode:
+        # Get-Content returns $null for an empty file and a single string for a
+        # one-line file, neither of which expose a usable .Count property.
+        $rowCount = @(Get-Content $dockerStatsPath).Count - 1
+        if ($rowCount -lt 0) { $rowCount = 0 }
         Write-Step "Docker stats capture stopped ($rowCount samples recorded)"
+    }
+
+    # Stop the live watcher and run the post-scenario belt-and-braces scan.
+    # Always run these, even if the scenario threw; we want to know whether JIM
+    # logged errors regardless of how the scenario ended.
+    $capturedLines = @()
+    if ($errWatcher) {
+        $capturedLines = @(Stop-JimErrorWatcher -Handle $errWatcher)
+    }
+    Remove-Item Env:JIM_RUNPROFILE_ABORT_SENTINEL -ErrorAction SilentlyContinue
+
+    if ($capturedLines.Count -gt 0) {
+        Write-Host ""
+        Write-Host "${RED}✗ JIM error watcher captured $($capturedLines.Count) [ERR] line(s) during the scenario:${NC}"
+        foreach ($line in $capturedLines | Select-Object -First 10) {
+            Write-Host "    $line" -ForegroundColor Red
+        }
+        if ($capturedLines.Count -gt 10) {
+            Write-Host "    ... ($($capturedLines.Count - 10) more in $errWatcherSentinel)" -ForegroundColor Red
+        }
+        Write-Host ""
+        $scenarioExitCode = 1
+    }
+
+    # Belt-and-braces: one-shot scan in case the live watcher missed shutdown-race lines.
+    try {
+        Assert-NoWorkerErrors -Since $step5Start
+    }
+    catch {
+        Write-Host "${RED}✗ Post-scenario log scan failed: $_${NC}"
+        $scenarioExitCode = 1
     }
 }
 $timings["5. Run Tests"] = (Get-Date) - $step5Start

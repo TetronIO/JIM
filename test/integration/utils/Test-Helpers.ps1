@@ -718,29 +718,133 @@ function Get-RandomSubset {
 
 # Progress bar functions for visual feedback during long operations
 
+function Write-FileToConnectorVolume {
+    <#
+    .SYNOPSIS
+        Stream a host file into /connector-files inside jim.worker with correct ownership.
+
+    .DESCRIPTION
+        The only safe way to put a file into the shared jim-connector-files-volume for
+        testing is to stream it in through a non-root shell inside jim.worker so the
+        file lands owned by the worker's `app` user (UID 1654). We cannot use
+        `docker cp` — it preserves the host UID/GID, which leaves files the container
+        user can't overwrite when the File connector next exports.
+
+        This helper:
+          1. Verifies jim.worker is running.
+          2. Ensures the destination directory exists (owned by app:app).
+          3. Unlinks the destination file if present, then creates a fresh inode by
+             streaming the source via `docker exec -i -u app jim.worker sh -c 'cat > ...'`.
+
+        Use this anywhere a test needs to seed or refresh a file under /connector-files.
+
+    .PARAMETER SourcePath
+        Host path to the file to copy in.
+
+    .PARAMETER DestinationPath
+        Absolute path inside the container, e.g. /connector-files/test-data/hr-users.csv.
+        The parent directory is created if missing.
+
+    .EXAMPLE
+        Write-FileToConnectorVolume -SourcePath $csvPath -DestinationPath /connector-files/test-data/hr-users.csv
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$SourcePath,
+
+        [Parameter(Mandatory=$true)]
+        [string]$DestinationPath
+    )
+
+    if (-not (Test-Path $SourcePath)) {
+        throw "Source file not found: $SourcePath"
+    }
+
+    if (-not $DestinationPath.StartsWith('/')) {
+        throw "DestinationPath must be absolute (got '$DestinationPath')."
+    }
+
+    $containerRunning = docker ps --filter "name=jim.worker" --filter "status=running" --format "{{.Names}}" 2>$null
+    if ($containerRunning -ne "jim.worker") {
+        throw "jim.worker container is not running; cannot write $DestinationPath."
+    }
+
+    $destDir = [System.IO.Path]::GetDirectoryName($DestinationPath).Replace('\','/')
+    if ($destDir -and $destDir -ne '/') {
+        docker exec -u app jim.worker mkdir -p $destDir | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to create directory '$destDir' in jim.worker."
+        }
+    }
+
+    # Stream the file via docker exec stdin so the resulting file is owned by `app`.
+    # `rm -f` first guarantees a fresh inode even if a stale file with different
+    # ownership is already present (e.g. a customer or earlier test wrote through
+    # a different UID via `docker cp` or via the Samba/OpenLDAP side of the volume).
+    #
+    # Both steps use ArgumentList (no shell) so the path is passed verbatim and is
+    # safe against special characters (spaces, single quotes, etc.).
+
+    # Step 1: remove any stale file so tee always creates a fresh inode.
+    $rmPsi = New-Object System.Diagnostics.ProcessStartInfo
+    $rmPsi.FileName = "docker"
+    $rmPsi.ArgumentList.Add("exec")
+    $rmPsi.ArgumentList.Add("-u")
+    $rmPsi.ArgumentList.Add("app")
+    $rmPsi.ArgumentList.Add("jim.worker")
+    $rmPsi.ArgumentList.Add("rm")
+    $rmPsi.ArgumentList.Add("-f")
+    $rmPsi.ArgumentList.Add($DestinationPath)
+    $rmPsi.UseShellExecute = $false
+    $rmProc = [System.Diagnostics.Process]::Start($rmPsi)
+    $rmProc.WaitForExit()
+    $rmProc.Dispose()
+
+    # Step 2: stream file content via stdin into tee, which writes to the path directly.
+    $fileStream = [System.IO.File]::OpenRead($SourcePath)
+    try {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = "docker"
+        $psi.ArgumentList.Add("exec")
+        $psi.ArgumentList.Add("-i")
+        $psi.ArgumentList.Add("-u")
+        $psi.ArgumentList.Add("app")
+        $psi.ArgumentList.Add("jim.worker")
+        $psi.ArgumentList.Add("tee")
+        $psi.ArgumentList.Add($DestinationPath)
+        $psi.RedirectStandardInput = $true
+        $psi.RedirectStandardOutput = $true
+        $psi.UseShellExecute = $false
+
+        $proc = [System.Diagnostics.Process]::Start($psi)
+        try {
+            $fileStream.CopyTo($proc.StandardInput.BaseStream)
+            $proc.StandardInput.Close()
+            $proc.StandardOutput.ReadToEnd() | Out-Null
+            $proc.WaitForExit()
+            if ($proc.ExitCode -ne 0) {
+                throw "docker exec returned exit code $($proc.ExitCode) while writing $DestinationPath."
+            }
+        }
+        finally {
+            $proc.Dispose()
+        }
+    }
+    finally {
+        $fileStream.Dispose()
+    }
+}
+
 function Copy-CsvToConnectorFiles {
     <#
     .SYNOPSIS
-        Copy a CSV file from the host to /connector-files/test-data in the jim-connector-files-volume.
+        Seed a CSV file into /connector-files/test-data/ with correct ownership.
 
     .DESCRIPTION
-        Uses `docker cp` via the jim.worker container to push a host file into the named
-        Docker volume at /connector-files/test-data/<filename>. The destination filename
-        defaults to the source file's basename, or can be overridden.
-
-        This is the integration-test equivalent of the customer "drop a file into the
-        File Connector volume" step. It mirrors the pattern used in Generate-TestCSV.ps1.
-
-    .PARAMETER SourcePath
-        The host path to the CSV file to copy.
-
-    .PARAMETER DestinationName
-        Optional override for the target filename. Defaults to the basename of SourcePath.
-
-    .EXAMPLE
-        Copy-CsvToConnectorFiles -SourcePath "$testDataPath/hr-users.csv"
-
-        Copies to jim.worker:/connector-files/test-data/hr-users.csv
+        Thin wrapper around Write-FileToConnectorVolume that defaults the destination
+        to /connector-files/test-data/<SourceBasename>. Preserved for backwards
+        compatibility with existing scenario scripts; new callers can use
+        Write-FileToConnectorVolume directly when they need a non-standard destination.
     #>
     param(
         [Parameter(Mandatory=$true)]
@@ -750,18 +854,11 @@ function Copy-CsvToConnectorFiles {
         [string]$DestinationName
     )
 
-    if (-not (Test-Path $SourcePath)) {
-        throw "Source file not found: $SourcePath"
-    }
-
     if (-not $DestinationName) {
         $DestinationName = [System.IO.Path]::GetFileName($SourcePath)
     }
 
-    $result = docker cp $SourcePath "jim.worker:/connector-files/test-data/$DestinationName" 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to copy $SourcePath to jim.worker:/connector-files/test-data/${DestinationName}: $result"
-    }
+    Write-FileToConnectorVolume -SourcePath $SourcePath -DestinationPath "/connector-files/test-data/$DestinationName"
 }
 
 function Write-ProgressBar {
@@ -1868,6 +1965,236 @@ function Assert-ActivityItemsHaveOutcomeSummary {
     else {
         Write-Host "  ✓ $Name has $summaryCount items with OutcomeSummary" -ForegroundColor Green
     }
+}
+
+function Start-JimErrorWatcher {
+    <#
+    .SYNOPSIS
+        Starts background jobs that tail JIM container logs for [ERR] lines.
+
+    .DESCRIPTION
+        Spawns one background job per target container (jim.web, jim.worker,
+        jim.scheduler) that runs `docker logs --since <time> -f <container>` and
+        appends any line containing '[ERR]' to a shared sentinel file.
+
+        Returns a handle object containing the jobs, the sentinel file path, the
+        start time, and an optional regex of allowed patterns to ignore.
+
+        The sentinel file is plain text; each line is prefixed with the container
+        name and a UTC timestamp so callers can tell where the error came from.
+
+        This is the live half of the two-layer error detection strategy; the
+        post-scenario scan via Assert-NoWorkerErrors is the belt-and-braces layer.
+
+    .PARAMETER SentinelPath
+        Path to the sentinel file where detected error lines are written.
+        The file is created empty at start time.
+
+    .PARAMETER Since
+        DateTime marking the start of the log window. Passed to `docker logs --since`.
+        Use the scenario start time so we don't pick up lines from earlier phases.
+
+    .PARAMETER AllowPattern
+        Optional regex. Lines matching this pattern are NOT written to the sentinel
+        file, even if they contain '[ERR]'. Use sparingly and only for genuinely
+        benign patterns confirmed to not indicate a real failure.
+
+    .PARAMETER Containers
+        Container names to tail. Defaults to jim.web, jim.worker, jim.scheduler.
+
+    .OUTPUTS
+        PSCustomObject with Jobs, SentinelPath, StartTime, AllowPattern.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$SentinelPath,
+
+        [Parameter(Mandatory=$true)]
+        [datetime]$Since,
+
+        [Parameter(Mandatory=$false)]
+        [string]$AllowPattern = '',
+
+        [Parameter(Mandatory=$false)]
+        [string[]]$Containers = @('jim.web', 'jim.worker', 'jim.scheduler')
+    )
+
+    # Ensure sentinel file exists and is empty
+    $sentinelDir = Split-Path -Parent $SentinelPath
+    if ($sentinelDir -and -not (Test-Path $sentinelDir)) {
+        New-Item -ItemType Directory -Path $sentinelDir -Force | Out-Null
+    }
+    Set-Content -Path $SentinelPath -Value '' -NoNewline -Encoding UTF8
+
+    # `docker logs --since` expects RFC3339 or a Go duration. Use RFC3339 with
+    # a 1-second cushion so we don't miss any line racing the watcher start.
+    $sinceString = $Since.AddSeconds(-1).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+
+    $jobs = @()
+    foreach ($container in $Containers) {
+        $job = Start-Job -Name "jim-err-watcher-$container" -ScriptBlock {
+            param($containerName, $since, $sentinel, $allowPattern)
+
+            # `docker logs -f ... 2>&1` merges stderr into stdout so the pipeline
+            # sees every log line regardless of which stream the sink uses. The
+            # pipeline is line-buffered, so each match is written to the sentinel
+            # the moment it arrives.
+            & docker logs --since $since -f $containerName 2>&1 | ForEach-Object {
+                $line = $_
+                if ($null -eq $line) { return }
+                if ($line -match '\[ERR\]') {
+                    if ($allowPattern -and ($line -match $allowPattern)) { return }
+                    $stamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+                    # Open/append/close per line so the sentinel is durable even
+                    # if the watcher is killed mid-stream.
+                    [System.IO.File]::AppendAllText($sentinel, "[$stamp] [$containerName] $line`n")
+                }
+            }
+        } -ArgumentList $container, $sinceString, $SentinelPath, $AllowPattern
+
+        $jobs += $job
+    }
+
+    return [PSCustomObject]@{
+        Jobs         = $jobs
+        SentinelPath = $SentinelPath
+        StartTime    = $Since
+        AllowPattern = $AllowPattern
+        Containers   = $Containers
+    }
+}
+
+function Test-JimErrorWatcher {
+    <#
+    .SYNOPSIS
+        Returns $true if the watcher sentinel file contains any entries.
+
+    .DESCRIPTION
+        Lightweight check callable from polling loops. Does not stop the watcher
+        or drain jobs; safe to call as often as needed.
+
+    .PARAMETER Handle
+        The handle returned by Start-JimErrorWatcher.
+
+    .OUTPUTS
+        [bool] True if one or more error lines have been captured.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [PSCustomObject]$Handle
+    )
+
+    if (-not (Test-Path $Handle.SentinelPath)) {
+        return $false
+    }
+
+    $info = Get-Item $Handle.SentinelPath
+    return ($info.Length -gt 0)
+}
+
+function Stop-JimErrorWatcher {
+    <#
+    .SYNOPSIS
+        Stops the watcher jobs and returns captured error lines.
+
+    .DESCRIPTION
+        Stops and removes the background docker-logs jobs, then reads the
+        sentinel file and returns its lines. Call this from a `finally` block
+        so the jobs are always cleaned up, even when the scenario throws.
+
+    .PARAMETER Handle
+        The handle returned by Start-JimErrorWatcher.
+
+    .OUTPUTS
+        [string[]] Array of captured error lines (empty if no errors were seen).
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [PSCustomObject]$Handle
+    )
+
+    foreach ($job in $Handle.Jobs) {
+        try {
+            Stop-Job -Job $job -ErrorAction SilentlyContinue
+            Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+        }
+        catch {
+            # Best-effort cleanup; swallow so we always attempt the next job.
+        }
+    }
+
+    if (-not (Test-Path $Handle.SentinelPath)) {
+        return @()
+    }
+
+    $lines = @(Get-Content -Path $Handle.SentinelPath -ErrorAction SilentlyContinue | Where-Object { $_ -ne '' })
+    return $lines
+}
+
+function Assert-NoWorkerErrors {
+    <#
+    .SYNOPSIS
+        Post-scenario scan of JIM container logs for [ERR] lines.
+
+    .DESCRIPTION
+        Belt-and-braces companion to the live watcher. Runs a one-shot
+        `docker logs --since <time>` against each target container and fails the
+        scenario if any line containing '[ERR]' is found. Use this even if the
+        live watcher reported nothing, to catch lines that raced the watcher's
+        start-up or shutdown.
+
+    .PARAMETER Since
+        DateTime marking the start of the log window.
+
+    .PARAMETER AllowPattern
+        Optional regex; matching lines are ignored.
+
+    .PARAMETER Containers
+        Containers to scan. Defaults to jim.web, jim.worker, jim.scheduler.
+
+    .OUTPUTS
+        Throws if any [ERR] line is found (outside the allowlist). Returns
+        quietly on success.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [datetime]$Since,
+
+        [Parameter(Mandatory=$false)]
+        [string]$AllowPattern = '',
+
+        [Parameter(Mandatory=$false)]
+        [string[]]$Containers = @('jim.web', 'jim.worker', 'jim.scheduler')
+    )
+
+    $sinceString = $Since.AddSeconds(-1).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $allErrors = @()
+
+    foreach ($container in $Containers) {
+        # 2>&1 merges stderr (where some log sinks write) into stdout so the
+        # Select-String below sees every log line, not just stdout.
+        $output = docker logs --since $sinceString $container 2>&1
+        $errorLines = $output | Where-Object { $_ -match '\[ERR\]' }
+        if ($AllowPattern) {
+            $errorLines = $errorLines | Where-Object { $_ -notmatch $AllowPattern }
+        }
+        foreach ($line in $errorLines) {
+            $allErrors += "[$container] $line"
+        }
+    }
+
+    if ($allErrors.Count -gt 0) {
+        Write-Host "✗ FAILED: Detected $($allErrors.Count) [ERR] line(s) in JIM container logs:" -ForegroundColor Red
+        foreach ($line in $allErrors | Select-Object -First 20) {
+            Write-Host "    $line" -ForegroundColor Red
+        }
+        if ($allErrors.Count -gt 20) {
+            Write-Host "    ... ($($allErrors.Count - 20) more not shown)" -ForegroundColor Red
+        }
+        throw "JIM logged $($allErrors.Count) [ERR] line(s) during the scenario. See output above."
+    }
+
+    Write-Host "✓ PASSED: No [ERR] lines in jim.web, jim.worker, or jim.scheduler logs" -ForegroundColor Green
 }
 
 # Functions are automatically available when dot-sourced

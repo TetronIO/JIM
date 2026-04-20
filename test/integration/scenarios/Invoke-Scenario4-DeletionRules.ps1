@@ -569,8 +569,13 @@ try {
         throw "API key required for authentication"
     }
 
-    # Use dedicated minimal CSV for Scenario 4 (no baseline users initially)
-    Write-Host "Setting up dedicated CSV for Scenario 4 tests..." -ForegroundColor Gray
+    # Seed a full baseline set of CSVs into the volume first. Setup-Scenario1.ps1
+    # creates four CSV connected systems (HR, Training, Departments, Cross-Domain)
+    # and runs schema discovery against all of them, so every file must exist before
+    # setup runs. We then overlay Scenario 4's minimal HR and Training CSVs on top
+    # of the baselines so the deletion tests start with a known single-user state.
+    # Prior to this the scenario relied on files leaking from Scenario 1's volume.
+    Write-Host "Seeding baseline CSVs for Scenario 4..." -ForegroundColor Gray
     $testDataPath = "$PSScriptRoot/../../test-data"
     $scenarioDataPath = "$PSScriptRoot/data"
 
@@ -578,16 +583,18 @@ try {
         New-Item -ItemType Directory -Path $testDataPath -Force | Out-Null
     }
 
-    # Copy scenario-specific CSVs as the starting point
+    & "$PSScriptRoot/../Generate-TestCSV.ps1" -Template "Nano" -OutputPath $testDataPath
+
+    # Overlay Scenario 4's tailored HR and Training CSVs (1 baseline user each)
+    Write-Host "Applying Scenario 4 HR and Training overlays..." -ForegroundColor Gray
     Copy-Item -Path "$scenarioDataPath/scenario4-hr-users.csv" -Destination "$testDataPath/hr-users.csv" -Force
     Copy-Item -Path "$scenarioDataPath/scenario4-training-records.csv" -Destination "$testDataPath/training-records.csv" -Force
 
-    # Copy to container volume
     $csvPath = "$testDataPath/hr-users.csv"
     $trainingCsvPath = "$testDataPath/training-records.csv"
-    Copy-CsvToConnectorFiles -SourcePath $csvPath
-    Copy-CsvToConnectorFiles -SourcePath $trainingCsvPath
-    Write-Host "  CSVs initialised (HR + Training, 1 baseline user each)" -ForegroundColor Green
+    Write-FileToConnectorVolume -SourcePath $csvPath         -DestinationPath "/connector-files/test-data/hr-users.csv"
+    Write-FileToConnectorVolume -SourcePath $trainingCsvPath -DestinationPath "/connector-files/test-data/training-records.csv"
+    Write-Host "  CSVs initialised (HR + Training overlays over Nano baseline)" -ForegroundColor Green
 
     # Clean up test-specific directory users from previous test runs
     Write-Host "Cleaning up test-specific directory users from previous runs..." -ForegroundColor Gray
@@ -1035,12 +1042,20 @@ try {
         Start-Sleep -Seconds 3
 
         # Assert 1: MVO should still exist (grace period not yet elapsed)
-        # With recall=false, display name is retained so we can search by name
+        # With recall=false, display name is retained so we can search by name.
+        # On miss, fall back to an ID lookup to distinguish a real deletion from a
+        # display-name search miss (see engineering/notes/SCENARIO4_TEST4_GRACE_PERIOD_INVESTIGATION.md,
+        # hypothesis #3). Different error messages let a future regression self-diagnose.
         $mvoStillExists = Test-MvoExists -DisplayName "Test Auth Grace" -ObjectTypeName "User"
 
         if (-not $mvoStillExists) {
-            $testResults.Steps += @{ Name = "AuthoritativeGracePeriod"; Success = $false; Error = "MVO deleted immediately despite grace period" }
-            throw "Test 4 Assert 1 failed: MVO was deleted immediately despite 1-minute grace period"
+            $mvoStillExistsById = Test-MvoExistsById -MvoId $test4MvoId
+            if ($mvoStillExistsById) {
+                $testResults.Steps += @{ Name = "AuthoritativeGracePeriod"; Success = $false; Error = "Display-name search missed MVO but ID lookup found it (hypothesis #3: not a real deletion)" }
+                throw "Test 4 Assert 1 inconclusive: display-name search missed MVO $test4MvoId but ID lookup found it. Likely a Test-MvoExists false negative (display name may have been altered), not a real deletion."
+            }
+            $testResults.Steps += @{ Name = "AuthoritativeGracePeriod"; Success = $false; Error = "MVO deleted immediately despite grace period (confirmed via ID lookup)" }
+            throw "Test 4 Assert 1 failed: MVO $test4MvoId was deleted immediately despite 1-minute grace period (confirmed via ID lookup)"
         }
         Write-Host "  PASSED: MVO still exists (grace period not yet elapsed)" -ForegroundColor Green
 

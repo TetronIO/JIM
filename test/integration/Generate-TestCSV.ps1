@@ -212,35 +212,23 @@ $crossDomainHeaders -join "," | Set-Content -Path $crossDomainCsvPath -Encoding 
 
 Write-Host "  ✓ Created $crossDomainCsvPath (empty export target)" -ForegroundColor Green
 
-# Copy to the jim-connector-files-volume named Docker volume via jim.worker.
-# jim.worker is always running during integration tests and has the volume mounted
-# at /connector-files. Docker-managed volume ownership eliminates the UID mismatch
-# between the host user and the container's non-root 'app' user (UID 1654).
-Write-TestStep "Step 5" "Copying files to jim-connector-files-volume"
+# Seed the jim-connector-files-volume via jim.worker.
+#
+# We stream each file into the container via `docker exec -i -u app jim.worker tee ...`
+# (rather than `docker cp`) so the resulting files are owned by the non-root `app`
+# user (UID 1654) that the worker process runs as. `docker cp` preserves host UID/GID,
+# which leaves files owned by the host user and unwriteable by the container process;
+# this caused UnauthorizedAccessException when the File connector tried to rewrite
+# the cross-domain export target. See docker-compose.yml and src/JIM.Worker/Dockerfile.
+Write-TestStep "Step 5" "Seeding files into jim-connector-files-volume"
 
-try {
-    $containerRunning = docker ps --filter "name=jim.worker" --filter "status=running" --format "{{.Names}}" 2>$null
+Write-Host "  Streaming CSV files into jim.worker..." -ForegroundColor Gray
+Write-FileToConnectorVolume -SourcePath $csvPath            -DestinationPath "/connector-files/test-data/hr-users.csv"
+Write-FileToConnectorVolume -SourcePath $deptCsvPath        -DestinationPath "/connector-files/test-data/departments.csv"
+Write-FileToConnectorVolume -SourcePath $trainingCsvPath    -DestinationPath "/connector-files/test-data/training-records.csv"
+Write-FileToConnectorVolume -SourcePath $crossDomainCsvPath -DestinationPath "/connector-files/test-data/cross-domain-users.csv"
 
-    if ($containerRunning -eq "jim.worker") {
-        Write-Host "  Ensuring /connector-files/test-data subdirectory exists..." -ForegroundColor Gray
-        docker exec jim.worker mkdir -p /connector-files/test-data 2>$null
-
-        Write-Host "  Copying CSV files to volume via jim.worker..." -ForegroundColor Gray
-        docker cp $csvPath jim.worker:/connector-files/test-data/hr-users.csv
-        docker cp $deptCsvPath jim.worker:/connector-files/test-data/departments.csv
-        docker cp $trainingCsvPath jim.worker:/connector-files/test-data/training-records.csv
-        docker cp $crossDomainCsvPath jim.worker:/connector-files/test-data/cross-domain-users.csv
-
-        Write-Host "  ✓ Files copied to /connector-files/test-data in jim-connector-files-volume" -ForegroundColor Green
-    }
-    else {
-        Write-Host "  ⚠ jim.worker not running, files only in local directory" -ForegroundColor Yellow
-        Write-Host "    Start JIM stack and re-run to copy to the volume" -ForegroundColor Yellow
-    }
-}
-catch {
-    Write-Host "  ⚠ Could not copy to jim.worker: $_" -ForegroundColor Yellow
-}
+Write-Host "  ✓ Files seeded into /connector-files/test-data (owned by app:app)" -ForegroundColor Green
 
 # Summary
 Write-TestSection "CSV Generation Summary"

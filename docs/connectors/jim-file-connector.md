@@ -44,17 +44,22 @@ There are two patterns for getting files into and out of `/connector-files`. Mos
 
 This is the simplest pattern and the recommended starting point. The volume is created and managed by Docker; ownership is set automatically so the JIM container's runtime user can read and write to it without any host-side permission tweaking.
 
-You don't need to configure anything in your `docker-compose.yml` — the volume is part of the bundled JIM compose files. To put a file in the volume, copy it via the worker container:
+You don't need to configure anything in your `docker-compose.yml` — the volume is part of the bundled JIM compose files. To put a file into the volume, stream it through the worker container so the resulting file is owned by the JIM runtime user:
 
 ```bash
-docker cp ./Users.csv jim.worker:/connector-files/Users.csv
+docker exec -i -u app jim.worker sh -c 'cat > /connector-files/Users.csv' < ./Users.csv
 ```
 
-To read an exported file out:
+The `-u app` flag is important: it runs the shell inside the container as the JIM runtime user (UID 1654), so the file lands with the correct ownership. This matters when JIM will later rewrite the same file — for example in **Export Only** or **Bidirectional** mode, or whenever schema discovery is triggered on an existing file.
 
-```bash
-docker cp jim.worker:/connector-files/Exports.csv ./Exports.csv
-```
+!!! warning "Don't use `docker cp` to push files JIM will rewrite"
+    `docker cp ./file jim.worker:/path` is tempting but preserves your host UID/GID. The resulting file is not writable by the JIM runtime user (UID 1654), so any subsequent JIM export against that file will fail with an "Access to the path … is denied" error. Use the `docker exec … cat >` form above instead.
+
+    Reading *out* of the volume with `docker cp` is fine — the file on the host takes your local UID, which is what you usually want:
+
+    ```bash
+    docker cp jim.worker:/connector-files/Exports.csv ./Exports.csv
+    ```
 
 When to use this pattern:
 
@@ -137,12 +142,19 @@ The error `File not found: '/connector-files/Users.csv'` indicates the file is n
 
 ### Access denied (permission error)
 
-The error `Access to the path '/connector-files/...' is denied` typically occurs with bind-mounted host directories.
+The error `Access to the path '/connector-files/...' is denied` means the JIM runtime user (UID 1654) does not have write permission on the target file or its parent directory. This happens in two common situations:
 
-- The JIM worker runs as UID 1654. If host files are owned by a different UID, the worker can't read or write them.
+**Bind-mounted host directories:** host files preserve host UID/GID, which may not match UID 1654.
+
 - Fix the ownership: `chown -R 1654:1654 /mnt/your-mount-point` on the host.
 - For CIFS/SMB mounts, add `uid=1654,gid=1654` to the mount options.
 - For NFS, use UID mapping or ensure the file owner UID matches.
+
+**Files pushed into the named volume with `docker cp`:** `docker cp` preserves your host UID, so the file is owned by you, not by UID 1654. A subsequent JIM export or schema refresh against that file will fail. Either re-push the file with the `docker exec … cat >` form shown under [File access](#file-access), or fix the ownership directly:
+
+```bash
+docker exec -u 0 jim.worker chown app:app /connector-files/Users.csv
+```
 
 ### Column count mismatch
 
