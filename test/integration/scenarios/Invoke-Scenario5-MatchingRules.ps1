@@ -97,22 +97,28 @@ try {
 
     # Use dedicated minimal CSV for Scenario 5 (no baseline users)
     # This ensures tests are self-contained and don't cause mass export failures
-    Write-Host "Setting up dedicated CSV for Scenario 5 tests..." -ForegroundColor Gray
+    # Seed a full baseline set of CSVs into the volume first. Setup-Scenario1.ps1
+    # creates four CSV connected systems (HR, Training, Departments, Cross-Domain)
+    # and runs schema discovery against all of them, so every file must exist before
+    # setup runs. We then overlay Scenario 5's minimal HR CSV on top of the baseline.
+    # Prior to this the scenario relied on files leaking from Scenario 1's volume.
+    Write-Host "Seeding baseline CSVs for Scenario 5..." -ForegroundColor Gray
     $testDataPath = "$PSScriptRoot/../../test-data"
     $scenarioDataPath = "$PSScriptRoot/data"
 
-    # Ensure test-data directory exists
     if (-not (Test-Path $testDataPath)) {
         New-Item -ItemType Directory -Path $testDataPath -Force | Out-Null
     }
 
-    # Copy empty scenario-specific CSV as the starting point
+    & "$PSScriptRoot/../Generate-TestCSV.ps1" -Template "Nano" -OutputPath $testDataPath
+
+    # Overlay Scenario 5's tailored HR CSV (1 baseline user for schema discovery)
+    Write-Host "Applying Scenario 5 HR overlay..." -ForegroundColor Gray
     Copy-Item -Path "$scenarioDataPath/scenario5-hr-users.csv" -Destination "$testDataPath/hr-users.csv" -Force
 
-    # Copy to container volume
     $csvPath = "$testDataPath/hr-users.csv"
-    Copy-CsvToConnectorFiles -SourcePath $csvPath
-    Write-Host "  ✓ Dedicated CSV initialised (1 baseline user for schema discovery)" -ForegroundColor Green
+    Write-FileToConnectorVolume -SourcePath $csvPath -DestinationPath "/connector-files/test-data/hr-users.csv"
+    Write-Host "  ✓ CSV initialised (HR overlay over Nano baseline)" -ForegroundColor Green
 
     # Clean up test-specific directory users from previous test runs
     Write-Host "Cleaning up test-specific directory users from previous runs..." -ForegroundColor Gray

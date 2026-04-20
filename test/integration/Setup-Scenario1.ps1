@@ -456,8 +456,13 @@ else {
         Write-Host "  ✓ Training CSV schema imported ($($trainingObjectTypes.Count) object types)" -ForegroundColor Green
     }
     catch {
-        Write-Host "  ⚠ Training CSV schema import failed: $_" -ForegroundColor Yellow
-        $trainingObjectTypes = @()
+        # Throw rather than warn: schema-import failure on a CSV-backed system means
+        # the seed file is missing, which is always a test-setup bug. Downgrading it
+        # to a warning hid two scenarios (4 and 5) that weren't seeding the full set
+        # of CSVs this setup script discovers.
+        Write-Host "  ✗ Training CSV schema import failed: $_" -ForegroundColor Red
+        Write-Host "    The scenario must seed training-records.csv before running Setup-Scenario1." -ForegroundColor Yellow
+        throw
     }
 }
 
@@ -474,8 +479,10 @@ else {
         Write-Host "  ✓ Cross-Domain CSV schema imported ($($crossDomainObjectTypes.Count) object types)" -ForegroundColor Green
     }
     catch {
-        Write-Host "  ⚠ Cross-Domain CSV schema import failed: $_" -ForegroundColor Yellow
-        $crossDomainObjectTypes = @()
+        # Throw rather than warn: see the matching note in the Training CSV block.
+        Write-Host "  ✗ Cross-Domain CSV schema import failed: $_" -ForegroundColor Red
+        Write-Host "    The scenario must seed cross-domain-users.csv before running Setup-Scenario1." -ForegroundColor Yellow
+        throw
     }
 }
 
