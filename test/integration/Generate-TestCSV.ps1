@@ -15,6 +15,11 @@
 .PARAMETER OutputPath
     Path where CSV files should be created (default: ./test-data)
 
+.PARAMETER SkipSeed
+    Skip the final step of streaming CSVs into jim-connector-files-volume.
+    Used by Get-OrGenerate-TestCSV.ps1 when generating to a temp directory for archiving;
+    the wrapper runs the seeding step itself after extracting to the final output path.
+
 .EXAMPLE
     ./Generate-TestCSV.ps1 -Template Small
 #>
@@ -25,11 +30,18 @@ param(
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]
-    [string]$OutputPath = "./test-data"
+    [string]$OutputPath = "./test-data",
+
+    [Parameter(Mandatory=$false)]
+    [switch]$SkipSeed
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+# Fixed epoch for deterministic date generation (used by training records).
+# MUST stay constant: changing it invalidates every cached CSV archive (see Get-OrGenerate-TestCSV.ps1).
+$script:TrainingEpoch = [DateTime]::new(2026, 1, 1, 0, 0, 0, [DateTimeKind]::Utc)
 
 # Import helpers
 . "$PSScriptRoot/utils/Test-Helpers.ps1"
@@ -165,9 +177,11 @@ for ($i = 1; $i -le $usersWithTraining; $i++) {
         $completedCourses += $courses[$courseIndex].Code
     }
 
-    # Training completion date (deterministic based on index)
-    $daysAgo = 7 + ($i * 3) % 365  # Between 7 days and 1 year ago
-    $completionDate = (Get-Date).AddDays(-$daysAgo).ToString("yyyy-MM-ddTHH:mm:ssZ")
+    # Training completion date (deterministic based on index).
+    # Base date is a fixed epoch, not Get-Date, so re-runs produce byte-identical CSVs;
+    # this is what makes the CSV cache (see Get-OrGenerate-TestCSV.ps1) safe.
+    $daysAgo = 7 + ($i * 3) % 365  # Between 7 days and 1 year ago, relative to the epoch
+    $completionDate = $script:TrainingEpoch.AddDays(-$daysAgo).ToString("yyyy-MM-ddTHH:mm:ssZ")
 
     # Training status: Pass (90%), Fail (5%), InProgress (5%)
     $statusIndex = $i % 20
@@ -220,15 +234,20 @@ Write-Host "  ✓ Created $crossDomainCsvPath (empty export target)" -Foreground
 # which leaves files owned by the host user and unwriteable by the container process;
 # this caused UnauthorizedAccessException when the File connector tried to rewrite
 # the cross-domain export target. See docker-compose.yml and src/JIM.Worker/Dockerfile.
-Write-TestStep "Step 5" "Seeding files into jim-connector-files-volume"
+if ($SkipSeed) {
+    Write-Host "  (Skipping connector-volume seeding; -SkipSeed specified)" -ForegroundColor Gray
+}
+else {
+    Write-TestStep "Step 5" "Seeding files into jim-connector-files-volume"
 
-Write-Host "  Streaming CSV files into jim.worker..." -ForegroundColor Gray
-Write-FileToConnectorVolume -SourcePath $csvPath            -DestinationPath "/connector-files/test-data/hr-users.csv"
-Write-FileToConnectorVolume -SourcePath $deptCsvPath        -DestinationPath "/connector-files/test-data/departments.csv"
-Write-FileToConnectorVolume -SourcePath $trainingCsvPath    -DestinationPath "/connector-files/test-data/training-records.csv"
-Write-FileToConnectorVolume -SourcePath $crossDomainCsvPath -DestinationPath "/connector-files/test-data/cross-domain-users.csv"
+    Write-Host "  Streaming CSV files into jim.worker..." -ForegroundColor Gray
+    Write-FileToConnectorVolume -SourcePath $csvPath            -DestinationPath "/connector-files/test-data/hr-users.csv"
+    Write-FileToConnectorVolume -SourcePath $deptCsvPath        -DestinationPath "/connector-files/test-data/departments.csv"
+    Write-FileToConnectorVolume -SourcePath $trainingCsvPath    -DestinationPath "/connector-files/test-data/training-records.csv"
+    Write-FileToConnectorVolume -SourcePath $crossDomainCsvPath -DestinationPath "/connector-files/test-data/cross-domain-users.csv"
 
-Write-Host "  ✓ Files seeded into /connector-files/test-data (owned by app:app)" -ForegroundColor Green
+    Write-Host "  ✓ Files seeded into /connector-files/test-data (owned by app:app)" -ForegroundColor Green
+}
 
 # Summary
 Write-TestSection "CSV Generation Summary"

@@ -650,8 +650,14 @@ function New-TestUser {
     # - All contractors: 1 week to 12 months in the future
     # - ~15% of employees (those with resignations): 1 week to 3 months in the future
     # - Other employees: no expiry (null)
+    #
+    # Base date is a fixed epoch (not Get-Date) so CSV generation is byte-deterministic across runs,
+    # which is what makes the CSV cache (Get-OrGenerate-TestCSV.ps1) safe. Any call site that needs a
+    # "from-now" offset should compute it against Get-Date itself.
+    # Chosen well into the future so that expiry dates derived from (epoch + 7..365 days) remain
+    # future-dated for the foreseeable life of this test suite.
     $accountExpires = $null
-    $now = Get-Date
+    $now = [DateTime]::new(2030, 1, 1, 0, 0, 0, [DateTimeKind]::Utc)
 
     if ($isContractor) {
         # Contractors: expiry between 1 week and 12 months

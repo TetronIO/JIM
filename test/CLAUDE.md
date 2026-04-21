@@ -227,3 +227,39 @@ These flags are for human developer iteration only. Claude must not use them bec
 The OpenLDAP accesslog database uses an MDB storage engine with a fixed maximum map size (`olcDbMaxSize`). When the map is full, OpenLDAP **silently stops recording changes**; delta imports will find zero modifications and sync changes will be lost. There is no error message; the writes just stop.
 
 The map size is configured in `test/integration/docker/openldap/scripts/01-add-second-suffix.sh`. Current setting: **8 GB** (sufficient for Scale100K / 100K objects with large group membership operations). If adding templates beyond Scale100K (e.g. Scale1M / 1M objects), increase the accesslog `olcDbMaxSize` proportionally (estimate ~10 MB per 1,000 objects for the initial population, plus additional capacity for sync cycles and group membership writes).
+
+## CSV cache
+
+The three large, deterministic HR CSVs (`hr-users.csv`, `departments.csv`, `training-records.csv`) are cached by `test/integration/Get-OrGenerate-TestCSV.ps1`, which `Invoke-IntegrationTests.ps1` and `Run-IntegrationTests.ps1` call instead of invoking `Generate-TestCSV.ps1` directly. At Scale100K the cache turns ~100 s of CSV generation into a sub-second tar extraction.
+
+**Cache location:** `test/integration/test-data/.cache/csv-<template>-<hash16>.tar` (gitignored).
+
+**Cache key inputs:** whole-file SHA256 over `Generate-TestCSV.ps1` + `utils/Test-Helpers.ps1`, plus the template name and PowerShell major version. Editing either script invalidates every template's cache entry. This is intentional (matches the Samba snapshot precedent in `Build-SambaSnapshots.ps1`).
+
+**Determinism requirement:** the CSVs MUST be byte-identical across runs, otherwise the cache silently serves stale data. The two places this is enforced:
+- `Generate-TestCSV.ps1` uses `$script:TrainingEpoch` (a fixed `2026-01-01` UTC date) instead of `Get-Date` for `completionDate`.
+- `utils/Test-Helpers.ps1 > New-TestUser` uses a fixed `2030-01-01` UTC epoch instead of `Get-Date` for `AccountExpires`.
+Do NOT reintroduce `Get-Date` into these code paths. If you add a new deterministic date field, derive it from a fixed epoch too.
+
+**Not cached:** `cross-domain-users.csv`. It is a header-only export target that the File connector appends to during the test. The wrapper regenerates it fresh on every run (including cache hits) to avoid leaking state between runs.
+
+**Docker seeding runs every time.** The cache archive holds file contents only; the `jim-connector-files-volume` state is not cached. Both cache-hit and cache-miss paths call `Write-FileToConnectorVolume` to stream the four CSVs into `jim.worker` with correct ownership.
+
+**Flags:**
+- `-IgnoreCache` — force regeneration and overwrite any existing cache entry
+- `-NoCache` — generate as normal but neither read nor write the cache
+- `-CachePath <dir>` — override the default `<OutputPath>/.cache` location
+
+**Verifying the cache:** `test/integration/Test-CsvCache.ps1` is a standalone acceptance-test script that proves generator determinism, cache round-trip byte-identity, key sensitivity, and invalidation on script edits. Runs in a few seconds against the `Nano` template without needing Docker or `jim.worker`. Run it whenever you touch `Generate-TestCSV.ps1`, `utils/Test-Helpers.ps1 > New-TestUser`, or the cache wrapper.
+
+**GitHub Actions wiring** (for the future pre-release workflow; out of scope for this iteration):
+
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: test/integration/test-data/.cache
+    key:  csv-${{ matrix.template }}-${{ hashFiles('test/integration/Generate-TestCSV.ps1','test/integration/utils/Test-Helpers.ps1') }}
+    restore-keys: |
+      csv-${{ matrix.template }}-
+- run: ./test/integration/Get-OrGenerate-TestCSV.ps1 -Template ${{ matrix.template }}
+```

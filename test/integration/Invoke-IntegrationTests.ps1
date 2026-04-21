@@ -270,7 +270,7 @@ try {
         # HR-driven provisioning is tested against a clean directory.
 
         Write-Host "Generating test CSV files..." -ForegroundColor Gray
-        & "$scriptRoot/Generate-TestCSV.ps1" -Template $Template
+        & "$scriptRoot/Get-OrGenerate-TestCSV.ps1" -Template $Template
 
         if ($LASTEXITCODE -ne 0) {
             throw "Failed to generate CSV files"

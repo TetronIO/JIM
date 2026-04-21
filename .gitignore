@@ -456,6 +456,7 @@ env
 # Integration test artifacts
 test/integration/results/
 test/integration/test-data/
+test/integration/test-data/.cache/
 test/integration/.api-key
 test/test-data/
 test-data/

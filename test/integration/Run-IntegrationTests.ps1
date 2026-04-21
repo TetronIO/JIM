@@ -2359,7 +2359,7 @@ if ($SetupOnly) {
         if ($templateRelevant) {
             Write-Step "Generating test data (Template: $Template)..."
             try {
-                & "$scriptRoot/Generate-TestCSV.ps1" -Template $Template -OutputPath "$scriptRoot/../test-data"
+                & "$scriptRoot/Get-OrGenerate-TestCSV.ps1" -Template $Template -OutputPath "$scriptRoot/../test-data"
                 Write-Success "Test data generated"
             }
             catch {
