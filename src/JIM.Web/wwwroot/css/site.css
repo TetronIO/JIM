@@ -1382,8 +1382,20 @@ html[lang] .mud-alert-position {
     transition: background-color 0.2s ease, color 0.2s ease;
 }
 
+.jim-chip-link .mud-chip .jim-title-accent {
+    transition: color 0.2s ease;
+}
+
 .jim-chip-link:hover .mud-chip {
     background-color: var(--mud-palette-primary);
+    color: var(--mud-palette-primary-text);
+}
+
+/* Ensure the accent-coloured prefix (e.g. object type) inside a hovered chip
+   switches to the chip's hover text colour so it remains legible against the
+   primary background. Uses the theme's primary-text variable so this works
+   uniformly across every theme. */
+.jim-chip-link:hover .mud-chip .jim-title-accent {
     color: var(--mud-palette-primary-text);
 }
 
