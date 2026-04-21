@@ -89,7 +89,7 @@
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
             <MudText Typo="Typo.body2" Class="mud-text-secondary">Rows per page:</MudText>
             <MudSelect T="int" Value="@_rowsPerPage" ValueChanged="OnRowsPerPageChanged"
-                       Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense"
+                       Variant="Variant.Text" Dense="true" Margin="Margin.Dense"
                        Style="width: 70px;" Class="mt-0">
                 <MudSelectItem T="int" Value="10">10</MudSelectItem>
                 <MudSelectItem T="int" Value="25">25</MudSelectItem>
@@ -346,7 +346,7 @@
                         var percentage = (double)context.ObjectsProcessed / context.ObjectsToProcess * 100;
                         <MudStack Spacing="0" Style="width: 120px;">
                             <MudProgressLinear Value="@percentage" Color="Color.Info" Rounded="true" Size="Size.Small" />
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="white-space: nowrap;">@context.ObjectsProcessed.ToString("N0") / @context.ObjectsToProcess.ToString("N0")</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-3" Style="white-space: nowrap;">@context.ObjectsProcessed.ToString("N0") / @context.ObjectsToProcess.ToString("N0")</MudText>
                         </MudStack>
                     }
                     else
@@ -417,7 +417,7 @@
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
             <MudText Typo="Typo.body2" Class="mud-text-secondary">Rows per page:</MudText>
             <MudSelect T="int" Value="@_rowsPerPage" ValueChanged="OnRowsPerPageChanged"
-                       Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense"
+                       Variant="Variant.Text" Dense="true" Margin="Margin.Dense"
                        Style="width: 70px;" Class="mt-0">
                 <MudSelectItem T="int" Value="10">10</MudSelectItem>
                 <MudSelectItem T="int" Value="25">25</MudSelectItem>

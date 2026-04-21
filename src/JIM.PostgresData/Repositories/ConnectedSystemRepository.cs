@@ -2574,11 +2574,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var now = DateTime.UtcNow;
 
         return await Repository.Database.PendingExports
+            .AsNoTracking()
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)
-            .Include(pe => pe.ConnectedSystemObject)
-                .ThenInclude(cso => cso!.Type)
             .Include(pe => pe.ConnectedSystemObject)
                 .ThenInclude(cso => cso!.AttributeValues)
                     .ThenInclude(av => av.Attribute)
@@ -2603,6 +2602,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take)
     {
         return await ExecutableExportsQuery(connectedSystemId)
+            .AsNoTracking()
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)

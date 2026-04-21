@@ -590,10 +590,10 @@ try {
     Copy-Item -Path "$scenarioDataPath/scenario4-hr-users.csv" -Destination "$testDataPath/hr-users.csv" -Force
     Copy-Item -Path "$scenarioDataPath/scenario4-training-records.csv" -Destination "$testDataPath/training-records.csv" -Force
 
-    $csvPath = "$testDataPath/hr-users.csv"
-    $trainingCsvPath = "$testDataPath/training-records.csv"
-    Write-FileToConnectorVolume -SourcePath $csvPath         -DestinationPath "/connector-files/test-data/hr-users.csv"
-    Write-FileToConnectorVolume -SourcePath $trainingCsvPath -DestinationPath "/connector-files/test-data/training-records.csv"
+    Write-FilesToConnectorVolume -SourceDir $testDataPath -Files @(
+        @{ SourceFile = 'hr-users.csv';         DestinationPath = '/connector-files/test-data/hr-users.csv' }
+        @{ SourceFile = 'training-records.csv'; DestinationPath = '/connector-files/test-data/training-records.csv' }
+    )
     Write-Host "  CSVs initialised (HR + Training overlays over Nano baseline)" -ForegroundColor Green
 
     # Clean up test-specific directory users from previous test runs

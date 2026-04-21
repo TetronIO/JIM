@@ -1189,29 +1189,10 @@ function Reset-JIMForNextScenario {
     Write-Host ""
     Write-Host "${BLUE}--- Lightweight Reset ---${NC}"
 
-    # 0. Empty the shared File Connector volume in place.
-    #
-    # `docker compose down -v` below will try to delete jim-connector-files-volume,
-    # but Samba AD and OpenLDAP (started from docker-compose.integration-tests.yml
-    # and kept running across scenarios for performance) also mount this volume.
-    # Docker refuses to delete a volume that's still mounted, so without this step
-    # the volume silently persists between scenarios and accumulates stale files —
-    # including CSVs and subdirectories created by Samba/OpenLDAP with host UIDs
-    # (e.g. 1000/ubuntu) that the next run's non-root worker can't overwrite.
-    #
-    # We can't `docker exec` this inside jim.worker: Samba writes to the shared
-    # volume as root/ubuntu, and jim.worker drops CAP_DAC_OVERRIDE, so even its
-    # root user can't rmdir Samba-created subdirectories. Instead we launch a
-    # one-off throwaway container from the worker's own image (already pulled,
-    # no extra network fetch) with default (non-restricted) capabilities, mount
-    # the volume, and rm -rf its contents as root.
-    $workerImage = (docker inspect jim.worker --format '{{.Config.Image}}' 2>$null)
-    if (-not $workerImage) {
-        # Fall back to the compose-project image name if the container isn't up.
-        $workerImage = 'jim-worker'
-    }
-    Write-Host "${GRAY}  Emptying jim-connector-files-volume contents (via throwaway $workerImage container)...${NC}"
-    docker run --rm --user 0 --entrypoint sh -v jim-connector-files-volume:/vol $workerImage -c 'rm -rf /vol/* /vol/.[!.]* 2>/dev/null; true' 2>&1 | Out-Null
+    # 0. Empty the shared File Connector volume in place. See Clear-ConnectorFilesVolume
+    # for the full rationale; briefly, `docker compose down -v` below can't remove
+    # jim-connector-files-volume while Samba AD / OpenLDAP keep it pinned.
+    Clear-ConnectorFilesVolume
 
     # 1. Stop JIM containers (keep Samba AD running)
     Write-Host "${GRAY}  Stopping JIM containers...${NC}"
@@ -1867,6 +1848,18 @@ if (-not $SkipReset) {
     # Remove the JIM database volume to ensure completely fresh state
     docker volume rm jim-db-volume 2>&1 | Out-Null
 
+    # Remove the connector-files volume. With the containers force-rm'd above, no
+    # one should be holding this volume anymore; `docker volume rm` removes it
+    # outright. If it still fails for any reason (e.g. a leftover container from
+    # an unrelated Docker project), fall back to an in-place wipe so the next
+    # scenario doesn't inherit stale CSVs. This mirrors the Reset-JIMForNextScenario
+    # strategy where Samba/LDAP stay up and the volume must be emptied in place.
+    $rmResult = docker volume rm jim-connector-files-volume 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "${GRAY}  jim-connector-files-volume could not be removed (${rmResult}); wiping in place instead...${NC}"
+        Clear-ConnectorFilesVolume
+    }
+
     Write-Success "Containers stopped and all volumes removed"
 }
 else {
@@ -2359,7 +2352,7 @@ if ($SetupOnly) {
         if ($templateRelevant) {
             Write-Step "Generating test data (Template: $Template)..."
             try {
-                & "$scriptRoot/Generate-TestCSV.ps1" -Template $Template -OutputPath "$scriptRoot/../test-data"
+                & "$scriptRoot/Get-OrGenerate-TestCSV.ps1" -Template $Template -OutputPath "$scriptRoot/../test-data"
                 Write-Success "Test data generated"
             }
             catch {
@@ -2630,6 +2623,21 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
     ) -PassThru -RedirectStandardOutput "$dockerStatsPath.stdout.log" -RedirectStandardError "$dockerStatsPath.stderr.log"
 }
 
+# Start the connector-files volume auditor. inotifywait sidecar logs every
+# write/create/delete/rename to jim-connector-files-volume so we can pin down
+# any out-of-band writers that the transcript can't name. See the 08:47:22
+# Scale100K incident for the failure mode this was added to diagnose.
+$volumeAuditLogPath = Join-Path $scriptRoot "results" "volume-audit-$Scenario-$Template-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').log"
+Write-Step "Starting connector-files volume auditor -> $volumeAuditLogPath"
+$volumeAuditor = Start-ConnectorVolumeAuditor -LogPath $volumeAuditLogPath
+
+# Start the docker events capture. Streams all container/image/volume lifecycle
+# events to disk so throwaway `docker run` calls (our busybox seed helper,
+# rogue calls from other sessions) can be identified retroactively.
+$dockerEventsLogPath = Join-Path $scriptRoot "results" "docker-events-$Scenario-$Template-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').log"
+Write-Step "Starting docker events capture -> $dockerEventsLogPath"
+$dockerEventsProcess = Start-DockerEventsCapture -LogPath $dockerEventsLogPath
+
 # Start the JIM error watcher. This tails jim.web / jim.worker / jim.scheduler
 # logs for [ERR] lines and writes any matches to a sentinel file. Start-JIMRunProfile
 # -Wait loops check the sentinel between polls (via the JIM_RUNPROFILE_ABORT_SENTINEL
@@ -2661,6 +2669,29 @@ finally {
         $rowCount = @(Get-Content $dockerStatsPath).Count - 1
         if ($rowCount -lt 0) { $rowCount = 0 }
         Write-Step "Docker stats capture stopped ($rowCount samples recorded)"
+    }
+
+    # Stop the connector-files volume auditor and record the line count so
+    # reviewers can tell at a glance whether anything wrote to the volume.
+    try {
+        $auditLineCount = Stop-ConnectorVolumeAuditor -Handle $volumeAuditor
+        if ($volumeAuditor) {
+            Write-Step "Volume auditor stopped ($auditLineCount events recorded in $volumeAuditLogPath)"
+        }
+    }
+    catch {
+        Write-Host "${YELLOW}  Warning: volume auditor stop failed: $_${NC}"
+    }
+
+    # Stop the docker events capture.
+    try {
+        $eventLineCount = Stop-DockerEventsCapture -Process $dockerEventsProcess -LogPath $dockerEventsLogPath
+        if ($dockerEventsProcess) {
+            Write-Step "Docker events capture stopped ($eventLineCount events recorded in $dockerEventsLogPath)"
+        }
+    }
+    catch {
+        Write-Host "${YELLOW}  Warning: docker events capture stop failed: $_${NC}"
     }
 
     # Stop the live watcher and run the post-scenario belt-and-braces scan.
@@ -3170,6 +3201,12 @@ Write-Section "Output Files"
 Write-Host "  ${GRAY}Scenario log:${NC}       $scenarioLogFile"
 if ($currentFile) {
     Write-Host "  ${GRAY}Performance metrics:${NC} $currentFile"
+}
+if ($volumeAuditLogPath -and (Test-Path $volumeAuditLogPath)) {
+    Write-Host "  ${GRAY}Volume audit log:${NC}   $volumeAuditLogPath"
+}
+if ($dockerEventsLogPath -and (Test-Path $dockerEventsLogPath)) {
+    Write-Host "  ${GRAY}Docker events log:${NC}  $dockerEventsLogPath"
 }
 
 # Re-run Command

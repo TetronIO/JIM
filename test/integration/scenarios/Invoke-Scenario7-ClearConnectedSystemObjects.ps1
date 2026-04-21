@@ -135,7 +135,7 @@ try {
     # to this the suite was relying on files leaking across scenarios through the
     # shared jim-connector-files-volume.
     Write-Host "Seeding CSV test data..." -ForegroundColor Gray
-    & "$PSScriptRoot/../Generate-TestCSV.ps1" -Template $Template -OutputPath "$PSScriptRoot/../../test-data"
+    & "$PSScriptRoot/../Get-OrGenerate-TestCSV.ps1" -Template $Template -OutputPath "$PSScriptRoot/../../test-data"
     Write-Host "  ✓ CSV test data seeded" -ForegroundColor Green
 
     # Setup scenario configuration (reuse Scenario 1 setup for CSV connected system)

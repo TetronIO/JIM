@@ -650,8 +650,14 @@ function New-TestUser {
     # - All contractors: 1 week to 12 months in the future
     # - ~15% of employees (those with resignations): 1 week to 3 months in the future
     # - Other employees: no expiry (null)
+    #
+    # Base date is a fixed epoch (not Get-Date) so CSV generation is byte-deterministic across runs,
+    # which is what makes the CSV cache (Get-OrGenerate-TestCSV.ps1) safe. Any call site that needs a
+    # "from-now" offset should compute it against Get-Date itself.
+    # Chosen well into the future so that expiry dates derived from (epoch + 7..365 days) remain
+    # future-dated for the foreseeable life of this test suite.
     $accountExpires = $null
-    $now = Get-Date
+    $now = [DateTime]::new(2030, 1, 1, 0, 0, 0, [DateTimeKind]::Utc)
 
     if ($isContractor) {
         # Contractors: expiry between 1 week and 12 months
@@ -718,25 +724,320 @@ function Get-RandomSubset {
 
 # Progress bar functions for visual feedback during long operations
 
+$script:ConnectorVolumeHelperImage = 'busybox:1.37.0'
+
+function Clear-ConnectorFilesVolume {
+    <#
+    .SYNOPSIS
+        Empty the contents of jim-connector-files-volume in place.
+
+    .DESCRIPTION
+        `docker compose down -v` cannot delete jim-connector-files-volume while
+        samba-ad-primary / openldap-primary (started from docker-compose.integration-tests.yml
+        and kept alive across scenarios in -Scenario All mode) hold it open. Without an
+        in-place wipe the volume silently persists between runs and accumulates stale files.
+
+        This helper launches a throwaway container from the jim.worker image (already pulled,
+        no extra network fetch) with default (non-restricted) capabilities, mounts the volume,
+        and rm -rf's its contents as root. This is safe to call whether jim.worker is running
+        or not; falls back to the compose-project image name when the container isn't up.
+
+        Call sites:
+          - Run-IntegrationTests.ps1 Step 1 (top-level reset)
+          - Run-IntegrationTests.ps1 Reset-JIMForNextScenario (between-scenarios lightweight reset)
+        Both paths must start each scenario with an empty volume, so the helper lives here
+        rather than being duplicated in both call sites.
+    #>
+    param()
+
+    $workerImage = (docker inspect jim.worker --format '{{.Config.Image}}' 2>$null)
+    if (-not $workerImage) {
+        # Fall back to the compose-project image name if the container isn't up.
+        $workerImage = 'jim-worker'
+    }
+
+    Write-Host "  Emptying jim-connector-files-volume contents (via throwaway $workerImage container)..." -ForegroundColor Gray
+    docker run --rm --user 0 --entrypoint sh `
+        -v jim-connector-files-volume:/vol $workerImage `
+        -c 'rm -rf /vol/* /vol/.[!.]* 2>/dev/null; true' 2>&1 | Out-Null
+}
+
+function Write-FilesToConnectorVolume {
+    <#
+    .SYNOPSIS
+        Copy one or more host files into the jim-connector-files-volume in a single rootless docker run.
+
+    .DESCRIPTION
+        Mounts the shared jim-connector-files-volume and the host source directory into a throwaway
+        busybox container running as UID 1654, then copies the requested files in one shot. Files
+        land owned by UID 1654 (the `app` user in jim.worker) because that is the UID doing the
+        writes; no `chown` and no root is required in the pipeline.
+
+        This replaces the per-file `docker exec -i -u app jim.worker tee ...` streaming pattern.
+        For bulk seeding (e.g. the four CSVs in Step 5 of the integration harness) this cuts
+        Scale100K Step 5 from ~15-25 s to ~1-3 s by eliminating the per-file docker exec round-
+        trips and the PowerShell-pipe-over-stdin transfer.
+
+        Correctness notes:
+          - Each destination is removed via `rm -f` before the copy. Busybox `cp` overwrites
+            contents in place rather than unlinking, so `rm -f` preserves the fresh-inode
+            guarantee of the old implementation (defends against stale files owned by a
+            different UID written e.g. via Samba/OpenLDAP).
+          - Destination paths are passed through a generated shell script, not as `docker run`
+            argv, so paths with spaces or special characters are safe provided they do not
+            contain single quotes. CSV filenames never do.
+          - The host source directory is bind-mounted read-only.
+
+    .PARAMETER SourceDir
+        Host directory containing all source files. Bind-mounted read-only into the helper
+        container at /src.
+
+    .PARAMETER Files
+        Array of hashtables, each with:
+          - SourceFile: filename (not path) inside $SourceDir
+          - DestinationPath: absolute path inside the container volume, e.g.
+            /connector-files/test-data/hr-users.csv
+
+    .EXAMPLE
+        Write-FilesToConnectorVolume -SourceDir $outputPath -Files @(
+            @{ SourceFile = 'hr-users.csv';    DestinationPath = '/connector-files/test-data/hr-users.csv' }
+            @{ SourceFile = 'departments.csv'; DestinationPath = '/connector-files/test-data/departments.csv' }
+        )
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$SourceDir,
+
+        [Parameter(Mandatory=$true)]
+        [hashtable[]]$Files
+    )
+
+    if (-not (Test-Path -Path $SourceDir -PathType Container)) {
+        throw "Source directory not found: $SourceDir"
+    }
+
+    if ($Files.Count -eq 0) {
+        throw "Write-FilesToConnectorVolume called with no files."
+    }
+
+    $resolvedSourceDir = (Resolve-Path -Path $SourceDir).Path
+    if ([System.IO.Path]::DirectorySeparatorChar -eq '\') {
+        $resolvedSourceDir = $resolvedSourceDir.Replace('\','/')
+    }
+
+    # Caller provenance: captured once per call and used in three places —
+    #   (a) the DarkGray breadcrumb line in the scenario transcript,
+    #   (b) the .last-seed file inside the volume (for post-mortem forensics when
+    #       a scenario transcript doesn't show the call, e.g. stray out-of-band writer),
+    #   (c) failure messages so the throw points at the caller, not just the helper.
+    $stack = Get-PSCallStack
+    $callerScript = if ($stack.Count -ge 2 -and $stack[1].ScriptName) {
+        Split-Path -Leaf $stack[1].ScriptName
+    } else { '<unknown>' }
+    $callerLine = if ($stack.Count -ge 2) { $stack[1].ScriptLineNumber } else { 0 }
+    $callerCmd = if ($stack.Count -ge 2) { $stack[1].Command } else { '<unknown>' }
+    $callerInfo = "${callerScript}:${callerLine} (${callerCmd})"
+
+    # Capture expected per-file sizes on host now so we can verify post-copy that
+    # what's in the volume matches what we asked busybox to copy. This catches two
+    # failure modes: (1) a silent short-read / truncation in the cp path, and (2)
+    # any out-of-band overwriter between this call's return and the caller's
+    # first read. (1) is diagnosed immediately by the throw below; (2) requires
+    # the caller to re-check later via Assert-ConnectorVolumeCsvParity.
+    $expectedSizes = @{}
+    $totalBytes = 0L
+
+    # Collect destination metadata and build the copy script in one pass.
+    $destDirs = [System.Collections.Generic.HashSet[string]]::new()
+    $shellScript = [System.Text.StringBuilder]::new()
+    $null = $shellScript.AppendLine('set -e')
+
+    foreach ($entry in $Files) {
+        $sourceFile = [string]$entry.SourceFile
+        $destPath   = [string]$entry.DestinationPath
+
+        if (-not $sourceFile) {
+            throw "Write-FilesToConnectorVolume: entry is missing SourceFile. (caller: $callerInfo)"
+        }
+        if (-not $destPath) {
+            throw "Write-FilesToConnectorVolume: entry is missing DestinationPath. (caller: $callerInfo)"
+        }
+        if (-not $destPath.StartsWith('/')) {
+            throw "DestinationPath must be absolute (got '$destPath'). (caller: $callerInfo)"
+        }
+        if ($sourceFile -match '[\\/]') {
+            throw "SourceFile must be a filename, not a path (got '$sourceFile'). Set SourceDir to the containing directory. (caller: $callerInfo)"
+        }
+        if ($sourceFile -match "'" -or $destPath -match "'") {
+            throw "Write-FilesToConnectorVolume does not support paths containing single quotes. (caller: $callerInfo)"
+        }
+
+        $hostFile = Join-Path $resolvedSourceDir $sourceFile
+        if (-not (Test-Path -Path $hostFile -PathType Leaf)) {
+            throw "Source file not found: $hostFile (caller: $callerInfo)"
+        }
+
+        $sourceSize = (Get-Item -LiteralPath $hostFile).Length
+        $expectedSizes[$destPath] = $sourceSize
+        $totalBytes += $sourceSize
+
+        $destDir = [System.IO.Path]::GetDirectoryName($destPath).Replace('\','/')
+        if ($destDir -and $destDir -ne '/') {
+            $null = $destDirs.Add($destDir)
+        }
+
+        # rm -f guarantees a fresh inode even if a stale file owned by a different
+        # UID is already at the destination (e.g. from a previous run or a parallel
+        # Samba/OpenLDAP write path). cp --remove-destination would be tidier but
+        # busybox cp doesn't ship that flag; the explicit rm is portable.
+        $null = $shellScript.AppendLine("rm -f '$destPath'")
+        $null = $shellScript.AppendLine("cp '/src/$sourceFile' '$destPath'")
+    }
+
+    # Breadcrumb: prints to the transcript so a reader can see exactly which
+    # script and line issued every seed, plus the payload shape. Intentionally
+    # short so it doesn't clutter normal runs.
+    Write-Host "  [seed] $callerInfo -> $($Files.Count) file(s), $totalBytes bytes from $resolvedSourceDir" -ForegroundColor DarkGray
+
+    # .last-seed breadcrumb written INSIDE the container at the top of the shell
+    # script. If the volume is ever found with unexpected contents, `docker exec
+    # jim.worker cat /connector-files/.last-seed` reports the timestamp, the
+    # PowerShell PID ($env:JIM_SEED_CALLER_PID), the caller location, and the
+    # destination list. This catches out-of-band writers whose transcripts we
+    # don't control — the .last-seed reflects whatever wrote the volume most
+    # recently, regardless of which session ran it.
+    $mkdirScript = [System.Text.StringBuilder]::new()
+    foreach ($d in $destDirs) {
+        $null = $mkdirScript.AppendLine("mkdir -p '$d'")
+    }
+
+    $destList = ($Files | ForEach-Object { $_.DestinationPath }) -join ' '
+    $headerScript = [System.Text.StringBuilder]::new()
+    # Use printf-with-literal-strings so no variable expansion happens on content
+    # coming from PowerShell; caller_pid is injected via env, the rest are literals.
+    $null = $headerScript.AppendLine('set -e')
+    $null = $headerScript.AppendLine("printf '%s pid=%d ppid=%d caller_pid=%s caller=%s bytes=%d files=%s\n' `"`$(date -Iseconds)`" `$`$ `"`${PPID}`" `"`${JIM_SEED_CALLER_PID:-unset}`" '$callerInfo' '$totalBytes' '$destList' > /connector-files/.last-seed")
+
+    # Prepend header + mkdirs so provenance is captured even if a later cp fails,
+    # and directories exist before cp runs.
+    $fullScript = $headerScript.ToString() + $mkdirScript.ToString() + $shellScript.ToString()
+
+    $mountSpec = "${resolvedSourceDir}:/src:ro"
+    $volumeMount = 'jim-connector-files-volume:/connector-files'
+
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = 'docker'
+    $psi.ArgumentList.Add('run')
+    $psi.ArgumentList.Add('--rm')
+    # Expose the PowerShell PID to the shell so .last-seed records it — useful
+    # when multiple pwsh sessions could contend for the same volume.
+    $psi.ArgumentList.Add('-e')
+    $psi.ArgumentList.Add("JIM_SEED_CALLER_PID=$PID")
+    $psi.ArgumentList.Add('--user')
+    $psi.ArgumentList.Add('1654:1654')
+    $psi.ArgumentList.Add('-v')
+    $psi.ArgumentList.Add($volumeMount)
+    $psi.ArgumentList.Add('-v')
+    $psi.ArgumentList.Add($mountSpec)
+    $psi.ArgumentList.Add($script:ConnectorVolumeHelperImage)
+    $psi.ArgumentList.Add('sh')
+    $psi.ArgumentList.Add('-c')
+    $psi.ArgumentList.Add($fullScript)
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+
+    $proc = [System.Diagnostics.Process]::Start($psi)
+    try {
+        $stdout = $proc.StandardOutput.ReadToEnd()
+        $stderr = $proc.StandardError.ReadToEnd()
+        $proc.WaitForExit()
+        if ($proc.ExitCode -ne 0) {
+            $fileList = ($Files | ForEach-Object { $_.DestinationPath }) -join ', '
+            $hint = ''
+            if ($stderr -match 'Permission denied') {
+                $hint = " This usually means a destination file or its parent directory is owned by a UID other than 1654 (e.g. from a past 'docker cp' into the volume). Reset the volume with 'docker volume rm jim-connector-files-volume' after stopping jim.worker / jim.web, or chown the affected path from a root-privileged sidecar."
+            }
+            throw "docker run helper (image $script:ConnectorVolumeHelperImage) failed with exit code $($proc.ExitCode) while seeding [$fileList] from $callerInfo.$hint stderr: $stderr. stdout: $stdout"
+        }
+    }
+    finally {
+        $proc.Dispose()
+    }
+
+    # Post-seed size verification. Stat every destination inside the volume and
+    # compare against the host source size captured above. A mismatch here would
+    # mean the cp path did something weird (short read, silent partial write),
+    # or — if sizes match now but diverge later — that a subsequent out-of-band
+    # writer overwrote the file. Either way, fail fast and loudly so the hour-
+    # long sync downstream doesn't proceed on corrupted input.
+    $statPaths = ($Files | ForEach-Object { "'$($_.DestinationPath)'" }) -join ' '
+    $statScript = "for f in $statPaths; do printf '%s %s\n' `"`$f`" `"`$(stat -c '%s' `"`$f`")`"; done"
+    $statPsi = New-Object System.Diagnostics.ProcessStartInfo
+    $statPsi.FileName = 'docker'
+    $statPsi.ArgumentList.Add('run')
+    $statPsi.ArgumentList.Add('--rm')
+    $statPsi.ArgumentList.Add('--user')
+    $statPsi.ArgumentList.Add('1654:1654')
+    $statPsi.ArgumentList.Add('-v')
+    $statPsi.ArgumentList.Add($volumeMount)
+    $statPsi.ArgumentList.Add($script:ConnectorVolumeHelperImage)
+    $statPsi.ArgumentList.Add('sh')
+    $statPsi.ArgumentList.Add('-c')
+    $statPsi.ArgumentList.Add($statScript)
+    $statPsi.UseShellExecute = $false
+    $statPsi.RedirectStandardOutput = $true
+    $statPsi.RedirectStandardError = $true
+
+    $statProc = [System.Diagnostics.Process]::Start($statPsi)
+    try {
+        $statStdout = $statProc.StandardOutput.ReadToEnd()
+        $statStderr = $statProc.StandardError.ReadToEnd()
+        $statProc.WaitForExit()
+        if ($statProc.ExitCode -ne 0) {
+            throw "Post-seed verification failed: stat helper exited $($statProc.ExitCode). stderr: $statStderr. stdout: $statStdout. Caller: $callerInfo"
+        }
+
+        $mismatches = @()
+        foreach ($line in ($statStdout -split "`n")) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $parts = $line.Trim() -split '\s+', 2
+            if ($parts.Count -ne 2) { continue }
+            $path = $parts[0]
+            $actual = [int64]$parts[1]
+            $expected = $expectedSizes[$path]
+            if ($null -eq $expected) { continue }
+            if ($actual -ne $expected) {
+                $mismatches += "  ${path}: host=$expected bytes, volume=$actual bytes"
+            }
+        }
+
+        if ($mismatches.Count -gt 0) {
+            $details = $mismatches -join "`n"
+            throw @"
+Post-seed size verification detected corruption. Caller: $callerInfo
+Source dir: $resolvedSourceDir
+Mismatches:
+$details
+The File connector will read truncated data. Investigate the seed path (busybox cp
+failure, bind-mount issue) or any out-of-band writer to jim-connector-files-volume
+BEFORE re-running (root cause will recur on retry).
+"@
+        }
+    }
+    finally {
+        $statProc.Dispose()
+    }
+}
+
 function Write-FileToConnectorVolume {
     <#
     .SYNOPSIS
-        Stream a host file into /connector-files inside jim.worker with correct ownership.
+        Copy a single host file into /connector-files inside the shared volume with correct ownership.
 
     .DESCRIPTION
-        The only safe way to put a file into the shared jim-connector-files-volume for
-        testing is to stream it in through a non-root shell inside jim.worker so the
-        file lands owned by the worker's `app` user (UID 1654). We cannot use
-        `docker cp` — it preserves the host UID/GID, which leaves files the container
-        user can't overwrite when the File connector next exports.
-
-        This helper:
-          1. Verifies jim.worker is running.
-          2. Ensures the destination directory exists (owned by app:app).
-          3. Unlinks the destination file if present, then creates a fresh inode by
-             streaming the source via `docker exec -i -u app jim.worker sh -c 'cat > ...'`.
-
-        Use this anywhere a test needs to seed or refresh a file under /connector-files.
+        Thin wrapper around Write-FilesToConnectorVolume for call sites that only need to write
+        one file. See Write-FilesToConnectorVolume for the full design rationale.
 
     .PARAMETER SourcePath
         Host path to the file to copy in.
@@ -756,83 +1057,16 @@ function Write-FileToConnectorVolume {
         [string]$DestinationPath
     )
 
-    if (-not (Test-Path $SourcePath)) {
+    if (-not (Test-Path -Path $SourcePath -PathType Leaf)) {
         throw "Source file not found: $SourcePath"
     }
 
-    if (-not $DestinationPath.StartsWith('/')) {
-        throw "DestinationPath must be absolute (got '$DestinationPath')."
-    }
+    $sourceDir  = [System.IO.Path]::GetDirectoryName($SourcePath)
+    $sourceFile = [System.IO.Path]::GetFileName($SourcePath)
 
-    $containerRunning = docker ps --filter "name=jim.worker" --filter "status=running" --format "{{.Names}}" 2>$null
-    if ($containerRunning -ne "jim.worker") {
-        throw "jim.worker container is not running; cannot write $DestinationPath."
-    }
-
-    $destDir = [System.IO.Path]::GetDirectoryName($DestinationPath).Replace('\','/')
-    if ($destDir -and $destDir -ne '/') {
-        docker exec -u app jim.worker mkdir -p $destDir | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to create directory '$destDir' in jim.worker."
-        }
-    }
-
-    # Stream the file via docker exec stdin so the resulting file is owned by `app`.
-    # `rm -f` first guarantees a fresh inode even if a stale file with different
-    # ownership is already present (e.g. a customer or earlier test wrote through
-    # a different UID via `docker cp` or via the Samba/OpenLDAP side of the volume).
-    #
-    # Both steps use ArgumentList (no shell) so the path is passed verbatim and is
-    # safe against special characters (spaces, single quotes, etc.).
-
-    # Step 1: remove any stale file so tee always creates a fresh inode.
-    $rmPsi = New-Object System.Diagnostics.ProcessStartInfo
-    $rmPsi.FileName = "docker"
-    $rmPsi.ArgumentList.Add("exec")
-    $rmPsi.ArgumentList.Add("-u")
-    $rmPsi.ArgumentList.Add("app")
-    $rmPsi.ArgumentList.Add("jim.worker")
-    $rmPsi.ArgumentList.Add("rm")
-    $rmPsi.ArgumentList.Add("-f")
-    $rmPsi.ArgumentList.Add($DestinationPath)
-    $rmPsi.UseShellExecute = $false
-    $rmProc = [System.Diagnostics.Process]::Start($rmPsi)
-    $rmProc.WaitForExit()
-    $rmProc.Dispose()
-
-    # Step 2: stream file content via stdin into tee, which writes to the path directly.
-    $fileStream = [System.IO.File]::OpenRead($SourcePath)
-    try {
-        $psi = New-Object System.Diagnostics.ProcessStartInfo
-        $psi.FileName = "docker"
-        $psi.ArgumentList.Add("exec")
-        $psi.ArgumentList.Add("-i")
-        $psi.ArgumentList.Add("-u")
-        $psi.ArgumentList.Add("app")
-        $psi.ArgumentList.Add("jim.worker")
-        $psi.ArgumentList.Add("tee")
-        $psi.ArgumentList.Add($DestinationPath)
-        $psi.RedirectStandardInput = $true
-        $psi.RedirectStandardOutput = $true
-        $psi.UseShellExecute = $false
-
-        $proc = [System.Diagnostics.Process]::Start($psi)
-        try {
-            $fileStream.CopyTo($proc.StandardInput.BaseStream)
-            $proc.StandardInput.Close()
-            $proc.StandardOutput.ReadToEnd() | Out-Null
-            $proc.WaitForExit()
-            if ($proc.ExitCode -ne 0) {
-                throw "docker exec returned exit code $($proc.ExitCode) while writing $DestinationPath."
-            }
-        }
-        finally {
-            $proc.Dispose()
-        }
-    }
-    finally {
-        $fileStream.Dispose()
-    }
+    Write-FilesToConnectorVolume -SourceDir $sourceDir -Files @(
+        @{ SourceFile = $sourceFile; DestinationPath = $DestinationPath }
+    )
 }
 
 function Copy-CsvToConnectorFiles {
@@ -859,6 +1093,108 @@ function Copy-CsvToConnectorFiles {
     }
 
     Write-FileToConnectorVolume -SourcePath $SourcePath -DestinationPath "/connector-files/test-data/$DestinationName"
+}
+
+function Assert-ConnectorVolumeCsvParity {
+    <#
+    .SYNOPSIS
+        Verify volume CSV file sizes match host expectations; throw on divergence.
+
+    .DESCRIPTION
+        Defence-in-depth check meant to run immediately before a CSV-consuming run
+        profile fires. Write-FilesToConnectorVolume already verifies sizes at seed
+        time; this helper catches the narrower failure mode where the volume was
+        seeded correctly but something truncated the file between seed and read
+        (the 08:47:22 Scale100K incident we investigated).
+
+        On mismatch, throws with the container path, expected (host) size, and
+        actual (volume) size so the transcript captures exactly which file
+        diverged. Also reads /connector-files/.last-seed from the volume and
+        surfaces its contents — that file records the most recent seeder's PID,
+        caller, and payload, so the failure message points at the out-of-band
+        writer if one exists.
+
+    .PARAMETER Pairs
+        Array of hashtables each with HostPath (absolute host path to the file
+        we SHOULD be reading) and ContainerPath (absolute /connector-files path
+        inside the volume). All files listed are checked in a single docker exec.
+
+    .EXAMPLE
+        Assert-ConnectorVolumeCsvParity -Pairs @(
+            @{ HostPath = "$testDataPath/hr-users.csv";         ContainerPath = '/connector-files/test-data/hr-users.csv' }
+            @{ HostPath = "$testDataPath/training-records.csv"; ContainerPath = '/connector-files/test-data/training-records.csv' }
+        )
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable[]]$Pairs
+    )
+
+    if ($Pairs.Count -eq 0) { return }
+
+    foreach ($p in $Pairs) {
+        if (-not $p.HostPath -or -not $p.ContainerPath) {
+            throw "Assert-ConnectorVolumeCsvParity: each pair must have HostPath and ContainerPath."
+        }
+        if (-not (Test-Path -Path $p.HostPath -PathType Leaf)) {
+            throw "Assert-ConnectorVolumeCsvParity: host file not found: $($p.HostPath)"
+        }
+    }
+
+    # Build a single shell command that prints "<path> <size>" per container path.
+    # Running one docker exec is meaningfully cheaper than one per file when this
+    # helper is called before every CSV-consuming run profile.
+    $containerPaths = ($Pairs | ForEach-Object { "'$($_.ContainerPath)'" }) -join ' '
+    $statCmd = "for f in $containerPaths; do printf '%s %s\n' `"`$f`" `"`$(stat -c '%s' `"`$f`" 2>/dev/null || echo MISSING)`"; done"
+
+    $statOutput = & docker exec jim.worker sh -c $statCmd 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Assert-ConnectorVolumeCsvParity: docker exec jim.worker failed: $statOutput"
+    }
+
+    $actualByPath = @{}
+    foreach ($line in ($statOutput -split "`n")) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        $parts = $line.Trim() -split '\s+', 2
+        if ($parts.Count -ne 2) { continue }
+        $actualByPath[$parts[0]] = $parts[1]
+    }
+
+    $mismatches = @()
+    foreach ($p in $Pairs) {
+        $expected = (Get-Item -LiteralPath $p.HostPath).Length
+        $actualRaw = $actualByPath[$p.ContainerPath]
+        if ($null -eq $actualRaw -or $actualRaw -eq 'MISSING') {
+            $mismatches += "  $($p.ContainerPath): host=$expected bytes, volume=MISSING"
+            continue
+        }
+        $actual = [int64]$actualRaw
+        if ($actual -ne $expected) {
+            $mismatches += "  $($p.ContainerPath): host=$expected bytes, volume=$actual bytes"
+        }
+    }
+
+    if ($mismatches.Count -eq 0) { return }
+
+    # Divergence detected — grab the .last-seed breadcrumb and fail loudly.
+    $lastSeed = & docker exec jim.worker sh -c 'cat /connector-files/.last-seed 2>/dev/null || echo "(.last-seed not present)"' 2>&1
+    $details = $mismatches -join "`n"
+    throw @"
+Connector volume CSV parity check FAILED. One or more files have diverged from the
+host source between the most recent seed and this read. Do not proceed with the
+pending run profile — the File connector will read truncated or stale data.
+
+Mismatches:
+$details
+
+Most recent seed provenance (from /connector-files/.last-seed):
+  $lastSeed
+
+Next steps:
+  - Check for stray pwsh sessions / background jobs that might have issued another seed.
+  - Grep the scenario transcript for '[seed]' lines between the last good read and now.
+  - docker exec jim.worker ls -la /connector-files/test-data to see current file state.
+"@
 }
 
 function Write-ProgressBar {
@@ -2129,6 +2465,273 @@ function Stop-JimErrorWatcher {
 
     $lines = @(Get-Content -Path $Handle.SentinelPath -ErrorAction SilentlyContinue | Where-Object { $_ -ne '' })
     return $lines
+}
+
+function Start-ConnectorVolumeAuditor {
+    <#
+    .SYNOPSIS
+        Start an inotifywait sidecar that logs every write/create/delete/rename
+        to jim-connector-files-volume for the duration of a scenario.
+
+    .DESCRIPTION
+        Launches a detached alpine container that installs inotify-tools and
+        monitors /connector-files recursively. Every filesystem event is written
+        to a log on the host (via a bind-mounted results directory), giving us
+        an authoritative timeline of who wrote what to the volume and when.
+
+        This is the strongest probe for diagnosing out-of-band writers: unlike
+        transcript-based breadcrumbs, it captures events regardless of which
+        process (even non-JIM ones) performed the write. Paired with the
+        .last-seed breadcrumb in Write-FilesToConnectorVolume, the two together
+        can identify the caller for any unexpected mutation.
+
+        Overhead is negligible on typical scenario runs: inotify is kernel-side
+        and the sidecar only emits events when they occur. A Scale100K run with
+        ~4 CSV writes produces a handful of log lines.
+
+        Returns a handle for the companion Stop-ConnectorVolumeAuditor helper.
+        Safe to call when docker isn't available — returns $null in that case.
+
+    .PARAMETER LogPath
+        Absolute host path to the audit log file to write. Parent directory is
+        created if missing.
+
+    .OUTPUTS
+        PSCustomObject with ContainerName and LogPath, or $null if the sidecar
+        could not be started (no docker, or docker run failed).
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$LogPath
+    )
+
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        return $null
+    }
+
+    $logDir = Split-Path -Parent $LogPath
+    if ($logDir -and -not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+    }
+    # Pre-create the log file so the bind mount is a file (not a directory)
+    # inside the sidecar and so the first `tail -f` from a debugging operator
+    # doesn't trip on a missing path.
+    if (-not (Test-Path $LogPath)) {
+        New-Item -ItemType File -Path $LogPath -Force | Out-Null
+    }
+
+    $containerName = "jim-volume-audit-$([Guid]::NewGuid().ToString('N').Substring(0,8))"
+
+    # alpine + inotify-tools is ~10 MB pull on first use, cached thereafter.
+    # --init gives us a proper PID 1 so SIGTERM from `docker stop` reaches
+    # inotifywait cleanly. We chain `apk add` and `inotifywait` in one shell
+    # string and redirect output directly to the bind-mounted audit log —
+    # inotifywait line-buffers its output by default, so `tail -f` on the host
+    # updates live without needing stdbuf.
+    $monitorCmd = "apk add -q inotify-tools >/dev/null 2>&1 && " +
+                  "inotifywait -m -r -q " +
+                  "--timefmt '%FT%T%z' " +
+                  "--format '%T %e %w%f' " +
+                  "/watch >> /audit.log"
+
+    $runArgs = @(
+        'run', '-d', '--rm', '--init',
+        '--name', $containerName,
+        '-v', 'jim-connector-files-volume:/watch:ro',
+        '-v', "${LogPath}:/audit.log",
+        'alpine:3.20',
+        'sh', '-c', $monitorCmd
+    )
+
+    $startOutput = & docker @runArgs 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  (connector-volume audit sidecar failed to start: $startOutput)" -ForegroundColor DarkYellow
+        return $null
+    }
+
+    return [PSCustomObject]@{
+        ContainerName = $containerName
+        LogPath       = $LogPath
+    }
+}
+
+function Stop-ConnectorVolumeAuditor {
+    <#
+    .SYNOPSIS
+        Stop an inotifywait sidecar started by Start-ConnectorVolumeAuditor.
+
+    .DESCRIPTION
+        Best-effort cleanup: tries `docker stop` followed by `docker rm -f`.
+        Safe to call with $null (no-op); safe to call multiple times. Always
+        call from a `finally` block so the sidecar doesn't leak past the run.
+
+    .PARAMETER Handle
+        The handle returned by Start-ConnectorVolumeAuditor, or $null.
+
+    .OUTPUTS
+        Returns the number of audit log lines captured (0 if the log file is
+        empty or missing).
+    #>
+    param(
+        [Parameter(Mandatory=$false)]
+        $Handle
+    )
+
+    if ($null -eq $Handle) { return 0 }
+
+    # --time 2 caps the wait for graceful SIGTERM; force-kills if the process
+    # doesn't exit. This limits worst-case cleanup cost to ~2s per scenario.
+    docker stop --time 2 $Handle.ContainerName 2>&1 | Out-Null
+    docker rm -f $Handle.ContainerName 2>&1 | Out-Null
+
+    if (Test-Path $Handle.LogPath) {
+        $lineCount = @(Get-Content -Path $Handle.LogPath -ErrorAction SilentlyContinue).Count
+        return $lineCount
+    }
+    return 0
+}
+
+function Start-DockerEventsCapture {
+    <#
+    .SYNOPSIS
+        Stream `docker events` to a log file for the duration of a scenario.
+
+    .DESCRIPTION
+        Spawns `docker events` as a background process that writes every
+        container/image/volume lifecycle event to a host log. Essential for
+        retroactive diagnosis of throwaway containers (e.g. our busybox seed
+        helper, rogue `docker run` calls from other sessions) — `docker events`
+        is a live stream with no retention by default, so capturing it to disk
+        is the only way to see the history.
+
+        The format includes Time, Type, Action, image, and container name, which
+        is enough to identify the command that produced each event when
+        correlated with the .last-seed breadcrumb and the inotify audit log.
+
+    .PARAMETER LogPath
+        Absolute host path to write the events log to.
+
+    .OUTPUTS
+        System.Diagnostics.Process for the docker events stream, or $null on
+        failure.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$LogPath
+    )
+
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        return $null
+    }
+
+    $logDir = Split-Path -Parent $LogPath
+    if ($logDir -and -not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+    }
+
+    try {
+        # ProcessStartInfo + ArgumentList preserves argv boundaries on Linux
+        # pwsh; `Start-Process -ArgumentList` joins the array with spaces, which
+        # then retokenises the format string (its internal spaces cause docker
+        # to see the trailing words as positional args, not part of --format).
+        # We also want stdout flushed line-by-line so a live `tail -f` sees
+        # events as they happen — stdbuf -oL in front of docker forces that.
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = '/usr/bin/stdbuf'
+        $psi.ArgumentList.Add('-oL')
+        $psi.ArgumentList.Add('docker')
+        $psi.ArgumentList.Add('events')
+        $psi.ArgumentList.Add('--format')
+        $psi.ArgumentList.Add('{{.Time}} {{.Type}} {{.Action}} image={{.Actor.Attributes.image}} name={{.Actor.Attributes.name}}')
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.CreateNoWindow = $true
+
+        $process = [System.Diagnostics.Process]::Start($psi)
+
+        # Pump stdout/stderr to the log files on background threads so we don't
+        # block the parent and the pipe doesn't fill up.
+        $outStream = [System.IO.StreamWriter]::new($LogPath, $true)
+        $errStream = [System.IO.StreamWriter]::new("$LogPath.stderr", $true)
+        $outStream.AutoFlush = $true
+        $errStream.AutoFlush = $true
+
+        # Register handlers BEFORE BeginOutputReadLine so we don't race early lines.
+        $outStream | Add-Member -Name 'Proc' -MemberType NoteProperty -Value $process -Force
+        Register-ObjectEvent -InputObject $process -EventName OutputDataReceived -MessageData $outStream -Action {
+            if ($EventArgs.Data) { $Event.MessageData.WriteLine($EventArgs.Data) }
+        } | Out-Null
+        Register-ObjectEvent -InputObject $process -EventName ErrorDataReceived -MessageData $errStream -Action {
+            if ($EventArgs.Data) { $Event.MessageData.WriteLine($EventArgs.Data) }
+        } | Out-Null
+        $process.BeginOutputReadLine()
+        $process.BeginErrorReadLine()
+
+        # Tag the process with the streams so Stop-DockerEventsCapture can close them.
+        $process | Add-Member -Name 'OutStream' -MemberType NoteProperty -Value $outStream -Force
+        $process | Add-Member -Name 'ErrStream' -MemberType NoteProperty -Value $errStream -Force
+        return $process
+    }
+    catch {
+        Write-Host "  (docker events capture failed to start: $_)" -ForegroundColor DarkYellow
+        return $null
+    }
+}
+
+function Stop-DockerEventsCapture {
+    <#
+    .SYNOPSIS
+        Stop the docker events stream started by Start-DockerEventsCapture.
+
+    .DESCRIPTION
+        Kills the docker events process. Safe to call with $null or an already-
+        exited process; safe to call multiple times. Always call from a
+        `finally` block.
+
+    .PARAMETER Process
+        The process handle returned by Start-DockerEventsCapture, or $null.
+
+    .OUTPUTS
+        Returns the number of event lines captured (0 if missing).
+    #>
+    param(
+        [Parameter(Mandatory=$false)]
+        $Process,
+
+        [Parameter(Mandatory=$false)]
+        [string]$LogPath
+    )
+
+    if ($null -ne $Process -and -not $Process.HasExited) {
+        try {
+            Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
+        }
+        catch {
+            # Best effort; docker events sometimes exits on its own when the
+            # daemon restarts, in which case HasExited lies briefly.
+        }
+    }
+
+    # Close the stream writers so final buffered events flush to disk before
+    # we count lines. Guarded because a $null Process skipped them entirely.
+    if ($null -ne $Process) {
+        try {
+            $Process.WaitForExit(2000) | Out-Null
+        }
+        catch { }
+        foreach ($propName in 'OutStream', 'ErrStream') {
+            $s = $Process.PSObject.Properties[$propName]
+            if ($s -and $s.Value) {
+                try { $s.Value.Flush(); $s.Value.Dispose() } catch { }
+            }
+        }
+    }
+
+    if ($LogPath -and (Test-Path $LogPath)) {
+        return @(Get-Content -Path $LogPath -ErrorAction SilentlyContinue).Count
+    }
+    return 0
 }
 
 function Assert-NoWorkerErrors {
