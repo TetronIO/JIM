@@ -400,6 +400,19 @@ try {
         $testUser = New-TestUser -Index 1
         Write-Host "Testing joiner scenario with $($testUser.SamAccountName) and $((Get-TemplateScale -Template $Template).Users - 1) other users..." -ForegroundColor Gray
 
+        # Pair list reused for both parity checks in this step: once before the
+        # first CSV import (detects truncation between setup-seed and first read)
+        # and once before Training Full Import (the specific read that failed in
+        # the 08:47:22 Scale100K incident). See Assert-ConnectorVolumeCsvParity.
+        $csvParityPairs = @(
+            @{ HostPath = "$PSScriptRoot/../../test-data/hr-users.csv";         ContainerPath = '/connector-files/test-data/hr-users.csv' }
+            @{ HostPath = "$PSScriptRoot/../../test-data/training-records.csv"; ContainerPath = '/connector-files/test-data/training-records.csv' }
+            @{ HostPath = "$PSScriptRoot/../../test-data/departments.csv";      ContainerPath = '/connector-files/test-data/departments.csv' }
+        )
+
+        # Parity probe: confirm the volume still has the files we seeded at setup.
+        Assert-ConnectorVolumeCsvParity -Pairs $csvParityPairs
+
         # Trigger CSV Import
         Write-Host "Triggering CSV import..." -ForegroundColor Gray
         $importResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
@@ -445,6 +458,13 @@ try {
         if ($config.TrainingSystemId -and $config.TrainingImportProfileId -and $config.TrainingSyncProfileId) {
             Write-Host ""
             Write-Host "Establishing Training data baseline (joins to HR-created MVOs)..." -ForegroundColor Gray
+
+            # Parity probe: the 08:47:22 Scale100K incident truncated the volume
+            # CSVs between the HR sync and this import. Check again here so a
+            # recurrence fails with a clear error (naming the caller via
+            # .last-seed) rather than silently producing 3 training records.
+            Assert-ConnectorVolumeCsvParity -Pairs $csvParityPairs
+
             Write-Host "  Running Training Full Import..." -ForegroundColor DarkGray
             $trainingImportResult = Start-JIMRunProfile -ConnectedSystemId $config.TrainingSystemId -RunProfileId $config.TrainingImportProfileId -Wait -PassThru
             Assert-ActivitySuccess -ActivityId $trainingImportResult.activityId -Name "Training Full Import (Joiner)"
