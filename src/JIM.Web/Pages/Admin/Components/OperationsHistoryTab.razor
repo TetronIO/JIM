@@ -346,7 +346,7 @@
                         var percentage = (double)context.ObjectsProcessed / context.ObjectsToProcess * 100;
                         <MudStack Spacing="0" Style="width: 120px;">
                             <MudProgressLinear Value="@percentage" Color="Color.Info" Rounded="true" Size="Size.Small" />
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="white-space: nowrap;">@context.ObjectsProcessed.ToString("N0") / @context.ObjectsToProcess.ToString("N0")</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-3" Style="white-space: nowrap;">@context.ObjectsProcessed.ToString("N0") / @context.ObjectsToProcess.ToString("N0")</MudText>
                         </MudStack>
                     }
                     else
