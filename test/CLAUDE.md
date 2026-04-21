@@ -230,7 +230,20 @@ The map size is configured in `test/integration/docker/openldap/scripts/01-add-s
 
 ## CSV cache
 
-The three large, deterministic HR CSVs (`hr-users.csv`, `departments.csv`, `training-records.csv`) are cached by `test/integration/Get-OrGenerate-TestCSV.ps1`, which `Invoke-IntegrationTests.ps1` and `Run-IntegrationTests.ps1` call instead of invoking `Generate-TestCSV.ps1` directly. At Scale100K the cache turns ~100 s of CSV generation into a sub-second tar extraction.
+The three large, deterministic HR CSVs (`hr-users.csv`, `departments.csv`, `training-records.csv`) are cached by `test/integration/Get-OrGenerate-TestCSV.ps1`. At Scale100K the cache turns ~100 s of CSV generation into a sub-second tar extraction.
+
+**Callers that use the cache (templated by the caller, potentially large):**
+- `Invoke-IntegrationTests.ps1` (main runner, Step 3 populate)
+- `Run-IntegrationTests.ps1` (scenario orchestrator)
+- `scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1` (scenario-internal reset to baseline)
+- `scenarios/Invoke-Scenario7-ClearConnectedSystemObjects.ps1` (scenario-internal seed)
+
+**Callers that deliberately bypass the cache (call `Generate-TestCSV.ps1` directly):**
+- `scenarios/Invoke-Scenario4-DeletionRules.ps1` — hard-coded `Nano` template then overlays scenario-specific HR/Training CSVs from `scenarios/data/`. Caching would save negligible time (3 users) and the overlay would immediately replace the wrapper's output.
+- `scenarios/Invoke-Scenario5-MatchingRules.ps1` — hard-coded `Nano`, same overlay pattern as Scenario 4.
+- `scenarios/Invoke-Scenario6-SchedulerService.ps1` — hard-coded `Micro` (10 users); too small for caching to be worth the wrapper complexity.
+
+When adding a new scenario, ask: does it use `-Template $Template` with a potentially large template, and does it consume the generator's pristine output without further file-level tampering? If both yes, call `Get-OrGenerate-TestCSV.ps1`. Otherwise stick with `Generate-TestCSV.ps1` directly.
 
 **Cache location:** `test/integration/test-data/.cache/csv-<template>-<hash16>.tar` (gitignored).
 

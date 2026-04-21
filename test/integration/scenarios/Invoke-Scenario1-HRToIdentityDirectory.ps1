@@ -225,7 +225,7 @@ try {
     # NOTE: This is necessary even after database reset because CSV files persist
     # on the host filesystem and are mounted into containers.
     Write-Host "Resetting CSV test data to baseline..." -ForegroundColor Gray
-    & "$PSScriptRoot/../Generate-TestCSV.ps1" -Template $Template -OutputPath "$PSScriptRoot/../../test-data"
+    & "$PSScriptRoot/../Get-OrGenerate-TestCSV.ps1" -Template $Template -OutputPath "$PSScriptRoot/../../test-data"
     Write-Host "  ✓ CSV test data reset to baseline" -ForegroundColor Green
 
     # Clean up test-specific directory users from previous test runs
