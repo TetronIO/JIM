@@ -92,12 +92,20 @@ Write-Host "Cache file:  $archivePath" -ForegroundColor Gray
 
 $cacheHit = (-not $IgnoreCache) -and (-not $NoCache) -and (Test-Path $archivePath)
 
+# Status fields captured while we work; a single banner is printed at the end so
+# the outcome is always the most recent, high-visibility thing on screen.
+$status        = $null  # 'hit' | 'miss-write' | 'miss-nocache' | 'ignore-write' | 'ignore-nocache'
+$elapsedLabel  = $null  # what was timed ("restore" / "generate")
+$elapsedSeconds = $null
+
 if ($cacheHit) {
     Write-Host "Cache hit; restoring CSVs..." -ForegroundColor Green
     $restoreStart = Get-Date
     Restore-CsvsFromCache -ArchivePath $archivePath -OutputPath $resolvedOutputPath
-    $restoreSeconds = [math]::Round(((Get-Date) - $restoreStart).TotalSeconds, 2)
-    Write-Host "  ✓ Restored cached CSVs in ${restoreSeconds}s" -ForegroundColor Green
+    $elapsedSeconds = [math]::Round(((Get-Date) - $restoreStart).TotalSeconds, 2)
+    $elapsedLabel = "restore"
+    $status = 'hit'
+    Write-Host "  ✓ Restored cached CSVs in ${elapsedSeconds}s" -ForegroundColor Green
 }
 else {
     if ($IgnoreCache) {
@@ -110,20 +118,74 @@ else {
         Write-Host "Cache miss; generating..." -ForegroundColor Yellow
     }
 
+    $generateStart = Get-Date
     & "$scriptRoot/Generate-TestCSV.ps1" -Template $Template -OutputPath $resolvedOutputPath -SkipSeed
     # Generate-TestCSV.ps1 uses $ErrorActionPreference = "Stop"; a failure throws rather than
     # setting $LASTEXITCODE, so we don't check it here.
+    $elapsedSeconds = [math]::Round(((Get-Date) - $generateStart).TotalSeconds, 2)
+    $elapsedLabel = "generate"
 
-    if (-not $NoCache) {
+    if ($NoCache) {
+        $status = if ($IgnoreCache) { 'ignore-nocache' } else { 'miss-nocache' }
+    }
+    else {
         Write-Host "Archiving CSVs into cache..." -ForegroundColor Gray
         Save-CsvsToCache -ArchivePath $archivePath -OutputPath $resolvedOutputPath -Template $Template -Hash16 $hash16
         Write-Host "  ✓ Wrote $archivePath" -ForegroundColor Green
+        $status = if ($IgnoreCache) { 'ignore-write' } else { 'miss-write' }
     }
 }
 
 # Always regenerate cross-domain-users.csv fresh (not cached).
 $crossDomainPath = Invoke-CrossDomainTargetRegeneration -OutputPath $resolvedOutputPath
 Write-Host "  ✓ Wrote fresh $crossDomainPath (empty export target)" -ForegroundColor Green
+
+# ---------------------------------------------------------------------------
+# Cache status banner
+# ---------------------------------------------------------------------------
+# Printed before the connector-volume seeding step so that on a cache miss the
+# banner is not scrolled offscreen by Generate-TestCSV.ps1's ~50 lines of output,
+# and on any seeding failure the cache outcome is still visible above the error.
+
+$archiveSize = if (Test-Path $archivePath) {
+    $bytes = (Get-Item $archivePath).Length
+    if ($bytes -ge 1MB) { "{0:N1} MB" -f ($bytes / 1MB) }
+    elseif ($bytes -ge 1KB) { "{0:N1} KB" -f ($bytes / 1KB) }
+    else { "$bytes B" }
+}
+else { "(no archive)" }
+
+Write-Host ""
+switch ($status) {
+    'hit' {
+        Write-Host "===========================================" -ForegroundColor Green
+        Write-Host " CSV cache: HIT ($Template, $archiveSize, ${elapsedSeconds}s $elapsedLabel)" -ForegroundColor Green
+        Write-Host "===========================================" -ForegroundColor Green
+    }
+    'miss-write' {
+        Write-Host "===========================================" -ForegroundColor Yellow
+        Write-Host " CSV cache: MISS -> WROTE ($Template, $archiveSize, ${elapsedSeconds}s $elapsedLabel)" -ForegroundColor Yellow
+        Write-Host " Next run with this key will restore from cache." -ForegroundColor Gray
+        Write-Host "===========================================" -ForegroundColor Yellow
+    }
+    'miss-nocache' {
+        Write-Host "===========================================" -ForegroundColor Yellow
+        Write-Host " CSV cache: DISABLED (-NoCache, ${elapsedSeconds}s $elapsedLabel)" -ForegroundColor Yellow
+        Write-Host "===========================================" -ForegroundColor Yellow
+    }
+    'ignore-write' {
+        Write-Host "===========================================" -ForegroundColor Yellow
+        Write-Host " CSV cache: BYPASSED -> OVERWROTE (-IgnoreCache, $Template, $archiveSize, ${elapsedSeconds}s $elapsedLabel)" -ForegroundColor Yellow
+        Write-Host "===========================================" -ForegroundColor Yellow
+    }
+    'ignore-nocache' {
+        Write-Host "===========================================" -ForegroundColor Yellow
+        Write-Host " CSV cache: BYPASSED (-IgnoreCache -NoCache, ${elapsedSeconds}s $elapsedLabel)" -ForegroundColor Yellow
+        Write-Host "===========================================" -ForegroundColor Yellow
+    }
+}
+Write-Host "Cache file: $archivePath" -ForegroundColor Gray
+Write-Host ""
 
 # Always seed the connector-files volume (not cached).
 Invoke-ConnectorVolumeSeeding -OutputPath $resolvedOutputPath
