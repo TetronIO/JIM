@@ -452,11 +452,13 @@ else
     {
         if (context.Status == WorkerTaskStatus.Processing)
         {
-            if (context.ObjectsToProcess > 0)
+            if (context.ObjectsToProcess.HasValue && context.ObjectsToProcess.Value > 0 && context.ObjectsProcessed.HasValue)
             {
-                var percentage = (double)context.ObjectsProcessed!.Value / context.ObjectsToProcess.Value * 100;
+                var processed = context.ObjectsProcessed.Value;
+                var total = context.ObjectsToProcess.Value;
+                var percentage = (double)processed / total * 100;
                 <MudProgressLinear Value="@percentage" Color="Color.Info" Rounded="true" />
-                <MudText Typo="Typo.caption" Class="mt-3">@context.ObjectsProcessed.Value.ToString("N0") / @context.ObjectsToProcess.Value.ToString("N0")@(!string.IsNullOrEmpty(context.ProgressMessage) ? $" - {context.ProgressMessage}" : "")</MudText>
+                <MudText Typo="Typo.caption" Class="mt-3">@processed.ToString("N0") / @total.ToString("N0")@(!string.IsNullOrEmpty(context.ProgressMessage) ? $" - {context.ProgressMessage}" : "")</MudText>
             }
             else
             {
