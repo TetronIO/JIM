@@ -243,7 +243,7 @@ Do NOT reintroduce `Get-Date` into these code paths. If you add a new determinis
 
 **Not cached:** `cross-domain-users.csv`. It is a header-only export target that the File connector appends to during the test. The wrapper regenerates it fresh on every run (including cache hits) to avoid leaking state between runs.
 
-**Docker seeding runs every time.** The cache archive holds file contents only; the `jim-connector-files-volume` state is not cached. Both cache-hit and cache-miss paths call `Write-FileToConnectorVolume` to stream the four CSVs into `jim.worker` with correct ownership.
+**Docker seeding runs every time.** The cache archive holds file contents only; the `jim-connector-files-volume` state is not cached. Both cache-hit and cache-miss paths call `Write-FilesToConnectorVolume` (plural) to copy the four CSVs into the volume via a single rootless `docker run --user 1654:1654 busybox` that mounts the volume and the source directory. Files land owned by UID 1654 directly (no `chown` or `jim.worker` exec required), which is both faster and better aligned with the read-only rootfs hardening. Wall-clock is ~1 s for a full Scale100K-sized payload (~70 MB across four files). The legacy per-file `Write-FileToConnectorVolume` still exists as a thin wrapper for single-file callers.
 
 **Flags:**
 - `-IgnoreCache` — force regeneration and overwrite any existing cache entry

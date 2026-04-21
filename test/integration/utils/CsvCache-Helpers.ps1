@@ -91,11 +91,11 @@ function Invoke-CrossDomainTargetRegeneration {
 function Invoke-ConnectorVolumeSeeding {
     <#
     .SYNOPSIS
-        Stream all four CSVs into /connector-files inside jim.worker with correct ownership.
+        Copy all four CSVs into /connector-files inside the shared volume with correct ownership.
     .DESCRIPTION
         Kept in sync with the equivalent block in Generate-TestCSV.ps1 (step 5). The cache stores
         file contents only; the connector-files volume state is never cached, so this must run on
-        every invocation including cache hits. Assumes Write-FileToConnectorVolume is available
+        every invocation including cache hits. Assumes Write-FilesToConnectorVolume is available
         (imported from utils/Test-Helpers.ps1 by the caller).
     #>
     param(
@@ -103,11 +103,13 @@ function Invoke-ConnectorVolumeSeeding {
     )
 
     Write-TestStep "Seed" "Seeding files into jim-connector-files-volume"
-    Write-Host "  Streaming CSV files into jim.worker..." -ForegroundColor Gray
-    Write-FileToConnectorVolume -SourcePath (Join-Path $OutputPath "hr-users.csv")           -DestinationPath "/connector-files/test-data/hr-users.csv"
-    Write-FileToConnectorVolume -SourcePath (Join-Path $OutputPath "departments.csv")        -DestinationPath "/connector-files/test-data/departments.csv"
-    Write-FileToConnectorVolume -SourcePath (Join-Path $OutputPath "training-records.csv")   -DestinationPath "/connector-files/test-data/training-records.csv"
-    Write-FileToConnectorVolume -SourcePath (Join-Path $OutputPath "cross-domain-users.csv") -DestinationPath "/connector-files/test-data/cross-domain-users.csv"
+    Write-Host "  Copying CSV files into jim-connector-files-volume..." -ForegroundColor Gray
+    Write-FilesToConnectorVolume -SourceDir $OutputPath -Files @(
+        @{ SourceFile = 'hr-users.csv';            DestinationPath = '/connector-files/test-data/hr-users.csv' }
+        @{ SourceFile = 'departments.csv';         DestinationPath = '/connector-files/test-data/departments.csv' }
+        @{ SourceFile = 'training-records.csv';    DestinationPath = '/connector-files/test-data/training-records.csv' }
+        @{ SourceFile = 'cross-domain-users.csv';  DestinationPath = '/connector-files/test-data/cross-domain-users.csv' }
+    )
     Write-Host "  ✓ Files seeded into /connector-files/test-data (owned by app:app)" -ForegroundColor Green
 }
 

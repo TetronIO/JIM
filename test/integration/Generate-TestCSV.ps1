@@ -240,11 +240,13 @@ if ($SkipSeed) {
 else {
     Write-TestStep "Step 5" "Seeding files into jim-connector-files-volume"
 
-    Write-Host "  Streaming CSV files into jim.worker..." -ForegroundColor Gray
-    Write-FileToConnectorVolume -SourcePath $csvPath            -DestinationPath "/connector-files/test-data/hr-users.csv"
-    Write-FileToConnectorVolume -SourcePath $deptCsvPath        -DestinationPath "/connector-files/test-data/departments.csv"
-    Write-FileToConnectorVolume -SourcePath $trainingCsvPath    -DestinationPath "/connector-files/test-data/training-records.csv"
-    Write-FileToConnectorVolume -SourcePath $crossDomainCsvPath -DestinationPath "/connector-files/test-data/cross-domain-users.csv"
+    Write-Host "  Copying CSV files into jim-connector-files-volume..." -ForegroundColor Gray
+    Write-FilesToConnectorVolume -SourceDir $OutputPath -Files @(
+        @{ SourceFile = 'hr-users.csv';            DestinationPath = '/connector-files/test-data/hr-users.csv' }
+        @{ SourceFile = 'departments.csv';         DestinationPath = '/connector-files/test-data/departments.csv' }
+        @{ SourceFile = 'training-records.csv';    DestinationPath = '/connector-files/test-data/training-records.csv' }
+        @{ SourceFile = 'cross-domain-users.csv';  DestinationPath = '/connector-files/test-data/cross-domain-users.csv' }
+    )
 
     Write-Host "  ✓ Files seeded into /connector-files/test-data (owned by app:app)" -ForegroundColor Green
 }

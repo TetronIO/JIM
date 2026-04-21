@@ -724,25 +724,166 @@ function Get-RandomSubset {
 
 # Progress bar functions for visual feedback during long operations
 
+$script:ConnectorVolumeHelperImage = 'busybox:1.37.0'
+
+function Write-FilesToConnectorVolume {
+    <#
+    .SYNOPSIS
+        Copy one or more host files into the jim-connector-files-volume in a single rootless docker run.
+
+    .DESCRIPTION
+        Mounts the shared jim-connector-files-volume and the host source directory into a throwaway
+        busybox container running as UID 1654, then copies the requested files in one shot. Files
+        land owned by UID 1654 (the `app` user in jim.worker) because that is the UID doing the
+        writes; no `chown` and no root is required in the pipeline.
+
+        This replaces the per-file `docker exec -i -u app jim.worker tee ...` streaming pattern.
+        For bulk seeding (e.g. the four CSVs in Step 5 of the integration harness) this cuts
+        Scale100K Step 5 from ~15-25 s to ~1-3 s by eliminating the per-file docker exec round-
+        trips and the PowerShell-pipe-over-stdin transfer.
+
+        Correctness notes:
+          - Each destination is removed via `rm -f` before the copy. Busybox `cp` overwrites
+            contents in place rather than unlinking, so `rm -f` preserves the fresh-inode
+            guarantee of the old implementation (defends against stale files owned by a
+            different UID written e.g. via Samba/OpenLDAP).
+          - Destination paths are passed through a generated shell script, not as `docker run`
+            argv, so paths with spaces or special characters are safe provided they do not
+            contain single quotes. CSV filenames never do.
+          - The host source directory is bind-mounted read-only.
+
+    .PARAMETER SourceDir
+        Host directory containing all source files. Bind-mounted read-only into the helper
+        container at /src.
+
+    .PARAMETER Files
+        Array of hashtables, each with:
+          - SourceFile: filename (not path) inside $SourceDir
+          - DestinationPath: absolute path inside the container volume, e.g.
+            /connector-files/test-data/hr-users.csv
+
+    .EXAMPLE
+        Write-FilesToConnectorVolume -SourceDir $outputPath -Files @(
+            @{ SourceFile = 'hr-users.csv';    DestinationPath = '/connector-files/test-data/hr-users.csv' }
+            @{ SourceFile = 'departments.csv'; DestinationPath = '/connector-files/test-data/departments.csv' }
+        )
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$SourceDir,
+
+        [Parameter(Mandatory=$true)]
+        [hashtable[]]$Files
+    )
+
+    if (-not (Test-Path -Path $SourceDir -PathType Container)) {
+        throw "Source directory not found: $SourceDir"
+    }
+
+    if ($Files.Count -eq 0) {
+        throw "Write-FilesToConnectorVolume called with no files."
+    }
+
+    $resolvedSourceDir = (Resolve-Path -Path $SourceDir).Path
+    if ([System.IO.Path]::DirectorySeparatorChar -eq '\') {
+        $resolvedSourceDir = $resolvedSourceDir.Replace('\','/')
+    }
+
+    $destDirs = [System.Collections.Generic.HashSet[string]]::new()
+    $script = [System.Text.StringBuilder]::new()
+    $null = $script.AppendLine('set -e')
+
+    foreach ($entry in $Files) {
+        $sourceFile = [string]$entry.SourceFile
+        $destPath   = [string]$entry.DestinationPath
+
+        if (-not $sourceFile) {
+            throw "Write-FilesToConnectorVolume: entry is missing SourceFile."
+        }
+        if (-not $destPath) {
+            throw "Write-FilesToConnectorVolume: entry is missing DestinationPath."
+        }
+        if (-not $destPath.StartsWith('/')) {
+            throw "DestinationPath must be absolute (got '$destPath')."
+        }
+        if ($sourceFile -match '[\\/]') {
+            throw "SourceFile must be a filename, not a path (got '$sourceFile'). Set SourceDir to the containing directory."
+        }
+        if ($sourceFile -match "'" -or $destPath -match "'") {
+            throw "Write-FilesToConnectorVolume does not support paths containing single quotes."
+        }
+        if (-not (Test-Path -Path (Join-Path $resolvedSourceDir $sourceFile) -PathType Leaf)) {
+            throw "Source file not found: $(Join-Path $resolvedSourceDir $sourceFile)"
+        }
+
+        $destDir = [System.IO.Path]::GetDirectoryName($destPath).Replace('\','/')
+        if ($destDir -and $destDir -ne '/') {
+            $null = $destDirs.Add($destDir)
+        }
+
+        # rm -f guarantees a fresh inode even if a stale file owned by a different
+        # UID is already at the destination (e.g. from a previous run or a parallel
+        # Samba/OpenLDAP write path). cp --remove-destination would be tidier but
+        # busybox cp doesn't ship that flag; the explicit rm is portable.
+        $null = $script.AppendLine("rm -f '$destPath'")
+        $null = $script.AppendLine("cp '/src/$sourceFile' '$destPath'")
+    }
+
+    $mkdirScript = [System.Text.StringBuilder]::new()
+    foreach ($d in $destDirs) {
+        $null = $mkdirScript.AppendLine("mkdir -p '$d'")
+    }
+    # Prepend mkdirs so the directories exist before cp runs.
+    $fullScript = $mkdirScript.ToString() + $script.ToString()
+
+    $mountSpec = "${resolvedSourceDir}:/src:ro"
+    $volumeMount = 'jim-connector-files-volume:/connector-files'
+
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = 'docker'
+    $psi.ArgumentList.Add('run')
+    $psi.ArgumentList.Add('--rm')
+    $psi.ArgumentList.Add('--user')
+    $psi.ArgumentList.Add('1654:1654')
+    $psi.ArgumentList.Add('-v')
+    $psi.ArgumentList.Add($volumeMount)
+    $psi.ArgumentList.Add('-v')
+    $psi.ArgumentList.Add($mountSpec)
+    $psi.ArgumentList.Add($script:ConnectorVolumeHelperImage)
+    $psi.ArgumentList.Add('sh')
+    $psi.ArgumentList.Add('-c')
+    $psi.ArgumentList.Add($fullScript)
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+
+    $proc = [System.Diagnostics.Process]::Start($psi)
+    try {
+        $stdout = $proc.StandardOutput.ReadToEnd()
+        $stderr = $proc.StandardError.ReadToEnd()
+        $proc.WaitForExit()
+        if ($proc.ExitCode -ne 0) {
+            $fileList = ($Files | ForEach-Object { $_.DestinationPath }) -join ', '
+            $hint = ''
+            if ($stderr -match 'Permission denied') {
+                $hint = " This usually means a destination file or its parent directory is owned by a UID other than 1654 (e.g. from a past 'docker cp' into the volume). Reset the volume with 'docker volume rm jim-connector-files-volume' after stopping jim.worker / jim.web, or chown the affected path from a root-privileged sidecar."
+            }
+            throw "docker run helper (image $script:ConnectorVolumeHelperImage) failed with exit code $($proc.ExitCode) while seeding [$fileList].$hint stderr: $stderr. stdout: $stdout"
+        }
+    }
+    finally {
+        $proc.Dispose()
+    }
+}
+
 function Write-FileToConnectorVolume {
     <#
     .SYNOPSIS
-        Stream a host file into /connector-files inside jim.worker with correct ownership.
+        Copy a single host file into /connector-files inside the shared volume with correct ownership.
 
     .DESCRIPTION
-        The only safe way to put a file into the shared jim-connector-files-volume for
-        testing is to stream it in through a non-root shell inside jim.worker so the
-        file lands owned by the worker's `app` user (UID 1654). We cannot use
-        `docker cp` — it preserves the host UID/GID, which leaves files the container
-        user can't overwrite when the File connector next exports.
-
-        This helper:
-          1. Verifies jim.worker is running.
-          2. Ensures the destination directory exists (owned by app:app).
-          3. Unlinks the destination file if present, then creates a fresh inode by
-             streaming the source via `docker exec -i -u app jim.worker sh -c 'cat > ...'`.
-
-        Use this anywhere a test needs to seed or refresh a file under /connector-files.
+        Thin wrapper around Write-FilesToConnectorVolume for call sites that only need to write
+        one file. See Write-FilesToConnectorVolume for the full design rationale.
 
     .PARAMETER SourcePath
         Host path to the file to copy in.
@@ -762,83 +903,16 @@ function Write-FileToConnectorVolume {
         [string]$DestinationPath
     )
 
-    if (-not (Test-Path $SourcePath)) {
+    if (-not (Test-Path -Path $SourcePath -PathType Leaf)) {
         throw "Source file not found: $SourcePath"
     }
 
-    if (-not $DestinationPath.StartsWith('/')) {
-        throw "DestinationPath must be absolute (got '$DestinationPath')."
-    }
+    $sourceDir  = [System.IO.Path]::GetDirectoryName($SourcePath)
+    $sourceFile = [System.IO.Path]::GetFileName($SourcePath)
 
-    $containerRunning = docker ps --filter "name=jim.worker" --filter "status=running" --format "{{.Names}}" 2>$null
-    if ($containerRunning -ne "jim.worker") {
-        throw "jim.worker container is not running; cannot write $DestinationPath."
-    }
-
-    $destDir = [System.IO.Path]::GetDirectoryName($DestinationPath).Replace('\','/')
-    if ($destDir -and $destDir -ne '/') {
-        docker exec -u app jim.worker mkdir -p $destDir | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to create directory '$destDir' in jim.worker."
-        }
-    }
-
-    # Stream the file via docker exec stdin so the resulting file is owned by `app`.
-    # `rm -f` first guarantees a fresh inode even if a stale file with different
-    # ownership is already present (e.g. a customer or earlier test wrote through
-    # a different UID via `docker cp` or via the Samba/OpenLDAP side of the volume).
-    #
-    # Both steps use ArgumentList (no shell) so the path is passed verbatim and is
-    # safe against special characters (spaces, single quotes, etc.).
-
-    # Step 1: remove any stale file so tee always creates a fresh inode.
-    $rmPsi = New-Object System.Diagnostics.ProcessStartInfo
-    $rmPsi.FileName = "docker"
-    $rmPsi.ArgumentList.Add("exec")
-    $rmPsi.ArgumentList.Add("-u")
-    $rmPsi.ArgumentList.Add("app")
-    $rmPsi.ArgumentList.Add("jim.worker")
-    $rmPsi.ArgumentList.Add("rm")
-    $rmPsi.ArgumentList.Add("-f")
-    $rmPsi.ArgumentList.Add($DestinationPath)
-    $rmPsi.UseShellExecute = $false
-    $rmProc = [System.Diagnostics.Process]::Start($rmPsi)
-    $rmProc.WaitForExit()
-    $rmProc.Dispose()
-
-    # Step 2: stream file content via stdin into tee, which writes to the path directly.
-    $fileStream = [System.IO.File]::OpenRead($SourcePath)
-    try {
-        $psi = New-Object System.Diagnostics.ProcessStartInfo
-        $psi.FileName = "docker"
-        $psi.ArgumentList.Add("exec")
-        $psi.ArgumentList.Add("-i")
-        $psi.ArgumentList.Add("-u")
-        $psi.ArgumentList.Add("app")
-        $psi.ArgumentList.Add("jim.worker")
-        $psi.ArgumentList.Add("tee")
-        $psi.ArgumentList.Add($DestinationPath)
-        $psi.RedirectStandardInput = $true
-        $psi.RedirectStandardOutput = $true
-        $psi.UseShellExecute = $false
-
-        $proc = [System.Diagnostics.Process]::Start($psi)
-        try {
-            $fileStream.CopyTo($proc.StandardInput.BaseStream)
-            $proc.StandardInput.Close()
-            $proc.StandardOutput.ReadToEnd() | Out-Null
-            $proc.WaitForExit()
-            if ($proc.ExitCode -ne 0) {
-                throw "docker exec returned exit code $($proc.ExitCode) while writing $DestinationPath."
-            }
-        }
-        finally {
-            $proc.Dispose()
-        }
-    }
-    finally {
-        $fileStream.Dispose()
-    }
+    Write-FilesToConnectorVolume -SourceDir $sourceDir -Files @(
+        @{ SourceFile = $sourceFile; DestinationPath = $DestinationPath }
+    )
 }
 
 function Copy-CsvToConnectorFiles {
