@@ -309,8 +309,9 @@ public class ExportExecutionServer
             await ExecuteUsingCallsWithBatchingAsync(connectedSystem, callsConnector, result, options,
                 cancellationToken, progressCallback, connectorFactory, repositoryFactory, batchCompletedCallback);
         }
-        // Check if connector supports export using files — still loads all exports upfront
-        // (file-based connectors write all data in one pass so batch-loading doesn't help)
+        // File-based connectors load all pending exports upfront because the connector writes the
+        // full output file in a single pass. Batching the DB load would only help if the write
+        // strategy also streamed; see issue #633 for that follow-up.
         else if (connector is IConnectorExportUsingFiles filesConnector)
         {
             var pendingExports = await GetExecutableExportsAsync(connectedSystem.Id);
