@@ -4,9 +4,9 @@
 >
 > **Repository**: https://github.com/TetronIO/JIM
 >
-> **Document Version**: 1.6
+> **Document Version**: 1.7
 >
-> **Last Updated**: 2026-04-10
+> **Last Updated**: 2026-04-22
 >
 > **Note**: This is a snapshot. For current implementation details, check the repository or ask the user to provide updated code/docs.
 
@@ -24,7 +24,7 @@
 | **Auth** | OpenID Connect (OIDC) with PKCE |
 | **Deployment** | Docker containers, air-gapped capable |
 | **License** | Source-available (free non-production, commercial for production) |
-| **Status** | Active development, v0.9.0 released |
+| **Status** | Active development, v0.10.0 released |
 | **Language** | British English (en-GB) for all text |
 
 ---
@@ -274,7 +274,7 @@ FormatDateTime(hireDate, "yyyy-MM-dd")
 
 ### Key Endpoints (v1)
 
-14 API controllers with 120 endpoints. Key examples:
+17 API controllers. Key examples:
 
 | Endpoint | Purpose |
 |----------|---------|
@@ -295,7 +295,7 @@ Full interactive Scalar API reference available at `/api/reference` in all envir
 
 ### PowerShell Module
 
-78 cmdlets for automation:
+93 cmdlets for automation:
 
 ```powershell
 # Connect interactively (opens browser for SSO)
@@ -355,10 +355,10 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 - ✅ Scheduler service with cron/interval triggers and multi-step execution
 - ✅ Admin UI (operations, config, monitoring)
 - ✅ Dashboard home page with system overview
-- ✅ API with JWT and API key auth (14 controllers, 120 endpoints)
-- ✅ PowerShell module (78 cmdlets)
+- ✅ API with JWT and API key auth (17 controllers)
+- ✅ PowerShell module (93 cmdlets)
 - ✅ Docker deployment with air-gapped bundles
-- ✅ Integration testing framework (7 scenarios)
+- ✅ Integration testing framework (8 scenarios, Scenarios 1-2 and 4-9)
 - ✅ Credential encryption
 - ✅ Change history/audit with timeline UI and deleted objects view
 - ✅ Real-time progress indication on Operations page
@@ -381,6 +381,27 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 - ✅ **MVA to SVA Flow** (#435) - Attribute flow support for multi-valued to single-valued attribute mappings
 - ✅ **Case-Insensitive Expression Lookups** (#341) - Expression attribute lookups are now case-insensitive, matching expected behaviour
 - ✅ **PE Reconciliation for All Data Types** (#263) - Pending export reconciliation extended to cover all attribute data types
+
+### Recent Enhancements (v0.10.0)
+
+- ✅ **Service Identity** (#583) - Service Name and Service ID for distinguishing JIM instances; appears in sidebar, tab title, footer; Service ID is an immutable GUID
+- ✅ **Role Membership Management** (#467) - REST API and PowerShell cmdlets (`Get/Add/Remove-JIMRoleMember`, `Get-JIMMetaverseObjectRole`) with lockout safety checks
+- ✅ **Predefined Searches Toggle** (#555) - Enable/disable Predefined Searches without deletion; disabled searches hidden from portal, search API, and sidebar navigation
+- ✅ **System Endpoint Cmdlets** (#468) - `Get-JIMHealth`, `Get-JIMVersion`, `Get-JIMAuthConfig`, `Get-JIMUserInfo` with health/version/auth config callable without `Connect-JIM`
+- ✅ **Public API Reference** - Interactive Scalar API reference available at `/api/reference` in every environment (including air-gapped); public snapshot hosted at tetronio.github.io/JIM/api/reference/
+- ✅ **Build-Time OpenAPI Generation** - OpenAPI document pre-generated at Docker build time for instant Scalar load with zero runtime overhead
+- ✅ **Count API Endpoints** (#154) - New count endpoints for metaverse objects, connector space, and pending exports
+- ✅ **OIDC Sign-Out** (#49) - Sign out with the identity provider, gated by `SSOEnableLogOut` service setting; new user menu with sign-out in navigation drawer
+- ✅ **EF Core AsNoTracking by Default** (#484) - All queries now default to AsNoTracking; write paths opt in via `withChangeTracking` parameter
+- ✅ **GetConnectedSystemCoreAsync** (#494) - Lightweight connected system retrieval and flat container tree loading replacing the previous 11-level Include chain
+- ✅ **Nested Container Hierarchy** (#586) - Partition hierarchy API now returns the full nested container tree so administrators can select nested OUs
+- ✅ **Partition Validation Diagnostics** (#564) - Validation errors now pinpoint the exact gap (hierarchy not imported, no partitions selected, or selected partitions have no container selected) and name the partition involved
+- ✅ **OWASP Top 10:2025 Assessment** (#500) - Full assessment completed with targeted remediation plan
+- ✅ **Supply Chain Hardening** - Docker base image digests pinned (#520), GitHub Actions pinned by SHA (#517), main branch protection with required status checks (#521), signed commits enforced
+- ✅ **Sync Integrity Overhaul** - Cross-page reference resolution merges into existing RPEIs, CSO/MVO change records persist during RPEI flush, graph traversal fixes across sync/worker paths
+- ✅ **File Connector Named Volume** - Docker named volume `jim-connector-files-volume` at `/connector-files` replaces the previous `/var/connector-files` bind mount, so default deployments get working File Connector exports out of the box
+- ✅ **Integration Test Metrics Streaming** (#476) - Automated metrics streaming to central tracking system with Grafana dashboards and host fingerprinting for fair cross-environment comparison
+- ✅ **Clear Connected System Stats** (#74) - Clear Connected System activity tracks and displays removal statistics
 
 ### Recent Enhancements (v0.9.0)
 

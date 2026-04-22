@@ -40,6 +40,7 @@ Service Settings control runtime behaviour for JIM, such as SSO configuration, s
 
 | Category | Description |
 |----------|-------------|
+| `Instance` | Service identity settings (name, ID) for distinguishing JIM deployments |
 | `SSO` | Single sign-on and authentication settings |
 | `Synchronisation` | Sync pipeline and change tracking settings |
 | `Maintenance` | Maintenance mode and system health settings |

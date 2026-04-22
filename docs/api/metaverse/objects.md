@@ -260,6 +260,49 @@ Returns `200 OK` with a paginated list. Each item includes `displayName` (always
 
 ---
 
+## Count Objects
+
+Returns the number of metaverse objects matching the supplied filters. Useful for dashboards, automation decisions, and confirming search results before paging through them.
+
+```
+GET /api/v1/metaverse/objects/count
+```
+
+### Query Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `objectTypeId` | integer | Optional. Restrict the count to a single object type. |
+| `search` | string | Optional. Free-text search term matched against the cached display name (case-insensitive). |
+| `filterAttributeName` | string | Optional. Attribute name to filter on (exact match, case-insensitive). Must be paired with `filterAttributeValue`. |
+| `filterAttributeValue` | string | Optional. Attribute value to filter on (exact match, case-insensitive). Must be paired with `filterAttributeName`. |
+
+### Examples
+
+```bash title="curl"
+curl -X GET "https://jim.example.com/api/v1/metaverse/objects/count?objectTypeId=1" \
+  -H "Authorization: Bearer <token>"
+```
+
+### Response
+
+Returns an integer representing the match count:
+
+```json
+42
+```
+
+### Errors
+
+| Code | Description |
+|------|-------------|
+| `401` | Authentication required |
+
+!!! note "PowerShell coverage"
+    A dedicated PowerShell cmdlet for this endpoint is tracked as a future enhancement.
+
+---
+
 ## Retrieve an Object
 
 Returns the full details of a metaverse object, including all attribute values and linked connector space objects.

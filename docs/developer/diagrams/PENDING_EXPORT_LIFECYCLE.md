@@ -1,6 +1,6 @@
 # Pending Export Lifecycle
 
-> Last updated: 2026-04-02, JIM v0.8.1
+> Last updated: 2026-04-22, JIM v0.10.0
 
 This diagram shows the full lifecycle of a Pending Export from creation during synchronisation, through export execution, to confirmation during a confirming import. Pending Exports are the mechanism by which JIM propagates changes from the metaverse to target connected systems.
 

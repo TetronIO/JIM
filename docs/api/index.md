@@ -168,16 +168,15 @@ Some long-running operations (schema import, run profile execution, connected sy
 
 ## Interactive Documentation
 
-JIM includes a [Scalar](https://scalar.com/) API reference for interactive API exploration:
+JIM includes a [Scalar](https://scalar.com/) API reference for interactive API exploration, available in every environment (development, production, and air-gapped) at:
 
 ```
 https://jim.example.com/api/reference
 ```
 
-The Scalar API reference provides a browsable list of all endpoints, request/response schemas, and the ability to execute API calls directly from the browser. The underlying OpenAPI specification is available at `/api/openapi/v1.json` for client code generation.
+The Scalar API reference provides a browsable list of all endpoints, request/response schemas, and the ability to execute API calls directly from the browser. The underlying OpenAPI specification is available at `/api/openapi/v1.json` for client code generation. The OpenAPI document is pre-generated at build time, so the reference loads instantly with no runtime overhead.
 
-!!! note
-    The interactive API reference is only enabled in development environments. Production deployments do not expose `/api/reference` or the OpenAPI JSON spec, to reduce the attack surface.
+A public snapshot of the reference (matching the currently-published JIM release) is also hosted on the documentation site at [tetronio.github.io/JIM/api/reference/](https://tetronio.github.io/JIM/api/reference/) for exploring the API without a running JIM instance.
 
 !!! tip
     Use this reference documentation for understanding how the API works and building integrations. Use the Scalar API reference when you need to quickly test an endpoint or generate a client library.

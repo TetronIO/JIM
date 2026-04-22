@@ -42,6 +42,7 @@ The Metaverse is JIM's central identity store. It contains object types (schema 
 |--------|------|-------------|
 | `GET` | [`/api/v1/metaverse/objects`](objects.md) | List objects |
 | `GET` | [`/api/v1/metaverse/objects/search/{predefinedSearchUri}`](objects.md#search-objects) | Search objects using a predefined search |
+| `GET` | [`/api/v1/metaverse/objects/count`](objects.md#count-objects) | Count objects matching a filter |
 | `GET` | [`/api/v1/metaverse/objects/{id}`](objects.md#retrieve-an-object) | Retrieve an object with attributes and connectors |
 
 ### Pending Deletions

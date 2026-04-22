@@ -75,14 +75,14 @@ Detailed Mermaid diagrams document the runtime behaviour of JIM's synchronisatio
 
 ### Core Technologies (Required)
 - **.NET 10.0**: All projects target `net10.0`
-- **C# 13**: Language features, nullable reference types enabled
+- **C# 14**: Language features, nullable reference types enabled
 - **ASP.NET Core**: Web framework for Blazor and API
 - **Entity Framework Core 10.0**: ORM for data persistence
 - **PostgreSQL 18**: Primary database (via Npgsql)
 
 ### UI & Frontend
 - **Blazor Server**: Interactive web UI with SignalR
-- **MudBlazor 8.x**: Material Design component library
+- **MudBlazor 9.x**: Material Design component library
 - **Razor Pages**: Server-side rendering
 
 ### Authentication & Security
@@ -204,9 +204,11 @@ For full details and connector-specific guidance, see [`docs/plans/doing/GUID_UU
 > JIM is deployed in production environments. EF Core tracks applied migrations by name in the `__EFMigrationsHistory` table. If existing migrations are removed and replaced with a new combined migration, EF will not recognise it as already applied, will attempt to re-create all tables, and **will fail on every deployed instance**. Migrations are append-only; once committed to `main`, they are permanent. The only permitted operations are adding new migrations and, in rare cases, reverting the most recent migration on a feature branch before merge.
 
 **Performance**:
-- Use `.AsNoTracking()` for read-only queries
+- All EF Core queries default to `AsNoTracking`; `QueryTrackingBehavior.NoTracking` is configured on the shared `JimDbContext`. Read-only paths are fast and allocation-light without any per-query `.AsNoTracking()` call (#484).
+- Write paths must explicitly opt in to change tracking via the `withChangeTracking: true` parameter on repository read methods, or by using `AsTracking()` on the underlying query. The worker and sync engine rely on this; forgetting to opt in on a write path results in entities not being persisted.
 - Batch operations where possible
 - Index frequently queried columns
+- For high-throughput worker hot paths (per-page flushes, cross-page resolution, bulk inserts), prefer raw Npgsql over EF Core projection. See [`src/CLAUDE.md`](../src/CLAUDE.md) under "Worker Hot Path - Raw SQL Over EF Projection".
 
 ### 4. Dependency Injection
 
@@ -809,7 +811,7 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 | URL | Description |
 |-----|-------------|
 | `http://localhost:5200` | JIM Web UI |
-| `http://localhost:5200/api/reference` | Scalar API reference (development only) |
+| `http://localhost:5200/api/reference` | Scalar API reference (available in every environment) |
 | `http://localhost:5200/dev/error-pages` | Error page preview (Development only) |
 | `http://localhost:8181` | Keycloak admin console (`admin` / `admin`) |
 
@@ -1349,7 +1351,7 @@ Invoke-JIMApiRequest -Method Delete -Endpoint "api/v1/connected-systems/$id"
 2. Use DTOs for request/response (in `src/JIM.Web/Models/Api/`)
 3. Add XML comments for OpenAPI documentation
 4. Add authorisation attributes if needed
-5. Test via the Scalar API reference at `/api/reference` (development only)
+5. Test via the Scalar API reference at `/api/reference` (available in every environment)
 
 ### Modifying Database Schema
 1. Update entity classes in `src/JIM.Models/Models/`
@@ -1423,6 +1425,6 @@ Invoke-JIMApiRequest -Method Delete -Endpoint "api/v1/connected-systems/$id"
 
 ---
 
-**Last Updated**: 2026-02-09
-**Version**: 1.4
-**Applies to**: JIM v1.x (NET 10.0)
+**Last Updated**: 2026-04-22
+**Version**: 1.5
+**Applies to**: JIM v0.10.x (NET 10.0)

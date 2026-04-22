@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Version** | 1.2 |
-| **Last Updated** | 2026-04-10 |
+| **Version** | 1.3 |
+| **Last Updated** | 2026-04-22 |
 | **Status** | Active |
 
 ---
@@ -33,6 +33,7 @@ The frameworks and standards covered include those commonly required by:
 | CISA Secure by Design | US/International | All | Aligned - embedded in CLAUDE.md |
 | Cyber Essentials / CE Plus | UK | Government | Supported - deployment guidance addresses required controls |
 | OWASP ASVS v4.0 | International | All | Aligned - development guidelines reference |
+| OWASP Top 10:2025 | International | All | Assessed - see assessment document below |
 | NIST SP 800-53 Rev 5 | US | Federal | Mapped - see control families below |
 | NIST SP 800-171 Rev 2 | US | Defence (CUI) | Aligned - relevant controls addressed |
 | NIST CSF 2.0 | US/International | All | Mapped - see functions below |
@@ -316,12 +317,45 @@ This maps JIM's features to the NIST SP 800-53 control families most relevant to
 
 ---
 
+## OWASP Top 10:2025 Assessment
+
+A full assessment against the OWASP Top 10:2025 is documented in [`engineering/plans/OWASP_TOP_10_ASSESSMENT.md`](plans/OWASP_TOP_10_ASSESSMENT.md) (first published 2026-04-09).
+
+**Overall result:** Strong. The fundamentals (authentication, access control, cryptography, injection prevention, exception handling) are solid and well-implemented. Five gaps were identified; none represent critical vulnerabilities, but all are tracked for remediation to maintain the security posture expected by JIM's target deployment environments.
+
+| Category | Rating | Gaps |
+|----------|--------|------|
+| A01:2025 - Broken Access Control | Strong | None |
+| A02:2025 - Security Misconfiguration | Good, with gaps | No rate limiting (High); no Content Security Policy (Medium) |
+| A03:2025 - Software Supply Chain Failures | Good, with gap | See assessment document |
+| A04:2025 - Cryptographic Failures | Strong | None |
+| A05:2025 - Injection | Strong | None |
+| A06:2025 - Insecure Design | Strong | None |
+| A07:2025 - Identification and Authentication Failures | Strong | None |
+| A08:2025 - Software and Data Integrity Failures | Strong | Covered by supply chain hardening (see below) |
+| A09:2025 - Security Logging and Monitoring Failures | Good, with gap | See assessment document |
+| A10:2025 - Server-Side Request Forgery | Strong | None |
+
+See the assessment document for the full evidence table and remediation plan.
+
+### Supply Chain Hardening (A03 / A08)
+
+As of JIM v0.10.0 the following supply chain controls are in place:
+
+- **Docker base images digest-pinned**: all `FROM` lines in `src/JIM.Web/Dockerfile`, `src/JIM.Worker/Dockerfile`, and `src/JIM.Scheduler/Dockerfile` pin `image:tag@sha256:<digest>`. Enforced by the CI `scan-base-images` job. Updates are driven by Dependabot.
+- **GitHub Actions pinned by SHA**: every reusable action referenced from `.github/workflows/` is pinned to a commit SHA rather than a mutable tag. Dependabot raises digest/SHA bumps on a daily cadence.
+- **Main branch protection**: all changes to `main` must land via pull request with required status checks (build, test, CodeQL, container scan, dependency scan, automated baseline review). Direct pushes and force-pushes are blocked.
+- **Signed commits**: contributors cannot commit without signing; the pre-commit hook enforces this locally and server-side enforcement is planned.
+
+---
+
 ## References
 
 - [NCSC Secure Development and Deployment Guidance](https://www.ncsc.gov.uk/collection/developers-collection)
 - [UK Software Security Code of Practice](https://www.gov.uk/government/publications/software-security-code-of-practice)
 - [CISA Secure by Design](https://www.cisa.gov/resources-tools/resources/secure-by-design)
 - [OWASP Application Security Verification Standard](https://owasp.org/www-project-application-security-verification-standard/)
+- [OWASP Top 10:2025](https://owasp.org/Top10/2025/)
 - [NIST SP 800-53 Rev 5](https://csrc.nist.gov/publications/detail/sp/800-53/rev-5/final)
 - [NIST Cybersecurity Framework 2.0](https://www.nist.gov/cyberframework)
 - [ASD Essential Eight](https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/essential-eight)

@@ -1,8 +1,10 @@
 # Activity and RPEI Flow
 
-> Last updated: 2026-03-26, JIM v0.7.1 (`00907431`)
+> Last updated: 2026-04-22, JIM v0.10.0
 
 This diagram shows how Activities are created, how Run Profile Execution Items (RPEIs) are accumulated during operations, and how the final activity status is determined. Activities are the immutable audit record for every operation in JIM.
+
+Since v0.10.0, sync RPEIs are bulk-inserted per page via raw SQL (`FlushRpeisAsync`) rather than held in-memory for the full run, to keep memory bounded at 100K+ object scale. Summary statistics are accumulated incrementally during each flush. Cross-page reference resolution merges new attribute-flow rows under the existing MvoChange parent rather than creating a duplicate RPEI, resolving the previous ~2x RPEI duplication when references spanned multiple pages.
 
 ## Activity Status Values
 
@@ -84,7 +86,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    SyncStart([Sync processing]) --> DirectAdd[RPEIs added directly to<br/>activity.RunProfileExecutionItems<br/>during per-CSO processing]
+    SyncStart([Sync processing]) --> DirectAdd[RPEIs added per-page to<br/>activity.RunProfileExecutionItems<br/>during per-CSO processing,<br/>then bulk-inserted and cleared<br/>by FlushRpeisAsync]
 
     DirectAdd --> PerCSO{For each CSO}
 

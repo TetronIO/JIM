@@ -200,6 +200,54 @@ Returns `200 OK` with a paginated list of attribute values.
 
 ---
 
+## Count Connector Space Objects
+
+Returns the number of connector space objects in a connected system, with optional filtering by object type and partition. Useful for dashboards and automation decisions that need a total without paging.
+
+```
+GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/connector-space/count
+```
+
+### Path Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `connectedSystemId` | integer | ID of the connected system |
+
+### Query Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `objectTypeId` | integer | Optional. Restrict the count to a single connected system object type. |
+| `partitionId` | integer | Optional. Restrict the count to a single partition (for connectors that support partitions). |
+
+### Examples
+
+```bash title="curl"
+curl -X GET "https://jim.example.com/api/v1/synchronisation/connected-systems/1/connector-space/count?objectTypeId=5" \
+  -H "Authorization: Bearer <token>"
+```
+
+### Response
+
+Returns an integer representing the match count:
+
+```json
+1247
+```
+
+### Errors
+
+| Status | Code | Description |
+|--------|------|-------------|
+| `401` | `UNAUTHORISED` | Authentication required |
+| `404` | `NOT_FOUND` | Connected system does not exist |
+
+!!! note "PowerShell coverage"
+    A dedicated PowerShell cmdlet for this endpoint is tracked as a future enhancement.
+
+---
+
 ## Count Unresolved References
 
 Returns the number of unresolved reference attribute values in the connector space. Unresolved references indicate that an attribute points to an object that has not yet been imported.

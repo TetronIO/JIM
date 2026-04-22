@@ -23,11 +23,11 @@ JIM is a modern Identity Management system designed for organisations with compl
 - Hub-and-spoke architecture using a central metaverse for identity correlation
 - Bidirectional synchronisation of Users, Groups, and custom object types (e.g., Departments, Roles, Computers)
 - Multi-directory LDAP support: Active Directory, OpenLDAP, 389 Directory Server, and other RFC 4512-compliant directories
-- Build-in scheduler that supports parallel operations
+- Built-in scheduler that supports parallel operations
 - Tested at 100K+ object scale with bounded memory pipelines
 - Transform data using expressions with extensive built-in functions for common identity operations
 - Extensible with custom Connectors (fully testable)
-- Modern Web Portal and REST API with OpenAPI documentation
+- Modern Web Portal and REST API with interactive Scalar API reference (in-app at `/api/reference` and published at [tetronio.github.io/JIM/api/reference/](https://tetronio.github.io/JIM/api/reference/))
 - PowerShell automation for Identity as Code (IDaC) - deploy JIM instances in minutes, not months
 - Realtime activity monitoring
 - Single Sign-On (SSO) using OpenID Connect

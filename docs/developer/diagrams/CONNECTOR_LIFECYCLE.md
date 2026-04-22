@@ -1,6 +1,6 @@
 # Connector Lifecycle
 
-> Last updated: 2026-03-26, JIM v0.7.1 (`00907431`)
+> Last updated: 2026-04-22, JIM v0.10.0
 
 This diagram shows how connectors are resolved, configured, opened, used, and closed across import and export operations. Connectors implement capability interfaces that determine their lifecycle shape.
 

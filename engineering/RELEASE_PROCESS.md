@@ -16,6 +16,7 @@ JIM uses a tag-based release workflow. When we push a tag like `v0.2.0`, the Git
 
 | Version | Date | Notes |
 |---------|------|-------|
+| `0.10.0` | 2026-04-22 | Service Name and Service ID for instance identification, Role membership management API and PowerShell cmdlets with administrator-lockout safety checks, Predefined Searches enable/disable toggle, System endpoint PowerShell cmdlets (health, version, auth config, user info), interactive Scalar API reference available in every environment (including air-gapped) with a public snapshot hosted on the documentation site, build-time OpenAPI generation, count endpoints for metaverse objects, connector space, and pending exports, OIDC sign-out with the identity provider, EF Core AsNoTracking by default with explicit write-path opt-in, sync integrity overhaul (cross-page reference resolution, CSO/MVO change-record persistence, graph traversal fixes), nested container hierarchy support, partition validation diagnostics, File Connector named volume for zero-setup deployments, OWASP Top 10:2025 assessment, and supply chain hardening (digest-pinned base images, SHA-pinned GitHub Actions, branch protection). |
 | `0.9.1` | 2026-04-08 | Search Objects API endpoint and Search-JIMMetaverseObject PowerShell cmdlet for fast predefined searches at 100K+ scale, CachedDisplayName sort optimisation, composite index on MVO attribute values, keyset pagination for object list queries, UI fixes for sync rule avatar chips and MVA value count formatting. |
 | `0.9.0` | 2026-04-07 | 100K object scale with bounded memory pipelines and Scale100K integration test validation, .NET 10.0 LTS migration, Docker container hardening (non-root, read-only rootfs, dropped capabilities), Service Settings REST API and PowerShell cmdlets, data integrity validation for metaverse attributes, partition-scoped deletion detection, safe cancellation for sync/import operations, LDAP export concurrency auto-tuning, PowerShell module enhancements (3 new cmdlets, -Name filtering on 6 cmdlets), 9 performance optimisations. |
 | `0.8.1` | 2026-04-02 | Pre-export CREATE→DELETE reconciliation, export rule evaluation and AD schema discovery performance improvements, entity tracking fix for large-scale cross-page reference resolution, error message cleanup, context-aware breadcrumbs, CWE-117 log injection fix. |
@@ -430,6 +431,22 @@ All images are signed using [cosign](https://github.com/sigstore/cosign) for sup
 ```bash
 cosign verify ghcr.io/tetronio/jim-web:0.2.0
 ```
+
+## API Reference Publication
+
+Each release publishes an interactive Scalar API reference to the JIM documentation site at [tetronio.github.io/JIM/api/reference/](https://tetronio.github.io/JIM/api/reference/). The public reference is a snapshot that matches the currently-published JIM version, so consumers can explore the API surface without a running JIM instance.
+
+**How it works:**
+
+- The OpenAPI document is generated at Docker build time inside the `jim-web` image (`openapi-gen` stage). The generated `/app/wwwroot/api/openapi/v1.json` is baked into the final image, so every deployed instance serves the same document as the release.
+- On release, the `docs` workflow extracts the baked-in `v1.json` from the released `jim-web` image tag, drops it into `docs/api/reference/` alongside the static Scalar shell, and deploys the MkDocs site to GitHub Pages.
+- A manual `publish-api-reference` workflow is available for re-publishing outside of a release if the static page ever needs to be redeployed without cutting a new version.
+
+**What to verify after release:**
+
+- `https://tetronio.github.io/JIM/api/reference/` loads the Scalar interface and lists the latest endpoints added in this release
+- The version label in the Scalar header matches the JIM release version
+- Any newly-added endpoints documented in this release appear in the reference
 
 ## PowerShell Module
 

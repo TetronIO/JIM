@@ -1,6 +1,6 @@
 # MVO Deletion and Grace Period
 
-> Last updated: 2026-03-26, JIM v0.7.1 (`00907431`)
+> Last updated: 2026-04-22, JIM v0.10.0
 
 This diagram shows the full lifecycle of Metaverse Object (MVO) deletion, from the trigger event (CSO disconnection) through deletion rule evaluation, grace period handling, and deferred housekeeping cleanup.
 

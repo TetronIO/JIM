@@ -1,6 +1,6 @@
 # Full Synchronisation - CSO Processing Flow
 
-> Last updated: 2026-04-07, JIM v0.9.0
+> Last updated: 2026-04-22, JIM v0.10.0
 
 This diagram shows the core decision tree for processing a single Connected System Object (CSO) during Full or Delta Synchronisation. This is the central flow of JIM's identity management engine.
 
@@ -26,22 +26,26 @@ flowchart TD
     CsoLoop -->|Yes| CheckCancel{Cancellation<br/>requested?}
     CheckCancel -->|Yes| FlushBeforeCancel[Complete current page flush<br/>before stopping]
     FlushBeforeCancel --> Return([Return - activity<br/>finalised by caller])
-    CheckCancel -->|No| ProcessCso[ProcessConnectedSystemObjectAsync<br/>See Per-CSO Processing below]
-    ProcessCso --> IncrProgress[Increment ObjectsProcessed]
+    CheckCancel -->|No| Pass1[Pass 1: for every CSO in page<br/>ProcessObsoleteAndExportConfirmationAsync<br/>- Confirm pending exports<br/>- Tear down obsolete CSOs<br/>- Populate _pendingDisconnectedMvoIds]
+    Pass1 --> Pass2[Pass 2: for every non-obsolete CSO<br/>ProcessActiveConnectedSystemObjectAsync<br/>See Per-CSO Processing below<br/>Skips if IsUnchangedSinceLastSync]
+    Pass2 --> IncrProgress[Increment ObjectsProcessed]
     IncrProgress --> CsoLoop
 
     CsoLoop -->|No| DeferredRef[Process deferred reference attributes<br/>Second pass: resolve MVO references<br/>that depend on other CSOs in page]
-    DeferredRef --> PersistMvo[Batch persist MVO creates + updates]
-    PersistMvo --> MvoChanges[Create MVO change objects<br/>for audit trail]
-    MvoChanges --> EvalExports[Batch evaluate outbound exports<br/>Create pending exports for target systems]
-    EvalExports --> FlushPE[Flush pending export<br/>create/delete/update operations]
-    FlushPE --> FlushCSO[Flush obsolete CSO deletions]
-    FlushCSO --> FlushMVO[Flush pending MVO deletions<br/>0-grace-period only]
-    FlushMVO --> UpdateProgress[Update activity progress<br/>in database]
-    UpdateProgress --> ClearCache[Clear export evaluation cache<br/>and change tracker at page boundary]
-    ClearCache --> PageLoop
+    DeferredRef --> PersistMvo[PersistPendingMetaverseObjectsAsync:<br/>bulk persist MVO creates + updates]
+    PersistMvo --> CreateMvoChanges[CreatePendingMvoChangeObjectsAsync:<br/>build in-memory MVO change records<br/>for audit trail]
+    CreateMvoChanges --> EvalExports[EvaluatePendingExportsAsync:<br/>batch-evaluate outbound exports<br/>for each tracked MVO]
+    EvalExports --> FlushPE[FlushPendingExportOperationsAsync:<br/>create/delete/update pending exports]
+    FlushPE --> ResolveSnapshots[ResolvePendingExportReferenceSnapshotsAsync:<br/>fix up reference attribute snapshots<br/>on newly-created pending exports]
+    ResolveSnapshots --> FlushCSO[FlushObsoleteCsoOperationsAsync:<br/>persist queued CSO deletions]
+    FlushCSO --> FlushMVO[FlushPendingMvoDeletionsAsync:<br/>0-grace-period MVO deletions]
+    FlushMVO --> FlushRpeis[FlushRpeisAsync:<br/>bulk-insert RPEIs via raw SQL<br/>clear in-memory collection]
+    FlushRpeis --> FlushMvoChanges[FlushPendingMvoChangesAsync:<br/>persist MVO change records<br/>before change tracker clear]
+    FlushMvoChanges --> ClearCache[Clear export evaluation cache<br/>and change tracker at page boundary]
+    ClearCache --> UpdateProgress[Update activity progress<br/>in database]
+    UpdateProgress --> PageLoop
 
-    PageLoop -->|No| CrossPage[Cross-page reference resolution<br/>Reload CSOs with unresolved references<br/>Resolve MVO references across page boundaries<br/>Re-run flush pipeline for resolved references]
+    PageLoop -->|No| CrossPage[Cross-page reference resolution<br/>Reload CSOs with unresolved references<br/>Resolve MVO references across pages<br/>Merge new attribute-flow rows under<br/>the existing MvoChange parent RPEI<br/>Re-run persist/flush pipeline]
     CrossPage --> Watermark[Update delta sync watermark<br/>LastSyncCompletedAt = UtcNow]
     Watermark --> End([Sync Complete])
 ```
@@ -153,3 +157,9 @@ flowchart TD
 - **Per-page cache loading**: The export evaluation cache is loaded per-page and cleared at page boundaries. This keeps memory consumption bounded regardless of total CSO count, preventing out-of-memory conditions on large connected systems.
 
 - **Data integrity validation (v0.9.0, #465)**: Metaverse attribute operations are validated for data integrity before being applied. This prevents silent corruption from malformed attribute values reaching the metaverse.
+
+- **Two-pass per-CSO processing (v0.10.0)**: Each page iterates over its CSOs twice. Pass 1 (`ProcessObsoleteAndExportConfirmationAsync`) handles pending-export confirmation and obsolete CSO teardown for every CSO, populating `_pendingDisconnectedMvoIds` before any Pass 2 work begins. Pass 2 (`ProcessActiveConnectedSystemObjectAsync`) runs join/projection/attribute flow only for non-obsolete CSOs. This ordering guarantees that Pass 2 join attempts see the complete set of disconnected MVOs from Pass 1 and skip them, avoiding race conditions where a CSO tries to join an MVO that is being torn down in the same page.
+
+- **Cross-page RPEI merge (v0.10.0)**: The unique index `IX_MetaverseObjectChanges_ActivityRunProfileExecutionItemId` means each RPEI can have at most one MvoChange parent. Cross-page reference resolution therefore merges new reference-attribute changes *under the existing MvoChange parent* rather than creating a second standalone RPEI for the same MVO. This resolves the previous ~2x RPEI duplication and the confusing split-outcome rows that appeared in activity detail when groups spanned multiple pages.
+
+- **Two-phase MVO change persistence (v0.10.0)**: MVO change records are built in-memory during the page (`CreatePendingMvoChangeObjectsAsync`) and persisted in a distinct `FlushPendingMvoChangesAsync` step that runs *before* the change tracker clear. Splitting creation from persistence avoids losing the in-memory records when the change tracker is cleared to bound memory at page boundaries.

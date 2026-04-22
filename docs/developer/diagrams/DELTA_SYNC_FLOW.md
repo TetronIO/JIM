@@ -1,6 +1,6 @@
 # Delta Sync Flow
 
-> Last updated: 2026-04-07, JIM v0.9.0
+> Last updated: 2026-04-22, JIM v0.10.0
 
 This diagram shows how Delta Synchronisation differs from Full Synchronisation. Both use identical per-CSO processing logic; the only difference is CSO selection and a few lifecycle steps.
 
@@ -10,9 +10,8 @@ This diagram shows how Delta Synchronisation differs from Full Synchronisation. 
 |--------|-----------|------------|
 | CSO Selection | ALL CSOs (or partition-scoped) | Only CSOs with `LastUpdated > watermark` (partition-scoped filtering supported since v0.8.0) |
 | Early Exit | Never | Yes, if 0 modified CSOs |
-| Pending Export Surfacing | Yes (creates RPEIs for operator visibility) | No |
 | Per-page pipeline | Identical | Identical |
-| Watermark Update | Yes | Yes (even when 0 changes) |
+| Watermark Update | No | Yes (even when 0 changes) |
 | Use Case | Initial sync, periodic reconciliation | Incremental updates |
 
 ## Delta Sync Flow
@@ -39,13 +38,14 @@ flowchart TD
 
     CsoLoop -->|Yes| CheckCancel{Cancellation<br/>requested?}
     CheckCancel -->|Yes| Return([Return])
-    CheckCancel -->|No| ProcessCso[ProcessConnectedSystemObjectAsync<br/>Identical to Full Sync:<br/>confirm PEs, join, project,<br/>attribute flow, drift detection]
-    ProcessCso --> CsoLoop
+    CheckCancel -->|No| Pass1[Pass 1: every CSO in page<br/>ProcessObsoleteAndExportConfirmationAsync<br/>- Confirm pending exports<br/>- Tear down obsolete CSOs<br/>- Populate _pendingDisconnectedMvoIds]
+    Pass1 --> Pass2[Pass 2: non-obsolete CSOs<br/>ProcessActiveConnectedSystemObjectAsync<br/>Identical to Full Sync:<br/>join, project, attribute flow, drift]
+    Pass2 --> CsoLoop
 
-    CsoLoop -->|No| PageFlush[Page flush pipeline:<br/>1. Deferred reference attributes<br/>2. Batch persist MVOs<br/>3. Create MVO change objects<br/>4. Evaluate exports<br/>5. Flush PE operations<br/>6. Flush obsolete CSOs<br/>7. Flush MVO deletions<br/>8. Update activity progress]
+    CsoLoop -->|No| PageFlush[Page flush pipeline:<br/>1. Deferred reference attributes<br/>2. PersistPendingMetaverseObjectsAsync<br/>3. CreatePendingMvoChangeObjectsAsync<br/>4. EvaluatePendingExportsAsync<br/>5. FlushPendingExportOperationsAsync<br/>6. ResolvePendingExportReferenceSnapshotsAsync<br/>7. FlushObsoleteCsoOperationsAsync<br/>8. FlushPendingMvoDeletionsAsync<br/>9. FlushRpeisAsync (bulk-insert via raw SQL)<br/>10. FlushPendingMvoChangesAsync<br/>11. Clear change tracker, update progress]
     PageFlush --> PageLoop
 
-    PageLoop -->|No| CrossPage[Cross-page reference resolution<br/>Reload CSOs with unresolved references<br/>Resolve MVO references across page boundaries<br/>Re-run flush pipeline for resolved references]
+    PageLoop -->|No| CrossPage[Cross-page reference resolution<br/>Reload CSOs with unresolved references<br/>Merge reference-attribute changes under<br/>the existing MvoChange parent RPEI<br/>Re-run persist/flush pipeline]
     CrossPage --> UpdateWatermark[Update watermark<br/>LastSyncCompletedAt = UtcNow]
     UpdateWatermark --> Done([Sync Complete])
 ```
@@ -70,17 +70,6 @@ flowchart LR
     end
 ```
 
-## What Full Sync Does That Delta Sync Does Not
-
-```mermaid
-flowchart TD
-    FullSync([Full Sync only]) --> SurfacePE[SurfacePendingExportsAsExecutionItems]
-    SurfacePE --> FilterPE[Filter pending exports:<br/>Status = Pending or<br/>ExportNotConfirmed]
-    FilterPE --> HasPE{Pending exports<br/>to surface?}
-    HasPE -->|No| Skip([Skip])
-    HasPE -->|Yes| CreateRPEI[Create RPEI for each PE<br/>ObjectChangeType from PE ChangeType<br/>Gives operators visibility into<br/>what next export run will do]
-```
-
 ## Key Design Decisions
 
 - **Identical per-CSO logic**: Both full and delta sync share the exact same `ProcessConnectedSystemObjectAsync()` from `SyncTaskProcessorBase`, using `ISyncEngine` for pure domain decisions and `ISyncServer`/`ISyncRepository` for orchestration and data access. The only difference is which CSOs are selected for processing.
@@ -91,8 +80,8 @@ flowchart TD
 
 - **First delta sync processes everything**: If `LastSyncCompletedAt` is null (no previous sync), the watermark defaults to `DateTime.MinValue`, effectively selecting all CSOs, the same set as a full sync.
 
-- **No pending export surfacing**: Delta sync skips `SurfacePendingExportsAsExecutionItems()` since it's a lightweight incremental operation. Full sync surfaces pending exports as RPEIs so operators can see what changes are staged for the next export run.
-
-- **Cross-page reference resolution**: Both full and delta sync perform cross-page reference resolution after all pages are processed. CSOs with reference attributes that couldn't be resolved during page processing (because the referenced CSO was on a different page) are reloaded and resolved once all MVOs exist. The standard flush pipeline runs again for the resolved references.
+- **Cross-page reference resolution (v0.10.0)**: Both full and delta sync perform cross-page reference resolution after all pages are processed. CSOs with reference attributes that couldn't be resolved during page processing (because the referenced CSO was on a different page) are reloaded and resolved once all MVOs exist. New reference-attribute changes are merged under the existing MvoChange parent RPEI (rather than creating a second standalone RPEI for the same MVO), honouring the `IX_MetaverseObjectChanges_ActivityRunProfileExecutionItemId` unique index. The standard persist/flush pipeline runs again for the resolved references.
 
 - **Partition-scoped filtering (v0.8.0, #353)**: Both full and delta sync support partition-scoped CSO selection via `TargetPartitionId` on the run profile. When set, CSO counting and page loading are filtered to only that partition's scope.
+
+- **Two-pass per-CSO processing (v0.10.0)**: Each page iterates over its CSOs twice. Pass 1 handles pending-export confirmation and obsolete CSO teardown across all CSOs, populating `_pendingDisconnectedMvoIds`. Pass 2 runs join/projection/attribute flow only on non-obsolete CSOs. This ordering guarantees Pass 2 join attempts see the complete set of disconnected MVOs from Pass 1.

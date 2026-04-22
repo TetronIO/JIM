@@ -125,6 +125,7 @@ Each object type in the `objectTypes` array contains:
 |--------|------|-------------|
 | `GET` | [`/api/v1/synchronisation/connected-systems/{id}/connector-space/{objectId}`](connector-space.md) | Retrieve a connector space object |
 | `GET` | [`/api/v1/synchronisation/connected-systems/{id}/connector-space/{objectId}/attributes/{attrName}/values`](connector-space.md#list-attribute-values) | List object attribute values (paginated) |
+| `GET` | [`/api/v1/synchronisation/connected-systems/{id}/connector-space/count`](connector-space.md#count-connector-space-objects) | Count connector space objects matching a filter |
 | `GET` | [`/api/v1/synchronisation/connected-systems/{id}/connector-space/unresolved-references/count`](connector-space.md#count-unresolved-references) | Count unresolved reference attributes |
 
 ### Pending Exports
@@ -132,5 +133,6 @@ Each object type in the `objectTypes` array contains:
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | [`/api/v1/synchronisation/connected-systems/{id}/pending-exports`](pending-exports.md) | List pending exports |
+| `GET` | [`/api/v1/synchronisation/connected-systems/{id}/pending-exports/count`](pending-exports.md#count-pending-exports) | Count pending exports matching a filter |
 | `GET` | [`/api/v1/synchronisation/pending-exports/{exportId}`](pending-exports.md#retrieve-a-pending-export) | Retrieve a pending export |
 | `GET` | [`/api/v1/synchronisation/pending-exports/{exportId}/attribute-changes/{attrName}/values`](pending-exports.md#list-attribute-changes) | List attribute changes for a pending export |
