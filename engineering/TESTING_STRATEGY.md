@@ -57,8 +57,8 @@ public async Task GetConnectedSystemObjectsModifiedSinceAsync_WithModifiedCsos_R
 ## 2. Workflow Tests
 
 **Location**: Two complementary test suites:
-- `test/JIM.Worker.Tests/Workflows/`: Lower-level workflow tests using `WorkflowTestBase` (26 tests)
-- `test/JIM.Workflow.Tests/Scenarios/`: Higher-level scenario tests using `WorkflowTestHarness` (36 tests)
+- `test/JIM.Worker.Tests/Workflows/`: Lower-level workflow tests using `WorkflowTestBase` (47 tests)
+- `test/JIM.Workflow.Tests/Scenarios/`: Higher-level scenario tests using `WorkflowTestHarness` (40 tests)
 
 **Purpose**: Test multi-step business processes using real implementations with in-memory database
 
@@ -72,17 +72,16 @@ public async Task GetConnectedSystemObjectsModifiedSinceAsync_WithModifiedCsos_R
 
 | Test File | Tests | Area |
 |-----------|------:|------|
-| `SyncWorkflowTests.cs` | 6 | Full Sync / Delta Sync watermark |
-| `DeletionRuleWorkflowTests.cs` | 10 | MVO deletion lifecycle |
-| `ExportConfirmationWorkflowTests.cs` | 7 | Export confirmation cycle |
-| `AttributeRecallExpressionWorkflowTests.cs` | 3 | Multi-source attribute recall |
-| `FullSyncAfterImportWorkflowTests.cs` | 2 | Import → Full Sync |
-| `DeltaSyncAfterImportWorkflowTests.cs` | 2 | Import → Delta Sync |
-| `DriftDetectionWorkflowTests.cs` | 12 | Export drift detection |
-| `NoNetChangeWorkflowTests.cs` | 12 | No-change optimisation |
-| `ProvisioningWorkflowTests.cs` | 4 | Joiner provisioning |
-| `GroupMembershipSyncTests.cs` | 2 | Entitlement management |
-| `NonStringDataTypeExportTests.cs` | 4 | Non-string data type exports |
+| `Scenarios/Entitlement Management/CrossRunReferenceResolutionTests.cs` | 2 | Cross-run reference resolution |
+| `Scenarios/Entitlement Management/GroupMembershipSyncTests.cs` | 2 | Group membership sync |
+| `Scenarios/Joiners/ProvisioningWorkflowTests.cs` | 4 | Joiner provisioning |
+| `Scenarios/Sync/FullSyncAfterImportWorkflowTests.cs` | 2 | Import → Full Sync |
+| `Scenarios/Sync/DeltaSyncAfterImportWorkflowTests.cs` | 2 | Import → Delta Sync |
+| `Scenarios/Sync/DriftDetectionWorkflowTests.cs` | 12 | Export drift detection |
+| `Scenarios/Sync/NoNetChangeWorkflowTests.cs` | 12 | No-change optimisation |
+| `Scenarios/Sync/NonStringDataTypeExportTests.cs` | 4 | Non-string data type exports |
+
+Total: 40 tests.
 
 **What Workflow Tests Are Good At**:
 - ✅ Testing multi-step workflows (Import -> Sync -> Export)

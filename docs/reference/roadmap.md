@@ -6,14 +6,21 @@ For the latest milestone status and issue tracking, see the [GitHub milestones](
 
 ---
 
-## 🔨 v0.9 -- Pre-release Stabilisation
+## 🔨 v0.9 -- v0.10 -- Pre-release Stabilisation
 
-Hardening and polish ahead of the first stable release.
+Hardening and polish ahead of the first stable release. Delivered:
 
-- Integration test coverage expansion across all sync scenarios
-- Performance benchmarking and optimisation for large-scale deployments
-- Documentation completion (administrator guide, connector reference, API reference)
-- Security hardening audit and remediation
+- Bounded-memory pipelines tested at 100K+ object scale
+- EF Core query defaults tuned for read-heavy workloads (AsNoTracking by default with explicit write-path opt-in)
+- Sync integrity overhaul: cross-page reference resolution, change-record persistence, entity tracking conflicts resolved
+- Integration test coverage across all sync scenarios with automated metrics streaming
+- OWASP Top 10:2025 assessment completed with targeted hardening
+- Supply chain hardening: Docker base image digests pinned, GitHub Actions pinned by SHA, main branch protection with required status checks
+- Interactive Scalar API reference available in every environment (including air-gapped), with a public snapshot hosted on the documentation site
+- Role membership management API and PowerShell cmdlets
+- Service identity (Service Name and Service ID) for distinguishing JIM instances
+- OIDC sign-out with identity provider support
+- Predefined Searches that can be disabled and re-enabled without deletion
 
 ---
 

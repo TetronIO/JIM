@@ -1,6 +1,6 @@
 # Worker Task Lifecycle
 
-> Last updated: 2026-04-01, JIM v0.8.0
+> Last updated: 2026-04-22, JIM v0.10.0
 
 This diagram shows how the JIM Worker service picks up, executes, and completes tasks. It covers the main polling loop, task dispatch, heartbeat management, cancellation handling, and housekeeping.
 
@@ -57,8 +57,8 @@ flowchart TD
     ResolveConnector --> ResolveRP[Get RunProfile from<br/>ConnectedSystem.RunProfiles]
     ResolveRP --> RunType{RunProfile<br/>RunType?}
 
-    RunType -->|FullImport| FI[SyncImportTaskProcessor<br/>PerformFullImportAsync<br/>Uses ISyncEngine + ISyncServer + ISyncRepository]
-    RunType -->|DeltaImport| DI[SyncImportTaskProcessor<br/>PerformFullImportAsync<br/>Connector handles delta filtering<br/>Uses ISyncEngine + ISyncServer + ISyncRepository]
+    RunType -->|FullImport| FI[SyncImportTaskProcessor<br/>PerformImportAsync<br/>Uses ISyncEngine + ISyncServer + ISyncRepository]
+    RunType -->|DeltaImport| DI[SyncImportTaskProcessor<br/>PerformImportAsync<br/>Connector handles delta filtering<br/>Uses ISyncEngine + ISyncServer + ISyncRepository]
     RunType -->|FullSynchronisation| FS[SyncFullSyncTaskProcessor<br/>PerformFullSyncAsync<br/>Uses ISyncEngine + ISyncServer + ISyncRepository]
     RunType -->|DeltaSynchronisation| DS[SyncDeltaSyncTaskProcessor<br/>PerformDeltaSyncAsync<br/>Uses ISyncEngine + ISyncServer + ISyncRepository]
     RunType -->|Export| EX[SyncExportTaskProcessor<br/>PerformExportAsync<br/>Uses ISyncServer + ISyncRepository]

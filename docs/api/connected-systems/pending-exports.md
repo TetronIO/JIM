@@ -113,6 +113,54 @@ Returns `200 OK` with a paginated list of pending export summaries.
 
 ---
 
+## Count Pending Exports
+
+Returns the number of pending exports on a connected system, with optional filtering by change type and status. Useful for dashboards and run-profile orchestration.
+
+```
+GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/pending-exports/count
+```
+
+### Path Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `connectedSystemId` | integer | ID of the connected system |
+
+### Query Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `changeType` | string | Optional. Restrict the count to a single change type: `Create`, `Update`, or `Delete`. |
+| `status` | integer | Optional. Restrict the count to a single status: `0` (Pending), `1` (ExportNotConfirmed), `2` (Executing), `3` (Failed), `4` (Exported). |
+
+### Examples
+
+```bash title="curl"
+curl -X GET "https://jim.example.com/api/v1/synchronisation/connected-systems/1/pending-exports/count?changeType=Create" \
+  -H "Authorization: Bearer <token>"
+```
+
+### Response
+
+Returns an integer representing the match count:
+
+```json
+87
+```
+
+### Errors
+
+| Status | Code | Description |
+|--------|------|-------------|
+| `401` | `UNAUTHORISED` | Authentication required |
+| `404` | `NOT_FOUND` | Connected system does not exist |
+
+!!! note "PowerShell coverage"
+    A dedicated PowerShell cmdlet for this endpoint is tracked as a future enhancement.
+
+---
+
 ## Retrieve a Pending Export
 
 Returns full details of a pending export, including all attribute changes.

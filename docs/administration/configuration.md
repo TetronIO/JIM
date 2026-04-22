@@ -26,7 +26,7 @@ These variables control how Docker Compose resolves and pulls JIM container imag
 | Variable          | Description                                                                 | Default | Example                     |
 |-------------------|-----------------------------------------------------------------------------|---------|-----------------------------|
 | `DOCKER_REGISTRY` | Container registry prefix for pulling images. Leave empty for local builds. | *(empty)* | `ghcr.io/tetronio/`        |
-| `JIM_VERSION`     | Release version tag. Leave empty for local builds.                          | *(empty)* | `0.8.1`                    |
+| `JIM_VERSION`     | Release version tag. Leave empty for local builds.                          | *(empty)* | `0.10.0`                   |
 
 ---
 
@@ -92,6 +92,8 @@ The settings listed below are the ones most commonly adjusted; the full list is 
 
 | Key                          | Display name              | Category        | Description                                                                                                                                                                                                                                                      | Default       |
 |------------------------------|---------------------------|-----------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------|
+| `Instance.Name`              | Service name              | Instance        | A friendly, editable name for this JIM instance. Appears in the sidebar, browser tab title, and footer so operators can distinguish multiple JIM deployments at a glance (for example, `JIM Production`, `JIM DR`).                                             | *(empty)*     |
+| `Instance.Id`                | Service ID                | Instance        | A stable GUID that uniquely identifies this JIM instance. Generated exactly once on first startup and never changes thereafter. Useful for tooling, logs, and telemetry correlation. Read-only.                                                                  | *(generated)* |
 | `SSO.EnableLogOut`           | SSO enable log-out        | SSO             | Controls whether the sign-out button is shown in the JIM user menu. Set to `false` for deployments where users cannot realistically sign out of their enterprise-managed SSO session, for example on domain-joined devices with seamless SSO. | `true`        |
 | `Sync.PartitionValidationMode` | Run profile partition validation | Synchronisation | Controls how JIM behaves when a run profile is executed for a Connected System that supports partitions but has none selected. `Error` blocks execution; `Warning` allows execution but logs a warning.                                                         | `Error`       |
 | `History.RetentionPeriod`    | History retention period  | History         | The duration for which activity and audit history is retained. Format: `d.hh:mm:ss`. Longer periods increase database size and may affect performance.                                                                                                          | `90.00:00:00` (90 days) |

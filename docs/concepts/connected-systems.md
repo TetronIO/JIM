@@ -62,6 +62,8 @@ Where they do apply, partitions let JIM scope imports, exports, and synchronisat
 
 Inside a partition, or directly inside the connector space of a connector that does not support partitions, you can have **containers**. Containers are a separate, lower-order logical construct that sits beneath partitions. They exist mainly to support LDAP **organisational units (OUs)** and similar hierarchical groupings.
 
+Containers can be nested arbitrarily deep. JIM loads the full container hierarchy, so administrators can select nested containers (for example `OU=Contractors,OU=Users,DC=company,DC=local`) for import or export. Automation can address nested containers via the API and PowerShell using the same full-hierarchy view.
+
 Containers are what you use to narrow imports and exports to a subset of data. For example, you might configure JIM to import only from `OU=Users,DC=company,DC=local` rather than the entire domain partition.
 
 ### Partitions vs. containers at a glance

@@ -76,7 +76,7 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
 
             database = container "PostgreSQL Database" "Stores configuration, metaverse objects, staging area, sync rules, activity history, task queue" "PostgreSQL 18" "Database"
 
-            pwsh = container "PowerShell Module" "Cross-platform module with 79 cmdlets for automation and scripting" "PowerShell 7" "Client Library"
+            pwsh = container "PowerShell Module" "Cross-platform module with 93 cmdlets for automation and scripting" "PowerShell 7" "Client Library"
 
             !docs docs
             !adrs adrs

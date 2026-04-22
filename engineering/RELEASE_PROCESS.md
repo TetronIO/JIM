@@ -431,6 +431,22 @@ All images are signed using [cosign](https://github.com/sigstore/cosign) for sup
 cosign verify ghcr.io/tetronio/jim-web:0.2.0
 ```
 
+## API Reference Publication
+
+Each release publishes an interactive Scalar API reference to the JIM documentation site at [tetronio.github.io/JIM/api/reference/](https://tetronio.github.io/JIM/api/reference/). The public reference is a snapshot that matches the currently-published JIM version, so consumers can explore the API surface without a running JIM instance.
+
+**How it works:**
+
+- The OpenAPI document is generated at Docker build time inside the `jim-web` image (`openapi-gen` stage). The generated `/app/wwwroot/api/openapi/v1.json` is baked into the final image, so every deployed instance serves the same document as the release.
+- On release, the `docs` workflow extracts the baked-in `v1.json` from the released `jim-web` image tag, drops it into `docs/api/reference/` alongside the static Scalar shell, and deploys the MkDocs site to GitHub Pages.
+- A manual `publish-api-reference` workflow is available for re-publishing outside of a release if the static page ever needs to be redeployed without cutting a new version.
+
+**What to verify after release:**
+
+- `https://tetronio.github.io/JIM/api/reference/` loads the Scalar interface and lists the latest endpoints added in this release
+- The version label in the Scalar header matches the JIM release version
+- Any newly-added endpoints documented in this release appear in the reference
+
 ## PowerShell Module
 
 The JIM PowerShell module is automatically published to [PSGallery](https://www.powershellgallery.com/) on each release.

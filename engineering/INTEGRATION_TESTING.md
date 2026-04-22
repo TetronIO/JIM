@@ -89,7 +89,14 @@ This single script handles everything:
 
 # Large-scale test with reduced logging and no change tracking
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario1-HRToIdentityDirectory" -Template Large -LogLevel Warning -DisableChangeTracking
+
+# Full pre-release regression suite (all scenarios, both directory types, Samba Medium/Large, OpenLDAP Scale100K)
+./test/integration/Run-IntegrationTests.ps1 -PreRelease
 ```
+
+**Strict-mode hardening:** the runner uses `Set-StrictMode -Version Latest`, so local debugging must treat uninitialised variables and missing properties as errors. This matches CI behaviour and prevents drift between the two environments.
+
+**-PreRelease preset**: shorthand for the full pre-release regression (`-Scenario All -DirectoryType All` for Samba AD with Medium + Large templates and OpenLDAP with Scale100K). Use this as the final sign-off before cutting a release.
 
 **Available Scenarios (`-Scenario` parameter):**
 
@@ -2092,6 +2099,30 @@ For many debugging and development scenarios, **Workflow Tests** provide a faste
 - Performance baseline measurement
 
 See [Developer Guide - Workflow Tests](DEVELOPER_GUIDE.md#workflow-tests) for details on writing and running workflow tests.
+
+---
+
+## Metrics Streaming
+
+Integration test runs stream performance metrics to a central tracking system (JIM-Bench) so that runs from any environment can be compared on equal footing. This produces the Grafana dashboards used to spot regressions and to track long-term throughput trends.
+
+**What is captured:**
+
+- `DiagnosticListener` span durations for sync, import, export, and flush phases
+- `MetricsCheckpoint` Information-level log lines for guaranteed throughput tracking at any log level
+- Cumulative object count and wall-clock offset tags per span, enabling phase-by-phase throughput profiling
+- Host fingerprint (CPU model, core count, memory, kernel, Docker version) so dashboards can normalise results across machines
+
+**Configuration:**
+
+Metrics streaming is opt-in. Set these variables in `.env` (or supply via the runner's environment) to enable streaming:
+
+| Variable | Description |
+|----------|-------------|
+| `JIM_BENCH_API_URL` | Bench ingestion endpoint |
+| `JIM_BENCH_API_KEY` | Bench API key (provisioned by `scripts/Set-JIMBenchSecrets.ps1`) |
+
+When either variable is missing the runner skips the streaming step and continues without error, so untracked local runs keep working. See `engineering/plans/done/476-integration-test-metrics-jim-side.md` and the `bench-sync.yml` workflow for end-to-end details.
 
 ---
 

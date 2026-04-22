@@ -1,6 +1,6 @@
 # Full Import Flow
 
-> Last updated: 2026-04-07, JIM v0.9.0
+> Last updated: 2026-04-22, JIM v0.10.0
 
 This diagram shows how objects are imported from a connected system into JIM's connector space. Both Full Import and Delta Import use the same processor (`SyncImportTaskProcessor`); the connector handles delta filtering internally via watermark/persisted data.
 
@@ -12,7 +12,7 @@ Since v0.8.0, LDAP connectors for OpenLDAP/Generic directories import using **pa
 
 ```mermaid
 flowchart TD
-    Start([PerformFullImportAsync]) --> ConnType{Connector<br/>type?}
+    Start([PerformImportAsync]) --> ConnType{Connector<br/>type?}
 
     %% --- Call-based connector (e.g., LDAP) ---
     ConnType -->|IConnectorImportUsingCalls| InjectServices[Inject CertificateProvider<br/>and CredentialProtection<br/>if connector supports them]
