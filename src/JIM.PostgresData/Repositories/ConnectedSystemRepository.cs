@@ -2573,6 +2573,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         var now = DateTime.UtcNow;
 
+        // CSO.Type is intentionally not included here: the file connector (the only consumer
+        // of this query) never reads it. The calls-path sibling query, GetExecutableExportBatchAsync,
+        // does include Type because LdapConnectorExport requires it.
         return await Repository.Database.PendingExports
             .AsNoTracking()
             .AsSplitQuery()
@@ -2606,6 +2609,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)
+            // CSO.Type is required by LdapConnectorExport: GetObjectClass() reads Type.Name as
+            // an object-class fallback, and InjectPlaceholderModificationsIfNeeded() assigns
+            // the Type entity onto synthesised placeholder attribute changes. The file-path
+            // sibling query (GetExecutableExportsAsync) does not include Type because the
+            // file connector never reads it.
             .Include(pe => pe.ConnectedSystemObject)
                 .ThenInclude(cso => cso!.Type)
             .Include(pe => pe.ConnectedSystemObject)
