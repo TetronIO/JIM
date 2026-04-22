@@ -124,7 +124,7 @@ services:
 
   jim.database:
     container_name: jim.database
-    image: postgres:18@sha256:52e6ffd11fddd081ae63880b635b2a61c14008c17fc98cdc7ce5472265516dd0
+    image: postgres:18@sha256:8da22df20409c62981f57682595ef617ee365ac905c48ab61d0ff8aafa83891d
     profiles:
       - with-db
     # PostgreSQL tuning - customise for your environment using https://pgtune.leopard.in.ua/
