@@ -271,6 +271,13 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3.7.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Extract OpenAPI document from jim-web image
         run: |
           IMAGE="${{ steps.prefix.outputs.IMAGE_PREFIX }}/jim-web:${{ steps.version.outputs.VERSION }}"
