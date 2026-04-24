@@ -9,6 +9,28 @@ title: Troubleshooting
 
 <!-- TODO: Common issues and resolutions for deployment, authentication, synchronisation, and connectivity problems -->
 
+## Authentication
+
+### `Invalid parameter: redirect_uri` when running `Connect-JIM` interactively
+
+You clicked **Login** (or let `Connect-JIM` open your browser) and the identity provider returned an error page saying `Invalid parameter: redirect_uri` (Keycloak), `AADSTS50011` (Entra ID), or a similar redirect-mismatch message.
+
+**What it means.** The PowerShell module is trying to authenticate as the identity provider client whose ID came from JIM's `/api/v1/auth/config` endpoint, but that client does not have a loopback redirect URI (`http://localhost:8400/callback/` through `http://localhost:8409/callback/`) registered. This typically happens because JIM is advertising the web application's client ID (a confidential client), but the PowerShell module needs a public client configured for PKCE/loopback.
+
+**How to fix.**
+
+1. Confirm your identity provider has a public client registered with at least the redirect URI `http://localhost:8400/callback/`. The [SSO Setup Guide](sso-setup.md) has per-provider instructions (Entra ID Step 5b, AD FS Step 4a, Keycloak Step 6a).
+2. If the public client is a **separate registration** from the web application (always the case for Keycloak), set `JIM_SSO_PUBLIC_CLIENT_ID` on the JIM server to the public client's client ID and restart JIM.
+3. If the public client **shares a registration** with the web application (Entra ID or AD FS with both platforms added to one app), you do not need to set `JIM_SSO_PUBLIC_CLIENT_ID`; just ensure the web app registration has the loopback redirect URI added under its native/mobile platform.
+
+Verify the config the server is advertising:
+
+```bash
+curl https://your-jim-url/api/v1/auth/config
+```
+
+The `clientId` in the response must be the client that has the loopback redirect URI registered at your identity provider.
+
 ## Known noisy log lines
 
 Some messages in the container logs look alarming but are expected and harmless. They are documented here so operators can confirm at a glance that nothing is actually wrong.

@@ -6,9 +6,25 @@ services:
       # Override JIM_DB_HOSTNAME from .env to use bundled database container
       - JIM_DB_HOSTNAME=jim.database
       - JIM_INFRASTRUCTURE_API_KEY=${JIM_INFRASTRUCTURE_API_KEY:-}
-      # Override SSO authority to use Docker DNS for back-channel OIDC discovery.
-      # The browser-facing redirect is rewritten to localhost:8181 by JIM.Web.
+      # SSO authority has two faces in the devcontainer:
+      #   - JIM_SSO_AUTHORITY is the backend-facing URL. JIM.Web and the JWT
+      #     bearer middleware use it for JWKS / OIDC metadata fetches over the
+      #     Docker network, hence Docker DNS `jim.keycloak:8080`.
+      #   - JIM_SSO_PUBLIC_AUTHORITY is the browser/client-facing URL returned
+      #     by the /api/v1/auth/config endpoint to clients like the PowerShell
+      #     module running on the host, which reach Keycloak via the port-
+      #     forwarded `localhost:8181`.
+      # Keycloak itself is configured with KC_HOSTNAME_BACKCHANNEL_DYNAMIC=true
+      # so it returns the right endpoint URLs to each caller based on Host.
       - JIM_SSO_AUTHORITY=http://jim.keycloak:8080/realms/jim
+      - JIM_SSO_PUBLIC_AUTHORITY=http://localhost:8181/realms/jim
+      # JIM_SSO_CLIENT_ID=jim-web comes from .env and is the confidential client
+      # used by the Blazor UI. Keycloak does not allow a single client to be both
+      # confidential (with a secret) and public (PKCE/loopback), so the PowerShell
+      # module uses a separate public client 'jim-powershell' defined in the
+      # bundled realm. JIM_SSO_PUBLIC_CLIENT_ID tells the /api/v1/auth/config
+      # endpoint to advertise that public client to interactive clients.
+      - JIM_SSO_PUBLIC_CLIENT_ID=jim-powershell
       # OpenLDAP TLS configuration for LDAPS connections
       - LDAPTLS_REQCERT=never
     ports:

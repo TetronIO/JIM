@@ -68,9 +68,9 @@ Test-JIMConnection
 !!! warning "Use API keys from inside the devcontainer"
     Interactive browser-based SSO (`Connect-JIM -Url "http://localhost:5200"` with no `-ApiKey`) **does not work** from a PowerShell session running inside the devcontainer.
 
-    When the module asks JIM for its auth config, JIM returns the Keycloak authority as `http://jim.keycloak:8080/realms/jim` — the Docker Compose internal hostname that JIM.Web itself uses for back-channel calls. The devcontainer is a separate container that is not on the compose network, so `jim.keycloak` cannot be resolved, and the OIDC discovery fetch fails with `Name or service not known`.
+    The browser-based flow needs the PowerShell session to (a) resolve `localhost:8181` to the bundled Keycloak container and (b) open a browser on the user's machine to complete sign-in. The devcontainer is a separate container with no access to the host's `localhost:8181` port binding and no display, so both prerequisites fail.
 
-    The browser-based flow does work from a PowerShell session on the host machine (outside any container), because that session can reach the public `http://localhost:8181` Keycloak endpoint.
+    The browser-based flow does work from a PowerShell session **on the host machine** (outside any container), because that session can reach the port-forwarded `http://localhost:8181` Keycloak endpoint and has a browser available. The devcontainer's bundled Keycloak realm includes a `jim-powershell` public client with loopback redirect URIs and `docker-compose.override.yml` sets `JIM_SSO_PUBLIC_AUTHORITY` and `JIM_SSO_PUBLIC_CLIENT_ID` so `/api/v1/auth/config` advertises values the host can use.
 
     For inside-the-devcontainer development, always use an API key.
 

@@ -103,7 +103,7 @@ To enable OAuth authentication in the Scalar API reference:
 
 Configuring the PowerShell module now means administrators and automation scripts can connect to JIM interactively with their SSO account, without needing to issue or manage API keys. You can skip this step if you don't plan to use the PowerShell module, but it only takes a moment and is worth doing up front.
 
-To enable interactive browser-based authentication for the JIM PowerShell module:
+Entra ID allows a single app registration to serve both the JIM web application (confidential client with a secret) and the PowerShell module (public client using PKCE with a loopback redirect). You can reuse the same app registration from Step 1 — just add a new platform for the PowerShell flow:
 
 1. Go to **Authentication**
 2. Click **Add a platform**
@@ -114,6 +114,11 @@ To enable interactive browser-based authentication for the JIM PowerShell module
 7. Scroll down to **Advanced settings**
 8. Set **Allow public client flows** to **Yes**
 9. Click **Save**
+
+Because the web and PowerShell platforms share the same **Application (client) ID**, you can either:
+
+- **Share the client ID** (simplest): leave `JIM_SSO_PUBLIC_CLIENT_ID` unset in Step 6 below. The PowerShell module will use `JIM_SSO_CLIENT_ID`, which now has both Web and Mobile/Desktop platforms configured.
+- **Use a separate app registration** for the PowerShell module (stricter isolation): create a second app registration with only the Mobile/Desktop platform, note its Application (client) ID, and set `JIM_SSO_PUBLIC_CLIENT_ID` to that value.
 
 !!! note
     Entra ID requires exact redirect URI matching. If port 8400 is busy, the module will try ports 8401--8409. You may need to add additional redirect URIs if you encounter port conflicts.
@@ -129,13 +134,17 @@ JIM_SSO_CLIENT_ID={your-application-client-id}
 JIM_SSO_SECRET={your-client-secret}
 JIM_SSO_API_SCOPE=api://{your-application-client-id}/access_as_user
 
+# Optional: only set if you created a separate app registration for the PowerShell
+# module in Step 5b. Leave unset to reuse JIM_SSO_CLIENT_ID.
+# JIM_SSO_PUBLIC_CLIENT_ID={your-powershell-app-client-id}
+
 # User identity mapping
 JIM_SSO_CLAIM_TYPE=sub
 JIM_SSO_MV_ATTRIBUTE=Subject Identifier
 JIM_SSO_INITIAL_ADMIN={your-admin-sub-value}
 ```
 
-**Example with real values:**
+**Example with real values (single app registration, web + PowerShell share client ID):**
 
 ```bash
 JIM_SSO_AUTHORITY=https://login.microsoftonline.com/87654321-4321-4321-4321-cba987654321/v2.0
@@ -186,13 +195,15 @@ JIM_SSO_API_SCOPE=api://12345678-1234-1234-1234-123456789abc/access_as_user
 
 Configuring the PowerShell module now means administrators and automation scripts can connect to JIM interactively with their SSO account, without needing to issue or manage API keys. You can skip this step if you don't plan to use the PowerShell module, but it only takes a moment and is worth doing up front.
 
-The JIM PowerShell module uses OAuth 2.0 with PKCE for interactive browser-based authentication. AD FS supports this through native applications.
+The JIM PowerShell module uses OAuth 2.0 with PKCE for interactive browser-based authentication. AD FS supports this through native applications, which can live in the same Application Group as the web application.
 
 1. Right-click your Application Group and select **Properties**
 2. Click **Add application**
 3. Select **Native application**
 4. Click **Next**
-5. Note the **Client Identifier** (or use the same ID as the web application)
+5. Note the **Client Identifier**. You can either:
+    - **Reuse the web client's identifier** (simplest): use the same value as the web application from Step 2. Leave `JIM_SSO_PUBLIC_CLIENT_ID` unset in Step 7.
+    - **Use a distinct identifier for the native app** (stricter isolation): accept the auto-generated GUID, and set `JIM_SSO_PUBLIC_CLIENT_ID` to that value in Step 7.
 6. Add the **Redirect URI**: `http://localhost:8400/callback/`
 7. Click **Next** and then **Close**
 
@@ -233,13 +244,17 @@ JIM_SSO_CLIENT_ID={your-client-identifier}
 JIM_SSO_SECRET={your-client-secret}
 JIM_SSO_API_SCOPE=api://{your-client-identifier}
 
+# Optional: only set if Step 4a used a distinct Client Identifier for the native
+# (PowerShell) application. Leave unset to reuse JIM_SSO_CLIENT_ID.
+# JIM_SSO_PUBLIC_CLIENT_ID={your-native-app-client-identifier}
+
 # User identity mapping
 JIM_SSO_CLAIM_TYPE=sub
 JIM_SSO_MV_ATTRIBUTE=Subject Identifier
 JIM_SSO_INITIAL_ADMIN={your-admin-sub-value}
 ```
 
-**Example:**
+**Example (native app reuses the web client identifier):**
 
 ```bash
 JIM_SSO_AUTHORITY=https://adfs.example.com/adfs
@@ -347,17 +362,17 @@ If you need separate API clients for service-to-service communication:
 3. Click **Add client scope**
 4. Select `jim-api` and add as **Optional**
 
-### Step 6a: Configure PowerShell Module Authentication (Optional but recommended)
+### Step 6a: Configure PowerShell Module Authentication (Recommended)
 
-Configuring the PowerShell module now means administrators and automation scripts can connect to JIM interactively with their SSO account, without needing to issue or manage API keys. You can skip this step if you don't plan to use the PowerShell module, but it only takes a moment and is worth doing up front.
+Configuring the PowerShell module now means administrators and automation scripts can connect to JIM interactively with their SSO account, without needing to issue or manage API keys.
 
-The JIM PowerShell module uses OAuth 2.0 with PKCE for interactive browser-based authentication. This requires creating a public client in Keycloak.
+The JIM PowerShell module uses OAuth 2.0 with PKCE for interactive browser-based authentication. **Keycloak requires this to be a separate client** from the confidential web client — a single Keycloak client cannot be both confidential (with a secret) and public (PKCE/loopback). You must create a second, public client and tell JIM about it via `JIM_SSO_PUBLIC_CLIENT_ID` in Step 7.
 
 1. Navigate to **Clients**
 2. Click **Create client**
 3. Configure the client:
     - **Client type**: OpenID Connect
-    - **Client ID**: `jim-powershell`
+    - **Client ID**: `jim-powershell` (this exact value is what you'll set `JIM_SSO_PUBLIC_CLIENT_ID` to in Step 7)
 4. Click **Next**
 5. Configure capability:
     - **Client authentication**: OFF (this makes it a public client)
@@ -374,7 +389,7 @@ The JIM PowerShell module uses OAuth 2.0 with PKCE for interactive browser-based
 11. Select `jim-api` and add as **Optional**
 
 !!! note
-    The PowerShell module uses loopback redirect URIs per [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252). If port 8400 is busy, you may need to add additional redirect URIs for ports 8401--8409 (e.g. `http://localhost:8401/callback/`).
+    The PowerShell module uses loopback redirect URIs per [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252). If port 8400 is busy, the module will try ports 8401--8409. Add the corresponding redirect URIs (e.g. `http://localhost:8401/callback/` through `http://localhost:8409/callback/`) if port conflicts are likely in your environment.
 
 ### Step 7: Configure JIM Environment Variables
 
@@ -384,6 +399,11 @@ JIM_SSO_AUTHORITY=https://{your-keycloak-server}/realms/{realm-name}
 JIM_SSO_CLIENT_ID=jim
 JIM_SSO_SECRET={your-client-secret}
 JIM_SSO_API_SCOPE=jim-api
+
+# Client ID for the public client you created in Step 6a for the PowerShell
+# module. Required if you want interactive (SSO) PowerShell authentication;
+# omit if you only plan to use API keys.
+JIM_SSO_PUBLIC_CLIENT_ID=jim-powershell
 
 # User identity mapping
 JIM_SSO_CLAIM_TYPE=sub
@@ -398,6 +418,7 @@ JIM_SSO_AUTHORITY=https://keycloak.example.com/realms/jim
 JIM_SSO_CLIENT_ID=jim
 JIM_SSO_SECRET=AbCdEfGhIjKlMnOpQrStUvWxYz123456
 JIM_SSO_API_SCOPE=jim-api
+JIM_SSO_PUBLIC_CLIENT_ID=jim-powershell
 ```
 
 ### Keycloak Troubleshooting
@@ -412,6 +433,37 @@ JIM_SSO_API_SCOPE=jim-api
 2. Click **Evaluate**
 3. Select a user and click **Evaluate**
 4. Check the **Generated access token** to see claim values
+
+---
+
+## Confidential vs Public Clients
+
+JIM uses two kinds of OAuth 2.0 clients, and depending on your identity provider they may be the same registration or two separate ones. Understanding which is which makes the per-provider steps above easier to follow.
+
+| Client | Used by | Authentication | Configured via |
+|--------|---------|----------------|----------------|
+| **Confidential** | The JIM web application (Blazor UI) | A stored client secret sent directly from the backend to the IdP's token endpoint. Never exposed to the browser. | `JIM_SSO_CLIENT_ID` and `JIM_SSO_SECRET` |
+| **Public** | Interactive clients that run on the user's machine (PowerShell module, future CLI tools) | PKCE with a loopback redirect URI (`http://localhost:8400/callback/`). No secret — the IdP relies on PKCE to bind the authorisation response to the original client. | `JIM_SSO_PUBLIC_CLIENT_ID` (falls back to `JIM_SSO_CLIENT_ID` when unset) |
+
+**When are these the same registration?**
+
+- **Microsoft Entra ID**: One app registration can have both a Web platform (for the confidential flow) and a Mobile/Desktop platform (for the public flow). In this case, leave `JIM_SSO_PUBLIC_CLIENT_ID` unset — the PowerShell module uses the same Application (client) ID as the web application.
+- **AD FS**: A single Application Group can include both a web application and a native application that share a Client Identifier. Leave `JIM_SSO_PUBLIC_CLIENT_ID` unset in that case.
+
+**When must they be different?**
+
+- **Keycloak**: A single Keycloak client cannot be both confidential and public. You must create two clients (e.g. `jim` and `jim-powershell`) and set `JIM_SSO_PUBLIC_CLIENT_ID` to the public one.
+- **Any IdP where your security policy forbids adding loopback redirects to a confidential client**: create a dedicated public client and point `JIM_SSO_PUBLIC_CLIENT_ID` at it.
+
+**What does JIM do with these values?**
+
+The JIM server exposes `/api/v1/auth/config`, an unauthenticated discovery endpoint that interactive clients call to learn how to authenticate. It returns:
+
+- `authority`: the OIDC authority URL — `JIM_SSO_PUBLIC_AUTHORITY` if set, else `JIM_SSO_AUTHORITY`
+- `clientId`: the client ID for public/PKCE flows — `JIM_SSO_PUBLIC_CLIENT_ID` if set, else `JIM_SSO_CLIENT_ID`
+- `scopes`: the OAuth scopes to request, including `JIM_SSO_API_SCOPE`
+
+Backend token validation (the JWT bearer middleware that protects `/api/**` endpoints) always uses `JIM_SSO_AUTHORITY` for issuer and JWKS, and `JIM_SSO_API_SCOPE` for the audience, regardless of which public client issued the token. As long as the public and confidential clients belong to the same realm/tenant and both request the same API scope, tokens from either are valid.
 
 ---
 

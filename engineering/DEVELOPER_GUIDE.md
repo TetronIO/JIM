@@ -863,7 +863,9 @@ JIM works with any OIDC-compliant Identity Provider (Entra ID, Okta, Auth0, Keyc
 **Production**: Override the `JIM_SSO_*` variables with your provider's settings. See the [SSO Setup Guide](SSO_SETUP_GUIDE.md).
 
 - `JIM_SSO_AUTHORITY`: OIDC authority URL (e.g., `https://login.microsoftonline.com/{tenant-id}/v2.0`)
-- `JIM_SSO_CLIENT_ID`: OIDC client/application ID
+- `JIM_SSO_PUBLIC_AUTHORITY`: Optional client-facing authority URL. Only set when the backend and clients reach the identity provider on different URLs (dev devcontainer, split-horizon reverse proxies). Returned to interactive clients via `/api/v1/auth/config`. Backend token validation always uses `JIM_SSO_AUTHORITY`.
+- `JIM_SSO_CLIENT_ID`: OIDC client/application ID (confidential client for the Blazor UI)
+- `JIM_SSO_PUBLIC_CLIENT_ID`: Optional client ID for interactive public clients (PowerShell module). Required when the IdP mandates separate confidential and public client registrations (Keycloak); optional for IdPs that allow one registration to host both platforms (Entra ID, AD FS). Falls back to `JIM_SSO_CLIENT_ID` when unset.
 - `JIM_SSO_SECRET`: OIDC client secret
 - `JIM_SSO_API_SCOPE`: API scope for JWT bearer authentication (e.g., `api://{client-id}/access_as_user`)
 
