@@ -42,10 +42,27 @@
   border: 1px solid rgba(30, 58, 95, 0.28);  /* --mud-palette-lines-default */
 }
 
-/* Light mode — header/footer border to separate from page */
+/* Light mode: header/footer border to separate from page */
 [data-md-color-scheme="default"] .md-header,
 [data-md-color-scheme="default"] .md-footer {
   border-bottom: 1px solid rgba(30, 58, 95, 0.12);
+}
+
+/* Light mode: when tabs row is present, shift the separator to its bottom edge */
+[data-md-color-scheme="default"] .md-header:has(+ .md-tabs) {
+  border-bottom: none;
+}
+
+/* Light mode: tabs bar matches the header for a unified header block */
+[data-md-color-scheme="default"] .md-tabs {
+  background-color: #f3f3f3;
+  color: #121b29;
+  border-bottom: 1px solid rgba(30, 58, 95, 0.12);
+}
+
+/* Light mode: soften the scroll drop-shadow; the default reads too strongly on a pale header */
+[data-md-color-scheme="default"] .md-header--shadow {
+  box-shadow: 0 0 0.2rem rgba(0, 0, 0, 0.07), 0 0.2rem 0.4rem rgba(0, 0, 0, 0.1);
 }
 
 [data-md-color-scheme="default"] .md-footer {
@@ -104,9 +121,9 @@
   border: 1px solid #243a52;                  /* --mud-palette-lines-default */
 }
 
-/* Dark mode — tabs bar slightly darker than header for separation */
+/* Dark mode: tabs bar in deep plum, bridging header to purple hero */
 [data-md-color-scheme="slate"] .md-tabs {
-  background-color: #15132b;
+  background-color: #1d1a3d;
 }
 
 [data-md-color-scheme="slate"] .md-typeset a:hover,
