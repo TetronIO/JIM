@@ -34,7 +34,18 @@ Categorise each PR into one of three ecosystems:
 - Check: Does the update stay within the same major.minor version (e.g., 9.0)?
 - Check: Is the publisher Microsoft (`mcr.microsoft.com`) or another trusted source?
 - Check: Is the change digest-only (`@sha256:` swap) or a tag change?
-- **CRITICAL - Apt Package Pinning**: JIM Dockerfiles pin functional apt packages to exact versions. Before approving ANY Docker base image digest update:
+- **No-op re-tag detection (digest-only swaps)**: Docker Official Images (Postgres, Keycloak, Redis, etc.) are periodically re-tagged upstream without any filesystem change; the manifest is refreshed (re-signed, annotations updated, multi-arch manifest list repacked) but every layer is byte-for-byte identical. Dependabot still raises a PR for these because it tracks the manifest digest. Before investigating further, rule this out:
+  1. Pull both digests and compare root filesystem layers:
+     ```bash
+     docker pull <image>@<old-digest> && docker pull <image>@<new-digest>
+     OLD=$(docker inspect <image>@<old-digest> --format '{{range .RootFS.Layers}}{{println .}}{{end}}')
+     NEW=$(docker inspect <image>@<new-digest> --format '{{range .RootFS.Layers}}{{println .}}{{end}}')
+     diff <(echo "$OLD") <(echo "$NEW")
+     ```
+  2. If the diff is empty, this is a **no-op re-tag**. Mark it as such in the assessment (`Security: No-op (identical layers)`) and recommend **Merge**; the apt pin check below is redundant because the filesystem is unchanged. Still run a final CI check, but skip deeper investigation.
+  3. If any layer differs, treat this as a real image change and continue with the apt-pinning and CVE checks below.
+  4. **Best-effort caveat**: if `docker pull` of the *old* digest fails (e.g., `manifest verification failed`), the upstream has garbage-collected it and you cannot confirm. Note this in the assessment ("old digest no longer resolvable, no-op status unconfirmed") and proceed with the normal Docker checks rather than blocking.
+- **CRITICAL - Apt Package Pinning** (skip if the no-op check above confirmed identical layers): JIM Dockerfiles pin functional apt packages to exact versions. Before approving ANY Docker base image digest update:
   1. Identify which Dockerfiles have pinned apt packages by reading the changed Dockerfile
   2. For each pinned package, verify it is still available at the same version in the new base image:
      ```bash
@@ -81,9 +92,12 @@ Note whether the update addresses any known CVEs - this increases urgency to mer
 Create a summary table with columns:
 | PR | Update | Service | CI Status | Pinning Check | Security | Recommendation |
 
+The `Security` column should note one of: CVEs addressed (list them), `No-op (identical layers)` for confirmed upstream re-tags, `No-op unconfirmed (old digest unresolvable)` if the upstream GC'd the prior digest, or `None` if no CVE implications.
+
 Recommendations should be one of:
 - **Merge** - All checks pass
 - **Merge (security)** - Addresses a CVE, prioritise
+- **Merge (no-op re-tag)** - Layer-identical upstream manifest refresh, safe to merge without further investigation
 - **Hold** - Needs investigation (explain why)
 - **Reject** - Fails assessment (explain why)
 
