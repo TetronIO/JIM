@@ -1,7 +1,39 @@
 # Docs Site Reference
 
-> MkDocs site conventions, diagram embedding, and infrastructure internals.
-> For writing style, emoji usage, and changelog format, see the root `CLAUDE.md`.
+> MkDocs site conventions, diagram embedding, infrastructure internals, and writing style.
+> For changelog format, see `engineering/CLAUDE.md`.
+
+## Documentation Style
+
+**Use `✅` for positive indicators and `❌` for negative indicators in tables** (e.g. feature comparison tables). Do NOT use `:material-check-bold:`, `:material-close:`, or other Material icon syntax -- these render as small monochrome icons. The emoji equivalents render as clear green/red symbols in MkDocs and on GitHub.
+
+**Use emojis to add energy and aid visual scanning, but keep them purposeful and professional.** JIM documentation should feel alive and modern, not dry -- but never unprofessional.
+
+Where to use them:
+- Table indicators: `✅` / `❌` for yes/no capability comparisons
+- Changelog entries: one leading emoji per entry to signal the type of change (✨ new, 🐛 fix, ⚡ performance, 🔄 changed, 🗑️ removed, 🔒 security, 📦 deployment, 🖥️ UI/UX)
+- Section lead-ins on feature-heavy or conceptual pages: a single emoji before a heading or card title to anchor the concept visually
+- Admonition-style callouts where an emoji reinforces the tone (e.g. a warning or tip paragraph)
+
+Where NOT to use them:
+- Mid-sentence or inline within body text
+- In API/technical reference content (endpoint tables, parameter lists, code comments)
+- More than once per heading or table cell
+- Decoratively on every heading -- only where it genuinely adds meaning or helps the reader navigate
+- As a substitute for checklists: use `- [ ]` / `- [x]` task list syntax instead, which renders as styled checkboxes via the `pymdownx.tasklist` extension
+
+## ASCII Diagrams
+
+When creating ASCII diagrams in documentation or code comments, use only reliably monospaced characters:
+
+| Use         | Instead of    | Purpose                        |
+|-------------|---------------|--------------------------------|
+| `->` `-->`  | `->` `-->` `>` | Arrows (horizontal)           |
+| `<-` `<--`  | special chars | Arrows (reverse)               |
+| `v` / `^`   | `v` `^`       | Arrows (vertical)             |
+| `+`         | box-drawing chars | Corners and junctions      |
+| `-` / `|`   | `=` special chars | Lines (horizontal/vertical)|
+| `-`         | bullets       | Bullet points in diagrams      |
 
 ## C4 Architecture Diagrams (SVG)
 

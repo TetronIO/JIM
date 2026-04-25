@@ -32,6 +32,25 @@
   - Units: Metric only (metres, litres, kilograms, kilometres) - never use imperial units
   - Date/Time: Always use UTC for storage and internal operations; display in user's local time zone where appropriate
   - Exceptions: Technical terms, proper nouns, third-party library names, URLs
+- **NEVER use em dashes (`—`)** in documentation, comments, or UI text. Use traditional separators instead:
+  - In sentences: semicolons, commas, or colons (e.g. "JIM takes a different approach; it deploys..." not "JIM takes a different approach — it deploys...")
+  - In bullet points: colons to separate a label from its description (e.g. "Attribute Writeback: Keep HR systems current" not "Attribute Writeback — Keep HR systems current")
+  - In parenthetical asides: commas or parentheses
+
+**Copyright Headers (MANDATORY on all new files):**
+Every new source file MUST include a copyright header as the very first content. The `.editorconfig` enforces this for `.cs` files via `IDE0073`.
+
+| File type | Header |
+|-----------|--------|
+| `.cs` | `// Copyright (c) Tetron Limited. All rights reserved.`<br>`// Licensed under the Tetron Commercial License. See LICENSE file in the project root.` |
+| `.razor` | `@* Copyright (c) Tetron Limited. All rights reserved. *@`<br>`@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@` |
+| `.ps1` | `# Copyright (c) Tetron Limited. All rights reserved.`<br>`# Licensed under the Tetron Commercial License. See LICENSE file in the project root.` |
+| `.sh` | `# Copyright (c) Tetron Limited. All rights reserved.`<br>`# Licensed under the Tetron Commercial License. See LICENSE file in the project root.` |
+
+- For `.cs` and `.ps1` files: place the header at line 1, followed by a blank line, then the file content
+- For `.sh` files: place the header **after** the shebang line (`#!/bin/bash` or similar), no blank line between shebang and header
+- For `.razor` files: place the header **after** all `@` directives (`@page`, `@using`, `@inject`, etc.), followed by a blank line before the markup. Razor requires directives at the start of the file. Do NOT add headers to `_Imports.razor`.
+- Do NOT add headers to auto-generated files (EF migrations, `.Designer.cs`, `.g.cs`, `.AssemblyInfo.cs`)
 
 **DateTime Handling (IMPORTANT):**
 - Always use `DateTime` type (not `DateTimeOffset`) in models
@@ -41,6 +60,10 @@
 - Code that processes DateTime values from the database must handle BOTH `DateTime` and `DateTimeOffset` types
 - See `DynamicExpressoEvaluator.ToFileTime()` for an example of handling both types
 - This design choice maintains database portability (MySQL, SQL Server, etc. handle DateTimeOffset differently)
+
+**SQL Parameterisation (security):**
+- ALWAYS parameterise SQL. EF Core does this by default. Raw Npgsql is fine on worker hot paths (see "Worker Hot Path - Raw SQL Over EF Projection" below) but must use `NpgsqlParameter` or the `NullableParam` helper.
+- NEVER concatenate or interpolate user-controlled values into a SQL string; always pass them as parameters.
 
 **Raw SQL Nullable Parameters (CRITICAL):**
 - NEVER use `(object?)value ?? DBNull.Value` as a parameter to `ExecuteSqlRawAsync` or `ExecuteSqlInterpolatedAsync`
@@ -53,6 +76,11 @@
 - For file-open code paths (`FileStream`, `Directory.CreateDirectory`, `Path.*`), the expected set is `UnauthorizedAccessException`, `IOException`, `ArgumentException`, `NotSupportedException`, `System.Security.SecurityException`.
 - When several catches share identical fallback behaviour, extract a small private helper (e.g. `FailOpen(path, ex)`) and call it from each typed catch - keeps the catches specific without duplicating the handler body.
 - For JS interop retry patterns in `OnAfterRenderAsync` (e.g. loading user preferences), catch `InvalidOperationException` specifically; this is the exception Blazor throws when JS interop is invoked before the runtime is ready
+
+**Logging Security (CWE-117 - log injection):**
+- ALWAYS wrap user-controlled `string?` values with `LogSanitiser.Sanitise()` (from `JIM.Utilities`) before passing them as arguments to any `ILogger` or Serilog log call
+- Integers, GUIDs, enums, and DateTimes are safe and do not need wrapping
+- NEVER log secrets, tokens, or personal data, sanitised or otherwise
 
 **Worker Hot Path - Raw SQL Over EF Projection:**
 - For queries on the synchronisation hot path (per-page flushes, cross-page resolution, export evaluation, change-record persistence), default to raw Npgsql (`NpgsqlCommand` + `DbDataReader`, or `BeginBinaryImportAsync` for COPY) rather than EF Core - even `AsNoTracking()` projection.
