@@ -30,9 +30,13 @@ public class ConnectedSystemDetailDto
     /// <param name="entity">The connected system entity.</param>
     /// <param name="pendingExportCount">
     /// Pre-computed pending export count. Required because GetConnectedSystemAsync
-    /// doesn't load the PendingExports navigation property (too expensive).
+    /// does not load the PendingExports navigation property (too expensive).
     /// </param>
-    public static ConnectedSystemDetailDto FromEntity(ConnectedSystem entity, int pendingExportCount = 0)
+    /// <param name="objectCount">
+    /// Pre-computed connected system object count. Required because GetConnectedSystemAsync
+    /// does not load the Objects navigation property (it can be very large).
+    /// </param>
+    public static ConnectedSystemDetailDto FromEntity(ConnectedSystem entity, int pendingExportCount = 0, int objectCount = 0)
     {
         return new ConnectedSystemDetailDto
         {
@@ -52,7 +56,7 @@ public class ConnectedSystemDetailDto
             ObjectTypes = entity.ObjectTypes?
                 .Select(ConnectedSystemObjectTypeDto.FromEntity)
                 .ToList() ?? new(),
-            ObjectCount = entity.Objects?.Count ?? 0,
+            ObjectCount = objectCount,
             PendingExportCount = pendingExportCount
         };
     }

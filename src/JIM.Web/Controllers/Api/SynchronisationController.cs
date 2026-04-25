@@ -88,11 +88,13 @@ public class SynchronisationController(
         if (system == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
 
-        // GetConnectedSystemAsync doesn't load PendingExports (too expensive for the detail query).
-        // Compute the count via a dedicated query, matching how the Blazor UI does it.
+        // GetConnectedSystemAsync doesn't load PendingExports or Objects (too expensive for
+        // the detail query and can be very large). Compute counts via dedicated queries,
+        // matching how the Blazor UI does it.
         var pendingExportCount = await _application.ConnectedSystems.GetPendingExportsCountAsync(connectedSystemId);
+        var objectCount = await _application.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId);
 
-        return Ok(ConnectedSystemDetailDto.FromEntity(system, pendingExportCount));
+        return Ok(ConnectedSystemDetailDto.FromEntity(system, pendingExportCount, objectCount));
     }
 
     /// <summary>

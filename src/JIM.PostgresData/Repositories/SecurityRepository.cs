@@ -44,12 +44,17 @@ public class SecurityRepository : ISecurityRepository
 
     public async Task<Role?> GetRoleByIdAsync(int roleId)
     {
-        return await Repository.Database.Roles.SingleOrDefaultAsync(q => q.Id == roleId);
+        return await Repository.Database.Roles
+            .Include(q => q.StaticMembers)
+            .SingleOrDefaultAsync(q => q.Id == roleId);
     }
 
     public async Task<List<Role>> GetMetaverseObjectRolesAsync(Guid metaverseObjectId)
     {
-        return await Repository.Database.Roles.Where(q => q.StaticMembers.Any(sm => sm.Id == metaverseObjectId)).ToListAsync();
+        return await Repository.Database.Roles
+            .Include(q => q.StaticMembers)
+            .Where(q => q.StaticMembers.Any(sm => sm.Id == metaverseObjectId))
+            .ToListAsync();
     }
 
     public async Task<bool> IsObjectInRoleAsync(Guid userId, string roleName)
