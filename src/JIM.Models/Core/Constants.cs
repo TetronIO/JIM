@@ -21,7 +21,9 @@ public static class Constants
 
         // SSO/OIDC
         public static string SsoAuthority => "JIM_SSO_AUTHORITY";
+        public static string SsoPublicAuthority => "JIM_SSO_PUBLIC_AUTHORITY";
         public static string SsoClientId => "JIM_SSO_CLIENT_ID";
+        public static string SsoPublicClientId => "JIM_SSO_PUBLIC_CLIENT_ID";
         public static string SsoSecret => "JIM_SSO_SECRET";
         public static string SsoApiScope => "JIM_SSO_API_SCOPE";
         public static string SsoValidIssuers => "JIM_SSO_VALID_ISSUERS";

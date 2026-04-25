@@ -43,7 +43,9 @@ public class AuthController : ControllerBase
     public IActionResult GetConfig()
     {
         var authority = Environment.GetEnvironmentVariable(Constants.Config.SsoAuthority);
+        var publicAuthority = Environment.GetEnvironmentVariable(Constants.Config.SsoPublicAuthority);
         var clientId = Environment.GetEnvironmentVariable(Constants.Config.SsoClientId);
+        var publicClientId = Environment.GetEnvironmentVariable(Constants.Config.SsoPublicClientId);
         var apiScope = Environment.GetEnvironmentVariable(Constants.Config.SsoApiScope);
 
         if (string.IsNullOrEmpty(authority) || string.IsNullOrEmpty(clientId))
@@ -63,10 +65,25 @@ public class AuthController : ControllerBase
             scopes.Add(apiScope);
         }
 
+        // Prefer the public/client-facing authority when the deployment exposes Keycloak on a
+        // different URL to clients than to the JIM backend (e.g. dev devcontainer: backend reaches
+        // Keycloak via Docker DNS jim.keycloak:8080, while browsers and the PowerShell module on
+        // the host reach it via localhost:8181). Falls back to JIM_SSO_AUTHORITY when unset, which
+        // is the common case for single-URL production deployments.
+        var clientAuthority = !string.IsNullOrEmpty(publicAuthority) ? publicAuthority : authority;
+
+        // Interactive clients (PowerShell module, etc.) perform public-client PKCE flows with
+        // loopback redirects. Some IDPs (notably Keycloak) require this to be a separate client
+        // registration from the confidential web client used by the Blazor UI. When
+        // JIM_SSO_PUBLIC_CLIENT_ID is set, advertise it to clients; otherwise fall back to
+        // JIM_SSO_CLIENT_ID (valid for IDPs like Entra ID or AD FS where the same registration
+        // can support both a web platform and a native/desktop platform).
+        var interactiveClientId = !string.IsNullOrEmpty(publicClientId) ? publicClientId : clientId;
+
         return Ok(new AuthConfigResponse
         {
-            Authority = authority,
-            ClientId = clientId,
+            Authority = clientAuthority,
+            ClientId = interactiveClientId,
             Scopes = scopes,
             ResponseType = "code",
             UsePkce = true,

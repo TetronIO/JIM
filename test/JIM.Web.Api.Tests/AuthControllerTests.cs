@@ -18,7 +18,9 @@ public class AuthControllerTests
     {
         // Clear environment variables before each test
         Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", null);
+        Environment.SetEnvironmentVariable("JIM_SSO_PUBLIC_AUTHORITY", null);
         Environment.SetEnvironmentVariable("JIM_SSO_CLIENT_ID", null);
+        Environment.SetEnvironmentVariable("JIM_SSO_PUBLIC_CLIENT_ID", null);
         Environment.SetEnvironmentVariable("JIM_SSO_API_SCOPE", null);
 
         _controller = new AuthController();
@@ -29,7 +31,9 @@ public class AuthControllerTests
     {
         // Clean up environment variables after each test
         Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", null);
+        Environment.SetEnvironmentVariable("JIM_SSO_PUBLIC_AUTHORITY", null);
         Environment.SetEnvironmentVariable("JIM_SSO_CLIENT_ID", null);
+        Environment.SetEnvironmentVariable("JIM_SSO_PUBLIC_CLIENT_ID", null);
         Environment.SetEnvironmentVariable("JIM_SSO_API_SCOPE", null);
     }
 
@@ -230,6 +234,133 @@ public class AuthControllerTests
         // Assert
         Assert.That(config, Is.Not.Null);
         Assert.That(config!.CodeChallengeMethod, Is.EqualTo("S256"));
+    }
+
+    [Test]
+    public void GetConfig_WhenPublicAuthoritySet_ReturnsPublicAuthority()
+    {
+        // Arrange - backend authority differs from client/browser-facing authority
+        // (typical dev devcontainer: jim.web reaches Keycloak via Docker DNS,
+        // browsers and PowerShell on the host reach it via localhost).
+        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", "http://jim.keycloak:8080/realms/jim");
+        Environment.SetEnvironmentVariable("JIM_SSO_PUBLIC_AUTHORITY", "http://localhost:8181/realms/jim");
+        Environment.SetEnvironmentVariable("JIM_SSO_CLIENT_ID", "test-client-id");
+
+        // Act
+        var result = _controller.GetConfig() as OkObjectResult;
+        var config = result?.Value as AuthConfigResponse;
+
+        // Assert
+        Assert.That(config, Is.Not.Null);
+        Assert.That(config!.Authority, Is.EqualTo("http://localhost:8181/realms/jim"));
+    }
+
+    [Test]
+    public void GetConfig_WhenPublicAuthorityUnset_FallsBackToAuthority()
+    {
+        // Arrange - typical production: one public URL, JIM_SSO_PUBLIC_AUTHORITY not set
+        var authority = "https://login.panoply.org";
+        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", authority);
+        Environment.SetEnvironmentVariable("JIM_SSO_CLIENT_ID", "test-client-id");
+
+        // Act
+        var result = _controller.GetConfig() as OkObjectResult;
+        var config = result?.Value as AuthConfigResponse;
+
+        // Assert
+        Assert.That(config, Is.Not.Null);
+        Assert.That(config!.Authority, Is.EqualTo(authority));
+    }
+
+    [Test]
+    public void GetConfig_WhenPublicAuthorityEmpty_FallsBackToAuthority()
+    {
+        // Arrange - treat empty string the same as unset
+        var authority = "https://login.panoply.org";
+        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", authority);
+        Environment.SetEnvironmentVariable("JIM_SSO_PUBLIC_AUTHORITY", "");
+        Environment.SetEnvironmentVariable("JIM_SSO_CLIENT_ID", "test-client-id");
+
+        // Act
+        var result = _controller.GetConfig() as OkObjectResult;
+        var config = result?.Value as AuthConfigResponse;
+
+        // Assert
+        Assert.That(config, Is.Not.Null);
+        Assert.That(config!.Authority, Is.EqualTo(authority));
+    }
+
+    [Test]
+    public void GetConfig_WhenOnlyPublicAuthoritySet_Returns503()
+    {
+        // Arrange - JIM_SSO_AUTHORITY remains the mandatory trigger; a public override
+        // alone does not satisfy the "SSO is configured" precondition.
+        Environment.SetEnvironmentVariable("JIM_SSO_PUBLIC_AUTHORITY", "http://localhost:8181/realms/jim");
+        Environment.SetEnvironmentVariable("JIM_SSO_CLIENT_ID", "test-client-id");
+
+        // Act
+        var result = _controller.GetConfig();
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<ObjectResult>());
+        var objectResult = result as ObjectResult;
+        Assert.That(objectResult?.StatusCode, Is.EqualTo(503));
+    }
+
+    [Test]
+    public void GetConfig_WhenPublicClientIdSet_ReturnsPublicClientId()
+    {
+        // Arrange - public (PKCE/loopback) client is registered separately from the
+        // confidential web client. Keycloak mandates this split; other IDPs allow
+        // same-id or separate registrations. The returned ClientId must be the one
+        // the PowerShell module presents at the IdP authorise endpoint, which must
+        // match the public client's allowed loopback redirect URIs.
+        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", "https://login.panoply.org");
+        Environment.SetEnvironmentVariable("JIM_SSO_CLIENT_ID", "jim-web");
+        Environment.SetEnvironmentVariable("JIM_SSO_PUBLIC_CLIENT_ID", "jim-powershell");
+
+        // Act
+        var result = _controller.GetConfig() as OkObjectResult;
+        var config = result?.Value as AuthConfigResponse;
+
+        // Assert
+        Assert.That(config, Is.Not.Null);
+        Assert.That(config!.ClientId, Is.EqualTo("jim-powershell"));
+    }
+
+    [Test]
+    public void GetConfig_WhenPublicClientIdUnset_FallsBackToClientId()
+    {
+        // Arrange - IdPs that allow the web and PowerShell clients to share a
+        // registration (Entra ID, AD FS) don't need the override; clients get the
+        // same ID that backs the web app.
+        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", "https://login.panoply.org");
+        Environment.SetEnvironmentVariable("JIM_SSO_CLIENT_ID", "test-client-id");
+
+        // Act
+        var result = _controller.GetConfig() as OkObjectResult;
+        var config = result?.Value as AuthConfigResponse;
+
+        // Assert
+        Assert.That(config, Is.Not.Null);
+        Assert.That(config!.ClientId, Is.EqualTo("test-client-id"));
+    }
+
+    [Test]
+    public void GetConfig_WhenPublicClientIdEmpty_FallsBackToClientId()
+    {
+        // Arrange - treat empty string the same as unset
+        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", "https://login.panoply.org");
+        Environment.SetEnvironmentVariable("JIM_SSO_CLIENT_ID", "test-client-id");
+        Environment.SetEnvironmentVariable("JIM_SSO_PUBLIC_CLIENT_ID", "");
+
+        // Act
+        var result = _controller.GetConfig() as OkObjectResult;
+        var config = result?.Value as AuthConfigResponse;
+
+        // Assert
+        Assert.That(config, Is.Not.Null);
+        Assert.That(config!.ClientId, Is.EqualTo("test-client-id"));
     }
 
     #endregion

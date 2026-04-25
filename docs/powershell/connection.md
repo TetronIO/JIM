@@ -70,7 +70,7 @@ Connect-JIM "https://jim.example.com" "jim_ak_7f3e..."
 
 ### Notes
 
-- **Interactive SSO** requires that SSO is configured on the JIM server, a browser is available on the local machine, and the identity provider permits localhost redirect URIs.
+- **Interactive SSO** requires that SSO is configured on the JIM server, a browser is available on the local machine, and the identity provider permits localhost redirect URIs on the client it issues tokens to. The PowerShell module is a public OAuth client that uses PKCE with loopback redirects; on Keycloak, and any IdP where the web and interactive clients must be separate registrations, the JIM administrator must create a second public client and set `JIM_SSO_PUBLIC_CLIENT_ID` on the server — see [SSO Setup](../administration/sso-setup.md) for details.
 - **API key authentication** is recommended for automation, CI/CD pipelines, and headless environments where a browser is not available.
 - OAuth sessions are cached locally; tokens are refreshed automatically when they approach expiry.
 - If a valid session already exists, `Connect-JIM` reuses it unless `-Force` is specified.
