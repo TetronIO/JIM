@@ -93,6 +93,35 @@ public class SecurityControllerTests
     }
 
     // ──────────────────────────────────────────────
+    // GET /api/v1/security/roles
+    // ──────────────────────────────────────────────
+
+    [Test]
+    public async Task GetRolesAsync_ReturnsOkWithRoleHeadersAsync()
+    {
+        // Arrange
+        var headers = new List<JIM.Models.Security.DTOs.RoleHeader>
+        {
+            new() { Id = 1, Name = "Administrator", BuiltIn = true, Created = DateTime.UtcNow, StaticMemberCount = 3 },
+            new() { Id = 2, Name = "Reader", BuiltIn = true, Created = DateTime.UtcNow, StaticMemberCount = 0 }
+        };
+        _mockSecurityRepo.Setup(r => r.GetRoleHeadersAsync()).ReturnsAsync(headers);
+
+        // Act
+        var result = await _controller.GetRolesAsync();
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = (OkObjectResult)result;
+        var returned = okResult.Value as IEnumerable<JIM.Models.Security.DTOs.RoleHeader>;
+        Assert.That(returned, Is.Not.Null);
+        var list = returned!.ToList();
+        Assert.That(list, Has.Count.EqualTo(2));
+        Assert.That(list.Single(h => h.Name == "Administrator").StaticMemberCount, Is.EqualTo(3));
+        Assert.That(list.Single(h => h.Name == "Reader").StaticMemberCount, Is.EqualTo(0));
+    }
+
+    // ──────────────────────────────────────────────
     // GET /api/v1/security/roles/{roleId}
     // ──────────────────────────────────────────────
 

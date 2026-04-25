@@ -3,11 +3,18 @@
 
 using JIM.Models.Core;
 using JIM.Models.Security;
+using JIM.Models.Security.DTOs;
 namespace JIM.Data.Repositories;
 
 public interface ISecurityRepository
 {
     public Task<List<Role>> GetRolesAsync();
+
+    /// <summary>
+    /// Returns lightweight role headers for list views, with static member counts
+    /// aggregated directly in SQL.
+    /// </summary>
+    public Task<List<RoleHeader>> GetRoleHeadersAsync();
 
     public Task<Role?> GetRoleAsync(string roleName);
 

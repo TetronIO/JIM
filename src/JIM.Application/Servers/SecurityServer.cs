@@ -3,6 +3,7 @@
 
 using JIM.Models.Core;
 using JIM.Models.Security;
+using JIM.Models.Security.DTOs;
 namespace JIM.Application.Servers;
 
 public class SecurityServer
@@ -17,6 +18,11 @@ public class SecurityServer
     public async Task<List<Role>> GetRolesAsync()
     {
         return await Application.Repository.Security.GetRolesAsync();
+    }
+
+    public async Task<List<RoleHeader>> GetRoleHeadersAsync()
+    {
+        return await Application.Repository.Security.GetRoleHeadersAsync();
     }
 
     public async Task<Role?> GetRoleAsync(string roleName)

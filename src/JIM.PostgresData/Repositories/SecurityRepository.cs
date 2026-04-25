@@ -4,6 +4,7 @@
 using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Security;
+using JIM.Models.Security.DTOs;
 using Microsoft.EntityFrameworkCore;
 namespace JIM.PostgresData.Repositories;
 
@@ -19,6 +20,21 @@ public class SecurityRepository : ISecurityRepository
     public async Task<List<Role>> GetRolesAsync()
     {
         return await Repository.Database.Roles.OrderBy(q => q.Name).ToListAsync();
+    }
+
+    public async Task<List<RoleHeader>> GetRoleHeadersAsync()
+    {
+        return await Repository.Database.Roles
+            .OrderBy(r => r.Name)
+            .Select(r => new RoleHeader
+            {
+                Id = r.Id,
+                Name = r.Name,
+                BuiltIn = r.BuiltIn,
+                Created = r.Created,
+                StaticMemberCount = r.StaticMembers.Count
+            })
+            .ToListAsync();
     }
 
     public async Task<Role?> GetRoleAsync(string roleName)
