@@ -4,6 +4,7 @@
 using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Security;
+using JIM.Models.Security.DTOs;
 using Microsoft.EntityFrameworkCore;
 namespace JIM.PostgresData.Repositories;
 
@@ -21,6 +22,21 @@ public class SecurityRepository : ISecurityRepository
         return await Repository.Database.Roles.OrderBy(q => q.Name).ToListAsync();
     }
 
+    public async Task<List<RoleHeader>> GetRoleHeadersAsync()
+    {
+        return await Repository.Database.Roles
+            .OrderBy(r => r.Name)
+            .Select(r => new RoleHeader
+            {
+                Id = r.Id,
+                Name = r.Name,
+                BuiltIn = r.BuiltIn,
+                Created = r.Created,
+                StaticMemberCount = r.StaticMembers.Count
+            })
+            .ToListAsync();
+    }
+
     public async Task<Role?> GetRoleAsync(string roleName)
     {
         return await Repository.Database.Roles.SingleOrDefaultAsync(q => q.Name == roleName);
@@ -28,12 +44,17 @@ public class SecurityRepository : ISecurityRepository
 
     public async Task<Role?> GetRoleByIdAsync(int roleId)
     {
-        return await Repository.Database.Roles.SingleOrDefaultAsync(q => q.Id == roleId);
+        return await Repository.Database.Roles
+            .Include(q => q.StaticMembers)
+            .SingleOrDefaultAsync(q => q.Id == roleId);
     }
 
     public async Task<List<Role>> GetMetaverseObjectRolesAsync(Guid metaverseObjectId)
     {
-        return await Repository.Database.Roles.Where(q => q.StaticMembers.Any(sm => sm.Id == metaverseObjectId)).ToListAsync();
+        return await Repository.Database.Roles
+            .Include(q => q.StaticMembers)
+            .Where(q => q.StaticMembers.Any(sm => sm.Id == metaverseObjectId))
+            .ToListAsync();
     }
 
     public async Task<bool> IsObjectInRoleAsync(Guid userId, string roleName)

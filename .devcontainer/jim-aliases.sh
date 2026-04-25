@@ -215,6 +215,7 @@ _jim_db_compose() {
 
 # Standalone database (local development workflow)
 jim-db() {
+  _jim_heal_docker_creds
   docker compose $(_jim_db_compose) up -d
 }
 jim-db-stop() {
@@ -227,6 +228,7 @@ jim-db-logs() {
 # Standalone Keycloak IdP (local debugging workflow - use with jim-db + F5)
 # Starts the bundled Keycloak from docker-compose.override.yml without the full stack.
 jim-keycloak() {
+  _jim_heal_docker_creds
   docker compose -f docker-compose.yml -f docker-compose.override.yml up -d jim.keycloak
   _jim_keycloak_bridge
 }
@@ -283,11 +285,33 @@ _jim_kill_local() {
   fi
 }
 
+# Self-heal stale Docker credential helper references at command time.
+# The VS Code Dev Containers extension's per-session credsStore shim
+# (docker-credential-dev-containers-<uuid>) can disappear mid-session
+# (extension reload, host VS Code restart, etc.) while the reference in
+# ~/.docker/config.json persists, making every docker pull/build fail with
+# "error getting credentials - err: exit status 255". setup.sh handles this
+# at container creation; this runs at command time to handle the in-session
+# breakage. See setup.sh for the full background.
+_jim_heal_docker_creds() {
+  local cfg="$HOME/.docker/config.json"
+  [ -f "$cfg" ] || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+  local creds_store
+  creds_store=$(jq -r '.credsStore // empty' "$cfg" 2>/dev/null)
+  [ -n "$creds_store" ] || return 0
+  command -v "docker-credential-$creds_store" >/dev/null 2>&1 && return 0
+  echo "Stale Docker credsStore '$creds_store' (helper binary missing) - removing from $cfg"
+  local tmp
+  tmp=$(mktemp) && jq 'del(.credsStore)' "$cfg" > "$tmp" && mv "$tmp" "$cfg"
+}
+
 # Clear any previous aliases before defining functions (zsh cannot redefine alias as function)
 unalias jim-stack jim-stack-logs jim-stack-down jim-restart jim-build jim-build-light jim-build-web jim-build-worker jim-build-scheduler jim-cleanup jim-reset jim-db jim-db-stop jim-db-logs jim-keycloak jim-keycloak-stop jim-keycloak-logs 2>/dev/null || true
 
 # Docker stack management
 jim-stack() {
+  _jim_heal_docker_creds
   _jim_kill_local
   docker compose $(_jim_compose) up -d
   _jim_keycloak_bridge
@@ -302,6 +326,7 @@ jim-stack-down() {
   docker rm -f samba-ad-primary samba-ad-source samba-ad-target 2>/dev/null || true
 }
 jim-restart() {
+  _jim_heal_docker_creds
   _jim_kill_local
   docker compose $(_jim_compose) down && docker compose $(_jim_compose) up -d --force-recreate
   _jim_keycloak_bridge
@@ -313,26 +338,31 @@ _jim_version_suffix() {
   echo "dev.$(date -u +%Y%m%d).$((10#$(date -u +%H)*60+10#$(date -u +%M)))"
 }
 jim-build() {
+  _jim_heal_docker_creds
   _jim_kill_local
   VERSION_SUFFIX="$(_jim_version_suffix)" docker compose $(_jim_compose) up -d --build
   _jim_keycloak_bridge
 }
 jim-build-web() {
+  _jim_heal_docker_creds
   _jim_kill_local
   local vs="$(_jim_version_suffix)"
   VERSION_SUFFIX="$vs" docker compose $(_jim_compose) build jim.web && VERSION_SUFFIX="$vs" docker compose $(_jim_compose) up -d jim.web
 }
 jim-build-worker() {
+  _jim_heal_docker_creds
   _jim_kill_local
   local vs="$(_jim_version_suffix)"
   VERSION_SUFFIX="$vs" docker compose $(_jim_compose) build jim.worker && VERSION_SUFFIX="$vs" docker compose $(_jim_compose) up -d jim.worker
 }
 jim-build-scheduler() {
+  _jim_heal_docker_creds
   _jim_kill_local
   local vs="$(_jim_version_suffix)"
   VERSION_SUFFIX="$vs" docker compose $(_jim_compose) build jim.scheduler && VERSION_SUFFIX="$vs" docker compose $(_jim_compose) up -d jim.scheduler
 }
 jim-build-light() {
+  _jim_heal_docker_creds
   _jim_kill_local
   docker compose $(_jim_compose) up -d jim.database jim.keycloak
   _jim_keycloak_bridge

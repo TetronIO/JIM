@@ -36,6 +36,37 @@ print_warning() {
 # TODO list, not individual warnings scattered through the setup log.
 PENDING_ACTIONS=""
 
+# Self-heal stale Docker credential helper references.
+# The VS Code Dev Containers extension forwards the host's Docker credentials
+# into the container by writing a per-session entry into ~/.docker/config.json
+# of the form: {"credsStore": "dev-containers-<uuid>"} and installing a shim
+# binary docker-credential-dev-containers-<uuid> on PATH that proxies cred
+# lookups back to the host. The shim is per-VS-Code-session; the config.json
+# entry persists in the home volume across rebuilds. When the UUID rotates
+# (rebuild, extension reload, host restart) the config.json reference becomes
+# stale - Docker tries to exec a binary that no longer exists, gets exit 255,
+# and *every* image pull fails (even anonymous public ones like
+# docker/dockerfile:1) because Docker consults the credential store before
+# deciding the request is anonymous. Symptom: jim-build / jim-stack fail with
+# "error getting credentials - err: exit status 255". Fix: if the configured
+# helper isn't on PATH, drop it. Login-based credentials (docker login) are
+# unaffected because they're stored under "auths", not "credsStore".
+print_step "Checking Docker credential helper..."
+DOCKER_CONFIG_JSON="$HOME/.docker/config.json"
+if [ -f "$DOCKER_CONFIG_JSON" ] && command -v jq >/dev/null 2>&1; then
+    creds_store=$(jq -r '.credsStore // empty' "$DOCKER_CONFIG_JSON" 2>/dev/null)
+    if [ -n "$creds_store" ] && ! command -v "docker-credential-$creds_store" >/dev/null 2>&1; then
+        print_warning "Stale credsStore '$creds_store' references missing binary - removing"
+        tmp=$(mktemp)
+        jq 'del(.credsStore)' "$DOCKER_CONFIG_JSON" > "$tmp" && mv "$tmp" "$DOCKER_CONFIG_JSON"
+        print_success "Removed stale credsStore from $DOCKER_CONFIG_JSON"
+    else
+        print_success "Docker credential helper OK (or none configured)"
+    fi
+else
+    print_success "No Docker config.json or jq unavailable - skipping credsStore check"
+fi
+
 # Check Docker daemon health.
 # The docker-in-docker feature starts its own dockerd inside this container at
 # postCreate time. On some native Linux hosts (notably Fedora and Asahi Linux,

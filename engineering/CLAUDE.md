@@ -193,3 +193,74 @@ Both documents include a `Document Version` field in their header. This version 
 JIM follows strict security development practices aligned with NCSC, CISA, OWASP ASVS, and UK Software Security Code of Practice standards. Full details are in:
 - `docs/COMPLIANCE_MAPPING.md` - Complete security framework and standards mapping
 - `docs/DEVELOPER_GUIDE.md` - Security development guidelines and patterns
+
+---
+
+## Changelog Maintenance
+
+The project uses [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Entries must be kept up to date as changes are made, not deferred until release time.
+
+**Audience and tone:**
+The changelog is a **customer-facing product document**. The audience is administrators and decision-makers wanting to know what's new. Entries should make JIM appear useful, reliable, sophisticated, and exciting.
+- Write entries as product changes, not developer notes: focus on the benefit or outcome, not the implementation detail
+- Use a leading emoji per entry to add energy and visual scanning context (e.g. ✨ for new features, 🐛 for fixes, ⚡ for performance, 🔒 for security)
+- Do NOT include: internal refactoring, test changes, developer tooling, CI/CD tweaks, or anything that has no user-facing impact
+- Trivial changes (renamed a CSS class, moved a file, updated a comment) do NOT belong in the changelog
+
+**When to add an entry:**
+- Add an entry under `## [Unreleased]` with each commit or PR that introduces user-facing changes
+- This includes: new features, bug fixes, performance improvements, changed behaviour, and removed functionality
+
+**When NOT to add an entry:**
+- Documentation-only changes (`.md` files, `docs/` updates)
+- CI/CD workflow changes (`.github/workflows/`)
+- Development tooling changes (`.editorconfig`, devcontainer config)
+- Refactoring with no user-facing impact
+- Test-only changes
+- Trivial UI tweaks with no meaningful user impact
+
+**Categories (use as applicable):**
+- **Added**: new features or capabilities
+- **Changed**: modifications to existing behaviour
+- **Fixed**: bug fixes
+- **Performance**: optimisations and performance improvements
+- **Removed**: removed features (use sparingly)
+
+**Formatting conventions (match existing style):**
+- Use `####` subheadings to group related entries under a larger feature (e.g., `#### Scheduler Service (#168)`)
+- Reference GitHub issue numbers where applicable (e.g., `(#123)`)
+- Keep entries concise: one line per change, describe what changed from the user's perspective
+- Lead each entry with an appropriate emoji (✨ new, 🐛 fix, ⚡ performance, 🔄 changed, 🗑️ removed, 🔒 security, 📦 deployment/infrastructure, 🖥️ UI/UX)
+
+**At release time:** Move all `[Unreleased]` entries to a new version section and update comparison links at the bottom of the file. See Release Process below.
+
+---
+
+## Release Process
+
+**CRITICAL: NEVER modify the `VERSION` file without explicit user instruction to create a release.**
+
+The `VERSION` file is the single source of truth for JIM's version number. It feeds into:
+- All .NET assembly versions (via `Directory.Build.props`)
+- Docker image tags (via release workflow)
+- PowerShell module version (updated at release time)
+- Diagram metadata (via `export-diagrams.js`)
+
+**Versioning scheme:** [Semantic Versioning](https://semver.org/), `X.Y.Z` with optional prerelease suffix (e.g., `0.3.0-alpha`).
+
+**What triggers a version bump:**
+- New feature releases
+- Breaking changes
+- Significant bug fix batches
+- User explicitly requesting a release
+
+**What does NOT trigger a version bump:**
+- Documentation changes
+- Diagram regeneration
+- CI/CD improvements
+- Development tooling changes
+- Refactoring without user-facing changes
+
+**To create a release:** Use `/release <version>`; the skill handles VERSION, CHANGELOG, PowerShell manifest, documentation review, commit, tag, and push.
+
+> **Full release process, air-gapped deployment, and Docker image details:** See `RELEASE_PROCESS.md`

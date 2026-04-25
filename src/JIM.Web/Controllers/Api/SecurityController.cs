@@ -5,6 +5,7 @@ using System.Security.Claims;
 using Asp.Versioning;
 using JIM.Application;
 using JIM.Models.Core;
+using JIM.Models.Security.DTOs;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -34,14 +35,13 @@ public class SecurityController(ILogger<SecurityController> logger, JimApplicati
     /// </summary>
     /// <returns>A list of all Role definitions.</returns>
     [HttpGet("roles", Name = "GetRoles")]
-    [ProducesResponseType(typeof(IEnumerable<RoleDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(IEnumerable<RoleHeader>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetRolesAsync()
     {
         _logger.LogTrace("Requested roles");
-        var roles = await _application.Security.GetRolesAsync();
-        var dtos = roles.Select(RoleDto.FromEntity);
-        return Ok(dtos);
+        var headers = await _application.Security.GetRoleHeadersAsync();
+        return Ok(headers);
     }
 
     /// <summary>
