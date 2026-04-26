@@ -33,7 +33,7 @@ JIM is a modern Identity Management system designed for organisations with compl
 - Single Sign-On (SSO) using OpenID Connect
 - Dark/Light mode
 
-![A screenshot of JIM running](https://tetron.io/images/jim/0.8.0/homepage-dark.png "JIM Screenshot")
+![A screenshot of JIM running](https://tetron.io/images/jim/0.10.0/homepage-dark.png "JIM Screenshot")
 
 <p align="center">
   <strong>📖 <a href="https://tetronio.github.io/JIM/">Read the full documentation</a></strong>
