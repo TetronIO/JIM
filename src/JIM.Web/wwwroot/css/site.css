@@ -574,7 +574,7 @@ body.jim-dark-mode .jim-instance-bar .jim-title-accent {
     border-top-style: solid;
     border-top-width: 1px;
     border-top-color: var(--jim-drawer-border-color);
-    padding: 4px 0;
+    padding: 8px 0;
 }
 
 /* === User Menu (drawer footer) === */
