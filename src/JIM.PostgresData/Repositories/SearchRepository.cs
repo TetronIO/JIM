@@ -35,6 +35,19 @@ public class SearchRepository : ISearchRepository
         return predefinedSearchHeaders;
     }
 
+    public async Task<PredefinedSearch?> GetPredefinedSearchAsync(int id)
+    {
+        return await Repository.Database.PredefinedSearches.
+            AsSplitQuery(). // Use split query to avoid cartesian explosion from multiple collection includes
+            Include(q => q.Attributes).
+            ThenInclude(q => q.MetaverseAttribute).
+            Include(q => q.MetaverseObjectType).
+            Include(q => q.CriteriaGroups).
+            ThenInclude(cg => cg.Criteria).
+            ThenInclude(c => c.MetaverseAttribute).
+            SingleOrDefaultAsync(q => q.Id == id);
+    }
+
     public async Task<PredefinedSearch?> GetPredefinedSearchAsync(string uri)
     {
         return await Repository.Database.PredefinedSearches.

@@ -13,6 +13,8 @@ Disabled searches are hidden from the portal, the end-user search API, and the s
 
 ## The Predefined Search Header Object
 
+Returned by [List Predefined Searches](#list-predefined-searches).
+
 ```json
 {
   "id": 3,
@@ -39,11 +41,28 @@ Disabled searches are hidden from the portal, the end-user search API, and the s
 | `metaverseAttributeCount` | integer | Number of attributes surfaced in the search results |
 | `created` | datetime | UTC creation timestamp |
 
+## The Predefined Search Object
+
+Returned by [Get a Predefined Search by ID](#get-a-predefined-search-by-id) and [Get a Predefined Search by URI](#get-a-predefined-search-by-uri). Includes the full search graph: header fields plus the displayed attributes and the criteria-group tree.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | integer | Unique identifier |
+| `name` | string | Human-readable display name |
+| `uri` | string | Stable slug used in URLs and as a search identifier |
+| `isEnabled` | boolean | Whether the search is currently visible to end users |
+| `builtIn` | boolean | Whether the search ships with JIM (as opposed to being administrator-defined) |
+| `isDefaultForMetaverseObjectType` | boolean | Whether this is the default search for its object type |
+| `metaverseObjectType` | object | The Metaverse Object Type the search targets |
+| `attributes` | array | Attributes surfaced in the search results, ordered by `position` |
+| `criteriaGroups` | array | Criteria groups that filter which objects match the search |
+| `created` | datetime | UTC creation timestamp |
+
 ---
 
 ## List Predefined Searches
 
-Returns all Predefined Searches, including any that are currently disabled, so administrators can discover their IDs and current state.
+Returns all Predefined Searches as lightweight headers, including any that are currently disabled, so administrators can discover their IDs and current state.
 
 ```
 GET /api/v1/predefined-searches
@@ -68,7 +87,7 @@ GET /api/v1/predefined-searches
 
 ### Response
 
-Returns `200 OK` with an array of header objects.
+Returns `200 OK` with an array of [header objects](#the-predefined-search-header-object).
 
 ### Errors
 
@@ -76,6 +95,97 @@ Returns `200 OK` with an array of header objects.
 |--------|------|-------------|
 | `401` | `UNAUTHORISED` | Authentication required |
 | `403` | `FORBIDDEN` | Insufficient permissions (Administrator role required) |
+
+---
+
+## Get a Predefined Search by ID
+
+Returns the full graph (attributes and criteria groups) for the search with the given integer ID. The ID is the canonical identifier; for lookup by URI slug see [Get a Predefined Search by URI](#get-a-predefined-search-by-uri).
+
+```
+GET /api/v1/predefined-searches/{id}
+```
+
+### Request
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | integer (route) | The unique identifier of the Predefined Search |
+
+### Examples
+
+=== "curl"
+
+    ```bash
+    curl https://jim.example.com/api/v1/predefined-searches/3 \
+      -H "X-Api-Key: jim_xxxxxxxxxxxx"
+    ```
+
+=== "PowerShell"
+
+    ```powershell
+    Get-JIMPredefinedSearch -Id 3
+    ```
+
+### Response
+
+Returns `200 OK` with a [Predefined Search Object](#the-predefined-search-object).
+
+### Errors
+
+| Status | Code | Description |
+|--------|------|-------------|
+| `401` | `UNAUTHORISED` | Authentication required |
+| `403` | `FORBIDDEN` | Insufficient permissions (Administrator role required) |
+| `404` | `NOT_FOUND` | No Predefined Search exists with the supplied ID |
+
+---
+
+## Get a Predefined Search by URI
+
+Convenience lookup by the search's stable, human-readable slug (for example `people` or `security-groups`). Returns the same full graph as the by-ID endpoint.
+
+```
+GET /api/v1/predefined-searches/by-uri/{uri}
+```
+
+### Request
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `uri` | string (route) | The URI slug of the Predefined Search |
+
+### Examples
+
+=== "curl"
+
+    ```bash
+    curl https://jim.example.com/api/v1/predefined-searches/by-uri/people \
+      -H "X-Api-Key: jim_xxxxxxxxxxxx"
+    ```
+
+=== "PowerShell"
+
+    ```powershell
+    Get-JIMPredefinedSearch -Uri people
+    ```
+
+### Response
+
+Returns `200 OK` with a [Predefined Search Object](#the-predefined-search-object).
+
+### Errors
+
+| Status | Code | Description |
+|--------|------|-------------|
+| `400` | `BAD_REQUEST` | URI was empty or whitespace |
+| `401` | `UNAUTHORISED` | Authentication required |
+| `403` | `FORBIDDEN` | Insufficient permissions (Administrator role required) |
+| `404` | `NOT_FOUND` | No Predefined Search exists with the supplied URI |
+
+### Notes
+
+- The integer ID returned in the response is the canonical identifier. Subsequent write operations (PATCH) must be keyed by ID, not URI.
 
 ---
 

@@ -52,6 +52,61 @@ public class PredefinedSearchesControllerTests
     };
 
     [Test]
+    public async Task GetByIdAsync_WithExistingId_ReturnsOkWithEntityAsync()
+    {
+        var existing = BuildSearch(7, isEnabled: true);
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(7)).ReturnsAsync(existing);
+
+        var result = await _controller.GetByIdAsync(7);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = (OkObjectResult)result;
+        Assert.That(okResult.Value, Is.SameAs(existing));
+    }
+
+    [Test]
+    public async Task GetByIdAsync_WithUnknownId_ReturnsNotFoundAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(999)).ReturnsAsync((PredefinedSearch?)null);
+
+        var result = await _controller.GetByIdAsync(999);
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    [Test]
+    public async Task GetByUriAsync_WithExistingUri_ReturnsOkWithEntityAsync()
+    {
+        var existing = BuildSearch(7, isEnabled: true);
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync("people")).ReturnsAsync(existing);
+
+        var result = await _controller.GetByUriAsync("people");
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = (OkObjectResult)result;
+        Assert.That(okResult.Value, Is.SameAs(existing));
+    }
+
+    [Test]
+    public async Task GetByUriAsync_WithUnknownUri_ReturnsNotFoundAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync("nope")).ReturnsAsync((PredefinedSearch?)null);
+
+        var result = await _controller.GetByUriAsync("nope");
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    [Test]
+    public async Task GetByUriAsync_WithEmptyUri_ReturnsBadRequestAsync()
+    {
+        var result = await _controller.GetByUriAsync(string.Empty);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockSearchRepo.Verify(r => r.GetPredefinedSearchAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    [Test]
     public async Task GetAllAsync_ReturnsAllHeadersIncludingDisabledAsync()
     {
         var headers = new List<PredefinedSearchHeader>
