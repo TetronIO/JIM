@@ -515,6 +515,34 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     color: var(--jim-logo-text-color, #ffffff) !important;
 }
 
+/* Stretch the logo row to the full drawer width so margin-left: auto on the
+   toggle button pushes it all the way to the right edge. */
+.jim-drawer-logo {
+    width: 100%;
+}
+
+/* Pin/collapse toggle on the logo row - pushed to the right edge by margin-left: auto.
+   The button is wrapped by MudTooltip's `.mud-tooltip-root` div, which is the actual
+   flex child of `.jim-drawer-logo`, so the auto margin must be applied there.
+   Icon rotates 180deg when the drawer is unpinned so the chevron always points the
+   direction the drawer will move when clicked. */
+.jim-drawer-logo > .mud-tooltip-root:has(.jim-drawer-toggle) {
+    margin-left: auto;
+    margin-right: 8px;
+}
+
+.jim-drawer-toggle {
+    color: var(--jim-nav-top-level-color) !important;
+}
+
+.jim-drawer-toggle .mud-icon-root {
+    transition: transform 0.2s ease;
+}
+
+.jim-drawer-toggle-collapsed .mud-icon-root {
+    transform: rotate(180deg);
+}
+
 .jim-instance-bar {
     position: fixed;
     top: 0;

@@ -50,6 +50,13 @@ else
                 @if (IsDrawerOpen)
                 {
                     <MudText Class="ms-2">JIM</MudText>
+                    <MudTooltip Text="@(IsDrawerPinned ? "Collapse sidebar" : "Pin sidebar open")" Arrow="true" Placement="Placement.Top">
+                        <MudIconButton Icon="@Icons.Material.Filled.MenuOpen"
+                                       Size="Size.Small"
+                                       OnClick="ToggleDrawerPinned"
+                                       Class="@($"jim-drawer-toggle{(IsDrawerPinned ? "" : " jim-drawer-toggle-collapsed")}")"
+                                       aria-label="@(IsDrawerPinned ? "Collapse sidebar" : "Pin sidebar open")" />
+                    </MudTooltip>
                 }
             </div>
 
@@ -57,9 +64,7 @@ else
 
             <div class="jim-drawer-footer">
                 <DrawerUserMenu DrawerOpen="@IsDrawerOpen"
-                                @bind-IsDarkMode="@IsDarkMode"
-                                IsDrawerPinned="@IsDrawerPinned"
-                                OnTogglePinned="ToggleDrawerPinned" />
+                                @bind-IsDarkMode="@IsDarkMode" />
             </div>
 
 
