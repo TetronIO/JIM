@@ -111,8 +111,8 @@ html[lang] {
     --jim-nav-child-color: #3e4240;
     --jim-nav-hover-color: #7a1a0e;
     --jim-nav-active-color: #7a1a0e;
-    --jim-nav-active-bg: #9b9e9c;
-    --jim-nav-hover-bg: #828583;
+    --jim-nav-active-bg: #a8abaa;
+    --jim-nav-hover-bg: #8e9190;
 
     /* === JIM Custom: Drawer border (transparent — blended) === */
     --jim-drawer-border-color: transparent;

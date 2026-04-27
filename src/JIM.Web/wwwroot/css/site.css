@@ -703,6 +703,19 @@ body.jim-dark-mode .jim-instance-bar .jim-title-accent {
     box-sizing: border-box !important;
 }
 
+/* When the drawer is in mini variant AND collapsed, drop the inset margins so
+   icons sit centred on the drawer's vertical axis rather than offset by 8px.
+   `.mud-drawer-mini` alone is the variant marker (present even when expanded);
+   `.mud-drawer--closed.mud-drawer-mini` is the actually-collapsed state. */
+.mud-drawer--closed.mud-drawer-mini .jim-nav-menu .mud-nav-link {
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    margin-inline-start: 0 !important;
+    margin-inline-end: 0 !important;
+    border-radius: 0 !important;
+}
+
 /* Active/selected nav item - background pill plus stronger text/icon colour.
    Set color on the link element itself (not just .mud-nav-link-text) and use a
    selector specific enough to beat MudBlazor's
