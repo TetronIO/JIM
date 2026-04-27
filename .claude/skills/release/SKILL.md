@@ -6,7 +6,9 @@ argument-hint: "[version] (optional — e.g., 0.4.0 or 0.4.0-alpha; if omitted, 
 
 # Create a JIM Release
 
-Follow the release process defined in `docs/RELEASE_PROCESS.md` to create a new release of JIM.
+Follow the release process defined in `engineering/RELEASE_PROCESS.md` to create a new release of JIM.
+
+> **Releases are tag-driven.** The `release.yml` workflow runs on tag push, not on commits to `main`. The published artefacts are built from the commit the tag points at. The `main` branch is protected and rejects direct pushes — the release commit must land on `main` via a PR. The cleanest sequence is: PR first, merge, then tag the merge commit on `main` and push the tag.
 
 If a version was provided via `$ARGUMENTS`, note it but do NOT act on it yet — the version will be confirmed after changelog validation.
 
@@ -60,20 +62,32 @@ From this list, identify commits that introduced:
 
 ### 2. Review and update documentation
 
-Cross-reference the identified changes against ALL of the following documentation files, and update any that are out of date:
+Cross-reference the identified changes against the documentation and update any that are out of date.
 
+**Customer-facing site (`docs/`, MkDocs)**:
 - **`README.md`** (root) — Feature list, quick-start instructions, architecture overview, prerequisites
-- **`docs/DEVELOPER_GUIDE.md`** — Architecture guide, development workflows, component documentation, diagram references
-- **`docs/DEPLOYMENT_GUIDE.md`** — Deployment instructions, configuration, environment variables
-- **`docs/DATABASE_GUIDE.md`** — Schema changes, migration notes, database configuration
-- **`docs/EXPRESSIONS_GUIDE.md`** — Expression language documentation, available functions
-- **`docs/TESTING_STRATEGY.md`** — Testing approach, test categories, integration test documentation
-- **`docs/COMPLIANCE_MAPPING.md`** — Security and compliance documentation
-- **`docs/CACHING_STRATEGY.md`** — Caching architecture and configuration
-- **`docs/RELEASE_PROCESS.md`** — Release steps (if process has changed)
-- **`docs/JIM_AI_ASSISTANT_CONTEXT.md`** — AI assistant context document
-- **`docs/JIM_AI_ASSISTANT_INSTRUCTIONS.md`** — AI assistant instructions
+- **`docs/index.md`** — MkDocs landing page (feature cards, capabilities)
+- **`docs/getting-started/`** — Deployment and first-run guidance
+- **`docs/concepts/`** — Architecture, sync pipeline, sync rules, JML lifecycle
+- **`docs/administration/`** — Configuration env vars, SSO setup, troubleshooting
+- **`docs/connectors/`** — LDAP, File, etc.
+- **`docs/powershell/`** — Cmdlet reference pages
+- **`docs/developer/`** — Architecture, building, testing, contributing
+- **`docs/api/`** — REST endpoint docs
+- **`docs/reference/`** — Roadmap, glossary
 - **Any other `.md` files in `docs/`** that are affected by the changes
+
+**Internal engineering docs (`engineering/`, not part of MkDocs site)**:
+- **`engineering/DEVELOPER_GUIDE.md`** — Comprehensive development guide
+- **`engineering/DATABASE_GUIDE.md`** — Schema, migrations, connection pooling, backup/restore
+- **`engineering/EXPRESSIONS_GUIDE.md`** — Expression language reference
+- **`engineering/TESTING_STRATEGY.md`** / **`engineering/INTEGRATION_TESTING.md`** — Testing approach
+- **`engineering/COMPLIANCE_MAPPING.md`** — Security framework mapping
+- **`engineering/CACHING_STRATEGY.md`** — Caching architecture
+- **`engineering/CANCELLATION_SAFETY.md`** — Cancellation invariants
+- **`engineering/OPTIMISATIONS.md`** — Performance notes
+- **`engineering/RELEASE_PROCESS.md`** — Release steps (if the process itself has changed)
+- **`engineering/JIM_AI_ASSISTANT_CONTEXT.md`** / **`engineering/JIM_AI_ASSISTANT_INSTRUCTIONS.md`** — AI assistant docs (bump their `Document Version` field if content changes)
 
 For each file, check whether the changes since the last release have made any content inaccurate, incomplete, or missing. Make the updates directly — do not just flag them.
 
@@ -81,12 +95,13 @@ For each file, check whether the changes since the last release have made any co
 
 #### C4 Model (Structurizr)
 
-1. **Review `docs/diagrams/structurizr/workspace.dsl`** against the current codebase. Check that:
+1. **Review `engineering/diagrams/structurizr/workspace.dsl`** against the current codebase. Check that:
    - All containers (services, databases) are represented
    - All components within each container are current
    - Relationships between components/containers are accurate
    - Any new connectors, services, or significant components added since the last release are included
    - Removed or renamed components are cleaned up
+   - Hard-coded numbers in container/component descriptions (e.g. "Cross-platform module with N cmdlets") still match reality — verify against `src/JIM.PowerShell/JIM.psd1` `FunctionsToExport`
 
 2. **Update the DSL** if any changes are needed.
 
@@ -94,13 +109,11 @@ For each file, check whether the changes since the last release have made any co
    ```
    jim-diagrams
    ```
-   This exports both light and dark theme SVGs to `docs/diagrams/images/`.
-
-4. **Review `docs/diagrams/structurizr/docs/01-overview.md`** — update the diagram documentation page if the diagrams have changed or new views have been added.
+   This exports both light and dark theme SVGs to `docs/diagrams/images/light/` and `docs/diagrams/images/dark/`.
 
 #### Mermaid Process Diagrams
 
-Review each Mermaid diagram in `docs/diagrams/mermaid/` against the current codebase behaviour:
+Review each Mermaid diagram in `docs/developer/diagrams/` against the current codebase behaviour:
 
 - `FULL_IMPORT_FLOW.md` — Object import, duplicate detection, deletion detection
 - `FULL_SYNC_CSO_PROCESSING.md` — Per-CSO sync decision tree
@@ -113,14 +126,14 @@ Review each Mermaid diagram in `docs/diagrams/mermaid/` against the current code
 - `ACTIVITY_AND_RPEI_FLOW.md` — Activity and RPEI accumulation
 - `MVO_DELETION_AND_GRACE_PERIOD.md` — Deletion rules and grace periods
 
-For each diagram, check whether the logic or flow has changed since the last release. Update any diagrams that no longer accurately reflect the code.
+Each diagram has a `> Last updated: <date>, JIM v<version>` line near the top. If the logic still matches, no edit is needed. If you do edit a diagram, update that line to today's date and the version being released.
 
 #### Diagram references in documentation
 
 Verify that pages embedding or linking to diagrams are up to date:
-- `README.md` — SVG references
-- `docs/DEVELOPER_GUIDE.md` — C4 and Mermaid diagram listings and links
-- `docs/diagrams/structurizr/README.md` — Structurizr tooling documentation
+- `README.md` — SVG references in the Architecture section (light/dark variants under `docs/diagrams/images/`)
+- `docs/concepts/architecture.md` and other docs/ pages that embed C4 diagrams
+- `engineering/DEVELOPER_GUIDE.md` — C4 and Mermaid diagram listings and links
 
 If new diagrams were added or existing ones renamed/removed, update these references accordingly.
 
@@ -147,9 +160,10 @@ Show the user a summary of all documentation and diagram changes made:
 - Marketing site recommendations (for manual action)
 - Ask the user to confirm before proceeding to changelog validation
 
-Once confirmed, commit the documentation updates:
+Once confirmed, commit the documentation updates on a release branch (do NOT commit to `main` directly — branch protection blocks that). If you are not already on a release branch, create one first:
 ```bash
-git add README.md docs/ docs/diagrams/
+git checkout -b release/v<version>
+git add README.md docs/ engineering/ docs/diagrams/images/
 git commit -m "docs: update documentation and diagrams for v<version> release"
 ```
 
@@ -232,13 +246,7 @@ Edit `src/JIM.PowerShell/JIM.psd1`:
 - If the version has a prerelease suffix (e.g., `0.4.0-alpha`), uncomment/set `Prerelease = 'alpha'`
 - If the version is stable (no suffix), ensure `Prerelease` is commented out
 
-## Step 4: Update Release History Table
-
-Update the release history table in `docs/RELEASE_PROCESS.md`:
-- Add a new row at the top of the table with the version, today's date, and a brief summary
-- The summary should be a concise description derived from the changelog entries
-
-## Step 5: Present Summary for Review
+## Step 4: Present Summary for Review
 
 Show the user:
 1. The version being released
@@ -246,30 +254,68 @@ Show the user:
 3. The full changelog section for the new version
 4. Ask for confirmation before committing
 
-## Step 6: Commit
+## Step 5: Commit on a Release Branch
 
-After user confirmation, commit all changes:
+The `main` branch is protected and rejects direct pushes. The release commit must land on `main` via a PR.
+
+If you have not already created a release branch (e.g. for documentation updates earlier), create one now and commit the release files:
 
 ```bash
-git add VERSION CHANGELOG.md src/JIM.PowerShell/JIM.psd1 docs/RELEASE_PROCESS.md
+git checkout -b release/v<version>
+git add VERSION CHANGELOG.md src/JIM.PowerShell/JIM.psd1
 git commit -m "Release v<version>"
 ```
 
-## Step 7: Tag
+If you are already on `release/v<version>` from the documentation step, add the release files to a separate commit on the same branch.
 
-Create the release tag:
+## Step 6: Open the Release PR
+
+Push the release branch and open a PR to `main`:
+
 ```bash
-git tag v<version>
+git push -u origin release/v<version>
+gh pr create --title "Release v<version>" --body "$(cat <<'EOF'
+## Summary
+
+Release commit for v<version>.
+
+Updates:
+- `VERSION`: <previous> → <version>
+- `CHANGELOG.md`: new `[<version>] - <date>` section + comparison links
+- `src/JIM.PowerShell/JIM.psd1`: `ModuleVersion` → `<version>`
+
+## Test plan
+
+- [ ] CI passes (build, test, scan, code review, container scan, dependency scan)
+- [ ] Tag `v<version>` will be created on the merge commit after this PR is merged
+EOF
+)"
 ```
 
-## Step 8: Push
+Wait for all required status checks to pass (currently 7), then merge the PR. Use a **merge commit** or **squash** — do not rebase, because the tag in Step 8 must point at a commit that is on `main`. After merge, switch back to `main` and pull:
 
-**Ask the user for confirmation before pushing.** Then:
 ```bash
-git push origin main --tags
+git checkout main
+git pull origin main
 ```
 
-Inform the user that the push will trigger the release workflow which:
+## Step 7: Tag the Merge Commit and Push the Tag
+
+The release workflow runs on tag push. It will build and publish artefacts from whatever commit the tag points at, so the tag must point at a commit that is on `main`.
+
+JIM enforces signed tags (`tag.forceSignAnnotated=true`), so use `git tag -a -m`, not a lightweight tag:
+
+```bash
+git tag -a v<version> -m "Release v<version>"
+```
+
+**Ask the user for confirmation before pushing the tag.** This is the point of no return — pushing the tag triggers PSGallery publishing, container image push, and GitHub Release creation, all of which are externally visible.
+
+```bash
+git push origin v<version>
+```
+
+The tag-push triggers the release workflow which:
 1. Validates the build and runs all tests
 2. Builds and pushes Docker images to `ghcr.io/tetronio/jim-{web,worker,scheduler}:<version>`
 3. Publishes the PowerShell module to PSGallery
@@ -277,15 +323,23 @@ Inform the user that the push will trigger the release workflow which:
 5. Attaches standalone deployment files to the release (`docker-compose.yml`, `docker-compose.production.yml`, `.env.example`)
 6. Creates a GitHub Release with all assets
 
-## Step 9: Post-Release Verification
+## Step 8: Post-Release Verification
 
 Tell the user to verify after the workflow completes:
 - [ ] GitHub Release page has the bundle, checksums, and standalone deployment files
 - [ ] Docker images are available: `ghcr.io/tetronio/jim-web:<version>`, etc.
-- [ ] PowerShell module is available on PSGallery
-- [ ] The `setup.sh` installer can detect the new release
+- [ ] PowerShell module is available on PSGallery: `Install-Module JIM -RequiredVersion <version>`
+- [ ] The `setup.sh` installer detects the new release
 
 Provide the Actions URL for monitoring:
 ```
 https://github.com/TetronIO/JIM/actions
 ```
+
+## Recovery: PR rejected after release commit was made
+
+If you created the release commit and tried to push directly to `main` (e.g. with `git push origin main --tags`), the tag will push but `main` will be rejected by branch protection. To recover:
+
+1. The tag is now on the remote and the release workflow has likely already started. **Do not delete the tag** unless the workflow has clearly failed — letting it run is usually safer than re-tagging.
+2. Push the release commit to a release branch and open the PR (Step 7 above) so `main` catches up to the published release.
+3. Once the PR merges, `main` aligns with what was published.
