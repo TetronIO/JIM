@@ -25,6 +25,19 @@ public class SearchServer
         return await Application.Repository.Search.GetPredefinedSearchHeadersAsync();
     }
 
+    /// <summary>
+    /// Full retrieval of a predefined search by ID, including the attributes and criteria graph.
+    /// Use for read-only display where the full graph is needed (e.g. an API GET).
+    /// </summary>
+    public async Task<PredefinedSearch?> GetPredefinedSearchAsync(int id)
+    {
+        var predefinedSearch = await Application.Repository.Search.GetPredefinedSearchAsync(id);
+        if (predefinedSearch != null)
+            predefinedSearch = PostProcessPredefinedSearch(predefinedSearch);
+
+        return predefinedSearch;
+    }
+
     public async Task<PredefinedSearch?> GetPredefinedSearchAsync(string uri)
     {
         var predefinedSearch = await Application.Repository.Search.GetPredefinedSearchAsync(uri);

@@ -11,30 +11,42 @@ function Get-JIMPredefinedSearch {
         including those that are currently disabled, so that they can be enabled or updated
         via Set-JIMPredefinedSearch.
 
+        When -Id or a literal -Uri is supplied the cmdlet calls a dedicated server endpoint
+        and returns the full search graph (attributes and criteria). Wildcard -Uri patterns
+        and the unfiltered list view return lightweight headers.
+
     .PARAMETER Id
-        Return only the search with this ID.
+        Return only the search with this ID. Resolves to a single full search via the server.
 
     .PARAMETER Uri
         Return only the search with this URI (the stable, human-readable slug such as
-        "people" or "security-groups"). Supports wildcards.
+        "people" or "security-groups"). Supports wildcards. A literal URI resolves to a
+        single full search via the server; a wildcard pattern is filtered client-side
+        against the list of headers.
 
     .OUTPUTS
-        PSCustomObject representing a Predefined Search header.
+        PSCustomObject. For -Id and literal -Uri lookups, the full Predefined Search
+        including its attributes and criteria. Otherwise, Predefined Search headers.
 
     .EXAMPLE
         Get-JIMPredefinedSearch
 
-        Lists all Predefined Searches, including any that are disabled.
+        Lists all Predefined Searches as headers, including any that are disabled.
 
     .EXAMPLE
         Get-JIMPredefinedSearch -Uri 'people'
 
-        Returns the Predefined Search identified by the URI 'people'.
+        Returns the full Predefined Search identified by the URI 'people'.
+
+    .EXAMPLE
+        Get-JIMPredefinedSearch -Uri 'sec*'
+
+        Returns headers for all Predefined Searches whose URI starts with "sec".
 
     .EXAMPLE
         Get-JIMPredefinedSearch -Id 3
 
-        Returns the Predefined Search with ID 3.
+        Returns the full Predefined Search with ID 3.
 
     .LINK
         Set-JIMPredefinedSearch
@@ -58,22 +70,57 @@ function Get-JIMPredefinedSearch {
             return
         }
 
-        Write-Verbose "Listing Predefined Searches"
-
-        try {
-            $response = Invoke-JIMApi -Endpoint "/api/v1/predefined-searches"
-        }
-        catch {
-            Write-Error "Failed to list Predefined Searches: $_"
-            return
-        }
-
-        $items = if ($null -ne $response.items) { $response.items } else { $response }
-
         switch ($PSCmdlet.ParameterSetName) {
-            'ById'  { $items | Where-Object { $_.id -eq $Id } }
-            'ByUri' { $items | Where-Object { $_.uri -like $Uri } }
-            default { $items }
+            'ById' {
+                Write-Verbose "Getting Predefined Search by ID $Id"
+                try {
+                    Invoke-JIMApi -Endpoint "/api/v1/predefined-searches/$Id"
+                }
+                catch {
+                    if ($_.Exception.Message -like '*not found*') { return }
+                    Write-Error "Failed to get Predefined Search with ID '$Id': $_"
+                }
+                return
+            }
+
+            'ByUri' {
+                if ([System.Management.Automation.WildcardPattern]::ContainsWildcardCharacters($Uri)) {
+                    Write-Verbose "Listing Predefined Searches and filtering by wildcard URI '$Uri'"
+                    try {
+                        $response = Invoke-JIMApi -Endpoint "/api/v1/predefined-searches"
+                    }
+                    catch {
+                        Write-Error "Failed to list Predefined Searches: $_"
+                        return
+                    }
+                    $items = if ($null -ne $response.items) { $response.items } else { $response }
+                    $items | Where-Object { $_.uri -like $Uri }
+                    return
+                }
+
+                Write-Verbose "Getting Predefined Search by URI '$Uri'"
+                try {
+                    $encoded = [System.Uri]::EscapeDataString($Uri)
+                    Invoke-JIMApi -Endpoint "/api/v1/predefined-searches/by-uri/$encoded"
+                }
+                catch {
+                    if ($_.Exception.Message -like '*not found*') { return }
+                    Write-Error "Failed to get Predefined Search with URI '$Uri': $_"
+                }
+                return
+            }
+
+            default {
+                Write-Verbose "Listing Predefined Searches"
+                try {
+                    $response = Invoke-JIMApi -Endpoint "/api/v1/predefined-searches"
+                }
+                catch {
+                    Write-Error "Failed to list Predefined Searches: $_"
+                    return
+                }
+                if ($null -ne $response.items) { $response.items } else { $response }
+            }
         }
     }
 }

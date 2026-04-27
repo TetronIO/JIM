@@ -10,6 +10,8 @@ public interface ISearchRepository
 {
     public Task<IList<PredefinedSearchHeader>> GetPredefinedSearchHeadersAsync();
 
+    public Task<PredefinedSearch?> GetPredefinedSearchAsync(int id);
+
     public Task<PredefinedSearch?> GetPredefinedSearchAsync(string uri);
 
     public Task<PredefinedSearch?> GetPredefinedSearchAsync(MetaverseObjectType metaverseObjectType);

@@ -3,7 +3,9 @@
 
 using Asp.Versioning;
 using JIM.Application;
+using JIM.Models.Search;
 using JIM.Models.Search.DTOs;
+using JIM.Utilities;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -47,6 +49,62 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
 
         var headers = await _application.Search.GetPredefinedSearchHeadersAsync();
         return Ok(headers);
+    }
+
+    /// <summary>
+    /// Get a predefined search by ID.
+    /// </summary>
+    /// <remarks>
+    /// Returns the full predefined search graph including the displayed attributes and the
+    /// criteria-group tree. ID is the canonical identifier; for lookup by the human-readable
+    /// slug use <c>GET /by-uri/{uri}</c>.
+    /// </remarks>
+    /// <param name="id">The unique identifier of the predefined search.</param>
+    /// <returns>The predefined search; 404 Not Found if no search has that ID.</returns>
+    [HttpGet("{id:int}", Name = "GetPredefinedSearchById")]
+    [ProducesResponseType(typeof(PredefinedSearch), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetByIdAsync([FromRoute] int id)
+    {
+        _logger.LogTrace("Getting predefined search {Id}", id);
+
+        var search = await _application.Search.GetPredefinedSearchAsync(id);
+        if (search == null)
+            return NotFound(ApiErrorResponse.NotFound($"Predefined search with ID {id} not found."));
+
+        return Ok(search);
+    }
+
+    /// <summary>
+    /// Get a predefined search by URI.
+    /// </summary>
+    /// <remarks>
+    /// Convenience lookup by the predefined search's stable, human-readable slug (for example
+    /// <c>people</c> or <c>security-groups</c>). The canonical identifier is the integer ID;
+    /// callers performing subsequent updates should resolve to ID via this endpoint and PATCH by ID.
+    /// </remarks>
+    /// <param name="uri">The URI slug of the predefined search.</param>
+    /// <returns>The predefined search; 404 Not Found if no search has that URI.</returns>
+    [HttpGet("by-uri/{uri}", Name = "GetPredefinedSearchByUri")]
+    [ProducesResponseType(typeof(PredefinedSearch), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetByUriAsync([FromRoute] string uri)
+    {
+        if (string.IsNullOrWhiteSpace(uri))
+            return BadRequest(ApiErrorResponse.BadRequest("URI must not be empty."));
+
+        _logger.LogTrace("Getting predefined search by URI {Uri}", LogSanitiser.Sanitise(uri));
+
+        var search = await _application.Search.GetPredefinedSearchAsync(uri);
+        if (search == null)
+            return NotFound(ApiErrorResponse.NotFound($"Predefined search with URI '{uri}' not found."));
+
+        return Ok(search);
     }
 
     /// <summary>
