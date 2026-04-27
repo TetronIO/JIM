@@ -13,7 +13,12 @@ Cmdlets for administering Predefined Searches. Predefined Searches are named, re
 
 ## Get-JIMPredefinedSearch
 
-Lists Predefined Searches. Administrators see all searches, including any that are currently disabled, so they can be discovered and enabled via [`Set-JIMPredefinedSearch`](#set-jimpredefinedsearch).
+Gets Predefined Searches. Administrators see all searches, including any that are currently disabled, so they can be discovered and enabled via [`Set-JIMPredefinedSearch`](#set-jimpredefinedsearch).
+
+The shape of the returned object depends on how you call the cmdlet:
+
+- **No parameters** or a wildcard `-Uri`: returns lightweight headers (one per search), suitable for browsing and discovery.
+- **`-Id`** or a literal `-Uri`: resolves directly against a dedicated server endpoint and returns the full search graph (header fields plus the displayed attributes and criteria groups).
 
 ### Syntax
 
@@ -32,12 +37,12 @@ Get-JIMPredefinedSearch -Uri <string>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById) | | Return only the search with this ID. Accepts pipeline input by property name. |
-| `Uri` | `string` | Yes (ByUri) | | Return only the search with this URI (e.g. `people`, `security-groups`). Supports wildcards. Accepts pipeline input by property name. |
+| `Id` | `int` | Yes (ById) | | Return only the search with this ID. Resolves to a single full search via the server. Accepts pipeline input by property name. |
+| `Uri` | `string` | Yes (ByUri) | | Return only the search with this URI (e.g. `people`, `security-groups`). Supports wildcards: a literal value resolves to a single full search via the server; a wildcard pattern is filtered client-side against the list of headers. Accepts pipeline input by property name. |
 
 ### Output
 
-Returns one or more `PSCustomObject` instances with the following properties:
+The list view and wildcard `-Uri` lookups return one or more header `PSCustomObject` instances:
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -51,14 +56,30 @@ Returns one or more `PSCustomObject` instances with the following properties:
 | `metaverseAttributeCount` | `int` | Number of attributes surfaced in the search results |
 | `created` | `datetime` | When the search was created |
 
+`-Id` and literal `-Uri` lookups return a single full search with all of the header fields plus:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `metaverseObjectType` | `object` | The Metaverse Object Type the search targets |
+| `attributes` | `array` | Attributes surfaced in the search results, ordered by `position` |
+| `criteriaGroups` | `array` | Criteria groups that filter which objects match the search |
+
 ### Examples
 
-```powershell title="List all Predefined Searches (including disabled ones)"
+```powershell title="List all Predefined Searches as headers (including disabled ones)"
 Get-JIMPredefinedSearch
 ```
 
-```powershell title="Find the 'people' search"
+```powershell title="Get the full 'people' search by URI"
 Get-JIMPredefinedSearch -Uri people
+```
+
+```powershell title="Get the full search by ID"
+Get-JIMPredefinedSearch -Id 3
+```
+
+```powershell title="Filter headers by wildcard URI"
+Get-JIMPredefinedSearch -Uri 'sec*'
 ```
 
 ```powershell title="List every disabled search"
