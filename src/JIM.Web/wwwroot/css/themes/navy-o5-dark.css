@@ -107,8 +107,10 @@ html[lang] {
     /* === JIM Custom: Navigation === */
     --jim-nav-top-level-color: #b0b8c4;
     --jim-nav-child-color: #6e7e94;
-    --jim-nav-hover-color: #67b9ff;
-    --jim-nav-active-color: #67b9ff;
+    --jim-nav-hover-color: #ffffff;
+    --jim-nav-active-color: #ffffff;
+    --jim-nav-active-bg: #283448;
+    --jim-nav-hover-bg: #384660;
 
     /* === JIM Custom: Drawer border (paper border — right-hand edge) === */
     --jim-drawer-border-color: #2c3c54;

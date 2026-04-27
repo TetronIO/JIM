@@ -46,6 +46,9 @@ Docker Builds (auto-kills local JIM processes, rebuild + start):
   jim-build-web      - Rebuild jim.web + start
   jim-build-worker   - Rebuild jim.worker + start
   jim-build-scheduler - Rebuild jim.scheduler + start
+  Note: dev builds skip the OpenAPI doc generation Docker stage for speed.
+        Run jim-openapi-generate to refresh src/JIM.Web/wwwroot/api/openapi/v1.json
+        when API surface changes.
 
 Reset:
   jim-reset          - Full reset (containers, images, volumes)
@@ -333,33 +336,36 @@ jim-restart() {
 }
 
 # Docker builds (rebuild and start services)
-# VERSION_SUFFIX is generated at build time so each Docker build gets a unique dev version
+# VERSION_SUFFIX is generated at build time so each Docker build gets a unique dev version.
+# OPENAPI_STAGE=publish skips the expensive openapi-gen Dockerfile stage in
+# local dev builds (saves several minutes per build). Run jim-openapi-generate
+# to refresh the static OpenAPI doc on disk when the API surface changes.
 _jim_version_suffix() {
   echo "dev.$(date -u +%Y%m%d).$((10#$(date -u +%H)*60+10#$(date -u +%M)))"
 }
 jim-build() {
   _jim_heal_docker_creds
   _jim_kill_local
-  VERSION_SUFFIX="$(_jim_version_suffix)" docker compose $(_jim_compose) up -d --build
+  VERSION_SUFFIX="$(_jim_version_suffix)" OPENAPI_STAGE=publish docker compose $(_jim_compose) up -d --build
   _jim_keycloak_bridge
 }
 jim-build-web() {
   _jim_heal_docker_creds
   _jim_kill_local
   local vs="$(_jim_version_suffix)"
-  VERSION_SUFFIX="$vs" docker compose $(_jim_compose) build jim.web && VERSION_SUFFIX="$vs" docker compose $(_jim_compose) up -d jim.web
+  VERSION_SUFFIX="$vs" OPENAPI_STAGE=publish docker compose $(_jim_compose) build jim.web && VERSION_SUFFIX="$vs" OPENAPI_STAGE=publish docker compose $(_jim_compose) up -d jim.web
 }
 jim-build-worker() {
   _jim_heal_docker_creds
   _jim_kill_local
   local vs="$(_jim_version_suffix)"
-  VERSION_SUFFIX="$vs" docker compose $(_jim_compose) build jim.worker && VERSION_SUFFIX="$vs" docker compose $(_jim_compose) up -d jim.worker
+  VERSION_SUFFIX="$vs" OPENAPI_STAGE=publish docker compose $(_jim_compose) build jim.worker && VERSION_SUFFIX="$vs" OPENAPI_STAGE=publish docker compose $(_jim_compose) up -d jim.worker
 }
 jim-build-scheduler() {
   _jim_heal_docker_creds
   _jim_kill_local
   local vs="$(_jim_version_suffix)"
-  VERSION_SUFFIX="$vs" docker compose $(_jim_compose) build jim.scheduler && VERSION_SUFFIX="$vs" docker compose $(_jim_compose) up -d jim.scheduler
+  VERSION_SUFFIX="$vs" OPENAPI_STAGE=publish docker compose $(_jim_compose) build jim.scheduler && VERSION_SUFFIX="$vs" OPENAPI_STAGE=publish docker compose $(_jim_compose) up -d jim.scheduler
 }
 jim-build-light() {
   _jim_heal_docker_creds

@@ -104,6 +104,17 @@ foreach ($dockerfile in $dockerfiles) {
             continue
         }
 
+        # Skip build-arg references (e.g. "FROM ${OPENAPI_STAGE} AS final-source").
+        # These are resolved at build time to one of the file's own stage aliases
+        # via --build-arg, never to an external image. JIM.Web/Dockerfile uses this
+        # pattern to optionally bypass the OpenAPI doc-generation stage in local
+        # dev builds. Verifying the resolution would require executing the build,
+        # which is out of scope for static discovery.
+        if ($imageRef -match '^\$\{[A-Z_][A-Z0-9_]*\}$') {
+            Write-Host "  line ${lineNumber}: build-arg reference '$imageRef' (skipped)"
+            continue
+        }
+
         # Enforce the digest-pinning policy.
         if ($imageRef -notmatch '@sha256:[0-9a-f]{64}') {
             $policyViolations += "${relativePath}:${lineNumber}: FROM $imageRef is not digest-pinned"

@@ -32,17 +32,6 @@
                 Class="jim-user-popover">
         <MudPaper Outlined="true" Elevation="8" Class="jim-user-popover-paper pa-1">
             <MudList T="string" Dense="true" Class="py-0">
-                <MudListItem OnClick="HandleTogglePin">
-                    <div class="d-flex align-center justify-space-between jim-user-menu-row">
-                        <div class="d-flex align-center gap-2">
-                            <MudIcon Icon="@(IsDrawerPinned ? Icons.Material.Filled.PushPin : Icons.Material.Outlined.PushPin)"
-                                     Size="Size.Small" />
-                            <MudText Typo="Typo.body2">Pin menu open</MudText>
-                        </div>
-                        <MudSwitch T="bool" Value="@IsDrawerPinned" ReadOnly="true"
-                                   Color="Color.Primary" Size="Size.Small" Class="ma-0 jim-user-menu-switch" />
-                    </div>
-                </MudListItem>
                 <MudListItem OnClick="HandleToggleDarkMode">
                     <div class="d-flex align-center justify-space-between jim-user-menu-row">
                         <div class="d-flex align-center gap-2">
@@ -97,12 +86,6 @@
     [Parameter]
     public EventCallback<bool> IsDarkModeChanged { get; set; }
 
-    [Parameter]
-    public bool IsDrawerPinned { get; set; }
-
-    [Parameter]
-    public EventCallback OnTogglePinned { get; set; }
-
     private bool _popoverOpen;
     private string? _displayName;
     private string? _preferredUsername;
@@ -137,11 +120,6 @@
     private void ClosePopover()
     {
         _popoverOpen = false;
-    }
-
-    private async Task HandleTogglePin()
-    {
-        await OnTogglePinned.InvokeAsync();
     }
 
     private async Task HandleToggleDarkMode()

@@ -6,6 +6,10 @@
 # See https://aka.ms/containerfastmode to understand how Visual Studio uses this Dockerfile to build your images for faster debugging.
 
 ARG VERSION=dev
+# OPENAPI_STAGE selects the source for the final image: defaults to openapi-gen
+# (which generates the static OpenAPI doc); pass --build-arg OPENAPI_STAGE=publish
+# to skip the expensive generation step in local dev builds.
+ARG OPENAPI_STAGE=openapi-gen
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:55e37c7795bfaf6b9cc5d77c155811d9569f529d86e20647704bc1d7dd9741d4 AS base
 ARG VERSION
@@ -72,12 +76,22 @@ RUN dotnet publish "JIM.Web.csproj" -c Release -o /app/publish /p:UseAppHost=fal
 
 # Generate OpenAPI document in lightweight mode (no DB or IdP required).
 # The app starts, generates the schema from controller metadata, writes the
-# JSON file, and exits. The generated file is copied into the final image.
+# JSON file into the publish output, and exits.
+#
+# This stage is expensive (full publish output COPY + .NET cold start) and the
+# publish layer cache is invalidated on every build by VERSION_SUFFIX, so a
+# build arg lets local dev builds bypass it. CI/release builds always run it
+# (OPENAPI_STAGE defaults to openapi-gen). Local dev builds can pass
+# --build-arg OPENAPI_STAGE=publish to skip; run jim-openapi-generate to
+# refresh the static doc on disk when API surface changes.
+#
+# The output is written under /app/publish so that the final stage can pull
+# from either openapi-gen or publish using the same path.
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:55e37c7795bfaf6b9cc5d77c155811d9569f529d86e20647704bc1d7dd9741d4 AS openapi-gen
-WORKDIR /app
+WORKDIR /app/publish
 COPY --from=publish /app/publish .
 ENV JIM_OPENAPI_GENERATE=true \
-    JIM_OPENAPI_OUTPUT_PATH=/app/wwwroot/api/openapi/v1.json \
+    JIM_OPENAPI_OUTPUT_PATH=/app/publish/wwwroot/api/openapi/v1.json \
     JIM_LOG_LEVEL=Warning \
     JIM_LOG_PATH=/tmp \
     JIM_SSO_AUTHORITY=http://localhost:8181/realms/jim \
@@ -93,9 +107,12 @@ ENV JIM_OPENAPI_GENERATE=true \
     JIM_DB_PASSWORD=placeholder
 RUN dotnet JIM.Web.dll
 
-# Final stage - use published output with pre-generated OpenAPI document
+# Final stage - copy from either openapi-gen (default) or publish (when the
+# expensive doc-generation step is bypassed). Both stages expose the app
+# under /app/publish so the COPY path is identical.
+FROM ${OPENAPI_STAGE} AS final-source
+
 FROM base AS final
 WORKDIR /app
-COPY --from=publish /app/publish .
-COPY --from=openapi-gen /app/wwwroot/api/openapi/v1.json ./wwwroot/api/openapi/v1.json
+COPY --from=final-source /app/publish .
 ENTRYPOINT ["dotnet", "JIM.Web.dll"]

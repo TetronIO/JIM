@@ -499,6 +499,7 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     left: 0;
     height: 100vh;
     overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .jim-drawer.jim-drawer-with-bar {
@@ -512,6 +513,34 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     font-size: 1rem;
     font-weight: 500;
     color: var(--jim-logo-text-color, #ffffff) !important;
+}
+
+/* Stretch the logo row to the full drawer width so margin-left: auto on the
+   toggle button pushes it all the way to the right edge. */
+.jim-drawer-logo {
+    width: 100%;
+}
+
+/* Pin/collapse toggle on the logo row - pushed to the right edge by margin-left: auto.
+   The button is wrapped by MudTooltip's `.mud-tooltip-root` div, which is the actual
+   flex child of `.jim-drawer-logo`, so the auto margin must be applied there.
+   Icon rotates 180deg when the drawer is unpinned so the chevron always points the
+   direction the drawer will move when clicked. */
+.jim-drawer-logo > .mud-tooltip-root:has(.jim-drawer-toggle) {
+    margin-left: auto;
+    margin-right: 8px;
+}
+
+.jim-drawer-toggle {
+    color: var(--jim-nav-top-level-color) !important;
+}
+
+.jim-drawer-toggle .mud-icon-root {
+    transition: transform 0.2s ease;
+}
+
+.jim-drawer-toggle-collapsed .mud-icon-root {
+    transform: rotate(180deg);
 }
 
 .jim-instance-bar {
@@ -541,10 +570,11 @@ body.jim-dark-mode .jim-instance-bar .jim-title-accent {
 
 .jim-drawer-footer {
     margin: 0 6px;
+    margin-top: auto;
     border-top-style: solid;
     border-top-width: 1px;
     border-top-color: var(--jim-drawer-border-color);
-    padding: 4px 0;
+    padding: 8px 0;
 }
 
 /* === User Menu (drawer footer) === */
@@ -680,7 +710,52 @@ body.jim-dark-mode .jim-instance-bar .jim-title-accent {
     color: var(--jim-nav-top-level-color);
 }
 
-/* Active/selected nav item - stronger colour to stand out */
+/* Inset the active / hover highlight pill from the drawer edges and round its corners.
+   Themes set --jim-nav-active-bg / --jim-nav-hover-bg; the fallbacks below derive a
+   contrasting overlay from the drawer text colour, which works for both light and
+   dark drawers without theme-specific tuning.
+   MudBlazor's `.mud-nav-link { width: 100% }` rule causes the button (used by
+   MudNavGroup headers) to compute its width from the drawer, ignoring our 8px
+   margins and pushing the right side past the drawer edge; override to `auto` so
+   the button shrinks to fit alongside the margins. Also neutralise the 2px
+   border-inline-end MudBlazor adds to .active items, which would otherwise butt
+   the active pill against the drawer's right edge. */
+.jim-nav-menu .mud-nav-link {
+    width: calc(100% - 16px) !important;
+    margin-left: 8px !important;
+    margin-right: 8px !important;
+    margin-inline-start: 8px !important;
+    margin-inline-end: 8px !important;
+    border-radius: var(--mud-default-borderradius, 4px) !important;
+    border-inline-end-width: 0 !important;
+    border-right-width: 0 !important;
+    box-sizing: border-box !important;
+}
+
+/* When the drawer is in mini variant AND collapsed, drop the inset margins so
+   icons sit centred on the drawer's vertical axis rather than offset by 8px.
+   `.mud-drawer-mini` alone is the variant marker (present even when expanded);
+   `.mud-drawer--closed.mud-drawer-mini` is the actually-collapsed state. */
+.mud-drawer--closed.mud-drawer-mini .jim-nav-menu .mud-nav-link {
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    margin-inline-start: 0 !important;
+    margin-inline-end: 0 !important;
+    border-radius: 0 !important;
+}
+
+/* Active/selected nav item - background pill plus stronger text/icon colour.
+   Set color on the link element itself (not just .mud-nav-link-text) and use a
+   selector specific enough to beat MudBlazor's
+   `.mud-navmenu.mud-navmenu-primary .mud-nav-link.active:not(.mud-nav-link-disabled)`
+   colour rule, which would otherwise paint active text in --mud-palette-primary. */
+.jim-nav-menu a.mud-nav-link.active,
+.jim-nav-menu button.mud-nav-link.active {
+    background-color: var(--jim-nav-active-bg, color-mix(in srgb, var(--mud-palette-drawer-text) 12%, transparent)) !important;
+    color: var(--jim-nav-active-color) !important;
+}
+
 .jim-nav-menu .mud-nav-link.active .mud-nav-link-text {
     color: var(--jim-nav-active-color) !important;
 }
@@ -710,8 +785,19 @@ body.jim-dark-mode .jim-instance-bar .jim-title-accent {
     color: var(--jim-nav-hover-color, var(--jim-nav-active-color)) !important;
 }
 
-.jim-nav-menu .mud-nav-link:hover {
-    background-color: var(--jim-nav-hover-bg, transparent) !important;
+/* Hover background - more contrasting than the active pill so it remains
+   visible when hovering an item that is already selected. */
+.jim-nav-menu a.mud-nav-link:hover,
+.jim-nav-menu button.mud-nav-link:hover {
+    background-color: var(--jim-nav-hover-bg, color-mix(in srgb, var(--mud-palette-drawer-text) 20%, transparent)) !important;
+    color: var(--jim-nav-hover-color, var(--jim-nav-active-color)) !important;
+}
+
+/* Active item that is also being hovered - keep the hover background winning */
+.jim-nav-menu a.mud-nav-link.active:hover,
+.jim-nav-menu button.mud-nav-link.active:hover {
+    background-color: var(--jim-nav-hover-bg, color-mix(in srgb, var(--mud-palette-drawer-text) 20%, transparent)) !important;
+    color: var(--jim-nav-hover-color, var(--jim-nav-active-color)) !important;
 }
 
 /* Child nav items - dimmed colour and lighter weight for visual hierarchy */
@@ -722,11 +808,11 @@ body.jim-dark-mode .jim-instance-bar .jim-title-accent {
 
 /* Align child nav item text with parent text.
    MudBlazor sets padding-left/padding-inline-start: 36px on nested nav links.
-   Increase to 38px to align child text with parent text (after icon).
-   Note: jim-nav-child is on the parent div.mud-nav-item, not the anchor. */
+   We add an 8px left margin to inset the highlight pill, so reduce padding to
+   30px (38 - 8) to keep child text visually aligned with parent text. */
 .jim-nav-child .mud-nav-link {
-    padding-left: 38px !important;
-    padding-inline-start: 38px !important;
+    padding-left: 30px !important;
+    padding-inline-start: 30px !important;
 }
 
 /* Danger zone tab header - red text, icon and underline only when active */

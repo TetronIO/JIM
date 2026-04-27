@@ -107,8 +107,10 @@ html[lang] {
     /* === JIM Custom: Navigation === */
     --jim-nav-top-level-color: #4a5568;
     --jim-nav-child-color: #4a5568;
-    --jim-nav-hover-color: #005da8;
-    --jim-nav-active-color: #0076d3;
+    --jim-nav-hover-color: #1a2230;
+    --jim-nav-active-color: #1a2230;
+    --jim-nav-active-bg: #e0e4ea;
+    --jim-nav-hover-bg: #c2c8d1;
 
     /* === JIM Custom: Drawer border (paper border — right-hand edge) === */
     --jim-drawer-border-color: rgba(30, 58, 95, 0.26);
@@ -154,11 +156,6 @@ html[lang] .mud-button-group-root .mud-button-outlined.mud-button-outlined-prima
     border-color: var(--mud-palette-primary);
 }
 */
-
-/* Active/selected nav link — neutral background congruent with drawer */
-html[lang] .mud-nav-link.active:not(.mud-nav-link-disabled) {
-    background-color: #eaecf0 !important;
-}
 
 /* Use a muted shade of text-primary for labels instead of the primary colour.
    Exclude links — they use --jim-link-color via site.css instead. */

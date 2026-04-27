@@ -26,6 +26,11 @@ services:
       dockerfile: src/JIM.Web/Dockerfile
       args:
         VERSION_SUFFIX: ${VERSION_SUFFIX:-}
+        # Local dev builds set OPENAPI_STAGE=publish to skip the expensive
+        # openapi-gen step. CI/release builds leave it unset so the default
+        # (openapi-gen) bakes a fresh OpenAPI doc into the image. Run
+        # jim-openapi-generate to refresh the static doc on disk.
+        OPENAPI_STAGE: ${OPENAPI_STAGE:-openapi-gen}
     depends_on:
       jim.database:
         condition: service_healthy
