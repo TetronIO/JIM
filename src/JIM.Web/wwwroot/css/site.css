@@ -542,6 +542,7 @@ body.jim-dark-mode .jim-instance-bar .jim-title-accent {
 
 .jim-drawer-footer {
     margin: 0 6px;
+    margin-top: auto;
     border-top-style: solid;
     border-top-width: 1px;
     border-top-color: var(--jim-drawer-border-color);
