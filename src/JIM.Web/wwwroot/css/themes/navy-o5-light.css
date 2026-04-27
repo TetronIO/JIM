@@ -109,8 +109,8 @@ html[lang] {
     --jim-nav-child-color: #4a5568;
     --jim-nav-hover-color: #1a2230;
     --jim-nav-active-color: #1a2230;
-    --jim-nav-active-bg: #ccd0d6;
-    --jim-nav-hover-bg: #aeb4bd;
+    --jim-nav-active-bg: #e0e4ea;
+    --jim-nav-hover-bg: #c2c8d1;
 
     /* === JIM Custom: Drawer border (paper border — right-hand edge) === */
     --jim-drawer-border-color: rgba(30, 58, 95, 0.26);
