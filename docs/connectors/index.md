@@ -38,7 +38,7 @@ JIM ships with the following built-in connectors:
 | [JIM File Connector](jim-file-connector.md) | CSV and delimited text files | Full Import, Export |
 | [JIM LDAP Connector](jim-ldap-connector.md) | Active Directory, OpenLDAP, 389 Directory Server, and other RFC 4512-compliant directories | Full Import, Delta Import, Export |
 
-## Planned Connectors
+## 🗺️ Planned Connectors
 
 For planned connectors including SQL databases, PowerShell, SCIM 2.0, and REST APIs, see the [Roadmap](../reference/roadmap.md).
 
