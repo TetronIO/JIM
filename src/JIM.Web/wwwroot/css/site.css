@@ -515,6 +515,18 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     color: var(--jim-logo-text-color, #ffffff) !important;
 }
 
+/* JIM logo wordmark in the sidebar - rendered in Space Grotesk to match the
+   docs site heading-accent layer, distinguishing the brand mark from the
+   surrounding IBM Plex Sans UI. Nudged down 2px to centre it on the logo
+   image's optical axis (Space Grotesk has tall caps that otherwise sit high). */
+.jim-drawer-logo-text {
+    font-family: 'Space Grotesk', 'IBM Plex Sans', -apple-system, sans-serif !important;
+    font-weight: 600 !important;
+    letter-spacing: -0.02em;
+    position: relative;
+    top: 2px;
+}
+
 /* Stretch the logo row to the full drawer width so margin-left: auto on the
    toggle button pushes it all the way to the right edge. */
 .jim-drawer-logo {
