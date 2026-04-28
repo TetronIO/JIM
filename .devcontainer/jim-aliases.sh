@@ -424,8 +424,20 @@ _jim_prune_images_preserving_snapshots() {
   docker image prune -f 2>/dev/null || true
 }
 
-# Reset (preserves Samba AD and OpenLDAP snapshot images — they take a long time to build)
+# Reset (preserves Samba AD and OpenLDAP snapshot images; they take a long time to build)
 jim-reset() {
+  # Stop any natively-run JIM.Web/Worker/Scheduler processes so they don't squat on host ports (e.g. 5200)
+  local native_pids
+  native_pids=$(pgrep -f '/JIM\.(Web|Worker|Scheduler)$' 2>/dev/null || true)
+  if [ -n "$native_pids" ]; then
+    echo "Stopping native JIM processes: $(echo $native_pids | tr '\n' ' ')"
+    echo "$native_pids" | xargs -r kill 2>/dev/null || true
+    sleep 1
+    # Force-kill any survivors
+    native_pids=$(pgrep -f '/JIM\.(Web|Worker|Scheduler)$' 2>/dev/null || true)
+    [ -n "$native_pids" ] && echo "$native_pids" | xargs -r kill -9 2>/dev/null || true
+  fi
+
   docker compose $(_jim_compose) down --volumes
   docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down --volumes --remove-orphans 2>/dev/null || true
   docker rm -f samba-ad-primary samba-ad-source samba-ad-target sqlserver-hris-a oracle-hris-b postgres-target openldap-test mysql-test 2>/dev/null || true
