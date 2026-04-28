@@ -237,11 +237,36 @@ html[lang] .mud-alert-outlined-info {
     color: var(--mud-palette-info) !important;
 }
 
-/* Info alert text colour — match border/icon for default and outlined variants */
-html[lang] .mud-alert-filled-info .mud-alert-message,
+/* Info alert text colour — match border/icon for outlined and text variants
+   only. The filled variant uses a bright info background, so its text must
+   stay on the dark text colour from --mud-palette-info-text instead. */
 html[lang] .mud-alert-outlined-info .mud-alert-message,
 html[lang] .mud-alert-text-info .mud-alert-message {
     color: var(--mud-palette-info) !important;
+}
+
+/* Filled alerts use bright semantic colours as backgrounds, so links inside
+   them must use the dark on-colour text instead of the bright site link
+   colour (which clashes with the info/success/warning/error backgrounds).
+   Match the .mud-link.mud-primary-text classes to beat the site-wide
+   a.mud-link.mud-primary-text rule and the dark-theme :visited override. */
+html[lang] .mud-alert-filled-info a,
+html[lang] .mud-alert-filled-info a.mud-link.mud-primary-text,
+html[lang] .mud-alert-filled-info a.mud-link.mud-primary-text:visited,
+html[lang] .mud-alert-filled-info a.mud-link.mud-primary-text:hover,
+html[lang] .mud-alert-filled-success a,
+html[lang] .mud-alert-filled-success a.mud-link.mud-primary-text,
+html[lang] .mud-alert-filled-success a.mud-link.mud-primary-text:visited,
+html[lang] .mud-alert-filled-success a.mud-link.mud-primary-text:hover,
+html[lang] .mud-alert-filled-warning a,
+html[lang] .mud-alert-filled-warning a.mud-link.mud-primary-text,
+html[lang] .mud-alert-filled-warning a.mud-link.mud-primary-text:visited,
+html[lang] .mud-alert-filled-warning a.mud-link.mud-primary-text:hover,
+html[lang] .mud-alert-filled-error a,
+html[lang] .mud-alert-filled-error a.mud-link.mud-primary-text,
+html[lang] .mud-alert-filled-error a.mud-link.mud-primary-text:visited,
+html[lang] .mud-alert-filled-error a.mud-link.mud-primary-text:hover {
+    color: #0a1018 !important;
 }
 
 html[lang] .mud-alert-outlined-success {
