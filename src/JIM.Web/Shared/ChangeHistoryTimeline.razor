@@ -59,13 +59,14 @@ else
                                                         Placement="Placement.Top" Arrow="true">
                                                 @if (changeGroup.CsoId.HasValue && changeGroup.ConnectedSystemId.HasValue)
                                                 {
-                                                    <MudLink
+                                                    <MudLink Typo="Typo.body2"
+                                                    Class="jim-text-code"
                                                     Href="@Utilities.GetConnectedSystemObjectHref(changeGroup.ConnectedSystemId.Value, changeGroup.CsoId.Value)"
                                                     @onclick:stopPropagation="true">@changeGroup.CsoExternalId</MudLink>
                                                 }
                                                 else
                                                 {
-                                                    <MudText Typo="Typo.body1">@changeGroup.CsoExternalId</MudText>
+                                                    <MudText Typo="Typo.body2" Class="jim-text-code">@changeGroup.CsoExternalId</MudText>
                                                 }
                                             </MudTooltip>
                                         </span>
