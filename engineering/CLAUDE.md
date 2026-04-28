@@ -201,11 +201,23 @@ JIM follows strict security development practices aligned with NCSC, CISA, OWASP
 The project uses [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Entries must be kept up to date as changes are made, not deferred until release time.
 
 **Audience and tone:**
-The changelog is a **customer-facing product document**. The audience is administrators and decision-makers wanting to know what's new. Entries should make JIM appear useful, reliable, sophisticated, and exciting.
+The changelog is a **customer-facing product document**. The audience is administrators and decision-makers wanting to know what's new. Entries should make JIM appear useful, reliable, sophisticated, and exciting; written with light product/marketing polish that conveys a capable team shipping a great product.
 - Write entries as product changes, not developer notes: focus on the benefit or outcome, not the implementation detail
 - Use a leading emoji per entry to add energy and visual scanning context (e.g. ✨ for new features, 🐛 for fixes, ⚡ for performance, 🔒 for security)
 - Do NOT include: internal refactoring, test changes, developer tooling, CI/CD tweaks, or anything that has no user-facing impact
 - Trivial changes (renamed a CSS class, moved a file, updated a comment) do NOT belong in the changelog
+
+**Length and style — keep entries succinct:**
+- **Target one sentence per entry; two at most.** If you cannot say it in two sentences, the entry is doing too much; trim or split it.
+- A reader should be able to scan the entry in a few seconds and know whether it affects them.
+- Lead with the customer-visible outcome ("Safari sign-in no longer fails with...", "The bundled X template now persists at production speed without..."), then optionally one short clause naming the underlying mechanism at a high level (e.g. "rewritten to use PostgreSQL `COPY` binary import"). Stop there.
+- **Do NOT include in changelog entries** (these belong in commit messages, PR descriptions, or code comments — not the changelog):
+  - Internal class, method, file, or property names (e.g. `SaveChanges`, EF change tracker, `SecurePolicy=SameAsRequest`)
+  - Step-by-step explanations of what was wrong and how it was fixed
+  - Browser/framework default behaviour explanations
+  - Quantitative internals (parameter counts, SQL round-trip counts, exact byte sizes) unless the number itself is the customer-visible benefit
+  - Multi-clause sentences chaining "previously X happened because Y, now Z does W because..."
+- **Test before committing:** would an administrator skimming release notes care about this sentence? If the detail only matters to someone reading the diff, cut it.
 
 **When to add an entry:**
 - Add an entry under `## [Unreleased]` with each commit or PR that introduces user-facing changes

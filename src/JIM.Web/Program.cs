@@ -199,6 +199,20 @@ try
             // Allow HTTP authority for local development (e.g. bundled Keycloak at http://localhost:8181)
             if (authority != null && authority.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
                 options.RequireHttpsMetadata = false;
+
+            // Development-only: relax correlation/nonce cookies so plain-HTTP localhost works in Safari.
+            // ASP.NET Core defaults both cookies to SameSite=None; Secure. Chrome/Edge/Firefox treat
+            // http://localhost as a secure context and accept Secure cookies on it; Safari does not
+            // (WebKit bug 232088), silently drops them, and the OIDC callback fails with "Correlation
+            // failed". Production keeps the secure defaults, which are correct over HTTPS and required
+            // if the IdP ever responds via form_post (cross-site POST needs SameSite=None).
+            if (builder.Environment.IsDevelopment())
+            {
+                options.CorrelationCookie.SameSite = SameSiteMode.Lax;
+                options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+                options.NonceCookie.SameSite = SameSiteMode.Lax;
+                options.NonceCookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+            }
             options.ClientId = clientId;
             options.ClientSecret = clientSecret;
             options.ResponseType = "code";

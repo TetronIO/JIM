@@ -1,6 +1,7 @@
 @using JIM.Models.Core
 @using Utilities
 @inject IJimApplicationFactory JimFactory
+@inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -14,10 +15,16 @@
         {
             <MudTable @ref="_table" T="MetaverseObjectAttributeValue"
                       ServerData="ServerReloadAsync"
-                      Dense="true" Hover="true" Elevation="0" Outlined="true"
+                      Dense="@_dense" Hover="true" Elevation="0" Outlined="true"
+                      Class="jim-mva-dialog-table"
                       FixedHeader="true" Height="400px"
                       Loading="@_loading" LoadingProgressColor="Color.Primary">
                 <ToolBarContent>
+                    <MudTooltip Text="@(_dense ? "Normal row spacing" : "Compact row spacing")" Arrow="true" Placement="Placement.Top">
+                        <MudIconButton Icon="@(_dense ? Icons.Material.Filled.DensitySmall : Icons.Material.Filled.DensityMedium)"
+                                       Variant="Variant.Filled" Color="Color.Default" Size="Size.Small" OnClick="OnToggleDense" />
+                    </MudTooltip>
+                    <MudSpacer />
                     <MudTextField T="string" Value="@_searchText"
                                   ValueChanged="@OnSearch"
                                   Placeholder="@($"Search {AttributeName.ToLower()}...")"
@@ -46,7 +53,7 @@
                     <MudTd DataLabel="Object Type">
                         @if (context.ReferenceValue != null)
                         {
-                            <MudChip T="string" Color="Color.Default">
+                            <MudChip T="string" Color="Color.Default" Size="@(_dense ? Size.Small : Size.Medium)">
                                 @context.ReferenceValue.Type?.Name
                             </MudChip>
                         }
@@ -61,10 +68,16 @@
         {
             <MudTable @ref="_table" T="MetaverseObjectAttributeValue"
                       ServerData="ServerReloadAsync"
-                      Dense="true" Hover="true" Elevation="0" Outlined="true"
+                      Dense="@_dense" Hover="true" Elevation="0" Outlined="true"
+                      Class="jim-mva-dialog-table"
                       FixedHeader="true" Height="400px"
                       Loading="@_loading" LoadingProgressColor="Color.Primary">
                 <ToolBarContent>
+                    <MudTooltip Text="@(_dense ? "Normal row spacing" : "Compact row spacing")" Arrow="true" Placement="Placement.Top">
+                        <MudIconButton Icon="@(_dense ? Icons.Material.Filled.DensitySmall : Icons.Material.Filled.DensityMedium)"
+                                       Variant="Variant.Filled" Color="Color.Default" Size="Size.Small" OnClick="OnToggleDense" />
+                    </MudTooltip>
+                    <MudSpacer />
                     <MudTextField T="string" Value="@_searchText"
                                   ValueChanged="@OnSearch"
                                   Placeholder="@($"Search {AttributeName.ToLower()}...")"
@@ -112,10 +125,35 @@
     private string _searchText = string.Empty;
     private bool _isReferenceAttribute;
     private bool _loading;
+    private bool _dense;
+    private bool _preferencesLoaded;
 
     protected override void OnInitialized()
     {
         _isReferenceAttribute = IsReferenceAttribute;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_preferencesLoaded)
+        {
+            try
+            {
+                _dense = await PreferenceService.GetTableDenseAsync() == true;
+                _preferencesLoaded = true;
+                StateHasChanged();
+            }
+            catch (InvalidOperationException)
+            {
+                // JS interop not yet available, will retry on next render
+            }
+        }
+    }
+
+    private async Task OnToggleDense()
+    {
+        _dense = !_dense;
+        await PreferenceService.SetTableDenseAsync(_dense);
     }
 
     private async Task<TableData<MetaverseObjectAttributeValue>> ServerReloadAsync(

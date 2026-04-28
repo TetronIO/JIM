@@ -192,12 +192,14 @@ Per CLAUDE.md, changelog entries should be added with each commit/PR — but thi
    - List any commits that were correctly excluded (docs, CI, tests, refactoring)
    - If gaps are found, propose changelog entries and ask the user to confirm before adding them
 
-5. **Review tone and quality of existing entries.** The changelog is a customer-facing product document. Entries should:
+5. **Review tone, length, and quality of existing entries.** The changelog is a customer-facing product document. Entries should:
    - Be written as product changes (benefit/outcome), not developer notes (implementation detail)
+   - Be succinct: one sentence per entry, two at most. Flag any entry longer than two sentences for tightening
+   - Avoid internal class/method/file names, step-by-step fix explanations, framework-default tutorials, and "previously X / now Y" multi-clause sentences (full criteria in `engineering/CLAUDE.md`)
    - Lead with an emoji for visual scanning (✨ new, 🐛 fix, ⚡ performance, 🔄 changed, 🗑️ removed, 🔒 security, 📦 deployment, 🖥️ UI/UX)
    - Make JIM appear useful, reliable, sophisticated, and exciting
    - Exclude internal/trivial changes that don't matter to customers
-   If existing entries need rewording to meet this standard, propose edits.
+   If existing entries need rewording or shortening to meet this standard, propose edits.
 
 6. **If entries need adding or rewording**, update the `[Unreleased]` section of `CHANGELOG.md` with the confirmed changes before proceeding.
 
