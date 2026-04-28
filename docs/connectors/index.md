@@ -27,7 +27,7 @@ Each connected system in JIM has:
 - **Run profiles**<br /> Configured operations (full import, delta import, export).
 - **Synchronisation rules**<br /> Rules governing how data flows between the connected system and the metaverse.
 
-For more detail on these concepts, see [Connected Systems](../concepts/connected-systems.md).
+For more detail on these concepts, see [Connected Systems](../configuration/connected-systems.md).
 
 ## 🛠️ Available Connectors
 

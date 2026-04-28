@@ -15,7 +15,7 @@ flowchart LR
     L -.- LP["Deprovision\naccounts"]
 ```
 
-JIM handles each phase through its [synchronisation rules](synchronisation-rules.md) and [synchronisation pipeline](synchronisation-pipeline.md), applying the appropriate actions automatically based on your configuration.
+JIM handles each phase through its [synchronisation rules](../configuration/synchronisation-rules.md) and [synchronisation pipeline](synchronisation-pipeline.md), applying the appropriate actions automatically based on your configuration.
 
 ## 👤 Joiner
 

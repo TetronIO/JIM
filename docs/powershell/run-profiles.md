@@ -298,6 +298,6 @@ try {
 
 ## See also
 
-- [API Run Profiles](../api/run-profiles/index.md): REST API reference for run profile endpoints
+- [Run Profiles](../configuration/run-profiles.md): what run profiles are, run types, and how they fit alongside schedules and activities
 - [Activities](activities.md): cmdlets for monitoring and inspecting activity execution history
 - [Connected Systems](connected-systems.md): cmdlets for managing connected systems

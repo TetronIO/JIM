@@ -488,6 +488,6 @@ Get-JIMPendingDeletion -Summary
 
 ## See also
 
-- [Metaverse API Reference](../api/metaverse/index.md)
+- [Metaverse](../configuration/metaverse.md): object types, attributes, objects, and pending deletions
 - [Synchronisation Rules](synchronisation-rules.md)
 - [Connected Systems](connected-systems.md)

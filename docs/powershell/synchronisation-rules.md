@@ -1124,6 +1124,6 @@ Remove-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 3 -Force
 
 ## See also
 
-- [API Synchronisation Rules](../api/synchronisation-rules/index.md): REST API reference for synchronisation rule endpoints
+- [Synchronisation Rules](../configuration/synchronisation-rules.md): direction, scoping, object matching, projection, and attribute mappings
 - [Connected Systems](connected-systems.md): PowerShell cmdlets for managing connected systems
 - [Metaverse](metaverse.md): PowerShell cmdlets for managing the metaverse

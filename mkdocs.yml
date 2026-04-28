@@ -96,11 +96,22 @@ nav:
   - Concepts:
       - concepts/index.md
       - Architecture: concepts/architecture.md
-      - Connected Systems: concepts/connected-systems.md
       - Synchronisation Pipeline: concepts/synchronisation-pipeline.md
-      - Synchronisation Rule: concepts/synchronisation-rules.md
       - JML Lifecycle: concepts/jml-lifecycle.md
       - Expressions: concepts/expressions.md
+  - Configuration:
+      - configuration/index.md
+      - Connected Systems: configuration/connected-systems.md
+      - Run Profiles: configuration/run-profiles.md
+      - Synchronisation Rules: configuration/synchronisation-rules.md
+      - Metaverse: configuration/metaverse.md
+      - Predefined Searches: configuration/predefined-searches.md
+      - Schedules: configuration/schedules.md
+      - Activities: configuration/activities.md
+      - API Keys: configuration/api-keys.md
+      - Certificates: configuration/certificates.md
+      - Service Settings: configuration/service-settings.md
+      - Roles: configuration/roles.md
   - Administration:
       - administration/index.md
       - Deployment: administration/deployment.md
@@ -115,18 +126,6 @@ nav:
   - API:
       - api/index.md
       - Authentication: api/authentication.md
-      - Connected Systems: api/connected-systems/index.md
-      - Run Profiles: api/run-profiles/index.md
-      - Synchronisation Rules: api/synchronisation-rules/index.md
-      - Metaverse: api/metaverse/index.md
-      - Predefined Searches: api/predefined-searches/index.md
-      - Schedules: api/schedules/index.md
-      - Activities: api/activities/index.md
-      - API Keys: api/api-keys/index.md
-      - Certificates: api/certificates/index.md
-      - Service Settings: api/service-settings/index.md
-      - Security: api/security/index.md
-      - System: api/system/index.md
   - PowerShell Module:
       - powershell/index.md
       - System: powershell/system.md
