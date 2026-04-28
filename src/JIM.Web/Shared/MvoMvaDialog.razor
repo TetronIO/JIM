@@ -15,6 +15,7 @@
             <MudTable @ref="_table" T="MetaverseObjectAttributeValue"
                       ServerData="ServerReloadAsync"
                       Dense="true" Hover="true" Elevation="0" Outlined="true"
+                      Class="jim-mva-dialog-table"
                       FixedHeader="true" Height="400px"
                       Loading="@_loading" LoadingProgressColor="Color.Primary">
                 <ToolBarContent>
@@ -46,7 +47,7 @@
                     <MudTd DataLabel="Object Type">
                         @if (context.ReferenceValue != null)
                         {
-                            <MudChip T="string" Color="Color.Default">
+                            <MudChip T="string" Color="Color.Default" Size="Size.Small">
                                 @context.ReferenceValue.Type?.Name
                             </MudChip>
                         }
@@ -62,6 +63,7 @@
             <MudTable @ref="_table" T="MetaverseObjectAttributeValue"
                       ServerData="ServerReloadAsync"
                       Dense="true" Hover="true" Elevation="0" Outlined="true"
+                      Class="jim-mva-dialog-table"
                       FixedHeader="true" Height="400px"
                       Loading="@_loading" LoadingProgressColor="Color.Primary">
                 <ToolBarContent>

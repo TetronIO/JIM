@@ -1308,6 +1308,18 @@ html[lang] .mud-alert-position {
     padding: 0 8px;
 }
 
+/* MVA "show more" dialog table is always dense; tighten cell padding and chip
+   sizing to match the visual density of the parent MVO Detail Table dense
+   mode, since MudBlazor's built-in mud-table-dense alone leaves rows looser
+   than the parent table. */
+.jim-mva-dialog-table tbody tr td {
+    padding: 4px 16px !important;
+}
+
+.jim-mva-dialog-table .mud-chip {
+    margin: 0;
+}
+
 
 .jim-attr-name {
     background-color: var(--jim-attr-name-bg, var(--mud-palette-background-grey));
