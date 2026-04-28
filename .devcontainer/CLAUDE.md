@@ -109,7 +109,7 @@ All dependency updates from Dependabot require human review before merging - the
 **Workflow 1 - Local Debugging (Recommended):**
 1. Run `jim-build-light` (starts db + Keycloak, waits for readiness, launches JIM.Web natively)
 2. Debug with breakpoints and hot reload
-3. Services: Web + API (https://localhost:7000), API reference at `/api/reference`
+3. Services: Web + API (http://localhost:5200), API reference at `/api/reference`
 
 **Workflow 2 - Full Docker Stack:**
 1. Start all services: `jim-stack`
