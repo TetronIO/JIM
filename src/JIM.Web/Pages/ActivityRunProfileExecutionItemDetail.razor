@@ -1042,8 +1042,8 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
 
         _activity = await jim.Activities.GetActivityAsync(_activityRunProfileExecutionItem.ActivityId);
 
-        if (_activity is { InitiatedByType: ActivityInitiatorType.User, InitiatedById: not null })
-            _initiatorMetaverseObjectHeader = await jim.Metaverse.GetMetaverseObjectHeaderAsync(_activity.InitiatedById.Value);
+        if (_activity is { InitiatedByType: ActivityInitiatorType.User, InitiatedById: { } initiatedById })
+            _initiatorMetaverseObjectHeader = await jim.Metaverse.GetMetaverseObjectHeaderAsync(initiatedById);
 
         // Determine navigation context from query parameter
         var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
