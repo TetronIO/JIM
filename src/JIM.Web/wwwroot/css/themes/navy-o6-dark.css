@@ -17,38 +17,38 @@
 
 html[lang] {
     /* === Primary Palette (muted purple accent) === */
-    --mud-palette-primary: #614b9e;
-    --mud-palette-primary-rgb: 97,75,158;
+    --mud-palette-primary: #764ce8;
+    --mud-palette-primary-rgb: 118, 76, 232;
     --mud-palette-primary-darken: #4e3c80;
-    --mud-palette-primary-lighten: #9585c8;
+    --mud-palette-primary-lighten: #b499ff;
     --mud-palette-primary-text: #ffffff;
 
     /* === Secondary Palette (cool slate-blue) === */
-    --mud-palette-secondary: #6b8aad;
-    --mud-palette-secondary-rgb: 107,138,173;
+    --mud-palette-secondary: #95a6bb;
+    --mud-palette-secondary-rgb: 149, 166, 187;
     --mud-palette-secondary-darken: #567498;
     --mud-palette-secondary-lighten: #84a0c0;
     --mud-palette-secondary-text: #0a1018;
 
     /* === Tertiary Palette (slate blue-grey) === */
-    --mud-palette-tertiary: #7FA8C4;
-    --mud-palette-tertiary-rgb: 127,168,196;
-    --mud-palette-tertiary-darken: #6B94B0;
-    --mud-palette-tertiary-lighten: #95BCD8;
+    --mud-palette-tertiary: #c4ba7f;
+    --mud-palette-tertiary-rgb: 196, 186, 127;
+    --mud-palette-tertiary-darken: #a39a69;
+    --mud-palette-tertiary-lighten: #d6cfa5;
     --mud-palette-tertiary-text: #0a1018;
 
     /* === Semantic Colours (bright for dark backgrounds) === */
     --mud-palette-success: #66d96e;
-    --mud-palette-success-rgb: 102,217,110;
+    --mud-palette-success-rgb: 102, 217, 110;
     --mud-palette-success-text: #0a1018;
     --mud-palette-warning: #ffb74d;
-    --mud-palette-warning-rgb: 255,183,77;
+    --mud-palette-warning-rgb: 255, 183, 77;
     --mud-palette-warning-text: #0a1018;
     --mud-palette-info: #64b5f6;
-    --mud-palette-info-rgb: 100,181,246;
+    --mud-palette-info-rgb: 100, 181, 246;
     --mud-palette-info-text: #0a1018;
     --mud-palette-error: #ff8a80;
-    --mud-palette-error-rgb: 255,138,128;
+    --mud-palette-error-rgb: 255, 138, 128;
     --mud-palette-error-text: #0a1018;
 
     /* === Background & Surface === */
@@ -197,12 +197,12 @@ html[lang] .mud-icon-button.mud-button-filled.mud-icon-button-color-error:not(:d
 
 html[lang] .mud-button-outlined.mud-button-outlined-error:not(:disabled):hover,
 html[lang] .mud-icon-button.mud-button-outlined.mud-icon-button-color-error:not(:disabled):hover {
-    background-color: rgba(var(--mud-palette-error-rgb), 0.08) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-error) 8%, transparent) !important;
 }
 
 html[lang] .mud-button-text.mud-button-text-error:not(:disabled):hover,
 html[lang] .mud-icon-button.mud-icon-button-color-error:not(.mud-button-filled):not(.mud-button-outlined):not(:disabled):hover {
-    background-color: rgba(var(--mud-palette-error-rgb), 0.08) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-error) 8%, transparent) !important;
 }
 
 /* Improve Dark button visibility on dark navy backgrounds */
@@ -219,9 +219,11 @@ html[lang] .mud-button-text.mud-button-text-dark:not(:disabled) {
     color: #5a6a80;
 }
 
+/* Link colour * /
 /* Visited link colour (hardcoded — browsers block var() in :visited for privacy) */
-html[lang] a.mud-link.mud-primary-text:visited {
-    color: #67b9ff !important;
+html[lang] a.mud-link.mud-primary-text,
+a.mud-link.mud-primary-text:visited {
+    color: #6dbcff !important;
 }
 
 /* Boost alert background contrast — MudBlazor outlined alerts default to
@@ -231,27 +233,52 @@ html[lang] .mud-alert-outlined-normal {
 }
 
 html[lang] .mud-alert-outlined-info {
-    background-color: rgba(var(--mud-palette-info-rgb), 0.06) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-info) 6%, transparent) !important;
     color: var(--mud-palette-info) !important;
 }
 
-/* Info alert text colour — match border/icon for default and outlined variants */
-html[lang] .mud-alert-filled-info .mud-alert-message,
+/* Info alert text colour — match border/icon for outlined and text variants
+   only. The filled variant uses a bright info background, so its text must
+   stay on the dark text colour from --mud-palette-info-text instead. */
 html[lang] .mud-alert-outlined-info .mud-alert-message,
 html[lang] .mud-alert-text-info .mud-alert-message {
     color: var(--mud-palette-info) !important;
 }
 
+/* Filled alerts use bright semantic colours as backgrounds, so links inside
+   them must use the dark on-colour text instead of the bright site link
+   colour (which clashes with the info/success/warning/error backgrounds).
+   Match the .mud-link.mud-primary-text classes to beat the site-wide
+   a.mud-link.mud-primary-text rule and the dark-theme :visited override. */
+html[lang] .mud-alert-filled-info a,
+html[lang] .mud-alert-filled-info a.mud-link.mud-primary-text,
+html[lang] .mud-alert-filled-info a.mud-link.mud-primary-text:visited,
+html[lang] .mud-alert-filled-info a.mud-link.mud-primary-text:hover,
+html[lang] .mud-alert-filled-success a,
+html[lang] .mud-alert-filled-success a.mud-link.mud-primary-text,
+html[lang] .mud-alert-filled-success a.mud-link.mud-primary-text:visited,
+html[lang] .mud-alert-filled-success a.mud-link.mud-primary-text:hover,
+html[lang] .mud-alert-filled-warning a,
+html[lang] .mud-alert-filled-warning a.mud-link.mud-primary-text,
+html[lang] .mud-alert-filled-warning a.mud-link.mud-primary-text:visited,
+html[lang] .mud-alert-filled-warning a.mud-link.mud-primary-text:hover,
+html[lang] .mud-alert-filled-error a,
+html[lang] .mud-alert-filled-error a.mud-link.mud-primary-text,
+html[lang] .mud-alert-filled-error a.mud-link.mud-primary-text:visited,
+html[lang] .mud-alert-filled-error a.mud-link.mud-primary-text:hover {
+    color: #0a1018 !important;
+}
+
 html[lang] .mud-alert-outlined-success {
-    background-color: rgba(var(--mud-palette-success-rgb), 0.06) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-success) 6%, transparent) !important;
 }
 
 html[lang] .mud-alert-outlined-warning {
-    background-color: rgba(var(--mud-palette-warning-rgb), 0.06) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-warning) 6%, transparent) !important;
 }
 
 html[lang] .mud-alert-outlined-error {
-    background-color: rgba(var(--mud-palette-error-rgb), 0.06) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-error) 6%, transparent) !important;
 }
 
 /* Table group header rows — deeper navy for schedule/category emphasis */
@@ -289,8 +316,8 @@ html[lang] .mud-chip-outlined.mud-chip-color-primary {
 
 /* Text primary chips — brighten text with subtle primary background */
 html[lang] .mud-chip-text.mud-chip-color-primary {
-    color: var(--mud-palette-primary-lighten) !important;
-    background-color: rgba(var(--mud-palette-primary-rgb), 0.32) !important;
+    color: #a583ff !important;
+    background-color: color-mix(in srgb, var(--mud-palette-primary) 32%, transparent) !important;
 }
 
 /* Outlined secondary chips — brighten text and border */
@@ -301,12 +328,12 @@ html[lang] .mud-chip-outlined.mud-chip-color-secondary {
 
 /* Text secondary chips — brighten text with subtle secondary background */
 html[lang] .mud-chip-text.mud-chip-color-secondary {
-    color: var(--mud-palette-secondary-lighten) !important;
-    background-color: rgba(var(--mud-palette-secondary-rgb), 0.32) !important;
+    color: #9fb8d5 !important;
+    background-color: color-mix(in srgb, 32%, transparent) !important;
 }
 
 /* Text tertiary chips — brighten text with subtle tertiary background */
 html[lang] .mud-chip-text.mud-chip-color-tertiary {
     color: var(--mud-palette-tertiary-lighten) !important;
-    background-color: rgba(var(--mud-palette-tertiary-rgb), 0.32) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-tertiary) 32%, transparent) !important;
 }

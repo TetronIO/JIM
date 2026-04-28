@@ -20,9 +20,9 @@ A **full import** reads every object from the connected system and compares it a
 
 Full imports are used for:
 
-- Initial setup of a connected system
-- Periodic reconciliation to ensure the connector space is accurate
-- Recovery after errors or data issues
+- **Initial setup of a connected system**<br /> Bringing in all data from a new external system for the first time.
+- **Periodic reconciliation to ensure the connector space is accurate**<br /> Regular checks to verify imported data matches the source system.
+- **Recovery after errors or data issues**<br /> Reloading all data to restore consistency after problems.
 
 ### Delta Import
 
@@ -35,9 +35,9 @@ For example, the OpenLDAP connector supports delta imports via the accesslog ove
 1. JIM connects to the external system using the configured connector
 2. Objects are read (all objects for full import, changed objects for delta import)
 3. For each imported object, JIM either:
-   - **Creates** a new CSO if the object is not already in the connector space
-   - **Updates** the existing CSO if the object has changed
-   - **Obsoletes** the CSO if the object no longer exists in the source (full import only)
+   - **Creates**<br /> A new CSO if the object is not already in the connector space.
+   - **Updates**<br /> The existing CSO if the object has changed.
+   - **Obsoletes**<br /> The CSO if the object no longer exists in the source (full import only).
 4. Import statistics are recorded in the activity log (objects added, updated, obsoleted, unchanged)
 
 Import does **not** modify the metaverse. The connector space acts as a staging area, isolating the metaverse from any issues during import.
@@ -50,25 +50,25 @@ Sync is the core phase where JIM reconciles connector space data with the metave
 
 Inbound sync processes CSOs from source systems and updates the metaverse. For each CSO in scope:
 
-1. **Scoping** -- JIM evaluates the synchronisation rule's scoping filter to determine whether this CSO should be processed. Objects that fall out of scope are disconnected from the metaverse.
+1. **Scoping**<br /> JIM evaluates the synchronisation rule's scoping filter to determine whether this CSO should be processed. Objects that fall out of scope are disconnected from the metaverse.
 
-2. **Join resolution** -- JIM checks the synchronisation rule's join rules to find a matching MVO. Join rules define how to correlate a CSO with an existing metaverse object (e.g., match on employee ID, email address, or a combination of attributes).
+2. **Join resolution**<br /> JIM checks the synchronisation rule's join rules to find a matching MVO. Join rules define how to correlate a CSO with an existing metaverse object (e.g., match on employee ID, email address, or a combination of attributes).
 
-3. **Projection** -- If no matching MVO is found and the synchronisation rule allows projection, JIM creates a new MVO. The projected MVO is linked to the CSO.
+3. **Projection**<br /> If no matching MVO is found and the synchronisation rule allows projection, JIM creates a new MVO. The projected MVO is linked to the CSO.
 
-4. **Attribute flow** -- Once a CSO is joined or projected to an MVO, JIM applies the attribute flow rules. Inbound attribute flows copy values from the CSO to the MVO, optionally transforming them using [expressions](expressions.md).
+4. **Attribute flow**<br /> Once a CSO is joined or projected to an MVO, JIM applies the attribute flow rules. Inbound attribute flows copy values from the CSO to the MVO, optionally transforming them using [expressions](expressions.md).
 
 ### Outbound Sync (Metaverse to Target)
 
 Outbound sync evaluates MVOs against outbound synchronisation rules and determines what changes need to be exported to target systems. For each MVO in scope:
 
-1. **Scoping** -- JIM evaluates which MVOs are in scope for the outbound synchronisation rule.
+1. **Scoping**<br /> JIM evaluates which MVOs are in scope for the outbound synchronisation rule.
 
-2. **Provisioning** -- If an MVO is in scope but does not have a corresponding CSO in the target connected system, JIM provisions (creates) a new CSO.
+2. **Provisioning**<br /> If an MVO is in scope but does not have a corresponding CSO in the target connected system, JIM provisions (creates) a new CSO.
 
-3. **Attribute flow** -- Outbound attribute flows copy values from the MVO to the CSO, optionally transforming them using expressions.
+3. **Attribute flow**<br /> Outbound attribute flows copy values from the MVO to the CSO, optionally transforming them using expressions.
 
-4. **Pending exports** -- Changes to CSOs are recorded as **pending exports** rather than being sent to the target system immediately. This allows administrators to review queued changes before they are applied.
+4. **Pending exports**<br /> Changes to CSOs are recorded as **pending exports** rather than being sent to the target system immediately. This allows administrators to review queued changes before they are applied.
 
 ### Full Sync vs Delta Sync
 
@@ -81,11 +81,11 @@ Export sends pending changes from the connector space to the target connected sy
 
 ### What Happens During Export
 
-1. JIM reads the pending exports for the connected system
-2. For each pending export, the connector sends the change to the external system
-3. Successful exports are confirmed and the pending export is cleared
-4. Failed exports are logged with error details for troubleshooting
-5. Export statistics are recorded in the activity log
+1. JIM reads the pending exports for the connected system.
+2. For each pending export, the connector sends the change to the external system.
+3. Successful exports are confirmed and the pending export is cleared.
+4. Failed exports are logged with error details for troubleshooting.
+5. Export statistics are recorded in the activity log.
 
 ### Batching and Parallelism
 

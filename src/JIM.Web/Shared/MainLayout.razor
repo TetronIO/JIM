@@ -49,7 +49,7 @@ else
                 }
                 @if (IsDrawerOpen)
                 {
-                    <MudText Class="ms-2">JIM</MudText>
+                    <MudText Class="ms-2 jim-drawer-logo-text">JIM</MudText>
                     <MudTooltip Text="@(IsDrawerPinned ? "Collapse sidebar" : "Pin sidebar open")" Arrow="true" Placement="Placement.Top">
                         <MudIconButton Icon="@Icons.Material.Filled.MenuOpen"
                                        Size="Size.Small"
@@ -127,7 +127,7 @@ else
             {
                 FontFamily =
                 [
-                    "Inter",
+                    "IBM Plex Sans",
                     "-apple-system",
                     "Segoe UI Variable Display",
                     "Helvetica Neue",
@@ -135,6 +135,20 @@ else
                 ],
                 FontWeight = "400",
                 FontSize = "16px"
+            },
+            // MudBlazor 9 defaults (from Material Design 1.0) ship H5 at weight
+            // 400 and H6 at weight 500 - so H6 reads visually heavier than H5,
+            // which inverts the natural document hierarchy. Override so H5 sits
+            // clearly above H6 in both size (inherited 1.5rem vs 1.25rem) and
+            // weight, while H6 stays heavier than body text (400) so it remains
+            // distinguishable from regular paragraphs.
+            H5 = new H5Typography()
+            {
+                FontWeight = "600"
+            },
+            H6 = new H6Typography()
+            {
+                FontWeight = "500"
             }
         },
         LayoutProperties = new LayoutProperties()

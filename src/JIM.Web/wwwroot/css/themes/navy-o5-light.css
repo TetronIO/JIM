@@ -190,19 +190,19 @@ html[lang] .mud-alert-text-normal {
 }
 
 html[lang] .mud-alert-text-info {
-    background-color: rgba(var(--mud-palette-info-rgb), 0.12) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-info) 12%, transparent) !important;
 }
 
 html[lang] .mud-alert-text-success {
-    background-color: rgba(var(--mud-palette-success-rgb), 0.14) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-success) 14%, transparent) !important;
 }
 
 html[lang] .mud-alert-text-warning {
-    background-color: rgba(var(--mud-palette-warning-rgb), 0.14) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-warning) 14%, transparent) !important;
 }
 
 html[lang] .mud-alert-text-error {
-    background-color: rgba(var(--mud-palette-error-rgb), 0.12) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-error) 12%, transparent) !important;
 }
 
 html[lang] .mud-alert-outlined-normal {
@@ -210,19 +210,19 @@ html[lang] .mud-alert-outlined-normal {
 }
 
 html[lang] .mud-alert-outlined-info {
-    background-color: rgba(var(--mud-palette-info-rgb), 0.06) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-info) 6%, transparent) !important;
 }
 
 html[lang] .mud-alert-outlined-success {
-    background-color: rgba(var(--mud-palette-success-rgb), 0.06) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-success) 6%, transparent) !important;
 }
 
 html[lang] .mud-alert-outlined-warning {
-    background-color: rgba(var(--mud-palette-warning-rgb), 0.06) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-warning) 6%, transparent) !important;
 }
 
 html[lang] .mud-alert-outlined-error {
-    background-color: rgba(var(--mud-palette-error-rgb), 0.06) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-error) 6%, transparent) !important;
 }
 
 /* Nested table footer, pager, and no-records rows use page background

@@ -178,12 +178,12 @@ html[lang] .mud-icon-button.mud-button-filled.mud-icon-button-color-error:not(:d
 
 html[lang] .mud-button-outlined.mud-button-outlined-error:not(:disabled):hover,
 html[lang] .mud-icon-button.mud-button-outlined.mud-icon-button-color-error:not(:disabled):hover {
-    background-color: rgba(var(--mud-palette-error-rgb), 0.08) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-error) 8%, transparent) !important;
 }
 
 html[lang] .mud-button-text.mud-button-text-error:not(:disabled):hover,
 html[lang] .mud-icon-button.mud-icon-button-color-error:not(.mud-button-filled):not(.mud-button-outlined):not(:disabled):hover {
-    background-color: rgba(var(--mud-palette-error-rgb), 0.08) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-error) 8%, transparent) !important;
 }
 
 /* Improve Dark button visibility on dark navy backgrounds */
@@ -212,19 +212,19 @@ html[lang] .mud-alert-outlined-normal {
 }
 
 html[lang] .mud-alert-outlined-info {
-    background-color: rgba(var(--mud-palette-info-rgb), 0.06) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-info) 6%, transparent) !important;
 }
 
 html[lang] .mud-alert-outlined-success {
-    background-color: rgba(var(--mud-palette-success-rgb), 0.06) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-success) 6%, transparent) !important;
 }
 
 html[lang] .mud-alert-outlined-warning {
-    background-color: rgba(var(--mud-palette-warning-rgb), 0.06) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-warning) 6%, transparent) !important;
 }
 
 html[lang] .mud-alert-outlined-error {
-    background-color: rgba(var(--mud-palette-error-rgb), 0.06) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-error) 6%, transparent) !important;
 }
 
 /* Table group header rows — deeper navy for schedule/category emphasis */

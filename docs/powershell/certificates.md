@@ -335,5 +335,5 @@ Get-JIMCertificate -EnabledOnly | ForEach-Object {
 
 ## See also
 
-- [API: Certificates](../api/certificates/index.md): REST API reference for certificate endpoints
+- [Certificates](../configuration/certificates.md): what certificates are, source types, expiry awareness, and rotation workflows
 - [Connected Systems](connected-systems.md): configure connected systems that use trusted certificates

@@ -9,7 +9,7 @@ Attribute Flow
 :   A rule that maps an attribute between a Connected System Object and a Metaverse Object. Attribute flows define how data moves during synchronisation, including any transformations applied via expressions.
 
 Connector
-:   An adapter for communicating with an external system. Each connector implements the protocol and logic required to import from and export to a specific type of data source (e.g., LDAP directories, CSV files).
+:   An adapter for communicating with an external system. Each connector implements the protocol and logic required to import from and export to a specific type of data source (e.g. LDAP directories, CSV files).
 
 Connector Space
 :   The staging area where Connected System Objects reside before and after synchronisation. The connector space acts as a buffer between external systems and the metaverse, ensuring that changes are validated before they are applied.

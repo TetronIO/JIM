@@ -129,10 +129,10 @@ Integers, GUIDs, enums, and `DateTime` values are inherently safe and do not nee
 
 Before adding any new NuGet package or third-party dependency:
 
-1. **Notify the maintainers:** state the need and conduct a suitability analysis
-2. **Research:** licence compatibility, maintainer reputation, maintenance status, known vulnerabilities
-3. **Present findings:** include a comparison table if alternatives exist
-4. **Await approval** before adding the dependency
+1. **Notify the maintainers**<br /> State the need and conduct a suitability analysis
+2. **Research**<br /> Licence compatibility, maintainer reputation, maintenance status, known vulnerabilities
+3. **Present findings**<br /> Include a comparison table if alternatives exist
+4. **Await approval**<br /> Before adding the dependency
 
 **Preference order:**
 

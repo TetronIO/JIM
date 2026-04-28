@@ -219,24 +219,24 @@ flowchart TD
 
 ## Key Design Decisions
 
-- **Cross-page duplicate detection**: A `HashSet<string>` tracks external IDs across all pages of a paginated import. This is defence-in-depth against directory servers with faulty paging (e.g., Samba AD).
+- **Cross-page duplicate detection**<br /> A `HashSet<string>` tracks external IDs across all pages of a paginated import. This is defence-in-depth against directory servers with faulty paging (e.g., Samba AD).
 
-- **Same-batch duplicate handling**: When duplicates are found within a single page, BOTH objects are rejected (no "random winner" based on file order). This forces data owners to fix the source data.
+- **Same-batch duplicate handling**<br /> When duplicates are found within a single page, BOTH objects are rejected (no "random winner" based on file order). This forces data owners to fix the source data.
 
-- **Watermark consistency**: For paginated delta imports, the original persisted connector data (watermark/USN) is passed to every page. The new watermark from the first page is only saved after all pages complete, ensuring consistent queries.
+- **Watermark consistency**<br /> For paginated delta imports, the original persisted connector data (watermark/USN) is passed to every page. The new watermark from the first page is only saved after all pages complete, ensuring consistent queries.
 
-- **RPEI list separation**: RPEIs are maintained separately from the Activity during import to avoid EF Core accidentally persisting CSOs before they're ready (EF would follow the Activity -> RPEI -> CSO navigation chain during `SaveChanges`).
+- **RPEI list separation**<br /> RPEIs are maintained separately from the Activity during import to avoid EF Core accidentally persisting CSOs before they're ready (EF would follow the Activity -> RPEI -> CSO navigation chain during `SaveChanges`).
 
-- **Zero-import safety**: If no objects are imported, deletion detection is skipped entirely to prevent accidental mass-deletion when connectivity to the source system fails.
+- **Zero-import safety**<br /> If no objects are imported, deletion detection is skipped entirely to prevent accidental mass-deletion when connectivity to the source system fails.
 
-- **PendingProvisioning transition**: CSOs created during export (provisioning) start with `PendingProvisioning` status. The confirming import transitions them to `Normal` when the object is confirmed to exist in the target system.
+- **PendingProvisioning transition**<br /> CSOs created during export (provisioning) start with `PendingProvisioning` status. The confirming import transitions them to `Normal` when the object is confirmed to exist in the target system.
 
-- **Parallel LDAP connections (#72)**: OpenLDAP/Generic directories use connection-scoped RFC 2696 paging cookies, so each container+objectType combo gets its own `LdapConnection`. Concurrency is capped by the Import Concurrency setting (default 4, max 8). AD directories are unaffected; they multiplex paged searches on a single connection. When the connection factory is unavailable or concurrency is 1, the connector falls back to sequential single-connection processing.
+- **Parallel LDAP connections (#72)**<br /> OpenLDAP/Generic directories use connection-scoped RFC 2696 paging cookies, so each container+objectType combo gets its own `LdapConnection`. Concurrency is capped by the Import Concurrency setting (default 4, max 8). AD directories are unaffected; they multiplex paged searches on a single connection. When the connection factory is unavailable or concurrency is 1, the connector falls back to sequential single-connection processing.
 
-- **Two-phase parallel write (#427)**: CSO persistence splits INSERT into two committed phases (CSO rows first, then attribute values) so that cross-partition FK references (ReferenceValueId pointing to a CSO on a different parallel connection) succeed without post-hoc fixup. Small batches (< parallelism x 50) bypass this and write on a single connection. Write parallelism defaults to `Environment.ProcessorCount` (minimum 2) and is tuneable via `JIM_WRITE_PARALLELISM`.
+- **Two-phase parallel write (#427)**<br /> CSO persistence splits INSERT into two committed phases (CSO rows first, then attribute values) so that cross-partition FK references (ReferenceValueId pointing to a CSO on a different parallel connection) succeed without post-hoc fixup. Small batches (< parallelism x 50) bypass this and write on a single connection. Write parallelism defaults to `Environment.ProcessorCount` (minimum 2) and is tuneable via `JIM_WRITE_PARALLELISM`.
 
-- **Partition-scoped imports (#353)**: Run profiles can target a specific partition via `GetTargetPartitions()`. When set, only containers within that partition are imported; otherwise all selected partitions are included. This applies to both the import data collection and deletion detection scope. Deletion detection is scoped to the target partition, so CSOs in other partitions are not incorrectly marked as obsolete.
+- **Partition-scoped imports (#353)**<br /> Run profiles can target a specific partition via `GetTargetPartitions()`. When set, only containers within that partition are imported; otherwise all selected partitions are included. This applies to both the import data collection and deletion detection scope. Deletion detection is scoped to the target partition, so CSOs in other partitions are not incorrectly marked as obsolete.
 
-- **Cancellation safety**: When a cancellation is requested, the current page flush completes before exiting. This ensures no data loss; partially processed pages are fully persisted before the operation stops.
+- **Cancellation safety**<br /> When a cancellation is requested, the current page flush completes before exiting. This ensures no data loss; partially processed pages are fully persisted before the operation stops.
 
-- **Per-page change tracker clearing**: `ClearChangeTracker` is called at page boundaries to detach processed entities from the EF Core change tracker, keeping memory consumption bounded regardless of total import size.
+- **Per-page change tracker clearing**<br /> `ClearChangeTracker` is called at page boundaries to detach processed entities from the EF Core change tracker, keeping memory consumption bounded regardless of total import size.

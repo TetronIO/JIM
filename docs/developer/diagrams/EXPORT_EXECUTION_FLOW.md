@@ -163,24 +163,24 @@ flowchart TD
 
 ## Key Design Decisions
 
-- **Pre-export CREATE→DELETE reconciliation** (#218): Before fetching executable exports, `ReconcileCreateDeletePairsAsync` scans all pending exports for contradictory pairs targeting the same CSO. CREATE+DELETE pairs cancel both (object was never exported), UPDATE+DELETE cancels the UPDATE (deletion makes it redundant). This catches pairs persisted across different sync runs; the flush-time reconciliation in `SyncTaskProcessorBase` handles same-page pairs.
+- **Pre-export CREATE→DELETE reconciliation** (#218)<br /> Before fetching executable exports, `ReconcileCreateDeletePairsAsync` scans all pending exports for contradictory pairs targeting the same CSO. CREATE+DELETE pairs cancel both (object was never exported), UPDATE+DELETE cancels the UPDATE (deletion makes it redundant). This catches pairs persisted across different sync runs; the flush-time reconciliation in `SyncTaskProcessorBase` handles same-page pairs.
 
-- **Two-pass export**: Exports without unresolved references are executed first (immediate). Exports with unresolved MVO references are deferred, with references bulk-resolved in a single query, then executed in a second pass.
+- **Two-pass export**<br /> Exports without unresolved references are executed first (immediate). Exports with unresolved MVO references are deferred, with references bulk-resolved in a single query, then executed in a second pass.
 
-- **Retry with backoff**: Failed exports are retried with exponential backoff via `NextRetryAt`. After `MaxRetries` attempts, the export is marked as permanently `Failed`.
+- **Retry with backoff**<br /> Failed exports are retried with exponential backoff via `NextRetryAt`. After `MaxRetries` attempts, the export is marked as permanently `Failed`.
 
-- **No-net-change detection**: Before exports are created during sync, the system checks if the target CSO already has the expected values. This happens upstream in `EvaluateExportRulesWithNoNetChangeDetectionAsync`, not during export execution.
+- **No-net-change detection**<br /> Before exports are created during sync, the system checks if the target CSO already has the expected values. This happens upstream in `EvaluateExportRulesWithNoNetChangeDetectionAsync`, not during export execution.
 
-- **Container auto-selection**: When exports create new containers (e.g., OUs in LDAP), their external IDs are captured and auto-selected so they appear in future imports without manual configuration.
+- **Container auto-selection**<br /> When exports create new containers (e.g., OUs in LDAP), their external IDs are captured and auto-selected so they appear in future imports without manual configuration.
 
-- **Preview mode**: `SyncRunMode.PreviewOnly` returns the list of exports that would be processed without executing them, enabling dry-run functionality.
+- **Preview mode**<br /> `SyncRunMode.PreviewOnly` returns the list of exports that would be processed without executing them, enabling dry-run functionality.
 
-- **Per-batch isolation**: Each parallel batch gets its own `DbContext` and connector instance. EF Core is not thread-safe, so sharing a context across batches would cause data corruption.
+- **Per-batch isolation**<br /> Each parallel batch gets its own `DbContext` and connector instance. EF Core is not thread-safe, so sharing a context across batches would cause data corruption.
 
-- **ParallelBatchWriter (#394)**: The persistence phase of each batch (CSO updates, RPEI persistence, pending export status updates) is split across N concurrent PostgreSQL connections via `ParallelBatchWriter`. This parallelises the bulk database writes that were previously sequential, significantly reducing batch persistence time.
+- **ParallelBatchWriter (#394)**<br /> The persistence phase of each batch (CSO updates, RPEI persistence, pending export status updates) is split across N concurrent PostgreSQL connections via `ParallelBatchWriter`. This parallelises the bulk database writes that were previously sequential, significantly reducing batch persistence time.
 
-- **LDAP consolidation**: Multiple changes to the same attribute with the same operation type (e.g., 200 individual "member Add" operations) are consolidated into a single `DirectoryAttributeModification` before sending to the directory server. This is the correct RFC 4511 pattern and dramatically reduces the number of LDAP modify requests.
+- **LDAP consolidation**<br /> Multiple changes to the same attribute with the same operation type (e.g., 200 individual "member Add" operations) are consolidated into a single `DirectoryAttributeModification` before sending to the directory server. This is the correct RFC 4511 pattern and dramatically reduces the number of LDAP modify requests.
 
-- **LDAP chunking**: Consolidated modifications that exceed the configurable batch size (default: 100) are split into multiple `ModifyRequest` objects sent sequentially. This prevents LDAP server rejection of oversized requests, which is important for large group membership changes.
+- **LDAP chunking**<br /> Consolidated modifications that exceed the configurable batch size (default: 100) are split into multiple `ModifyRequest` objects sent sequentially. This prevents LDAP server rejection of oversized requests, which is important for large group membership changes.
 
-- **LDAP export concurrency auto-tuning**: Export concurrency defaults are automatically tuned based on the detected directory server type. AD and OpenLDAP directories default to 16 concurrent export operations, while Samba and unknown directory types default to 4. This balances throughput against server stability; Samba's LDAP implementation is less tolerant of high concurrency.
+- **LDAP export concurrency auto-tuning**<br /> Export concurrency defaults are automatically tuned based on the detected directory server type. AD and OpenLDAP directories default to 16 concurrent export operations, while Samba and unknown directory types default to 4. This balances throughput against server stability; Samba's LDAP implementation is less tolerant of high concurrency.

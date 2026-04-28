@@ -70,7 +70,7 @@ else if (_syncRule != null)
                         <MudText Class="mud-text-secondary">→</MudText>
                         <MudChip T="string" Size="Size.Medium">
                             <AvatarContent>
-                                <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
+                                <MudAvatar Color="Color.Secondary">CS</MudAvatar>
                             </AvatarContent>
                             <ChildContent>@_syncRule.ConnectedSystemObjectType?.Name</ChildContent>
                         </MudChip>
@@ -280,7 +280,7 @@ else if (_syncRule != null)
                                         <MudChip T="string" Size="Size.Medium">
                                             <AvatarContent>
                                                 <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
-                                                    <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
+                                                    <MudAvatar Color="Color.Secondary">CS</MudAvatar>
                                                 </MudTooltip>
                                             </AvatarContent>
                                             <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
@@ -590,7 +590,7 @@ else if (_syncRule != null)
                             <MudTooltip Text="@($"Connected System: {source.ConnectedSystemAttribute.Type.ToString().SplitOnCapitalLetters()}, {(source.ConnectedSystemAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
                                 <MudChip T="string" Size="Size.Medium">
                                     <AvatarContent>
-                                        <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
+                                        <MudAvatar Color="Color.Secondary">CS</MudAvatar>
                                     </AvatarContent>
                                     <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
                                 </MudChip>
@@ -638,7 +638,7 @@ else if (_syncRule != null)
                         <MudTooltip Text="@($"Connected System: {context.TargetConnectedSystemAttribute.Type.ToString().SplitOnCapitalLetters()}, {(context.TargetConnectedSystemAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
                             <MudChip T="string" Size="Size.Medium">
                                 <AvatarContent>
-                                    <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
+                                    <MudAvatar Color="Color.Secondary">CS</MudAvatar>
                                 </AvatarContent>
                                 <ChildContent>@context.TargetConnectedSystemAttribute.Name</ChildContent>
                             </MudChip>
@@ -832,7 +832,7 @@ else if (_syncRule != null)
                                 <MudChip T="string" Size="Size.Medium">
                                     <AvatarContent>
                                         <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
-                                            <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
+                                            <MudAvatar Color="Color.Secondary">CS</MudAvatar>
                                         </MudTooltip>
                                     </AvatarContent>
                                     <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
@@ -890,7 +890,7 @@ else if (_syncRule != null)
                         <MudChip T="string" Size="Size.Medium">
                             <AvatarContent>
                                 <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
-                                    <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
+                                    <MudAvatar Color="Color.Secondary">CS</MudAvatar>
                                 </MudTooltip>
                             </AvatarContent>
                             <ChildContent>@attributeFlowRule.TargetConnectedSystemAttribute?.Name</ChildContent>

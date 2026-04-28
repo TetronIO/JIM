@@ -21,13 +21,13 @@ flowchart LR
 
 Each connected system in JIM has:
 
-- **Connection settings** -- how to reach the external system (hostname, credentials, file path, etc.)
-- **Schema** -- the object types and attributes available in the external system
-- **Connector space** -- the staging area holding imported CSOs
-- **Run profiles** -- configured operations (full import, delta import, export)
-- **Synchronisation rules** -- rules governing how data flows between the connected system and the metaverse
+- **Connection settings**<br /> How to reach the external system (hostname, credentials, file path, etc.)
+- **Schema**<br /> The object types and attributes available in the external system.
+- **Connector space**<br /> The staging area holding imported CSOs.
+- **Run profiles**<br /> Configured operations (full import, delta import, export).
+- **Synchronisation rules**<br /> Rules governing how data flows between the connected system and the metaverse.
 
-For more detail on these concepts, see [Connected Systems](../concepts/connected-systems.md).
+For more detail on these concepts, see [Connected Systems](../configuration/connected-systems.md).
 
 ## 🛠️ Available Connectors
 
@@ -38,7 +38,7 @@ JIM ships with the following built-in connectors:
 | [JIM File Connector](jim-file-connector.md) | CSV and delimited text files | Full Import, Export |
 | [JIM LDAP Connector](jim-ldap-connector.md) | Active Directory, OpenLDAP, 389 Directory Server, and other RFC 4512-compliant directories | Full Import, Delta Import, Export |
 
-## Planned Connectors
+## 🗺️ Planned Connectors
 
 For planned connectors including SQL databases, PowerShell, SCIM 2.0, and REST APIs, see the [Roadmap](../reference/roadmap.md).
 

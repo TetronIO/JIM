@@ -130,14 +130,14 @@ flowchart TD
 
 ## Key Design Decisions
 
-- **Two connector families**: Call-based connectors (`IConnectorImportUsingCalls`/`IConnectorExportUsingCalls`) have an explicit open/close lifecycle with connection management. File-based connectors (`IConnectorImportUsingFiles`/`IConnectorExportUsingFiles`) handle everything in a single call with no connection state.
+- **Two connector families**<br /> Call-based connectors (`IConnectorImportUsingCalls`/`IConnectorExportUsingCalls`) have an explicit open/close lifecycle with connection management. File-based connectors (`IConnectorImportUsingFiles`/`IConnectorExportUsingFiles`) handle everything in a single call with no connection state.
 
-- **Service injection before open**: Certificate and credential providers are injected before `OpenImportConnection`/`OpenExportConnection` is called. This allows connectors to decrypt passwords and load certificates during connection setup.
+- **Service injection before open**<br /> Certificate and credential providers are injected before `OpenImportConnection`/`OpenExportConnection` is called. This allows connectors to decrypt passwords and load certificates during connection setup.
 
-- **Watermark consistency**: During paginated delta imports, the *original* persisted connector data is passed to every page. The new watermark from the first page is only saved after all pages complete, ensuring the connector sees a consistent view across pages.
+- **Watermark consistency**<br /> During paginated delta imports, the *original* persisted connector data is passed to every page. The new watermark from the first page is only saved after all pages complete, ensuring the connector sees a consistent view across pages.
 
-- **Parallel connector isolation**: Each parallel export batch gets its own connector instance created via factory. This avoids shared connection state between concurrent batches, which is critical for connectors like LDAP that maintain stateful connections.
+- **Parallel connector isolation**<br /> Each parallel export batch gets its own connector instance created via factory. This avoids shared connection state between concurrent batches, which is critical for connectors like LDAP that maintain stateful connections.
 
-- **CloseExportConnection in finally**: The export connection is always closed, even if an exception occurs during export. This prevents connection leaks in long-running worker processes.
+- **CloseExportConnection in finally**<br /> The export connection is always closed, even if an exception occurs during export. This prevents connection leaks in long-running worker processes.
 
-- **Hard-coded resolution**: Connectors are currently resolved by name matching against `ConnectorDefinition.Name`. This will be extended to support user-supplied connector lookup in the future.
+- **Hard-coded resolution**<br /> Connectors are currently resolved by name matching against `ConnectorDefinition.Name`. This will be extended to support user-supplied connector lookup in the future.

@@ -202,12 +202,12 @@ A typical schedule with sequential and parallel steps:
 
 ## Key Design Decisions
 
-- **All steps queued upfront**: The scheduler creates all worker tasks at execution start, with subsequent steps as `WaitingForPreviousStep`. This makes the full execution plan visible in the task queue from the beginning.
+- **All steps queued upfront**<br /> The scheduler creates all worker tasks at execution start, with subsequent steps as `WaitingForPreviousStep`. This makes the full execution plan visible in the task queue from the beginning.
 
-- **Worker drives advancement**: Step transitions are driven by the worker (via `TryAdvanceScheduleExecutionAsync`) for minimal latency. The scheduler provides a safety net for crash recovery only.
+- **Worker drives advancement**<br /> Step transitions are driven by the worker (via `TryAdvanceScheduleExecutionAsync`) for minimal latency. The scheduler provides a safety net for crash recovery only.
 
-- **Activity-based outcome detection**: Since worker tasks are deleted upon completion, the system uses Activities (immutable audit records) to determine whether a step succeeded or failed.
+- **Activity-based outcome detection**<br /> Since worker tasks are deleted upon completion, the system uses Activities (immutable audit records) to determine whether a step succeeded or failed.
 
-- **Overlap prevention**: The scheduler checks for active executions before starting a new one for the same schedule. This prevents concurrent execution of the same schedule.
+- **Overlap prevention**<br /> The scheduler checks for active executions before starting a new one for the same schedule. This prevents concurrent execution of the same schedule.
 
-- **ContinueOnFailure**: Each step can be configured to continue or halt on failure. When any step at an index has `ContinueOnFailure = false` and its activity failed, the entire execution stops and remaining waiting tasks are cleaned up.
+- **ContinueOnFailure**<br /> Each step can be configured to continue or halt on failure. When any step at an index has `ContinueOnFailure = false` and its activity failed, the entire execution stops and remaining waiting tasks are cleaned up.

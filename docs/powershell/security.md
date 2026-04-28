@@ -228,5 +228,5 @@ Get-JIMRoleMember -RoleId 2 |
 
 ## See also
 
-- [API Security](../api/security/index.md)
+- [Roles](../configuration/roles.md): role definitions, static membership, and administrator-lockout safety
 - [API Keys](api-keys.md)

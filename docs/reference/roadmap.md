@@ -55,13 +55,19 @@ Each connector will follow JIM's established connector architecture, supporting 
 
 ## 🏛️ v2.0 -- IGA Foundation
 
-JIM's step-change from identity synchronisation into identity governance. Establishes the governance layer that enables compliance-driven organisations to manage access holistically, not just synchronise it.
+Evolves JIM's core IDAM capabilities so identities can be managed directly in JIM, without depending on Source-of-Record systems for everyday changes. The focus is depth in the existing identity surface (Users, Groups, custom types) rather than branching into adjacent domains.
 
-- **Direct metaverse object management** -- create, view, and manage identity objects directly within the UI
-- **Entitlement visibility and mapping** -- discover and map entitlements across connected systems
-- **Entitlement management** -- manage access assignments with request workflows and attestation:
-    - Access request workflows with approval chains
-    - Basic attestation and certification capabilities
-- **Compliance reporting** -- pre-built and customisable reports for audit and regulatory requirements
-- **Role-based access management** -- define and assign roles that bundle entitlements across connected systems
-- **Policy engine** -- declarative rules for separation of duties, access request approval, and risk scoring
+### Entitlement Management
+
+- **Direct group management**<br /> Create, update, and delete groups directly within JIM rather than only synchronising them from connected systems.
+- **Governance**<br /> Access reviews and attestation, delegated administration, dynamic memberships, time-based memberships, self-service requests, and approval workflows, etc.
+
+### Identity Lifecycle Management
+
+- **Direct user management**<br /> Create, update, and delete users directly within JIM rather than only synchronising them from connected systems.
+- **Self-service for locally-managed attributes**<br /> Allow users to maintain attributes owned by JIM (photos, pronouns, bios, and similar) rather than relying on upstream systems.
+- **Lifecycle Workflows**<br /> Event-driven workflows that automate joiner/mover/leaver processes end-to-end.
+
+### Fine-grained RBAC
+
+- **Custom permission models**<br /> Granular roles and permissions inside JIM itself, so administrators can shape access to JIM's functionality to match their organisation's structure.

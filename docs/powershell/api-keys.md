@@ -209,6 +209,6 @@ Get-JIMApiKey | Where-Object { $_.Name -like "temp-*" } | Remove-JIMApiKey -Forc
 
 ## See also
 
-- [API Keys](../api/api-keys/index.md): REST API reference for API key management
+- [API Keys](../configuration/api-keys.md): what API keys are, how they're managed, and the surfaces (UI, PowerShell, REST API) for working with them
 - [Connection](connection.md): establishing and managing connections to JIM
 - [Security](security.md): security configuration and best practices

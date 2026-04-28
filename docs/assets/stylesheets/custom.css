@@ -1,3 +1,8 @@
+/* Space Grotesk for marketing/publication-feel headings (hero title, header
+   site title). Body text remains IBM Plex Sans (set via mkdocs.yml).
+   Variable font: weight axis pulled at 600 + 700. */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&display=swap');
+
 /* JIM Brand Colour Overrides */
 
 /* Primary colour - JIM Purple #5A45A2 */
@@ -158,7 +163,14 @@
 
 .quickstart-cards > ul > li:hover {
   border-color: var(--md-accent-fg-color);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Material grid cards: lighten the border on hover (default behaviour fades it
+   to transparent, which reads as "darker" in dark mode). 2D look — no shadow. */
+.md-typeset .grid.cards > :is(ul, ol) > li:hover,
+.md-typeset .grid > .card:hover {
+  border-color: var(--md-default-fg-color--lighter);
+  box-shadow: none;
 }
 
 /* ========================================
@@ -256,12 +268,48 @@
 }
 
 .jim-hero__title {
+  font-family: 'Space Grotesk', 'IBM Plex Sans', -apple-system, sans-serif;
   font-size: 3rem;
   font-weight: 700;
   margin: 0 0 1rem;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
   color: #ffffff;
+}
+
+/* Header site title (and animated current-page title) in the display sans
+   accent for a more "design-forward" feel. Nav, body and code remain IBM Plex. */
+.md-header__title .md-ellipsis {
+  font-family: 'Space Grotesk', 'IBM Plex Sans', -apple-system, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Page heading colour and weight.
+   Material's default H1 uses --md-default-fg-color--light (dimmer than body)
+   and weight 300, which makes the page title look greyer than the H2/H3
+   headings below it. Pin the H1 to the regular foreground colour and bump
+   weights across the board for a stronger hierarchy. */
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3,
+.md-typeset h4,
+.md-typeset h5,
+.md-typeset h6 {
+  color: var(--md-default-fg-color);
+}
+
+.md-typeset h1 { font-weight: 400; }
+.md-typeset h2 { font-weight: 500; }
+.md-typeset h3 { font-weight: 500; }
+.md-typeset h4 { font-weight: 500; }
+
+/* Bump table and admonition body text from Material's 0.64rem (80% of body)
+   to 0.72rem (90% of body) for slightly easier reading. */
+.md-typeset table:not([class]),
+.md-typeset .admonition,
+.md-typeset details {
+  font-size: 0.72rem;
 }
 
 .jim-hero__tagline {

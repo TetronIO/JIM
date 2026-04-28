@@ -38,10 +38,10 @@ JIM follows a strict N-tier layered architecture. Upper layers depend on lower l
 
 The metaverse is the authoritative identity repository at the centre of JIM's architecture. All identity operations flow through the metaverse; there is never a direct sync between connected systems.
 
-- **MetaverseObject:** Central identity entity (users, groups, custom types)
-- **ConnectedSystem:** External system synchronised with the metaverse
-- **SyncRule:** Bidirectional mappings between connected systems and the metaverse
-- **Staging Areas:** Import/export staging for transactional integrity
+- **MetaverseObject**<br /> Central identity entity (users, groups, custom types)
+- **ConnectedSystem**<br /> External system synchronised with the metaverse
+- **SyncRule**<br /> Bidirectional mappings between connected systems and the metaverse
+- **Staging Areas**<br /> Import/export staging for transactional integrity
 
 ```mermaid
 flowchart LR
@@ -129,8 +129,8 @@ The Worker is the engine that processes all synchronisation operations. Its desi
 
 ### Core Interfaces
 
-- **`ISyncEngine`:** Stateless domain engine with methods for join resolution, projection, attribute flow, scoping, and more. Zero I/O dependencies; receives all data as parameters and returns results. Fully unit-testable without mocks.
-- **`ISyncRepository`:** Data access boundary with approximately 80 methods. Production implementation: `JIM.PostgresData.Repositories.SyncRepository`. Test implementation: `JIM.InMemoryData.SyncRepository`.
+- **`ISyncEngine`**<br /> Stateless domain engine with methods for join resolution, projection, attribute flow, scoping, and more. Zero I/O dependencies; receives all data as parameters and returns results. Fully unit-testable without mocks.
+- **`ISyncRepository`**<br /> Data access boundary with approximately 80 methods. Production implementation: `JIM.PostgresData.Repositories.SyncRepository`. Test implementation: `JIM.InMemoryData.SyncRepository`.
 
 ### Dependency Injection
 
@@ -138,8 +138,8 @@ The Worker and Scheduler use `IJimApplicationFactory` and `IConnectorFactory` fo
 
 ### Bulk Write Performance
 
-- **`ParallelBatchWriter`:** Splits bulk writes across N concurrent PostgreSQL connections
-- **COPY binary protocol:** Used for high-volume inserts (CSO creates, MVO creates, RPEIs, sync outcomes) via Npgsql's binary COPY API
+- **`ParallelBatchWriter`**<br /> Splits bulk writes across N concurrent PostgreSQL connections
+- **COPY binary protocol**<br /> Used for high-volume inserts (CSO creates, MVO creates, RPEIs, sync outcomes) via Npgsql's binary COPY API
 
 ### Export Parallelism
 

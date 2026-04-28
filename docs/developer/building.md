@@ -124,9 +124,9 @@ The default PostgreSQL settings in `docker-compose.yml` are tuned for a 64GB / 1
 
 Key settings to adjust:
 
-- `shared_buffers`: typically ~25% of available host RAM
-- `effective_cache_size`: typically ~75% of available host RAM
-- `shm_size` (Docker): must be >= `shared_buffers` with ~25% headroom
+- `shared_buffers`<br /> Typically ~25% of available host RAM
+- `effective_cache_size`<br /> Typically ~75% of available host RAM
+- `shm_size` (Docker)<br /> Must be >= `shared_buffers` with ~25% headroom
 
 **Sizing reference:**
 

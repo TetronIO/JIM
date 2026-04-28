@@ -113,10 +113,10 @@
                                                 <MudChip T="string" Color="Color.Default"
                                                          Style="margin: 0;">
                                                     <AvatarContent>
-                                                        <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
+                                                        <MudAvatar Color="Color.Secondary">CS</MudAvatar>
                                                     </AvatarContent>
                                                     <ChildContent>
-                                                        <b class="jim-title-accent">@_pendingExport.ConnectedSystemObject.Type.Name:</b>&nbsp;@GetCsoDisplayName()
+                                                        <b class="jim-cs-chip-prefix">@_pendingExport.ConnectedSystemObject.Type.Name:</b>&nbsp;@GetCsoDisplayName()
                                                     </ChildContent>
                                                 </MudChip>
                                             </MudLink>
@@ -143,7 +143,7 @@
                                                         <MudAvatar Color="Color.Primary">MV</MudAvatar>
                                                     </AvatarContent>
                                                     <ChildContent>
-                                                        <b class="jim-title-accent">@_pendingExport.SourceMetaverseObject.Type.Name:</b>&nbsp;@GetMvoDisplayName()
+                                                        <b class="jim-mv-chip-prefix">@_pendingExport.SourceMetaverseObject.Type.Name:</b>&nbsp;@GetMvoDisplayName()
                                                     </ChildContent>
                                                 </MudChip>
                                             </MudLink>

@@ -72,16 +72,16 @@ flowchart LR
 
 ## Key Design Decisions
 
-- **Identical per-CSO logic**: Both full and delta sync share the exact same `ProcessConnectedSystemObjectAsync()` from `SyncTaskProcessorBase`, using `ISyncEngine` for pure domain decisions and `ISyncServer`/`ISyncRepository` for orchestration and data access. The only difference is which CSOs are selected for processing.
+- **Identical per-CSO logic**<br /> Both full and delta sync share the exact same `ProcessConnectedSystemObjectAsync()` from `SyncTaskProcessorBase`, using `ISyncEngine` for pure domain decisions and `ISyncServer`/`ISyncRepository` for orchestration and data access. The only difference is which CSOs are selected for processing.
 
-- **Early exit optimisation**: Delta sync checks if any CSOs have been modified before loading caches and entering the page loop. If nothing has changed, it updates the watermark and returns immediately.
+- **Early exit optimisation**<br /> Delta sync checks if any CSOs have been modified before loading caches and entering the page loop. If nothing has changed, it updates the watermark and returns immediately.
 
-- **Watermark always advances**: Even when zero CSOs are modified, the watermark is updated. This prevents the watermark from becoming stale if no changes occur for an extended period.
+- **Watermark always advances**<br /> Even when zero CSOs are modified, the watermark is updated. This prevents the watermark from becoming stale if no changes occur for an extended period.
 
-- **First delta sync processes everything**: If `LastSyncCompletedAt` is null (no previous sync), the watermark defaults to `DateTime.MinValue`, effectively selecting all CSOs, the same set as a full sync.
+- **First delta sync processes everything**<br /> If `LastSyncCompletedAt` is null (no previous sync), the watermark defaults to `DateTime.MinValue`, effectively selecting all CSOs, the same set as a full sync.
 
-- **Cross-page reference resolution (v0.10.0)**: Both full and delta sync perform cross-page reference resolution after all pages are processed. CSOs with reference attributes that couldn't be resolved during page processing (because the referenced CSO was on a different page) are reloaded and resolved once all MVOs exist. New reference-attribute changes are merged under the existing MvoChange parent RPEI (rather than creating a second standalone RPEI for the same MVO), honouring the `IX_MetaverseObjectChanges_ActivityRunProfileExecutionItemId` unique index. The standard persist/flush pipeline runs again for the resolved references.
+- **Cross-page reference resolution (v0.10.0)**<br /> Both full and delta sync perform cross-page reference resolution after all pages are processed. CSOs with reference attributes that couldn't be resolved during page processing (because the referenced CSO was on a different page) are reloaded and resolved once all MVOs exist. New reference-attribute changes are merged under the existing MvoChange parent RPEI (rather than creating a second standalone RPEI for the same MVO), honouring the `IX_MetaverseObjectChanges_ActivityRunProfileExecutionItemId` unique index. The standard persist/flush pipeline runs again for the resolved references.
 
-- **Partition-scoped filtering (v0.8.0, #353)**: Both full and delta sync support partition-scoped CSO selection via `TargetPartitionId` on the run profile. When set, CSO counting and page loading are filtered to only that partition's scope.
+- **Partition-scoped filtering (v0.8.0, #353)**<br /> Both full and delta sync support partition-scoped CSO selection via `TargetPartitionId` on the run profile. When set, CSO counting and page loading are filtered to only that partition's scope.
 
-- **Two-pass per-CSO processing (v0.10.0)**: Each page iterates over its CSOs twice. Pass 1 handles pending-export confirmation and obsolete CSO teardown across all CSOs, populating `_pendingDisconnectedMvoIds`. Pass 2 runs join/projection/attribute flow only on non-obsolete CSOs. This ordering guarantees Pass 2 join attempts see the complete set of disconnected MVOs from Pass 1.
+- **Two-pass per-CSO processing (v0.10.0)**<br /> Each page iterates over its CSOs twice. Pass 1 handles pending-export confirmation and obsolete CSO teardown across all CSOs, populating `_pendingDisconnectedMvoIds`. Pass 2 runs join/projection/attribute flow only on non-obsolete CSOs. This ordering guarantees Pass 2 join attempts see the complete set of disconnected MVOs from Pass 1.

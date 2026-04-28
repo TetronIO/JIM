@@ -611,6 +611,6 @@ Get-JIMScheduleExecution -ScheduleId "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -Act
 
 ## See also
 
-- [Schedules API](../api/schedules/index.md): REST API reference for schedule endpoints
+- [Schedules](../configuration/schedules.md): what schedules are, trigger types and patterns, step types, and execution behaviour
 - [Run Profiles](run-profiles.md): Managing connected system run profiles
 - [Activities](activities.md): Viewing synchronisation activity results

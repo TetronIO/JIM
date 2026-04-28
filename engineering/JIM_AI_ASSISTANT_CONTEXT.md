@@ -448,7 +448,7 @@ Development follows sequenced milestones (see [GitHub Milestones](https://github
 | **v0.9-STABILISATION** | Configuration controls, identity fusing, lifecycle state management (JML triggers), sync engine refinement, architectural foundation for extensibility |
 | **v1.0-ILM-COMPLETE** | First production-ready release: robust sync rules, lifecycle automation, scheduling, error handling, operational monitoring |
 | **v1.x-CONNECTORS** | Expanding connector coverage: broader LDAP support, SQL databases, SCIM endpoints, HR systems, connector framework improvements |
-| **v2.0-IGA-FOUNDATION** | Step-change into identity governance: entitlement visibility, access request workflows, attestation capabilities |
+| **v2.0-IGA-FOUNDATION** | Direct in-JIM management of MVOs (no longer dependent on Source-of-Record systems): Entitlement Management (group management + governance — reviews/attestation, delegated admin, dynamic & time-based memberships, self-service, approvals, etc.), Identity Lifecycle Management (user management, self-service for locally-managed attributes, lifecycle workflows), and fine-grained RBAC for custom permission models |
 
 ---
 

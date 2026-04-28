@@ -1,39 +1,391 @@
-﻿@page
+@page
 @model JIM.Web.Pages.ErrorModel
+@inject JIM.Web.Models.ThemeSettings ThemeSettings
 
 <!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-        <title>Error</title>
-        <link href="~/css/bootstrap/bootstrap.min.css" rel="stylesheet" />
-        <link href="~/css/site.css" rel="stylesheet" asp-append-version="true" />
-    </head>
-    <body>
-        <div class="main">
-            <div class="content px-4">
-                <h1 class="text-danger">Error.</h1>
-                <h2 class="text-danger">An error occurred while processing your request.</h2>
-
-                @if (Model.ShowRequestId)
-                {
-                    <p>
-                        <strong>Request ID:</strong> <code>@Model.RequestId</code>
-                    </p>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JIM — Something went wrong</title>
+    <link href="~/css/fonts/ibm-plex.css" rel="stylesheet" />
+    <link href="~/css/fonts/space-grotesk.css" rel="stylesheet" />
+    <link id="jim-theme-light" rel="stylesheet" href="@ThemeSettings.LightThemePath" />
+    <link id="jim-theme-dark" rel="stylesheet" href="@ThemeSettings.DarkThemePath" disabled />
+    <link rel="apple-touch-icon" sizes="180x180" href="~/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="~/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="~/favicon-16x16.png">
+    <script>
+        // Apply the user's saved JIM theme preference before first paint to avoid a flash.
+        // Mirrors MainLayout.razor: localStorage 'jim_darkMode' wins; otherwise OS preference.
+        (function () {
+            try {
+                var saved = localStorage.getItem('jim_darkMode');
+                var isDark = saved === 'true' || (saved === null && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                var lightLink = document.getElementById('jim-theme-light');
+                var darkLink = document.getElementById('jim-theme-dark');
+                if (isDark) {
+                    if (lightLink) lightLink.disabled = true;
+                    if (darkLink) darkLink.disabled = false;
+                    document.documentElement.classList.add('jim-dark-mode');
                 }
+            } catch (e) {
+                // localStorage may be unavailable (private mode, sandboxed iframe); fall back to light.
+            }
+        })();
+    </script>
+    <style>
+        :root {
+            --jim-error-shape-primary: #e65100;
+            --jim-error-shape-secondary: #ff8f00;
+            --jim-error-shape-tertiary: #00bcd4;
+            --jim-error-gear-color: #e65100;
+            --jim-error-gear-highlight: #ffffff;
+            --jim-error-gear-hole: #1a0a00;
+            --jim-error-crack-color: #ffcc02;
+            --jim-error-sparkle-color: #ffd54f;
+            --jim-error-warning-bg: #ff6d00;
+            --jim-error-warning-color: #ffffff;
+        }
 
-                <h3>Development Mode</h3>
-                <p>
-                    Swapping to the <strong>Development</strong> environment displays detailed information about the error that occurred.
+        html.jim-dark-mode {
+            --jim-error-shape-primary: #ff8a50;
+            --jim-error-shape-secondary: #ffb74d;
+            --jim-error-shape-tertiary: #4dd0e1;
+            --jim-error-gear-color: #ff8a50;
+            --jim-error-gear-highlight: #ffffff;
+            --jim-error-gear-hole: #1a1a2e;
+            --jim-error-crack-color: #ffe082;
+            --jim-error-sparkle-color: #ffe082;
+            --jim-error-warning-bg: #ff9100;
+            --jim-error-warning-color: #ffffff;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            background-color: var(--mud-palette-background, #ffffff);
+            color: var(--mud-palette-text-primary, #1a1a2e);
+            font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        .jim-error-page {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            min-height: 100vh;
+            padding: 2rem;
+            box-sizing: border-box;
+        }
+
+        .jim-error-illustration {
+            width: 100%;
+            max-width: 400px;
+            margin-bottom: 2rem;
+        }
+
+        .jim-error-illustration svg {
+            width: 100%;
+            height: auto;
+        }
+
+        .jim-error-content {
+            max-width: 600px;
+            width: 100%;
+        }
+
+        .jim-error-title {
+            font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+            font-size: 2.25rem;
+            font-weight: 600;
+            margin: 0 0 0.5rem 0;
+            color: var(--mud-palette-text-primary, #1a1a2e);
+        }
+
+        .jim-error-subtitle {
+            font-size: 1.125rem;
+            color: var(--mud-palette-text-secondary, #6c757d);
+            margin: 0 0 1.5rem 0;
+            font-weight: 400;
+        }
+
+        .jim-error-request-id {
+            font-size: 0.875rem;
+            color: var(--mud-palette-text-secondary, #6c757d);
+            margin: 1.5rem 0;
+        }
+
+        .jim-error-request-id code {
+            font-family: "IBM Plex Mono", "Consolas", monospace;
+            background-color: var(--mud-palette-background-grey, rgba(0, 0, 0, 0.05));
+            padding: 0.15rem 0.45rem;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+
+        .jim-error-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 2.5rem;
+        }
+
+        .jim-error-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1.25rem;
+            font-family: inherit;
+            font-size: 0.9rem;
+            font-weight: 500;
+            line-height: 1.75;
+            text-decoration: none;
+            border-radius: 4px;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+            min-height: 36px;
+        }
+
+        .jim-error-button-filled {
+            background-color: var(--mud-palette-primary, #764ce8);
+            color: var(--mud-palette-primary-text, #ffffff);
+            border-color: var(--mud-palette-primary, #764ce8);
+        }
+
+        .jim-error-button-filled:hover {
+            background-color: var(--mud-palette-primary-darken, #4e3c80);
+            border-color: var(--mud-palette-primary-darken, #4e3c80);
+        }
+
+        .jim-error-button-outlined {
+            background-color: transparent;
+            color: var(--mud-palette-text-primary, #1a1a2e);
+            border-color: var(--mud-palette-text-secondary, #6c757d);
+        }
+
+        .jim-error-button-outlined:hover {
+            background-color: var(--mud-palette-background-grey, rgba(0, 0, 0, 0.05));
+        }
+
+        .jim-error-button svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
+
+        /* Floating animation for shapes */
+        .jim-err-float-shape { animation: jim-err-float 6s ease-in-out infinite; }
+        .jim-err-shape-1 { animation-delay: 0s; }
+        .jim-err-shape-2 { animation-delay: 0.5s; }
+        .jim-err-shape-3 { animation-delay: 1s; }
+        .jim-err-shape-4 { animation-delay: 1.5s; }
+        .jim-err-shape-5 { animation-delay: 2s; }
+        .jim-err-shape-6 { animation-delay: 2.5s; }
+        .jim-err-shape-7 { animation-delay: 3s; }
+        .jim-err-shape-8 { animation-delay: 3.5s; }
+
+        @@keyframes jim-err-float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+
+        /* Main gear wobble */
+        .jim-err-gear-group {
+            animation: jim-err-gear-wobble 4s ease-in-out infinite;
+            transform-origin: 200px 150px;
+        }
+
+        @@keyframes jim-err-gear-wobble {
+            0%, 100% { transform: rotate(0deg); }
+            15% { transform: rotate(8deg); }
+            25% { transform: rotate(6deg); }
+            35% { transform: rotate(10deg); }
+            50% { transform: rotate(5deg); }
+            65% { transform: rotate(-3deg); }
+            80% { transform: rotate(2deg); }
+        }
+
+        /* Mini gears spinning */
+        .jim-err-mini-gear-1 {
+            animation: jim-err-mini-spin 8s linear infinite;
+            transform-origin: 310px 70px;
+        }
+
+        .jim-err-mini-gear-2 {
+            animation: jim-err-mini-spin-reverse 10s linear infinite;
+            transform-origin: 100px 200px;
+        }
+
+        @@keyframes jim-err-mini-spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        @@keyframes jim-err-mini-spin-reverse {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(-360deg); }
+        }
+
+        /* Crack glow pulse */
+        .jim-err-crack { animation: jim-err-crack-glow 2s ease-in-out infinite; }
+
+        @@keyframes jim-err-crack-glow {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        /* Sparkle animation */
+        .jim-err-sparkle { animation: jim-err-sparkle-pulse 2s ease-in-out infinite; }
+        .jim-err-sparkle-1 { animation-delay: 0s; }
+        .jim-err-sparkle-2 { animation-delay: 0.7s; }
+        .jim-err-sparkle-3 { animation-delay: 1.4s; }
+
+        @@keyframes jim-err-sparkle-pulse {
+            0%, 100% { opacity: 0.3; transform: scale(0.8); }
+            50% { opacity: 1; transform: scale(1.2); }
+        }
+
+        /* Exclamation mark bounce */
+        .jim-err-exclamation { animation: jim-err-exclamation-bounce 3s ease-in-out infinite; }
+
+        @@keyframes jim-err-exclamation-bounce {
+            0%, 100% { transform: translate(0, 0); }
+            25% { transform: translate(0, -6px); }
+            50% { transform: translate(0, 0); }
+            75% { transform: translate(0, -3px); }
+        }
+
+        @@media (max-width: 600px) {
+            .jim-error-page { padding: 1rem; }
+            .jim-error-illustration { max-width: 280px; }
+            .jim-error-title { font-size: 1.75rem; }
+            .jim-error-subtitle { font-size: 1rem; }
+        }
+
+        @@media (prefers-reduced-motion: reduce) {
+            .jim-err-float-shape,
+            .jim-err-gear-group,
+            .jim-err-mini-gear-1,
+            .jim-err-mini-gear-2,
+            .jim-err-crack,
+            .jim-err-sparkle,
+            .jim-err-exclamation {
+                animation: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="jim-error-page">
+        <div class="jim-error-illustration">
+            <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Broken cog illustration">
+                <circle class="jim-err-float-shape jim-err-shape-1" cx="55" cy="45" r="7" fill="var(--jim-error-shape-tertiary)" opacity="0.6"/>
+                <circle class="jim-err-float-shape jim-err-shape-2" cx="345" cy="75" r="11" fill="var(--jim-error-shape-secondary)" opacity="0.5"/>
+                <circle class="jim-err-float-shape jim-err-shape-3" cx="75" cy="230" r="6" fill="var(--jim-error-shape-primary)" opacity="0.4"/>
+                <circle class="jim-err-float-shape jim-err-shape-4" cx="330" cy="255" r="9" fill="var(--jim-error-shape-tertiary)" opacity="0.5"/>
+
+                <rect class="jim-err-float-shape jim-err-shape-5" x="25" y="140" width="14" height="14" rx="3" fill="var(--jim-error-shape-secondary)" opacity="0.4" transform="rotate(45 32 147)"/>
+                <rect class="jim-err-float-shape jim-err-shape-6" x="365" y="170" width="12" height="12" rx="2" fill="var(--jim-error-shape-primary)" opacity="0.5" transform="rotate(30 371 176)"/>
+
+                <polygon class="jim-err-float-shape jim-err-shape-7" points="65,275 75,260 85,275" fill="var(--jim-error-shape-tertiary)" opacity="0.4"/>
+                <polygon class="jim-err-float-shape jim-err-shape-8" points="340,35 350,20 360,35" fill="var(--jim-error-shape-secondary)" opacity="0.5"/>
+
+                <g class="jim-err-gear-group">
+                    <g fill="var(--jim-error-gear-color)">
+                        <rect x="188" y="68" width="24" height="18" rx="3"/>
+                        <rect x="188" y="214" width="24" height="18" rx="3"/>
+                        <rect x="118" y="138" width="18" height="24" rx="3"/>
+                        <rect x="264" y="138" width="18" height="24" rx="3"/>
+
+                        <rect x="240" y="78" width="22" height="16" rx="3" transform="rotate(30 251 86)"/>
+                        <rect x="256" y="108" width="22" height="16" rx="3" transform="rotate(60 267 116)"/>
+                        <rect x="256" y="176" width="22" height="16" rx="3" transform="rotate(-60 267 184)"/>
+                        <rect x="240" y="206" width="22" height="16" rx="3" transform="rotate(-30 251 214)"/>
+
+                        <rect x="138" y="78" width="22" height="16" rx="3" transform="rotate(-30 149 86)"/>
+                        <rect x="122" y="108" width="22" height="16" rx="3" transform="rotate(-60 133 116)"/>
+                        <rect x="122" y="176" width="22" height="16" rx="3" transform="rotate(60 133 184)"/>
+                        <rect x="138" y="206" width="22" height="16" rx="3" transform="rotate(30 149 214)"/>
+                    </g>
+
+                    <circle cx="200" cy="150" r="62" fill="var(--jim-error-gear-color)"/>
+                    <circle cx="200" cy="150" r="52" fill="none" stroke="var(--jim-error-gear-highlight)" stroke-width="2" opacity="0.3"/>
+                    <circle cx="200" cy="150" r="22" fill="var(--jim-error-gear-hole)"/>
+                    <circle cx="200" cy="150" r="18" fill="none" stroke="var(--jim-error-gear-color)" stroke-width="3" opacity="0.4"/>
+
+                    <path class="jim-err-crack" d="M200 88 L196 110 L203 120 L195 135 L200 150"
+                          stroke="var(--jim-error-crack-color)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path class="jim-err-crack" d="M200 150 L208 165 L202 178 L210 195 L205 212"
+                          stroke="var(--jim-error-crack-color)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path class="jim-err-crack" d="M195 135 L178 140 L168 138"
+                          stroke="var(--jim-error-crack-color)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path class="jim-err-crack" d="M208 165 L222 162 L232 166"
+                          stroke="var(--jim-error-crack-color)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                </g>
+
+                <g class="jim-err-mini-gear-1">
+                    <circle cx="310" cy="70" r="18" fill="var(--jim-error-shape-secondary)" opacity="0.7"/>
+                    <circle cx="310" cy="70" r="8" fill="var(--jim-error-gear-hole)" opacity="0.7"/>
+                    <rect x="304" y="48" width="12" height="8" rx="2" fill="var(--jim-error-shape-secondary)" opacity="0.7"/>
+                    <rect x="304" y="84" width="12" height="8" rx="2" fill="var(--jim-error-shape-secondary)" opacity="0.7"/>
+                    <rect x="288" y="64" width="8" height="12" rx="2" fill="var(--jim-error-shape-secondary)" opacity="0.7"/>
+                    <rect x="324" y="64" width="8" height="12" rx="2" fill="var(--jim-error-shape-secondary)" opacity="0.7"/>
+                </g>
+
+                <g class="jim-err-mini-gear-2">
+                    <circle cx="100" cy="200" r="14" fill="var(--jim-error-shape-primary)" opacity="0.6"/>
+                    <circle cx="100" cy="200" r="6" fill="var(--jim-error-gear-hole)" opacity="0.6"/>
+                    <rect x="95" y="183" width="10" height="6" rx="2" fill="var(--jim-error-shape-primary)" opacity="0.6"/>
+                    <rect x="95" y="211" width="10" height="6" rx="2" fill="var(--jim-error-shape-primary)" opacity="0.6"/>
+                    <rect x="83" y="195" width="6" height="10" rx="2" fill="var(--jim-error-shape-primary)" opacity="0.6"/>
+                    <rect x="111" y="195" width="6" height="10" rx="2" fill="var(--jim-error-shape-primary)" opacity="0.6"/>
+                </g>
+
+                <g class="jim-err-sparkle jim-err-sparkle-1">
+                    <path d="M280 120 L283 126 L290 126 L285 131 L287 138 L280 134 L273 138 L275 131 L270 126 L277 126 Z" fill="var(--jim-error-sparkle-color)"/>
+                </g>
+                <g class="jim-err-sparkle jim-err-sparkle-2">
+                    <path d="M125 125 L127 129 L132 129 L128 132 L130 137 L125 134 L120 137 L122 132 L118 129 L123 129 Z" fill="var(--jim-error-sparkle-color)" opacity="0.7"/>
+                </g>
+                <g class="jim-err-sparkle jim-err-sparkle-3">
+                    <path d="M320 200 L322 204 L327 204 L323 207 L325 212 L320 209 L315 212 L317 207 L313 204 L318 204 Z" fill="var(--jim-error-sparkle-color)" opacity="0.8"/>
+                </g>
+
+                <g class="jim-err-exclamation">
+                    <circle cx="290" cy="180" r="20" fill="var(--jim-error-warning-bg)" opacity="0.9"/>
+                    <rect x="287" y="165" width="6" height="18" rx="3" fill="var(--jim-error-warning-color)"/>
+                    <circle cx="290" cy="190" r="3" fill="var(--jim-error-warning-color)"/>
+                </g>
+            </svg>
+        </div>
+
+        <div class="jim-error-content">
+            <h1 class="jim-error-title">Something went wrong</h1>
+            <p class="jim-error-subtitle">Well, that wasn't supposed to happen. A cog has slipped!</p>
+
+            @if (Model.ShowRequestId)
+            {
+                <p class="jim-error-request-id">
+                    Request ID: <code>@Model.RequestId</code>
                 </p>
-                <p>
-                    <strong>The Development environment shouldn't be enabled for deployed applications.</strong>
-                    It can result in displaying sensitive information from exceptions to end users.
-                    For local debugging, enable the <strong>Development</strong> environment by setting the <strong>ASPNETCORE_ENVIRONMENT</strong> environment variable to <strong>Development</strong>
-                    and restarting the app.
-                </p>
+            }
+
+            <div class="jim-error-actions">
+                <a href="/" class="jim-error-button jim-error-button-filled">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 9v12h5v-7h6v7h5V9l-8-6z"/></svg>
+                    Go to Dashboard
+                </a>
+                <a href="javascript:location.reload();" class="jim-error-button jim-error-button-outlined">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 1 0 7.74 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+                    Try Again
+                </a>
             </div>
         </div>
-    </body>
+    </div>
+</body>
 </html>

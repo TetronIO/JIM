@@ -180,6 +180,6 @@ Get-JIMActivityChildren -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" |
 
 ## See also
 
-- [API Activities](../api/activities/index.md): REST API reference for activity endpoints
+- [Activities](../configuration/activities.md): what activities are, lifecycle, summary statistics, and parent/child execution model
 - [Run Profiles](run-profiles.md): cmdlets for managing and executing synchronisation run profiles
 - [Schedules](schedules.md): cmdlets for managing automated run profile schedules

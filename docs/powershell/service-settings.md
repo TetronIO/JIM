@@ -148,6 +148,6 @@ Get-JIMServiceSetting | Where-Object { $_.IsOverridden } |
 
 ## See also
 
-- [Service Settings API](../api/service-settings/index.md): REST API reference for service settings
+- [Service Settings](../configuration/service-settings.md): what service settings are, default vs override behaviour, and read-only environment-mirrored settings
 - [Activities](activities.md): viewing audit activities created by setting changes
 - [Connection](connection.md): establishing and managing connections to JIM

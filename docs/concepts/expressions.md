@@ -8,10 +8,10 @@ JIM includes a built-in expression engine that lets you write short formulas to 
 
 Expressions are used in:
 
-- **Export attribute mappings** -- transform metaverse attributes before sending them to a connected system
-- **Import attribute mappings** -- transform connected system attributes before storing them in the metaverse
-- **Conditional logic** -- choose different values based on conditions (e.g., enable or disable an account based on employee status)
-- **Scoping filters** -- determine which objects are in scope for a synchronisation rule
+- **Export attribute mappings**<br /> Transform metaverse attributes before sending them to a connected system.
+- **Import attribute mappings**<br /> Transform connected system attributes before storing them in the metaverse.
+- **Conditional logic**<br /> Choose different values based on conditions (e.g. enable or disable an account based on employee status).
+- **Scoping filters**<br /> Determine which objects are in scope for a synchronisation rule.
 
 ## Quick Examples
 
@@ -32,8 +32,8 @@ Coalesce(mv["Preferred Name"], mv["First Name"])
 
 Expressions work with two sources of data:
 
-- **`mv`** -- attributes on the Metaverse Object (the central identity record)
-- **`cs`** -- attributes on the Connected System Object (the external system record)
+- **`mv`**<br /> Attributes on the Metaverse Object (the central identity record).
+- **`cs`**<br /> Attributes on the Connected System Object (the external system record).
 
 Access an attribute by putting its name in square brackets and quotes:
 
@@ -364,31 +364,31 @@ JIM validates expressions when you save a synchronisation rule. If an expression
 
 Common errors:
 
-- **Missing closing quote or bracket** -- check that every `"` and `(` has a matching pair
-- **Unknown function name** -- check the spelling; function names are case-sensitive
-- **Wrong number of parameters** -- check the function reference above for the correct parameters
-- **Syntax errors** -- look for misplaced operators or missing commas between function parameters
+- **Missing closing quote or bracket**<br /> Check that every `"` and `(` has a matching pair.
+- **Unknown function name**<br /> Check the spelling; function names are case-sensitive.
+- **Wrong number of parameters**<br /> Check the function reference above for the correct parameters.
+- **Syntax errors**<br /> Look for misplaced operators or missing commas between function parameters.
 
 ### Troubleshooting
 
 When an expression does not produce the result you expect:
 
-1. **Check attribute names carefully** -- names must match the exact casing shown in the JIM admin UI, so `mv["department"]` and `mv["Department"]` are treated differently
-2. **Use `Eq()` for text comparisons** -- using `==` for text is a common mistake (see [String Comparison](#string-comparison))
-3. **Check for missing values** -- if an attribute does not exist on the object, it returns nothing (null), which can affect the result. Use `Coalesce()` or `IsNullOrEmpty()` to handle this
-4. **Test with sample data** -- use the expression test feature in the synchronisation rule editor to try your expression with real attribute values before saving
-5. **Check the worker logs** -- if expressions fail during sync, the worker service logs the error details
+1. **Check attribute names carefully**<br /> Names must match the exact casing shown in the JIM admin UI, so `mv["department"]` and `mv["Department"]` are treated differently.
+2. **Use `Eq()` for text comparisons**<br /> Using `==` for text is a common mistake (see [String Comparison](#string-comparison)).
+3. **Check for missing values**<br /> If an attribute does not exist on the object, it returns nothing (null), which can affect the result. Use `Coalesce()` or `IsNullOrEmpty()` to handle this.
+4. **Test with sample data**<br /> Use the expression test feature in the synchronisation rule editor to try your expression with real attribute values before saving.
+5. **Check the worker logs**<br /> If expressions fail during sync, the worker service logs the error details.
 
 ## Best Practices
 
-1. **Always use `Eq()` for text comparisons** -- the `==` operator can give incorrect results when comparing attribute values.
+1. **Always use `Eq()` for text comparisons**<br /> The `==` operator can give incorrect results when comparing attribute values.
 
-2. **Handle missing values** -- use `Coalesce()` to provide a fallback, or `IsNullOrEmpty()` to check before using a value. This prevents unexpected results when an attribute has not been populated yet.
+2. **Handle missing values**<br /> Use `Coalesce()` to provide a fallback, or `IsNullOrEmpty()` to check before using a value. This prevents unexpected results when an attribute has not been populated yet.
 
-3. **Always use `EscapeDN()` in distinguished names** -- this prevents special characters in names from breaking LDAP paths.
+3. **Always use `EscapeDN()` in distinguished names**<br /> This prevents special characters in names from breaking LDAP paths.
 
-4. **Test before saving** -- use the expression test feature in the UI to verify your expressions with sample data.
+4. **Test before saving**<br /> Use the expression test feature in the UI to verify your expressions with sample data.
 
-5. **Keep expressions simple** -- if an expression is getting complex, consider splitting the logic across multiple attribute mappings.
+5. **Keep expressions simple**<br /> If an expression is getting complex, consider splitting the logic across multiple attribute mappings.
 
-6. **Document complex expressions** -- add a note in the synchronisation rule's description explaining what complex expressions do, so the next person can understand them.
+6. **Document complex expressions**<br /> Add a note in the synchronisation rule's description explaining what complex expressions do, so the next person can understand them.

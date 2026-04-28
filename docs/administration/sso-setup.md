@@ -573,25 +573,25 @@ The most common failure modes and how to fix them:
 
 Configure appropriate token lifetimes in your identity provider:
 
-- **Access tokens**: 5--60 minutes (shorter is more secure)
-- **Refresh tokens**: Hours to days, depending on your security requirements
-- **ID tokens**: Same as access tokens
+- **Access tokens**<br /> 5–60 minutes (shorter is more secure)
+- **Refresh tokens**<br /> Hours to days, depending on your security requirements
+- **ID tokens**<br /> Same as access tokens
 
 ### Client Secrets
 
-- Rotate client secrets regularly (every 6--12 months)
-- Use separate secrets for development and production
-- Never commit secrets to source control
-- Consider using a secrets management solution (e.g. HashiCorp Vault) for secret storage
+- **Rotate client secrets regularly**<br /> Every 6–12 months is recommended.
+- **Use separate secrets for development and production**<br /> Never share credentials across environments.
+- **Never commit secrets to source control**<br /> Keep all credentials out of repositories.
+- **Consider using a secrets management solution**<br /> E.g. HashiCorp Vault for secret storage.
 
 ### Redirect URIs
 
-- Only register exact redirect URIs (no wildcards)
-- Use HTTPS in production
-- Remove any development/test URIs before going to production
+- **Only register exact redirect URIs**<br /> No wildcards allowed.
+- **Use HTTPS in production**<br /> Secure connections are required for production deployments.
+- **Remove any development/test URIs**<br /> Before going to production, clean up test configurations.
 
 ### Scopes and Permissions
 
-- Request only the minimum scopes needed
-- Regularly audit which permissions are granted
-- Use admin consent for organisation-wide deployments
+- **Request only the minimum scopes needed**<br /> Follow the principle of least privilege.
+- **Regularly audit which permissions are granted**<br /> Review permissions periodically for security compliance.
+- **Use admin consent for organisation-wide deployments**<br /> For widespread deployments, use organization-level consent mechanisms.
