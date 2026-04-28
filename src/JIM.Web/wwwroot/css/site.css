@@ -921,11 +921,11 @@ html[lang] .jim-paper-danger-zone {
    which is invisible on dark backgrounds. Override with a visible neutral wash.
    The filled variant gets a stronger wash to differentiate from text. */
 html[lang] .mud-alert-text-normal {
-    background-color: rgba(var(--mud-palette-text-primary-rgb, 255, 255, 255), 0.08) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-text-primary) 8%, transparent) !important;
 }
 
 html[lang] .mud-alert-filled-normal {
-    background-color: rgba(var(--mud-palette-text-primary-rgb, 255, 255, 255), 0.12) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-text-primary) 12%, transparent) !important;
 }
 
 /* Dark mode adjustments for error alert */

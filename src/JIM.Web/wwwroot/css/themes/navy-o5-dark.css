@@ -17,37 +17,30 @@
 html[lang] {
     /* === Primary Palette (bright sky-blue accent) === */
     --mud-palette-primary: #67b9ff;
-    --mud-palette-primary-rgb: 103,185,255;
     --mud-palette-primary-darken: #4a9ee6;
     --mud-palette-primary-lighten: #9ad0ff;
     --mud-palette-primary-text: #0a1018;
 
     /* === Secondary Palette (cool slate-blue) === */
     --mud-palette-secondary: #6b8aad;
-    --mud-palette-secondary-rgb: 107,138,173;
     --mud-palette-secondary-darken: #567498;
     --mud-palette-secondary-lighten: #84a0c0;
     --mud-palette-secondary-text: #0a1018;
 
     /* === Tertiary Palette (muted teal — cool complement to blue) === */
     --mud-palette-tertiary: #4a9a8a;
-    --mud-palette-tertiary-rgb: 74,154,138;
     --mud-palette-tertiary-darken: #3a8070;
     --mud-palette-tertiary-lighten: #60b0a0;
     --mud-palette-tertiary-text: #0a1018;
 
     /* === Semantic Colours (bright for dark backgrounds) === */
     --mud-palette-success: #66d96e;
-    --mud-palette-success-rgb: 102,217,110;
     --mud-palette-success-text: #0a1018;
     --mud-palette-warning: #ffb74d;
-    --mud-palette-warning-rgb: 255,183,77;
     --mud-palette-warning-text: #0a1018;
     --mud-palette-info: #64b5f6;
-    --mud-palette-info-rgb: 100,181,246;
     --mud-palette-info-text: #0a1018;
     --mud-palette-error: #ff8a80;
-    --mud-palette-error-rgb: 255,138,128;
     --mud-palette-error-text: #0a1018;
 
     /* === Background & Surface === */
@@ -178,12 +171,12 @@ html[lang] .mud-icon-button.mud-button-filled.mud-icon-button-color-error:not(:d
 
 html[lang] .mud-button-outlined.mud-button-outlined-error:not(:disabled):hover,
 html[lang] .mud-icon-button.mud-button-outlined.mud-icon-button-color-error:not(:disabled):hover {
-    background-color: rgba(var(--mud-palette-error-rgb), 0.08) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-error) 8%, transparent) !important;
 }
 
 html[lang] .mud-button-text.mud-button-text-error:not(:disabled):hover,
 html[lang] .mud-icon-button.mud-icon-button-color-error:not(.mud-button-filled):not(.mud-button-outlined):not(:disabled):hover {
-    background-color: rgba(var(--mud-palette-error-rgb), 0.08) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-error) 8%, transparent) !important;
 }
 
 /* Improve Dark button visibility on dark navy backgrounds */
@@ -212,19 +205,19 @@ html[lang] .mud-alert-outlined-normal {
 }
 
 html[lang] .mud-alert-outlined-info {
-    background-color: rgba(var(--mud-palette-info-rgb), 0.06) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-info) 6%, transparent) !important;
 }
 
 html[lang] .mud-alert-outlined-success {
-    background-color: rgba(var(--mud-palette-success-rgb), 0.06) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-success) 6%, transparent) !important;
 }
 
 html[lang] .mud-alert-outlined-warning {
-    background-color: rgba(var(--mud-palette-warning-rgb), 0.06) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-warning) 6%, transparent) !important;
 }
 
 html[lang] .mud-alert-outlined-error {
-    background-color: rgba(var(--mud-palette-error-rgb), 0.06) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-error) 6%, transparent) !important;
 }
 
 /* Table group header rows — deeper navy for schedule/category emphasis */
