@@ -6,7 +6,7 @@ title: Certificates
 
 Certificates store trusted CA and intermediate certificates used by connectors for LDAP and HTTPS authentication. Each certificate can be enabled or disabled independently without removing it.
 
-> Endpoint reference for this resource is in the [Scalar API reference](../index.md#where-to-find-what). This page covers the storage model and operational behaviour.
+> Endpoint reference for this resource is in the [interactive API reference](../index.md#where-to-find-what). This page covers the storage model and operational behaviour.
 
 ## Key Concepts
 

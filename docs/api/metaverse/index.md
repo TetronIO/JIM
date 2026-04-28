@@ -6,7 +6,7 @@ title: Metaverse
 
 The Metaverse is JIM's central identity store. It contains object types (the schema), attributes (the fields), and the identity objects themselves. All synchronisation flows through the metaverse: import rules bring data in from connected systems, and export rules push data out.
 
-> Endpoint reference for this resource is in the [Scalar API reference](../index.md#where-to-find-what). This page covers the concepts.
+> Endpoint reference for this resource is in the [interactive API reference](../index.md#where-to-find-what). This page covers the concepts.
 
 ## Key Concepts
 

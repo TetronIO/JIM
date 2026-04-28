@@ -8,7 +8,7 @@ An Activity is a tracked operation in JIM. Every significant action -- run profi
 
 Activities are the primary mechanism for monitoring synchronisation progress and troubleshooting issues. Run profile activities additionally include detailed per-object execution items.
 
-> Endpoint reference for this resource (full field tables, status enums, target types, query parameters) is in the [Scalar API reference](../index.md#where-to-find-what). This page covers the model at a conceptual level and the common workflows.
+> Endpoint reference for this resource (full field tables, status enums, target types, query parameters) is in the [interactive API reference](../index.md#where-to-find-what). This page covers the model at a conceptual level and the common workflows.
 
 ## Key Concepts
 
@@ -16,7 +16,7 @@ Activities are the primary mechanism for monitoring synchronisation progress and
 
 **Initiated-by.** Every activity records who or what triggered it: a user (with metaverse object ID), an API key, or the system itself (e.g. a schedule). This is the audit trail.
 
-**Summary statistics.** Activities for run profile executions carry counters relevant to the operation type: imports record `totalAdded` / `totalUpdated` / `totalDeleted`, sync stages add `totalProjected` / `totalJoined` / `totalAttributeFlows`, exports add `totalExported` / `totalDeprovisioned`, and so on. The exact field set depends on the operation; the Scalar reference documents the full schema.
+**Summary statistics.** Activities for run profile executions carry counters relevant to the operation type: imports record `totalAdded` / `totalUpdated` / `totalDeleted`, sync stages add `totalProjected` / `totalJoined` / `totalAttributeFlows`, exports add `totalExported` / `totalDeprovisioned`, and so on. The exact field set depends on the operation; the interactive API reference documents the full schema.
 
 **Execution items.** For run profile activities, JIM stores a per-object record of what happened (with any error details) for the most recent run. These let you drill from a high-level "5 errors" counter down to the specific connector space objects that failed.
 

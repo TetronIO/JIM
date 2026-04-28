@@ -6,7 +6,7 @@ title: Security
 
 The Security API exposes role definitions and role-membership management. Roles determine what authenticated principals (users and API keys) can do within JIM.
 
-> Endpoint reference for this resource is in the [Scalar API reference](../index.md#where-to-find-what). This page covers the concepts.
+> Endpoint reference for this resource is in the [interactive API reference](../index.md#where-to-find-what). This page covers the concepts.
 
 ## Key Concepts
 

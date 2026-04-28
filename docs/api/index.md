@@ -8,17 +8,15 @@ JIM exposes a REST API for programmatic access to all identity management operat
 
 ## Where to find what
 
-This section follows the [Diátaxis](https://diataxis.fr/) split: the pages here are **guidance** (what the resource is, common workflows, important behaviours), and the **reference** (every endpoint, every request and response field, an interactive "Try It" feature) lives in the Scalar API reference.
+The documentation is split between two surfaces. The pages in this section explain what each resource is, how it behaves, and the workflows you'll typically build against it. The interactive API reference is the authoritative source for endpoint signatures, request and response schemas, and error responses.
 
 | Looking for | Go to |
 |-------------|-------|
-| Endpoint signatures, request and response schemas, error codes | **Scalar API reference** -- on every JIM instance at `/api/reference`, or hosted at [tetronio.github.io/JIM/api/reference/](https://tetronio.github.io/JIM/api/reference/) |
-| Raw OpenAPI document (for client code generation) | `/api/openapi/v1.json` on a JIM instance |
+| Endpoint signatures, request and response schemas, error codes | The interactive API reference, available on any JIM instance at `/api/reference` and hosted at [tetronio.github.io/JIM/api/reference/](https://tetronio.github.io/JIM/api/reference/) |
+| OpenAPI document (for client code generation) | `/api/openapi/v1.json` on a JIM instance |
 | How to authenticate | [Authentication](authentication.md) |
 | What a resource is, and how it fits into a workflow | The per-resource pages in this section |
 | PowerShell cmdlets that wrap the API | [PowerShell Module](../powershell/index.md) |
-
-The Scalar reference is generated from the OpenAPI document at build time, so it loads instantly and works in air-gapped environments without any cloud calls.
 
 ## Resources
 
@@ -51,7 +49,7 @@ The Scalar reference is generated from the OpenAPI document at build time, so it
 
 ## Conventions at a glance
 
-These behaviours are common across the API. The Scalar reference is authoritative for any specific endpoint; the summary here is for orientation.
+These behaviours are common across the API. The interactive API reference is authoritative for any specific endpoint; the summary here is for orientation.
 
 **Versioning.** The API uses URL path-based versioning. The current version is `v1`; all endpoints are prefixed with `/api/v1/`. Future versions appear under `/api/v2/` etc., with a deprecation period for the previous version.
 
@@ -60,8 +58,8 @@ These behaviours are common across the API. The Scalar reference is authoritativ
 - **API keys** in the `X-Api-Key` header, suitable for scripts, automation, and service-to-service integrations
 - **JWT Bearer tokens** in the `Authorization: Bearer <token>` header, suitable for user-driven integrations via OIDC/SSO
 
-**Pagination.** List endpoints accept `page`, `pageSize`, `sortBy`, `sortDirection`, and `filter` query parameters and return a paginated envelope (`items`, `totalCount`, `page`, `pageSize`, `totalPages`, `hasNextPage`, `hasPreviousPage`). The Scalar reference lists the exact parameter constraints for each endpoint.
+**Pagination.** List endpoints accept `page`, `pageSize`, `sortBy`, `sortDirection`, and `filter` query parameters and return a paginated envelope (`items`, `totalCount`, `page`, `pageSize`, `totalPages`, `hasNextPage`, `hasPreviousPage`). The interactive API reference lists the exact parameter constraints for each endpoint.
 
-**Errors.** All errors return a consistent JSON shape with a machine-readable `code`, a human-readable `message`, optional `details` and `validationErrors`, and a `timestamp`. The full set of error codes is documented in the Scalar reference per endpoint.
+**Errors.** All errors return a consistent JSON shape with a machine-readable `code`, a human-readable `message`, optional `details` and `validationErrors`, and a `timestamp`. The full set of error codes is documented per endpoint in the interactive API reference.
 
 **Asynchronous operations.** Long-running operations (schema import, run profile execution, connected system deletion) return `202 Accepted` with an activity ID; poll [Activities](activities/index.md) to track progress.

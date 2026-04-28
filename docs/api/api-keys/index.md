@@ -6,7 +6,7 @@ title: API Keys
 
 API keys provide non-interactive authentication for scripts, automation, and service-to-service integrations. Each key is associated with one or more roles that determine what it can do.
 
-> Endpoint reference for this resource is in the [Scalar API reference](../index.md#where-to-find-what). This page covers the model and the operational concerns.
+> Endpoint reference for this resource is in the [interactive API reference](../index.md#where-to-find-what). This page covers the model and the operational concerns.
 
 ## Key Concepts
 

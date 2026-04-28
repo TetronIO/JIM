@@ -8,7 +8,7 @@ A Run Profile defines a synchronisation operation that can be executed against a
 
 Run profiles are the building blocks of [schedules](../schedules/index.md): each schedule step typically references a run profile to execute. They can also be executed directly via the API for one-off operations.
 
-> Endpoint reference for this resource is in the [Scalar API reference](../index.md#where-to-find-what). This page covers the model and the workflows.
+> Endpoint reference for this resource is in the [interactive API reference](../index.md#where-to-find-what). This page covers the model and the workflows.
 
 ## Key Concepts
 

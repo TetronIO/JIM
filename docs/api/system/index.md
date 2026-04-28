@@ -6,7 +6,7 @@ title: System
 
 System endpoints expose health checks, application version, OIDC client discovery configuration, and information about the currently authenticated user. Most of these endpoints are anonymous: deliberately so, because they are designed to be called by load balancers, container orchestrators, and unauthenticated client bootstraps.
 
-> Endpoint reference for this resource (status payloads, OIDC config fields, user-info schema) is in the [Scalar API reference](../index.md#where-to-find-what). This page covers what each endpoint is for and when to use it.
+> Endpoint reference for this resource (status payloads, OIDC config fields, user-info schema) is in the [interactive API reference](../index.md#where-to-find-what). This page covers what each endpoint is for and when to use it.
 
 ## Key Concepts
 

@@ -6,7 +6,7 @@ title: Predefined Searches
 
 A Predefined Search is a named, reusable search over metaverse objects. Predefined Searches drive the portal's list views and back the fast `GET /api/v1/metaverse/objects/search/{uri}` endpoint that end-user search consumers call. They are administrator-managed: end users do not author new searches, they consume the ones that already exist.
 
-> Endpoint reference for this resource is in the [Scalar API reference](../index.md#where-to-find-what). This page covers the model and the operational behaviour.
+> Endpoint reference for this resource is in the [interactive API reference](../index.md#where-to-find-what). This page covers the model and the operational behaviour.
 
 ## Key Concepts
 
@@ -24,8 +24,8 @@ A Predefined Search is a named, reusable search over metaverse objects. Predefin
 
 There are two distinct surfaces:
 
-- **Running** a search to get matching objects: `GET /api/v1/metaverse/objects/search/{uri}` (covered as part of the [Metaverse](../metaverse/index.md) endpoints in the Scalar reference). This is what the portal and end-user integrations call.
-- **Administering** the list of searches (listing, retrieving, enabling, disabling): the endpoints documented for this resource in the Scalar reference.
+- **Running** a search to get matching objects: `GET /api/v1/metaverse/objects/search/{uri}` (covered as part of the [Metaverse](../metaverse/index.md) endpoints in the interactive API reference). This is what the portal and end-user integrations call.
+- **Administering** the list of searches (listing, retrieving, enabling, disabling): the endpoints documented for this resource in the interactive API reference.
 
 The two surfaces never overlap. Administrative endpoints never return search results; the search-execution endpoint never returns search definitions.
 

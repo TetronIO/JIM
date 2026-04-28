@@ -8,7 +8,7 @@ A Connected System represents an external identity store that synchronises with 
 
 Each connected system is associated with a [connector](../../connectors/index.md) that defines how JIM communicates with the external store, and contains a connector space of imported objects, a discovered schema, and an optional partition or container hierarchy.
 
-> Endpoint reference for this resource (request and response schemas, query parameters, error codes) is in the [Scalar API reference](../index.md#where-to-find-what). The page below covers concepts and end-to-end workflows.
+> Endpoint reference for this resource (request and response schemas, query parameters, error codes) is in the [interactive API reference](../index.md#where-to-find-what). The page below covers concepts and end-to-end workflows.
 
 ## Key Concepts
 

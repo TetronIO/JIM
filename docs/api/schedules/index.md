@@ -8,7 +8,7 @@ A Schedule defines an automated sequence of operations that JIM executes on a tr
 
 Schedules are the primary mechanism for automating identity synchronisation workflows -- e.g. a nightly schedule that imports from each connected system, runs synchronisation, and exports the results.
 
-> Endpoint reference for this resource (cron pattern fields, step type fields, status enums, full request and response shapes) is in the [Scalar API reference](../index.md#where-to-find-what). This page covers the model and the common workflows.
+> Endpoint reference for this resource (cron pattern fields, step type fields, status enums, full request and response shapes) is in the [interactive API reference](../index.md#where-to-find-what). This page covers the model and the common workflows.
 
 ## Key Concepts
 

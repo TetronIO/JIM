@@ -8,7 +8,7 @@ A Synchronisation Rule defines how objects flow between a connected system and t
 
 Synchronisation rules are the core configuration mechanism for identity synchronisation. They determine which objects are joined, projected, or provisioned, and how attributes are shaped during the process.
 
-> Endpoint reference for this resource is in the [Scalar API reference](../index.md#where-to-find-what). This page covers the model and the common end-to-end workflows.
+> Endpoint reference for this resource is in the [interactive API reference](../index.md#where-to-find-what). This page covers the model and the common end-to-end workflows.
 
 ## Key Concepts
 

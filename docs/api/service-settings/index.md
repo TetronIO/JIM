@@ -6,7 +6,7 @@ title: Service Settings
 
 Service Settings control runtime behaviour for JIM: instance identity, single sign-on, synchronisation options, maintenance mode, history retention. Each setting has a key (dot notation), a typed value, a default, and an effective value (the override if set, otherwise the default).
 
-> Endpoint reference for this resource is in the [Scalar API reference](../index.md#where-to-find-what). This page covers the model and the operational behaviour.
+> Endpoint reference for this resource is in the [interactive API reference](../index.md#where-to-find-what). This page covers the model and the operational behaviour.
 
 ## Key Concepts
 
