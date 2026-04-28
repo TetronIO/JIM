@@ -163,7 +163,14 @@
 
 .quickstart-cards > ul > li:hover {
   border-color: var(--md-accent-fg-color);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Material grid cards: lighten the border on hover (default behaviour fades it
+   to transparent, which reads as "darker" in dark mode). 2D look — no shadow. */
+.md-typeset .grid.cards > :is(ul, ol) > li:hover,
+.md-typeset .grid > .card:hover {
+  border-color: var(--md-default-fg-color--lighter);
+  box-shadow: none;
 }
 
 /* ========================================
@@ -296,6 +303,14 @@
 .md-typeset h2 { font-weight: 500; }
 .md-typeset h3 { font-weight: 500; }
 .md-typeset h4 { font-weight: 500; }
+
+/* Bump table and admonition body text from Material's 0.64rem (80% of body)
+   to 0.72rem (90% of body) for slightly easier reading. */
+.md-typeset table:not([class]),
+.md-typeset .admonition,
+.md-typeset details {
+  font-size: 0.72rem;
+}
 
 .jim-hero__tagline {
   font-size: 1.2rem;
