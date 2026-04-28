@@ -44,9 +44,9 @@ Attribute mappings define how individual attributes flow between a connected sys
 
 ### Source Types
 
-- **AttributeMapping**: Direct one-to-one attribute flow (single source, no expression)
-- **ExpressionMapping**: Expression-based transformation (single source with an expression)
-- **AdvancedMapping**: Multiple sources or complex configurations
+- **AttributeMapping**<br /> Direct one-to-one attribute flow (single source, no expression)
+- **ExpressionMapping**<br /> Expression-based transformation (single source with an expression)
+- **AdvancedMapping**<br /> Multiple sources or complex configurations
 
 ---
 
