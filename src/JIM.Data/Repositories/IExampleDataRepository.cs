@@ -39,11 +39,15 @@ public interface IExampleDataRepository
     /// <param name="metaverseObjects">The list of MetaverseObjects to persist.</param>
     /// <param name="batchSize">Number of objects to persist per batch. Smaller batches reduce memory pressure.</param>
     /// <param name="cancellationToken">The cancellation token to use to determine if the operation should be cancelled.</param>
-    /// <param name="progressCallback">Optional callback for reporting persistence progress. Parameters are (totalObjects, objectsPersisted).</param>
+    /// <param name="progressCallback">
+    /// Optional callback fired once per batch with a <see cref="PersistenceProgress"/> payload describing
+    /// total / persisted object counts, batch index / count, and elapsed persistence time so callers
+    /// can derive an ETA.
+    /// </param>
     /// <returns>The number of objects persisted.</returns>
     public Task<int> CreateMetaverseObjectsAsync(
         List<MetaverseObject> metaverseObjects,
         int batchSize,
         CancellationToken cancellationToken,
-        Func<int, int, Task>? progressCallback = null);
+        Func<PersistenceProgress, Task>? progressCallback = null);
 }

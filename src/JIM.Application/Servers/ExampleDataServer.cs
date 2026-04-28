@@ -359,19 +359,36 @@ public class ExampleDataServer
         if (progressCallback != null)
             await progressCallback(totalObjectsToCreate, totalObjectsToCreate, "Persisting to database...");
 
+        // FK scalar fixup before persistence.
+        //
+        // The generator builds each MetaverseObjectAttributeValue with the Attribute navigation set
+        // (av.Attribute = templateAttribute.MetaverseAttribute) but leaves the AttributeId scalar at
+        // its default of 0. EF's previous AddRange path silently filled the FK from the navigation;
+        // the raw-SQL/COPY persistence path on the worker hot path writes av.AttributeId directly
+        // and would fail with a foreign key violation against MetaverseAttributes.
+        //
+        // We populate the FK scalar here, at the boundary between generation and persistence,
+        // because (a) it's the right architectural seam (the generator's contract is "produce the
+        // graph"; the persistence layer's contract is "write what you're given"), and (b) doing it
+        // once per template execution is cheaper than threading the FK through every Generate*
+        // helper. ReferenceValueId is fixed up later by CreateMetaverseObjectsBulkAsync itself.
+        foreach (var av in metaverseObjectsToCreate.SelectMany(mvo => mvo.AttributeValues).Where(av => av.AttributeId == 0 && av.Attribute is not null))
+            av.AttributeId = av.Attribute.Id;
+
         // submit metaverse objects to data layer for creation (batched for memory efficiency and progress)
         var persistenceStopwatch = new Stopwatch();
         persistenceStopwatch.Start();
 
-        // Create a persistence progress callback that reports during the persistence phase
-        // We show persistence progress as a second phase - objects are generated (100%), now persisting
-        Func<int, int, Task>? persistenceProgressCallback = null;
+        // Create a persistence progress callback that reports during the persistence phase.
+        // Generation is already at 100%; here we surface batch-level progress and a rolling ETA so
+        // the Activity UI shows a moving "Persisting to database... batch X/Y (P/T, ETA mm:ss)"
+        // message instead of a static string while large templates flush.
+        Func<PersistenceProgress, Task>? persistenceProgressCallback = null;
         if (progressCallback != null)
         {
-            persistenceProgressCallback = async (total, persisted) =>
+            persistenceProgressCallback = async progress =>
             {
-                // Format message to show persistence progress
-                var message = $"Persisting to database... ({persisted:N0}/{total:N0})";
+                var message = FormatPersistenceProgressMessage(progress);
                 await progressCallback(totalObjectsToCreate, totalObjectsToCreate, message);
             };
         }
@@ -398,6 +415,39 @@ public class ExampleDataServer
         dataGenerationValueTrackers.Clear();
 
         return totalObjectsCreated;
+    }
+
+    /// <summary>
+    /// Formats the per-batch persistence-progress payload into a single human-readable message
+    /// suitable for the Activity UI. Includes batch counter, object counter, and a rolling ETA
+    /// derived from the elapsed persistence time, omitting the ETA on the first batch (when we
+    /// have no useful rate measurement) and on the final batch (when there is nothing left to do).
+    /// </summary>
+    internal static string FormatPersistenceProgressMessage(PersistenceProgress progress)
+    {
+        var baseMessage = $"Persisting to database... batch {progress.BatchIndex:N0}/{progress.BatchCount:N0} ({progress.ObjectsPersisted:N0}/{progress.TotalObjects:N0})";
+
+        // No ETA on batch 1 (no rate yet) or once we're done
+        if (progress.BatchIndex <= 1 || progress.ObjectsPersisted >= progress.TotalObjects || progress.Elapsed <= TimeSpan.Zero)
+            return baseMessage;
+
+        var remainingObjects = progress.TotalObjects - progress.ObjectsPersisted;
+        var msPerObject = progress.Elapsed.TotalMilliseconds / progress.ObjectsPersisted;
+        var etaMs = msPerObject * remainingObjects;
+        if (double.IsNaN(etaMs) || double.IsInfinity(etaMs) || etaMs <= 0)
+            return baseMessage;
+
+        var eta = TimeSpan.FromMilliseconds(etaMs);
+        return $"{baseMessage}, ETA {FormatEta(eta)}";
+    }
+
+    private static string FormatEta(TimeSpan eta)
+    {
+        if (eta.TotalHours >= 1)
+            return $"{(int)eta.TotalHours:N0}h {eta.Minutes:D2}m";
+        if (eta.TotalMinutes >= 1)
+            return $"{eta.Minutes:D2}m {eta.Seconds:D2}s";
+        return $"{Math.Max(1, (int)Math.Ceiling(eta.TotalSeconds)):N0}s";
     }
     #endregion
 

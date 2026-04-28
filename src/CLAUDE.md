@@ -2,6 +2,18 @@
 
 > Detailed coding conventions, architecture rules, and development tasks for `src/`. See root `CLAUDE.md` for behavioural rules and guardrails.
 
+## Solution Quality Principles (READ FIRST)
+
+When proposing changes, always aim for the best option across all three of these axes simultaneously, not a compromise on any of them:
+
+1. **Best user experience.** What does the person using JIM actually feel when this ships? Pick the option that removes friction, surfaces the right information, and "just works".
+2. **Best architecture.** What does a staff engineer reviewing this in six months want to inherit? Pick the option that respects layers, models, and existing patterns rather than the option that's quicker to land.
+3. **Best performance.** What does this look like at customer scale (10K, 100K, 1M objects), not just on the developer's laptop? Pick the option that uses the right tool (raw SQL / COPY for bulk worker paths, EF Core for UI reads) rather than the option that's familiar.
+
+**Do not propose half-measures.** Offering a smaller intermediate fix because the proper fix "feels too big" is a false economy: it ships latent issues, causes emotional stress when those issues surface, and almost always takes more total time once you factor in the rework, re-testing, and re-explanation. If the right answer is the bigger change, propose the bigger change. Surface the cost honestly, but recommend the option that's correct on all three axes, not the one that's smallest. The user explicitly prefers the well-reasoned bigger fix over a chain of smaller pivots.
+
+This rule overrides any instinct to "minimise change" or "stay tightly scoped" when the smaller scope would be wrong on UX, architecture, or performance.
+
 ## Key Project Locations
 
 **Where to add:**

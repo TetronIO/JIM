@@ -7,6 +7,7 @@ using JIM.Models.ExampleData;
 using JIM.Models.ExampleData.DTOs;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
+using System.Diagnostics;
 namespace JIM.PostgresData.Repositories;
 
 public class ExampleDataRepository : IExampleDataRepository
@@ -242,13 +243,19 @@ public class ExampleDataRepository : IExampleDataRepository
     #endregion
 
     /// <summary>
-    /// Bulk creates metaverse objects in the database using batched persistence.
-    /// Batching reduces memory pressure and allows progress reporting during persistence.
+    /// Bulk creates metaverse objects in the database using batched, COPY-based persistence.
+    /// Each batch streams MVOs, attribute values, and (if change tracking is enabled) change-history
+    /// records to PostgreSQL via Npgsql binary COPY, mirroring the worker hot-path pattern documented
+    /// in <c>src/CLAUDE.md</c>. EF Core is bypassed entirely on the write path so neither the change
+    /// tracker nor parameterised INSERTs are in the way of throughput at scale.
     /// </summary>
     /// <param name="metaverseObjects">The list of MetaverseObjects to persist.</param>
-    /// <param name="batchSize">Number of objects to persist per batch. Smaller batches reduce memory pressure.</param>
+    /// <param name="batchSize">Number of objects to persist per batch. Smaller batches reduce memory pressure and improve cancellation responsiveness.</param>
     /// <param name="cancellationToken">The cancellation token to use to determine if the operation should be cancelled.</param>
-    /// <param name="progressCallback">Optional callback for reporting persistence progress. Parameters are (totalObjects, objectsPersisted).</param>
+    /// <param name="progressCallback">
+    /// Optional callback fired once per batch with a <see cref="PersistenceProgress"/> payload so callers
+    /// can render moving "what's happening" messages (batch X of Y, ETA, etc.) on the Activity record.
+    /// </param>
     /// <returns>The number of objects persisted.</returns>
     /// <exception cref="ArgumentNullException"></exception>
     /// <exception cref="OperationCanceledException"></exception>
@@ -256,11 +263,8 @@ public class ExampleDataRepository : IExampleDataRepository
         List<MetaverseObject> metaverseObjects,
         int batchSize,
         CancellationToken cancellationToken,
-        Func<int, int, Task>? progressCallback = null)
+        Func<PersistenceProgress, Task>? progressCallback = null)
     {
-        Log.Verbose("CreateMetaverseObjectsAsync: Starting to persist {Count:N0} MetaverseObjects in batches of {BatchSize}...",
-            metaverseObjects?.Count ?? 0, batchSize);
-
         if (metaverseObjects == null || metaverseObjects.Count == 0)
             throw new ArgumentNullException(nameof(metaverseObjects));
 
@@ -268,23 +272,71 @@ public class ExampleDataRepository : IExampleDataRepository
             batchSize = 500; // Sensible default
 
         var totalObjects = metaverseObjects.Count;
+        var batchTotal = (totalObjects + batchSize - 1) / batchSize;
+        Log.Information("CreateMetaverseObjectsAsync: Starting COPY-based persist of {Count:N0} MetaverseObjects in {BatchTotal:N0} batch(es) of {BatchSize}...",
+            totalObjects, batchTotal, batchSize);
 
-        // For now, persist all objects in a single transaction.
-        // Batched persistence with progress reporting is complex due to EF Core's change tracking
-        // of navigation properties causing duplicate key errors. This is tracked in GitHub issue #276
-        // for Post-MVP optimisation.
-        Repository.Database.MetaverseObjects.AddRange(metaverseObjects);
-        await Repository.Database.SaveChangesAsync(cancellationToken);
+        // Reuse the proven COPY-based bulk persistence on SyncRepository. Constructing a peer
+        // SyncRepository against the same PostgresDataRepository is the established pattern
+        // (see Worker.cs, SyncImportTaskProcessor, etc.). This keeps the per-table COPY logic
+        // in one place and gives example-data persistence the same throughput characteristics
+        // as the production sync hot path.
+        var syncRepo = new SyncRepository(Repository);
 
-        if (cancellationToken.IsCancellationRequested)
+        var totalPersisted = 0;
+        var batchIndex = 0;
+        var stopwatch = Stopwatch.StartNew();
+
+        for (var offset = 0; offset < totalObjects; offset += batchSize)
+        {
             cancellationToken.ThrowIfCancellationRequested();
+            batchIndex++;
 
-        // Report completion
-        if (progressCallback != null)
-            await progressCallback(totalObjects, totalObjects);
+            var batchCount = Math.Min(batchSize, totalObjects - offset);
+            var batch = metaverseObjects.GetRange(offset, batchCount);
 
-        Log.Verbose("CreateMetaverseObjectsAsync: Done - persisted {Count:N0} objects", totalObjects);
-        return totalObjects;
+            // Phase 1: COPY the MVOs and their attribute values.
+            // CreateMetaverseObjectsBulkAsync internally fixes up ReferenceValueId FKs from
+            // navigation properties, so cross-batch references (e.g. manager links from the
+            // User template's binary tree) resolve correctly because earlier batches have
+            // already committed.
+            await syncRepo.CreateMetaverseObjectsBulkAsync(batch);
+
+            // Phase 2: COPY the change-history records, if any. Example data generation either
+            // attaches a single Created change per MVO (when MVO change tracking is enabled) or
+            // none at all (when disabled), so we just collect whatever the server layer set.
+            var changeRecords = batch.SelectMany(mvo => mvo.Changes).ToList();
+            if (changeRecords.Count > 0)
+                await syncRepo.PersistPendingMvoChangesAsync(changeRecords, []);
+
+            // The bulk persistence reattaches MVOs to the EF change tracker as Unchanged so
+            // downstream sync code can discover navigation children. Example data has no
+            // downstream EF work after persistence: drop the tracker so memory stays bounded
+            // across batches.
+            Repository.Database.ChangeTracker.Clear();
+
+            totalPersisted += batchCount;
+
+            Log.Information(
+                "CreateMetaverseObjectsAsync: Persisted batch {BatchIndex:N0}/{BatchTotal:N0} ({Persisted:N0}/{Total:N0} objects, {ChangeCount:N0} change records) in {Elapsed}",
+                batchIndex, batchTotal, totalPersisted, totalObjects, changeRecords.Count, stopwatch.Elapsed);
+
+            if (progressCallback != null)
+            {
+                await progressCallback(new PersistenceProgress
+                {
+                    TotalObjects = totalObjects,
+                    ObjectsPersisted = totalPersisted,
+                    BatchIndex = batchIndex,
+                    BatchCount = batchTotal,
+                    Elapsed = stopwatch.Elapsed
+                });
+            }
+        }
+
+        stopwatch.Stop();
+        Log.Information("CreateMetaverseObjectsAsync: Done - persisted {Count:N0} objects in {Elapsed}", totalPersisted, stopwatch.Elapsed);
+        return totalPersisted;
     }
 
     #region private methods
