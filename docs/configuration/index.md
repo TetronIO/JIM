@@ -46,6 +46,6 @@ Each configuration object page covers:
 - **What it is** and the key concepts you need to grasp before editing it
 - **How it fits in** to JIM's overall model
 - **Common workflows** at a concept level (the steps that matter, not click-by-click instructions)
-- **Manage <object>** -- where to do the work, in three forms: the JIM portal, PowerShell, and the REST API
+- **Where to do the work** in three forms: the JIM portal, PowerShell, and the REST API
 
 The portal is the right surface for most day-to-day administration. PowerShell is the right surface for repeatable automation, scripted onboarding, and integrations into existing operational tooling. The REST API is the right surface for purpose-built integrations and bespoke tooling.
