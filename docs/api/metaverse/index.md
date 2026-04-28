@@ -4,51 +4,26 @@ title: Metaverse
 
 # Metaverse
 
-The Metaverse is JIM's central identity store. It contains object types (schema definitions), attributes, and the identity objects themselves. All synchronisation flows through the metaverse: import rules bring data in from connected systems, and export rules push data out.
+The Metaverse is JIM's central identity store. It contains object types (the schema), attributes (the fields), and the identity objects themselves. All synchronisation flows through the metaverse: import rules bring data in from connected systems, and export rules push data out.
+
+> Endpoint reference for this resource is in the [Scalar API reference](../index.md#where-to-find-what). This page covers the concepts.
 
 ## Key Concepts
 
-**Object Types** define the schema categories in the metaverse (e.g. `person`, `group`). Each object type has associated attributes and configurable deletion rules.
+**Object types** define the schema categories in the metaverse (typical examples: `person`, `group`). Each object type has its own attribute set and configurable deletion rules (e.g. immediate deletion, or a grace period before pending deletion is finalised).
 
-**Attributes** define the fields available on metaverse objects (e.g. `displayName`, `mail`, `employeeId`). Attributes can be single-valued or multi-valued, and support multiple data types.
+**Attributes** define the fields available on metaverse objects (e.g. `displayName`, `mail`, `employeeId`). Attributes can be single-valued or multi-valued, and support several data types (string, integer, datetime, boolean, reference, etc.). The set of attributes on an object type is administrator-defined; JIM does not impose a fixed schema.
 
-**Objects** are the identity records in the metaverse. Each object has a type, attribute values, and may be linked to one or more connector space objects in connected systems.
+**Objects** are the identity records. Each object has a type, attribute values, and may be linked to one or more connector space objects in connected systems. The links are how data flows between the external systems and the metaverse during synchronisation.
 
-**Pending Deletions** track metaverse objects that are awaiting deletion after all their connector space objects have been disconnected. Deletion rules and grace periods control when objects are actually removed.
+**Pending deletions** track metaverse objects awaiting final deletion after all their connector space links have been removed. The grace period (configured per object type) gives administrators time to intervene if a deletion was triggered in error.
 
-## Endpoints
+**Search.** The metaverse supports filtering and a fast named-search API driven by [Predefined Searches](../predefined-searches/index.md).
 
-### Object Types
+## See also
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | [`/api/v1/metaverse/object-types`](object-types.md) | List object types |
-| `GET` | [`/api/v1/metaverse/object-types/{id}`](object-types.md#retrieve-an-object-type) | Retrieve an object type |
-| `PUT` | [`/api/v1/metaverse/object-types/{id}`](object-types.md#update-an-object-type) | Update deletion rules |
-
-### Attributes
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | [`/api/v1/metaverse/attributes`](attributes.md) | List attributes |
-| `GET` | [`/api/v1/metaverse/attributes/{id}`](attributes.md#retrieve-an-attribute) | Retrieve an attribute |
-| `POST` | [`/api/v1/metaverse/attributes`](attributes.md#create-an-attribute) | Create an attribute |
-| `PUT` | [`/api/v1/metaverse/attributes/{id}`](attributes.md#update-an-attribute) | Update an attribute |
-| `DELETE` | [`/api/v1/metaverse/attributes/{id}`](attributes.md#delete-an-attribute) | Delete an attribute |
-
-### Objects
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | [`/api/v1/metaverse/objects`](objects.md) | List objects |
-| `GET` | [`/api/v1/metaverse/objects/search/{predefinedSearchUri}`](objects.md#search-objects) | Search objects using a predefined search |
-| `GET` | [`/api/v1/metaverse/objects/count`](objects.md#count-objects) | Count objects matching a filter |
-| `GET` | [`/api/v1/metaverse/objects/{id}`](objects.md#retrieve-an-object) | Retrieve an object with attributes and connectors |
-
-### Pending Deletions
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | [`/api/v1/metaverse/pending-deletions`](pending-deletions.md) | List pending deletions |
-| `GET` | [`/api/v1/metaverse/pending-deletions/count`](pending-deletions.md#count-pending-deletions) | Count pending deletions |
-| `GET` | [`/api/v1/metaverse/pending-deletions/summary`](pending-deletions.md#pending-deletions-summary) | Pending deletions summary |
+- [Concepts: Architecture](../../concepts/architecture.md) -- how the metaverse fits into JIM's architecture
+- [Concepts: Synchronisation Pipeline](../../concepts/synchronisation-pipeline.md) -- how data flows through the metaverse during import, sync, and export
+- [Concepts: JML Lifecycle](../../concepts/jml-lifecycle.md) -- joiner/mover/leaver lifecycle and how it relates to metaverse object state
+- [Predefined Searches](../predefined-searches/index.md) -- named searches over metaverse objects
+- [PowerShell: Metaverse](../../powershell/metaverse.md) -- cmdlets that wrap these endpoints

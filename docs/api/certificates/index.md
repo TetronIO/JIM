@@ -4,69 +4,41 @@ title: Certificates
 
 # Certificates
 
-Certificates store trusted CA and intermediate certificates used by connectors for LDAP/HTTPS authentication. JIM supports adding certificates from Base64-encoded data or by referencing a file in the connector-files volume mount. Each certificate can be enabled or disabled independently.
+Certificates store trusted CA and intermediate certificates used by connectors for LDAP and HTTPS authentication. Each certificate can be enabled or disabled independently without removing it.
 
-## The Certificate Object
+> Endpoint reference for this resource is in the [Scalar API reference](../index.md#where-to-find-what). This page covers the storage model and operational behaviour.
 
-```json
-{
-  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "name": "Corporate Root CA",
-  "thumbprint": "A1B2C3D4E5F6...",
-  "subject": "CN=Corporate Root CA, O=Contoso Ltd",
-  "issuer": "CN=Corporate Root CA, O=Contoso Ltd",
-  "serialNumber": "01AB23CD",
-  "validFrom": "2024-01-01T00:00:00Z",
-  "validTo": "2034-01-01T00:00:00Z",
-  "sourceType": "Uploaded",
-  "filePath": null,
-  "isEnabled": true,
-  "createdAt": "2026-02-15T10:00:00Z",
-  "createdBy": "admin@contoso.com",
-  "notes": "Root CA for LDAP connector authentication",
-  "isExpired": false,
-  "isExpiringSoon": false,
-  "daysUntilExpiry": 2827
-}
-```
+## Key Concepts
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | guid | Unique identifier |
-| `name` | string | Human-readable name |
-| `thumbprint` | string | Certificate SHA-1 thumbprint |
-| `subject` | string | Certificate subject |
-| `issuer` | string | Certificate issuer |
-| `serialNumber` | string | Certificate serial number |
-| `validFrom` | datetime | Certificate validity start |
-| `validTo` | datetime | Certificate validity end |
-| `sourceType` | string | `Uploaded` (stored in database) or `FilePath` (referenced from connector-files mount) |
-| `filePath` | string, nullable | File path (only for `FilePath` source type) |
-| `isEnabled` | boolean | Whether the certificate is active |
-| `createdAt` | datetime | UTC creation timestamp |
-| `createdBy` | string, nullable | User who added the certificate |
-| `notes` | string, nullable | Optional notes |
-| `isExpired` | boolean | Whether the certificate has expired |
-| `isExpiringSoon` | boolean | Whether the certificate expires within 30 days |
-| `daysUntilExpiry` | integer | Days until expiry (negative if expired) |
+**Two source types.** Certificates can be added in one of two ways:
 
-## Source Types
+- **Uploaded** -- the certificate data is supplied as Base64 and stored directly in the JIM database. Self-contained; survives container restarts without any external file dependency.
+- **File path** -- the certificate is referenced by a path inside the connector-files volume mount. The file must remain accessible to JIM at runtime. Useful when an existing PKI tooling pipeline already places certificates on disk.
 
-| Type | Description |
-|------|-------------|
-| `Uploaded` | Certificate data stored in the JIM database. Added via Base64-encoded data. |
-| `FilePath` | Certificate referenced by file path in the connector-files volume mount. The file must remain accessible. |
+The two sources are equivalent at use time; the distinction matters mainly for deployment and rotation workflow.
 
-## Endpoints
+**Enabled flag.** Disabling a certificate removes it from the trust set without deleting it. Use this to temporarily revoke a CA without losing the metadata, or to stage a future change.
 
-| Endpoint | Description |
-|----------|-------------|
-| [List Certificates](list.md) | Paginated list of all certificates |
-| [List Enabled Certificates](enabled.md) | All currently enabled certificates |
-| [Retrieve a Certificate](retrieve.md) | Get full certificate details by ID |
-| [Add from Data](add-data.md) | Add a certificate from Base64-encoded data |
-| [Add from File](add-file.md) | Add a certificate from the connector-files mount |
-| [Update a Certificate](update.md) | Update name, notes, or enabled status |
-| [Delete a Certificate](delete.md) | Permanently remove a certificate |
-| [Validate a Certificate](validate.md) | Check certificate validity and chain |
-| [Download a Certificate](download.md) | Download certificate in DER format |
+**Expiry awareness.** JIM tracks `validFrom` / `validTo` and surfaces convenience flags (`isExpired`, `isExpiringSoon`, `daysUntilExpiry`). Use these to drive monitoring; the API does not auto-disable expired certificates.
+
+**Validation.** A separate validation operation lets you check a certificate's chain and validity before relying on it. It does not modify state.
+
+## Common Workflows
+
+**Adding a new CA certificate from your PKI:**
+
+1. Either upload the Base64-encoded data, or place the file in the connector-files mount and reference it by path
+2. Validate the certificate to confirm chain and validity
+3. Confirm the certificate is enabled and visible in the enabled list
+4. Configure the relevant connector to authenticate using the connected system's LDAPS/HTTPS endpoint
+
+**Rotating a CA before expiry:**
+
+1. Add the new certificate (uploaded or file path)
+2. Validate
+3. Once you've confirmed connectors successfully negotiate against systems using the new CA, disable or delete the old certificate
+
+## See also
+
+- [Connectors](../../connectors/index.md) -- which connectors use the certificate trust set
+- [PowerShell: Certificates](../../powershell/certificates.md) -- cmdlets that wrap these endpoints

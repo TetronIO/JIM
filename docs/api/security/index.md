@@ -4,281 +4,31 @@ title: Security
 
 # Security
 
-The Security API provides access to role definitions and role membership management. Roles determine what actions users and API keys can perform within JIM.
+The Security API exposes role definitions and role-membership management. Roles determine what authenticated principals (users and API keys) can do within JIM.
 
-## The Role Object
+> Endpoint reference for this resource is in the [Scalar API reference](../index.md#where-to-find-what). This page covers the concepts.
 
-```json
-{
-  "id": 1,
-  "name": "Administrator",
-  "builtIn": true,
-  "created": "2026-01-10T09:00:00Z",
-  "staticMemberCount": 3
-}
-```
+## Key Concepts
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | integer | Unique identifier |
-| `name` | string | Role name |
-| `builtIn` | boolean | Whether this is a built-in role (cannot be deleted) |
-| `created` | datetime | UTC creation timestamp |
-| `staticMemberCount` | integer | Number of metaverse objects assigned to this role |
+**Roles.** A role is a named permission grant. The current model is coarse-grained: most administrative endpoints require the `Administrator` role. Future releases will introduce finer-grained roles; the API surface here is forward-compatible.
 
-## The Role Member Object
+**Built-in roles.** Roles marked `builtIn` ship with JIM and cannot be deleted. They can have members added or removed like any other role.
 
-```json
-{
-  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "displayName": "Alice Smith",
-  "typeId": 1,
-  "typeName": "Person"
-}
-```
+**Static membership.** A role's static members are the metaverse objects (typically `person` objects) explicitly assigned to the role. Membership is established by adding a metaverse object as a member, and removed by deleting that membership.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | GUID | Unique identifier of the metaverse object |
-| `displayName` | string | Display name of the metaverse object |
-| `typeId` | integer | Object type ID |
-| `typeName` | string | Object type name |
+**API key roles.** API keys carry roles directly (rather than via metaverse-object membership). This means rotating a person's role membership doesn't affect already-issued API keys, and revoking an API key doesn't change a person's role membership.
 
----
+## Administrator-lockout safety
 
-## List Roles
+The API includes two safety checks specifically for the Administrator role; both reject the request rather than risk locking everyone out:
 
-Returns all security roles defined in JIM.
+- You cannot remove **yourself** from the Administrator role
+- You cannot remove the **last remaining member** of the Administrator role
 
-```
-GET /api/v1/security/roles
-```
+If you genuinely need to transfer admin to a different identity, add the new admin first, then remove the old one.
 
-### Examples
+## See also
 
-=== "curl"
-
-    ```bash
-    curl https://jim.example.com/api/v1/security/roles \
-      -H "X-Api-Key: jim_xxxxxxxxxxxx"
-    ```
-
-=== "PowerShell"
-
-    ```powershell
-    Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
-
-    Get-JIMRole
-    ```
-
-### Response
-
-Returns `200 OK` with an array of role objects.
-
-### Errors
-
-| Status | Code | Description |
-|--------|------|-------------|
-| `401` | `UNAUTHORISED` | Authentication required |
-| `403` | `FORBIDDEN` | Insufficient permissions (Administrator role required) |
-
----
-
-## Get Role
-
-Returns a single role by its unique identifier.
-
-```
-GET /api/v1/security/roles/{roleId}
-```
-
-### Parameters
-
-| Name | In | Type | Required | Description |
-|------|-----|------|----------|-------------|
-| `roleId` | path | integer | Yes | The unique identifier of the role |
-
-### Examples
-
-=== "curl"
-
-    ```bash
-    curl https://jim.example.com/api/v1/security/roles/1 \
-      -H "X-Api-Key: jim_xxxxxxxxxxxx"
-    ```
-
-=== "PowerShell"
-
-    ```powershell
-    Get-JIMRole -Id 1
-    ```
-
-### Response
-
-Returns `200 OK` with a role object.
-
-### Errors
-
-| Status | Code | Description |
-|--------|------|-------------|
-| `401` | `UNAUTHORISED` | Authentication required |
-| `403` | `FORBIDDEN` | Insufficient permissions (Administrator role required) |
-| `404` | `NOT_FOUND` | Role not found |
-
----
-
-## Role Members
-
-### List Role Members
-
-Returns all metaverse objects assigned to a role.
-
-```
-GET /api/v1/security/roles/{roleId}/members
-```
-
-#### Parameters
-
-| Name | In | Type | Required | Description |
-|------|-----|------|----------|-------------|
-| `roleId` | path | integer | Yes | The unique identifier of the role |
-
-#### Examples
-
-=== "curl"
-
-    ```bash
-    curl https://jim.example.com/api/v1/security/roles/1/members \
-      -H "X-Api-Key: jim_xxxxxxxxxxxx"
-    ```
-
-=== "PowerShell"
-
-    ```powershell
-    # By role ID
-    Get-JIMRoleMember -RoleId 1
-
-    # Pipeline from Get-JIMRole
-    Get-JIMRole -Name "Administrator" | Get-JIMRoleMember
-    ```
-
-#### Response
-
-Returns `200 OK` with an array of role member objects.
-
-#### Errors
-
-| Status | Code | Description |
-|--------|------|-------------|
-| `401` | `UNAUTHORISED` | Authentication required |
-| `403` | `FORBIDDEN` | Insufficient permissions (Administrator role required) |
-| `404` | `NOT_FOUND` | Role not found |
-
----
-
-### Add Role Member
-
-Assigns a metaverse object as a static member of the specified role.
-
-```
-PUT /api/v1/security/roles/{roleId}/members/{metaverseObjectId}
-```
-
-#### Parameters
-
-| Name | In | Type | Required | Description |
-|------|-----|------|----------|-------------|
-| `roleId` | path | integer | Yes | The unique identifier of the role |
-| `metaverseObjectId` | path | GUID | Yes | The unique identifier of the metaverse object |
-
-#### Examples
-
-=== "curl"
-
-    ```bash
-    curl -X PUT \
-      https://jim.example.com/api/v1/security/roles/1/members/a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
-      -H "X-Api-Key: jim_xxxxxxxxxxxx"
-    ```
-
-=== "PowerShell"
-
-    ```powershell
-    # By IDs
-    Add-JIMRoleMember -RoleId 1 -MetaverseObjectId "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-
-    # Pipeline from Get-JIMMetaverseObject
-    Get-JIMMetaverseObject -Id "a1b2c3d4-..." | Add-JIMRoleMember -RoleId 1
-    ```
-
-#### Response
-
-Returns `204 No Content` on success.
-
-#### Errors
-
-| Status | Code | Description |
-|--------|------|-------------|
-| `400` | `VALIDATION_ERROR` | Metaverse object not found |
-| `401` | `UNAUTHORISED` | Authentication required |
-| `403` | `FORBIDDEN` | Insufficient permissions (Administrator role required) |
-| `404` | `NOT_FOUND` | Role not found |
-| `409` | `CONFLICT` | Metaverse object is already a member of this role |
-
----
-
-### Remove Role Member
-
-Removes a metaverse object from the specified role.
-
-```
-DELETE /api/v1/security/roles/{roleId}/members/{metaverseObjectId}
-```
-
-!!! warning "Safety Checks"
-    Two safety checks prevent administrator lockout:
-
-    - You cannot remove **yourself** from the Administrator role
-    - You cannot remove the **last member** of the Administrator role
-
-    Both return `400 VALIDATION_ERROR` with a descriptive message.
-
-#### Parameters
-
-| Name | In | Type | Required | Description |
-|------|-----|------|----------|-------------|
-| `roleId` | path | integer | Yes | The unique identifier of the role |
-| `metaverseObjectId` | path | GUID | Yes | The unique identifier of the metaverse object |
-
-#### Examples
-
-=== "curl"
-
-    ```bash
-    curl -X DELETE \
-      https://jim.example.com/api/v1/security/roles/1/members/a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
-      -H "X-Api-Key: jim_xxxxxxxxxxxx"
-    ```
-
-=== "PowerShell"
-
-    ```powershell
-    # By IDs
-    Remove-JIMRoleMember -RoleId 1 -MetaverseObjectId "a1b2c3d4-..." -Force
-
-    # With confirmation prompt
-    Remove-JIMRoleMember -RoleId 1 -MetaverseObjectId "a1b2c3d4-..."
-    ```
-
-#### Response
-
-Returns `204 No Content` on success.
-
-#### Errors
-
-| Status | Code | Description |
-|--------|------|-------------|
-| `400` | `VALIDATION_ERROR` | Self-removal from Administrator role, last Administrator removal, or object not in role |
-| `401` | `UNAUTHORISED` | Authentication required |
-| `403` | `FORBIDDEN` | Insufficient permissions (Administrator role required) |
-| `404` | `NOT_FOUND` | Role not found |
+- [API Keys](../api-keys/index.md) -- API keys carry roles directly; the same security model applies
+- [Authentication](../authentication.md) -- how authenticated principals are identified
+- [PowerShell: Security](../../powershell/security.md) -- cmdlets that wrap these endpoints

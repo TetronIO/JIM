@@ -4,66 +4,46 @@ title: Run Profiles
 
 # Run Profiles
 
-A Run Profile defines a synchronisation operation that can be executed against a connected system. Each run profile specifies the type of operation (import, sync, or export), batch size, and optionally a target partition or file path.
+A Run Profile defines a synchronisation operation that can be executed against a connected system. Each run profile specifies the type of operation (import, sync, or export), a batch size, and optionally a target partition or file path.
 
-Run profiles are the building blocks of [schedules](../schedules/index.md); each schedule step typically references a run profile to execute.
+Run profiles are the building blocks of [schedules](../schedules/index.md): each schedule step typically references a run profile to execute. They can also be executed directly via the API for one-off operations.
+
+> Endpoint reference for this resource is in the [Scalar API reference](../index.md#where-to-find-what). This page covers the model and the workflows.
+
+## Key Concepts
+
+**Run types.** A run profile is one of:
+
+- **Full Import** -- read every object from the connected system and replace the existing connector space view
+- **Delta Import** -- read only the objects that have changed since the last import (faster; only available where the connector supports change tracking)
+- **Full Synchronisation** -- evaluate every connector space object against the synchronisation rules; produce projections, joins, attribute flows, and pending exports
+- **Delta Synchronisation** -- evaluate only objects with pending changes since the last sync (faster)
+- **Export** -- flush pending exports out to the connected system
+
+**Batch size.** Controls how many objects are processed per batch during execution. Larger batches reduce overhead per object but cost more memory and increase failure blast radius. Sensible defaults differ per connector; tune as needed.
+
+**Partition / file path.** For connectors that expose multiple partitions (LDAP) or that operate on files (the file connector), the run profile pins the operation to a specific scope.
+
+**Asynchronous execution.** Triggering a run profile returns an activity ID. The actual work runs on the worker and is monitored via [Activities](../activities/index.md).
 
 ## Common Workflows
 
 **Setting up run profiles for a new connected system:**
 
-1. [Create a connected system](../connected-systems/create.md) and import its schema
-2. [Create run profiles](#endpoints) for each operation type needed (typically: delta import, delta sync, export)
-3. Add the run profiles as steps in a [schedule](../schedules/create.md)
+1. Create the connected system and import its schema
+2. Create the run profiles you need (typically: a delta import, a delta sync, and an export; full variants too if you want a periodic ground-truth refresh)
+3. Either add them as steps to a [schedule](../schedules/index.md) for automated execution, or call execute directly for one-off runs
 
 **Running a one-off import:**
 
-1. [List run profiles](list.md) for the connected system
-2. [Execute the run profile](execute.md) to trigger it immediately
-3. Monitor progress via the [Activities](../activities/index.md) endpoint using the returned activity ID
+1. List run profiles for the connected system to find the right one
+2. Execute the run profile -- the API returns an activity ID
+3. Poll Activities to monitor progress and retrieve the result
 
-## The Run Profile Object
+## See also
 
-```json
-{
-  "id": 1,
-  "name": "Delta Import",
-  "connectedSystemId": 1,
-  "runType": "DeltaImport",
-  "pageSize": 100,
-  "partitionName": null,
-  "filePath": null
-}
-```
-
-### Attributes
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | integer | Unique identifier |
-| `name` | string | Display name |
-| `connectedSystemId` | integer | Parent connected system ID |
-| `runType` | string | Operation type (see below) |
-| `pageSize` | integer | Number of objects to process per batch |
-| `partitionName` | string, nullable | Target partition name (if applicable) |
-| `filePath` | string, nullable | File path for file-based connectors |
-
-### Run Types
-
-| Value | Description |
-|-------|-------------|
-| `FullImport` | Import all objects from the connected system, replacing existing connector space data |
-| `DeltaImport` | Import only objects that have changed since the last import |
-| `FullSynchronisation` | Synchronise all connector space objects with the metaverse |
-| `DeltaSynchronisation` | Synchronise only objects with pending changes since the last sync |
-| `Export` | Export pending changes from the metaverse to the connected system |
-
-## Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | [`/api/v1/synchronisation/connected-systems/{id}/run-profiles`](list.md) | List run profiles |
-| `POST` | [`/api/v1/synchronisation/connected-systems/{id}/run-profiles`](create.md) | Create a run profile |
-| `PUT` | [`/api/v1/synchronisation/connected-systems/{id}/run-profiles/{runProfileId}`](update.md) | Update a run profile |
-| `DELETE` | [`/api/v1/synchronisation/connected-systems/{id}/run-profiles/{runProfileId}`](delete.md) | Delete a run profile |
-| `POST` | [`/api/v1/synchronisation/connected-systems/{id}/run-profiles/{runProfileId}/execute`](execute.md) | Execute a run profile |
+- [Connected Systems](../connected-systems/index.md) -- run profiles belong to a connected system
+- [Schedules](../schedules/index.md) -- automated execution of run profiles
+- [Activities](../activities/index.md) -- monitoring run profile execution
+- [Concepts: Synchronisation Pipeline](../../concepts/synchronisation-pipeline.md) -- what each run type does
+- [PowerShell: Run Profiles](../../powershell/run-profiles.md) -- cmdlets that wrap these endpoints

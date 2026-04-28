@@ -181,5 +181,5 @@ do {
 
 ## See also
 
-- [API History](../api/history.md): REST API reference for history endpoints
+- [API reference](../api/index.md): the Scalar API reference (linked from the API index) covers the history endpoints
 - [Activities](activities.md): cmdlets for querying activity logs and execution history

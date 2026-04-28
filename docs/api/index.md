@@ -1,182 +1,67 @@
 ---
-title: API Reference
+title: API
 ---
 
-# API Reference
+# API
 
-JIM provides a comprehensive REST API for programmatic access to all identity management operations. Use it to automate connected system configuration, trigger synchronisation runs, query the metaverse, and integrate JIM into your infrastructure workflows.
+JIM exposes a REST API for programmatic access to all identity management operations: configuring connected systems, triggering synchronisation runs, querying the metaverse, and integrating JIM into wider infrastructure workflows. The API is served from the same application as the web UI; there is no separate service to deploy.
 
-The API is served from the same application as the web UI; there is no separate service to deploy.
+## Where to find what
 
-!!! tip "Interactive API Reference"
+This section follows the [Diátaxis](https://diataxis.fr/) split: the pages here are **guidance** (what the resource is, common workflows, important behaviours), and the **reference** (every endpoint, every request and response field, an interactive "Try It" feature) lives in the Scalar API reference.
 
-    For a complete, searchable endpoint reference with request/response schemas and an interactive "Try It" feature, see the **[Interactive API Reference](reference/)** (generated from the latest release).
+| Looking for | Go to |
+|-------------|-------|
+| Endpoint signatures, request and response schemas, error codes | **Scalar API reference** -- on every JIM instance at `/api/reference`, or hosted at [tetronio.github.io/JIM/api/reference/](https://tetronio.github.io/JIM/api/reference/) |
+| Raw OpenAPI document (for client code generation) | `/api/openapi/v1.json` on a JIM instance |
+| How to authenticate | [Authentication](authentication.md) |
+| What a resource is, and how it fits into a workflow | The per-resource pages in this section |
+| PowerShell cmdlets that wrap the API | [PowerShell Module](../powershell/index.md) |
 
-    The same reference is also available on every JIM instance at `/api/reference` — ideal for air-gapped environments.
-
-    The pages below focus on setup, authentication, and end-to-end examples; use the interactive reference for detailed endpoint specifications.
-
-## Quick Start
-
-**Base URL:**
-
-```
-https://jim.example.com/api/v1/
-```
-
-**Authenticate** with an API key or JWT Bearer token (see [Authentication](authentication.md) for full details):
-
-=== "curl"
-
-    ```bash
-    curl https://jim.example.com/api/v1/health \
-      -H "X-Api-Key: jim_xxxxxxxxxxxx"
-    ```
-
-=== "PowerShell"
-
-    ```powershell
-    Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
-    Get-JIMHealth
-    ```
+The Scalar reference is generated from the OpenAPI document at build time, so it loads instantly and works in air-gapped environments without any cloud calls.
 
 ## Resources
 
 ### Synchronisation
 
-| Resource | Description |
-|----------|-------------|
-| [Connected Systems](connected-systems/index.md) | External identity stores that synchronise with the JIM metaverse |
-| [Run Profiles](run-profiles/index.md) | Import, sync, and export operations for connected systems |
-| [Synchronisation Rules](synchronisation-rules/index.md) | Attribute mappings, scoping, and join logic between connected systems and the metaverse |
+- [Connected Systems](connected-systems/index.md) -- external identity stores that synchronise with the JIM metaverse
+- [Run Profiles](run-profiles/index.md) -- import, sync, and export operations for connected systems
+- [Synchronisation Rules](synchronisation-rules/index.md) -- attribute mappings, scoping, and join logic between connected systems and the metaverse
 
 ### Metaverse
 
-| Resource | Description |
-|----------|-------------|
-| [Object Types](metaverse/object-types.md) | Schema definitions for metaverse objects |
-| [Attributes](metaverse/attributes.md) | Metaverse attribute definitions and object type associations |
-| [Objects](metaverse/objects.md) | Identity objects stored in the metaverse |
-| [Pending Deletions](metaverse/pending-deletions.md) | Metaverse objects awaiting deletion after grace period |
-| [Predefined Searches](predefined-searches/index.md) | Named searches that drive portal list views and the fast search API |
+- [Metaverse](metaverse/index.md) -- object types, attributes, objects, and pending deletions
+- [Predefined Searches](predefined-searches/index.md) -- named searches that drive portal list views and the fast search API
 
-### Scheduling
+### Scheduling and Operations
 
-| Resource | Description |
-|----------|-------------|
-| [Schedules](schedules/index.md) | Automated execution schedules with ordered steps |
-| [Schedule Executions](schedules/executions.md) | Running and completed schedule execution records |
-
-### Operations
-
-| Resource | Description |
-|----------|-------------|
-| [Activities](activities/index.md) | Audit trail of all operations (imports, syncs, exports) |
-| [Logs](logs.md) | Application log file access and filtering |
-| [History](history.md) | Deletion history and retention cleanup |
+- [Schedules](schedules/index.md) -- automated execution schedules with ordered steps
+- [Activities](activities/index.md) -- audit trail of all operations (imports, syncs, exports, configuration changes)
 
 ### Configuration
 
-| Resource | Description |
-|----------|-------------|
-| [API Keys](api-keys/index.md) | API key lifecycle management |
-| [Certificates](certificates/index.md) | Certificate storage for connector authentication |
-| [Service Settings](service-settings/index.md) | Runtime configuration values |
-| [Security](security/index.md) | Role definitions |
+- [API Keys](api-keys/index.md) -- API key lifecycle management
+- [Certificates](certificates/index.md) -- certificate storage for connector authentication
+- [Service Settings](service-settings/index.md) -- runtime configuration values
+- [Security](security/index.md) -- role definitions and role membership
 
 ### System
 
-| Resource | Description |
-|----------|-------------|
-| [System](system/index.md) | Health, readiness, liveness probes, version, auth config, and user info |
+- [System](system/index.md) -- health, readiness, liveness, version, and authentication configuration
 
-## Versioning
+## Conventions at a glance
 
-JIM uses URL path-based versioning. The current API version is **v1**. All endpoints are prefixed with `/api/v1/`.
+These behaviours are common across the API. The Scalar reference is authoritative for any specific endpoint; the summary here is for orientation.
 
-Future versions will be introduced under `/api/v2/` etc., with previous versions maintained for a deprecation period.
+**Versioning.** The API uses URL path-based versioning. The current version is `v1`; all endpoints are prefixed with `/api/v1/`. Future versions appear under `/api/v2/` etc., with a deprecation period for the previous version.
 
-## Conventions
+**Authentication.** All endpoints require authentication except a small number of system endpoints (health probes, version, auth config). Most endpoints additionally require the **Administrator** role. JIM supports two methods, both detailed in [Authentication](authentication.md):
 
-### Authentication
+- **API keys** in the `X-Api-Key` header, suitable for scripts, automation, and service-to-service integrations
+- **JWT Bearer tokens** in the `Authorization: Bearer <token>` header, suitable for user-driven integrations via OIDC/SSO
 
-All endpoints require authentication except Health and Auth Config. Most endpoints also require the **Administrator** role.
+**Pagination.** List endpoints accept `page`, `pageSize`, `sortBy`, `sortDirection`, and `filter` query parameters and return a paginated envelope (`items`, `totalCount`, `page`, `pageSize`, `totalPages`, `hasNextPage`, `hasPreviousPage`). The Scalar reference lists the exact parameter constraints for each endpoint.
 
-Two authentication methods are supported:
+**Errors.** All errors return a consistent JSON shape with a machine-readable `code`, a human-readable `message`, optional `details` and `validationErrors`, and a `timestamp`. The full set of error codes is documented in the Scalar reference per endpoint.
 
-- **API keys**<br /> Include in the `X-Api-Key` header. Best for scripts, automation, and service-to-service integrations.
-- **JWT Bearer tokens**<br /> Include in the `Authorization: Bearer <token>` header. Best for user-driven integrations via OIDC/SSO.
-
-See [Authentication](authentication.md) for setup instructions and examples.
-
-### Pagination
-
-List endpoints return paginated results:
-
-| Parameter       | Type    | Default | Description                        |
-|-----------------|---------|---------|------------------------------------|
-| `page`          | integer | `1`     | Page number (1-based)              |
-| `pageSize`      | integer | `25`    | Items per page (max 100)           |
-| `sortBy`        | string  |         | Field name to sort by              |
-| `sortDirection` | string  | `asc`   | Sort order: `asc` or `desc`        |
-| `filter`        | string  |         | Filter expression                  |
-
-All paginated responses share this envelope:
-
-```json
-{
-  "items": [],
-  "totalCount": 142,
-  "page": 1,
-  "pageSize": 25,
-  "totalPages": 6,
-  "hasNextPage": true,
-  "hasPreviousPage": false
-}
-```
-
-### Error Responses
-
-All errors return a consistent JSON format:
-
-```json
-{
-  "code": "VALIDATION_ERROR",
-  "message": "Name is required.",
-  "details": null,
-  "validationErrors": {
-    "name": ["The Name field is required."]
-  },
-  "timestamp": "2026-04-05T10:30:00Z"
-}
-```
-
-| Code | Description |
-|------|-------------|
-| `VALIDATION_ERROR` | Request body or query parameter validation failed |
-| `NOT_FOUND` | The requested resource does not exist |
-| `UNAUTHORISED` | Authentication is missing or invalid |
-| `FORBIDDEN` | Authenticated but insufficient permissions |
-| `CONFLICT` | Operation conflicts with current state |
-| `BAD_REQUEST` | Malformed request |
-| `INTERNAL_ERROR` | Unexpected server error |
-| `SERVICE_UNAVAILABLE` | Service is temporarily unavailable |
-
-### Asynchronous Operations
-
-Some long-running operations (schema import, run profile execution, connected system deletion) return `202 Accepted` with an activity or task ID. Poll the Activities resource to track progress.
-
-## Interactive Documentation
-
-JIM includes a [Scalar](https://scalar.com/) API reference for interactive API exploration, available in every environment (development, production, and air-gapped) at:
-
-```
-https://jim.example.com/api/reference
-```
-
-The Scalar API reference provides a browsable list of all endpoints, request/response schemas, and the ability to execute API calls directly from the browser. The underlying OpenAPI specification is available at `/api/openapi/v1.json` for client code generation. The OpenAPI document is pre-generated at build time, so the reference loads instantly with no runtime overhead.
-
-A public snapshot of the reference (matching the currently-published JIM release) is also hosted on the documentation site at [tetronio.github.io/JIM/api/reference/](https://tetronio.github.io/JIM/api/reference/) for exploring the API without a running JIM instance.
-
-!!! tip
-    Use this reference documentation for understanding how the API works and building integrations. Use the Scalar API reference when you need to quickly test an endpoint or generate a client library.
+**Asynchronous operations.** Long-running operations (schema import, run profile execution, connected system deletion) return `202 Accepted` with an activity ID; poll [Activities](activities/index.md) to track progress.

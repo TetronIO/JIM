@@ -4,53 +4,39 @@ title: Service Settings
 
 # Service Settings
 
-Service Settings control runtime behaviour for JIM, such as SSO configuration, synchronisation options, maintenance mode, and history retention. Each setting has a key (dot notation), a typed value, and a default. Settings can be overridden through the API or admin UI; some are read-only when mirrored from environment variables.
+Service Settings control runtime behaviour for JIM: instance identity, single sign-on, synchronisation options, maintenance mode, history retention. Each setting has a key (dot notation), a typed value, a default, and an effective value (the override if set, otherwise the default).
 
-## The Service Setting Object
+> Endpoint reference for this resource is in the [Scalar API reference](../index.md#where-to-find-what). This page covers the model and the operational behaviour.
 
-```json
-{
-  "key": "ChangeTracking.CsoChanges.Enabled",
-  "displayName": "CSO Change Tracking",
-  "description": "Controls whether connector space object changes are recorded for audit purposes",
-  "category": "Synchronisation",
-  "valueType": "Boolean",
-  "defaultValue": "true",
-  "value": null,
-  "effectiveValue": "true",
-  "isReadOnly": false,
-  "isOverridden": false
-}
-```
+## Key Concepts
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `key` | string | Unique setting key using dot notation |
-| `displayName` | string | Human-readable name |
-| `description` | string, nullable | Description of what this setting controls |
-| `category` | string | Grouping category: `SSO`, `Synchronisation`, `Maintenance`, or `History` |
-| `valueType` | string | Data type: `String`, `Boolean`, `Integer`, or `TimeSpan` |
-| `defaultValue` | string, nullable | The default value |
-| `value` | string, nullable | The overridden value, or null if using the default |
-| `effectiveValue` | string, nullable | The active value (override if set, otherwise default) |
-| `isReadOnly` | boolean | Whether this setting is read-only (mirrored from environment variables) |
-| `isOverridden` | boolean | Whether the current value differs from the default |
+**Default vs override.** Every setting has a built-in default. If you set a value through the API or admin UI, that value takes effect; otherwise the default applies. The `effectiveValue` field tells you which is currently active, and `isOverridden` tells you whether anyone has set an explicit value.
 
-## Categories
+**Read-only settings.** Some settings are mirrored from environment variables (typically the bootstrap settings -- database connection, initial encryption configuration). These are returned by the API for visibility but cannot be changed at runtime; updating them through the API is rejected. Change the underlying environment variable and restart JIM instead. By design, JIM keeps the set of environment-variable-driven settings small and prefers service settings, so this category is small by intent.
 
-| Category | Description |
-|----------|-------------|
-| `Instance` | Service identity settings (name, ID) for distinguishing JIM deployments |
-| `SSO` | Single sign-on and authentication settings |
-| `Synchronisation` | Sync pipeline and change tracking settings |
-| `Maintenance` | Maintenance mode and system health settings |
-| `History` | Audit history retention and cleanup settings |
+**Categories.** Settings are grouped by concern -- `Instance`, `SSO`, `Synchronisation`, `Maintenance`, `History` -- which is mostly a UI grouping. The category does not change semantics.
 
-## Endpoints
+**Reverting.** Removing the override (i.e. setting `value` back to null so `effectiveValue` reverts to `defaultValue`) is a separate operation from updating, because it conveys intent (return to default) more clearly than an update with a null body would.
 
-| Endpoint | Description |
-|----------|-------------|
-| [List Service Settings](list.md) | Get all service settings |
-| [Retrieve a Service Setting](retrieve.md) | Get a specific setting by key |
-| [Update a Service Setting](update.md) | Change a setting value |
-| [Revert a Service Setting](revert.md) | Reset a setting to its default value |
+**Value types.** Settings are typed (`String`, `Boolean`, `Integer`, `TimeSpan`). The API enforces the type on update.
+
+## Common Workflows
+
+**Looking up a setting:**
+
+1. List service settings to discover the key, current effective value, and whether it's overridden
+2. Retrieve the specific setting if you need just one
+
+**Changing a setting:**
+
+1. Update the setting with the new value
+2. The change takes effect immediately for new operations; running operations finish under the previous value
+
+**Reverting to default:**
+
+1. Call revert on the setting; `value` returns to null, `effectiveValue` reverts to `defaultValue`
+
+## See also
+
+- [Administration: Configuration Reference](../../administration/configuration.md) -- conceptual overview of which settings exist and what they do
+- [PowerShell: Service Settings](../../powershell/service-settings.md) -- cmdlets that wrap these endpoints

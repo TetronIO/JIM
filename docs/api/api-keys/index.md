@@ -4,49 +4,45 @@ title: API Keys
 
 # API Keys
 
-API keys provide non-interactive authentication for scripts, automation, and service-to-service integrations. The full key is shown only once at creation; after that, only the prefix is available for identification.
+API keys provide non-interactive authentication for scripts, automation, and service-to-service integrations. Each key is associated with one or more roles that determine what it can do.
 
-## The API Key Object
+> Endpoint reference for this resource is in the [Scalar API reference](../index.md#where-to-find-what). This page covers the model and the operational concerns.
 
-```json
-{
-  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "name": "CI/CD Pipeline",
-  "description": "Used by GitHub Actions for automated deployments",
-  "keyPrefix": "jim_ak_7",
-  "createdAt": "2026-01-15T10:00:00Z",
-  "expiresAt": "2026-07-15T10:00:00Z",
-  "lastUsedAt": "2026-04-05T08:30:00Z",
-  "lastUsedFromIp": "192.168.1.100",
-  "isEnabled": true,
-  "roles": [
-    { "id": 1, "name": "Administrator", "builtIn": true }
-  ]
-}
-```
+## Key Concepts
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | guid | Unique identifier |
-| `name` | string | Human-readable name |
-| `description` | string, nullable | Optional description |
-| `keyPrefix` | string | First characters of the key for identification |
-| `createdAt` | datetime | UTC creation timestamp |
-| `expiresAt` | datetime, nullable | Expiry date (null = never expires) |
-| `lastUsedAt` | datetime, nullable | When the key was last used |
-| `lastUsedFromIp` | string, nullable | IP address of last usage |
-| `isEnabled` | boolean | Whether the key is currently active |
-| `roles` | array | Roles assigned to this key |
+**One-time disclosure.** The full secret value of an API key is returned **only once**, in the response to the create call. After that, only the key prefix is visible. JIM stores only a SHA-256 hash of the key; the plaintext is never persisted, and there is no way to recover it.
 
-## Endpoints
+**Prefix.** Every key begins with `jim_` for easy identification in logs and configuration files, followed by a random secret. Only the prefix is shown after creation.
 
-| Endpoint | Description |
-|----------|-------------|
-| [List API Keys](list.md) | Get all API keys |
-| [Retrieve an API Key](retrieve.md) | Get a specific API key by ID |
-| [Create an API Key](create.md) | Create a new API key |
-| [Update an API Key](update.md) | Update name, roles, expiry, or enabled status |
-| [Delete an API Key](delete.md) | Permanently revoke and delete an API key |
+**Expiry.** Keys can be created with an absolute expiry date or with no expiry. Expired keys are rejected automatically.
 
-!!! warning "Key Security"
-    The full API key is returned **only once** at creation. Store it securely; it cannot be retrieved again. If a key is lost, delete it and create a new one. JIM stores only a SHA-256 hash of the key; the plaintext is never persisted.
+**Enabled flag.** A key can be temporarily disabled without deleting it; this revokes its access immediately while preserving its history. Re-enabling restores access.
+
+**Roles.** A key carries the permissions of its assigned roles. Almost all endpoints currently require the Administrator role; future role granularity will let you mint narrower keys.
+
+**Last-used tracking.** JIM records the timestamp and source IP of each successful authentication, which is useful for spotting unused keys and unexpected callers.
+
+## Common Workflows
+
+**Issuing a key for a CI/CD integration:**
+
+1. Create the key with a meaningful name (e.g. "GitHub Actions deploy"), an expiry consistent with your rotation policy, and the role(s) it needs
+2. Capture the full key from the create response and store it in your secret manager immediately; you will not be able to retrieve it again
+3. Configure the integration to send the key in the `X-Api-Key` header on every request
+
+**Rotating a key:**
+
+1. Create a new key with the same role(s) and a future expiry
+2. Roll the new key out to the consuming integration
+3. Once you've confirmed the new key is in use (check `lastUsedAt`), delete the old one
+
+**Suspending a key after a suspected leak:**
+
+1. Disable the key immediately (faster than deletion if you might need to inspect history)
+2. Investigate
+3. Either re-enable, or delete and rotate
+
+## See also
+
+- [Authentication](../authentication.md) -- how keys are presented on requests, plus the alternative JWT Bearer flow
+- [PowerShell: API Keys](../../powershell/api-keys.md) -- cmdlets that wrap these endpoints
