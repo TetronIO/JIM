@@ -32,8 +32,8 @@ theme:
         icon: material/brightness-4
         name: Switch to light mode
   font:
-    text: Inter
-    code: JetBrains Mono
+    text: IBM Plex Sans
+    code: IBM Plex Mono
   logo: assets/images/jim-logo.png
   favicon: assets/images/jim-logo.png
   icon:

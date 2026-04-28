@@ -467,7 +467,7 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
 }
 
 .jim-text-code {
-    font-family: "Lucida Console", "Courier New", monospace;
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
     font-size: 0.9em !important;
 }
 
@@ -478,7 +478,7 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
 
 /* Inline code styling - similar to markdown code blocks */
 .jim-code-inline {
-    font-family: "Lucida Console", "Courier New", monospace;
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
     font-size: 0.9em;
     padding: 8px 6px;
     border-radius: 5px;
@@ -1158,7 +1158,7 @@ html[lang] .mud-alert-position {
 /* JSON syntax highlighting colours are defined in css/themes/ files */
 
 .jim-json-syntax {
-    font-family: "Lucida Console", "Courier New", monospace;
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
     font-size: 0.75rem;
     line-height: 1.5;
     margin: 0;
@@ -1207,7 +1207,7 @@ html[lang] .mud-alert-position {
 }
 
 .jim-expr-syntax {
-    font-family: "Lucida Console", "Courier New", monospace;
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
     display: inline;
 }
 
