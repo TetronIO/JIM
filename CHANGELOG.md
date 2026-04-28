@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - 💄 Example data template execution now reports live, batch-level persistence progress on the Activity record rather than a static "Persisting to database..." message. While the worker is flushing generated objects to the database, the Activity message updates per batch with current batch number, object counter, and a rolling ETA (e.g. "Persisting to database... batch 8/21 (4,000/10,500), ETA 02m 15s"), and the Activity progress bar advances accordingly. The same per-batch information is also written to the worker logs.
+- 💄 Compact row spacing on the Metaverse Object detail Table view now also compacts multi-valued attribute rows. Previously the toggle only reduced cell padding, leaving multi-valued reference rows (e.g. group Owners, Static Members) at full height because each per-value chip+link item kept its default size, padding, and gap. In compact mode the inter-item gap and per-item padding are eliminated and the type chip beside each reference is rendered at small size, so groups with many members fit in a meaningfully smaller area.
 
 ## [0.10.1] - 2026-04-27
 

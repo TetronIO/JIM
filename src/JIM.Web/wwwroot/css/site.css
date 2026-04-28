@@ -1287,6 +1287,27 @@ html[lang] .mud-alert-position {
     padding: 4px 16px !important;
 }
 
+/* Dense mode: tighten multi-valued attribute layout so MVA rows compact too.
+   Removes the inter-item gap and per-item padding, and shrinks chips so each
+   value row matches the dense cell height instead of staying at default size. */
+.jim-attribute-table.mud-table-dense .jim-attr-expanded {
+    gap: 8px;
+}
+
+.jim-attribute-table.mud-table-dense .jim-attr-expanded-item {
+    padding: 0;
+}
+
+.jim-attribute-table.mud-table-dense .mud-chip {
+    height: 24px;
+    font-size: 0.75rem;
+    margin: 0 4px 0 0;
+}
+
+.jim-attribute-table.mud-table-dense .mud-chip .mud-chip-content {
+    padding: 0 8px;
+}
+
 
 .jim-attr-name {
     background-color: var(--jim-attr-name-bg, var(--mud-palette-background-grey));
