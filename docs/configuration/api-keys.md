@@ -58,7 +58,7 @@ JIM records the timestamp and source IP of each successful authentication. This 
 
 - **JIM portal**<br /> API Keys area of the admin UI
 - **PowerShell**<br /> [API Keys cmdlets](../powershell/api-keys.md) (`Get-JIMApiKey`, `New-JIMApiKey`, `Set-JIMApiKey`, etc.)
-- **REST API**<br /> API Keys endpoints in the [interactive API reference](../api/index.md)
+- **REST API**<br /> API Keys endpoints in the [interactive API reference](../../api/reference/)
 
 ## See also
 

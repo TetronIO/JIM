@@ -82,7 +82,7 @@ Disabled schedules don't fire on their cron trigger and don't appear as eligible
 
 - **JIM portal**<br /> Schedules area of the admin UI
 - **PowerShell**<br /> [Schedules cmdlets](../powershell/schedules.md) (`Get-JIMSchedule`, `New-JIMSchedule`, `Invoke-JIMSchedule`, etc.)
-- **REST API**<br /> Schedules and schedule execution endpoints in the [interactive API reference](../api/index.md)
+- **REST API**<br /> Schedules and schedule execution endpoints in the [interactive API reference](../../api/reference/)
 
 ## See also
 

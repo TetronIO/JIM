@@ -42,7 +42,7 @@ If you genuinely need to transfer admin to a different identity, add the new adm
 
 - **JIM portal**<br /> Roles area of the admin UI
 - **PowerShell**<br /> [Security cmdlets](../powershell/security.md) (`Get-JIMRole`, `Add-JIMRoleMember`, `Remove-JIMRoleMember`, etc.)
-- **REST API**<br /> Security endpoints in the [interactive API reference](../api/index.md)
+- **REST API**<br /> Security endpoints in the [interactive API reference](../../api/reference/)
 
 ## See also
 

@@ -46,7 +46,7 @@ A separate validation operation lets you check a certificate's chain and validit
 
 - **JIM portal**<br /> Certificates area of the admin UI
 - **PowerShell**<br /> [Certificates cmdlets](../powershell/certificates.md) (`Get-JIMCertificate`, `New-JIMCertificate`, `Test-JIMCertificate`, etc.)
-- **REST API**<br /> Certificates endpoints in the [interactive API reference](../api/index.md)
+- **REST API**<br /> Certificates endpoints in the [interactive API reference](../../api/reference/)
 
 ## See also
 

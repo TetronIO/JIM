@@ -208,5 +208,5 @@ if ($user.isAdministrator) {
 
 ## See also
 
-- [API reference](../api/index.md): the interactive API reference covers the system endpoints (health, readiness, liveness, version, auth config, user info)
+- [Interactive API reference](../api/reference/): covers the system endpoints (health, readiness, liveness, version, auth config, user info)
 - [Connection](connection.md): establishing and managing connections to JIM

@@ -59,7 +59,7 @@ Settings are typed: string, boolean, integer, or timespan. The type is enforced 
 
 - **JIM portal**<br /> Service Settings area of the admin UI
 - **PowerShell**<br /> [Service Settings cmdlets](../powershell/service-settings.md) (`Get-JIMServiceSetting`, `Set-JIMServiceSetting`, etc.)
-- **REST API**<br /> Service Settings endpoints in the [interactive API reference](../api/index.md)
+- **REST API**<br /> Service Settings endpoints in the [interactive API reference](../../api/reference/)
 
 ## See also
 

@@ -61,7 +61,7 @@ The administrative surface is what this page describes. The running surface is p
 
 - **JIM portal**<br /> Predefined Searches area of the admin UI
 - **PowerShell**<br /> [Predefined Searches cmdlets](../powershell/predefined-searches.md) (`Get-JIMPredefinedSearch`, `Set-JIMPredefinedSearch`, etc.)
-- **REST API**<br /> Predefined Searches endpoints in the [interactive API reference](../api/index.md)
+- **REST API**<br /> Predefined Searches endpoints in the [interactive API reference](../../api/reference/)
 
 ## See also
 

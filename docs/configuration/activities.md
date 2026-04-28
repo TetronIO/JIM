@@ -34,7 +34,7 @@ Activities for run profile executions carry counters relevant to the operation t
 - **Exports**<br /> `Total Exported`, `Total Deprovisioned`, `Total Pending Exports`.
 - **All operations**<br /> `Total Errors`, `Total Activity Time`, `Execution Time`.
 
-The exact field set depends on the operation; the [interactive API reference](../api/index.md) documents the full schema.
+The exact field set depends on the operation; the [interactive API reference](../../api/reference/) documents the full schema.
 
 ## Execution items
 
@@ -62,7 +62,7 @@ A schedule execution typically appears as a parent activity with one child activ
 
 - **JIM portal**<br /> Activities area of the admin UI
 - **PowerShell**<br /> [Activities cmdlets](../powershell/activities.md) (`Get-JIMActivity`, etc.)
-- **REST API**<br /> Activities endpoints in the [interactive API reference](../api/index.md)
+- **REST API**<br /> Activities endpoints in the [interactive API reference](../../api/reference/)
 
 ## See also
 

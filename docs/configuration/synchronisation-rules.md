@@ -185,7 +185,7 @@ This rule imports full-time employees from the HR system, joins them to existing
 
 - **JIM portal**<br /> Synchronisation Rules area of the admin UI
 - **PowerShell**<br /> [Synchronisation Rules cmdlets](../powershell/synchronisation-rules.md) (`Get-JIMSyncRule`, `New-JIMSyncRule`, etc.)
-- **REST API**<br /> Synchronisation Rules endpoints in the [interactive API reference](../api/index.md)
+- **REST API**<br /> Synchronisation Rules endpoints in the [interactive API reference](../../api/reference/)
 
 ## See also
 

@@ -48,7 +48,7 @@ The metaverse supports filtering and a fast named-search API. The named-search A
 
 - **JIM portal**<br /> Metaverse area of the admin UI for objects, object types, attributes, and pending deletions
 - **PowerShell**<br /> [Metaverse cmdlets](../powershell/metaverse.md) (`Get-JIMMetaverseObject`, `Get-JIMMetaverseObjectType`, `Get-JIMMetaverseAttribute`, etc.)
-- **REST API**<br /> Metaverse endpoints in the [interactive API reference](../api/index.md)
+- **REST API**<br /> Metaverse endpoints in the [interactive API reference](../../api/reference/)
 
 ## See also
 

@@ -48,7 +48,7 @@ Triggering a run profile returns an activity ID. The actual work runs on the wor
 
 - **JIM portal**<br /> Run Profiles tab on a connected system in the admin UI
 - **PowerShell**<br /> [Run Profile cmdlets](../powershell/run-profiles.md) (`Get-JIMRunProfile`, `New-JIMRunProfile`, `Invoke-JIMRunProfile`, etc.)
-- **REST API**<br /> Run Profile endpoints in the [interactive API reference](../api/index.md)
+- **REST API**<br /> Run Profile endpoints in the [interactive API reference](../../api/reference/)
 
 ## See also
 

@@ -93,7 +93,7 @@ Changes destined for the connected system that have been computed by synchronisa
 
 - **JIM portal**<br /> Connected Systems area of the admin UI
 - **PowerShell**<br /> [Connected Systems cmdlets](../powershell/connected-systems.md) (`Get-JIMConnectedSystem`, `New-JIMConnectedSystem`, `Set-JIMConnectedSystem`, etc.)
-- **REST API**<br /> Connected Systems endpoints in the [interactive API reference](../api/index.md)
+- **REST API**<br /> Connected Systems endpoints in the [interactive API reference](../../api/reference/)
 
 ## See also
 

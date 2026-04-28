@@ -10,7 +10,7 @@ JIM exposes a REST API for programmatic access to all identity management operat
 
 | Looking for | Go to |
 |-------------|-------|
-| Endpoint signatures, request and response schemas, error codes | The interactive API reference, available on any JIM instance at `/api/reference` and hosted at [tetronio.github.io/JIM/api/reference/](https://tetronio.github.io/JIM/api/reference/) |
+| Endpoint signatures, request and response schemas, error codes | The [interactive API reference](reference/), available on any JIM instance at `/api/reference` |
 | OpenAPI document (for client code generation) | `/api/openapi/v1.json` on a JIM instance |
 | How to authenticate | [Authentication](authentication.md) |
 | What a JIM object is and how it fits into a workflow | [Configuration](../configuration/index.md) |
