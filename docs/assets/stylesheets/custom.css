@@ -278,6 +278,25 @@
   letter-spacing: -0.01em;
 }
 
+/* Page heading colour and weight.
+   Material's default H1 uses --md-default-fg-color--light (dimmer than body)
+   and weight 300, which makes the page title look greyer than the H2/H3
+   headings below it. Pin the H1 to the regular foreground colour and bump
+   weights across the board for a stronger hierarchy. */
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3,
+.md-typeset h4,
+.md-typeset h5,
+.md-typeset h6 {
+  color: var(--md-default-fg-color);
+}
+
+.md-typeset h1 { font-weight: 400; }
+.md-typeset h2 { font-weight: 500; }
+.md-typeset h3 { font-weight: 500; }
+.md-typeset h4 { font-weight: 500; }
+
 .jim-hero__tagline {
   font-size: 1.2rem;
   line-height: 1.55;
