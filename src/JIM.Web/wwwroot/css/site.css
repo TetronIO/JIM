@@ -25,6 +25,13 @@
     border-bottom: 1px solid var(--mud-palette-table-lines, var(--mud-palette-lines-default));
 }
 
+/* Trailing (current-page) breadcrumb item: lift colour so it reads in light mode.
+   MudBlazor's default disabled style is too pale against light backgrounds. */
+.mud-breadcrumb-item.mud-disabled,
+.mud-breadcrumb-item.mud-disabled .mud-typography {
+    color: var(--mud-palette-text-secondary) !important;
+}
+
 /* Header row stays compact regardless of dense/normal toggle */
 .mud-table-root .mud-table-head .mud-table-cell {
     font-weight: 500;
