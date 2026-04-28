@@ -19,30 +19,37 @@
 html[lang] {
     /* === Primary Palette (red-orange accent — the glowing strip) === */
     --mud-palette-primary: #d63a28;
+    --mud-palette-primary-rgb: 214,58,40;
     --mud-palette-primary-darken: #b8301f;
     --mud-palette-primary-lighten: #e85a4a;
     --mud-palette-primary-text: #ffffffff;
 
     /* === Secondary Palette (charcoal — the dark hardware body) === */
     --mud-palette-secondary: #2a2d2b;
+    --mud-palette-secondary-rgb: 42,45,43;
     --mud-palette-secondary-darken: #1a1c1b;
     --mud-palette-secondary-lighten: #3e4240;
     --mud-palette-secondary-text: #ffffffff;
 
     /* === Tertiary Palette (muted teal — subtle technological cool) === */
     --mud-palette-tertiary: #4a7c72;
+    --mud-palette-tertiary-rgb: 74,124,114;
     --mud-palette-tertiary-darken: #3a6358;
     --mud-palette-tertiary-lighten: #5e9488;
     --mud-palette-tertiary-text: #ffffffff;
 
     /* === Semantic Colours (WCAG AA accessible on #d4d7d5 surface) === */
     --mud-palette-success: #2d7a3e;
+    --mud-palette-success-rgb: 45,122,62;
     --mud-palette-success-text: #ffffffff;
     --mud-palette-warning: #b85a00;
+    --mud-palette-warning-rgb: 184,90,0;
     --mud-palette-warning-text: #ffffffff;
     --mud-palette-info: #1a6baa;
+    --mud-palette-info-rgb: 26,107,170;
     --mud-palette-info-text: #ffffffff;
     --mud-palette-error: #c62828;
+    --mud-palette-error-rgb: 198,40,40;
     --mud-palette-error-text: #ffffffff;
 
     /* === Background & Surface === */

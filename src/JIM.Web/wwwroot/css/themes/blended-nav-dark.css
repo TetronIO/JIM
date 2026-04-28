@@ -19,30 +19,37 @@
 html[lang] {
     /* === Primary Palette === */
     --mud-palette-primary: #4488ff;
+    --mud-palette-primary-rgb: 68,136,255;
     --mud-palette-primary-darken: #3070ee;
     --mud-palette-primary-lighten: #66a0ff;
     --mud-palette-primary-text: #ffffffff;
 
     /* === Secondary Palette === */
     --mud-palette-secondary: #4488ff;
+    --mud-palette-secondary-rgb: 68,136,255;
     --mud-palette-secondary-darken: #3070ee;
     --mud-palette-secondary-lighten: #66a0ff;
     --mud-palette-secondary-text: #ffffffff;
 
     /* === Tertiary Palette === */
     --mud-palette-tertiary: #00796B;
+    --mud-palette-tertiary-rgb: 0,121,107;
     --mud-palette-tertiary-darken: #00695c;
     --mud-palette-tertiary-lighten: #26a69a;
     --mud-palette-tertiary-text: #ffffffff;
 
     /* === Semantic Colours (brighter shades for dark backgrounds) === */
     --mud-palette-success: #1b7d3e;
+    --mud-palette-success-rgb: 27,125,62;
     --mud-palette-success-text: #ffffffff;
     --mud-palette-warning: #ffb74d;
+    --mud-palette-warning-rgb: 255,183,77;
     --mud-palette-warning-text: #000000dd;
     --mud-palette-info: #64b5f6;
+    --mud-palette-info-rgb: 100,181,246;
     --mud-palette-info-text: #000000dd;
     --mud-palette-error: #ff8a80;
+    --mud-palette-error-rgb: 255,138,128;
     --mud-palette-error-text: #000000dd;
 
     /* === Background & Surface === */

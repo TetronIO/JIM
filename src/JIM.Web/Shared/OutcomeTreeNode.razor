@@ -31,7 +31,7 @@
                                     <MudAvatar Color="Color.Primary">MV</MudAvatar>
                                 </AvatarContent>
                                 <ChildContent>
-                                    <b class="jim-title-accent">@MvoTypeName:</b>&nbsp;@Outcome.TargetEntityDescription
+                                    <b class="jim-mv-chip-prefix">@MvoTypeName:</b>&nbsp;@Outcome.TargetEntityDescription
                                 </ChildContent>
                             </MudChip>
                         </MudLink>
@@ -49,12 +49,12 @@
                             <MudChip T="string" Color="Color.Default" Size="Size.Medium"
                                      Style="margin: 0;">
                                 <AvatarContent>
-                                    <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
+                                    <MudAvatar Color="Color.Secondary">CS</MudAvatar>
                                 </AvatarContent>
                                 <ChildContent>
                                     @if (!string.IsNullOrEmpty(csoTypeName))
                                     {
-                                        <b class="jim-title-accent">@csoTypeName:</b><text>&nbsp;</text>
+                                        <b class="jim-cs-chip-prefix">@csoTypeName:</b><text>&nbsp;</text>
                                     }
                                     @Outcome.TargetEntityId
                                 </ChildContent>

@@ -17,31 +17,38 @@
 
 html[lang] {
     /* === Primary Palette (muted purple accent) === */
-    --mud-palette-primary: #614b9e;
+    --mud-palette-primary: #764ce8;
+    --mud-palette-primary-rgb: 118, 76, 232;
     --mud-palette-primary-darken: #4e3c80;
-    --mud-palette-primary-lighten: #9585c8;
+    --mud-palette-primary-lighten: #b499ff;
     --mud-palette-primary-text: #ffffff;
 
     /* === Secondary Palette (cool slate-blue) === */
-    --mud-palette-secondary: #6b8aad;
+    --mud-palette-secondary: #95a6bb;
+    --mud-palette-secondary-rgb: 149, 166, 187;
     --mud-palette-secondary-darken: #567498;
     --mud-palette-secondary-lighten: #84a0c0;
     --mud-palette-secondary-text: #0a1018;
 
     /* === Tertiary Palette (slate blue-grey) === */
-    --mud-palette-tertiary: #7FA8C4;
-    --mud-palette-tertiary-darken: #6B94B0;
-    --mud-palette-tertiary-lighten: #95BCD8;
+    --mud-palette-tertiary: #c4ba7f;
+    --mud-palette-tertiary-rgb: 196, 186, 127;
+    --mud-palette-tertiary-darken: #a39a69;
+    --mud-palette-tertiary-lighten: #d6cfa5;
     --mud-palette-tertiary-text: #0a1018;
 
     /* === Semantic Colours (bright for dark backgrounds) === */
     --mud-palette-success: #66d96e;
+    --mud-palette-success-rgb: 102, 217, 110;
     --mud-palette-success-text: #0a1018;
     --mud-palette-warning: #ffb74d;
+    --mud-palette-warning-rgb: 255, 183, 77;
     --mud-palette-warning-text: #0a1018;
     --mud-palette-info: #64b5f6;
+    --mud-palette-info-rgb: 100, 181, 246;
     --mud-palette-info-text: #0a1018;
     --mud-palette-error: #ff8a80;
+    --mud-palette-error-rgb: 255, 138, 128;
     --mud-palette-error-text: #0a1018;
 
     /* === Background & Surface === */
@@ -212,9 +219,11 @@ html[lang] .mud-button-text.mud-button-text-dark:not(:disabled) {
     color: #5a6a80;
 }
 
+/* Link colour * /
 /* Visited link colour (hardcoded — browsers block var() in :visited for privacy) */
-html[lang] a.mud-link.mud-primary-text:visited {
-    color: #67b9ff !important;
+html[lang] a.mud-link.mud-primary-text,
+a.mud-link.mud-primary-text:visited {
+    color: #6dbcff !important;
 }
 
 /* Boost alert background contrast — MudBlazor outlined alerts default to
@@ -282,7 +291,7 @@ html[lang] .mud-chip-outlined.mud-chip-color-primary {
 
 /* Text primary chips — brighten text with subtle primary background */
 html[lang] .mud-chip-text.mud-chip-color-primary {
-    color: var(--mud-palette-primary-lighten) !important;
+    color: #a583ff !important;
     background-color: color-mix(in srgb, var(--mud-palette-primary) 32%, transparent) !important;
 }
 
@@ -294,8 +303,8 @@ html[lang] .mud-chip-outlined.mud-chip-color-secondary {
 
 /* Text secondary chips — brighten text with subtle secondary background */
 html[lang] .mud-chip-text.mud-chip-color-secondary {
-    color: var(--mud-palette-secondary-lighten) !important;
-    background-color: color-mix(in srgb, var(--mud-palette-secondary) 32%, transparent) !important;
+    color: #9fb8d5 !important;
+    background-color: color-mix(in srgb, 32%, transparent) !important;
 }
 
 /* Text tertiary chips — brighten text with subtle tertiary background */

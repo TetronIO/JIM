@@ -193,7 +193,7 @@ public static class Helpers
             // Sync (MVO operations)
             ObjectChangeType.Projected => Color.Primary,
             ObjectChangeType.Joined => Color.Secondary,
-            ObjectChangeType.AttributeFlow => Color.Tertiary,
+            ObjectChangeType.AttributeFlow => Color.Secondary,
             ObjectChangeType.Disconnected => Color.Warning,
             ObjectChangeType.DisconnectedOutOfScope => Color.Warning,
             ObjectChangeType.OutOfScopeRetainJoin => Color.Info,
@@ -635,7 +635,7 @@ public static class Helpers
             // Sync outcomes — inbound
             ActivityRunProfileExecutionItemSyncOutcomeType.Projected => Color.Primary,
             ActivityRunProfileExecutionItemSyncOutcomeType.Joined => Color.Secondary,
-            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => Color.Tertiary,
+            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => Color.Secondary,
             ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => Color.Warning,
             ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => Color.Warning,
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => Color.Error,

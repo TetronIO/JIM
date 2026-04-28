@@ -462,6 +462,16 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     color: var(--mud-palette-tertiary);
 }
 
+/* Chip-prefix accents for MV/CS object-type labels inside causality-tree chips.
+   Coloured to harmonise with each chip's avatar (primary for MV, secondary for CS). */
+.jim-mv-chip-prefix {
+    color: var(--mud-palette-primary-lighten);
+}
+
+.jim-cs-chip-prefix {
+    color: var(--mud-palette-secondary-lighten);
+}
+
 .jim-header-title {
     font-weight: 300;
 }
@@ -1513,7 +1523,9 @@ html[lang] .mud-alert-position {
     transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-.jim-chip-link .mud-chip .jim-title-accent {
+.jim-chip-link .mud-chip .jim-title-accent,
+.jim-chip-link .mud-chip .jim-mv-chip-prefix,
+.jim-chip-link .mud-chip .jim-cs-chip-prefix {
     transition: color 0.2s ease;
 }
 
@@ -1526,8 +1538,17 @@ html[lang] .mud-alert-position {
    switches to the chip's hover text colour so it remains legible against the
    primary background. Uses the theme's primary-text variable so this works
    uniformly across every theme. */
-.jim-chip-link:hover .mud-chip .jim-title-accent {
+.jim-chip-link:hover .mud-chip .jim-title-accent,
+.jim-chip-link:hover .mud-chip .jim-mv-chip-prefix,
+.jim-chip-link:hover .mud-chip .jim-cs-chip-prefix {
     color: var(--mud-palette-primary-text);
+}
+
+/* On hover the chip background becomes primary, so a Color.Primary avatar
+   (e.g. the MV badge) loses contrast. Darken its background to keep the
+   circle distinct from the surrounding chip fill. */
+.jim-chip-link:hover .mud-chip .mud-avatar.mud-avatar-filled-primary {
+    background-color: var(--mud-palette-primary-darken);
 }
 
 /* Schedule Step Drag and Drop Styles */
