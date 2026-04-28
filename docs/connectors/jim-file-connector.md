@@ -8,15 +8,15 @@ The JIM File Connector enables bi-directional synchronisation of identity data w
 
 ## Supported Features
 
-- **Configurable delimiters** -- comma (default), tab, pipe, semicolon, or any custom character
-- **Multi-valued attributes** -- supported via duplicate column names in the header row, or via a configurable in-field delimiter (default: pipe `|`)
-- **Schema auto-discovery** -- column headers are read automatically to build the schema
-- **Type detection** -- attribute data types are inferred by inspecting up to 50 rows of data. Supported types: Text, Number, Boolean, Guid, DateTime
-- **Culture-aware parsing** -- an optional culture setting controls how numbers, dates, and other locale-sensitive values are parsed
-- **Object type support** -- objects can be typed via a dedicated column in the file, or by specifying a fixed object type for the entire file
-- **Operational modes** -- Import Only, Export Only, or Bidirectional (export then confirming import from the same file)
-- **Auto-confirm export** -- in Export Only mode, exported changes are written directly and automatically confirmed
-- **Stop on first error** -- optionally halt processing on the first error encountered, useful for debugging data quality issues
+- **Configurable delimiters**<br /> Comma (default), tab, pipe, semicolon, or any custom character
+- **Multi-valued attributes**<br /> Supported via duplicate column names in the header row, or via a configurable in-field delimiter (default: pipe `|`)
+- **Schema auto-discovery**<br /> Column headers are read automatically to build the schema
+- **Type detection**<br /> Attribute data types are inferred by inspecting up to 50 rows of data. Supported types: Text, Number, Boolean, Guid, DateTime
+- **Culture-aware parsing**<br /> An optional culture setting controls how numbers, dates, and other locale-sensitive values are parsed
+- **Object type support**<br /> Objects can be typed via a dedicated column in the file, or by specifying a fixed object type for the entire file
+- **Operational modes**<br /> Import Only, Export Only, or Bidirectional (export then confirming import from the same file)
+- **Auto-confirm export**<br /> In Export Only mode, exported changes are written directly and automatically confirmed
+- **Stop on first error**<br /> Optionally halt processing on the first error encountered, useful for debugging data quality issues
 
 ## Settings
 
@@ -63,9 +63,9 @@ The `-u app` flag is important: it runs the shell inside the container as the JI
 
 When to use this pattern:
 
-- **Exports** — JIM writes the file; a downstream process or human pulls it out via `docker cp`, an SFTP sidecar, or similar.
-- **Manual imports** — admin pushes a file in once, JIM imports it.
-- **Sidecar-orchestrated drops** — a helper service (cron job, file-transfer container) runs alongside JIM, drops a file into the volume, and JIM picks it up on the next scheduled import.
+- **Exports**<br /> JIM writes the file; a downstream process or human pulls it out via `docker cp`, an SFTP sidecar, or similar.
+- **Manual imports**<br /> Admin pushes a file in once, JIM imports it.
+- **Sidecar-orchestrated drops**<br /> A helper service (cron job, file-transfer container) runs alongside JIM, drops a file into the volume, and JIM picks it up on the next scheduled import.
 
 ### 2. Integration: bind-mount over a subdirectory
 
@@ -115,18 +115,18 @@ services:
 
 JIM's File Connector configurations would then point at:
 
-- `/connector-files/Users.csv` — admin-pushed file in the named volume
-- `/connector-files/hr-input/employees.csv` — read from the HR share
-- `/connector-files/payroll-output/payroll.csv` — written to the payroll share
+- `/connector-files/Users.csv`<br /> Admin-pushed file in the named volume
+- `/connector-files/hr-input/employees.csv`<br /> Read from the HR share
+- `/connector-files/payroll-output/payroll.csv`<br /> Written to the payroll share
 
 ## Schema Discovery
 
 When you configure a File Connector connected system and trigger schema discovery, JIM performs the following steps:
 
-1. **Reads the header row** -- column names become attribute names in the schema.
-2. **Detects multi-valued attributes** -- if the same column name appears more than once in the header, the attribute is marked as multi-valued.
-3. **Infers data types** -- JIM reads up to 50 data rows and attempts to parse each column's values as Number, Boolean, Guid, or DateTime. If none of these match, the attribute defaults to Text.
-4. **Discovers object types** -- if an Object Type Column is configured, JIM reads through the file to find all unique object type values. Otherwise, it uses the fixed Object Type setting.
+1. **Reads the header row**<br /> Column names become attribute names in the schema.
+2. **Detects multi-valued attributes**<br /> If the same column name appears more than once in the header, the attribute is marked as multi-valued.
+3. **Infers data types**<br /> JIM reads up to 50 data rows and attempts to parse each column's values as Number, Boolean, Guid, or DateTime. If none of these match, the attribute defaults to Text.
+4. **Discovers object types**<br /> If an Object Type Column is configured, JIM reads through the file to find all unique object type values. Otherwise, it uses the fixed Object Type setting.
 
 In **Export Only** mode where no file exists yet, schema discovery creates a minimal schema with just the specified object type. Attributes are defined later by synchronisation rules.
 
@@ -183,5 +183,5 @@ If imported data contains garbled characters or unexpected symbols:
 
 If attributes that should be multi-valued are appearing as single-valued:
 
-- **Duplicate column approach**: Ensure the column name appears more than once in the header row. The names must match exactly (case-insensitive).
-- **In-field delimiter approach**: Check that the Multi-Value Delimiter setting matches the delimiter used within the field values.
+- **Duplicate column approach**<br /> Ensure the column name appears more than once in the header row. The names must match exactly (case-insensitive).
+- **In-field delimiter approach**<br /> Check that the Multi-Value Delimiter setting matches the delimiter used within the field values.

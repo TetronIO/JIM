@@ -7,6 +7,23 @@
 
 **Use `✅` for positive indicators and `❌` for negative indicators in tables** (e.g. feature comparison tables). Do NOT use `:material-check-bold:`, `:material-close:`, or other Material icon syntax -- these render as small monochrome icons. The emoji equivalents render as clear green/red symbols in MkDocs and on GitHub.
 
+**Term-and-description bullet lists: put the description on a new line via `<br />`, not on the same line separated by a dash.** When a list pairs a bold label with descriptive text, the description reads better on its own line. The first word of the description is capitalised because it now starts a new line.
+
+Format:
+
+```markdown
+- **Term**<br /> Descriptive text explaining the term.
+- **Another term**<br /> More descriptive text.
+```
+
+Not:
+
+```markdown
+- **Term** -- descriptive text explaining the term.
+```
+
+This applies to feature lists, capability lists, and any similar "label + explanation" bullet structure. It does not apply to short flat bullet lists where each item is a single phrase.
+
 **Use emojis to add energy and aid visual scanning, but keep them purposeful and professional.** JIM documentation should feel alive and modern, not dry -- but never unprofessional.
 
 Where to use them:

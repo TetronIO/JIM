@@ -23,36 +23,36 @@ JIM automatically detects the directory type during schema discovery by inspecti
 
 ### Import
 
-- **Full Import** -- reads all objects from selected partitions and object types
-- **Delta Import** -- imports only changes since the last import run
-    - **Active Directory**: uses USN (Update Sequence Number) change tracking
-    - **OpenLDAP / 389 DS**: uses the changelog overlay (accesslog)
-- **Parallel imports** -- configurable concurrency for OpenLDAP and generic directories, allowing multiple containers and object types to be imported simultaneously
-- **Paged results** -- automatic RFC 2696 Simple Paged Results support for large directories
-- **Configurable search timeout** -- control how long to wait for LDAP search results
+- **Full Import**<br /> Reads all objects from selected partitions and object types.
+- **Delta Import**<br /> Imports only changes since the last import run.
+    - **Active Directory**<br /> Uses USN (Update Sequence Number) change tracking.
+    - **OpenLDAP / 389 DS**<br /> Uses the changelog overlay (accesslog).
+- **Parallel imports**<br /> Configurable concurrency for OpenLDAP and generic directories, allowing multiple containers and object types to be imported simultaneously.
+- **Paged results**<br /> Automatic RFC 2696 Simple Paged Results support for large directories.
+- **Configurable search timeout**<br /> Control how long to wait for LDAP search results.
 
 ### Export
 
-- **Create, update, and delete** operations on directory objects
-- **Configurable delete behaviour** -- choose between deleting objects outright or disabling them (e.g. via userAccountControl for Active Directory)
-- **Configurable concurrency** -- parallel batch export support with 1--64 concurrent LDAP operations
-- **Batched multi-valued modifications** -- large attribute changes (e.g. group membership) are automatically split into configurable batches to avoid exceeding directory server limits
-- **Container provisioning** -- optionally create organisational units (OUs) on demand when provisioning objects to new locations
-- **Group placeholder members** -- automatic handling of the `groupOfNames` MUST member constraint for OpenLDAP directories
+- **Create, update, and delete**<br /> Operations on directory objects.
+- **Configurable delete behaviour**<br /> Choose between deleting objects outright or disabling them (e.g. via userAccountControl for Active Directory).
+- **Configurable concurrency**<br /> Parallel batch export support with 1-64 concurrent LDAP operations.
+- **Batched multi-valued modifications**<br /> Large attribute changes (e.g. group membership) are automatically split into configurable batches to avoid exceeding directory server limits.
+- **Container provisioning**<br /> Optionally create organisational units (OUs) on demand when provisioning objects to new locations.
+- **Group placeholder members**<br /> Automatic handling of the `groupOfNames` MUST member constraint for OpenLDAP directories.
 
 ### Schema Discovery
 
-- **Automatic RFC 4512 schema parsing** -- object classes and attributes are discovered directly from the directory's subschema subentry
-- **Structural and auxiliary class support** -- optionally include auxiliary classes in schema discovery
-- **Partition discovery** -- automatically enumerates naming contexts and organisational units
-- **Hidden partition filtering** -- skip Configuration, Schema, and DNS partitions for improved performance
+- **Automatic RFC 4512 schema parsing**<br /> Object classes and attributes are discovered directly from the directory's subschema subentry.
+- **Structural and auxiliary class support**<br /> Optionally include auxiliary classes in schema discovery.
+- **Partition discovery**<br /> Automatically enumerates naming contexts and organisational units.
+- **Hidden partition filtering**<br /> Skip Configuration, Schema, and DNS partitions for improved performance.
 
 ### Security and Connectivity
 
-- **LDAPS (SSL/TLS)** -- encrypted communication over port 636 (or custom port)
-- **Certificate validation** -- full validation against system CA store and JIM-managed certificates, with an option to skip validation for testing
-- **Authentication types** -- Simple bind or NTLM authentication
-- **Automatic retry** -- configurable retry with exponential backoff for transient failures
+- **LDAPS (SSL/TLS)**<br /> Encrypted communication over port 636 (or custom port).
+- **Certificate validation**<br /> Full validation against system CA store and JIM-managed certificates, with an option to skip validation for testing.
+- **Authentication types**<br /> Simple bind or NTLM authentication.
+- **Automatic retry**<br /> Configurable retry with exponential backoff for transient failures.
 
 ## Connection Settings
 
@@ -126,10 +126,10 @@ If your directory server uses a certificate issued by an internal certificate au
 
 The LDAP service account used by JIM should follow the principle of least privilege:
 
-- **For import only**: grant read access to the containers and attributes that JIM needs to import.
-- **For export (provisioning)**: grant create, modify, and delete permissions on the target containers. For Active Directory, this typically means delegated control over the relevant OUs.
-- **For container provisioning**: if "Create Containers as Needed" is enabled, the service account must have permission to create organisational units.
-- **For delta import**: the service account needs read access to the directory's change tracking mechanism (USN attributes for AD, accesslog for OpenLDAP).
+- **For import only**<br /> Grant read access to the containers and attributes that JIM needs to import.
+- **For export (provisioning)**<br /> Grant create, modify, and delete permissions on the target containers. For Active Directory, this typically means delegated control over the relevant OUs.
+- **For container provisioning**<br /> If "Create Containers as Needed" is enabled, the service account must have permission to create organisational units.
+- **For delta import**<br /> The service account needs read access to the directory's change tracking mechanism (USN attributes for AD, accesslog for OpenLDAP).
 
 !!! tip "Dedicated service account"
     Always use a dedicated service account for JIM rather than sharing credentials with other applications or using a personal account. This simplifies auditing and ensures that permission changes do not inadvertently affect JIM's operations.
