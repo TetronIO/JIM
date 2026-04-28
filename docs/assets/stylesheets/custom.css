@@ -1,3 +1,8 @@
+/* Space Grotesk for marketing/publication-feel headings (hero title, header
+   site title). Body text remains IBM Plex Sans (set via mkdocs.yml).
+   Variable font: weight axis pulled at 600 + 700. */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&display=swap');
+
 /* JIM Brand Colour Overrides */
 
 /* Primary colour - JIM Purple #5A45A2 */
@@ -256,12 +261,21 @@
 }
 
 .jim-hero__title {
+  font-family: 'Space Grotesk', 'IBM Plex Sans', -apple-system, sans-serif;
   font-size: 3rem;
   font-weight: 700;
   margin: 0 0 1rem;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
   color: #ffffff;
+}
+
+/* Header site title (and animated current-page title) in the display sans
+   accent for a more "design-forward" feel. Nav, body and code remain IBM Plex. */
+.md-header__title .md-ellipsis {
+  font-family: 'Space Grotesk', 'IBM Plex Sans', -apple-system, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .jim-hero__tagline {
