@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ✨ Predefined Searches can now be retrieved individually via the API and PowerShell module: new `GET /api/v1/predefined-searches/{id}` and `GET /api/v1/predefined-searches/by-uri/{uri}` endpoints return the full search graph, and `Get-JIMPredefinedSearch -Id` / `-Uri` now resolve directly against the server instead of filtering the list client-side (#154)
 
+### Fixed
+
+- 🐛 The "Initiated By" link on Activity and Activity Run Profile Execution Item detail pages now points to the correct Metaverse Object URL, derived dynamically from the initiator's Metaverse Object Type plural name (`/t/{typePluralName}/v/{id}`) instead of a broken hardcoded `/identity/person/{id}` path.
+- 🐛 Sign-in via Safari against the development stack at `http://localhost:5200` no longer fails with `AuthenticationFailureException: Correlation failed`. ASP.NET Core's OIDC handler defaults the correlation and nonce cookies to `SameSite=None; Secure`; Chrome, Edge, and Firefox treat `http://localhost` as a secure context and accept these cookies, but Safari does not, silently dropping them and breaking the OIDC callback. In Development the cookies are now configured as `SameSite=Lax` with `SecurePolicy=SameAsRequest` so they round-trip correctly over plain HTTP localhost. Production builds keep the secure defaults, which are correct over HTTPS and required for any identity provider that uses the form_post response mode.
+
 ## [0.10.1] - 2026-04-27
 
 ### Added

@@ -2,6 +2,7 @@
 @attribute [Authorize(Roles = "User")]
 @using JIM.Models.Activities;
 @using JIM.Models.Core
+@using JIM.Models.Core.DTOs
 @using JIM.Models.Enums;
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
@@ -77,9 +78,9 @@
                     {
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                             <MudIcon Icon="@Icons.Material.Filled.Person" Class="mud-text-secondary" />
-                            @if (_activity.InitiatedById.HasValue)
+                            @if (_activity.InitiatedById.HasValue && _initiatorMetaverseObjectHeader != null)
                             {
-                                <MudLink Href="@($"/identity/person/{_activity.InitiatedById.Value}")">
+                                <MudLink Href="@Utilities.GetMetaverseObjectHref(_initiatorMetaverseObjectHeader)">
                                     @_activity.InitiatedByName
                                 </MudLink>
                             }
@@ -982,6 +983,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     private MetaverseObject? _metaverseObject;
     private PendingExport? _pendingExport;
     private MetaverseObjectType? _metaverseObjectType;
+    private MetaverseObjectHeader? _initiatorMetaverseObjectHeader;
     private List<ConnectedSystemHeader>? _deletionTriggerSystems;
 
 
@@ -1039,6 +1041,9 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         }
 
         _activity = await jim.Activities.GetActivityAsync(_activityRunProfileExecutionItem.ActivityId);
+
+        if (_activity is { InitiatedByType: ActivityInitiatorType.User, InitiatedById: not null })
+            _initiatorMetaverseObjectHeader = await jim.Metaverse.GetMetaverseObjectHeaderAsync(_activity.InitiatedById.Value);
 
         // Determine navigation context from query parameter
         var uri = NavManager.ToAbsoluteUri(NavManager.Uri);

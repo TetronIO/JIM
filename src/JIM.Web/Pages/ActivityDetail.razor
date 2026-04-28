@@ -81,9 +81,9 @@
                     {
                         <MudText>
                             <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" Style="vertical-align: middle;" />
-                            @if (_activity.InitiatedById.HasValue)
+                            @if (_activity.InitiatedById.HasValue && _initiatorMetaverseObjectHeader != null)
                             {
-                                <MudLink Href="@($"/identity/person/{_activity.InitiatedById.Value}")">@_activity.InitiatedByName</MudLink>
+                                <MudLink Href="@Utilities.GetMetaverseObjectHref(_initiatorMetaverseObjectHeader)">@_activity.InitiatedByName</MudLink>
                             }
                             else
                             {
@@ -709,6 +709,7 @@
     private List<Activity> _childActivities = new();
     private ConnectedSystemHeader? _connectedSystemHeader;
     private MetaverseObjectHeader? _metaverseObjectHeader;
+    private MetaverseObjectHeader? _initiatorMetaverseObjectHeader;
     private ActivityRunProfileExecutionStats? _activityRunProfileExecutionStats;
     private string _searchString = "";
     private bool _loading;
@@ -744,6 +745,7 @@
         _initialisationComplete = false;
         _connectedSystemHeader = null;
         _metaverseObjectHeader = null;
+        _initiatorMetaverseObjectHeader = null;
         _activityRunProfileExecutionStats = null;
         _childActivities = new();
         _searchString = "";
@@ -785,6 +787,9 @@
 
         if (_activity.TargetType is ActivityTargetType.MetaverseObject or ActivityTargetType.ConnectedSystemRunProfile && _activity.MetaverseObjectId != null)
             _metaverseObjectHeader = await jim.Metaverse.GetMetaverseObjectHeaderAsync(_activity.MetaverseObjectId.Value);
+
+        if (_activity.InitiatedByType == ActivityInitiatorType.User && _activity.InitiatedById.HasValue)
+            _initiatorMetaverseObjectHeader = await jim.Metaverse.GetMetaverseObjectHeaderAsync(_activity.InitiatedById.Value);
 
         if (_activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && _activity.TargetOperationType == ActivityTargetOperationType.Execute)
             _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(_activity.Id);
