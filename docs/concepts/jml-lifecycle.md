@@ -23,17 +23,17 @@ A **joiner** event occurs when a new identity appears in a source system for the
 
 ### What Happens
 
-1. **Import** -- JIM imports the new record from the source system, creating a new CSO in the connector space.
+1. **Import**<br /> JIM imports the new record from the source system, creating a new CSO in the connector space.
 
-2. **Join attempt** -- During inbound sync, JIM evaluates the synchronisation rule's join rules to check whether this identity already exists in the metaverse (e.g., a rehire or a record that arrived from another source system).
+2. **Join attempt**<br /> During inbound sync, JIM evaluates the synchronisation rule's join rules to check whether this identity already exists in the metaverse (e.g. a rehire or a record that arrived from another source system).
 
-3. **Projection** -- If no existing MVO is found, JIM **projects** a new MetaverseObject. This is the birth of the identity in JIM's metaverse.
+3. **Projection**<br /> If no existing MVO is found, JIM **projects** a new MetaverseObject. This is the birth of the identity in JIM's metaverse.
 
-4. **Inbound attribute flow** -- The new employee's attributes (name, department, employee ID, etc.) flow from the CSO into the newly created MVO.
+4. **Inbound attribute flow**<br /> The new employee's attributes (name, department, employee ID, etc.) flow from the CSO into the newly created MVO.
 
-5. **Outbound evaluation** -- Outbound synchronisation rules evaluate the new MVO. If the MVO is in scope for any outbound rules, JIM **provisions** new CSOs in the target connected systems.
+5. **Outbound evaluation**<br /> Outbound synchronisation rules evaluate the new MVO. If the MVO is in scope for any outbound rules, JIM **provisions** new CSOs in the target connected systems.
 
-6. **Export** -- The provisioned CSOs are exported to the target systems, creating the actual accounts (e.g., an Active Directory user account, an email mailbox).
+6. **Export**<br /> The provisioned CSOs are exported to the target systems, creating the actual accounts (e.g. an Active Directory user account, an email mailbox).
 
 ### Example
 
@@ -53,15 +53,15 @@ A **mover** event occurs when an existing identity's attributes change. This cov
 
 ### What Happens
 
-1. **Import** -- JIM imports the updated record, detecting the changed attributes on the existing CSO.
+1. **Import**<br /> JIM imports the updated record, detecting the changed attributes on the existing CSO.
 
-2. **Inbound sync** -- The changed attributes flow from the CSO to the linked MVO through the inbound attribute flow rules. Only changed attributes are processed.
+2. **Inbound sync**<br /> The changed attributes flow from the CSO to the linked MVO through the inbound attribute flow rules. Only changed attributes are processed.
 
-3. **Outbound evaluation** -- Outbound synchronisation rules detect that the MVO has changed and evaluate whether the changes affect any target systems.
+3. **Outbound evaluation**<br /> Outbound synchronisation rules detect that the MVO has changed and evaluate whether the changes affect any target systems.
 
-4. **Attribute flow** -- Changed attributes flow outbound to the target CSOs. Expressions are re-evaluated (e.g., if the department changes, the target OU may need to change).
+4. **Attribute flow**<br /> Changed attributes flow outbound to the target CSOs. Expressions are re-evaluated (e.g. if the department changes, the target OU may need to change).
 
-5. **Export** -- Pending exports are sent to the target systems, updating the existing accounts.
+5. **Export**<br /> Pending exports are sent to the target systems, updating the existing accounts.
 
 ### Example
 
@@ -88,16 +88,16 @@ A **leaver** event occurs when an identity is removed or marked as inactive in t
 
 ### What Happens
 
-1. **Import** -- JIM detects the change. This could be:
+1. **Import**<br /> JIM detects the change. This could be:
    - The record is deleted from the source system (the CSO is **obsoleted**)
-   - A status attribute changes (e.g., `employeeStatus` changes to "Terminated")
+   - A status attribute changes (e.g. `employeeStatus` changes to "Terminated")
    - The record falls out of scope for the inbound synchronisation rule
 
-2. **Inbound sync** -- The CSO is **disconnected** from the MVO. What happens next depends on the configured **deletion rules**.
+2. **Inbound sync**<br /> The CSO is **disconnected** from the MVO. What happens next depends on the configured **deletion rules**.
 
-3. **Outbound evaluation** -- If the MVO is disconnected or deleted, outbound synchronisation rules trigger **deprovisioning** in target systems.
+3. **Outbound evaluation**<br /> If the MVO is disconnected or deleted, outbound synchronisation rules trigger **deprovisioning** in target systems.
 
-4. **Export** -- Deprovisioning actions are sent to the target systems.
+4. **Export**<br /> Deprovisioning actions are sent to the target systems.
 
 ### Deprovisioning
 
@@ -105,9 +105,9 @@ Deprovisioning is the process of disabling or removing accounts in target system
 
 | Strategy | Description |
 |----------|-------------|
-| **Disable** | Disable the account in the target system (e.g., set `userAccountControl` to 514 in Active Directory) |
-| **Delete** | Remove the account from the target system entirely |
-| **Disconnect** | Unlink the CSO from the MVO but leave the target account unchanged |
+| **Disable** | Disables the account in the target system (e.g. set `userAccountControl` to 514 in Active Directory) |
+| **Delete** | Removes the account from the target system entirely |
+| **Disconnect** | Unlinks the CSO from the MVO but leaves the target account unchanged |
 
 The strategy is configured per outbound synchronisation rule, giving you fine-grained control over what happens in each target system when an identity leaves.
 
@@ -117,7 +117,7 @@ Deletion rules control what happens to the **metaverse object** when connected s
 
 | Rule | Behaviour |
 |------|-----------|
-| **Manual** | The MVO is never automatically deleted -- an administrator must manually remove it |
+| **Manual** | The MVO is never automatically deleted; an administrator must manually remove it |
 | **When Last Connector Disconnected** | The MVO is deleted when no CSOs remain connected to it |
 | **When Authoritative Source Disconnected** | The MVO is deleted when the CSO from its authoritative source system is disconnected |
 
@@ -127,9 +127,9 @@ JIM supports **grace periods** for deletion. Rather than deleting an MVO immedia
 
 Grace periods are valuable for:
 
-- **Rehires** -- if an employee leaves and is rehired within the grace period, their identity is restored rather than recreated
-- **Data corrections** -- if an employee is accidentally removed from the source system, there is time to correct the error before downstream accounts are affected
-- **Compliance** -- some organisations require identity data to be retained for a period after departure
+- **Rehires**<br /> If an employee leaves and is rehired within the grace period, their identity is restored rather than recreated.
+- **Data corrections**<br /> If an employee is accidentally removed from the source system, there is time to correct the error before downstream accounts are affected.
+- **Compliance**<br /> Some organisations require identity data to be retained for a period after departure.
 
 During the grace period, the MVO remains in the metaverse but is marked for pending deletion. If the identity reappears in the source system before the grace period expires, the deletion is cancelled and the identity is restored.
 

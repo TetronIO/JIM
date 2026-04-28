@@ -145,22 +145,22 @@ stateDiagram-v2
 
 ## Key Design Decisions
 
-- **Internal MVO protection**: MVOs with `Origin = Internal` (admin accounts, service accounts created directly in JIM) are never subject to automatic deletion, regardless of the deletion rule configured on the object type.
+- **Internal MVO protection**<br /> MVOs with `Origin = Internal` (admin accounts, service accounts created directly in JIM) are never subject to automatic deletion, regardless of the deletion rule configured on the object type.
 
-- **Grace period reconnection**: If a CSO reconnects to an MVO during the grace period, the MVO is no longer eligible for deletion. The `LastConnectorDisconnectedDate` remains set, but the eligibility query checks for remaining CSOs, so the MVO won't be deleted.
+- **Grace period reconnection**<br /> If a CSO reconnects to an MVO during the grace period, the MVO is no longer eligible for deletion. The `LastConnectorDisconnectedDate` remains set, but the eligibility query checks for remaining CSOs, so the MVO won't be deleted.
 
-- **Initiator preservation**: When an MVO is marked for deferred deletion, the original initiator info (who/what caused the disconnection) is captured on the MVO. When housekeeping eventually deletes it, this original initiator is used in the audit trail, not "housekeeping" or "system".
+- **Initiator preservation**<br /> When an MVO is marked for deferred deletion, the original initiator info (who/what caused the disconnection) is captured on the MVO. When housekeeping eventually deletes it, this original initiator is used in the audit trail, not "housekeeping" or "system".
 
-- **Export cleanup before deletion**: Both immediate and housekeeping deletion paths call `EvaluateMvoDeletionAsync()` before the actual deletion. This creates delete pending exports for any provisioned target system CSOs, ensuring the external system is cleaned up.
+- **Export cleanup before deletion**<br /> Both immediate and housekeeping deletion paths call `EvaluateMvoDeletionAsync()` before the actual deletion. This creates delete pending exports for any provisioned target system CSOs, ensuring the external system is cleaned up.
 
-- **Fallback on failure**: If immediate deletion fails (e.g., database error), the system sets `LastConnectorDisconnectedDate` as a fallback. This ensures housekeeping will pick up the MVO for retry on the next cycle, rather than losing the deletion intent.
+- **Fallback on failure**<br /> If immediate deletion fails (e.g., database error), the system sets `LastConnectorDisconnectedDate` as a fallback. This ensures housekeeping will pick up the MVO for retry on the next cycle, rather than losing the deletion intent.
 
-- **Capped housekeeping**: Housekeeping processes a maximum of 50 MVOs per cycle (every 60 seconds). This prevents large deletion backlogs from monopolising the worker during idle time.
+- **Capped housekeeping**<br /> Housekeeping processes a maximum of 50 MVOs per cycle (every 60 seconds). This prevents large deletion backlogs from monopolising the worker during idle time.
 
-- **WhenAuthoritativeSourceDisconnected fallback**: If `DeletionTriggerConnectedSystemIds` is empty, the rule falls back to `WhenLastConnectorDisconnected` behaviour. This prevents misconfiguration from causing unexpected deletions.
+- **WhenAuthoritativeSourceDisconnected fallback**<br /> If `DeletionTriggerConnectedSystemIds` is empty, the rule falls back to `WhenLastConnectorDisconnected` behaviour. This prevents misconfiguration from causing unexpected deletions.
 
-- **Dedup within page**: Multiple CSOs from the same MVO can disconnect in the same sync page. The dedup check in `MarkMvoForDeletionAsync` prevents the same MVO from being queued for immediate deletion twice.
+- **Dedup within page**<br /> Multiple CSOs from the same MVO can disconnect in the same sync page. The dedup check in `MarkMvoForDeletionAsync` prevents the same MVO from being queued for immediate deletion twice.
 
-- **Attribute recall via ContributedBySystemId**: When `RemoveContributedAttributesOnObsoletion` is enabled on the object type, all MVO attribute values contributed by the disconnecting system (identified by `ContributedBySystemId`) are recalled. The `removedAttributes` set is tracked and passed to export evaluation, where pure recall operations skip evaluation entirely to avoid expression mapping errors against incomplete data.
+- **Attribute recall via ContributedBySystemId**<br /> When `RemoveContributedAttributesOnObsoletion` is enabled on the object type, all MVO attribute values contributed by the disconnecting system (identified by `ContributedBySystemId`) are recalled. The `removedAttributes` set is tracked and passed to export evaluation, where pure recall operations skip evaluation entirely to avoid expression mapping errors against incomplete data.
 
-- **IsPendingDeletion**: An MVO is considered pending deletion when it has `LastConnectorDisconnectedDate` set, has `Origin = Projected` (not `Internal`), and its type's deletion rule is either `WhenLastConnectorDisconnected` or `WhenAuthoritativeSourceDisconnected`.
+- **IsPendingDeletion**<br /> An MVO is considered pending deletion when it has `LastConnectorDisconnectedDate` set, has `Origin = Projected` (not `Internal`), and its type's deletion rule is either `WhenLastConnectorDisconnected` or `WhenAuthoritativeSourceDisconnected`.

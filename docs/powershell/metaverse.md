@@ -93,9 +93,9 @@ Set-JIMMetaverseObjectType -InputObject <object> [-DeletionRule <string>] [-Dele
 !!! note "Deletion rules"
     The deletion rule controls how metaverse objects of this type are automatically cleaned up:
 
-    - **Manual**: objects are never automatically deleted; an administrator must delete them explicitly
-    - **WhenLastConnectorDisconnected**: the object is marked for deletion when all connectors are removed
-    - **WhenAuthoritativeSourceDisconnected**: the object is marked for deletion when the authoritative source connector is removed
+    - **Manual**<br /> Objects are never automatically deleted; an administrator must delete them explicitly
+    - **WhenLastConnectorDisconnected**<br /> The object is marked for deletion when all connectors are removed
+    - **WhenAuthoritativeSourceDisconnected**<br /> The object is marked for deletion when the authoritative source connector is removed
 
 #### Output
 

@@ -251,9 +251,9 @@ PUT /api/v1/metaverse/attributes/{id}
 
 The `objectTypeIds` field **replaces** all existing mappings with the provided set. To manage mappings:
 
-- **Add a mapping**: include all existing type IDs plus the new one
-- **Remove a mapping**: include all existing type IDs except the one to remove
-- **Clear all mappings**: pass an empty array `[]`
+- **Add a mapping**<br /> Include all existing type IDs plus the new one
+- **Remove a mapping**<br /> Include all existing type IDs except the one to remove
+- **Clear all mappings**<br /> Pass an empty array `[]`
 
 !!! warning
     You cannot remove an object type mapping if metaverse objects of that type have values stored for this attribute. The API returns a `400 VALIDATION_ERROR` indicating which type cannot be removed and how many objects are affected. Remove the attribute values first (e.g. by removing the synchronisation rule mapping that flows data into this attribute, then running a full sync).

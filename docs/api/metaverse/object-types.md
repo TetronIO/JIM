@@ -12,10 +12,10 @@ Attributes are mapped to object types to define which fields are available on ob
 
 Attribute-to-object-type mappings are managed via the [Attributes API](attributes.md), not the Object Types API. To add or remove attributes from an object type:
 
-- **Add an attribute to an object type**: [update the attribute](attributes.md#update-an-attribute) and include this object type's ID in the `objectTypeIds` array
-- **Remove an attribute from an object type**: [update the attribute](attributes.md#update-an-attribute) and exclude this object type's ID from the `objectTypeIds` array
-- **Create a new attribute mapped to this type**: [create the attribute](attributes.md#create-an-attribute) with this object type's ID in `objectTypeIds`
-- **View which attributes are mapped**: [retrieve the object type](#retrieve-an-object-type) to see the `attributes` array
+- **Add an attribute to an object type**<br /> [Update the attribute](attributes.md#update-an-attribute) and include this object type's ID in the `objectTypeIds` array
+- **Remove an attribute from an object type**<br /> [Update the attribute](attributes.md#update-an-attribute) and exclude this object type's ID from the `objectTypeIds` array
+- **Create a new attribute mapped to this type**<br /> [Create the attribute](attributes.md#create-an-attribute) with this object type's ID in `objectTypeIds`
+- **View which attributes are mapped**<br /> [Retrieve the object type](#retrieve-an-object-type) to see the `attributes` array
 
 !!! note
     You cannot remove an attribute mapping from an object type if metaverse objects of that type have values stored for the attribute. See [Data Integrity Rules](attributes.md#data-integrity-rules) for details.

@@ -164,16 +164,16 @@ flowchart TD
 
 ## Key Design Decisions
 
-- **RPEI list separation during import**: RPEIs are maintained in a separate list during import to prevent EF Core from following the `Activity -> RPEI -> CSO` navigation chain during `SaveChanges`. This avoids accidentally persisting CSOs before they're ready.
+- **RPEI list separation during import**<br /> RPEIs are maintained in a separate list during import to prevent EF Core from following the `Activity -> RPEI -> CSO` navigation chain during `SaveChanges`. This avoids accidentally persisting CSOs before they're ready.
 
-- **Direct attachment during sync**: During sync, RPEIs are added directly to `activity.RunProfileExecutionItems` since CSOs already exist in the database (they were created during a prior import).
+- **Direct attachment during sync**<br /> During sync, RPEIs are added directly to `activity.RunProfileExecutionItems` since CSOs already exist in the database (they were created during a prior import).
 
-- **Conditional RPEI creation**: RPEIs are only created when `HasChanges = true` during sync. This is an optimisation to avoid unnecessary allocations for objects that haven't changed.
+- **Conditional RPEI creation**<br /> RPEIs are only created when `HasChanges = true` during sync. This is an optimisation to avoid unnecessary allocations for objects that haven't changed.
 
-- **Error isolation**: Each CSO is processed within its own try-catch during sync. Errors create RPEIs but do not halt processing of remaining CSOs. This ensures a single bad object doesn't prevent the entire sync from completing.
+- **Error isolation**<br /> Each CSO is processed within its own try-catch during sync. Errors create RPEIs but do not halt processing of remaining CSOs. This ensures a single bad object doesn't prevent the entire sync from completing.
 
-- **Three-tier status model**: `Complete` (no errors), `CompleteWithWarning` (some errors), `FailedWithError` (all errors or unhandled exception). This gives operators clear visibility into the severity of issues.
+- **Three-tier status model**<br /> `Complete` (no errors), `CompleteWithWarning` (some errors), `FailedWithError` (all errors or unhandled exception). This gives operators clear visibility into the severity of issues.
 
-- **Triple fallback for failure**: `SafeFailActivityAsync` ensures activities are never left stuck in `InProgress`, even when the DbContext is corrupted or disposed. This is critical for system reliability; stuck activities would block future schedule executions.
+- **Triple fallback for failure**<br /> `SafeFailActivityAsync` ensures activities are never left stuck in `InProgress`, even when the DbContext is corrupted or disposed. This is critical for system reliability; stuck activities would block future schedule executions.
 
-- **Initiator triad audit**: Every activity records who initiated it (`InitiatedByType`, `InitiatedById`, `InitiatedByName`). For scheduled tasks, this preserves the schedule context. For deferred MVO deletions, the original initiator is captured at mark time and replayed during housekeeping.
+- **Initiator triad audit**<br /> Every activity records who initiated it (`InitiatedByType`, `InitiatedById`, `InitiatedByName`). For scheduled tasks, this preserves the schedule context. For deferred MVO deletions, the original initiator is captured at mark time and replayed during housekeeping.

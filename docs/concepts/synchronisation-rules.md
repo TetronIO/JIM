@@ -54,7 +54,7 @@ For outbound rules, scoping filters evaluate MVO attributes:
 mv["Object Type"] = "Person" AND mv["Employee Status"] = "Active"
 ```
 
-Objects that fall out of scope are **disconnected** from the synchronisation rule. This is important for the [JML lifecycle](jml-lifecycle.md) -- when an employee's status changes to "Leaver", they may fall out of scope for an outbound rule, triggering deprovisioning.
+Objects that fall out of scope are **disconnected** from the synchronisation rule. This is important for the [JML lifecycle](jml-lifecycle.md); when an employee's status changes to "Leaver", they may fall out of scope for an outbound rule, triggering deprovisioning.
 
 Scoping filters support the JIM [expression language](expressions.md), allowing complex conditions to be evaluated.
 
@@ -71,7 +71,7 @@ Join rules specify one or more attribute pairs to compare:
 | `employeeId` | `Employee ID` | Match on employee identifier |
 | `mail` | `Email Address` | Match on email address |
 
-JIM evaluates the join rules in order. If a match is found, the CSO is **joined** to the MVO -- they are linked, and attribute flows apply.
+JIM evaluates the join rules in order. If a match is found, the CSO is **joined** to the MVO; they are linked, and attribute flows apply.
 
 ### Multiple Join Rules
 
@@ -87,9 +87,9 @@ JIM evaluates the rules in order and uses the first match found.
 
 | Outcome | Description |
 |---------|-------------|
-| **Joined** | Exactly one matching MVO found -- CSO is linked to it |
-| **No match** | No matching MVO found -- projection may create one |
-| **Multiple matches** | More than one matching MVO found -- an error is raised (ambiguous join) |
+| **Joined** | Exactly one matching MVO found; CSO is linked to it |
+| **No match** | No matching MVO found; projection may create one |
+| **Multiple matches** | More than one matching MVO found; an error is raised (ambiguous join) |
 
 ## Projection Rules
 
@@ -105,7 +105,7 @@ For example, when a new employee appears in the HR system:
 4. The projection rule creates a new MVO of type "Person"
 5. Attribute flows populate the new MVO with the employee's data
 
-If projection is **not** enabled, the CSO remains disconnected -- it exists in the connector space but is not linked to the metaverse. This is useful for rules that should only update existing identities, not create new ones.
+If projection is **not** enabled, the CSO remains disconnected; it exists in the connector space but is not linked to the metaverse. This is useful for rules that should only update existing identities, not create new ones.
 
 ## Attribute Flows
 
@@ -136,8 +136,8 @@ Outbound flows map MVO attributes to CSO attributes:
 
 | Type | Description |
 |------|-------------|
-| **Direct** | Copy the attribute value as-is, with no transformation |
-| **Expression** | Apply a transformation using the [expression language](expressions.md) |
+| **Direct** | Copies the attribute value as-is, with no transformation |
+| **Expression** | Applies a transformation using the [expression language](expressions.md) |
 
 ### Multi-Valued Attributes
 

@@ -187,20 +187,20 @@ This prevents silent loss of drift corrections when merging with export evaluati
 
 ## Key Design Decisions
 
-- **Three-operation lifecycle**: A pending export typically spans Sync (creation), Export (execution), and Confirming Import (confirmation). This design ensures changes are verified end-to-end.
+- **Three-operation lifecycle**<br /> A pending export typically spans Sync (creation), Export (execution), and Confirming Import (confirmation). This design ensures changes are verified end-to-end.
 
-- **Partial confirmation**: Individual attribute changes can be confirmed independently. If 3 out of 5 attributes match the target system, only the 2 unconfirmed attributes remain on the pending export for retry.
+- **Partial confirmation**<br /> Individual attribute changes can be confirmed independently. If 3 out of 5 attributes match the target system, only the 2 unconfirmed attributes remain on the pending export for retry.
 
-- **Create-to-Update demotion**: When a Create PE is partially confirmed (object was created but some attributes didn't take), it's demoted to an Update PE. This prevents the next export from trying to create an already-existing object.
+- **Create-to-Update demotion**<br /> When a Create PE is partially confirmed (object was created but some attributes didn't take), it's demoted to an Update PE. This prevents the next export from trying to create an already-existing object.
 
-- **No-net-change detection**: Before creating a PE during sync, the system checks if the target CSO already has the expected values (using pre-cached data in `ExportEvaluationCache`). This avoids unnecessary export operations and reduces connector load.
+- **No-net-change detection**<br /> Before creating a PE during sync, the system checks if the target CSO already has the expected values (using pre-cached data in `ExportEvaluationCache`). This avoids unnecessary export operations and reduces connector load.
 
-- **Drift correction**: When `EnforceState` is enabled on an export synchronisation rule and the CSO has values that don't match the MVO, a corrective PE is created to reassert the correct values. This detects and corrects unauthorised changes made directly in target systems.
+- **Drift correction**<br /> When `EnforceState` is enabled on an export synchronisation rule and the CSO has values that don't match the MVO, a corrective PE is created to reassert the correct values. This detects and corrects unauthorised changes made directly in target systems.
 
-- **Pure recall skip**: When all changed attributes on an MVO are removals (attribute recall due to CSO disconnection), export evaluation is skipped entirely. Expression-based mappings (e.g., DN templates) would evaluate against post-recall null attributes and produce invalid values. Target systems retain their existing attribute values until attribute priority (Issue #91) enables replacement value resolution.
+- **Pure recall skip**<br /> When all changed attributes on an MVO are removals (attribute recall due to CSO disconnection), export evaluation is skipped entirely. Expression-based mappings (e.g., DN templates) would evaluate against post-recall null attributes and produce invalid values. Target systems retain their existing attribute values until attribute priority (Issue #91) enables replacement value resolution.
 
-- **Value-level drift merge**: When merging drift corrections with export evaluation changes, the merge key is a composite of `AttributeId` + value identity (not just `AttributeId`). This prevents silent loss of multi-valued attribute drift corrections; e.g., 117 member removals would be dropped if merged by `AttributeId` alone.
+- **Value-level drift merge**<br /> When merging drift corrections with export evaluation changes, the merge key is a composite of `AttributeId` + value identity (not just `AttributeId`). This prevents silent loss of multi-valued attribute drift corrections; e.g., 117 member removals would be dropped if merged by `AttributeId` alone.
 
-- **Pre-export CREATE→DELETE reconciliation** (#218): Dual-layer reconciliation cancels contradictory pending exports before they reach the connector. At **flush time** (during sync), deferred CREATE/UPDATE PEs are checked against persisted DELETE PEs for the same CSO: CREATE+DELETE pairs cancel both (no net change), UPDATE+DELETE cancels the UPDATE (deletion still needed). At **export time**, the same logic runs across all pending exports to catch pairs persisted in different sync runs. This prevents unnecessary export operations and connector errors.
+- **Pre-export CREATE→DELETE reconciliation** (#218)<br /> Dual-layer reconciliation cancels contradictory pending exports before they reach the connector. At **flush time** (during sync), deferred CREATE/UPDATE PEs are checked against persisted DELETE PEs for the same CSO: CREATE+DELETE pairs cancel both (no net change), UPDATE+DELETE cancels the UPDATE (deletion still needed). At **export time**, the same logic runs across all pending exports to catch pairs persisted in different sync runs. This prevents unnecessary export operations and connector errors.
 
-- **Exponential backoff**: Failed exports use increasing retry delays (`NextRetryAt`) to avoid hammering a target system that's experiencing issues.
+- **Exponential backoff**<br /> Failed exports use increasing retry delays (`NextRetryAt`) to avoid hammering a target system that's experiencing issues.

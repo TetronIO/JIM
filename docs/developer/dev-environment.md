@@ -54,9 +54,9 @@ JIM ships a bundled Keycloak instance for development SSO, removing the need for
 
 Keycloak management aliases:
 
-- `jim-keycloak`: Start Keycloak only (for local debugging workflow)
-- `jim-keycloak-stop`: Stop Keycloak
-- `jim-keycloak-logs`: View Keycloak logs
+- `jim-keycloak`<br /> Start Keycloak only (for local debugging workflow)
+- `jim-keycloak-stop`<br /> Stop Keycloak
+- `jim-keycloak-logs`<br /> View Keycloak logs
 
 ### Front-channel and back-channel URLs
 

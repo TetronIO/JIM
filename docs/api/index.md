@@ -104,8 +104,8 @@ All endpoints require authentication except Health and Auth Config. Most endpoin
 
 Two authentication methods are supported:
 
-- **API keys:** include in the `X-Api-Key` header. Best for scripts, automation, and service-to-service integrations.
-- **JWT Bearer tokens:** include in the `Authorization: Bearer <token>` header. Best for user-driven integrations via OIDC/SSO.
+- **API keys**<br /> Include in the `X-Api-Key` header. Best for scripts, automation, and service-to-service integrations.
+- **JWT Bearer tokens**<br /> Include in the `Authorization: Bearer <token>` header. Best for user-driven integrations via OIDC/SSO.
 
 See [Authentication](authentication.md) for setup instructions and examples.
 

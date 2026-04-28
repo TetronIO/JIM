@@ -35,17 +35,17 @@ This two-stage approach provides several benefits:
 
 A **CSO** is JIM's local representation of an object in an external system. Each CSO holds:
 
-- **Distinguished name or anchor** -- a unique identifier that maps to the external object
-- **Attributes** -- the attribute values as imported from the external system
-- **Link to metaverse** -- if the CSO has been joined or projected, it links to a MetaverseObject (MVO)
-- **Pending exports** -- changes queued to be sent back to the external system
+- **Distinguished name or anchor**<br /> A unique identifier that maps to the external object.
+- **Attributes**<br /> The attribute values as imported from the external system.
+- **Link to metaverse**<br /> If the CSO has been joined or projected, it links to a MetaverseObject (MVO).
+- **Pending exports**<br /> Changes queued to be sent back to the external system.
 
 CSOs have a lifecycle:
 
-1. **Created** during import when a new object is discovered in the external system
-2. **Updated** during subsequent imports when attribute values change
-3. **Joined** or **projected** during synchronisation to link with an MVO
-4. **Obsoleted** when the object no longer exists in the external system
+1. **Created**<br /> During import when a new object is discovered in the external system.
+2. **Updated**<br /> During subsequent imports when attribute values change.
+3. **Joined** or **projected**<br /> During synchronisation to link with an MVO.
+4. **Obsoleted**<br /> When the object no longer exists in the external system.
 
 ## Partitions
 

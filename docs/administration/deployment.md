@@ -119,11 +119,11 @@ bash setup.sh
 
 The script will:
 
-1. Check prerequisites (Docker, Compose v2, curl)
-2. Auto-detect the latest release
-3. Download compose files and environment template
-4. Walk you through database and SSO configuration
-5. Optionally start JIM
+1. **Check prerequisites** (Docker, Compose v2, curl)
+2. **Auto-detect the latest release**
+3. **Download compose files and environment template**
+4. **Walk you through database and SSO configuration**
+5. **Optionally start JIM**
 
 ### Option 2 -- Manual Setup
 
@@ -213,7 +213,7 @@ docker load -i docker-images/jim-scheduler.tar
 docker load -i docker-images/postgres-18.tar
 ```
 
-### Step 3: Set Up PostgreSQL
+### Step 3: Set Up PostgreSQL (Select an Option)
 
 **Option A: Use the bundled PostgreSQL container** (simpler, suitable for smaller deployments)
 
@@ -298,7 +298,7 @@ docker compose logs -f
 
 ### Step 8: Verify Startup
 
-JIM automatically applies any pending database migrations on first startup -- no manual migration step is required. Watch the logs to confirm:
+JIM automatically applies any pending database migrations on first startup; no manual migration step is required. Watch the logs to confirm:
 
 ```bash
 docker compose logs jim.worker --tail=50
@@ -311,9 +311,9 @@ Look for "Database migrations applied" or "Database is up to date" in the worker
 
 ### Step 9: Access JIM
 
-1. Open your browser to `https://jim.your-domain.local` (or `http://localhost:5200` if no TLS)
-2. Log in with your SSO credentials
-3. The initial admin user (configured via `JIM_SSO_INITIAL_ADMIN`) will have full access
+1. **Open your browser** to `https://jim.your-domain.local` (or `http://localhost:5200` if no TLS)
+2. **Log in** with your SSO credentials
+3. **Verify access** - the initial admin user (configured via `JIM_SSO_INITIAL_ADMIN`) will have full access
 
 ---
 

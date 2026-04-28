@@ -57,11 +57,11 @@ Each connector will follow JIM's established connector architecture, supporting 
 
 JIM's step-change from identity synchronisation into identity governance. Establishes the governance layer that enables compliance-driven organisations to manage access holistically, not just synchronise it.
 
-- **Direct metaverse object management** -- create, view, and manage identity objects directly within the UI
-- **Entitlement visibility and mapping** -- discover and map entitlements across connected systems
-- **Entitlement management** -- manage access assignments with request workflows and attestation:
+- **Direct metaverse object management**<br /> Create, view, and manage identity objects directly within the UI.
+- **Entitlement visibility and mapping**<br /> Discover and map entitlements across connected systems.
+- **Entitlement management**<br /> Manage access assignments with request workflows and attestation:
     - Access request workflows with approval chains
     - Basic attestation and certification capabilities
-- **Compliance reporting** -- pre-built and customisable reports for audit and regulatory requirements
-- **Role-based access management** -- define and assign roles that bundle entitlements across connected systems
-- **Policy engine** -- declarative rules for separation of duties, access request approval, and risk scoring
+- **Compliance reporting**<br /> Pre-built and customisable reports for audit and regulatory requirements.
+- **Role-based access management**<br /> Define and assign roles that bundle entitlements across connected systems.
+- **Policy engine**<br /> Declarative rules for separation of duties, access request approval, and risk scoring.
