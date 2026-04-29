@@ -110,12 +110,27 @@
             }
             else if (context.IsPendingExportStub)
             {
-                @* Pending reference - matched but awaiting export or confirming import *@
+                @* Pending reference: matched and resolved, but the referenced object is not yet
+                   confirmed in the target system. Render the same chip+link affordance as a fully
+                   resolved reference so the operator can navigate to the (pending) stub CSO, with
+                   a clock badge to indicate its provisional status. *@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                    <MudTooltip Text="Pending — this reference has been resolved but the object has not yet been fully confirmed in the target system.">
+                    <MudTooltip Text="Pending: this reference has been resolved but the referenced object has not yet been fully confirmed in the target system." Arrow="true" Placement="Placement.Top">
                         <MudIcon Icon="@Icons.Material.Filled.Schedule" Color="Color.Info" Size="Size.Small" />
                     </MudTooltip>
-                    <MudText Class="mud-text-secondary">@context.DisplayValue</MudText>
+                    @if (context.ReferenceValue != null)
+                    {
+                        <MudChip T="string" Color="Color.Default">@context.ReferenceValue.TypeName</MudChip>
+                        <MudLink Href="@context.ReferenceValue.Href">
+                            @context.ReferenceValue.DisplayName
+                        </MudLink>
+                    }
+                    else if (!string.IsNullOrEmpty(context.DisplayValue))
+                    {
+                        @* Fallback for legacy rows or unresolved cross-batch references where the
+                           stub CSO link is unavailable: show the resolved identifier as plain text. *@
+                        <MudText Class="mud-text-secondary">@context.DisplayValue</MudText>
+                    }
                 </MudStack>
             }
             else if (context.ReferenceValue != null)
@@ -226,11 +241,19 @@
                 {
                     AttributeName = ac.AttributeName,
                     ChangeType = vc.ValueChangeType,
+                    // Keep the string fallback when there is no reference navigation to chip; pending-export
+                    // stubs may have ReferenceValue == null on legacy rows or unresolved cross-batch cases,
+                    // and StringValue still carries the resolved DN for display in those situations.
                     Value = vc.ReferenceValue == null ? vc.ToString() : null,
                     ReferenceValue = vc.ReferenceValue != null ? new ReferenceValueInfo
                     {
                         TypeName = vc.ReferenceValue.Type?.Name ?? "Unknown",
-                        DisplayName = GetReferenceDisplayName(vc.ReferenceValue),
+                        // For pending-export stubs, prefer the resolved identifier (DN) captured in
+                        // StringValue: it is the value the operator recognises, whereas the stub CSO
+                        // has not yet acquired its post-export display attributes.
+                        DisplayName = vc.IsPendingExportStub && !string.IsNullOrEmpty(vc.StringValue)
+                            ? vc.StringValue
+                            : GetReferenceDisplayName(vc.ReferenceValue),
                         Href = Utilities.GetConnectedSystemObjectHref(vc.ReferenceValue)
                     } : null,
                     IsMultiValued = ac.Attribute?.AttributePlurality == AttributePlurality.MultiValued,
