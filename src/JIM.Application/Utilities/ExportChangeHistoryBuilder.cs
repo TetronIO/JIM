@@ -35,10 +35,16 @@ public static class ExportChangeHistoryBuilder
             _ => ObjectChangeType.Exported
         };
 
+        // Set the scalar FK alongside the navigation: ConnectedSystemObjectChange rows are persisted
+        // via the raw COPY path (BulkInsertCsoChangesRawAsync), which reads ConnectedSystemObjectId
+        // directly and does not trigger EF's automatic FK fix-up from the navigation. Without the
+        // explicit assignment the column is inserted as NULL, breaking Causality Tree rendering for
+        // export change history (#683).
         var change = new ConnectedSystemObjectChange
         {
             ConnectedSystemId = connectedSystemId,
             ConnectedSystemObject = exportItem.ConnectedSystemObject,
+            ConnectedSystemObjectId = exportItem.ConnectedSystemObject?.Id,
             ChangeType = changeType,
             ChangeTime = DateTime.UtcNow,
             ActivityRunProfileExecutionItem = executionItem,

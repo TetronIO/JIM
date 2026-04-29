@@ -477,6 +477,7 @@ try {
         Write-Host "    Exporting to Target AD..." -ForegroundColor Gray
         $exportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetExportProfile.id -Wait -PassThru
         Assert-ExportSuccess -ActivityId $exportResult.activityId -Name "Target Export$contextSuffix"
+        Assert-ExportRpeisHaveCsoLink -ActivityId $exportResult.activityId -Name "Target Export$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
         # Step 6: Full Confirming Import from Target
@@ -541,6 +542,7 @@ try {
         Write-Host "    Exporting to Target AD..." -ForegroundColor Gray
         $exportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetExportProfile.id -Wait -PassThru
         Assert-ExportSuccess -ActivityId $exportResult.activityId -Name "Target Export$contextSuffix"
+        Assert-ExportRpeisHaveCsoLink -ActivityId $exportResult.activityId -Name "Target Export$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
         # Step 4: Delta Confirming Import from Target
@@ -1199,6 +1201,7 @@ try {
         Write-Host "    Exporting corrections to Target AD..." -ForegroundColor Gray
         $exportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetExportProfile.id -Wait -PassThru
         Assert-ExportSuccess -ActivityId $exportResult.activityId -Name "Target Export (reassert state)"
+        Assert-ExportRpeisHaveCsoLink -ActivityId $exportResult.activityId -Name "Target Export (reassert state)"
         Start-Sleep -Seconds $WaitSeconds
 
         # Confirming Import

@@ -1652,6 +1652,103 @@ function Assert-ExportSuccess {
     }
 }
 
+function Assert-ExportRpeisHaveCsoLink {
+    <#
+    .SYNOPSIS
+        Assert that every Exported / Deprovisioned RPEI for a just-completed export Activity
+        has its ConnectedSystemObjectId FK populated, and that the linked
+        ConnectedSystemObjectChange row (when present) also has its ConnectedSystemObjectId populated.
+
+    .DESCRIPTION
+        Guards against a regression where the export pipeline writes RPEIs through the raw-SQL /
+        COPY bulk-insert path with only the navigation property set. EF's automatic FK fix-up
+        does not run on raw SQL, so the scalar FK ends up NULL and the audit trail loses its
+        link from the Activity into the CSO detail page (issue #683).
+
+        This check MUST be performed against a real Postgres instance; in-memory EF auto-tracks
+        navigations and would silently mask the bug. The helper queries the database directly
+        via psql in the jim.database container.
+
+        Scope: only checks Exported (11) and Deprovisioned (12) RPEIs. Other ObjectChangeType
+        values legitimately have NULL ConnectedSystemObjectId in some flows (e.g. CSO already
+        deleted via ON DELETE SET NULL on a historical activity).
+
+    .PARAMETER ActivityId
+        The Activity ID (GUID) of a just-completed export Activity.
+
+    .PARAMETER Name
+        A friendly name for the export Activity (used in output messages).
+
+    .EXAMPLE
+        Assert-ExportRpeisHaveCsoLink -ActivityId $exportResult.activityId -Name "Target Export"
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ActivityId,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Name
+    )
+
+    # Validate ActivityId is a well-formed GUID before substituting into SQL.
+    # The query interpolates ActivityId directly because psql -c does not support bind parameters
+    # over docker compose exec; restricting to a GUID closes the only realistic injection vector.
+    $parsedId = [Guid]::Empty
+    if (-not [Guid]::TryParse($ActivityId, [ref]$parsedId)) {
+        throw "Assert-ExportRpeisHaveCsoLink: ActivityId '$ActivityId' is not a valid GUID."
+    }
+    $safeActivityId = $parsedId.ToString()
+
+    # ObjectChangeType values: Exported = 11, Deprovisioned = 12
+    $rpeiQuery = @"
+SELECT COUNT(*) FROM "ActivityRunProfileExecutionItems"
+WHERE "ActivityId" = '$safeActivityId'
+  AND "ObjectChangeType" IN (11, 12)
+  AND "ConnectedSystemObjectId" IS NULL
+  AND "ErrorType" IS NULL;
+"@
+
+    $rpeiNullCount = docker compose exec -T jim.database psql -t -A -U jim -d jim -c $rpeiQuery 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Assert-ExportRpeisHaveCsoLink: psql query failed for '$Name' (ActivityId: $ActivityId). Output: $rpeiNullCount"
+    }
+
+    $rpeiNullCount = [int]($rpeiNullCount | Out-String).Trim()
+    if ($rpeiNullCount -gt 0) {
+        Write-Host "  ✗ $Name - $rpeiNullCount export RPEI(s) persisted with NULL ConnectedSystemObjectId" -ForegroundColor Red
+        Write-Host "    This breaks audit-trail navigation from Operations into CSO detail (#683)" -ForegroundColor Red
+        Write-Host "    ActivityId: $ActivityId" -ForegroundColor Red
+        throw "Export '$Name' persisted $rpeiNullCount RPEI row(s) with NULL ConnectedSystemObjectId (ActivityId: $ActivityId)"
+    }
+
+    # Also check the linked ConnectedSystemObjectChange rows. These are written through the same
+    # raw-SQL/COPY path and exhibit the same defect (the change row's FK was set on the navigation
+    # only, not the scalar). Restrict to changes linked to the export Activity's RPEIs.
+    $changeQuery = @"
+SELECT COUNT(*) FROM "ConnectedSystemObjectChanges" c
+JOIN "ActivityRunProfileExecutionItems" r ON c."ActivityRunProfileExecutionItemId" = r."Id"
+WHERE r."ActivityId" = '$safeActivityId'
+  AND r."ObjectChangeType" IN (11, 12)
+  AND r."ErrorType" IS NULL
+  AND c."ConnectedSystemObjectId" IS NULL;
+"@
+
+    $changeNullCount = docker compose exec -T jim.database psql -t -A -U jim -d jim -c $changeQuery 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Assert-ExportRpeisHaveCsoLink: psql query failed (change rows) for '$Name' (ActivityId: $ActivityId). Output: $changeNullCount"
+    }
+
+    $changeNullCount = [int]($changeNullCount | Out-String).Trim()
+    if ($changeNullCount -gt 0) {
+        Write-Host "  ✗ $Name - $changeNullCount ConnectedSystemObjectChange row(s) persisted with NULL ConnectedSystemObjectId" -ForegroundColor Red
+        Write-Host "    Causality Tree will fail to render attribute-level export detail (#683)" -ForegroundColor Red
+        Write-Host "    ActivityId: $ActivityId" -ForegroundColor Red
+        throw "Export '$Name' persisted $changeNullCount ConnectedSystemObjectChange row(s) with NULL ConnectedSystemObjectId (ActivityId: $ActivityId)"
+    }
+
+    Write-Host "  ✓ $Name - all export RPEIs and change rows have populated ConnectedSystemObjectId FKs" -ForegroundColor Green
+}
+
 function Assert-ActivityHasChanges {
     <#
     .SYNOPSIS
