@@ -150,6 +150,35 @@ For new features or significant changes:
 - Never automatically create a PR or merge to `main` - the user must explicitly instruct
 - Build and test pass before commit (per Critical Rules); push and PR only when the user asks
 
+### Merging via gh CLI
+
+`main` is protected by a ruleset that requires seven status checks to pass before a merge is allowed: `build-and-test`, `discover-base-images`, `scan-base-images-summary`, the three CodeQL analyses (`Analyze (actions)`, `Analyze (csharp)`, `Analyze (javascript-typescript)`), and `claude-review`. Strict mode is on, so the PR must be up to date with `main`. Zero approvals are required, but unresolved review threads block the merge.
+
+- Default merge command: `gh pr merge <n> --squash --delete-branch --auto`. The `--auto` flag queues the merge so it lands the moment all required checks go green.
+- An immediate `gh pr merge` failure right after `gh pr create` is **expected**, not a blocker. The checks haven't started yet. Don't escalate it; just use `--auto`.
+- **Never use `--admin` to bypass.** It overrides the required checks and the harness will (correctly) refuse it.
+
+### Closing the loop after `--auto`
+
+Use the Monitor tool with an until-loop so the harness notifies you when the PR transitions to `MERGED`:
+
+```bash
+until gh pr view <n> --json state -q .state | grep -q MERGED; do sleep 30; done
+```
+
+Don't ScheduleWakeup, don't sleep-poll between turns, don't proactively re-check. Wait for the notification.
+
+When it fires, run cleanup:
+
+```bash
+git checkout main
+git pull --ff-only
+git fetch --prune
+git branch -d <feature-branch> 2>/dev/null || true
+```
+
+The `|| true` is intentional: when `gh pr merge` runs while you are checked out on the feature branch, it fast-forwards the local feature branch ref to the squash commit, so by cleanup time the branch may already be gone. Treat "branch not found" as success, not failure.
+
 ## Changelog & Release
 
 - Add entries under `## [Unreleased]` in `CHANGELOG.md` for user-facing changes (features, fixes, performance, changed behaviour, removals)
