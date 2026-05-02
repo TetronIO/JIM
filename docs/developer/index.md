@@ -67,6 +67,8 @@ This guide covers everything you need to get started as a contributor: setting u
 | Resource | Description |
 |----------|-------------|
 | [Repository](https://github.com/TetronIO/JIM) | Source code on GitHub |
+| [Discussions](https://github.com/TetronIO/JIM/discussions) | Q&A, feature ideas, and design conversations |
+| [Issues](https://github.com/TetronIO/JIM/issues) | Bug reports and tracked work |
 | [Expression Language Guide](../concepts/expressions.md) | C#-like expression language for attribute mappings |
 | [SSO Setup Guide](../administration/sso-setup.md) | Configure OIDC authentication for any identity provider |
 | [Deployment Guide](../administration/deployment.md) | Production deployment instructions |

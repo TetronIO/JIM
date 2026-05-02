@@ -48,3 +48,7 @@ Getting JIM running involves three main steps:
 3. **Configure your first synchronisation:** Connect a source system, define synchronisation rules, and verify data flows correctly through the metaverse.
 
 Once deployed, JIM is accessible via a web portal at `http://localhost:5200` by default. You can also interact with JIM through its REST API or the cross-platform PowerShell module.
+
+## Stuck?
+
+If something does not behave the way you expect, the [Q&A category in GitHub Discussions](https://github.com/TetronIO/JIM/discussions/categories/q-a) is the place to ask. Search first; if your question is already there, add to that thread rather than starting a new one. For confirmed bugs, open a [GitHub Issue](https://github.com/TetronIO/JIM/issues) instead.
