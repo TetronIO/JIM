@@ -136,9 +136,19 @@ JIM has reached MVP completion (100%). The core identity lifecycle is fully func
 
 For detailed feature checklists and post-MVP roadmap, see the [Roadmap](https://tetronio.github.io/JIM/reference/roadmap/).
 
+## Community & Support
+
+JIM is built in the open and we'd love to hear from people running it, evaluating it, or thinking about it. The best place to engage with us and other users is [GitHub Discussions](https://github.com/TetronIO/JIM/discussions).
+
+- **Questions and setup help:** Open a thread in the [Q&A](https://github.com/TetronIO/JIM/discussions/categories/q-a) category. Search existing threads first; if your question is already there, add to it rather than starting a new one.
+- **Feature ideas and suggestions:** Post in the [Ideas](https://github.com/TetronIO/JIM/discussions/categories/ideas) category. Upvotes on existing ideas genuinely inform roadmap prioritisation, so prefer adding signal to a duplicate over creating a new thread.
+- **Bug reports:** Open a [GitHub Issue](https://github.com/TetronIO/JIM/issues). If it turns out to be a usage question, we may convert it to a Discussion.
+- **Security vulnerabilities:** Follow the responsible disclosure process in [SECURITY.md](SECURITY.md); please do not report security issues in public Issues or Discussions.
+
 ## Licensing
 JIM uses a Source-Available model where it is free to use in non-production scenarios, but requires a commercial license for use in production scenarios. [﻿Full details can be found here](https://tetron.io/jim/#licensing).
 
 ## More Information
 - **Documentation:** [tetronio.github.io/JIM](https://tetronio.github.io/JIM/)
+- **Discussions:** [github.com/TetronIO/JIM/discussions](https://github.com/TetronIO/JIM/discussions)
 - **Product site:** [tetron.io/jim](https://tetron.io/jim)

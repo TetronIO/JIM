@@ -13,6 +13,8 @@ JIM is a source-available project. This page covers the guidelines and expectati
 3. Review the code style and conventions below
 4. Pick an issue or propose a change
 
+For anything beyond a small, self-contained fix (a new feature, a connector, an architectural change, a non-trivial refactor), please start a thread in [GitHub Discussions](https://github.com/TetronIO/JIM/discussions) before opening a pull request. The [Ideas](https://github.com/TetronIO/JIM/discussions/categories/ideas) category is the right home for proposals; this lets us shape the approach together and avoids you investing time in something that might not land.
+
 ## Code Style
 
 ### Language and Spelling

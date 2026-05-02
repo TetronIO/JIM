@@ -135,6 +135,15 @@ JIM has reached MVP completion. The core identity lifecycle is fully functional:
 - **Export** changes to target systems with pending export management
 - **Schedule** automated synchronisation using cron or interval-based triggers
 
+## 💬 Community & Support
+
+JIM is built in the open. [GitHub Discussions](https://github.com/TetronIO/JIM/discussions) is the place to engage with the maintainers and other users.
+
+- **Questions and setup help**<br /> Start a thread in the [Q&A](https://github.com/TetronIO/JIM/discussions/categories/q-a) category. Search existing threads first.
+- **Feature ideas and suggestions**<br /> Post in the [Ideas](https://github.com/TetronIO/JIM/discussions/categories/ideas) category. Upvotes on existing ideas inform roadmap prioritisation; prefer adding signal to a duplicate over creating a new thread.
+- **Bug reports**<br /> Open a [GitHub Issue](https://github.com/TetronIO/JIM/issues).
+- **Security vulnerabilities**<br /> Follow the [Security Policy](https://github.com/TetronIO/JIM/security/policy); please do not report security issues in public Issues or Discussions.
+
 ## Licensing
 
 JIM uses a Source-Available model where it is free to use in non-production scenarios, but requires a commercial licence for use in production scenarios. [Full details can be found here](https://tetron.io/jim/#licensing).
