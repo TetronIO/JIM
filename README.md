@@ -32,7 +32,7 @@ JIM is a modern Identity Management system designed for organisations with compl
 - Realtime activity monitoring
 - Single Sign-On (SSO) using OpenID Connect
 - Dark/Light mode
-  
+
 ![A screenshot of JIM running](https://tetron.io/images/jim/0.10.2/homepage-dark.png "JIM Screenshot")
 
 <p align="center">
@@ -45,15 +45,25 @@ JIM is a modern Identity Management system designed for organisations with compl
 
 Enterprise identity synchronisation typically requires cloud connectivity, complex infrastructure, or expensive licensing. JIM takes a different approach; it deploys as a single Docker stack, runs entirely on-premises, and works in air-gapped networks with no external dependencies. Source-available code means you can inspect, audit, and verify everything JIM does with your identity data.
 
-| Capability | JIM |
-|---|---|
-| Air-gapped deployment | ✅ |
-| Cloud dependencies | None |
-| Container-native | ✅ |
-| Source available | ✅ |
-| SSO with any OIDC provider | ✅ |
-| Full REST API | ✅ |
-| PowerShell automation | ✅ |
+JIM is designed to solve both enterprise-scale identity management and micro-deployment challenges for edge-sync scenarios.
+
+![Air-gapped deployment](https://img.shields.io/badge/%E2%9C%93-Air--gapped_deployment-2ea44f?style=for-the-badge)
+&nbsp;
+![Container-native](https://img.shields.io/badge/%E2%9C%93-Container--native-2ea44f?style=for-the-badge)
+&nbsp;
+![Source available](https://img.shields.io/badge/%E2%9C%93-Source_available-2ea44f?style=for-the-badge)
+&nbsp;
+![SSO with any OIDC provider](https://img.shields.io/badge/%E2%9C%93-SSO_with_any_OIDC_provider-2ea44f?style=for-the-badge)
+&nbsp;
+![Full REST API](https://img.shields.io/badge/%E2%9C%93-Full_REST_API-2ea44f?style=for-the-badge)
+&nbsp;
+![PowerShell automation](https://img.shields.io/badge/%E2%9C%93-PowerShell_automation-2ea44f?style=for-the-badge)
+&nbsp;
+![Deploy in minutes](https://img.shields.io/badge/%E2%9C%93-Deploy_in_minutes-2ea44f?style=for-the-badge)
+&nbsp;
+![Enterprise scale](https://img.shields.io/badge/%E2%9C%93-Enterprise_scale-2ea44f?style=for-the-badge)
+&nbsp;
+![Micro deployments for edge sync](https://img.shields.io/badge/%E2%9C%93-Micro_deployments_for_edge_sync-2ea44f?style=for-the-badge)
 
 ## Scenarios
 JIM supports common Identity Governance & Administration (IGA) scenarios:
