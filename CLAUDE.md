@@ -160,11 +160,13 @@ For new features or significant changes:
 
 ### Closing the loop after `--auto`
 
-Use the Monitor tool with an until-loop so the harness notifies you when the PR transitions to `MERGED`:
+Use the **Bash tool with `run_in_background: true`** and an until-loop so the harness notifies you when the PR transitions to `MERGED`:
 
 ```bash
-until gh pr view <n> --json state -q .state | grep -q MERGED; do sleep 30; done
+until [ "$(gh pr view <n> --json state -q .state)" = "MERGED" ]; do sleep 30; done
 ```
+
+This is the right primitive per the Monitor tool's own guidance: a single completion event ("tell me when X is true") is a Bash background command that exits when the condition is satisfied. The Monitor tool is for per-occurrence streams (a notification per matching log line) and is the wrong fit here.
 
 Don't ScheduleWakeup, don't sleep-poll between turns, don't proactively re-check. Wait for the notification.
 
@@ -174,10 +176,10 @@ When it fires, run cleanup:
 git checkout main
 git pull --ff-only
 git fetch --prune
-git branch -d <feature-branch> 2>/dev/null || true
+git branch -D <feature-branch>
 ```
 
-The `|| true` is intentional: when `gh pr merge` runs while you are checked out on the feature branch, it fast-forwards the local feature branch ref to the squash commit, so by cleanup time the branch may already be gone. Treat "branch not found" as success, not failure.
+Use `-D` (capital D), not `-d`. We squash-merge by default, so the feature branch's commits are not ancestors of `main` (main gets one new squash commit instead). `git branch -d` refuses with *"not fully merged"* in that case; `-D` is safe because the squash commit is already on `main`. If you were checked out on the feature branch when `gh pr merge` ran, the local ref may already have been auto-deleted, in which case `-D` will report "branch not found"; that is success, not failure.
 
 ## Changelog & Release
 
