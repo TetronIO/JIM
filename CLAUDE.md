@@ -146,6 +146,7 @@ For new features or significant changes:
 
 - Always work on a feature branch; never commit directly to `main`
 - Branch naming: `feature/description`
+- **Reuse the existing feature branch; never create a new one because the current branch's name "doesn't fit" the task.** If you start work and find yourself already checked out on a feature branch (i.e. not `main`), commit your changes there. Do not create `feature/<something-else>` for an unrelated task. The user runs multiple chat sessions in parallel and tracks work by branch; spawning new branches makes commits invisible across sessions. If the scope has genuinely broadened, surface it: "this commit is unrelated to the current branch name; want me to rename the branch or stay on it?" and let the user decide. Only branch off `main` when the user explicitly asks, or when you have just merged/finished the previous branch and are starting fresh from a clean `main`.
 - Never automatically create a PR or merge to `main` - the user must explicitly instruct
 - Build and test pass before commit (per Critical Rules); push and PR only when the user asks
 
