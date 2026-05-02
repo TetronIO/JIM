@@ -45,6 +45,8 @@ JIM is a modern Identity Management system designed for organisations with compl
 
 Enterprise identity synchronisation typically requires cloud connectivity, complex infrastructure, or expensive licensing. JIM takes a different approach; it deploys as a single Docker stack, runs entirely on-premises, and works in air-gapped networks with no external dependencies. Source-available code means you can inspect, audit, and verify everything JIM does with your identity data.
 
+JIM is designed to solve both enterprise-scale identity management and micro-deployment challenges for edge-sync scenarios.
+
 ![Air-gapped deployment](https://img.shields.io/badge/%E2%9C%93-Air--gapped_deployment-2ea44f?style=for-the-badge)
 &nbsp;
 ![Container-native](https://img.shields.io/badge/%E2%9C%93-Container--native-2ea44f?style=for-the-badge)
