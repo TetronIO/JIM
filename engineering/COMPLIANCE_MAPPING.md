@@ -155,7 +155,7 @@ The UK Government's Software Security Code of Practice defines 14 principles acr
 
 | Principle | Requirement | JIM Alignment | Status |
 |-----------|-------------|---------------|--------|
-| 11 | Report vulnerabilities responsibly | SECURITY.md with dedicated security@tetron.io email | Aligned |
+| 11 | Report vulnerabilities responsibly | SECURITY.md with dedicated security@junctional.io email | Aligned |
 | 12 | Provide vulnerability information to customers | Coordinated disclosure, security advisories | Aligned |
 | 13 | Publish accurate CVE information | In progress - GitHub Security Advisories integration | Aligned |
 | 14 | Provide security documentation | SECURITY.md, deployment guidance, this compliance mapping | Aligned |

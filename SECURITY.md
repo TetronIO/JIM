@@ -16,7 +16,7 @@ We take security vulnerabilities seriously. If you discover a security issue in 
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-Instead, please send an email to: **security@tetron.io**
+Instead, please send an email to: **security@junctional.io**
 
 Include as much of the following information as possible:
 
