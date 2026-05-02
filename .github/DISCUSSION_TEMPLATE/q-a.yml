@@ -1,0 +1,79 @@
+title: "[Q&A] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for asking a question. A few details up front make it much easier for us, or another community member, to help you quickly. Before posting, please search existing Q&A threads in case your question has already been answered.
+
+        ⚠️ **Please redact sensitive information** from any logs, configuration, or examples you share: real usernames, email addresses, internal hostnames, LDAP DNs with real OU paths, tokens, and any other data that would identify a specific person or organisation.
+
+  - type: input
+    id: jim-version
+    attributes:
+      label: JIM version
+      description: Which version of JIM are you running? Found in the UI footer or `docker inspect` on the JIM container image tag.
+      placeholder: "e.g. v0.9.2"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deployment-method
+    attributes:
+      label: Deployment method
+      description: How is JIM deployed in your environment?
+      options:
+        - Docker Compose
+        - Kubernetes
+        - Other / custom
+        - Not yet deployed (evaluation)
+    validations:
+      required: true
+
+  - type: input
+    id: oidc-provider
+    attributes:
+      label: OIDC provider
+      description: Which identity provider is JIM federated with for sign-in?
+      placeholder: "e.g. Entra ID, Keycloak, ADFS, etc."
+    validations:
+      required: false
+
+  - type: input
+    id: connectors
+    attributes:
+      label: Connector(s) involved
+      description: Which JIM connector(s) are relevant to your question?
+      placeholder: "e.g. CSV, LDAP, Generic Database"
+    validations:
+      required: false
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: What are you trying to do, and what's the specific question or behaviour you'd like help with?
+      placeholder: |
+        Describe what you're trying to achieve and the specific point you're stuck on.
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you tried?
+      description: Steps you've already attempted, documentation you've consulted, or hypotheses you've ruled out. This helps us avoid suggesting things you've already tested.
+      placeholder: |
+        - Tried X, which produced Y
+        - Reviewed docs section Z
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or configuration (redacted)
+      description: Paste any relevant log snippets or sync rule configuration. Wrap them in triple backticks for formatting. **Redact sensitive data.**
+      render: text
+    validations:
+      required: false
