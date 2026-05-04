@@ -136,7 +136,7 @@ else
                                                             {
                                                                 <div class="more-changes-indicator">
                                                                     <MudChip T="string" Variant="Variant.Filled" Color="Color.Primary">
-                                                                        +@GetRemainingDisplayChangesCount(changeGroup) more
+                                                                        +@GetRemainingDisplayChangesCount(changeGroup).ToString("N0") more
                                                                     </MudChip>
                                                                 </div>
                                                             }
