@@ -11,6 +11,7 @@ using JIM.Models.Search;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Models.Utility;
+using JIM.Application.Diagnostics;
 using JIM.Application.Exceptions;
 using JIM.Application.Utilities;
 using Serilog;
@@ -52,6 +53,9 @@ public class MetaverseServer
 
     public async Task<MetaverseObjectType?> GetMetaverseObjectTypeByPluralNameAsync(string pluralName, bool includeChildObjects)
     {
+        using var span = Diagnostics.Diagnostics.Database.StartSpan("Mvo.GetTypeByPluralName")
+            .SetTag("pluralName", pluralName)
+            .SetTag("includeChildObjects", includeChildObjects);
         return await Application.Repository.Metaverse.GetMetaverseObjectTypeByPluralNameAsync(pluralName, includeChildObjects);
     }
 
@@ -341,6 +345,9 @@ public class MetaverseServer
     /// </summary>
     public async Task<MvoDetailResult?> GetMetaverseObjectDetailAsync(Guid id, MvoAttributeLoadStrategy loadStrategy)
     {
+        using var span = Diagnostics.Diagnostics.Database.StartSpan("Mvo.GetDetail")
+            .SetTag("id", id)
+            .SetTag("strategy", loadStrategy.ToString());
         return await Application.Repository.Metaverse.GetMetaverseObjectDetailAsync(id, loadStrategy);
     }
 
