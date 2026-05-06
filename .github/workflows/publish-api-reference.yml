@@ -4,7 +4,7 @@ name: Publish API Reference
 #
 # This workflow regenerates the OpenAPI document from the current code on main
 # and deploys the MkDocs site, updating the public reference at
-# https://tetronio.github.io/JIM/api/reference/.
+# https://docs.junctional.io/api/reference/.
 #
 # Use this to:
 #   - Validate the API reference deploy process outside of a release
