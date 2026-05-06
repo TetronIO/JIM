@@ -247,7 +247,7 @@ jobs:
   # Job 3: Publish the documentation site with the latest OpenAPI document.
   # Extracts the pre-generated OpenAPI JSON from the released jim-web Docker image,
   # drops it into the docs/ tree, builds the MkDocs site, and deploys to GitHub Pages.
-  # This ensures the public API reference at https://tetronio.github.io/JIM/api/reference/
+  # This ensures the public API reference at https://docs.junctional.io/api/reference/
   # always matches the latest stable release.
   publish-docs:
     name: Publish Documentation Site

@@ -388,7 +388,7 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 - ✅ **Role Membership Management** (#467) - REST API and PowerShell cmdlets (`Get/Add/Remove-JIMRoleMember`, `Get-JIMMetaverseObjectRole`) with lockout safety checks
 - ✅ **Predefined Searches Toggle** (#555) - Enable/disable Predefined Searches without deletion; disabled searches hidden from portal, search API, and sidebar navigation
 - ✅ **System Endpoint Cmdlets** (#468) - `Get-JIMHealth`, `Get-JIMVersion`, `Get-JIMAuthConfig`, `Get-JIMUserInfo` with health/version/auth config callable without `Connect-JIM`
-- ✅ **Public API Reference** - Interactive Scalar API reference available at `/api/reference` in every environment (including air-gapped); public snapshot hosted at tetronio.github.io/JIM/api/reference/
+- ✅ **Public API Reference** - Interactive Scalar API reference available at `/api/reference` in every environment (including air-gapped); public snapshot hosted at docs.junctional.io/api/reference/
 - ✅ **Build-Time OpenAPI Generation** - OpenAPI document pre-generated at Docker build time for instant Scalar load with zero runtime overhead
 - ✅ **Count API Endpoints** (#154) - New count endpoints for metaverse objects, connector space, and pending exports
 - ✅ **OIDC Sign-Out** (#49) - Sign out with the identity provider, gated by `SSOEnableLogOut` service setting; new user menu with sign-out in navigation drawer
