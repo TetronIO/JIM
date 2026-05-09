@@ -47,6 +47,7 @@
         'Set-JIMConnectedSystemPartition',
         'Set-JIMConnectedSystemContainer',
         'Get-JIMConnectedSystemObject',
+        'Get-JIMConnectedSystemObjectChangeHistory',
         'Get-JIMConnectedSystemUnresolvedReferenceCount',
         'Get-JIMPendingExport',
         'Clear-JIMConnectedSystem',

@@ -18,4 +18,11 @@ public class CsoDetailResult
     /// Key is the attribute name; value is the total count in the database.
     /// </summary>
     public Dictionary<string, int> AttributeValueTotalCounts { get; set; } = new();
+
+    /// <summary>
+    /// Total number of change-history records for this CSO. Surfaced separately so
+    /// detail callers can render a count badge without eager-loading the full change
+    /// graph. Change rows are paged via a dedicated repository call.
+    /// </summary>
+    public int ChangeCount { get; set; }
 }

@@ -545,4 +545,85 @@ public class CsoDetailAndPaginationTests
 
         return cso;
     }
+
+    #region GetConnectedSystemObjectChangeHistoryAsync tests
+
+    [Test]
+    public async Task GetConnectedSystemObjectChangeHistoryAsync_UnknownId_ReturnsNotFoundAsync()
+    {
+        var connectedSystemId = 1;
+        var csoId = Guid.NewGuid();
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemObjectAsync(connectedSystemId, csoId))
+            .ReturnsAsync((ConnectedSystemObject?)null);
+
+        var result = await _controller.GetConnectedSystemObjectChangeHistoryAsync(
+            connectedSystemId, csoId, new PaginationRequest { Page = 1, PageSize = 50 });
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+        _mockConnectedSystemRepo.Verify(r => r.GetCsoChangeHistoryAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectChangeHistoryAsync_KnownId_ReturnsPaginatedResponseAsync()
+    {
+        var connectedSystemId = 1;
+        var csoId = Guid.NewGuid();
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemObjectAsync(connectedSystemId, csoId))
+            .ReturnsAsync(CreateTestCso(csoId, connectedSystemId));
+
+        var dtoRows = new List<CsoChangeHistoryDto>
+        {
+            new CsoChangeHistoryDto { Id = Guid.NewGuid(), ChangeTime = DateTime.UtcNow, InitiatedByName = "Sync" },
+            new CsoChangeHistoryDto { Id = Guid.NewGuid(), ChangeTime = DateTime.UtcNow.AddMinutes(-1), InitiatedByName = "Sync" }
+        };
+        _mockConnectedSystemRepo.Setup(r => r.GetCsoChangeHistoryAsync(csoId, 1, 50))
+            .ReturnsAsync((dtoRows, 2));
+
+        var result = await _controller.GetConnectedSystemObjectChangeHistoryAsync(
+            connectedSystemId, csoId, new PaginationRequest { Page = 1, PageSize = 50 }) as OkObjectResult;
+        var response = result?.Value as PaginatedResponse<CsoChangeHistoryDto>;
+
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response!.Items.Count(), Is.EqualTo(2));
+        Assert.That(response.TotalCount, Is.EqualTo(2));
+        Assert.That(response.Page, Is.EqualTo(1));
+        Assert.That(response.PageSize, Is.EqualTo(50));
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectChangeHistoryAsync_PassesPaginationToRepositoryAsync()
+    {
+        var connectedSystemId = 1;
+        var csoId = Guid.NewGuid();
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemObjectAsync(connectedSystemId, csoId))
+            .ReturnsAsync(CreateTestCso(csoId, connectedSystemId));
+        _mockConnectedSystemRepo.Setup(r => r.GetCsoChangeHistoryAsync(csoId, It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync((new List<CsoChangeHistoryDto>(), 0));
+
+        await _controller.GetConnectedSystemObjectChangeHistoryAsync(
+            connectedSystemId, csoId, new PaginationRequest { Page = 3, PageSize = 25 });
+
+        _mockConnectedSystemRepo.Verify(r => r.GetCsoChangeHistoryAsync(csoId, 3, 25), Times.Once);
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectChangeHistoryAsync_EmptyHistory_ReturnsZeroTotalCountAsync()
+    {
+        var connectedSystemId = 1;
+        var csoId = Guid.NewGuid();
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemObjectAsync(connectedSystemId, csoId))
+            .ReturnsAsync(CreateTestCso(csoId, connectedSystemId));
+        _mockConnectedSystemRepo.Setup(r => r.GetCsoChangeHistoryAsync(csoId, 1, 50))
+            .ReturnsAsync((new List<CsoChangeHistoryDto>(), 0));
+
+        var result = await _controller.GetConnectedSystemObjectChangeHistoryAsync(
+            connectedSystemId, csoId, new PaginationRequest { Page = 1, PageSize = 50 }) as OkObjectResult;
+        var response = result?.Value as PaginatedResponse<CsoChangeHistoryDto>;
+
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response!.TotalCount, Is.EqualTo(0));
+        Assert.That(response.Items.Count(), Is.EqualTo(0));
+    }
+
+    #endregion
 }

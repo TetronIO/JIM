@@ -15,10 +15,15 @@ using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
+using System.Diagnostics;
 namespace JIM.PostgresData.Repositories;
 
 public class ConnectedSystemRepository : IConnectedSystemRepository
 {
+    // Picked up by the JIM diagnostic listener via the "JIM." prefix; named distinctly
+    // from the Application-layer "JIM.Database" source to keep tooling traces unambiguous.
+    private static readonly ActivitySource ActivitySource = new("JIM.PostgresData.ConnectedSystem");
+
     private PostgresDataRepository Repository { get; }
 
     internal ConnectedSystemRepository(PostgresDataRepository dataRepository)
@@ -1355,66 +1360,62 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         // CappedMva strategy: load the CSO with capped MVA values
         // Step 1: Load the CSO shell with metadata (no attribute values yet)
-        var entity = await Repository.Database.ConnectedSystemObjects
-            .AsSplitQuery()
-            .Include(cso => cso.Type)
-            .Include(cso => cso.MetaverseObject)
-            .ThenInclude(mvo => mvo!.Type)
-            .Include(cso => cso.MetaverseObject)
-            .ThenInclude(mvo => mvo!.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
+        ConnectedSystemObject? entity;
+        using (ActivitySource.StartActivity("Cso.LoadShell"))
+        {
+            entity = await Repository.Database.ConnectedSystemObjects
+                .AsSplitQuery()
+                .Include(cso => cso.Type)
+                .Include(cso => cso.MetaverseObject)
+                .ThenInclude(mvo => mvo!.Type)
+                .Include(cso => cso.MetaverseObject)
+                .ThenInclude(mvo => mvo!.AttributeValues)
+                .ThenInclude(av => av.Attribute)
+                .SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
+        }
 
         if (entity == null)
             return null;
 
         // Step 2: Get per-attribute value counts for this CSO
-        var attributeValueCounts = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
-            .Where(av => av.ConnectedSystemObject.Id == id)
-            .GroupBy(av => av.Attribute.Name)
-            .Select(g => new { AttributeName = g.Key, Count = g.Count() })
-            .ToListAsync();
+        Dictionary<string, int> totalCounts;
+        using (ActivitySource.StartActivity("Cso.LoadAttributeCounts"))
+        {
+            var attributeValueCounts = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
+                .Where(av => av.ConnectedSystemObject.Id == id)
+                .GroupBy(av => av.Attribute.Name)
+                .Select(g => new { AttributeName = g.Key, Count = g.Count() })
+                .ToListAsync();
 
-        var totalCounts = attributeValueCounts.ToDictionary(x => x.AttributeName, x => x.Count);
+            totalCounts = attributeValueCounts.ToDictionary(x => x.AttributeName, x => x.Count);
+        }
 
         // Step 3: Load SVA values (all of them) and MVA values (capped)
         // Identify which attributes are multi-valued
-        var mvaAttributeIds = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
-            .Where(av => av.ConnectedSystemObject.Id == id)
-            .Select(av => new { av.AttributeId, av.Attribute.AttributePlurality })
-            .Distinct()
-            .ToListAsync();
+        HashSet<int> multiValuedAttributeIds;
+        using (ActivitySource.StartActivity("Cso.LoadAttributePluralities"))
+        {
+            var mvaAttributeIds = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
+                .Where(av => av.ConnectedSystemObject.Id == id)
+                .Select(av => new { av.AttributeId, av.Attribute.AttributePlurality })
+                .Distinct()
+                .ToListAsync();
 
-        var multiValuedAttributeIds = mvaAttributeIds
-            .Where(a => a.AttributePlurality == Models.Core.AttributePlurality.MultiValued)
-            .Select(a => a.AttributeId)
-            .ToHashSet();
+            multiValuedAttributeIds = mvaAttributeIds
+                .Where(a => a.AttributePlurality == Models.Core.AttributePlurality.MultiValued)
+                .Select(a => a.AttributeId)
+                .ToHashSet();
+        }
 
         // Load all SVA values (including referenced CSO display info for bounded set)
-        // AsTracking required: Include path AttributeValue -> ReferenceValue(CSO) -> AttributeValues creates a cycle.
-        var svaValues = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
-            .AsTracking()
-            .AsSplitQuery()
-            .Where(av => av.ConnectedSystemObject.Id == id && !multiValuedAttributeIds.Contains(av.AttributeId))
-            .Include(av => av.Attribute)
-            .Include(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.Type)
-            .Include(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.AttributeValues)
-            .ThenInclude(rav => rav.Attribute)
-            .ToListAsync();
-
-        // Load capped MVA values per attribute (including referenced CSO display info for bounded page)
-        var cappedMvaValues = new List<ConnectedSystemObjectAttributeValue>();
-        foreach (var attrId in multiValuedAttributeIds)
+        List<ConnectedSystemObjectAttributeValue> svaValues;
+        using (var svaSpan = ActivitySource.StartActivity("Cso.LoadSvaValues"))
         {
             // AsTracking required: Include path AttributeValue -> ReferenceValue(CSO) -> AttributeValues creates a cycle.
-            var values = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
+            svaValues = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
                 .AsTracking()
                 .AsSplitQuery()
-                .Where(av => av.ConnectedSystemObject.Id == id && av.AttributeId == attrId)
-                .OrderBy(av => av.Id)
-                .Take(CappedMvaLimit)
+                .Where(av => av.ConnectedSystemObject.Id == id && !multiValuedAttributeIds.Contains(av.AttributeId))
                 .Include(av => av.Attribute)
                 .Include(av => av.ReferenceValue)
                 .ThenInclude(rv => rv!.Type)
@@ -1422,16 +1423,57 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .ThenInclude(rv => rv!.AttributeValues)
                 .ThenInclude(rav => rav.Attribute)
                 .ToListAsync();
+            svaSpan?.SetTag("count", svaValues.Count);
+        }
 
-            cappedMvaValues.AddRange(values);
+        // Load capped MVA values per attribute (including referenced CSO display info for bounded page)
+        var cappedMvaValues = new List<ConnectedSystemObjectAttributeValue>();
+        using (var mvaSpan = ActivitySource.StartActivity("Cso.LoadCappedMvaValues"))
+        {
+            mvaSpan?.SetTag("attributeCount", multiValuedAttributeIds.Count);
+            mvaSpan?.SetTag("cap", CappedMvaLimit);
+            foreach (var attrId in multiValuedAttributeIds)
+            {
+                using var iterSpan = ActivitySource.StartActivity("Cso.LoadCappedMvaValues.Attribute");
+                iterSpan?.SetTag("attributeId", attrId);
+                // AsTracking required: Include path AttributeValue -> ReferenceValue(CSO) -> AttributeValues creates a cycle.
+                var values = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
+                    .AsTracking()
+                    .AsSplitQuery()
+                    .Where(av => av.ConnectedSystemObject.Id == id && av.AttributeId == attrId)
+                    .OrderBy(av => av.Id)
+                    .Take(CappedMvaLimit)
+                    .Include(av => av.Attribute)
+                    .Include(av => av.ReferenceValue)
+                    .ThenInclude(rv => rv!.Type)
+                    .Include(av => av.ReferenceValue)
+                    .ThenInclude(rv => rv!.AttributeValues)
+                    .ThenInclude(rav => rav.Attribute)
+                    .ToListAsync();
+                iterSpan?.SetTag("returned", values.Count);
+
+                cappedMvaValues.AddRange(values);
+            }
         }
 
         // Combine and attach to entity
         entity.AttributeValues = svaValues.Concat(cappedMvaValues).ToList();
 
+        // Total change-history count, surfaced on the result so the UI can render a badge
+        // without eager-loading the change rows themselves.
+        int changeCount;
+        using (ActivitySource.StartActivity("Cso.LoadChangeCount"))
+        {
+            changeCount = await Repository.Database.ConnectedSystemObjectChanges
+                .AsNoTracking()
+                .Where(c => c.ConnectedSystemObject != null && c.ConnectedSystemObject.Id == id)
+                .CountAsync();
+        }
+
         return new CsoDetailResult
         {
             ConnectedSystemObject = entity,
+            ChangeCount = changeCount,
             AttributeValueTotalCounts = totalCounts
         };
     }
@@ -3795,9 +3837,111 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <inheritdoc />
+    public async Task<(List<CsoChangeHistoryDto> Items, int TotalCount)> GetCsoChangeHistoryAsync(Guid connectedSystemObjectId, int page, int pageSize)
+    {
+        if (page < 1)
+            page = 1;
+        if (pageSize < 1)
+            pageSize = 1;
+
+        using var span = ActivitySource.StartActivity("Cso.LoadChangeHistoryPage");
+        span?.SetTag("page", page);
+        span?.SetTag("pageSize", pageSize);
+
+        var baseQuery = Repository.Database.ConnectedSystemObjectChanges
+            .AsNoTracking()
+            .Where(c => c.ConnectedSystemObject != null && c.ConnectedSystemObject.Id == connectedSystemObjectId);
+
+        var totalCount = await baseQuery.CountAsync();
+        if (totalCount == 0)
+            return (new List<CsoChangeHistoryDto>(), 0);
+
+        // Flat projection. No Includes; EF generates the joins from the Select. Reference target
+        // display labels are sourced from a small set of known attributes via correlated subqueries
+        // rather than materialising the full reference target's attribute graph (the source of the
+        // ~3 s eager-load cost).
+        var items = await baseQuery
+            .OrderByDescending(c => c.ChangeTime)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(c => new CsoChangeHistoryDto
+            {
+                Id = c.Id,
+                ChangeType = c.ChangeType,
+                ChangeTime = c.ChangeTime,
+                InitiatedByType = c.InitiatedByType,
+                InitiatedById = c.InitiatedById,
+                InitiatedByName = c.InitiatedByName,
+                ActivityRunProfileExecutionItemId = c.ActivityRunProfileExecutionItemId,
+                RunProfileName = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
+                    ? c.ActivityRunProfileExecutionItem.Activity.TargetName
+                    : null,
+                AttributeChanges = c.AttributeChanges
+                    .OrderBy(ac => ac.AttributeName)
+                    .Select(ac => new CsoAttributeChangeDto
+                    {
+                        AttributeName = ac.AttributeName,
+                        AttributeType = ac.AttributeType,
+                        AttributePlurality = ac.Attribute != null ? ac.Attribute.AttributePlurality : Models.Core.AttributePlurality.SingleValued,
+                        ValueChanges = ac.ValueChanges
+                            .Select(vc => new CsoValueChangeDto
+                            {
+                                ValueChangeType = vc.ValueChangeType,
+                                StringValue = vc.StringValue,
+                                DateTimeValue = vc.DateTimeValue,
+                                IntValue = vc.IntValue,
+                                LongValue = vc.LongValue,
+                                ByteValueLength = vc.ByteValueLength,
+                                GuidValue = vc.GuidValue,
+                                BoolValue = vc.BoolValue,
+                                ReferenceValue = vc.ReferenceValue == null
+                                    ? null
+                                    : new CsoChangeReferenceDto
+                                    {
+                                        Id = vc.ReferenceValue.Id,
+                                        ConnectedSystemId = vc.ReferenceValue.ConnectedSystemId,
+                                        TypeName = vc.ReferenceValue.Type.Name,
+                                        // Best-effort label: prefer a "displayName" attribute, fall back to external id, then secondary external id.
+                                        DisplayName =
+                                            vc.ReferenceValue.AttributeValues
+                                                .Where(av => av.Attribute.Name.ToLower() == "displayname" && av.StringValue != null)
+                                                .Select(av => av.StringValue)
+                                                .FirstOrDefault()
+                                            ?? vc.ReferenceValue.AttributeValues
+                                                .Where(av => av.AttributeId == vc.ReferenceValue.ExternalIdAttributeId && av.StringValue != null)
+                                                .Select(av => av.StringValue)
+                                                .FirstOrDefault()
+                                            ?? (vc.ReferenceValue.SecondaryExternalIdAttributeId.HasValue
+                                                ? vc.ReferenceValue.AttributeValues
+                                                    .Where(av => av.AttributeId == vc.ReferenceValue.SecondaryExternalIdAttributeId.Value && av.StringValue != null)
+                                                    .Select(av => av.StringValue)
+                                                    .FirstOrDefault()
+                                                : null),
+                                        SecondaryId = vc.ReferenceValue.SecondaryExternalIdAttributeId.HasValue
+                                            ? vc.ReferenceValue.AttributeValues
+                                                .Where(av => av.AttributeId == vc.ReferenceValue.SecondaryExternalIdAttributeId.Value && av.StringValue != null)
+                                                .Select(av => av.StringValue)
+                                                .FirstOrDefault()
+                                            : null
+                                    }
+                            })
+                            .ToList()
+                    })
+                    .ToList()
+            })
+            .ToListAsync();
+
+        span?.SetTag("returned", items.Count);
+        span?.SetTag("totalCount", totalCount);
+        return (items, totalCount);
+    }
+
     public async Task<List<ConnectedSystemObjectChange>> GetConnectedSystemObjectChangesAsync(Guid connectedSystemObjectId, int limit = 100)
     {
-        return await Repository.Database.ConnectedSystemObjectChanges
+        using var span = ActivitySource.StartActivity("Cso.LoadChangesEager");
+        span?.SetTag("csoId", connectedSystemObjectId);
+        span?.SetTag("limit", limit);
+        var results = await Repository.Database.ConnectedSystemObjectChanges
             .AsSplitQuery()
             .Where(c => c.ConnectedSystemObject != null && c.ConnectedSystemObject.Id == connectedSystemObjectId)
             .OrderByDescending(c => c.ChangeTime)
@@ -3816,6 +3960,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(rv => rv!.AttributeValues)
             .ThenInclude(av => av.Attribute)
             .ToListAsync();
+        span?.SetTag("returned", results.Count);
+        return results;
     }
 
     /// <inheritdoc />
