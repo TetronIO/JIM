@@ -116,7 +116,7 @@ For detailed architecture diagrams (Component level), see the [Architecture](htt
 The fastest way to get JIM running:
 
 ```bash
-curl -fsSL https://tetron.io/jim/get | bash
+curl -fsSL https://junctional.io/get | bash
 ```
 
 This downloads everything you need, walks you through configuration, and starts JIM. For manual setup, air-gapped deployment, and production hardening, see the [Getting Started](https://docs.junctional.io/getting-started/) guide.
@@ -159,6 +159,7 @@ JIM is built in the open and we'd love to hear from people running it, evaluatin
 JIM uses a Source-Available model where it is free to use in non-production scenarios, but requires a commercial license for use in production scenarios. [﻿Full details can be found here](https://tetron.io/jim/#licensing).
 
 ## More Information
+- **Product site:** [junctional.io](https://junctional.io)
 - **Documentation:** [docs.junctional.io](https://docs.junctional.io/)
 - **Discussions:** [github.com/TetronIO/JIM/discussions](https://github.com/TetronIO/JIM/discussions)
-- **Product site:** [tetron.io/jim](https://tetron.io/jim)
+
