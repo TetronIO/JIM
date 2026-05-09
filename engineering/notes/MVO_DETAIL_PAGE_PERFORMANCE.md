@@ -1,6 +1,10 @@
 # MVO Detail Page Performance: Eager Change History Load
 
-> Investigation of the slow load on the metaverse object detail page (e.g. `/t/groups/v/{id}`) and a proposed remediation. Pre-decision; presented for review before any implementation work begins.
+- **Status:** Done
+- **Branch:** `feature/perf-instrumentation-mvo-detail`
+- **Implementation commit:** `09e6806a`
+
+> Investigation of the slow load on the metaverse object detail page (e.g. `/t/groups/v/{id}`), the chosen remediation, and the validation results.
 
 ## Symptom
 
@@ -114,15 +118,44 @@ Roughly half a day. Files touched:
 
 **C. Combined (recommended above).** Aligns with all three quality axes (UX, architecture, performance) per [`src/CLAUDE.md`](../../src/CLAUDE.md) and surfaces a useful new API capability.
 
-## Open questions for the reviewer
+## Decisions taken at implementation time
 
-1. Scope: do all four pieces in one PR, or split (UI + DTO first, API/PowerShell as a follow-up)?
-2. Page size: default 50 reasonable, or different given typical change-row size?
-3. Sort: should the API expose `sortDirection` from day one, or always DESC and add it later if asked?
-4. Should the Changes tab render a count badge before the lazy-load fires? (We already have `MetaverseObject.Changes.Count` from the eager-load today; the DTO approach loses that unless we surface a separate `totalCount` from the paginated call, which is in the proposed signature already.)
+The four open questions resolved as follows:
 
-## Branch state at the time of writing
+1. **Scope:** all four pieces shipped in a single PR (commit `09e6806a`). Splitting would have left the API/PowerShell gap open and introduced cross-PR coupling for the DTO contract.
+2. **Page size:** default 50, clamped to [1, 100] at the server. Matches the shape of the existing `Get-JIMMetaverseObject` cmdlet pagination.
+3. **Sort:** always DESC by `ChangeTime`. No `sortDirection` query parameter; can be added later if asked.
+4. **Count badge:** the badge needs no lazy-load. `MvoDetailResult` gained a `ChangeCount` field (single `COUNT(*)` against the same FK index used by the page query) plus `EarliestChangeInitiator` / `LatestChangeInitiator` summaries so the Properties tab still shows "Created By" / "Last Updated By" without round-tripping the change rows.
 
-- Branch: `feature/perf-instrumentation-mvo-detail`
-- Commit `e232cb64`: instrumentation only (spans + listener wiring in `JIM.Web`). No behaviour change.
-- Nothing from the recommendation above is implemented yet.
+## Validation (post-implementation)
+
+After `09e6806a`, five page loads of the same group MVO (`JIM_LOG_LEVEL=Debug`):
+
+| Span | Before | After (cold, 1st hit) | After (warm, range) |
+|---|---:|---:|---:|
+| `Mvo.LoadShell` (formerly `LoadShellWithChanges`) | 1225–1539 ms | **1.0 ms** | 0.7–1.5 ms |
+| `Mvo.LoadChangeCountAndInitiators` (new) | n/a | 6.4 ms | 2.1–5.4 ms |
+| `Mvo.LoadAttributeCounts` | 6–16 ms | 60.2 ms | 7.3–8.8 ms |
+| `Mvo.LoadAttributePluralities` | 5–9 ms | 5.1 ms | 3.2–6.8 ms |
+| `Mvo.LoadSvaValues` | 169–248 ms | **1032.8 ms** [SLOW] | 23.3–278.9 ms |
+| `Mvo.LoadCappedMvaValues` (1 attr) | 4–48 ms | 52.8 ms | 2.8–8.3 ms |
+| **`Mvo.GetDetail` total** | **1409–1863 ms** | **1159 ms** | **47.7–305.4 ms** |
+| `Mvo.GetChangeHistory` (lazy, only when Changes tab opened) | n/a | 217 ms | 94–217 ms |
+
+Headline: `Mvo.LoadShell` went from ~1.2–1.5 s to **0.7–1.5 ms (~1000× faster)**. This is the dominant gain and confirms the change-history Include chain was the entire structural problem.
+
+Warm steady-state `Mvo.GetDetail` is now **47–305 ms**, a 5–25× improvement over the previous 1.4–1.9 s. When the user does not click the Changes tab (run 2 of the captured set), no change-history work runs at all, so the worst-case cost only applies when the user actually wants the data. Worst-case path (cold first hit + immediate Changes tab click) is 1159 + 217 = ~1376 ms, which is still no worse than the previous unconditional path.
+
+The `[SLOW]` log entries that remain after this change come from a different span (`Mvo.LoadSvaValues`), not the change-history path that this work targeted.
+
+## Follow-up: cold-cache spike on `Mvo.LoadSvaValues`
+
+The first page load after a container restart shows `Mvo.LoadSvaValues` at ~1033 ms, with subsequent warm hits dropping to 23–279 ms. The original investigation captured the same query at 169–248 ms (warm). The cold-vs-warm pattern looks like an Npgsql connection-pool / EF compiled-model warmup effect rather than a structural regression.
+
+It is outside the scope of this branch and does not negate the change-history fix. If it becomes a user-visible problem on production cold starts, candidate next steps are:
+
+- Extend `Warming up EF Core model` in `JIM.Web/Program.cs` to also pre-execute the SVA shape against a representative MVO.
+- Profile the SVA query at cold start (cross-reference `Mvo.LoadSvaValues` span tags) to see whether the cost is in plan generation, statistics population, or the query itself.
+- Consider whether the SVA query needs its own raw-SQL path (per the worker hot-path guidance in `src/CLAUDE.md`); for a UI read this is probably overkill, but worth measuring before deciding.
+
+This is a separate engineering task; no action taken on this branch.
