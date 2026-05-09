@@ -528,6 +528,34 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
+    /// List the change history for a Metaverse Object
+    /// </summary>
+    /// <remarks>
+    /// Returns a paginated list of change records for the specified Metaverse Object,
+    /// ordered by change time descending (most recent first). Each row carries the
+    /// initiator, sync rule, and run profile context, plus the per-attribute value changes.
+    /// </remarks>
+    /// <param name="id">The unique identifier (GUID) of the Metaverse Object.</param>
+    /// <param name="pagination">Pagination parameters (page, pageSize). Page size is clamped to [1, 100].</param>
+    /// <returns>A paginated list of change-history records.</returns>
+    [HttpGet("objects/{id:guid}/change-history", Name = "GetObjectChangeHistory")]
+    [ProducesResponseType(typeof(PaginatedResponse<MvoChangeHistoryDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetObjectChangeHistoryAsync(Guid id, [FromQuery] PaginationRequest pagination)
+    {
+        _logger.LogTrace("Requested change history for metaverse object: {Id}", id);
+
+        // Verify the MVO exists so a missing id returns 404 rather than an empty page.
+        var exists = await _application.Metaverse.GetMetaverseObjectHeaderAsync(id);
+        if (exists == null)
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse object with ID {id} not found."));
+
+        var (items, totalCount) = await _application.Metaverse.GetMvoChangeHistoryAsync(id, pagination.Page, pagination.PageSize);
+        return Ok(PaginatedResponse<MvoChangeHistoryDto>.Create(items, totalCount, pagination.Page, pagination.PageSize));
+    }
+
+    /// <summary>
     /// List Metaverse Objects pending deletion
     /// </summary>
     /// <remarks>

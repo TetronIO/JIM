@@ -23,7 +23,7 @@
 
 @if (MetaverseObject != null)
 {
-    <NavigableMudTabs @bind-ActivePanelIndex="_activeTabIndex" Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" Class="mt-5" TabPanelsClass="pa-0">
+    <NavigableMudTabs ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnActiveTabIndexChangedAsync" Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" Class="mt-5" TabPanelsClass="pa-0">
         <Header Context="headerContext">
             @if (_activeTabIndex == 0)
             {
@@ -60,9 +60,37 @@
             }
         </MudTabPanel>
 
-        <MudTabPanel Text="Changes" Icon="@Icons.Material.Filled.History" BadgeData="@GetChangeCount()" BadgeColor="Color.Primary">
+        <MudTabPanel Text="Changes" Icon="@Icons.Material.Filled.History" BadgeData="@GetChangeBadge()" BadgeColor="Color.Primary">
             <div class="mt-3">
-                <ChangeHistoryTimeline Changes="@GetChangeHistory()" />
+                @if (_changeHistoryLoading && _changeHistoryRows.Count == 0)
+                {
+                    <div class="d-flex justify-center pa-4">
+                        <MudProgressCircular Indeterminate="true" />
+                    </div>
+                }
+                else if (_changeCount == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">No change history recorded for this object.</MudAlert>
+                }
+                else
+                {
+                    <ChangeHistoryTimeline Changes="@_changeHistoryRows" />
+                    @if (_changeHistoryRows.Count < _changeHistoryTotal)
+                    {
+                        <div class="d-flex justify-center mt-3">
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Primary"
+                                       Disabled="@_changeHistoryLoading"
+                                       OnClick="LoadMoreChangeHistoryAsync">
+                                @if (_changeHistoryLoading)
+                                {
+                                    <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="me-2" />
+                                }
+                                Load more (@($"{_changeHistoryTotal - _changeHistoryRows.Count:N0}") remaining)
+                            </MudButton>
+                        </div>
+                    }
+                }
             </div>
         </MudTabPanel>
 
@@ -160,6 +188,16 @@
     private string? _lastUpdatedByName;
     private string? _lastUpdatedByHref;
 
+    // Change-history lazy-load state. Initial detail load returns only the count so the
+    // badge can render immediately; the rows are fetched the first time the user lands
+    // on the Changes tab and paged via Load more.
+    private const int ChangeHistoryPageSize = 50;
+    private int _changeCount;
+    private int _changeHistoryTotal;
+    private int _changeHistoryNextPage = 1;
+    private bool _changeHistoryLoading;
+    private readonly List<ChangeHistoryTimeline.ChangeGroup> _changeHistoryRows = new();
+
     protected override async Task OnParametersSetAsync()
     {
         // If ?c= is present, force tabs view (overrides saved preference)
@@ -203,19 +241,19 @@
 
         MetaverseObject = detailResult.MetaverseObject;
         _attributeValueTotalCounts = detailResult.AttributeValueTotalCounts;
+        _changeCount = detailResult.ChangeCount;
 
         _displayName = MetaverseObject.DisplayName;
 
-        // Derive "Created By" from the earliest change and "Last Updated By" from the most recent
-        if (MetaverseObject.Changes.Count > 0)
+        if (detailResult.EarliestChangeInitiator != null)
         {
-            var orderedChanges = MetaverseObject.Changes.OrderBy(c => c.ChangeTime).ToList();
-            var firstChange = orderedChanges.First();
-            var lastChange = orderedChanges.Last();
-            _createdByName = firstChange.InitiatedByName;
-            _createdByHref = GetInitiatorHref(firstChange);
-            _lastUpdatedByName = lastChange.InitiatedByName;
-            _lastUpdatedByHref = GetInitiatorHref(lastChange);
+            _createdByName = detailResult.EarliestChangeInitiator.InitiatedByName;
+            _createdByHref = GetInitiatorHref(detailResult.EarliestChangeInitiator.InitiatedByType, detailResult.EarliestChangeInitiator.InitiatedById);
+        }
+        if (detailResult.LatestChangeInitiator != null)
+        {
+            _lastUpdatedByName = detailResult.LatestChangeInitiator.InitiatedByName;
+            _lastUpdatedByHref = GetInitiatorHref(detailResult.LatestChangeInitiator.InitiatedByType, detailResult.LatestChangeInitiator.InitiatedById);
         }
 
         if (MetaverseObject.DisplayName != null)
@@ -248,107 +286,121 @@
         }
     }
 
-    private string GetChangeCount()
+    private string GetChangeBadge()
     {
-        if (MetaverseObject?.Changes == null)
-            return "0";
-
-        return MetaverseObject.Changes.Count.ToString();
+        return _changeCount.ToString("N0");
     }
 
-    private List<ChangeHistoryTimeline.ChangeGroup> GetChangeHistory()
+    private async Task OnActiveTabIndexChangedAsync(int newIndex)
     {
-        if (MetaverseObject?.Changes == null)
-            return new List<ChangeHistoryTimeline.ChangeGroup>();
+        _activeTabIndex = newIndex;
+        // Lazy-load the first page of change history when the user lands on the Changes tab.
+        if (newIndex == 1 && _changeHistoryRows.Count == 0 && _changeCount > 0 && !_changeHistoryLoading)
+            await LoadChangeHistoryPageAsync();
+    }
 
-        return MetaverseObject.Changes
-            .OrderByDescending(c => c.ChangeTime)
-            .Select(change => new ChangeHistoryTimeline.ChangeGroup
-            {
-                ChangeType = change.ChangeType,
-                ChangeTime = change.ChangeTime,
-                // Initiator info is now stored directly on the change object (self-contained audit trail)
-                // ChangeInitiatorType = the principal type (User, ApiKey) for icon display
-                // ChangeMechanismType = how the change was triggered (SynchronisationRule, User, etc.)
-                ChangeInitiatorType = change.InitiatedByType.ToString(),
-                ChangeInitiatorName = change.InitiatedByName,
-                ChangeInitiatorId = change.InitiatedById,
-                ChangeMechanismType = MapChangeToMechanismType(change),
-                // Run profile and connected system context
-                RunProfileName = change.ActivityRunProfileExecutionItem?.Activity?.TargetName,
-                ConnectedSystemId = change.ActivityRunProfileExecutionItem?.Activity?.ConnectedSystemId,
-                ConnectedSystemName = change.ActivityRunProfileExecutionItem?.Activity?.TargetContext,
-                // Sync rule context
-                SyncRuleId = change.SyncRuleId,
-                SyncRuleName = change.SyncRuleName,
-                // Activity link for drill-down (optional - RPEI may be cleaned up)
-                ActivityRunProfileExecutionItemId = change.ActivityRunProfileExecutionItemId,
-                // CSO context for Joined/Projected changes (from RPEI snapshot)
-                CsoId = change.ActivityRunProfileExecutionItem?.ConnectedSystemObjectId,
-                CsoExternalId = change.ActivityRunProfileExecutionItem?.ExternalIdSnapshot,
-                AttributeChanges = change.AttributeChanges
-                    .OrderBy(ac => ac.AttributeName)
-                    .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange
-                    {
-                        AttributeName = ac.AttributeName,
-                        ChangeType = vc.ValueChangeType,
-                        Value = vc.ReferenceValue == null ? vc.ToString() : null,
-                        ReferenceValue = vc.ReferenceValue != null ? new ChangeHistoryTimeline.ReferenceValueInfo
+    private async Task LoadMoreChangeHistoryAsync()
+    {
+        await LoadChangeHistoryPageAsync();
+    }
+
+    private async Task LoadChangeHistoryPageAsync()
+    {
+        if (_changeHistoryLoading)
+            return;
+
+        _changeHistoryLoading = true;
+        StateHasChanged();
+        try
+        {
+            using var jim = JimFactory.Create();
+            var (items, totalCount) = await jim.Metaverse.GetMvoChangeHistoryAsync(IdParam, _changeHistoryNextPage, ChangeHistoryPageSize);
+            _changeHistoryTotal = totalCount;
+            _changeHistoryRows.AddRange(items.Select(MapDtoToChangeGroup));
+            _changeHistoryNextPage++;
+        }
+        finally
+        {
+            _changeHistoryLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private static ChangeHistoryTimeline.ChangeGroup MapDtoToChangeGroup(MvoChangeHistoryDto dto)
+    {
+        return new ChangeHistoryTimeline.ChangeGroup
+        {
+            ChangeType = dto.ChangeType,
+            ChangeTime = dto.ChangeTime,
+            ChangeInitiatorType = dto.InitiatedByType.ToString(),
+            ChangeInitiatorName = dto.InitiatedByName,
+            ChangeInitiatorId = dto.InitiatedById,
+            ChangeMechanismType = MapDtoToMechanismType(dto),
+            RunProfileName = dto.RunProfileName,
+            ConnectedSystemId = dto.ConnectedSystemId,
+            ConnectedSystemName = dto.ConnectedSystemName,
+            SyncRuleId = dto.SyncRuleId,
+            SyncRuleName = dto.SyncRuleName,
+            ActivityRunProfileExecutionItemId = dto.ActivityRunProfileExecutionItemId,
+            CsoId = dto.CsoId,
+            CsoExternalId = dto.CsoExternalId,
+            AttributeChanges = dto.AttributeChanges
+                .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange
+                {
+                    AttributeName = ac.AttributeName,
+                    ChangeType = vc.ValueChangeType,
+                    Value = vc.ReferenceValue == null ? vc.ToDisplayString() : null,
+                    ReferenceValue = vc.ReferenceValue != null
+                        ? new ChangeHistoryTimeline.ReferenceValueInfo
                         {
-                            TypeName = vc.ReferenceValue.Type.Name,
+                            TypeName = vc.ReferenceValue.TypeName,
                             DisplayName = vc.ReferenceValue.DisplayName ?? vc.ReferenceValue.Id.ToString(),
-                            SecondaryId = null, // MVO doesn't have secondary external ID
-                            Href = Utilities.GetMetaverseObjectHref(vc.ReferenceValue)
-                        } : null,
-                        IsMultiValued = ac.Attribute?.AttributePlurality == AttributePlurality.MultiValued,
-                        AttributeType = ac.AttributeType
-                    }))
-                    .ToList()
-            })
-            .ToList();
+                            SecondaryId = null,
+                            Href = Utilities.GetMetaverseObjectHref(vc.ReferenceValue.Id, vc.ReferenceValue.TypePluralName)
+                        }
+                        : null,
+                    IsMultiValued = ac.AttributePlurality == AttributePlurality.MultiValued,
+                    AttributeType = ac.AttributeType
+                }))
+                .ToList()
+        };
     }
 
-    /// <summary>
-    /// Maps a MetaverseObjectChange to a mechanism type string for the change history timeline.
-    /// Uses the ChangeInitiatorType when available, falling back to run type for sync-initiated changes.
-    /// </summary>
     private async Task CopyToClipboardAsync(string text)
     {
         await JsRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
     }
 
-    private static string? GetInitiatorHref(MetaverseObjectChange change)
+    private static string? GetInitiatorHref(ActivityInitiatorType initiatedByType, Guid? initiatedById)
     {
-        if (change.InitiatedById == null)
+        if (initiatedById == null)
             return null;
 
-        return change.InitiatedByType switch
+        return initiatedByType switch
         {
-            ActivityInitiatorType.User => $"/t/users/v/{change.InitiatedById}",
-            ActivityInitiatorType.ApiKey => $"/admin/apikeys/{change.InitiatedById}",
+            ActivityInitiatorType.User => $"/t/users/v/{initiatedById}",
+            ActivityInitiatorType.ApiKey => $"/admin/apikeys/{initiatedById}",
             _ => null
         };
     }
 
-    private static string MapChangeToMechanismType(MetaverseObjectChange change)
+    private static string MapDtoToMechanismType(MvoChangeHistoryDto dto)
     {
-        // Use the change initiator type when it's explicitly set to a non-sync/non-default value
-        if (change.ChangeInitiatorType is MetaverseObjectChangeInitiatorType.ExampleData
+        if (dto.ChangeInitiatorType is MetaverseObjectChangeInitiatorType.ExampleData
             or MetaverseObjectChangeInitiatorType.User
             or MetaverseObjectChangeInitiatorType.WorkflowInstance
             or MetaverseObjectChangeInitiatorType.GroupMembershipRuleEvaluation
             or MetaverseObjectChangeInitiatorType.System)
         {
-            return change.ChangeInitiatorType.ToString();
+            return dto.ChangeInitiatorType.ToString();
         }
 
-        // For sync-initiated changes, derive from the run type
-        return change.ActivityRunProfileExecutionItem?.Activity?.ConnectedSystemRunType switch
+        return dto.ConnectedSystemRunType switch
         {
             ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport => "Import",
             ConnectedSystemRunType.FullSynchronisation or ConnectedSystemRunType.DeltaSynchronisation => "SynchronisationRule",
             ConnectedSystemRunType.Export => "Export",
-            _ => "SynchronisationRule" // Default to sync for MVO changes
+            _ => "SynchronisationRule"
         };
     }
 }

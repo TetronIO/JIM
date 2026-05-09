@@ -388,4 +388,77 @@ public class MetaverseControllerObjectsTests
     }
 
     #endregion
+
+    #region GetObjectChangeHistoryAsync tests
+
+    [Test]
+    public async Task GetObjectChangeHistoryAsync_UnknownId_ReturnsNotFoundAsync()
+    {
+        var id = Guid.NewGuid();
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectHeaderAsync(id))
+            .ReturnsAsync((MetaverseObjectHeader?)null);
+
+        var result = await _controller.GetObjectChangeHistoryAsync(id, new PaginationRequest { Page = 1, PageSize = 50 });
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+        _mockMetaverseRepo.Verify(r => r.GetMvoChangeHistoryAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+    }
+
+    [Test]
+    public async Task GetObjectChangeHistoryAsync_KnownId_ReturnsPaginatedResponseAsync()
+    {
+        var id = Guid.NewGuid();
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectHeaderAsync(id))
+            .ReturnsAsync(new MetaverseObjectHeader { Id = id, TypeId = 1, TypeName = "User", TypePluralName = "Users" });
+
+        var dtoRows = new List<MvoChangeHistoryDto>
+        {
+            new MvoChangeHistoryDto { Id = Guid.NewGuid(), ChangeTime = DateTime.UtcNow, InitiatedByName = "Admin" },
+            new MvoChangeHistoryDto { Id = Guid.NewGuid(), ChangeTime = DateTime.UtcNow.AddMinutes(-1), InitiatedByName = "Sync Engine" }
+        };
+        _mockMetaverseRepo.Setup(r => r.GetMvoChangeHistoryAsync(id, 1, 50))
+            .ReturnsAsync((dtoRows, 2));
+
+        var result = await _controller.GetObjectChangeHistoryAsync(id, new PaginationRequest { Page = 1, PageSize = 50 }) as OkObjectResult;
+        var response = result?.Value as PaginatedResponse<MvoChangeHistoryDto>;
+
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response!.Items.Count(), Is.EqualTo(2));
+        Assert.That(response.TotalCount, Is.EqualTo(2));
+        Assert.That(response.Page, Is.EqualTo(1));
+        Assert.That(response.PageSize, Is.EqualTo(50));
+    }
+
+    [Test]
+    public async Task GetObjectChangeHistoryAsync_PassesPaginationToRepositoryAsync()
+    {
+        var id = Guid.NewGuid();
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectHeaderAsync(id))
+            .ReturnsAsync(new MetaverseObjectHeader { Id = id, TypeId = 1, TypeName = "User", TypePluralName = "Users" });
+        _mockMetaverseRepo.Setup(r => r.GetMvoChangeHistoryAsync(id, It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync((new List<MvoChangeHistoryDto>(), 0));
+
+        await _controller.GetObjectChangeHistoryAsync(id, new PaginationRequest { Page = 3, PageSize = 25 });
+
+        _mockMetaverseRepo.Verify(r => r.GetMvoChangeHistoryAsync(id, 3, 25), Times.Once);
+    }
+
+    [Test]
+    public async Task GetObjectChangeHistoryAsync_EmptyHistory_ReturnsZeroTotalCountAsync()
+    {
+        var id = Guid.NewGuid();
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectHeaderAsync(id))
+            .ReturnsAsync(new MetaverseObjectHeader { Id = id, TypeId = 1, TypeName = "User", TypePluralName = "Users" });
+        _mockMetaverseRepo.Setup(r => r.GetMvoChangeHistoryAsync(id, 1, 50))
+            .ReturnsAsync((new List<MvoChangeHistoryDto>(), 0));
+
+        var result = await _controller.GetObjectChangeHistoryAsync(id, new PaginationRequest { Page = 1, PageSize = 50 }) as OkObjectResult;
+        var response = result?.Value as PaginatedResponse<MvoChangeHistoryDto>;
+
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response!.TotalCount, Is.EqualTo(0));
+        Assert.That(response.Items.Count(), Is.EqualTo(0));
+    }
+
+    #endregion
 }

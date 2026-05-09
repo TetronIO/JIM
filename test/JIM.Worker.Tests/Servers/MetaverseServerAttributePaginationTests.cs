@@ -163,4 +163,53 @@ public class MetaverseServerAttributePaginationTests
         // Assert
         Assert.That(result, Is.Null);
     }
+
+    [Test]
+    public async Task GetMvoChangeHistoryAsync_DelegatesToRepositoryAsync()
+    {
+        var mvoId = Guid.NewGuid();
+        var expected = (
+            new List<MvoChangeHistoryDto>
+            {
+                new MvoChangeHistoryDto { Id = Guid.NewGuid(), ChangeTime = DateTime.UtcNow, InitiatedByName = "Admin" }
+            },
+            TotalCount: 1);
+        _mockMetaverseRepo
+            .Setup(r => r.GetMvoChangeHistoryAsync(mvoId, 2, 25))
+            .ReturnsAsync(expected);
+
+        var (items, total) = await _jim.Metaverse.GetMvoChangeHistoryAsync(mvoId, 2, 25);
+
+        Assert.That(total, Is.EqualTo(1));
+        Assert.That(items, Has.Count.EqualTo(1));
+        _mockMetaverseRepo.Verify(r => r.GetMvoChangeHistoryAsync(mvoId, 2, 25), Times.Once);
+    }
+
+    [Test]
+    public async Task GetMvoChangeHistoryAsync_ClampsPageSizeAboveLimitAsync()
+    {
+        var mvoId = Guid.NewGuid();
+        _mockMetaverseRepo
+            .Setup(r => r.GetMvoChangeHistoryAsync(mvoId, It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync((new List<MvoChangeHistoryDto>(), 0));
+
+        // Caller asks for 1000 — server should clamp to 100.
+        await _jim.Metaverse.GetMvoChangeHistoryAsync(mvoId, 1, 1000);
+
+        _mockMetaverseRepo.Verify(r => r.GetMvoChangeHistoryAsync(mvoId, 1, 100), Times.Once);
+    }
+
+    [Test]
+    public async Task GetMvoChangeHistoryAsync_FloorsZeroAndNegativeArgumentsAsync()
+    {
+        var mvoId = Guid.NewGuid();
+        _mockMetaverseRepo
+            .Setup(r => r.GetMvoChangeHistoryAsync(mvoId, It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync((new List<MvoChangeHistoryDto>(), 0));
+
+        // Caller asks for page 0, pageSize -5 — server should floor to 1, 1.
+        await _jim.Metaverse.GetMvoChangeHistoryAsync(mvoId, 0, -5);
+
+        _mockMetaverseRepo.Verify(r => r.GetMvoChangeHistoryAsync(mvoId, 1, 1), Times.Once);
+    }
 }

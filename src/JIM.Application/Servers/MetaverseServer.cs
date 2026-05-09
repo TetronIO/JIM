@@ -351,6 +351,26 @@ public class MetaverseServer
         return await Application.Repository.Metaverse.GetMetaverseObjectDetailAsync(id, loadStrategy);
     }
 
+    /// <summary>
+    /// Returns a page of change-history rows for a Metaverse Object, projected into a flat DTO.
+    /// Ordered by change time descending. <paramref name="pageSize"/> is clamped to [1, 100].
+    /// </summary>
+    public async Task<(List<MvoChangeHistoryDto> Items, int TotalCount)> GetMvoChangeHistoryAsync(Guid metaverseObjectId, int page, int pageSize)
+    {
+        if (page < 1)
+            page = 1;
+        if (pageSize < 1)
+            pageSize = 1;
+        if (pageSize > 100)
+            pageSize = 100;
+
+        using var span = Diagnostics.Diagnostics.Database.StartSpan("Mvo.GetChangeHistory")
+            .SetTag("id", metaverseObjectId)
+            .SetTag("page", page)
+            .SetTag("pageSize", pageSize);
+        return await Application.Repository.Metaverse.GetMvoChangeHistoryAsync(metaverseObjectId, page, pageSize);
+    }
+
     public async Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id)
     {
         return await Application.Repository.Metaverse.GetMetaverseObjectHeaderAsync(id);
