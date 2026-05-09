@@ -656,11 +656,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Pre-resolve displayName attribute IDs for this connected system to avoid repeated
         // ILike string comparisons in the search, sort, and projection clauses.
         // Each object type in the connected system may have its own "displayname" attribute.
-        var displayNameAttributeIds = await Repository.Database.ConnectedSystemAttributes
-            .Where(a => a.ConnectedSystemObjectType.ConnectedSystem.Id == connectedSystemId &&
-                        EF.Functions.ILike(a.Name, "displayname"))
-            .Select(a => a.Id)
-            .ToListAsync();
+        List<int> displayNameAttributeIds;
+        using (ActivitySource.StartActivity("Cso.Headers.LoadDisplayNameAttrIds"))
+        {
+            displayNameAttributeIds = await Repository.Database.ConnectedSystemAttributes
+                .Where(a => a.ConnectedSystemObjectType.ConnectedSystem.Id == connectedSystemId &&
+                            EF.Functions.ILike(a.Name, "displayname"))
+                .Select(a => a.Id)
+                .ToListAsync();
+        }
 
         var query = Repository.Database.ConnectedSystemObjects
             .Where(cso => cso.ConnectedSystem.Id == connectedSystemId);
@@ -767,19 +771,24 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         };
 
         // Get total count before pagination
-        var totalCount = await query.CountAsync();
+        int totalCount;
+        using (var countSpan = ActivitySource.StartActivity("Cso.Headers.Count"))
+        {
+            totalCount = await query.CountAsync();
+            countSpan?.SetTag("totalCount", totalCount);
+        }
 
         // Apply pagination
         var offset = (page - 1) * pageSize;
         var pagedObjects = query.Skip(offset).Take(pageSize);
 
-        // Project to header DTO with pending export info
-        // Use a left join to include pending export data for displayName and secondaryExternalId
-        var selectedObjects = from cso in pagedObjects
-            join pe in Repository.Database.PendingExports.Include(p => p.AttributeValueChanges).ThenInclude(avc => avc.Attribute)
-                on cso.Id equals pe.ConnectedSystemObjectId into pendingExports
-            from pe in pendingExports.DefaultIfEmpty()
-            select new ConnectedSystemObjectHeader
+        // Project to header DTO using scalar correlated subqueries throughout. The previous shape
+        // used a from-from-Include left join over PendingExports plus two SingleOrDefault calls
+        // returning full ConnectedSystemObjectAttributeValue entities; that materialised tens of
+        // entities per row and dominated the query at ~3 s for a 10-row page. The shape below
+        // returns only the scalar strings the page actually renders.
+        var selectedObjects = pagedObjects
+            .Select(cso => new ConnectedSystemObjectHeader
             {
                 Id = cso.Id,
                 ConnectedSystemId = cso.ConnectedSystemId,
@@ -790,39 +799,66 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 Status = cso.Status,
                 TypeId = cso.Type.Id,
                 TypeName = cso.Type.Name,
-                // Use pre-resolved attribute IDs and single FirstOrDefault instead of Any+Single
                 DisplayName = cso.AttributeValues
                     .Where(av => displayNameAttributeIds.Contains(av.AttributeId))
                     .Select(av => av.StringValue)
                     .FirstOrDefault(),
-                ExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.ExternalIdAttributeId),
-                ExternalIdAttributeName = cso.AttributeValues.Where(av => av.Attribute.Id == cso.ExternalIdAttributeId).Select(av => av.Attribute.Name).FirstOrDefault(),
-                SecondaryExternalIdAttributeValue = cso.AttributeValues.SingleOrDefault(av => av.Attribute.Id == cso.SecondaryExternalIdAttributeId),
-                SecondaryExternalIdAttributeName = cso.AttributeValues.Where(av => av.Attribute.Id == cso.SecondaryExternalIdAttributeId).Select(av => av.Attribute.Name).FirstOrDefault(),
-                // Pending export info - only show if CSO doesn't already have a confirmed value
-                HasPendingExport = pe != null,
-                PendingExportId = pe != null ? pe.Id : null,
-                PendingDisplayName = pe != null && !cso.AttributeValues.Any(av => displayNameAttributeIds.Contains(av.AttributeId))
-                    ? pe.AttributeValueChanges
+                ExternalIdValue = cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault(),
+                ExternalIdAttributeName = cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
+                    .Select(av => av.Attribute.Name)
+                    .FirstOrDefault(),
+                SecondaryExternalIdValue = cso.SecondaryExternalIdAttributeId == null
+                    ? null
+                    : cso.AttributeValues
+                        .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
+                        .Select(av => av.StringValue)
+                        .FirstOrDefault(),
+                SecondaryExternalIdAttributeName = cso.SecondaryExternalIdAttributeId == null
+                    ? null
+                    : cso.AttributeValues
+                        .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
+                        .Select(av => av.Attribute.Name)
+                        .FirstOrDefault(),
+                // Pending export fields: scalar correlated subqueries; no Includes, no left join.
+                HasPendingExport = Repository.Database.PendingExports.Any(pe => pe.ConnectedSystemObjectId == cso.Id),
+                PendingExportId = Repository.Database.PendingExports
+                    .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
+                    .Select(pe => (Guid?)pe.Id)
+                    .FirstOrDefault(),
+                PendingDisplayName = cso.AttributeValues.Any(av => displayNameAttributeIds.Contains(av.AttributeId))
+                    ? null
+                    : Repository.Database.PendingExports
+                        .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
+                        .SelectMany(pe => pe.AttributeValueChanges)
                         .Where(avc => displayNameAttributeIds.Contains(avc.AttributeId) || EF.Functions.ILike(avc.Attribute.Name, "cn"))
                         .Select(avc => avc.StringValue)
-                        .FirstOrDefault()
-                    : null,
-                PendingExternalId = pe != null
-                    ? pe.AttributeValueChanges
-                        .Where(avc => avc.AttributeId == cso.ExternalIdAttributeId)
-                        .Select(avc => avc.StringValue)
-                        .FirstOrDefault()
-                    : null,
-                PendingSecondaryExternalId = pe != null && cso.SecondaryExternalIdAttributeId != null &&
-                    !cso.AttributeValues.Any(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
-                    ? pe.AttributeValueChanges
+                        .FirstOrDefault(),
+                PendingExternalId = Repository.Database.PendingExports
+                    .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
+                    .SelectMany(pe => pe.AttributeValueChanges)
+                    .Where(avc => avc.AttributeId == cso.ExternalIdAttributeId)
+                    .Select(avc => avc.StringValue)
+                    .FirstOrDefault(),
+                PendingSecondaryExternalId = cso.SecondaryExternalIdAttributeId == null ||
+                                              cso.AttributeValues.Any(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
+                    ? null
+                    : Repository.Database.PendingExports
+                        .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
+                        .SelectMany(pe => pe.AttributeValueChanges)
                         .Where(avc => avc.Attribute.IsSecondaryExternalId)
                         .Select(avc => avc.StringValue)
                         .FirstOrDefault()
-                    : null
-            };
-        var results = await selectedObjects.ToListAsync();
+            });
+        List<ConnectedSystemObjectHeader> results;
+        using (var pageSpan = ActivitySource.StartActivity("Cso.Headers.LoadPage"))
+        {
+            results = await selectedObjects.ToListAsync();
+            pageSpan?.SetTag("returned", results.Count);
+        }
 
         // Build paged result set
         var pagedResultSet = new PagedResultSet<ConnectedSystemObjectHeader>

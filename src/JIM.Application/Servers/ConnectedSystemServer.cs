@@ -2102,6 +2102,8 @@ public class ConnectedSystemServer
     /// <param name="connectedSystemId">The unique identifier for the Connected System to return the types for.</param>
     public async Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId)
     {
+        using var span = Diagnostics.Diagnostics.Database.StartSpan("Cso.GetObjectTypes")
+            .SetTag("connectedSystemId", connectedSystemId);
         return await Application.Repository.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);
     }
 
@@ -2640,6 +2642,15 @@ public class ConnectedSystemServer
         IEnumerable<int>? objectTypeFilter = null,
         IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null)
     {
+        using var span = Diagnostics.Diagnostics.Database.StartSpan("Cso.GetHeaders")
+            .SetTag("connectedSystemId", connectedSystemId)
+            .SetTag("page", page)
+            .SetTag("pageSize", pageSize)
+            .SetTag("hasSearch", !string.IsNullOrWhiteSpace(searchQuery))
+            .SetTag("sortBy", sortBy ?? "default")
+            .SetTag("hasStatusFilter", statusFilter != null)
+            .SetTag("hasObjectTypeFilter", objectTypeFilter != null)
+            .SetTag("hasJoinTypeFilter", joinTypeFilter != null);
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
             connectedSystemId, page, pageSize, searchQuery, sortBy, sortDescending, statusFilter,
             objectTypeFilter, joinTypeFilter);
