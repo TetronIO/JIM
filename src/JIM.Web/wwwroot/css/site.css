@@ -182,6 +182,20 @@ html[lang] .jim-panel-transparent.mud-paper {
     background-color: transparent !important;
 }
 
+/* MudTabPanel BadgeData (chip indicator next to a tab title) renders via
+   transform: translate(50%, -50%), placing half the chip's height ABOVE the tab item's
+   top edge. MudBlazor's `.mud-tabs-tabbar-content` has hardcoded `overflow: hidden` (to
+   support horizontal tab truncation / scroll-button detection), which clips the upper
+   half of those badges.
+   Add 12px of top padding to `.mud-tabs-tabbar-content` so the translated badge falls
+   INSIDE the box's padding region instead of above it. The active-tab slider underline
+   uses `position: absolute; bottom: 0` against `.mud-tabs-tabbar-content` (its `position:
+   relative` ancestor) and continues to land at the bottom of the tab text since the
+   padding-box's bottom edge is unchanged. Horizontal overflow handling is untouched. */
+.mud-tabs-tabbar-content {
+    padding-top: 14px !important;
+}
+
 /* Give container elements a subtle border for better definition against the background.
    Use html[lang] parent for higher specificity (0,2,1) to beat MudBlazor's (0,1,0) rules. */
 html[lang] .mud-paper,

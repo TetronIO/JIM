@@ -479,3 +479,8 @@ src/JIM.Web/wwwroot/api/openapi/
 
 # Dev notes
 dev.txt
+
+# Playwright MCP working files (browser session output, ad-hoc screenshots from debugging)
+.playwright-mcp/
+/tabs-after-fix.png
+/mvo-tabs-after-fix.png
