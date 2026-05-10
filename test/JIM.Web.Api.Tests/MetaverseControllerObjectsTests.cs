@@ -424,9 +424,9 @@ public class MetaverseControllerObjectsTests
 
         Assert.That(response, Is.Not.Null);
         Assert.That(response!.Items.Count(), Is.EqualTo(2));
-        Assert.That(response.TotalCount, Is.EqualTo(2));
-        Assert.That(response.Page, Is.EqualTo(1));
-        Assert.That(response.PageSize, Is.EqualTo(50));
+        Assert.That(response!.TotalCount, Is.EqualTo(2));
+        Assert.That(response!.Page, Is.EqualTo(1));
+        Assert.That(response!.PageSize, Is.EqualTo(50));
     }
 
     [Test]
@@ -457,7 +457,7 @@ public class MetaverseControllerObjectsTests
 
         Assert.That(response, Is.Not.Null);
         Assert.That(response!.TotalCount, Is.EqualTo(0));
-        Assert.That(response.Items.Count(), Is.EqualTo(0));
+        Assert.That(response!.Items.Count(), Is.EqualTo(0));
     }
 
     #endregion

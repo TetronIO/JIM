@@ -3949,13 +3949,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                                                 .FirstOrDefault()
                                             ?? (vc.ReferenceValue.SecondaryExternalIdAttributeId.HasValue
                                                 ? vc.ReferenceValue.AttributeValues
-                                                    .Where(av => av.AttributeId == vc.ReferenceValue.SecondaryExternalIdAttributeId.Value && av.StringValue != null)
+                                                    .Where(av => av.AttributeId == vc.ReferenceValue.SecondaryExternalIdAttributeId && av.StringValue != null)
                                                     .Select(av => av.StringValue)
                                                     .FirstOrDefault()
                                                 : null),
                                         SecondaryId = vc.ReferenceValue.SecondaryExternalIdAttributeId.HasValue
                                             ? vc.ReferenceValue.AttributeValues
-                                                .Where(av => av.AttributeId == vc.ReferenceValue.SecondaryExternalIdAttributeId.Value && av.StringValue != null)
+                                                .Where(av => av.AttributeId == vc.ReferenceValue.SecondaryExternalIdAttributeId && av.StringValue != null)
                                                 .Select(av => av.StringValue)
                                                 .FirstOrDefault()
                                             : null
