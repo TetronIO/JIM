@@ -33,7 +33,7 @@ JIM is a modern Identity Management system designed for organisations with compl
 - Single Sign-On (SSO) using OpenID Connect
 - Dark/Light mode
 
-![A screenshot of JIM running](https://tetron.io/images/jim/0.10.2/homepage-dark.png "JIM Screenshot")
+![A screenshot of JIM running](https://junctional.io/images/tour/v0.10.3/homepage-dark.png "JIM Screenshot")
 
 <p align="center">
   <strong>📖 <a href="https://docs.junctional.io/">Read the full documentation</a></strong>
