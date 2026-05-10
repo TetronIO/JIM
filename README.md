@@ -22,12 +22,12 @@ JIM is a modern Identity Management system designed for organisations with compl
 
 - Hub-and-spoke architecture using a central metaverse for identity correlation
 - Bidirectional synchronisation of Users, Groups, and custom object types (e.g., Departments, Roles, Computers)
-- Multi-directory LDAP support: Active Directory, OpenLDAP, 389 Directory Server, and other RFC 4512-compliant directories
+- Multi-directory LDAP support: AD DS, OpenLDAP, 389 Directory Server, and RFC 4512-compliant ones
 - Built-in scheduler that supports parallel operations
 - Tested at 100K+ object scale with bounded memory pipelines
 - Transform data using expressions with extensive built-in functions for common identity operations
-- Extensible with custom Connectors (fully testable)
-- Modern Web Portal and REST API with interactive Scalar API reference (in-app at `/api/reference` and published at [docs.junctional.io/api/reference/](https://docs.junctional.io/api/reference/))
+- Built-in LDAP and File connectors, more in development, including a custom connector framework
+- Modern Web Portal and REST API with interactive Scalar [API reference](https://docs.junctional.io/api/reference/)
 - PowerShell automation for Identity as Code (IDaC) - deploy JIM instances in minutes, not months
 - Realtime activity monitoring
 - Single Sign-On (SSO) using OpenID Connect
