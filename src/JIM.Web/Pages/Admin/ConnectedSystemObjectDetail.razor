@@ -164,7 +164,7 @@
     <div class="mt-6">
     <NavigableMudTabs ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnActiveTabIndexChangedAsync"
                       Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pa-0 mt-6">
-        <MudTabPanel Text="Attributes">
+        <MudTabPanel Text="Attributes" Icon="@Icons.Material.Filled.ListAlt">
             <MudPaper Class="pa-0" Outlined="true">
                 <MudTable Items="@GetGroupedAttributes()" Hover="true" Dense="@_dense" Elevation="0"
                     Class="@(_dense ? "jim-attribute-table dense-body-only" : "jim-attribute-table")"
@@ -266,7 +266,7 @@
                 </MudTable>
             </MudPaper>
         </MudTabPanel>
-        <MudTabPanel Text="Change History" BadgeData="@_changeCount.ToString("N0")" BadgeColor="Color.Primary">
+        <MudTabPanel Text="Change History" Icon="@Icons.Material.Filled.History" BadgeData="@_changeCount.ToString("N0")" BadgeColor="Color.Primary">
             @if (_changeHistoryLoading && _changeHistoryRows.Count == 0)
             {
                 <div class="d-flex justify-center pa-4">
