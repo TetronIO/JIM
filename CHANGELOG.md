@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-05-10
+
 ### Added
 
 - ✨ Metaverse Object change history is now available via the API and PowerShell module: new `GET /api/v1/metaverse/objects/{id}/change-history` endpoint returns paginated change records, and the new `Get-JIMMetaverseObjectChangeHistory` cmdlet wraps it for automation and compliance scenarios.
@@ -733,7 +735,8 @@ JIM now supports deployments of 100,000+ objects, validated by Scale100K integra
 - Air-gapped deployment bundle support
 - PowerShell Gallery publishing
 
-[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.10.2...HEAD
+[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.10.3...HEAD
+[0.10.3]: https://github.com/TetronIO/JIM/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/TetronIO/JIM/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/TetronIO/JIM/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/TetronIO/JIM/compare/v0.9.1...v0.10.0

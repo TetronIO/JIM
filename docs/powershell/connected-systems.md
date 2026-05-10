@@ -659,6 +659,51 @@ Get-JIMConnectedSystemObject -ConnectedSystemId 3 -Id "a1b2c3d4-..." -AttributeN
 
 ---
 
+## Get-JIMConnectedSystemObjectChangeHistory
+
+Retrieves the change history for a Connected System Object. Each record carries the initiator and run profile context, plus the per-attribute value changes, ordered by change time descending (most recent first).
+
+### Syntax
+
+```powershell
+# Page (default)
+Get-JIMConnectedSystemObjectChangeHistory -ConnectedSystemId <int> -Id <guid>
+    [-Page <int>] [-PageSize <int>]
+
+# All
+Get-JIMConnectedSystemObjectChangeHistory -ConnectedSystemId <int> -Id <guid> -All [-PageSize <int>]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected system identifier. Accepts pipeline input by property name. |
+| `Id` | `guid` | Yes | | Connector space object identifier. Accepts pipeline input by property name. |
+| `All` | `switch` | No | `$false` | Automatically paginates through all results. Cannot be used with `-Page`. |
+| `Page` | `int` | No | `1` | Page number for paginated results. Cannot be used with `-All`. |
+| `PageSize` | `int` | No | `50` | Number of items per page. Maximum: `100`. |
+
+### Output
+
+Returns one `PSCustomObject` per change record, including the initiator, run profile context, and per-attribute value changes.
+
+### Examples
+
+```powershell title="Get the most recent page of changes"
+Get-JIMConnectedSystemObjectChangeHistory -ConnectedSystemId 3 -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+```
+
+```powershell title="Page through all changes for a CSO"
+Get-JIMConnectedSystemObjectChangeHistory -ConnectedSystemId 3 -Id "a1b2c3d4-..." -All
+```
+
+```powershell title="Use a larger page size"
+Get-JIMConnectedSystemObjectChangeHistory -ConnectedSystemId 3 -Id "a1b2c3d4-..." -PageSize 100
+```
+
+---
+
 ## Get-JIMConnectedSystemObjectAttributeValue
 
 Pages through the values of a multi-valued attribute on a connector space object. This is the dedicated cmdlet for browsing large multi-valued attributes.
