@@ -137,27 +137,38 @@ Verify that pages embedding or linking to diagrams are up to date:
 
 If new diagrams were added or existing ones renamed/removed, update these references accordingly.
 
-### 4. Review marketing site content
+### 4. Generate junctional.io site update prompt
 
-Fetch the public marketing site at `https://tetron.io/jim/` and compare its content against the current state of JIM:
+Fetch the public marketing site at `https://junctional.io/` and compare its content against the current state of JIM. Areas to inspect:
 
-1. **Feature claims** — Are all listed features still accurate? Are significant new features missing?
+1. **Feature claims** — Are listed features still accurate? Are significant new features missing?
 2. **Architecture descriptions** — Does the site's description of JIM's architecture match the current state?
-3. **Connector/integration list** — Are all supported connectors and integrations listed?
+3. **Connector/integration list** — Are all supported connectors and integrations represented?
 4. **Deployment/requirements** — Are prerequisites and deployment descriptions current?
 5. **Screenshots or visuals** — Are they representative of the current UI?
 
-The release agent cannot update the marketing site directly. Instead, present a clear summary of recommended changes to the user, structured so that a website development agent can implement them easily:
-- List each recommended change with: **what to change**, **where on the page**, **what the current text/content says**, and **what it should say or show instead**
-- Include any new feature descriptions that should be added, written in marketing-appropriate language
-- Flag any content that should be removed (e.g., features that were deprecated or renamed)
+> Note: the legacy `tetron.io/jim` page has been retired; do NOT fetch or reference it.
+
+This skill **does not edit the marketing site directly, and does not present marketing recommendations inline in chat**. The junctional.io site has its own dedicated agent which is authoritative on the site's structure, tone, and conventions, and will know more about the site than you do. Your job here is to **prime that agent with content-change suggestions**, not to dictate changes or critique the site's structure.
+
+Produce a markdown prompt document at `/tmp/junctional-site-prompt-v<version>.md` (outside the JIM repo — do NOT add it to git, do NOT place it under the workspace). The user will copy this file out and hand it to the junctional.io site agent in a separate session.
+
+The prompt should:
+- Open with context: this is an advisory list of content suggestions arising from the JIM v<version> release; the site agent is authoritative and should treat each item as a suggestion to evaluate, refine, or reject as it sees fit
+- Be written in second person addressed to the site agent ("you may want to consider …"), not as instructions to a human
+- Group suggestions by area (features, connectors, architecture, deployment, visuals, removals) so the site agent can prioritise
+- For each suggestion, include: **what area it relates to**, **what changed in JIM** (with a brief technical reason or pointer to the changelog entry), **what the site currently says or shows** (if you observed it during the fetch), and **a suggestion for what could be added/changed/removed** — phrased as "consider …", "you may want to …", or "this might be worth refreshing because …", never as "change X to Y"
+- Highlight any deprecations or removals that the site might still be advertising
+- Close with a note that screenshots/visuals are out of scope of this prompt; the site agent should request fresh screenshots from the user separately if it decides any are needed
+
+After writing the file, tell the user the absolute path to the prompt and remind them it is intentionally outside the repo and should be handed to the junctional.io site agent. Do NOT stage or commit the file.
 
 ### 5. Present documentation changes for review
 
 Show the user a summary of all documentation and diagram changes made:
 - List of files updated and what changed in each
 - Any new diagrams added
-- Marketing site recommendations (for manual action)
+- The path to the junctional.io site prompt file (e.g. `/tmp/junctional-site-prompt-v<version>.md`), noted as out-of-repo content for the user to hand to the junctional.io site agent
 - Ask the user to confirm before proceeding to changelog validation
 
 Once confirmed, commit the documentation updates on a release branch (do NOT commit to `main` directly — branch protection blocks that). If you are not already on a release branch, create one first:
