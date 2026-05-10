@@ -417,7 +417,7 @@ cosign verify ghcr.io/tetronio/jim-web:0.2.0
 
 ## API Reference Publication
 
-Each release publishes an interactive Scalar API reference to the JIM documentation site at [tetronio.github.io/JIM/api/reference/](https://tetronio.github.io/JIM/api/reference/). The public reference is a snapshot that matches the currently-published JIM version, so consumers can explore the API surface without a running JIM instance.
+Each release publishes an interactive Scalar API reference to the JIM documentation site at [docs.junctional.io/api/reference/](https://docs.junctional.io/api/reference/). The public reference is a snapshot that matches the currently-published JIM version, so consumers can explore the API surface without a running JIM instance.
 
 **How it works:**
 
@@ -427,7 +427,7 @@ Each release publishes an interactive Scalar API reference to the JIM documentat
 
 **What to verify after release:**
 
-- `https://tetronio.github.io/JIM/api/reference/` loads the Scalar interface and lists the latest endpoints added in this release
+- `https://docs.junctional.io/api/reference/` loads the Scalar interface and lists the latest endpoints added in this release
 - The version label in the Scalar header matches the JIM release version
 - Any newly-added endpoints documented in this release appear in the reference
 

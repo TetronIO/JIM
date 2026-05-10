@@ -14,7 +14,7 @@
 &nbsp;
 [![License](https://img.shields.io/badge/License-Source_Available-orange)](https://tetron.io/jim/#licensing)
 &nbsp;
-[![Documentation](https://img.shields.io/badge/Docs-tetronio.github.io%2FJIM-green)](https://tetronio.github.io/JIM/)
+[![Documentation](https://img.shields.io/badge/Docs-docs.junctional.io-green)](https://docs.junctional.io/)
 &nbsp;
 [![Open in GitHub Codespaces](https://img.shields.io/badge/Open_in-Codespaces-black?logo=github)](https://codespaces.new/TetronIO/JIM?devcontainer_path=.devcontainer/devcontainer.json)
 
@@ -27,7 +27,7 @@ JIM is a modern Identity Management system designed for organisations with compl
 - Tested at 100K+ object scale with bounded memory pipelines
 - Transform data using expressions with extensive built-in functions for common identity operations
 - Extensible with custom Connectors (fully testable)
-- Modern Web Portal and REST API with interactive Scalar API reference (in-app at `/api/reference` and published at [tetronio.github.io/JIM/api/reference/](https://tetronio.github.io/JIM/api/reference/))
+- Modern Web Portal and REST API with interactive Scalar API reference (in-app at `/api/reference` and published at [docs.junctional.io/api/reference/](https://docs.junctional.io/api/reference/))
 - PowerShell automation for Identity as Code (IDaC) - deploy JIM instances in minutes, not months
 - Realtime activity monitoring
 - Single Sign-On (SSO) using OpenID Connect
@@ -36,7 +36,7 @@ JIM is a modern Identity Management system designed for organisations with compl
 ![A screenshot of JIM running](https://tetron.io/images/jim/0.10.2/homepage-dark.png "JIM Screenshot")
 
 <p align="center">
-  <strong>📖 <a href="https://tetronio.github.io/JIM/">Read the full documentation</a></strong>
+  <strong>📖 <a href="https://docs.junctional.io/">Read the full documentation</a></strong>
   <br>
   <sub>Getting started guides, architecture deep-dives, API reference, and PowerShell automation</sub>
 </p>
@@ -107,7 +107,7 @@ JIM is a container-based distributed application implementing the metaverse patt
   </picture>
 </a>
 
-For detailed architecture diagrams (Component level), see the [Architecture](https://tetronio.github.io/JIM/concepts/architecture/) documentation.
+For detailed architecture diagrams (Component level), see the [Architecture](https://docs.junctional.io/concepts/architecture/) documentation.
 
 ## Quick Start
 
@@ -116,16 +116,16 @@ For detailed architecture diagrams (Component level), see the [Architecture](htt
 The fastest way to get JIM running:
 
 ```bash
-curl -fsSL https://tetron.io/jim/get | bash
+curl -fsSL https://junctional.io/get | bash
 ```
 
-This downloads everything you need, walks you through configuration, and starts JIM. For manual setup, air-gapped deployment, and production hardening, see the [Getting Started](https://tetronio.github.io/JIM/getting-started/) guide.
+This downloads everything you need, walks you through configuration, and starts JIM. For manual setup, air-gapped deployment, and production hardening, see the [Getting Started](https://docs.junctional.io/getting-started/) guide.
 
 ### Develop
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/TetronIO/JIM?devcontainer_path=.devcontainer/devcontainer.json)
 
-The devcontainer includes everything pre-configured; .NET 10.0, PostgreSQL, Keycloak IdP with test users, shell aliases, and VS Code extensions. Or clone locally and open with the [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension. See the [Developer Guide](https://tetronio.github.io/JIM/developer/) for details.
+The devcontainer includes everything pre-configured; .NET 10.0, PostgreSQL, Keycloak IdP with test users, shell aliases, and VS Code extensions. Or clone locally and open with the [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension. See the [Developer Guide](https://docs.junctional.io/developer/) for details.
 
 ### Automate
 
@@ -134,7 +134,7 @@ Install-Module -Name JIM
 Connect-JIM -Url "https://jim.example.com"
 ```
 
-JIM includes a cross-platform [PowerShell module](https://tetronio.github.io/JIM/powershell/) for scripting, automation, and Identity as Code (IDaC).
+JIM includes a cross-platform [PowerShell module](https://docs.junctional.io/powershell/) for scripting, automation, and Identity as Code (IDaC).
 
 ## State of Development
 JIM has reached MVP completion (100%). The core identity lifecycle is fully functional:
@@ -144,7 +144,7 @@ JIM has reached MVP completion (100%). The core identity lifecycle is fully func
 - **Export** changes to target systems with pending export management
 - **Schedule** automated synchronisation using cron or interval-based triggers
 
-For detailed feature checklists and post-MVP roadmap, see the [Roadmap](https://tetronio.github.io/JIM/reference/roadmap/).
+For detailed feature checklists and post-MVP roadmap, see the [Roadmap](https://docs.junctional.io/reference/roadmap/).
 
 ## Community & Support
 
@@ -159,6 +159,7 @@ JIM is built in the open and we'd love to hear from people running it, evaluatin
 JIM uses a Source-Available model where it is free to use in non-production scenarios, but requires a commercial license for use in production scenarios. [﻿Full details can be found here](https://tetron.io/jim/#licensing).
 
 ## More Information
-- **Documentation:** [tetronio.github.io/JIM](https://tetronio.github.io/JIM/)
+- **Product site:** [junctional.io](https://junctional.io)
+- **Documentation:** [docs.junctional.io](https://docs.junctional.io/)
 - **Discussions:** [github.com/TetronIO/JIM/discussions](https://github.com/TetronIO/JIM/discussions)
-- **Product site:** [tetron.io/jim](https://tetron.io/jim)
+
