@@ -480,7 +480,8 @@ src/JIM.Web/wwwroot/api/openapi/
 # Dev notes
 dev.txt
 
-# Playwright MCP working files (browser session output, ad-hoc screenshots from debugging)
+# Playwright MCP working files (browser session output, ad-hoc screenshots from debugging).
+# Repo-root *.png catches the screenshots Playwright saves there during evaluate/take-screenshot
+# calls, so future debug captures don't need to be added to .gitignore by name.
 .playwright-mcp/
-/tabs-after-fix.png
-/mvo-tabs-after-fix.png
+/*.png
