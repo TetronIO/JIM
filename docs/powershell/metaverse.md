@@ -428,6 +428,50 @@ Get-JIMMetaverseObject -ObjectTypeName "Person" -Page 3 -PageSize 50
 
 ---
 
+### Get-JIMMetaverseObjectChangeHistory
+
+Retrieves the change history for a Metaverse Object. Each record carries the initiator, sync rule, and run profile context, plus the per-attribute value changes, ordered by change time descending (most recent first).
+
+#### Syntax
+
+```powershell
+# Page (default)
+Get-JIMMetaverseObjectChangeHistory -Id <guid> [-Page <int>] [-PageSize <int>]
+
+# All
+Get-JIMMetaverseObjectChangeHistory -Id <guid> -All [-PageSize <int>]
+```
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `guid` | Yes | | Metaverse Object identifier. Accepts pipeline input by property name. |
+| `All` | `switch` | No | `$false` | Automatically paginates through all results. Cannot be used with `-Page`. |
+| `Page` | `int` | No | `1` | Page number for paginated results. Cannot be used with `-All`. |
+| `PageSize` | `int` | No | `50` | Number of items per page. Maximum: `100`. |
+
+#### Output
+
+Returns one `PSCustomObject` per change record, including the initiator, sync rule, run profile context, and per-attribute value changes.
+
+#### Examples
+
+```powershell title="Get the most recent page of changes"
+Get-JIMMetaverseObjectChangeHistory -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+```
+
+```powershell title="Page through every change for a Metaverse Object"
+Get-JIMMetaverseObjectChangeHistory -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -All
+```
+
+```powershell title="Pipe a Metaverse Object into the cmdlet"
+Get-JIMMetaverseObject -ObjectTypeName "Group" -Search "Project-Alpha" |
+    Get-JIMMetaverseObjectChangeHistory -All
+```
+
+---
+
 ## Pending Deletions
 
 ### Get-JIMPendingDeletion
