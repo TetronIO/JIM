@@ -16,6 +16,7 @@ using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
+using JIM.Application.Diagnostics;
 using JIM.Application.Utilities;
 using Microsoft.Extensions.Caching.Memory;
 using Serilog;
@@ -101,6 +102,8 @@ public class ConnectedSystemServer
 
     public async Task<ConnectedSystemHeader?> GetConnectedSystemHeaderAsync(int id)
     {
+        using var span = Diagnostics.Diagnostics.Database.StartSpan("Cso.GetConnectedSystemHeader")
+            .SetTag("connectedSystemId", id);
         return await Application.Repository.ConnectedSystems.GetConnectedSystemHeaderAsync(id);
     }
 
@@ -2099,6 +2102,8 @@ public class ConnectedSystemServer
     /// <param name="connectedSystemId">The unique identifier for the Connected System to return the types for.</param>
     public async Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId)
     {
+        using var span = Diagnostics.Diagnostics.Database.StartSpan("Cso.GetObjectTypes")
+            .SetTag("connectedSystemId", connectedSystemId);
         return await Application.Repository.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);
     }
 
@@ -2604,6 +2609,10 @@ public class ConnectedSystemServer
         Guid id,
         CsoAttributeLoadStrategy loadStrategy)
     {
+        using var span = Diagnostics.Diagnostics.Database.StartSpan("Cso.GetDetail")
+            .SetTag("connectedSystemId", connectedSystemId)
+            .SetTag("id", id)
+            .SetTag("strategy", loadStrategy.ToString());
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectDetailAsync(connectedSystemId, id, loadStrategy);
     }
 
@@ -2633,6 +2642,15 @@ public class ConnectedSystemServer
         IEnumerable<int>? objectTypeFilter = null,
         IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null)
     {
+        using var span = Diagnostics.Diagnostics.Database.StartSpan("Cso.GetHeaders")
+            .SetTag("connectedSystemId", connectedSystemId)
+            .SetTag("page", page)
+            .SetTag("pageSize", pageSize)
+            .SetTag("hasSearch", !string.IsNullOrWhiteSpace(searchQuery))
+            .SetTag("sortBy", sortBy ?? "default")
+            .SetTag("hasStatusFilter", statusFilter != null)
+            .SetTag("hasObjectTypeFilter", objectTypeFilter != null)
+            .SetTag("hasJoinTypeFilter", joinTypeFilter != null);
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
             connectedSystemId, page, pageSize, searchQuery, sortBy, sortDescending, statusFilter,
             objectTypeFilter, joinTypeFilter);
@@ -4242,6 +4260,8 @@ public class ConnectedSystemServer
     public async Task<(PendingExport PendingExport, int ChangeCount)?> GetPendingExportHeaderForObjectAsync(
         Guid connectedSystemObjectId)
     {
+        using var span = Diagnostics.Diagnostics.Database.StartSpan("Cso.GetPendingExportHeaderForObject")
+            .SetTag("csoId", connectedSystemObjectId);
         return await Application.Repository.ConnectedSystems.GetPendingExportHeaderByConnectedSystemObjectIdAsync(
             connectedSystemObjectId);
     }
@@ -4269,7 +4289,30 @@ public class ConnectedSystemServer
     /// <returns>List of changes ordered by ChangeTime descending (most recent first).</returns>
     public async Task<List<ConnectedSystemObjectChange>> GetConnectedSystemObjectChangesAsync(Guid connectedSystemObjectId, int limit = 100)
     {
+        using var span = Diagnostics.Diagnostics.Database.StartSpan("Cso.GetChanges")
+            .SetTag("csoId", connectedSystemObjectId)
+            .SetTag("limit", limit);
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectChangesAsync(connectedSystemObjectId, limit);
+    }
+
+    /// <summary>
+    /// Returns a page of change-history rows for a Connected System Object, projected into a flat DTO.
+    /// Ordered by change time descending. <paramref name="pageSize"/> is clamped to [1, 100].
+    /// </summary>
+    public async Task<(List<CsoChangeHistoryDto> Items, int TotalCount)> GetCsoChangeHistoryAsync(Guid connectedSystemObjectId, int page, int pageSize)
+    {
+        if (page < 1)
+            page = 1;
+        if (pageSize < 1)
+            pageSize = 1;
+        if (pageSize > 100)
+            pageSize = 100;
+
+        using var span = Diagnostics.Diagnostics.Database.StartSpan("Cso.GetChangeHistory")
+            .SetTag("csoId", connectedSystemObjectId)
+            .SetTag("page", page)
+            .SetTag("pageSize", pageSize);
+        return await Application.Repository.ConnectedSystems.GetCsoChangeHistoryAsync(connectedSystemObjectId, page, pageSize);
     }
     #endregion
 

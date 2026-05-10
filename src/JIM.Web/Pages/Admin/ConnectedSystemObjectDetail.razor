@@ -162,8 +162,9 @@
     }
 
     <div class="mt-6">
-    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pa-0 mt-6">
-        <MudTabPanel Text="Attributes">
+    <NavigableMudTabs ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnActiveTabIndexChangedAsync"
+                      Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pa-0 mt-6">
+        <MudTabPanel Text="Attributes" Icon="@Icons.Material.Filled.ListAlt">
             <MudPaper Class="pa-0" Outlined="true">
                 <MudTable Items="@GetGroupedAttributes()" Hover="true" Dense="@_dense" Elevation="0"
                     Class="@(_dense ? "jim-attribute-table dense-body-only" : "jim-attribute-table")"
@@ -265,15 +266,35 @@
                 </MudTable>
             </MudPaper>
         </MudTabPanel>
-        <MudTabPanel Text="Change History">
-            @if (CsoChanges == null)
+        <MudTabPanel Text="Change History" Icon="@Icons.Material.Filled.History" BadgeData="@_changeCount.ToString("N0")" BadgeColor="Color.Primary">
+            @if (_changeHistoryLoading && _changeHistoryRows.Count == 0)
             {
-                <MudProgressCircular Indeterminate="true" Class="mr-2" />
-                <MudText>Loading change history...</MudText>
+                <div class="d-flex justify-center pa-4">
+                    <MudProgressCircular Indeterminate="true" />
+                </div>
+            }
+            else if (_changeCount == 0)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">No change history recorded for this object.</MudAlert>
             }
             else
             {
-                <ChangeHistoryTimeline Changes="@GetCsoChangeHistory()" />
+                <ChangeHistoryTimeline Changes="@_changeHistoryRows" />
+                @if (_changeHistoryRows.Count < _changeHistoryTotal)
+                {
+                    <div class="d-flex justify-center mt-3">
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   Disabled="@_changeHistoryLoading"
+                                   OnClick="LoadMoreChangeHistoryAsync">
+                            @if (_changeHistoryLoading)
+                            {
+                                <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="me-2" />
+                            }
+                            Load more (@($"{_changeHistoryTotal - _changeHistoryRows.Count:N0}") remaining)
+                        </MudButton>
+                    </div>
+                }
             }
         </MudTabPanel>
     </NavigableMudTabs>
@@ -310,7 +331,16 @@
     private bool _pendingExportLoading;
     private int _pendingExportTotalCount;
 
-    private List<ConnectedSystemObjectChange>? CsoChanges { get; set; }
+    // Change-history lazy-load state. Initial detail load returns only the count so the badge
+    // can render immediately; the rows are fetched the first time the user opens the Change
+    // History tab and paged via Load more.
+    private const int ChangeHistoryPageSize = 50;
+    private int _activeTabIndex;
+    private int _changeCount;
+    private int _changeHistoryTotal;
+    private int _changeHistoryNextPage = 1;
+    private bool _changeHistoryLoading;
+    private readonly List<ChangeHistoryTimeline.ChangeGroup> _changeHistoryRows = new();
 
     private List<BreadcrumbItem> Breadcrumbs { get; set; } = null!;
 
@@ -369,6 +399,7 @@
 
         ConnectedSystemObject = detailResult.ConnectedSystemObject;
         AttributeValueTotalCounts = detailResult.AttributeValueTotalCounts;
+        _changeCount = detailResult.ChangeCount;
 
         Breadcrumbs = new List<BreadcrumbItem>
         {
@@ -390,8 +421,85 @@
             _pendingExportTotalCount = pendingExportResult.Value.ChangeCount;
         }
 
-        // Fetch change history for this CSO
-        CsoChanges = await jim.ConnectedSystems.GetConnectedSystemObjectChangesAsync(connectedSystemObjectId);
+        // Change history is loaded lazily when the user opens the Change History tab; the count
+        // already came back on the detail result so the badge renders immediately.
+    }
+
+    private async Task OnActiveTabIndexChangedAsync(int newIndex)
+    {
+        _activeTabIndex = newIndex;
+        // The Change History tab is the second one (index 1).
+        if (newIndex == 1 && _changeHistoryRows.Count == 0 && _changeCount > 0 && !_changeHistoryLoading)
+            await LoadChangeHistoryPageAsync();
+    }
+
+    private async Task LoadMoreChangeHistoryAsync()
+    {
+        await LoadChangeHistoryPageAsync();
+    }
+
+    private async Task LoadChangeHistoryPageAsync()
+    {
+        if (_changeHistoryLoading)
+            return;
+
+        _changeHistoryLoading = true;
+        StateHasChanged();
+        try
+        {
+            using var jim = JimFactory.Create();
+            if (!Guid.TryParse(CsoId, out var connectedSystemObjectId))
+                return;
+
+            var (items, totalCount) = await jim.ConnectedSystems.GetCsoChangeHistoryAsync(
+                connectedSystemObjectId, _changeHistoryNextPage, ChangeHistoryPageSize);
+            _changeHistoryTotal = totalCount;
+            _changeHistoryRows.AddRange(items.Select(MapDtoToChangeGroup));
+            _changeHistoryNextPage++;
+        }
+        finally
+        {
+            _changeHistoryLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private ChangeHistoryTimeline.ChangeGroup MapDtoToChangeGroup(CsoChangeHistoryDto dto)
+    {
+        return new ChangeHistoryTimeline.ChangeGroup
+        {
+            ChangeType = dto.ChangeType,
+            ChangeTime = dto.ChangeTime,
+            ChangeInitiatorType = MapInitiatorType(dto.InitiatedByType),
+            ChangeInitiatorName = dto.InitiatedByName,
+            ChangeInitiatorId = dto.InitiatedById,
+            ChangeMechanismType = "Import",
+            ConnectedSystemId = ConnectedSystemHeader?.Id,
+            ConnectedSystemName = ConnectedSystemHeader?.Name,
+            RunProfileName = dto.RunProfileName,
+            SyncRuleId = null,
+            SyncRuleName = null,
+            ActivityRunProfileExecutionItemId = dto.ActivityRunProfileExecutionItemId,
+            AttributeChanges = dto.AttributeChanges
+                .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange
+                {
+                    AttributeName = ac.AttributeName,
+                    ChangeType = vc.ValueChangeType,
+                    Value = vc.ReferenceValue == null ? vc.ToDisplayString() : null,
+                    ReferenceValue = vc.ReferenceValue != null
+                        ? new ChangeHistoryTimeline.ReferenceValueInfo
+                        {
+                            TypeName = vc.ReferenceValue.TypeName,
+                            DisplayName = vc.ReferenceValue.DisplayName ?? vc.ReferenceValue.Id.ToString(),
+                            SecondaryId = vc.ReferenceValue.SecondaryId,
+                            Href = Utilities.GetConnectedSystemObjectHref(vc.ReferenceValue.ConnectedSystemId, vc.ReferenceValue.Id)
+                        }
+                        : null,
+                    IsMultiValued = ac.AttributePlurality == AttributePlurality.MultiValued,
+                    AttributeType = ac.AttributeType
+                }))
+                .ToList()
+        };
     }
 
     private static readonly Func<AttributeGroup, object> _sortByAttribute = g => g.AttributeName;
@@ -575,51 +683,6 @@
             ConnectedSystemObjectJoinType.NotJoined => MudBlazor.Color.Default,
             _ => MudBlazor.Color.Default,
         };
-    }
-
-    private List<ChangeHistoryTimeline.ChangeGroup> GetCsoChangeHistory()
-    {
-        if (CsoChanges == null)
-            return new List<ChangeHistoryTimeline.ChangeGroup>();
-
-        return CsoChanges
-        .OrderByDescending(c => c.ChangeTime)
-        .Select(change => new ChangeHistoryTimeline.ChangeGroup
-        {
-            ChangeType = change.ChangeType,
-            ChangeTime = change.ChangeTime,
-            // CSO changes: Map the principal that initiated the import (User or ApiKey)
-            ChangeInitiatorType = MapInitiatorType(change.InitiatedByType),
-            ChangeInitiatorName = change.InitiatedByName,
-            ChangeInitiatorId = change.InitiatedById,
-            // Mechanism is Import, with link to connected system and run profile name
-            ChangeMechanismType = "Import",
-            ConnectedSystemId = ConnectedSystemHeader?.Id,
-            ConnectedSystemName = ConnectedSystemHeader?.Name,
-            RunProfileName = change.ActivityRunProfileExecutionItem?.Activity?.TargetName,
-            SyncRuleId = null,
-            SyncRuleName = null,
-            ActivityRunProfileExecutionItemId = change.ActivityRunProfileExecutionItemId,
-            AttributeChanges = change.AttributeChanges
-        .OrderBy(ac => ac.AttributeName)
-        .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange
-        {
-            AttributeName = ac.AttributeName,
-            ChangeType = vc.ValueChangeType,
-            Value = vc.ReferenceValue == null ? vc.ToString() : null,
-            ReferenceValue = vc.ReferenceValue != null ? new ChangeHistoryTimeline.ReferenceValueInfo
-            {
-                TypeName = vc.ReferenceValue.Type.Name,
-                DisplayName = vc.ReferenceValue.DisplayNameOrId ?? vc.ReferenceValue.Id.ToString(),
-                SecondaryId = vc.ReferenceValue.SecondaryExternalIdAttributeValue?.ToStringNoName(),
-                Href = Utilities.GetConnectedSystemObjectHref(vc.ReferenceValue)
-            } : null,
-            IsMultiValued = ac.Attribute?.AttributePlurality == AttributePlurality.MultiValued,
-            AttributeType = ac.AttributeType
-        }))
-        .ToList()
-        })
-        .ToList();
     }
 
     private static string MapInitiatorType(ActivityInitiatorType initiatorType)

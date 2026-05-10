@@ -4,6 +4,7 @@
 using System.Text.Json;
 using Asp.Versioning;
 using JIM.Application;
+using JIM.Application.Diagnostics;
 using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
 using JIM.Application.Services;
@@ -60,6 +61,11 @@ using System.Security.Claims;
 
 // initial logging setup for when the application has not yet been created (bootstrapping)...
 InitialiseLogging(new LoggerConfiguration(), true);
+
+// Enable performance diagnostics for the lifetime of the process so span completions
+// from the Application/Repository layers reach the Serilog pipeline.
+// Web requests should be much faster than worker batches, so a tighter slow threshold makes sense here.
+using var diagnosticListener = Diagnostics.EnableLogging(slowOperationThresholdMs: 250);
 
 try
 {

@@ -35,9 +35,21 @@ public interface IMetaverseRepository
     /// <summary>
     /// Loads a Metaverse Object with attribute loading controlled by the specified strategy.
     /// <see cref="MvoAttributeLoadStrategy.CappedMva"/> caps MVA values and includes per-attribute total counts.
-    /// Change history is always included.
+    /// Change history is NOT loaded eagerly; the change-row count is surfaced on the result so callers
+    /// can render a count badge, and the change rows themselves are loaded via
+    /// <see cref="GetMvoChangeHistoryAsync"/>.
     /// </summary>
     public Task<MvoDetailResult?> GetMetaverseObjectDetailAsync(Guid id, MvoAttributeLoadStrategy loadStrategy);
+
+    /// <summary>
+    /// Returns a page of change-history records for a Metaverse Object, projected into a flat DTO
+    /// so the full entity graph is not materialised. Ordered by <c>ChangeTime</c> descending.
+    /// </summary>
+    /// <param name="metaverseObjectId">The MVO whose change history is being read.</param>
+    /// <param name="page">1-based page number.</param>
+    /// <param name="pageSize">Rows per page; clamp to a sensible upper bound at the call site.</param>
+    /// <returns>The page of changes plus the total count of change records for the MVO.</returns>
+    public Task<(List<MvoChangeHistoryDto> Items, int TotalCount)> GetMvoChangeHistoryAsync(Guid metaverseObjectId, int page, int pageSize);
 
     public Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id);
 

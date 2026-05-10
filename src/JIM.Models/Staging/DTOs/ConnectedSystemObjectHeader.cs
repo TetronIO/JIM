@@ -12,11 +12,19 @@ public class ConnectedSystemObjectHeader
 
     public string? DisplayName { get; set; }
 
-    public ConnectedSystemObjectAttributeValue? ExternalIdAttributeValue { get; set; }
+    /// <summary>
+    /// Scalar string value of the external id attribute on this CSO. Replaces the previous
+    /// full-entity projection so the list query does not materialise an attribute-value entity
+    /// per row just to read its string value.
+    /// </summary>
+    public string? ExternalIdValue { get; set; }
 
     public string? ExternalIdAttributeName { get; set; }
 
-    public ConnectedSystemObjectAttributeValue? SecondaryExternalIdAttributeValue { get; set; }
+    /// <summary>
+    /// Scalar string value of the secondary external id attribute on this CSO, if defined and present.
+    /// </summary>
+    public string? SecondaryExternalIdValue { get; set; }
 
     public string? SecondaryExternalIdAttributeName { get; set; }
 

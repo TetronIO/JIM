@@ -13,10 +13,15 @@ using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Serilog;
+using System.Diagnostics;
 namespace JIM.PostgresData.Repositories;
 
 public class MetaverseRepository : IMetaverseRepository
 {
+    // Picked up by the JIM diagnostic listener via the "JIM." prefix; named distinctly
+    // from the Application-layer "JIM.Database" source to keep tooling traces unambiguous.
+    private static readonly ActivitySource ActivitySource = new("JIM.PostgresData.Metaverse");
+
     #region accessors
     private PostgresDataRepository Repository { get; }
     #endregion
@@ -372,81 +377,96 @@ public class MetaverseRepository : IMetaverseRepository
             return mvo == null ? null : new MvoDetailResult { MetaverseObject = mvo };
         }
 
-        // CappedMva strategy: load the MVO with capped MVA values
-        // Step 1: Load the MVO shell with change history (no attribute values yet)
-        var entity = await Repository.Database.MetaverseObjects
-            .AsSplitQuery()
-            .Include(mo => mo.Type)
-            .Include(mo => mo.Changes)
-            .ThenInclude(c => c.AttributeChanges)
-            .ThenInclude(ac => ac.Attribute)
-            .Include(mo => mo.Changes)
-            .ThenInclude(c => c.AttributeChanges)
-            .ThenInclude(ac => ac.ValueChanges)
-            .ThenInclude(vc => vc.ReferenceValue)
-            .ThenInclude(rv => rv!.Type)
-            .Include(mo => mo.Changes)
-            .ThenInclude(c => c.AttributeChanges)
-            .ThenInclude(ac => ac.ValueChanges)
-            .ThenInclude(vc => vc.ReferenceValue)
-            .ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
-            .ThenInclude(rvav => rvav.Attribute)
-            .Include(mo => mo.Changes)
-            .ThenInclude(c => c.SyncRule)
-            .Include(mo => mo.Changes)
-            .ThenInclude(c => c.ActivityRunProfileExecutionItem)
-            .ThenInclude(rpei => rpei!.Activity)
-            .SingleOrDefaultAsync(mo => mo.Id == id);
+        // CappedMva strategy: load the MVO shell only. Change history is intentionally NOT
+        // eager-loaded here; the original Include chain dominated the page load (~1.5s on
+        // chatty groups). Change rows are paged separately via GetMvoChangeHistoryAsync.
+        MetaverseObject? entity;
+        using (ActivitySource.StartActivity("Mvo.LoadShell"))
+        {
+            entity = await Repository.Database.MetaverseObjects
+                .Include(mo => mo.Type)
+                .SingleOrDefaultAsync(mo => mo.Id == id);
+        }
 
         if (entity == null)
             return null;
 
-        // Step 2: Get per-attribute value counts for this MVO
-        var attributeValueCounts = await Repository.Database.Set<MetaverseObjectAttributeValue>()
-            .Where(av => av.MetaverseObject.Id == id)
-            .GroupBy(av => av.Attribute.Name)
-            .Select(g => new { AttributeName = g.Key, Count = g.Count() })
-            .ToListAsync();
+        // Total change-history count, surfaced on the result so the UI can render a badge
+        // without eager-loading the change rows themselves.
+        int changeCount;
+        MvoChangeInitiatorSummary? earliestInitiator = null;
+        MvoChangeInitiatorSummary? latestInitiator = null;
+        using (ActivitySource.StartActivity("Mvo.LoadChangeCountAndInitiators"))
+        {
+            var changeQuery = Repository.Database.Set<MetaverseObjectChange>()
+                .AsNoTracking()
+                .Where(c => c.MetaverseObject != null && c.MetaverseObject.Id == id);
 
-        var totalCounts = attributeValueCounts.ToDictionary(x => x.AttributeName, x => x.Count);
+            changeCount = await changeQuery.CountAsync();
+            if (changeCount > 0)
+            {
+                earliestInitiator = await changeQuery
+                    .OrderBy(c => c.ChangeTime)
+                    .Select(c => new MvoChangeInitiatorSummary
+                    {
+                        ChangeTime = c.ChangeTime,
+                        InitiatedByType = c.InitiatedByType,
+                        InitiatedById = c.InitiatedById,
+                        InitiatedByName = c.InitiatedByName
+                    })
+                    .FirstOrDefaultAsync();
+
+                latestInitiator = await changeQuery
+                    .OrderByDescending(c => c.ChangeTime)
+                    .Select(c => new MvoChangeInitiatorSummary
+                    {
+                        ChangeTime = c.ChangeTime,
+                        InitiatedByType = c.InitiatedByType,
+                        InitiatedById = c.InitiatedById,
+                        InitiatedByName = c.InitiatedByName
+                    })
+                    .FirstOrDefaultAsync();
+            }
+        }
+
+        // Step 2: Get per-attribute value counts for this MVO
+        Dictionary<string, int> totalCounts;
+        using (ActivitySource.StartActivity("Mvo.LoadAttributeCounts"))
+        {
+            var attributeValueCounts = await Repository.Database.Set<MetaverseObjectAttributeValue>()
+                .Where(av => av.MetaverseObject.Id == id)
+                .GroupBy(av => av.Attribute.Name)
+                .Select(g => new { AttributeName = g.Key, Count = g.Count() })
+                .ToListAsync();
+
+            totalCounts = attributeValueCounts.ToDictionary(x => x.AttributeName, x => x.Count);
+        }
 
         // Step 3: Load SVA values (all of them) and MVA values (capped)
-        var mvaAttributeIds = await Repository.Database.Set<MetaverseObjectAttributeValue>()
-            .Where(av => av.MetaverseObject.Id == id)
-            .Select(av => new { av.AttributeId, av.Attribute.AttributePlurality })
-            .Distinct()
-            .ToListAsync();
+        HashSet<int> multiValuedAttributeIds;
+        using (ActivitySource.StartActivity("Mvo.LoadAttributePluralities"))
+        {
+            var mvaAttributeIds = await Repository.Database.Set<MetaverseObjectAttributeValue>()
+                .Where(av => av.MetaverseObject.Id == id)
+                .Select(av => new { av.AttributeId, av.Attribute.AttributePlurality })
+                .Distinct()
+                .ToListAsync();
 
-        var multiValuedAttributeIds = mvaAttributeIds
-            .Where(a => a.AttributePlurality == AttributePlurality.MultiValued)
-            .Select(a => a.AttributeId)
-            .ToHashSet();
+            multiValuedAttributeIds = mvaAttributeIds
+                .Where(a => a.AttributePlurality == AttributePlurality.MultiValued)
+                .Select(a => a.AttributeId)
+                .ToHashSet();
+        }
 
         // Load all SVA values
-        // AsTracking required: Include path AttributeValue -> ReferenceValue(MVO) -> AttributeValues creates a cycle.
-        var svaValues = await Repository.Database.Set<MetaverseObjectAttributeValue>()
-            .AsTracking()
-            .AsSplitQuery()
-            .Where(av => av.MetaverseObject.Id == id && !multiValuedAttributeIds.Contains(av.AttributeId))
-            .Include(av => av.Attribute)
-            .Include(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.Type)
-            .Include(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
-            .ThenInclude(rvav => rvav.Attribute)
-            .ToListAsync();
-
-        // Load capped MVA values per attribute
-        var cappedMvaValues = new List<MetaverseObjectAttributeValue>();
-        foreach (var attrId in multiValuedAttributeIds)
+        List<MetaverseObjectAttributeValue> svaValues;
+        using (var svaSpan = ActivitySource.StartActivity("Mvo.LoadSvaValues"))
         {
             // AsTracking required: Include path AttributeValue -> ReferenceValue(MVO) -> AttributeValues creates a cycle.
-            var values = await Repository.Database.Set<MetaverseObjectAttributeValue>()
+            svaValues = await Repository.Database.Set<MetaverseObjectAttributeValue>()
                 .AsTracking()
                 .AsSplitQuery()
-                .Where(av => av.MetaverseObject.Id == id && av.AttributeId == attrId)
-                .OrderBy(av => av.Id)
-                .Take(CappedMvaLimit)
+                .Where(av => av.MetaverseObject.Id == id && !multiValuedAttributeIds.Contains(av.AttributeId))
                 .Include(av => av.Attribute)
                 .Include(av => av.ReferenceValue)
                 .ThenInclude(rv => rv!.Type)
@@ -454,8 +474,37 @@ public class MetaverseRepository : IMetaverseRepository
                 .ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
                 .ThenInclude(rvav => rvav.Attribute)
                 .ToListAsync();
+            svaSpan?.SetTag("count", svaValues.Count);
+        }
 
-            cappedMvaValues.AddRange(values);
+        // Load capped MVA values per attribute
+        var cappedMvaValues = new List<MetaverseObjectAttributeValue>();
+        using (var mvaSpan = ActivitySource.StartActivity("Mvo.LoadCappedMvaValues"))
+        {
+            mvaSpan?.SetTag("attributeCount", multiValuedAttributeIds.Count);
+            mvaSpan?.SetTag("cap", CappedMvaLimit);
+            foreach (var attrId in multiValuedAttributeIds)
+            {
+                using var iterSpan = ActivitySource.StartActivity("Mvo.LoadCappedMvaValues.Attribute");
+                iterSpan?.SetTag("attributeId", attrId);
+                // AsTracking required: Include path AttributeValue -> ReferenceValue(MVO) -> AttributeValues creates a cycle.
+                var values = await Repository.Database.Set<MetaverseObjectAttributeValue>()
+                    .AsTracking()
+                    .AsSplitQuery()
+                    .Where(av => av.MetaverseObject.Id == id && av.AttributeId == attrId)
+                    .OrderBy(av => av.Id)
+                    .Take(CappedMvaLimit)
+                    .Include(av => av.Attribute)
+                    .Include(av => av.ReferenceValue)
+                    .ThenInclude(rv => rv!.Type)
+                    .Include(av => av.ReferenceValue)
+                    .ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
+                    .ThenInclude(rvav => rvav.Attribute)
+                    .ToListAsync();
+                iterSpan?.SetTag("returned", values.Count);
+
+                cappedMvaValues.AddRange(values);
+            }
         }
 
         // Combine and attach to entity
@@ -464,8 +513,103 @@ public class MetaverseRepository : IMetaverseRepository
         return new MvoDetailResult
         {
             MetaverseObject = entity,
-            AttributeValueTotalCounts = totalCounts
+            AttributeValueTotalCounts = totalCounts,
+            ChangeCount = changeCount,
+            EarliestChangeInitiator = earliestInitiator,
+            LatestChangeInitiator = latestInitiator
         };
+    }
+
+    public async Task<(List<MvoChangeHistoryDto> Items, int TotalCount)> GetMvoChangeHistoryAsync(Guid metaverseObjectId, int page, int pageSize)
+    {
+        if (page < 1)
+            page = 1;
+        if (pageSize < 1)
+            pageSize = 1;
+
+        using var span = ActivitySource.StartActivity("Mvo.LoadChangeHistoryPage");
+        span?.SetTag("page", page);
+        span?.SetTag("pageSize", pageSize);
+
+        // Run count and page in parallel; both hit the same indexed FK column, so the cost is
+        // dominated by the page projection rather than the aggregate.
+        var baseQuery = Repository.Database.Set<MetaverseObjectChange>()
+            .AsNoTracking()
+            .Where(c => c.MetaverseObject != null && c.MetaverseObject.Id == metaverseObjectId);
+
+        var totalCount = await baseQuery.CountAsync();
+        if (totalCount == 0)
+            return (new List<MvoChangeHistoryDto>(), 0);
+
+        // Flat projection. No Includes; EF generates the joins from the Select.
+        // Reference target display names come from MetaverseObject.CachedDisplayName,
+        // which avoids the AttributeValues filter-Include trick that the old query used.
+        var items = await baseQuery
+            .OrderByDescending(c => c.ChangeTime)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(c => new MvoChangeHistoryDto
+            {
+                Id = c.Id,
+                ChangeType = c.ChangeType,
+                ChangeTime = c.ChangeTime,
+                InitiatedByType = c.InitiatedByType,
+                InitiatedById = c.InitiatedById,
+                InitiatedByName = c.InitiatedByName,
+                ChangeInitiatorType = c.ChangeInitiatorType,
+                SyncRuleId = c.SyncRuleId,
+                SyncRuleName = c.SyncRuleName,
+                ActivityRunProfileExecutionItemId = c.ActivityRunProfileExecutionItemId,
+                CsoId = c.ActivityRunProfileExecutionItem != null ? c.ActivityRunProfileExecutionItem.ConnectedSystemObjectId : null,
+                CsoExternalId = c.ActivityRunProfileExecutionItem != null ? c.ActivityRunProfileExecutionItem.ExternalIdSnapshot : null,
+                ConnectedSystemId = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
+                    ? c.ActivityRunProfileExecutionItem.Activity.ConnectedSystemId
+                    : null,
+                ConnectedSystemName = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
+                    ? c.ActivityRunProfileExecutionItem.Activity.TargetContext
+                    : null,
+                RunProfileName = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
+                    ? c.ActivityRunProfileExecutionItem.Activity.TargetName
+                    : null,
+                ConnectedSystemRunType = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
+                    ? c.ActivityRunProfileExecutionItem.Activity.ConnectedSystemRunType
+                    : (ConnectedSystemRunType?)null,
+                AttributeChanges = c.AttributeChanges
+                    .OrderBy(ac => ac.AttributeName)
+                    .Select(ac => new MvoAttributeChangeDto
+                    {
+                        AttributeName = ac.AttributeName,
+                        AttributeType = ac.AttributeType,
+                        AttributePlurality = ac.Attribute != null ? ac.Attribute.AttributePlurality : AttributePlurality.SingleValued,
+                        ValueChanges = ac.ValueChanges
+                            .Select(vc => new MvoValueChangeDto
+                            {
+                                ValueChangeType = vc.ValueChangeType,
+                                StringValue = vc.StringValue,
+                                DateTimeValue = vc.DateTimeValue,
+                                IntValue = vc.IntValue,
+                                ByteValueLength = vc.ByteValueLength,
+                                GuidValue = vc.GuidValue,
+                                BoolValue = vc.BoolValue,
+                                ReferenceValue = vc.ReferenceValue == null
+                                    ? null
+                                    : new MvoChangeReferenceDto
+                                    {
+                                        Id = vc.ReferenceValue.Id,
+                                        DisplayName = vc.ReferenceValue.CachedDisplayName,
+                                        TypeName = vc.ReferenceValue.Type.Name,
+                                        TypePluralName = vc.ReferenceValue.Type.PluralName
+                                    }
+                            })
+                            .ToList()
+                    })
+                    .ToList()
+            })
+            .ToListAsync();
+
+        span?.SetTag("returned", items.Count);
+        span?.SetTag("totalCount", totalCount);
+        return (items, totalCount);
     }
 
     public async Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id)

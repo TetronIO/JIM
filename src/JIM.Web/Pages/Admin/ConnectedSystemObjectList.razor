@@ -192,15 +192,15 @@
                 }
                 else
                 {
-                    @context.ExternalIdAttributeValue?.ToStringNoName()
+                    @context.ExternalIdValue
                 }
             </MudTd>
             @if (_hasSecondaryExternalId)
             {
                 <MudTd DataLabel="Secondary External Id" Class="jim-text-break">
-                    @if (context.SecondaryExternalIdAttributeValue != null)
+                    @if (!string.IsNullOrEmpty(context.SecondaryExternalIdValue))
                     {
-                        @context.SecondaryExternalIdAttributeValue?.ToStringNoName()
+                        @context.SecondaryExternalIdValue
                     }
                     else if (!string.IsNullOrEmpty(context.PendingSecondaryExternalId))
                     {
@@ -442,11 +442,11 @@ else
 
         // Show secondary external ID column if any confirmed OR pending values exist
         _hasSecondaryExternalId = results.Any(r =>
-            r.SecondaryExternalIdAttributeValue != null || !string.IsNullOrEmpty(r.PendingSecondaryExternalId));
+            !string.IsNullOrEmpty(r.SecondaryExternalIdValue) || !string.IsNullOrEmpty(r.PendingSecondaryExternalId));
         if (_hasSecondaryExternalId)
         {
             var secondaryAttrName = results
-                .FirstOrDefault(r => r.SecondaryExternalIdAttributeValue != null)?.SecondaryExternalIdAttributeName;
+                .FirstOrDefault(r => !string.IsNullOrEmpty(r.SecondaryExternalIdValue))?.SecondaryExternalIdAttributeName;
             _secondaryExternalIdColumnHeader = string.IsNullOrEmpty(secondaryAttrName)
                 ? "Secondary External Id"
                 : $"Secondary External Id ({secondaryAttrName})";

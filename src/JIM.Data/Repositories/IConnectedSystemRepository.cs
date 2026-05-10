@@ -507,6 +507,16 @@ public interface IConnectedSystemRepository
     Task<List<ConnectedSystemObjectChange>> GetConnectedSystemObjectChangesAsync(Guid connectedSystemObjectId, int limit = 100);
 
     /// <summary>
+    /// Returns a page of change-history records for a Connected System Object, projected into a flat
+    /// DTO so the full entity graph is not materialised. Ordered by <c>ChangeTime</c> descending.
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The CSO whose change history is being read.</param>
+    /// <param name="page">1-based page number.</param>
+    /// <param name="pageSize">Rows per page; clamp to a sensible upper bound at the call site.</param>
+    /// <returns>The page of changes plus the total count of change records for the CSO.</returns>
+    Task<(List<CsoChangeHistoryDto> Items, int TotalCount)> GetCsoChangeHistoryAsync(Guid connectedSystemObjectId, int page, int pageSize);
+
+    /// <summary>
     /// Gets CSO changes where the CSO has been deleted (ChangeType = Deleted and ConnectedSystemObject is null).
     /// Used for the deleted objects browser.
     /// </summary>

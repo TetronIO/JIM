@@ -11,6 +11,7 @@ using JIM.Models.Search;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Models.Utility;
+using JIM.Application.Diagnostics;
 using JIM.Application.Exceptions;
 using JIM.Application.Utilities;
 using Serilog;
@@ -52,6 +53,9 @@ public class MetaverseServer
 
     public async Task<MetaverseObjectType?> GetMetaverseObjectTypeByPluralNameAsync(string pluralName, bool includeChildObjects)
     {
+        using var span = Diagnostics.Diagnostics.Database.StartSpan("Mvo.GetTypeByPluralName")
+            .SetTag("pluralName", pluralName)
+            .SetTag("includeChildObjects", includeChildObjects);
         return await Application.Repository.Metaverse.GetMetaverseObjectTypeByPluralNameAsync(pluralName, includeChildObjects);
     }
 
@@ -341,7 +345,30 @@ public class MetaverseServer
     /// </summary>
     public async Task<MvoDetailResult?> GetMetaverseObjectDetailAsync(Guid id, MvoAttributeLoadStrategy loadStrategy)
     {
+        using var span = Diagnostics.Diagnostics.Database.StartSpan("Mvo.GetDetail")
+            .SetTag("id", id)
+            .SetTag("strategy", loadStrategy.ToString());
         return await Application.Repository.Metaverse.GetMetaverseObjectDetailAsync(id, loadStrategy);
+    }
+
+    /// <summary>
+    /// Returns a page of change-history rows for a Metaverse Object, projected into a flat DTO.
+    /// Ordered by change time descending. <paramref name="pageSize"/> is clamped to [1, 100].
+    /// </summary>
+    public async Task<(List<MvoChangeHistoryDto> Items, int TotalCount)> GetMvoChangeHistoryAsync(Guid metaverseObjectId, int page, int pageSize)
+    {
+        if (page < 1)
+            page = 1;
+        if (pageSize < 1)
+            pageSize = 1;
+        if (pageSize > 100)
+            pageSize = 100;
+
+        using var span = Diagnostics.Diagnostics.Database.StartSpan("Mvo.GetChangeHistory")
+            .SetTag("id", metaverseObjectId)
+            .SetTag("page", page)
+            .SetTag("pageSize", pageSize);
+        return await Application.Repository.Metaverse.GetMvoChangeHistoryAsync(metaverseObjectId, page, pageSize);
     }
 
     public async Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id)

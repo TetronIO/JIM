@@ -47,6 +47,7 @@
         'Set-JIMConnectedSystemPartition',
         'Set-JIMConnectedSystemContainer',
         'Get-JIMConnectedSystemObject',
+        'Get-JIMConnectedSystemObjectChangeHistory',
         'Get-JIMConnectedSystemUnresolvedReferenceCount',
         'Get-JIMPendingExport',
         'Clear-JIMConnectedSystem',
@@ -108,6 +109,7 @@
 
         # Metaverse
         'Get-JIMMetaverseObject',
+        'Get-JIMMetaverseObjectChangeHistory',
         'Search-JIMMetaverseObject',
         'Get-JIMMetaverseObjectType',
         'Set-JIMMetaverseObjectType',

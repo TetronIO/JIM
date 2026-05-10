@@ -397,6 +397,35 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// List the change history for a Connected System Object
+    /// </summary>
+    /// <remarks>
+    /// Returns a paginated list of change records for the specified Connected System Object,
+    /// ordered by change time descending (most recent first). Each row carries the initiator
+    /// and run profile context, plus the per-attribute value changes.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="csoId">The unique identifier (GUID) of the Connected System Object.</param>
+    /// <param name="pagination">Pagination parameters (page, pageSize). Page size is clamped to [1, 100].</param>
+    /// <returns>A paginated list of change-history records.</returns>
+    [HttpGet("connected-systems/{connectedSystemId:int}/connector-space/{csoId:guid}/change-history", Name = "GetConnectedSystemObjectChangeHistory")]
+    [ProducesResponseType(typeof(PaginatedResponse<CsoChangeHistoryDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectedSystemObjectChangeHistoryAsync(int connectedSystemId, Guid csoId, [FromQuery] PaginationRequest pagination)
+    {
+        _logger.LogTrace("Requested change history for CSO {CsoId} in connected system {SystemId}", csoId, connectedSystemId);
+
+        // Verify the CSO exists in this connected system so a missing id returns 404 rather than an empty page.
+        var cso = await _application.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, csoId);
+        if (cso == null)
+            return NotFound(ApiErrorResponse.NotFound($"Object with ID {csoId} not found in connected system {connectedSystemId}."));
+
+        var (items, totalCount) = await _application.ConnectedSystems.GetCsoChangeHistoryAsync(csoId, pagination.Page, pagination.PageSize);
+        return Ok(PaginatedResponse<CsoChangeHistoryDto>.Create(items, totalCount, pagination.Page, pagination.PageSize));
+    }
+
+    /// <summary>
     /// List Attribute Values for a Connected System Object
     /// </summary>
     /// <remarks>
