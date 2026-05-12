@@ -11,24 +11,40 @@
   // /workspaces/JIM path disagrees with what VS Code has opened.
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/JIM,type=bind,consistency=cached",
   "workspaceFolder": "/workspaces/JIM",
-  // Features - pre-built development tools
+  // Features - pre-built development tools.
+  //
+  // Each Feature is a third-party script that runs as root during image
+  // build, so the supply-chain risk is equivalent to apt-installing a
+  // package. Versions are pinned (not "latest") for reproducibility and
+  // so Dependabot tracks them via the devcontainers ecosystem; see
+  // .github/dependabot.yml. The devcontainer CLI writes resolved digests
+  // to .devcontainer/devcontainer-lock.json, which is committed.
+  // Bump these in lockstep with a Dependabot PR review.
+  // Note on the two "version" concepts:
+  //  - The colon-tag on the Feature ID (e.g. :2.16.1) pins which version of
+  //    the Feature *script itself* to download. This is what Dependabot
+  //    tracks and is the supply-chain pin.
+  //  - The "version" key inside the Feature options is the Feature script's
+  //    own runtime parameter (e.g. for docker-in-docker, which Docker CE
+  //    version to install). "latest" here means "let the Feature pick" and
+  //    is independent of the script pin above; do not conflate the two.
   "features": {
     // Docker-in-Docker for running docker-compose
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2.16.1": {
       "version": "latest",
       "moby": true,
       "dockerDashComposeVersion": "v2"
     },
     // Node.js - required by Claude Code extension
-    "ghcr.io/devcontainers/features/node:1": {
+    "ghcr.io/devcontainers/features/node:1.7.1": {
       "version": "20"
     },
     // GitHub CLI
-    "ghcr.io/devcontainers/features/github-cli:1": {
+    "ghcr.io/devcontainers/features/github-cli:1.1.0": {
       "version": "latest"
     },
     // PowerShell - standard scripting platform
-    "ghcr.io/devcontainers/features/powershell:1": {
+    "ghcr.io/devcontainers/features/powershell:1.5.1": {
       "version": "latest"
     }
   },
