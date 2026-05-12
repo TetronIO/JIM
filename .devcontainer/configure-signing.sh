@@ -119,8 +119,53 @@ configure_codespaces_signing() {
     return 0
 }
 
+# Check that the git user identity is set before configuring signing. The
+# allowed_signers file built below ties signatures to the committer's email,
+# so user.email must resolve to something meaningful. Without this check the
+# script used to fall back to a "developer@local" placeholder, which made
+# every "git verify-commit" output show that placeholder regardless of who
+# actually authored the commit.
+#
+# VS Code's Dev Containers extension copies the host gitconfig into the
+# container automatically; Zed and the devcontainer CLI do not. After a
+# rebuild on those launchers, /home/vscode/.gitconfig has no identity, so we
+# need to either inherit it (out of scope here) or refuse to proceed and tell
+# the developer to set it.
+check_git_identity() {
+    local git_name git_email
+    git_name=$(git config --get user.name 2>/dev/null || echo "")
+    git_email=$(git config --get user.email 2>/dev/null || echo "")
+
+    if [ -n "$git_name" ] && [ -n "$git_email" ]; then
+        return 0
+    fi
+
+    print_banner "$YELLOW" "Git user identity is not set" \
+        "" \
+        "  user.name:  ${git_name:-<unset>}" \
+        "  user.email: ${git_email:-<unset>}" \
+        "" \
+        "Signing cannot be fully configured until both are set, because" \
+        "the allowed_signers file ties signatures to the committer's" \
+        "email. Without it, 'git verify-commit' would show a placeholder" \
+        "address instead of the real committer." \
+        "" \
+        "VS Code's Dev Containers extension copies the host gitconfig" \
+        "into the container automatically. Zed and the devcontainer CLI" \
+        "do not, so identity must be set explicitly inside the container" \
+        "(or in a host config that survives rebuilds)." \
+        "" \
+        "Set both, then re-run signing setup:" \
+        "" \
+        "  git config --global user.name \"Your Name\"" \
+        "  git config --global user.email \"you@example.com\"" \
+        "  .devcontainer/configure-signing.sh"
+    return 1
+}
+
 # Configure signing for a local devcontainer. This requires the host's SSH
-# agent to be forwarded into the container with at least one key loaded.
+# agent to be forwarded into the container with at least one key loaded, and
+# the git user identity to be set (see check_git_identity).
 configure_local_signing() {
     print_step "Configuring git SSH signing for local devcontainer..."
 
@@ -179,10 +224,11 @@ configure_local_signing() {
     git config --global user.signingkey "key::$ssh_key"
 
     # Build an allowed_signers file so that "git verify-commit" works locally.
-    # The email is best-effort; if user.email is not set we use a placeholder
-    # that still lets verification succeed structurally.
+    # check_git_identity has already guaranteed user.email is set, so we read
+    # it from the resolved git config (any scope, not just --global) to match
+    # what git will actually use for the commit author.
     local git_email
-    git_email=$(git config --global user.email 2>/dev/null || echo "developer@local")
+    git_email=$(git config --get user.email)
     mkdir -p ~/.ssh
     echo "$git_email $ssh_key" > ~/.ssh/allowed_signers
     git config --global gpg.ssh.allowedSignersFile ~/.ssh/allowed_signers
@@ -249,6 +295,11 @@ main() {
         configure_codespaces_signing
         return $?
     else
+        # Identity must be set before signing config so allowed_signers
+        # references the real committer rather than a placeholder.
+        if ! check_git_identity; then
+            return 1
+        fi
         configure_local_signing
         return $?
     fi
