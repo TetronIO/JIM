@@ -186,6 +186,31 @@ updates:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
 
+  # Devcontainer Features (.devcontainer/devcontainer.json).
+  #
+  # Each Feature is a third-party script that runs as root during devcontainer
+  # image build, so it sits in the same supply-chain risk class as base images
+  # and NuGet packages. Pinned by colon-tag in devcontainer.json with resolved
+  # digests captured in devcontainer-lock.json; Dependabot proposes weekly PRs
+  # when upstream Features publish new versions. Polled weekly (not daily) like
+  # NuGet and Actions since Features change infrequently and each bump needs a
+  # full devcontainer rebuild to validate.
+  - package-ecosystem: "devcontainers"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/London"
+    reviewers:
+      - "TetronIO/jim-maintainers"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
