@@ -65,6 +65,26 @@
         "omnisharp.enableEditorConfigSupport": true,
         "omnisharp.enableImportCompletion": true,
         "omnisharp.organizeImportsOnFormat": true,
+        // Force the C# extension and C# Dev Kit to use the .NET runtime that
+        // ships in the container image (pinned via the Dockerfile base image
+        // digest) instead of letting ms-dotnettools.vscode-dotnet-runtime
+        // download a separate runtime into its own sandbox. The sandboxed
+        // runtime has produced MEF composition crashes in the Roslyn LSP
+        // (FileNotFoundException for System.Numerics.Vectors 10.0.0.0 -
+        // a TypeLoadException masquerading as a missing-file error) when
+        // the LSP's expected runtime version doesn't match what gets
+        // acquired. Using the system install keeps everyone on the same
+        // pinned version and bypasses the failing acquisition path.
+        "dotnetAcquisitionExtension.existingDotnetPath": [
+          {
+            "extensionId": "ms-dotnettools.csharp",
+            "path": "/usr/share/dotnet/dotnet"
+          },
+          {
+            "extensionId": "ms-dotnettools.csdevkit",
+            "path": "/usr/share/dotnet/dotnet"
+          }
+        ],
         // C# settings
         "csharp.semanticHighlighting.enabled": true,
         "csharp.suppressDotnetInstallWarning": true,
@@ -146,7 +166,14 @@
   // dash in front of sudo makes this a no-op on native Linux Docker
   // (no host-services socket) and in Codespaces, where the path
   // either doesn't exist or isn't a real socket.
-  "postStartCommand": "sudo chown vscode:vscode /ssh-agent 2>/dev/null || true",
+  // The /ssh-agent chown is for git commit signing (see mounts comment).
+  // The chown of /home/vscode/.claude is required because Docker initialises
+  // a fresh named-volume mountpoint as root:root, so the vscode user can't
+  // write credentials, sessions, backups, or .last-cleanup into it; the
+  // Claude Code OAuth flow then completes against the server but the local
+  // token write fails with EACCES and the agent stays unauthenticated. The
+  // chown is idempotent and safe to re-run on every container start.
+  "postStartCommand": "sudo chown vscode:vscode /ssh-agent 2>/dev/null || true; sudo chown -R vscode:vscode /home/vscode/.claude || true",
   // Mounts:
   //  - Docker socket for Docker-in-Docker.
   //  - SSH agent socket from Docker Desktop's host-services bridge, used for
@@ -161,9 +188,25 @@
   //    bind-mounts it, so the container still starts but SSH forwarding
   //    silently no-ops. Codespaces uses a separate signing path (gh-gpgsign)
   //    and does not depend on this mount.
+  //  - Named volume "jim-claude-state" mounted at /home/vscode/.claude so
+  //    Claude Code's project memory, user-level settings, credentials and
+  //    session backups survive devcontainer rebuilds. Without this they
+  //    sit in the container's writable layer and get wiped on every
+  //    rebuild. The volume name is JIM-scoped (not shared with other
+  //    devcontainer projects) so auth state and user-level settings
+  //    don't bleed across projects on the same host; e.g. a personal
+  //    Anthropic account used in one project does not end up authenticated
+  //    in an unrelated work project. Per-project memories are already
+  //    isolated by Claude's path slugs under .claude/projects/<slug>/;
+  //    the volume scope is purely about user-level state. See
+  //    .devcontainer/CLAUDE.md "Persistent State Across Rebuilds" for
+  //    the Codespaces caveat and cross-platform notes. Note: fresh
+  //    named volumes mount as root:root; postStartCommand chowns the
+  //    mountpoint to vscode so Claude Code can write into it.
   "mounts": [
     "source=/var/run/docker.sock,target=/var/run/docker-host.sock,type=bind",
-    "source=/run/host-services/ssh-auth.sock,target=/ssh-agent,type=bind"
+    "source=/run/host-services/ssh-auth.sock,target=/ssh-agent,type=bind",
+    "source=jim-claude-state,target=/home/vscode/.claude,type=volume"
   ],
   // Container environment variables
   "containerEnv": {
