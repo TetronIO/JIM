@@ -65,6 +65,26 @@
         "omnisharp.enableEditorConfigSupport": true,
         "omnisharp.enableImportCompletion": true,
         "omnisharp.organizeImportsOnFormat": true,
+        // Force the C# extension and C# Dev Kit to use the .NET runtime that
+        // ships in the container image (pinned via the Dockerfile base image
+        // digest) instead of letting ms-dotnettools.vscode-dotnet-runtime
+        // download a separate runtime into its own sandbox. The sandboxed
+        // runtime has produced MEF composition crashes in the Roslyn LSP
+        // (FileNotFoundException for System.Numerics.Vectors 10.0.0.0 -
+        // a TypeLoadException masquerading as a missing-file error) when
+        // the LSP's expected runtime version doesn't match what gets
+        // acquired. Using the system install keeps everyone on the same
+        // pinned version and bypasses the failing acquisition path.
+        "dotnetAcquisitionExtension.existingDotnetPath": [
+          {
+            "extensionId": "ms-dotnettools.csharp",
+            "path": "/usr/share/dotnet/dotnet"
+          },
+          {
+            "extensionId": "ms-dotnettools.csdevkit",
+            "path": "/usr/share/dotnet/dotnet"
+          }
+        ],
         // C# settings
         "csharp.semanticHighlighting.enabled": true,
         "csharp.suppressDotnetInstallWarning": true,
