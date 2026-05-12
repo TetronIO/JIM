@@ -137,9 +137,33 @@
   "remoteUser": "vscode",
   // Lifecycle scripts
   "postCreateCommand": "bash .devcontainer/setup.sh",
-  // Mount Docker socket for Docker-in-Docker
+  // Make the bind-mounted SSH agent socket accessible to the non-root
+  // container user. Docker Desktop's host-services socket lands as
+  // root:root 0660 regardless of remoteUser, so the vscode user can't
+  // reach it - which breaks git commit signing for any launcher that
+  // doesn't intervene (Zed, devcontainer CLI). Run on every start
+  // because the bind mount is re-established each time. The leading
+  // dash in front of sudo makes this a no-op on native Linux Docker
+  // (no host-services socket) and in Codespaces, where the path
+  // either doesn't exist or isn't a real socket.
+  "postStartCommand": "sudo chown vscode:vscode /ssh-agent 2>/dev/null || true",
+  // Mounts:
+  //  - Docker socket for Docker-in-Docker.
+  //  - SSH agent socket from Docker Desktop's host-services bridge, used for
+  //    git commit signing inside the container. The path
+  //    /run/host-services/ssh-auth.sock is provided by Docker Desktop on
+  //    macOS and Windows; it proxies the host's ssh-agent into containers.
+  //    VS Code's Dev Containers extension forwards SSH_AUTH_SOCK automatically
+  //    as a non-spec feature, but Zed and the official devcontainer CLI do
+  //    not - hence the explicit mount here so signing works regardless of
+  //    launcher. On native Linux Docker (no Docker Desktop) the source path
+  //    does not exist; Docker creates an empty directory at that path and
+  //    bind-mounts it, so the container still starts but SSH forwarding
+  //    silently no-ops. Codespaces uses a separate signing path (gh-gpgsign)
+  //    and does not depend on this mount.
   "mounts": [
-    "source=/var/run/docker.sock,target=/var/run/docker-host.sock,type=bind"
+    "source=/var/run/docker.sock,target=/var/run/docker-host.sock,type=bind",
+    "source=/run/host-services/ssh-auth.sock,target=/ssh-agent,type=bind"
   ],
   // Container environment variables
   "containerEnv": {
@@ -152,7 +176,11 @@
     // Linux on Apple Silicon), crashing Claude Code at startup. Using the
     // distro binary works on every host (Codespaces, Docker Desktop on
     // Windows/macOS, native Linux) regardless of page size.
-    "USE_BUILTIN_RIPGREP": "0"
+    "USE_BUILTIN_RIPGREP": "0",
+    // Point ssh / git at the SSH agent socket bind-mounted above. See the
+    // comment on the mounts array for why this is needed and where the
+    // socket comes from.
+    "SSH_AUTH_SOCK": "/ssh-agent"
   },
   // Enable privileged mode for Docker-in-Docker
   "privileged": true,
