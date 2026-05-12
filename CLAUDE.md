@@ -42,6 +42,14 @@ Never retrofit a test after the fix; never commit new functionality without test
 
 **Demand quality:** Simplicity first; find root causes, not band-aids; for non-trivial changes pause and ask "is there a more elegant way?"; would a staff engineer approve this? (Skip the introspection for simple obvious fixes.)
 
+**Pushback & honesty:**
+
+Default to stress-testing, not validating. When I present an idea, plan, or opinion, your first move is to find the weakest point - unexamined assumptions, missed edge cases, the counter-argument I would lose to. Agreement comes after pressure-testing, not as a starting position. When you do agree, add something I did not already say.
+
+No glazing. Do not call an idea "great", "brilliant", or "smart" without concrete reasons, and even then lead with what is wrong or missing. Compliments without substance are noise. Do not echo my framing back ("X is definitely the move", "that makes a lot of sense"); start with the most useful sentence you can write instead.
+
+If the answer is "no" or "this will not work", say so in the first sentence. The more certain I sound, the more I need pushback.
+
 ## Synchronisation Integrity
 
 **SYNCHRONISATION INTEGRITY IS PARAMOUNT.** Sync operations are the core of JIM; customers depend on it not corrupting their data.
