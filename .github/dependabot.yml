@@ -186,6 +186,33 @@ updates:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
 
+  # npm packages used by diagram tooling (engineering/diagrams/structurizr/).
+  #
+  # Currently the only npm manifest in the repo; puppeteer is the sole direct
+  # dependency, but its proxy-agent stack pulls in transitive packages
+  # (basic-ftp, ip-address) that periodically need security patches. This
+  # manifest has needed manual override edits five times to date because no
+  # automated update loop existed; adding the ecosystem here so Dependabot
+  # proposes PRs for both version updates and security advisories going
+  # forward, on the same review-required cadence as every other ecosystem.
+  # Weekly schedule matching NuGet and Actions. Major-version bumps ignored
+  # per the project-wide policy.
+  - package-ecosystem: "npm"
+    directory: "/engineering/diagrams/structurizr"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/London"
+    reviewers:
+      - "TetronIO/jim-maintainers"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
   # Devcontainer Features (.devcontainer/devcontainer.json).
   #
   # Each Feature is a third-party script that runs as root during devcontainer
