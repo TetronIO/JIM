@@ -142,15 +142,17 @@ All dependency updates from Dependabot require human review before merging - the
 
 ## Persistent State Across Rebuilds
 
-`/home/vscode/.claude` is mounted from a Docker named volume `claude-state` so Claude Code's project memory, user-level settings, credentials and session backups survive `Rebuild Container`. Without the volume, that directory sits in the container's writable layer and is wiped on every rebuild.
+`/home/vscode/.claude` is mounted from a Docker named volume `jim-claude-state` so Claude Code's project memory, user-level settings, credentials and session backups survive `Rebuild Container`. Without the volume, that directory sits in the container's writable layer and is wiped on every rebuild.
 
-**Why the generic name (not `jim-claude-state`):** Claude already namespaces per-project memory under `.claude/projects/<workspace-slug>/`, so a single host-wide volume cleanly holds state for multiple devcontainer-based projects without collision. If you work on other projects that also mount `claude-state` at `/home/vscode/.claude`, you share user-level state (auth, settings) once and keep per-project memories isolated by Claude's own path slugs. Each developer's host has its own volume; nothing is synced across machines.
+**Why JIM-scoped (not a generic shared name):** A host-wide volume shared across every devcontainer-based project means signing in to Claude Code in any project authenticates all of them as the same Anthropic account. That's a footgun if you want different accounts per project (e.g. personal vs work). The JIM-scoped name keeps user-level state (auth, global settings) isolated to this project. Per-project memories are already isolated by Claude's path slugs under `.claude/projects/<workspace-slug>/`; the volume scope is purely about user-level state.
 
-**Cross-platform:** Works identically on Docker Desktop (macOS / Windows) and native Linux Docker. Lives inside Docker Desktop's VM or under `/var/lib/docker/volumes/` respectively. Lost only on explicit `docker volume rm claude-state` or a Docker factory reset.
+**Permissions:** Fresh named volumes mount as `root:root` 0755, so the `vscode` user can't write into `/home/vscode/.claude` until ownership is fixed. `postStartCommand` in `devcontainer.json` runs `sudo chown -R vscode:vscode /home/vscode/.claude` on every container start; this is idempotent. Without that chown, Claude Code's OAuth flow completes against the server but the local credential write fails with `EACCES` and the extension stays in "No authentication found".
 
-**Codespaces caveat:** Codespaces honours the named-volume mount, but each Codespace is its own VM and the volume is scoped to that one VM. State survives container rebuilds within the same Codespace (the common case) but does not survive Codespace deletion, and is not shared across Codespaces. Codespaces users therefore get partial benefit: less memory loss day-to-day, but no cross-project sharing.
+**Cross-platform:** Works identically on Docker Desktop (macOS / Windows) and native Linux Docker. Lives inside Docker Desktop's VM or under `/var/lib/docker/volumes/` respectively. Lost only on explicit `docker volume rm jim-claude-state` or a Docker factory reset.
 
-**To start fresh:** `docker volume rm claude-state` (Docker Desktop / Linux Docker) before the next rebuild. Codespaces users delete the Codespace.
+**Codespaces caveat:** Codespaces honours the named-volume mount, but each Codespace is its own VM and the volume is scoped to that one VM. State survives container rebuilds within the same Codespace (the common case) but does not survive Codespace deletion.
+
+**To start fresh:** `docker volume rm jim-claude-state` (Docker Desktop / Linux Docker) before the next rebuild. Codespaces users delete the Codespace. If you have a stale `claude-state` volume from an earlier version of this devcontainer, remove it with `docker volume rm claude-state` to free disk space.
 
 ## Troubleshooting
 
