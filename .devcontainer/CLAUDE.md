@@ -140,6 +140,18 @@ All dependency updates from Dependabot require human review before merging - the
 - PostgreSQL memory settings automatically optimized
 - Use `jim-db` or `jim-stack` aliases (already configured)
 
+## Persistent State Across Rebuilds
+
+`/home/vscode/.claude` is mounted from a Docker named volume `claude-state` so Claude Code's project memory, user-level settings, credentials and session backups survive `Rebuild Container`. Without the volume, that directory sits in the container's writable layer and is wiped on every rebuild.
+
+**Why the generic name (not `jim-claude-state`):** Claude already namespaces per-project memory under `.claude/projects/<workspace-slug>/`, so a single host-wide volume cleanly holds state for multiple devcontainer-based projects without collision. If you work on other projects that also mount `claude-state` at `/home/vscode/.claude`, you share user-level state (auth, settings) once and keep per-project memories isolated by Claude's own path slugs. Each developer's host has its own volume; nothing is synced across machines.
+
+**Cross-platform:** Works identically on Docker Desktop (macOS / Windows) and native Linux Docker. Lives inside Docker Desktop's VM or under `/var/lib/docker/volumes/` respectively. Lost only on explicit `docker volume rm claude-state` or a Docker factory reset.
+
+**Codespaces caveat:** Codespaces honours the named-volume mount, but each Codespace is its own VM and the volume is scoped to that one VM. State survives container rebuilds within the same Codespace (the common case) but does not survive Codespace deletion, and is not shared across Codespaces. Codespaces users therefore get partial benefit: less memory loss day-to-day, but no cross-project sharing.
+
+**To start fresh:** `docker volume rm claude-state` (Docker Desktop / Linux Docker) before the next rebuild. Codespaces users delete the Codespace.
+
 ## Troubleshooting
 
 **Build fails:**

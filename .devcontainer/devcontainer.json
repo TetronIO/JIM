@@ -181,9 +181,20 @@
   //    bind-mounts it, so the container still starts but SSH forwarding
   //    silently no-ops. Codespaces uses a separate signing path (gh-gpgsign)
   //    and does not depend on this mount.
+  //  - Named volume "claude-state" mounted at /home/vscode/.claude so
+  //    Claude Code's project memory, user-level settings, credentials and
+  //    session backups survive devcontainer rebuilds. Without this they
+  //    sit in the container's writable layer and get wiped on every
+  //    rebuild. The volume name is generic (not JIM-specific) so the
+  //    same volume can be mounted by any devcontainer-based project on
+  //    the same host; Claude's per-project path slugs under
+  //    .claude/projects/ keep memories isolated by workspace. See
+  //    .devcontainer/CLAUDE.md "Persistent State Across Rebuilds" for
+  //    the Codespaces caveat and cross-platform notes.
   "mounts": [
     "source=/var/run/docker.sock,target=/var/run/docker-host.sock,type=bind",
-    "source=/run/host-services/ssh-auth.sock,target=/ssh-agent,type=bind"
+    "source=/run/host-services/ssh-auth.sock,target=/ssh-agent,type=bind",
+    "source=claude-state,target=/home/vscode/.claude,type=volume"
   ],
   // Container environment variables
   "containerEnv": {
