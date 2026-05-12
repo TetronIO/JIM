@@ -12,7 +12,7 @@
 &nbsp;
 [![PowerShell Gallery](https://img.shields.io/powershellgallery/v/JIM?label=PSGallery&color=blue)](https://www.powershellgallery.com/packages/JIM/)
 &nbsp;
-[![License](https://img.shields.io/badge/License-Source_Available-orange)](https://tetron.io/jim/#licensing)
+[![License](https://img.shields.io/badge/License-Source_Available-orange)](https://junctional.io/license)
 &nbsp;
 [![Documentation](https://img.shields.io/badge/Docs-docs.junctional.io-green)](https://docs.junctional.io/)
 &nbsp;
