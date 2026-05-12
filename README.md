@@ -156,7 +156,7 @@ JIM is built in the open and we'd love to hear from people running it, evaluatin
 - **Security vulnerabilities:** Follow the responsible disclosure process in [SECURITY.md](SECURITY.md); please do not report security issues in public Issues or Discussions.
 
 ## Licensing
-JIM uses a Source-Available model where it is free to use in non-production scenarios, but requires a commercial license for use in production scenarios. [﻿Full details can be found here](https://tetron.io/jim/#licensing).
+JIM uses a Source-Available model where it is free to use in non-production scenarios, but requires a commercial license for use in production scenarios. [﻿Full details can be found here](https://junctional.io/license).
 
 ## More Information
 - **Product site:** [junctional.io](https://junctional.io)
