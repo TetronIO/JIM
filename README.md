@@ -1,7 +1,7 @@
 # Junctional Identity Manager (JIM)
 
 <p align="center">
-  <img src="https://tetron.io/images/jim/jim-logo.png" alt="JIM"/>
+  <img src="https://junctional.io/assets/jim-logo.png" alt="JIM"/>
 </p>
 
 [![CI](https://github.com/TetronIO/JIM/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/TetronIO/JIM/actions/workflows/ci.yml)
@@ -33,7 +33,7 @@ JIM is a modern Identity Management system designed for organisations with compl
 - Single Sign-On (SSO) using OpenID Connect
 - Dark/Light mode
 
-![A screenshot of JIM running](https://junctional.io/images/tour/v0.10.3/homepage-dark.png "JIM Screenshot")
+![A screenshot of JIM running](https://junctional.io/_astro/homepage-dark.C__Eo5nO.png "JIM Screenshot")
 
 <p align="center">
   <strong>📖 <a href="https://docs.junctional.io/">Read the full documentation</a></strong>
