@@ -198,6 +198,23 @@
   // token write fails with EACCES and the agent stays unauthenticated. The
   // chown is idempotent and safe to re-run on every container start.
   "postStartCommand": "sudo chown vscode:vscode /ssh-agent 2>/dev/null || true; sudo chown -R vscode:vscode /home/vscode/.claude || true",
+  // Re-run configure-signing.sh on every attach. This compensates for VS
+  // Code's Dev Containers extension syncing the host ~/.gitconfig into the
+  // container during the attach phase, *after* setup.sh's initial call from
+  // postCreateCommand has already configured signing. The host's
+  // user.signingkey on most developers' machines is a literal file path
+  // (e.g. ~/.ssh/id_ed25519) that doesn't resolve inside the container,
+  // so once VS Code's sync overwrites configure-signing.sh's in-container
+  // form (key::ssh-ed25519 AAAA...), git can't load the public key and the
+  // pre-commit signing hook rejects every commit. postAttachCommand runs
+  // AFTER the attach (and therefore after the gitconfig sync), so its
+  // re-run is the last word and the in-container form survives.
+  // The script is idempotent and exits with a clear banner if the SSH
+  // agent isn't forwarded; the `|| true` keeps a missing-agent state from
+  // failing the whole lifecycle. On non-VS Code launchers (Zed,
+  // devcontainer CLI) the host gitconfig sync doesn't happen, but
+  // re-running here is still a harmless idempotent no-op.
+  "postAttachCommand": "bash .devcontainer/configure-signing.sh || true",
   // Mounts:
   //  - Docker socket for Docker-in-Docker.
   //  - SSH agent socket from Docker Desktop's host-services bridge, used for
