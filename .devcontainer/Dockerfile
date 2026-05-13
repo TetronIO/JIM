@@ -28,6 +28,21 @@ RUN rm -f /etc/apt/sources.list.d/yarn.list 2>/dev/null; \
     rm -f /etc/apt/keyrings/yarn.gpg 2>/dev/null; \
     apt-get update || true
 
+# Hold moby-containerd on the 2.2.x line so the docker-in-docker Feature picks
+# a working version when it runs (Features execute after the Dockerfile, so
+# this pin is in place before apt sees the Feature's install request).
+# moby-containerd 2.3.0 on packages.microsoft.com/microsoft-ubuntu-noble-prod
+# ships without the io.containerd.transfer.v1 plugin that dockerd's libcontainerd
+# client requires; dockerd fails to start with "failed to start containerd:
+# timeout waiting for containerd to start" and Unimplemented errors for the
+# events.v1.Events, introspection.v1.Introspection, and grpc.health.v1.Health
+# gRPC services. The DinD Feature's "version" option only governs moby-engine,
+# not moby-containerd, so the pin has to live here. Priority 1001 forces the
+# downgrade even if 2.3.x somehow lands first during the Feature's apt run.
+# Re-evaluate when moby-containerd 2.3.x exposes transfer.v1 again upstream.
+RUN printf 'Package: moby-containerd\nPin: version 2.2.*\nPin-Priority: 1001\n' \
+    > /etc/apt/preferences.d/moby-containerd-pin
+
 # Install socat for Keycloak port-forwarding bridge.
 # Docker-in-Docker proxy ports aren't auto-forwarded by VS Code Dev Containers;
 # socat provides a userspace bridge that VS Code detects and forwards to the host.

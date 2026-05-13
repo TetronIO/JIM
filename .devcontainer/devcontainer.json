@@ -29,9 +29,17 @@
   //    version to install). "latest" here means "let the Feature pick" and
   //    is independent of the script pin above; do not conflate the two.
   "features": {
-    // Docker-in-Docker for running docker-compose
+    // Docker-in-Docker for running docker-compose.
+    // The Docker CE "version" is held to the 28.x major track as a precaution
+    // while the upstream moby packaging on packages.microsoft.com is settling.
+    // The acute breakage that prompted this pin was actually in moby-containerd
+    // 2.3.0 (missing the io.containerd.transfer.v1 plugin), not moby-engine -
+    // see the moby-containerd Pin in .devcontainer/Dockerfile for the real fix.
+    // Docker 28 has been validated against the pinned containerd 2.2.x; whether
+    // Docker 29.x also works once containerd is fixed has not been tested.
+    // Revisit both pins together when moby-containerd 2.3.x is repaired.
     "ghcr.io/devcontainers/features/docker-in-docker:2.16.1": {
-      "version": "latest",
+      "version": "28",
       "moby": true,
       "dockerDashComposeVersion": "v2"
     },
