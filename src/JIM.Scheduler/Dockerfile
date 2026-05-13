@@ -7,7 +7,7 @@
 
 ARG VERSION=dev
 
-FROM mcr.microsoft.com/dotnet/runtime:10.0-noble@sha256:8fb7ff015fcf0ebc6e90105bd6db06875954e6dc3d374b9dbb34c732867d13e4 AS base
+FROM mcr.microsoft.com/dotnet/runtime:10.0-noble@sha256:dcc1b45395697ed27239d121eb8f3d5f2e2fd195257d1b8119cb3e9eb85ad44f AS base
 ARG VERSION
 
 LABEL org.opencontainers.image.title="JIM Scheduler"
