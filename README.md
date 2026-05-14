@@ -1,7 +1,7 @@
 # Junctional Identity Manager (JIM)
 
 <p align="center">
-  <img src="https://junctional.io/assets/jim-logo.png" alt="JIM"/>
+  <img src="https://junctional.io/assets/jim-logo.png" alt="JIM" width="400"/>
 </p>
 
 [![CI](https://github.com/TetronIO/JIM/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/TetronIO/JIM/actions/workflows/ci.yml)
