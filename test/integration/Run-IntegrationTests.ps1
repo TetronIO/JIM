@@ -656,6 +656,13 @@ function Show-TemplateMenu {
             Time = "~1 hour"
         }
         @{
+            Name = "Scale100k5kGroups"
+            Users = 100000
+            Groups = 5027
+            Description = "100K users, realistic long-tail group shape (OpenLDAP + Scenario 8 only)"
+            Time = "~1.5 hours"
+        }
+        @{
             Name = "Scale200k55Groups"
             Users = 200000
             Groups = 55
@@ -682,13 +689,6 @@ function Show-TemplateMenu {
             Groups = 80
             Description = "1M users, stress testing"
             Time = "~6 hours"
-        }
-        @{
-            Name = "Scale100k5kGroups"
-            Users = 100000
-            Groups = 5027
-            Description = "100K users, realistic long-tail group shape (OpenLDAP + Scenario 8 only)"
-            Time = "~1.5 hours"
         }
     )
 
