@@ -1,5 +1,519 @@
-By accessing the Junctional Identity Manager (JIM) source code here, you are agreeing to the following licensing terms:
+Tetron Software Licence Agreement
+Version 2.0, 14 May 2026
 
-https://junctional.io/license/
 
-If you do not agree to these terms, do not access the Junctional Identity Manager (JIM) source code.
+This Software Licence Agreement (the "Agreement") is made between:
+
+Licensor: Tetron Limited, a company registered in England and Wales with
+company number 07749907, having its principal office at Kemp House, 160
+City Road, London, EC1V 2NX, United Kingdom ("Licensor" or "Tetron").
+
+Licensee: the individual or entity accepting this Agreement and using the
+Software in accordance with its terms ("Licensee").
+
+Effective Date: the date on which Licensee first accesses, downloads,
+clones, builds, installs, or otherwise uses the Software, whichever is
+the earliest.
+
+Business use only. This Agreement is intended for use by businesses,
+sole traders, and other organisations acting in the course of a trade,
+business, craft, or profession. It is not intended for, and is not
+offered to, consumers (within the meaning of the UK Consumer Rights Act
+2015). Licensee warrants that it is not a consumer and that the
+individual accepting this Agreement on Licensee's behalf has authority
+to do so.
+
+
+1. Definitions
+
+In this Agreement, the following definitions apply:
+
+"Software" means the software product known as JIM (Junctional Identity
+Manager), made available by Licensor at github.com/TetronIO/JIM and
+through any other channel designated by Licensor, including any updates,
+patches, modifications, enhancements, derivative versions, and
+accompanying documentation, but excluding any Third-Party Components
+(defined below).
+
+"Documentation" means the user, administrator, and developer
+documentation accompanying the Software, whether published in the
+Software's source repository, at docs.junctional.io, or otherwise made
+available by Licensor.
+
+"Third-Party Components" means open-source and third-party software
+incorporated in or distributed alongside the Software, each of which is
+licensed to Licensee under its own terms as identified in the NOTICE or
+THIRD_PARTY_NOTICES file accompanying the Software. This Agreement does
+not modify, supersede, or affect the terms applicable to any Third-Party
+Component.
+
+"Development and Testing" means use of the Software for non-production
+purposes only, including software development, integration testing,
+evaluation, demonstration (including to prospective customers, partners,
+and other third parties), training, education, prototyping, proof of
+concept, and personal learning, in each case where the Software is not
+used for Production Use.
+
+"Production Use" means any use of the Software that is not Development
+and Testing. Without limiting the foregoing, Production Use includes any
+use of the Software: (a) on which Licensee, any of its customers, or any
+other third party relies for the conduct of business; (b) that is
+integrated with Licensee's live, operational, or customer-facing systems
+such that any output of the Software is acted upon by any other system
+or by any user for non-evaluative purposes; or (c) in respect of which
+Licensee receives, or expects to receive, any form of consideration from
+any third party.
+
+"Commercial Licence" means a separate licence granted by Licensor
+authorising Production Use, on terms to be published by Licensor.
+
+"Source Available" means the licensing posture under which Licensor
+publishes the Software's source code at github.com/TetronIO/JIM for the
+purposes of inspection, evaluation, modification, and Development and
+Testing as permitted by this Agreement, without conferring any rights to
+Production Use, redistribution, sublicensing, hosting for third parties,
+or any other use not expressly granted herein.
+
+"Connector" means software that integrates with the Software through its
+published connector interface, whether developed by Licensor, by
+Licensee, or by a third party.
+
+"Connector SDK" means those parts of the Software that Licensor
+designates in the Documentation as the Connector SDK, comprising the
+interfaces, base classes, attributes, data-transfer types, and reference
+helpers necessary to develop a Connector, distributed by Licensor in
+such form as Licensor specifies from time to time (which may include one
+or more NuGet packages, reference assemblies, or other distribution
+mechanisms).
+
+
+2. Licence Grant
+
+2.1 Development and Testing Licence
+
+Subject to Licensee's compliance with this Agreement, Licensor grants
+Licensee a non-exclusive, non-transferable, non-sublicensable,
+royalty-free, worldwide, revocable licence to:
+
+1. access, download, clone, and build the Software's source code from
+   the channels Licensor has designated;
+2. install, run, and use the Software for Development and Testing
+   within Licensee's organisation;
+3. modify the Software's source code for the purposes of Development
+   and Testing within Licensee's organisation; and
+4. access and use the Documentation in connection with the foregoing.
+
+No fees are payable for the licence granted in this section 2.1.
+
+2.2 Public Source Publication
+
+For the avoidance of doubt: Licensor's publication of the Software's
+source code at github.com/TetronIO/JIM (or any successor location) is a
+deliberate act by Licensor, made on a Source Available basis. Nothing in
+section 3 prevents Licensee from referring to, linking to, or citing the
+publicly published source code. The restrictions in section 3 apply to
+redistribution of built artefacts, modified versions, hosted instances,
+repackaged forks, and any other exploitation of the Software, not to
+ordinary references to the publicly published source.
+
+2.3 Commercial Licence
+
+Production Use is not permitted under this Agreement. Production Use
+requires a separate Commercial Licence from Licensor. The terms of the
+Commercial Licence will be published by Licensor in due course. While
+the Commercial Licence terms are not yet published, Production Use may
+be permitted on a case-by-case basis under Licensor's Early Access
+Programme, which is governed by separate written terms agreed between
+Licensor and the participating Licensee.
+
+2.4 No Implied Licences
+
+No rights other than those expressly granted in this Agreement are
+granted by Licensor by implication, estoppel, exhaustion, or otherwise.
+All rights not expressly granted are reserved.
+
+
+3. Restrictions
+
+Licensee shall not, and shall not permit any third party to:
+
+1. use the Software for Production Use without a valid Commercial
+   Licence or other written authorisation from Licensor;
+2. distribute, sublicense, sell, lease, rent, host for the benefit of
+   any third party, or otherwise make the Software (or any modified
+   version of the Software) available to any third party, except as
+   expressly permitted by this Agreement;
+3. remove, alter, or obscure any copyright notice, trade mark, or other
+   proprietary notice in the Software or Documentation;
+4. use the Software in violation of any applicable law, including
+   export-control, sanctions, data-protection, or anti-bribery
+   legislation; or
+5. assert any patent, copyright, or other intellectual-property claim
+   against Licensor or any other Licensee in respect of the Software or
+   any contribution made to it.
+
+
+4. Connectors and Derivative Works
+
+4.1 First-party Connectors
+
+Connectors developed and distributed by Licensor form part of the
+Software and are subject to this Agreement.
+
+4.2 Licensee Connectors and the Connector SDK
+
+A Connector developed by or for Licensee that integrates with the
+Software through the Connector SDK is the property of Licensee, subject
+to this section 4.2.
+
+Licensor grants Licensee a non-exclusive, non-transferable, worldwide,
+royalty-free licence to:
+
+1. reference, incorporate, and use the Connector SDK in such a
+   Connector; and
+2. distribute the Connector together with the Connector SDK components
+   on which it depends,
+
+in each case solely for the purpose of enabling that Connector to
+integrate with installations of the Software that are themselves
+authorised under a Commercial Licence, this Agreement, or other written
+authorisation from Licensor.
+
+For the avoidance of doubt:
+
+- This section 4.2 does not extend to any portion of the Software
+  outside the Connector SDK. A Connector that embeds, copies, or
+  incorporates portions of the Software outside the Connector SDK is a
+  derivative work subject to section 4.3.
+- A Licensee that distributes a Connector to a third party does not
+  thereby grant that third party any licence to use the Software
+  itself. The third party requires its own licence under this Agreement
+  (for Development and Testing) or a Commercial Licence (for Production
+  Use) in order to run the Software with the Connector.
+- A Connector distributed under this section 4.2 must not be
+  represented as a Licensor product or imply Licensor endorsement, and
+  must include any attribution notice Licensor specifies in the
+  Documentation for Connector SDK redistribution.
+- Licensor may, in the Documentation or by separate written notice,
+  publish the Connector SDK (or components of it) under different terms
+  more permissive than those in this Agreement. Where Licensor does so,
+  those terms govern that publication of the Connector SDK in
+  preference to this section 4.2.
+
+4.3 Modifications to the Software
+
+Modifications to, or derivative works of, the Software's source code
+outside the Connector SDK (including Connectors that embed the
+Software's source code outside the Connector SDK) are subject to this
+Agreement and the restrictions in section 3.
+
+
+5. Ownership
+
+Licensor retains all right, title, and interest in and to the Software
+and the Documentation, including all intellectual-property rights. No
+ownership rights are transferred to Licensee under this Agreement.
+Licensee owns the rights to its own data, configurations, and any
+Licensee-created content that does not incorporate the Software's
+source code.
+
+
+6. Third-Party Components
+
+The Software incorporates Third-Party Components. Each Third-Party
+Component is licensed to Licensee under its own terms.
+
+Licensor identifies the Third-Party Components incorporated in each
+release of the Software through one or more of the following artefacts
+published with that release: (a) a Software Bill of Materials (SBOM) in
+SPDX or CycloneDX format, listing the name, version, supplier, and
+licence identifier of each Third-Party Component; and (b) a NOTICE,
+THIRD_PARTY_NOTICES, or equivalent file reproducing the attribution and
+licence text required by the terms of those Third-Party Components.
+
+Nothing in this Agreement restricts, modifies, or supersedes any rights
+granted to Licensee under the terms of any Third-Party Component, nor
+any obligation Licensee owes to the upstream licensor of any Third-Party
+Component. Licensor makes no warranty in respect of any Third-Party
+Component.
+
+
+7. Telemetry and Data Protection
+
+7.1 No Telemetry
+
+The Software does not, by default, transmit usage data,
+licence-verification signals, or other telemetry to Licensor or any
+third party. Where any future version of the Software introduces
+optional telemetry, that telemetry will be disclosed in the
+Documentation and will be off by default.
+
+7.2 Self-Hosted Operation
+
+The Software is self-hosted by Licensee. Licensor does not access,
+process, or store any personal data that Licensee loads into, or
+processes using, the Software, except where Licensee voluntarily
+provides such data to Licensor (for example in connection with a support
+request). Where Licensee processes personal data using the Software,
+Licensee is the controller in respect of that data for the purposes of
+UK GDPR and equivalent legislation, and Licensor is neither a controller
+nor a processor.
+
+7.3 Feedback
+
+Where Licensee voluntarily provides Licensor with feedback, suggestions,
+bug reports, ideas, or other information relating to the Software
+("Feedback"), Licensee grants Licensor a perpetual, irrevocable,
+worldwide, royalty-free, non-exclusive licence to use, reproduce,
+modify, and exploit such Feedback for any purpose, without obligation of
+confidentiality or compensation. This section does not apply to
+source-code contributions, which are governed by Licensor's Contributor
+Licence Agreement (where in force).
+
+
+8. Confidentiality
+
+8.1 Confidential Information
+
+"Confidential Information" means information disclosed by Licensor to
+Licensee that is either (a) marked or otherwise identified by Licensor
+as confidential, or (b) of a nature that a reasonable recipient would
+understand to be confidential, including pre-release versions of the
+Software, draft Documentation, Early Access Programme materials,
+security advisories not yet publicly disclosed, and Licensor's
+commercial terms.
+
+Confidential Information does not include information that is or
+becomes publicly available other than through Licensee's breach of this
+Agreement, was lawfully known to Licensee before disclosure, is
+independently developed by Licensee without reference to Licensor's
+Confidential Information, or is lawfully received from a third party
+without confidentiality obligation. Source code published by Licensor
+at github.com/TetronIO/JIM is not Confidential Information.
+
+8.2 Obligations
+
+Licensee shall protect Licensor's Confidential Information using at
+least the standard of care it applies to its own confidential
+information of similar sensitivity, and shall not disclose Confidential
+Information to any third party without Licensor's prior written
+consent, except where disclosure is required by law (in which case
+Licensee shall give Licensor reasonable prior notice where lawful).
+
+
+9. Warranties and Disclaimers
+
+The Software is provided "as is" and "as available", without any
+warranty of any kind, whether express, implied, statutory, or
+otherwise, including (without limitation) any implied warranties of
+satisfactory quality, merchantability, fitness for a particular
+purpose, accuracy, completeness, security, or non-infringement, in each
+case to the fullest extent permitted by English law.
+
+
+10. Limitation of Liability
+
+10.1 Inalienable Liability
+
+Nothing in this Agreement excludes or limits Licensor's liability for:
+(a) death or personal injury caused by Licensor's negligence; (b) fraud
+or fraudulent misrepresentation by Licensor; (c) any other liability
+that cannot be excluded or limited by English law.
+
+10.2 Excluded Loss
+
+Subject to section 10.1, Licensor shall not be liable, whether in
+contract, tort (including negligence), breach of statutory duty, or
+otherwise, for any: (a) loss of profits; (b) loss of business or
+business opportunity; (c) loss of revenue; (d) loss of anticipated
+savings; (e) loss, corruption, or alteration of data; (f) loss of
+goodwill; or (g) any indirect, incidental, special, consequential, or
+punitive loss or damage, in each case howsoever arising and even if
+foreseeable.
+
+10.3 Liability Cap
+
+Subject to sections 10.1 and 10.2, Licensor's total aggregate liability
+arising out of or in connection with this Agreement, whether in
+contract, tort (including negligence), breach of statutory duty, or
+otherwise, shall not exceed one hundred pounds sterling (GBP 100).
+Licensee acknowledges that the Software is provided to Licensee free of
+charge under this Agreement and that this cap reflects the allocation
+of risk the parties have agreed in light of the absence of
+consideration.
+
+
+11. Term and Termination
+
+11.1 Term
+
+This Agreement commences on the Effective Date and continues until
+terminated in accordance with this section 11.
+
+11.2 Termination by Licensee
+
+Licensee may terminate this Agreement at any time by ceasing all use of
+the Software and destroying or permanently deleting all copies of the
+Software (in source and built form) in Licensee's possession or
+control.
+
+11.3 Termination by Licensor for Material Breach
+
+Licensor may terminate this Agreement with immediate effect by written
+notice to Licensee where Licensee:
+
+1. uses the Software for Production Use without a valid Commercial
+   Licence;
+2. breaches sections 3 (Restrictions), 5 (Ownership), or 8
+   (Confidentiality);
+3. infringes or asserts any infringement claim against Licensor's
+   intellectual-property rights in respect of the Software; or
+4. becomes insolvent, enters administration, or ceases (or threatens
+   to cease) carrying on business.
+
+For any other material breach, Licensor may terminate this Agreement by
+written notice if the breach is not remedied within thirty (30) days of
+Licensor's written notice requiring remedy.
+
+11.4 Termination for Convenience
+
+Licensor may terminate this Agreement, or revoke the licence granted in
+section 2.1, on thirty (30) days' written notice to Licensee, save
+where a shorter period is justified to protect Licensor's legitimate
+interests.
+
+11.5 Effect of Termination
+
+On termination of this Agreement, Licensee shall: (a) immediately cease
+all use of the Software; (b) destroy or permanently delete all copies
+of the Software (in source and built form) in Licensee's possession or
+control; and (c) on Licensor's request, certify in writing that it has
+done so.
+
+11.6 Notices
+
+Notices under this Agreement may be served by Licensor on Licensee by:
+(a) email to the last email address Licensee has provided to Licensor;
+(b) for Licensees not registered with Licensor, publication in the
+LICENSE file or other prominent location in the Software's source
+repository, in which case the notice is deemed served seven (7) days
+after publication. Notices to Licensor must be sent to legal@tetron.io
+or to Licensor's registered office.
+
+11.7 Survival
+
+The following sections survive termination of this Agreement: 1
+(Definitions), 5 (Ownership), 6 (Third-Party Components), 7.3
+(Feedback), 8 (Confidentiality), 9 (Warranties and Disclaimers), 10
+(Limitation of Liability), 11.5 (Effect of Termination), 11.6
+(Notices), and 13 (General Provisions).
+
+
+12. Updates to These Terms
+
+Licensor may publish updated terms from time to time, including
+(without limitation) when the Commercial Licence terms are released or
+when material legal or regulatory developments require it. Updated
+terms will be made available at the same channels through which this
+Agreement is published. Licensee's continued use of the Software more
+than thirty (30) days after publication of updated terms constitutes
+Licensee's acceptance of the updated terms. Where Licensee does not
+accept the updated terms, Licensee's sole remedy is to terminate this
+Agreement under section 11.2.
+
+
+13. General Provisions
+
+13.1 Governing Law
+
+This Agreement, and any dispute or claim (including non-contractual
+disputes or claims) arising out of or in connection with it or its
+subject matter or formation, shall be governed by and construed in
+accordance with the laws of England and Wales.
+
+13.2 Jurisdiction
+
+The courts of England and Wales shall have exclusive jurisdiction to
+settle any dispute or claim (including non-contractual disputes or
+claims) arising out of or in connection with this Agreement.
+
+13.3 Export Control and Sanctions
+
+Licensee shall comply with all applicable export-control, re-export,
+and sanctions laws and regulations of the United Kingdom, the European
+Union, the United States, and any other jurisdiction applicable to
+Licensee's use of the Software. Licensee represents that it is not
+located in, organised under the laws of, or controlled by a person
+ordinarily resident in any country or territory subject to
+comprehensive trade sanctions imposed by any of the foregoing, and that
+it does not appear on any sanctions list maintained by any of those
+authorities.
+
+13.4 Assignment
+
+Licensee may not assign, transfer, charge, sublicense, or deal in any
+other manner with this Agreement or any of its rights or obligations
+under it, without Licensor's prior written consent. Licensor may
+assign or transfer this Agreement freely, including in connection with
+a corporate reorganisation, merger, or sale of all or substantially
+all of Licensor's business or assets relating to the Software.
+
+13.5 Third-Party Rights
+
+A person who is not a party to this Agreement shall have no rights
+under the Contracts (Rights of Third Parties) Act 1999 to enforce any
+term of this Agreement. This section does not affect any right or
+remedy of a third party that exists or is available apart from that
+Act.
+
+13.6 Entire Agreement
+
+This Agreement constitutes the entire agreement between the parties in
+relation to its subject matter and supersedes all prior agreements,
+understandings, representations, or arrangements, whether written or
+oral, in relation to that subject matter. Each party acknowledges that,
+in entering into this Agreement, it has not relied on any statement,
+representation, assurance, or warranty other than those expressly set
+out in this Agreement. Nothing in this section limits or excludes any
+liability for fraud or fraudulent misrepresentation.
+
+13.7 Amendments
+
+Save as provided in section 12 (Updates to These Terms), this Agreement
+may only be amended in writing and signed by an authorised
+representative of each party.
+
+13.8 Severability
+
+If any provision of this Agreement is found by a court of competent
+jurisdiction to be invalid, illegal, or unenforceable, that provision
+shall be modified to the minimum extent necessary to make it
+enforceable, or, if modification is not possible, severed from this
+Agreement. The remaining provisions shall continue in full force and
+effect.
+
+13.9 Waiver
+
+No failure or delay by Licensor to exercise any right or remedy under
+this Agreement constitutes a waiver of that or any other right or
+remedy.
+
+13.10 Force Majeure
+
+Licensor shall not be liable for any failure or delay in performing any
+obligation under this Agreement to the extent caused by events beyond
+its reasonable control.
+
+
+Acceptance
+
+By accessing, downloading, cloning, building, installing, or using the
+Software, Licensee accepts and agrees to be bound by the terms of this
+Agreement. If Licensee does not accept these terms, Licensee must not
+access, download, clone, build, install, or use the Software.
+
+
+--------------------------------------------------------------------------
+
+Tetron Software Licence Agreement, Version 2.0
+Issued 14 May 2026, superseding Version 1.1 (effective 15 December 2024)
