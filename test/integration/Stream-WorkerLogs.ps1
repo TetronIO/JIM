@@ -29,7 +29,7 @@
     Scenario name (e.g. "Scenario1-HRToIdentityDirectory").
 
 .PARAMETER Template
-    Template size (e.g. "Medium", "Scale100K").
+    Template size (e.g. "Medium", "Scale100k50Groups").
 
 .PARAMETER HostClass
     Host class label from Get-HostFingerprint.ps1 (e.g. "4c-8g-ssd").

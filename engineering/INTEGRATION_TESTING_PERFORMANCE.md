@@ -2,7 +2,7 @@
 
 ## Overview
 
-Integration tests generate realistic AD environments with users, groups, and memberships. Performance optimisations are critical for large-scale templates (Medium through Scale1M) to keep test execution times reasonable.
+Integration tests generate realistic AD environments with users, groups, and memberships. Performance optimisations are critical for large-scale templates (Medium through Scale1m80Groups) to keep test execution times reasonable.
 
 ## Template Scales
 
@@ -14,11 +14,14 @@ Integration tests generate realistic AD environments with users, groups, and mem
 | Medium      | 1,000      | 118     | ~23,000          | <5min       |
 | MediumLarge | 5,000      | 273     | ~150,000         | <15min      |
 | Large       | 10,000     | 530     | ~500,000         | <30min      |
-| Scale100K   | 100,000    | 2,040   | ~5,000,000       | <2hr        |
-| Scale200K   | 200,000    | 3,046   | ~10,000,000      | TBD         |
-| Scale500K   | 500,000    | 5,049   | ~25,000,000      | TBD         |
-| Scale750K   | 750,000    | 7,552   | ~37,500,000      | TBD         |
-| Scale1M     | 1,000,000  | 10,055  | ~50,000,000      | <8hr        |
+| Scale100k50Groups   | 100,000    | 50      | ~500,000         | <2hr        |
+| Scale200k55Groups   | 200,000    | 55      | ~1,000,000       | TBD         |
+| Scale500k65Groups   | 500,000    | 65      | ~3,000,000       | TBD         |
+| Scale750k70Groups   | 750,000    | 70      | ~5,000,000       | TBD         |
+| Scale1m80Groups     | 1,000,000  | 70      | ~7,000,000       | <8hr        |
+| Scale100k5kGroups   | 100,000    | ~5,027  | ~900,000         | <2hr (OpenLDAP only, Scenario 8 only) |
+
+> Counts above reflect the actual group counts in `Get-Scenario8GroupScale` and `Get-TemplateScale`. The 200k-1m tier group counts are due for review (see [`engineering/plans/SCALE_TEMPLATES_RESHAPE.md`](plans/SCALE_TEMPLATES_RESHAPE.md)).
 
 ## Current Performance Issues
 
@@ -39,7 +42,7 @@ foreach ($user in $uniqueCandidates) {
 **Impact**:
 - Medium template: 23,300 individual Docker exec calls = 26 minutes
 - Large template: ~500,000 calls = **estimated 9 hours**
-- Scale1M template: ~50 million calls = **estimated 38 days**
+- Scale1m80Groups template: ~50 million calls = **estimated 38 days**
 
 **Root cause**: `samba-tool group addmembers` accepts **multiple members in a single call**, but the script adds them one-by-one.
 
@@ -101,7 +104,7 @@ docker exec $container samba-tool group addmembers $group $memberList
 **Expected improvement**:
 - Medium: 26 minutes → **2-3 minutes** (8-10x faster)
 - Large: 9 hours → **30 minutes** (18x faster)
-- Scale1M: 38 days → **8 hours** (114x faster)
+- Scale1m80Groups: 38 days → **8 hours** (114x faster)
 
 **Trade-off**: None. This is a pure optimisation with no downsides.
 
@@ -127,7 +130,7 @@ $ldif | docker exec -i $container ldbmodify -H /usr/local/samba/private/sam.ldb
 **Expected improvement**:
 - Medium: 26 minutes → **30-60 seconds** (26-52x faster)
 - Large: 9 hours → **5-10 minutes** (54-108x faster)
-- Scale1M: 38 days → **2-4 hours** (228-456x faster)
+- Scale1m80Groups: 38 days → **2-4 hours** (228-456x faster)
 
 **Trade-off**: More complex code, requires DN construction.
 
@@ -176,7 +179,7 @@ samba-ad-source:
 - Nano/Micro/Small: 1 CPU, 1GB RAM
 - Medium: 2 CPUs, 2GB RAM
 - Large: 4 CPUs, 4GB RAM
-- Scale100K and above: 8 CPUs, 8GB RAM (requires host with sufficient resources)
+- Scale100k50Groups and above: 8 CPUs, 8GB RAM (requires host with sufficient resources)
 
 ### Strategy 5: Pre-Populated Container Images (FUTURE)
 
@@ -189,7 +192,7 @@ Build Samba AD container images with test data already populated:
 
 **Trade-off**:
 - Requires image building and storage
-- Images would be large (Scale100K and above could be multi-GB)
+- Images would be large (Scale100k50Groups and above could be multi-GB)
 - Less flexible for ad-hoc testing
 
 ## Common Issues and Fixes
@@ -255,12 +258,12 @@ $memberList = $members -join ','
 ### Phase 3: Advanced Optimisations (Future)
 
 1. Implement Strategy 3 (parallel population) for multi-domain scenarios
-2. Evaluate Strategy 5 (pre-populated images) for Scale100K and above templates
+2. Evaluate Strategy 5 (pre-populated images) for Scale100k50Groups and above templates
 3. Add progress reporting and ETA improvements to population scripts
 
 **Expected result**:
-- Scale100K scenarios become feasible (<2 hours)
-- Scale1M scenarios become feasible for overnight CI runs (<8 hours)
+- Scale100k50Groups scenarios become feasible (<2 hours)
+- Scale1m80Groups scenarios become feasible for overnight CI runs (<8 hours)
 
 ## Testing and Validation
 

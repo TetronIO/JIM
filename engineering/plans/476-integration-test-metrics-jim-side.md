@@ -206,7 +206,7 @@ A script that runs as a background job during the test, tailing the worker log f
   {
     "runId": "uuid",
     "scenario": "Scenario1-HRToIdentityDirectory",
-    "template": "Scale100K",
+    "template": "Scale100k50Groups",
     "hostClass": "4c-8g-ssd",
     "lines": [
       "DiagnosticListener: FullSync > ProcessCsoLoop completed in 234.5ms [csoCount=50, cumulativeObjectCount=5000, wallClockOffsetMs=12345]",
@@ -234,7 +234,7 @@ Called at the end of the test run to submit the final summary and signal run com
 {
   "runId": "uuid",
   "scenario": "Scenario1-HRToIdentityDirectory",
-  "template": "Scale100K",
+  "template": "Scale100k50Groups",
   "step": "All",
   "directoryType": "OpenLDAP",
   "hostFingerprint": { "hostname": "...", "hostClass": "4c-8g-ssd", ... },

@@ -39,7 +39,7 @@
     Generate as normal but do not read from or write to the cache.
 
 .EXAMPLE
-    ./Get-OrGenerate-TestCSV.ps1 -Template Scale100K
+    ./Get-OrGenerate-TestCSV.ps1 -Template Scale100k50Groups
 
 .EXAMPLE
     ./Get-OrGenerate-TestCSV.ps1 -Template Small -IgnoreCache
@@ -47,7 +47,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")]
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]
