@@ -179,6 +179,40 @@
   },
   // Container user
   "remoteUser": "vscode",
+  // Pre-create the host-services SSH socket source path inside the Docker
+  // daemon's filesystem before the devcontainer is built. The SSH bind mount
+  // in the "mounts" array below uses type=bind, which is strict: if the
+  // source path does not exist on the daemon side, the container fails to
+  // start with "A mount config is invalid. Make sure it has the right format
+  // and a source folder that exists on the machine where the Docker daemon
+  // is running."
+  //
+  // Docker Desktop on macOS creates /run/host-services/ssh-auth.sock itself
+  // as part of its SSH agent forwarding feature, but Docker Desktop on
+  // Windows and native Linux Docker do not - so the rebuild breaks for
+  // those developers with no obvious link to the SSH-forwarding change.
+  //
+  // This one-shot busybox container bind-mounts the daemon's /run into
+  // itself and idempotently touches an empty placeholder at the expected
+  // path if nothing already lives there. The "[ -e ]" guard preserves the
+  // real socket on macOS (sockets satisfy -e). On Windows / Linux it leaves
+  // an empty file, so the subsequent bind mount succeeds and SSH forwarding
+  // silently no-ops, which is what the inline mounts comment has always
+  // promised. Argv (array) form is used so PowerShell on Windows and bash
+  // on macOS/Linux invoke docker identically; shell logic stays inside the
+  // busybox container, not the host shell. See
+  // engineering/notes/DEVCONTAINER_SSH_FORWARDING_LINUX_RISK.md for history.
+  "initializeCommand": [
+    "docker",
+    "run",
+    "--rm",
+    "-v",
+    "/run:/run",
+    "busybox",
+    "sh",
+    "-c",
+    "mkdir -p /run/host-services && [ -e /run/host-services/ssh-auth.sock ] || touch /run/host-services/ssh-auth.sock"
+  ],
   // Lifecycle scripts
   "postCreateCommand": "bash .devcontainer/setup.sh",
   // Make the bind-mounted SSH agent socket accessible to the non-root
@@ -219,16 +253,24 @@
   //  - Docker socket for Docker-in-Docker.
   //  - SSH agent socket from Docker Desktop's host-services bridge, used for
   //    git commit signing inside the container. The path
-  //    /run/host-services/ssh-auth.sock is provided by Docker Desktop on
-  //    macOS and Windows; it proxies the host's ssh-agent into containers.
-  //    VS Code's Dev Containers extension forwards SSH_AUTH_SOCK automatically
-  //    as a non-spec feature, but Zed and the official devcontainer CLI do
-  //    not - hence the explicit mount here so signing works regardless of
-  //    launcher. On native Linux Docker (no Docker Desktop) the source path
-  //    does not exist; Docker creates an empty directory at that path and
-  //    bind-mounts it, so the container still starts but SSH forwarding
-  //    silently no-ops. Codespaces uses a separate signing path (gh-gpgsign)
-  //    and does not depend on this mount.
+  //    /run/host-services/ssh-auth.sock is created by Docker Desktop on macOS
+  //    as part of its SSH agent forwarding feature; it proxies the host's
+  //    ssh-agent into containers. VS Code's Dev Containers extension forwards
+  //    SSH_AUTH_SOCK automatically as a non-spec feature, but Zed and the
+  //    official devcontainer CLI do not - hence the explicit mount here so
+  //    signing works regardless of launcher.
+  //
+  //    On Docker Desktop for Windows and native Linux Docker, the source path
+  //    is NOT auto-created. type=bind is strict, so without intervention the
+  //    devcontainer would fail to start with "A mount config is invalid" on
+  //    those hosts. The "initializeCommand" higher up in this file runs a
+  //    one-shot container that touches an empty placeholder at the expected
+  //    path if nothing is already there, leaving real sockets alone. The
+  //    bind then succeeds everywhere; SSH forwarding only actually works
+  //    where Docker Desktop populates the socket for real (macOS).
+  //
+  //    Codespaces uses a separate signing path (gh-gpgsign) and does not
+  //    depend on this mount.
   //  - Named volume "jim-claude-state" mounted at /home/vscode/.claude so
   //    Claude Code's project memory, user-level settings, credentials and
   //    session backups survive devcontainer rebuilds. Without this they
