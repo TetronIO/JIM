@@ -262,15 +262,61 @@ for ($g = 0; $g -lt $companyCount; $g++) {
 }
 
 # Department groups
-$deptCount = [Math]::Min($groupScale.Departments, $sortedDepartmentKeys.Length)
-for ($g = 0; $g -lt $deptCount; $g++) {
-    $deptKey = $sortedDepartmentKeys[$g]
-    $groupName = "Dept-$deptKey"
+#
+# Naming:
+#   Slots 0..N-1 (where N = $sortedDepartmentKeys.Length) reuse the user-side
+#   department keys, so the membership rule "users where DeptKey == FilterKey"
+#   keeps matching real users in those groups (legacy template behaviour).
+#
+#   Slots N..count-1 take names from Get-DepartmentNames, deliberately skipping
+#   anything that overlaps with the keyed names so we don't end up with two
+#   groups sharing a name. These groups have no DeptKey filter; the membership
+#   assignment below uses Get-LongTailGroupSize to size them with the realistic
+#   long-tail distribution intended by the new template.
+$deptKeyCount = $sortedDepartmentKeys.Length
+$deptNonKeyCount = $groupScale.Departments - $deptKeyCount
+if ($deptNonKeyCount -lt 0) { $deptNonKeyCount = 0 }
+$deptKeyCountToUse = [Math]::Min($groupScale.Departments, $deptKeyCount)
+
+# Pre-compute long-tail department names, excluding any that collide with the
+# user-side keys. Over-request from Get-DepartmentNames and then filter so we
+# always have enough non-colliding names to fill $deptNonKeyCount slots.
+$deptLongTailNames = @()
+if ($deptNonKeyCount -gt 0) {
+    $keySet = @{}
+    foreach ($k in $sortedDepartmentKeys) { $keySet[$k] = $true }
+    $oversample = $deptNonKeyCount + $deptKeyCount + 50
+    $deptLongTailNames = @(Get-DepartmentNames -Count $oversample | Where-Object { -not $keySet.ContainsKey($_) })
+}
+
+$deptLongTailCursor = 0
+for ($g = 0; $g -lt $groupScale.Departments; $g++) {
+    if ($g -lt $deptKeyCountToUse) {
+        # Keyed department (user-attribute filter still applies)
+        $deptKey = $sortedDepartmentKeys[$g]
+        $groupName = "Dept-$deptKey"
+        $deptUsers = @($createdUsers | Where-Object { $_.DeptKey -eq $deptKey })
+        $initialMember = if ($deptUsers.Count -gt 0) { $deptUsers[0].DN } else { $createdUsers[0].DN }
+        $description = "Department group for $($scenario8DepartmentNames[$deptKey])"
+        $filterKey = $deptKey
+        $filterField = "DeptKey"
+        $categoryIndexForGroup = $g
+    } else {
+        # Long-tail department (sized via Get-LongTailGroupSize at membership time)
+        if ($deptLongTailCursor -ge $deptLongTailNames.Count) {
+            throw "Ran out of non-colliding department names. Available: $($deptLongTailNames.Count), requested: $deptNonKeyCount. Extend `$script:DepartmentNames or `$script:DepartmentQualifiers."
+        }
+        $deptName = $deptLongTailNames[$deptLongTailCursor]
+        $deptLongTailCursor++
+        $groupName = "Dept-$deptName"
+        $initialMember = $createdUsers[$g % $createdUsers.Count].DN
+        $description = "Department group: $deptName"
+        $filterKey = $null
+        $filterField = $null
+        $categoryIndexForGroup = $g - $deptKeyCountToUse  # index within long-tail tiers
+    }
+
     $dn = "cn=$groupName,$($config.GroupsOU)"
-
-    $deptUsers = @($createdUsers | Where-Object { $_.DeptKey -eq $deptKey })
-    $initialMember = if ($deptUsers.Count -gt 0) { $deptUsers[0].DN } else { $createdUsers[0].DN }
-
     $groupMail = "$($groupName.ToLower())@$($config.Domain)"
     $groupStatus = $groupStatuses[$groupIndex % $groupStatuses.Length]
     $groupIndex++
@@ -278,7 +324,7 @@ for ($g = 0; $g -lt $deptCount; $g++) {
     [void]$groupLdifBuilder.AppendLine("dn: $dn")
     [void]$groupLdifBuilder.AppendLine("objectClass: jimGroup")
     [void]$groupLdifBuilder.AppendLine("cn: $groupName")
-    [void]$groupLdifBuilder.AppendLine("description: Department group for $($scenario8DepartmentNames[$deptKey])")
+    [void]$groupLdifBuilder.AppendLine("description: $description")
     [void]$groupLdifBuilder.AppendLine("mail: $groupMail")
     [void]$groupLdifBuilder.AppendLine("jimGroupType: Managed")
     [void]$groupLdifBuilder.AppendLine("jimGroupStatus: $groupStatus")
@@ -286,21 +332,28 @@ for ($g = 0; $g -lt $deptCount; $g++) {
     [void]$groupLdifBuilder.AppendLine("")
 
     $createdGroups += @{
-        Name        = $groupName
-        DN          = $dn
-        Category    = "Department"
-        FilterKey   = $deptKey
-        FilterField = "DeptKey"
-        Members     = @($initialMember)
+        Name          = $groupName
+        DN            = $dn
+        Category      = "Department"
+        FilterKey     = $filterKey
+        FilterField   = $filterField
+        CategoryIndex = $categoryIndexForGroup
+        Members       = @($initialMember)
     }
 }
+$deptCount = $groupScale.Departments
 
 # Location groups
-$locationNames = @("Sydney", "Melbourne", "London", "Manchester", "NewYork",
-    "SanFrancisco", "Tokyo", "Singapore", "Berlin", "Paris")
-$locCount = [Math]::Min($groupScale.Locations, $locationNames.Length)
+#
+# Drop the historical inline 10-entry list and use the helper's curated pool
+# of 20 names. Membership is now sized via Get-LongTailGroupSize for variety
+# (previously every location ended up with $createdUsers.Count / $locCount
+# members, i.e. all the same size).
+$locCount = $groupScale.Locations
 for ($g = 0; $g -lt $locCount; $g++) {
-    $locName = $locationNames[$g]
+    $baseLoc = $script:LocationNames[$g % $script:LocationNames.Count]
+    $locRotation = [Math]::Floor($g / $script:LocationNames.Count)
+    $locName = if ($locRotation -eq 0) { $baseLoc } else { "${baseLoc}-${locRotation}" }
     $groupName = "Location-$locName"
     $dn = "cn=$groupName,$($config.GroupsOU)"
 
@@ -322,12 +375,13 @@ for ($g = 0; $g -lt $locCount; $g++) {
     [void]$groupLdifBuilder.AppendLine("")
 
     $createdGroups += @{
-        Name        = $groupName
-        DN          = $dn
-        Category    = "Location"
-        FilterKey   = $locName
-        FilterField = $null
-        Members     = @($initialMember)
+        Name          = $groupName
+        DN            = $dn
+        Category      = "Location"
+        FilterKey     = $locName
+        FilterField   = $null
+        CategoryIndex = $g
+        Members       = @($initialMember)
     }
 }
 
@@ -576,14 +630,33 @@ foreach ($group in $createdGroups) {
             $membersToAdd = @($matching | ForEach-Object { $_.DN })
         }
         "Department" {
-            $matching = @($createdUsers | Where-Object { $_.DeptKey -eq $group.FilterKey })
-            $membersToAdd = @($matching | ForEach-Object { $_.DN })
+            # Two flavours: keyed departments (FilterKey set) keep the original
+            # rule of "all users with matching DeptKey", which preserves legacy
+            # template behaviour. Long-tail departments (FilterKey null) are
+            # sized via Get-LongTailGroupSize like Application/Role.
+            if ($group.FilterField -eq "DeptKey" -and $null -ne $group.FilterKey) {
+                $matching = @($createdUsers | Where-Object { $_.DeptKey -eq $group.FilterKey })
+                $membersToAdd = @($matching | ForEach-Object { $_.DN })
+            } else {
+                $targetSize = Get-LongTailGroupSize -Category Department -Index $catIdx -UserCount $userCount
+                $offset = ($catIdx * 19) % [Math]::Max(1, $userCount)
+                $membersToAdd = @(
+                    for ($u = 0; $u -lt $targetSize; $u++) {
+                        $createdUsers[($offset + $u) % $userCount].DN
+                    }
+                )
+            }
         }
         "Location" {
-            $locIndex = $locationNames.IndexOf($group.FilterKey)
-            $membersToAdd = @($createdUsers | Where-Object {
-                ($createdUsers.IndexOf($_) % $locCount) -eq $locIndex
-            } | ForEach-Object { $_.DN })
+            # Long-tail sizing: produces varied location sizes (1k-10k typical)
+            # rather than the previous uniform "$userCount / $locCount" buckets.
+            $targetSize = Get-LongTailGroupSize -Category Location -Index $catIdx -UserCount $userCount
+            $offset = ($catIdx * 29) % [Math]::Max(1, $userCount)
+            $membersToAdd = @(
+                for ($u = 0; $u -lt $targetSize; $u++) {
+                    $createdUsers[($offset + $u) % $userCount].DN
+                }
+            )
         }
         "Project" {
             # Long-tail sizing: small groups by default, occasional larger outliers.
@@ -606,11 +679,15 @@ foreach ($group in $createdGroups) {
             )
         }
         "Division" {
-            # Users assigned to a division by userIndex % divisionCount.
-            $divisionIndex = [int]$group.FilterKey
-            $membersToAdd = @($createdUsers | Where-Object {
-                ($createdUsers.IndexOf($_) % $divisionCount) -eq $divisionIndex
-            } | ForEach-Object { $_.DN })
+            # Long-tail sizing: tiers in Get-LongTailGroupSize spread divisions
+            # across 5%-25% of users instead of the previous uniform 10% buckets.
+            $targetSize = Get-LongTailGroupSize -Category Division -Index $catIdx -UserCount $userCount
+            $offset = ($catIdx * 31) % [Math]::Max(1, $userCount)
+            $membersToAdd = @(
+                for ($u = 0; $u -lt $targetSize; $u++) {
+                    $createdUsers[($offset + $u) % $userCount].DN
+                }
+            )
         }
         "Application" {
             $targetSize = Get-LongTailGroupSize -Category Application -Index $catIdx -UserCount $userCount

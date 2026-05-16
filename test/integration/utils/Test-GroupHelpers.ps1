@@ -190,11 +190,52 @@ $script:CompanyNames = @(
 )
 
 $script:DepartmentNames = @(
+    # Slots 0-19: original 20 names. Order preserved to keep legacy template
+    # behaviour identical (these match the user-side $scenario8DepartmentNames
+    # keys used by the Samba and OpenLDAP populators for DeptKey-based filtering).
     "Engineering", "Finance", "Human-Resources", "Information-Technology", "Legal",
     "Marketing", "Operations", "Procurement", "Research-Development", "Sales",
     "Customer-Support", "Quality-Assurance", "Product-Management", "Data-Science",
-    "Security", "Facilities", "Executive", "Compliance", "Communications", "Training"
+    "Security", "Facilities", "Executive", "Compliance", "Communications", "Training",
+
+    # Slots 20-99: 80 additional realistic enterprise department names.
+    # Selected to span engineering sub-functions, finance, HR, legal, sales,
+    # marketing, product, customer, operations, data, security/IT, executive,
+    # and training/innovation areas. Used only by templates that need more
+    # than 20 distinct department groups (e.g. Scale100k5kGroups asks for 100).
+    "Backend-Engineering", "Frontend-Engineering", "Mobile-Engineering",
+    "Cloud-Infrastructure", "Site-Reliability", "Platform-Engineering",
+    "Data-Engineering", "Machine-Learning", "Network-Engineering",
+    "Security-Engineering", "DevOps", "Release-Engineering",
+    "Treasury", "Tax", "Payroll", "Internal-Audit", "Financial-Planning",
+    "Accounts-Payable", "Accounts-Receivable", "Investor-Relations", "Risk-Management",
+    "Talent-Acquisition", "Talent-Development", "Compensation-Benefits",
+    "Employee-Relations", "Learning-Development", "Diversity-Inclusion",
+    "Corporate-Counsel", "Litigation", "Contracts", "Ethics", "Privacy",
+    "Regulatory-Affairs",
+    "Enterprise-Sales", "Inside-Sales", "Channel-Sales", "Field-Sales",
+    "Sales-Operations", "Sales-Enablement",
+    "Demand-Generation", "Product-Marketing", "Brand-Marketing", "Content-Marketing",
+    "Public-Relations", "Internal-Communications", "Government-Relations",
+    "Product-Operations", "Product-Design", "UX-Research", "Design-Systems",
+    "Customer-Success", "Customer-Experience", "Technical-Support",
+    "Field-Engineering", "Professional-Services",
+    "Business-Operations", "Workplace-Operations", "Real-Estate", "Supply-Chain",
+    "Logistics",
+    "Business-Intelligence", "Analytics", "Research", "Insights",
+    "Information-Security", "Physical-Security", "Identity-Management",
+    "Network-Operations", "Service-Desk", "Infrastructure", "End-User-Computing",
+    "Office-Of-CEO", "Office-Of-CFO", "Office-Of-CTO", "Strategy",
+    "Corporate-Development", "Mergers-Acquisitions",
+    "Education", "Innovation", "Wellness"
 )
+
+# Qualifier pool for the second tier of department naming. Combined with base
+# names to produce "Dept-Engineering-Core" style group names when the template
+# needs more groups than the base pool provides. Chosen to be non-overlapping
+# with the base pool entries (so "Dept-Engineering-Core" reads cleanly without
+# colliding with a real base name).
+$script:DepartmentQualifiers = @("Core", "Lead", "Senior", "Strategic", "Regional")
 
 $script:LocationNames = @(
     "Sydney", "Melbourne", "London", "Manchester", "NewYork", "SanFrancisco",
@@ -268,8 +309,15 @@ function Get-CombinatorialNames {
     .DESCRIPTION
         Used to produce arbitrarily large name pools (e.g. 500 application access
         groups, 1000 distribution lists) without needing a hand-curated list.
-        First emits all prefix-suffix combinations, then appends numeric suffixes
-        if still short of Count.
+        Naming convention (matches Get-DepartmentNames):
+        - Tier 1: $Count <= $Prefixes.Count * $Suffixes.Count
+                  → "Prefix-Suffix" (no numeric suffix)
+        - Tier 2: beyond that
+                  → "Prefix-Suffix-N" where N is a hyphen-separated serial.
+
+        The hyphen before the serial number is deliberate: "App-CRM-Users-1"
+        scans more cleanly than "App-CRM-Users1" and matches the convention
+        used for layered Department naming.
     #>
     param(
         [Parameter(Mandatory=$true)]
@@ -300,13 +348,13 @@ function Get-CombinatorialNames {
         if ($names.Count -ge $Count) { break }
     }
 
-    # Pad with numeric suffixes if needed
+    # Pad with hyphen-separated numeric suffixes if still short.
     $counter = 1
     while ($names.Count -lt $Count) {
         foreach ($prefix in $Prefixes) {
             foreach ($suffix in $Suffixes) {
                 if ($names.Count -ge $Count) { break }
-                $name = "${prefix}${Separator}${suffix}${counter}"
+                $name = "${prefix}${Separator}${suffix}${Separator}${counter}"
                 if (-not $seen.ContainsKey($name)) {
                     [void]$names.Add($name)
                     $seen[$name] = $true
@@ -315,6 +363,82 @@ function Get-CombinatorialNames {
             if ($names.Count -ge $Count) { break }
         }
         $counter++
+    }
+
+    return $names[0..($Count - 1)]
+}
+
+function Get-DepartmentNames {
+    <#
+    .SYNOPSIS
+        Generate Count unique department names using a three-tier strategy.
+
+    .DESCRIPTION
+        Layered scaling strategy (the convention for the JIM test data):
+
+        - Tier 1: $Count <= $script:DepartmentNames.Count (100)
+                  → plain base names from the curated pool
+                  Example: "Engineering", "Backend-Engineering"
+
+        - Tier 2: $Count <= 100 * $script:DepartmentQualifiers.Count (500)
+                  → base names paired with a qualifier
+                  Example: "Engineering-Core", "Finance-Lead"
+
+        - Tier 3: beyond that
+                  → base + qualifier + hyphen-separated serial
+                  Example: "Engineering-Core-1", "Finance-Lead-2"
+
+        The hyphen before the serial is intentional: it disambiguates the
+        numeric component visually (compare "Engineering-Core1" vs
+        "Engineering-Core-1").
+
+        Returns base names without the "Dept-" prefix; callers prepend that.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [int]$Count
+    )
+
+    $names = [System.Collections.Generic.List[string]]::new()
+    $seen = @{}
+
+    # Tier 1: plain base names
+    foreach ($baseName in $script:DepartmentNames) {
+        if ($names.Count -ge $Count) { break }
+        [void]$names.Add($baseName)
+        $seen[$baseName] = $true
+    }
+
+    # Tier 2: base + qualifier
+    if ($names.Count -lt $Count) {
+        foreach ($qualifier in $script:DepartmentQualifiers) {
+            foreach ($baseName in $script:DepartmentNames) {
+                if ($names.Count -ge $Count) { break }
+                $name = "${baseName}-${qualifier}"
+                if (-not $seen.ContainsKey($name)) {
+                    [void]$names.Add($name)
+                    $seen[$name] = $true
+                }
+            }
+            if ($names.Count -ge $Count) { break }
+        }
+    }
+
+    # Tier 3: base + qualifier + serial (hyphen-separated)
+    $serial = 1
+    while ($names.Count -lt $Count) {
+        foreach ($qualifier in $script:DepartmentQualifiers) {
+            foreach ($baseName in $script:DepartmentNames) {
+                if ($names.Count -ge $Count) { break }
+                $name = "${baseName}-${qualifier}-${serial}"
+                if (-not $seen.ContainsKey($name)) {
+                    [void]$names.Add($name)
+                    $seen[$name] = $true
+                }
+            }
+            if ($names.Count -ge $Count) { break }
+        }
+        $serial++
     }
 
     return $names[0..($Count - 1)]
@@ -752,22 +876,23 @@ function New-Scenario8GroupSet {
         $globalIndex++
     }
 
-    # Department groups
-    # When the count exceeds the curated DepartmentNames pool, suffix with an
-    # index to keep names unique (e.g. Dept-Engineering, Dept-Engineering2, ...).
-    for ($i = 0; $i -lt $departmentCount; $i++) {
-        $baseName = $script:DepartmentNames[$i % $script:DepartmentNames.Count]
-        $rotation = [Math]::Floor($i / $script:DepartmentNames.Count)
-        $name = if ($rotation -eq 0) { $baseName } else { "${baseName}${rotation}" }
-        [void]$groups.Add((New-TestGroup -Category "Department" -Name $name -Index $globalIndex -Domain $Domain))
-        $globalIndex++
+    # Department groups: routed through Get-DepartmentNames which applies the
+    # three-tier convention (base -> base-qualifier -> base-qualifier-serial).
+    if ($departmentCount -gt 0) {
+        $deptNames = Get-DepartmentNames -Count $departmentCount
+        for ($i = 0; $i -lt $departmentCount; $i++) {
+            [void]$groups.Add((New-TestGroup -Category "Department" -Name $deptNames[$i] -Index $globalIndex -Domain $Domain))
+            $globalIndex++
+        }
     }
 
-    # Location groups (same suffix-on-overflow pattern as departments)
+    # Location groups. The curated pool has 20 entries; if a template ever
+    # asks for more, fall back to a hyphen-separated serial suffix to match
+    # the wider naming convention.
     for ($i = 0; $i -lt $locationCount; $i++) {
         $baseName = $script:LocationNames[$i % $script:LocationNames.Count]
         $rotation = [Math]::Floor($i / $script:LocationNames.Count)
-        $name = if ($rotation -eq 0) { $baseName } else { "${baseName}${rotation}" }
+        $name = if ($rotation -eq 0) { $baseName } else { "${baseName}-${rotation}" }
         [void]$groups.Add((New-TestGroup -Category "Location" -Name $name -Index $globalIndex -Domain $Domain))
         $globalIndex++
     }
