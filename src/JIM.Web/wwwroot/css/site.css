@@ -722,6 +722,22 @@ body.jim-dark-mode .jim-instance-bar .jim-title-accent {
     width: 1rem !important;
 }
 
+.jim-page-footer-junctional {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.jim-page-footer-junctional-icon {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+    background-color: currentColor;
+    -webkit-mask: url('/images/jim-logo.png') no-repeat center / contain;
+    mask: url('/images/jim-logo.png') no-repeat center / contain;
+}
+
 .jim-nowrap {
     white-space: nowrap;
 }
