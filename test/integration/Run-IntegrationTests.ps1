@@ -155,17 +155,17 @@
     change tracking disabled for maximum throughput during large-scale testing.
 
 .EXAMPLE
-    ./Run-IntegrationTests.ps1 -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Scale100K
+    ./Run-IntegrationTests.ps1 -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Scale100k50Groups
 
     Runs all scenarios against both directory types with different template sizes.
-    Samba AD uses Medium (faster population), OpenLDAP uses Scale100K.
+    Samba AD uses Medium (faster population), OpenLDAP uses Scale100k50Groups.
 
 .EXAMPLE
     ./Run-IntegrationTests.ps1 -PreRelease
 
     Runs the full pre-release regression: every implemented scenario against both
-    directory types, with Samba AD at the MediumLarge template and OpenLDAP at Scale100K.
-    Equivalent to: -Scenario All -DirectoryType All -TemplateSambaAD MediumLarge -TemplateOpenLDAP Scale100K.
+    directory types, with Samba AD at the MediumLarge template and OpenLDAP at Scale100k50Groups.
+    Equivalent to: -Scenario All -DirectoryType All -TemplateSambaAD MediumLarge -TemplateOpenLDAP Scale100k50Groups.
 #>
 
 param(
@@ -173,7 +173,7 @@ param(
     [string]$Scenario,
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")]
     [string]$Template = "Nano",
 
     [Parameter(Mandatory=$false)]
@@ -215,11 +215,11 @@ param(
     [switch]$DisableChangeTracking,
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")]
     [string]$TemplateSambaAD,
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")]
     [string]$TemplateOpenLDAP,
 
     [Parameter(Mandatory=$false)]
@@ -249,6 +249,27 @@ $repoRoot = (Get-Item $scriptRoot).Parent.Parent.FullName
 
 # Import helpers early so Get-DirectoryConfig is available
 . "$scriptRoot/utils/Test-Helpers.ps1"
+
+# Hard-fail: Scale100k5kGroups is OpenLDAP only. Reject early at the orchestrator
+# level so users discover the constraint at selection time, not 30 minutes into
+# population. The populator scripts have matching guards (defence in depth).
+function Test-Scale100k5kGroupsCompatibility {
+    param([string]$Template, [string]$DirectoryType, [string]$TemplateSambaAD, [string]$TemplateOpenLDAP)
+    # The new template is OpenLDAP only.
+    $offendingValues = @()
+    if ($Template -eq "Scale100k5kGroups" -and $DirectoryType -in @("SambaAD", "All")) {
+        $offendingValues += "-Template Scale100k5kGroups -DirectoryType $DirectoryType"
+    }
+    if ($TemplateSambaAD -eq "Scale100k5kGroups") {
+        $offendingValues += "-TemplateSambaAD Scale100k5kGroups"
+    }
+    if ($offendingValues.Count -gt 0) {
+        $msg = "Scale100k5kGroups is OpenLDAP only (Scenario 8 long-tail group shape). Samba AD cannot populate ~5000 groups within the time budget. Rejected: $($offendingValues -join ', '). Use -Template Scale100k50Groups for Samba scale testing, or pin to -DirectoryType OpenLDAP."
+        throw $msg
+    }
+}
+Test-Scale100k5kGroupsCompatibility -Template $Template -DirectoryType $DirectoryType `
+    -TemplateSambaAD $TemplateSambaAD -TemplateOpenLDAP $TemplateOpenLDAP
 
 # Resolve directory configuration (used throughout for Docker profiles, population, setup)
 # Skip for "All" — the DirectoryType All handler orchestrates multiple runs with specific types.
@@ -425,7 +446,7 @@ function Show-ScenarioMenu {
         }
         @{
             Name = "Pre-Release"
-            Description = "Runs every implemented scenario sequentially for both Samba AD and OpenLDAP at MediumLarge and Scale100K templates, respectively"
+            Description = "Runs every implemented scenario sequentially for both Samba AD and OpenLDAP at MediumLarge and Scale100k50Groups templates, respectively"
             Disabled = $false
             SeparatorAfter = $true
         }
@@ -628,35 +649,42 @@ function Show-TemplateMenu {
             Time = "~15 min"
         }
         @{
-            Name = "Scale100K"
+            Name = "Scale100k50Groups"
             Users = 100000
             Groups = 50
             Description = "100K users"
             Time = "~1 hour"
         }
         @{
-            Name = "Scale200K"
+            Name = "Scale100k5kGroups"
+            Users = 100000
+            Groups = 5027
+            Description = "100K users, realistic long-tail group shape (OpenLDAP + Scenario 8 only)"
+            Time = "~1.5 hours"
+        }
+        @{
+            Name = "Scale200k55Groups"
             Users = 200000
             Groups = 55
             Description = "200K users"
             Time = "~2 hours"
         }
         @{
-            Name = "Scale500K"
+            Name = "Scale500k65Groups"
             Users = 500000
             Groups = 65
             Description = "500K users"
             Time = "~3 hours"
         }
         @{
-            Name = "Scale750K"
+            Name = "Scale750k70Groups"
             Users = 750000
             Groups = 70
             Description = "750K users"
             Time = "~4 hours"
         }
         @{
-            Name = "Scale1M"
+            Name = "Scale1m80Groups"
             Users = 1000000
             Groups = 80
             Description = "1M users, stress testing"
@@ -981,12 +1009,12 @@ function Test-TemplateRelevant {
     return $true
 }
 
-# -PreRelease is shorthand for: -Scenario All -DirectoryType All -TemplateSambaAD MediumLarge -TemplateOpenLDAP Scale100K
+# -PreRelease is shorthand for: -Scenario All -DirectoryType All -TemplateSambaAD MediumLarge -TemplateOpenLDAP Scale100k50Groups
 if ($PreRelease) {
     $Scenario               = "All"
     $DirectoryType          = "All"
     $TemplateSambaAD        = "MediumLarge"
-    $TemplateOpenLDAP       = "Scale100K"
+    $TemplateOpenLDAP       = "Scale100k50Groups"
     $DirectoryTypeWasExplicitlySet = $true
     $TemplateWasExplicitlySet      = $true
 }
@@ -996,13 +1024,13 @@ if (-not $Scenario) {
     $Scenario = Show-ScenarioMenu
 
     # "Pre-Release" is a special menu entry that expands to all-scenarios, both directory
-    # types, with Samba AD at MediumLarge and OpenLDAP at Scale100K. It bypasses the Template
+    # types, with Samba AD at MediumLarge and OpenLDAP at Scale100k50Groups. It bypasses the Template
     # and DirectoryType sub-menus since those are fixed by the Pre-Release preset.
     if ($Scenario -eq "Pre-Release") {
         $Scenario                      = "All"
         $DirectoryType                 = "All"
         $TemplateSambaAD               = "MediumLarge"
-        $TemplateOpenLDAP              = "Scale100K"
+        $TemplateOpenLDAP              = "Scale100k50Groups"
         $DirectoryTypeWasExplicitlySet = $true
         $TemplateWasExplicitlySet      = $true
     }
@@ -2087,7 +2115,7 @@ if ($Scenario -like "*Scenario8*" -and $DirectoryType -ne "OpenLDAP") {
     # Scale Samba container memory for larger templates (ldbadd is memory-intensive —
     # it loads the full LDB into memory, so memory needs grow with user count)
     # Only needed when NOT using snapshots (snapshots don't run ldbadd)
-    if (-not $script:UsingSnapshots -and $Template -in @("Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")) {
+    if (-not $script:UsingSnapshots -and $Template -in @("Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")) {
         $env:SAMBA_SOURCE_MEMORY = "8G"
         $env:SAMBA_TARGET_MEMORY = "4G"
         Write-Host "  Samba source memory scaled to 8G for $Template template" -ForegroundColor Gray
@@ -2626,7 +2654,7 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
 # Start the connector-files volume auditor. inotifywait sidecar logs every
 # write/create/delete/rename to jim-connector-files-volume so we can pin down
 # any out-of-band writers that the transcript can't name. See the 08:47:22
-# Scale100K incident for the failure mode this was added to diagnose.
+# Scale100k50Groups incident for the failure mode this was added to diagnose.
 $volumeAuditLogPath = Join-Path $scriptRoot "results" "volume-audit-$Scenario-$Template-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').log"
 Write-Step "Starting connector-files volume auditor -> $volumeAuditLogPath"
 $volumeAuditor = Start-ConnectorVolumeAuditor -LogPath $volumeAuditLogPath
@@ -2738,7 +2766,7 @@ Write-Section "Step 6: Capturing Performance Metrics"
 # Skip detailed metrics capture for large templates - parsing the worker logs becomes
 # prohibitively expensive (CPU and memory) due to the volume of DiagnosticListener lines.
 # Use -CaptureMetrics to force capture regardless of template size.
-$metricsSkippedTemplates = @("MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")
+$metricsSkippedTemplates = @("MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")
 if ($Template -in $metricsSkippedTemplates -and -not $CaptureMetrics) {
     Write-Warning "Skipping detailed performance metrics for '$Template' template (log volume too large for efficient parsing)"
     Write-Step "Use -CaptureMetrics to force capture (this will be slow)"

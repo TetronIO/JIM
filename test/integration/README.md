@@ -114,13 +114,16 @@ pwsh test/integration/Invoke-IntegrationTests.ps1 -ScenariosOnly
 | **Medium** | 1,000 | 100 | 8 | Medium enterprise, CI/CD |
 | **MediumLarge** | 5,000 | 250 | 9 | Growing enterprise |
 | **Large** | 10,000 | 500 | 10 | Large enterprise, baselines |
-| **Scale100K** | 100,000 | 50 | 12 | 100K scale testing |
-| **Scale200K** | 200,000 | 55 | 12 | 200K scale testing |
-| **Scale500K** | 500,000 | 65 | 13 | 500K scale testing |
-| **Scale750K** | 750,000 | 70 | 14 | 750K scale testing |
-| **Scale1M** | 1,000,000 | 80 | 15 | 1M scale, stress testing |
+| **Scale100k50Groups** | 100,000 | 50 | 12 | 100K scale testing |
+| **Scale200k55Groups** | 200,000 | 55 | 12 | 200K scale testing |
+| **Scale500k65Groups** | 500,000 | 65 | 13 | 500K scale testing |
+| **Scale750k70Groups** | 750,000 | 70 | 14 | 750K scale testing |
+| **Scale1m80Groups** | 1,000,000 | 80 | 15 | 1M scale, stress testing |
+| **Scale100k5kGroups** | 100,000 | ~5,027 | ~9 | Realistic long-tail group shape for Scenario 8 (OpenLDAP only) |
 
 > **Note**: For GitHub Codespaces or resource-constrained environments, use **Nano** or **Micro** templates.
+
+> **Scale100k5kGroups**: provides a representative enterprise group distribution (a handful of very large all-staff/division groups plus a long tail of small project/application/role groups). Only valid for Scenario 8 against OpenLDAP; Samba AD cannot populate ~5,000 groups within the time budget. The runner hard-fails if combined with `-DirectoryType SambaAD` or with any scenario other than Scenario 8.
 
 ## Metrics Streaming
 

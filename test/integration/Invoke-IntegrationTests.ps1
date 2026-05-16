@@ -17,7 +17,7 @@
     8. Tear down systems (optional)
 
 .PARAMETER Template
-    Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100K, Scale200K, Scale500K, Scale750K, Scale1M)
+    Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups)
 
 .PARAMETER Phase
     Test phase (1 = MVP with LDAP/CSV, 2 = Post-MVP with databases)
@@ -46,7 +46,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")]
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]

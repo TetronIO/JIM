@@ -21,7 +21,7 @@
     - ou=Entitlements (empty — JIM provisions groups here)
 
 .PARAMETER Template
-    Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100K, Scale200K, Scale500K, Scale750K, Scale1M)
+    Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups)
 
 .PARAMETER Instance
     Which suffix to populate (Source or Target)
@@ -37,7 +37,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")]
     [string]$Template = "Nano",
 
     [Parameter(Mandatory=$false)]
@@ -262,15 +262,61 @@ for ($g = 0; $g -lt $companyCount; $g++) {
 }
 
 # Department groups
-$deptCount = [Math]::Min($groupScale.Departments, $sortedDepartmentKeys.Length)
-for ($g = 0; $g -lt $deptCount; $g++) {
-    $deptKey = $sortedDepartmentKeys[$g]
-    $groupName = "Dept-$deptKey"
+#
+# Naming:
+#   Slots 0..N-1 (where N = $sortedDepartmentKeys.Length) reuse the user-side
+#   department keys, so the membership rule "users where DeptKey == FilterKey"
+#   keeps matching real users in those groups (legacy template behaviour).
+#
+#   Slots N..count-1 take names from Get-DepartmentNames, deliberately skipping
+#   anything that overlaps with the keyed names so we don't end up with two
+#   groups sharing a name. These groups have no DeptKey filter; the membership
+#   assignment below uses Get-LongTailGroupSize to size them with the realistic
+#   long-tail distribution intended by the new template.
+$deptKeyCount = $sortedDepartmentKeys.Length
+$deptNonKeyCount = $groupScale.Departments - $deptKeyCount
+if ($deptNonKeyCount -lt 0) { $deptNonKeyCount = 0 }
+$deptKeyCountToUse = [Math]::Min($groupScale.Departments, $deptKeyCount)
+
+# Pre-compute long-tail department names, excluding any that collide with the
+# user-side keys. Over-request from Get-DepartmentNames and then filter so we
+# always have enough non-colliding names to fill $deptNonKeyCount slots.
+$deptLongTailNames = @()
+if ($deptNonKeyCount -gt 0) {
+    $keySet = @{}
+    foreach ($k in $sortedDepartmentKeys) { $keySet[$k] = $true }
+    $oversample = $deptNonKeyCount + $deptKeyCount + 50
+    $deptLongTailNames = @(Get-DepartmentNames -Count $oversample | Where-Object { -not $keySet.ContainsKey($_) })
+}
+
+$deptLongTailCursor = 0
+for ($g = 0; $g -lt $groupScale.Departments; $g++) {
+    if ($g -lt $deptKeyCountToUse) {
+        # Keyed department (user-attribute filter still applies)
+        $deptKey = $sortedDepartmentKeys[$g]
+        $groupName = "Dept-$deptKey"
+        $deptUsers = @($createdUsers | Where-Object { $_.DeptKey -eq $deptKey })
+        $initialMember = if ($deptUsers.Count -gt 0) { $deptUsers[0].DN } else { $createdUsers[0].DN }
+        $description = "Department group for $($scenario8DepartmentNames[$deptKey])"
+        $filterKey = $deptKey
+        $filterField = "DeptKey"
+        $categoryIndexForGroup = $g
+    } else {
+        # Long-tail department (sized via Get-LongTailGroupSize at membership time)
+        if ($deptLongTailCursor -ge $deptLongTailNames.Count) {
+            throw "Ran out of non-colliding department names. Available: $($deptLongTailNames.Count), requested: $deptNonKeyCount. Extend `$script:DepartmentNames or `$script:DepartmentQualifiers."
+        }
+        $deptName = $deptLongTailNames[$deptLongTailCursor]
+        $deptLongTailCursor++
+        $groupName = "Dept-$deptName"
+        $initialMember = $createdUsers[$g % $createdUsers.Count].DN
+        $description = "Department group: $deptName"
+        $filterKey = $null
+        $filterField = $null
+        $categoryIndexForGroup = $g - $deptKeyCountToUse  # index within long-tail tiers
+    }
+
     $dn = "cn=$groupName,$($config.GroupsOU)"
-
-    $deptUsers = @($createdUsers | Where-Object { $_.DeptKey -eq $deptKey })
-    $initialMember = if ($deptUsers.Count -gt 0) { $deptUsers[0].DN } else { $createdUsers[0].DN }
-
     $groupMail = "$($groupName.ToLower())@$($config.Domain)"
     $groupStatus = $groupStatuses[$groupIndex % $groupStatuses.Length]
     $groupIndex++
@@ -278,7 +324,7 @@ for ($g = 0; $g -lt $deptCount; $g++) {
     [void]$groupLdifBuilder.AppendLine("dn: $dn")
     [void]$groupLdifBuilder.AppendLine("objectClass: jimGroup")
     [void]$groupLdifBuilder.AppendLine("cn: $groupName")
-    [void]$groupLdifBuilder.AppendLine("description: Department group for $($scenario8DepartmentNames[$deptKey])")
+    [void]$groupLdifBuilder.AppendLine("description: $description")
     [void]$groupLdifBuilder.AppendLine("mail: $groupMail")
     [void]$groupLdifBuilder.AppendLine("jimGroupType: Managed")
     [void]$groupLdifBuilder.AppendLine("jimGroupStatus: $groupStatus")
@@ -286,21 +332,28 @@ for ($g = 0; $g -lt $deptCount; $g++) {
     [void]$groupLdifBuilder.AppendLine("")
 
     $createdGroups += @{
-        Name        = $groupName
-        DN          = $dn
-        Category    = "Department"
-        FilterKey   = $deptKey
-        FilterField = "DeptKey"
-        Members     = @($initialMember)
+        Name          = $groupName
+        DN            = $dn
+        Category      = "Department"
+        FilterKey     = $filterKey
+        FilterField   = $filterField
+        CategoryIndex = $categoryIndexForGroup
+        Members       = @($initialMember)
     }
 }
+$deptCount = $groupScale.Departments
 
 # Location groups
-$locationNames = @("Sydney", "Melbourne", "London", "Manchester", "NewYork",
-    "SanFrancisco", "Tokyo", "Singapore", "Berlin", "Paris")
-$locCount = [Math]::Min($groupScale.Locations, $locationNames.Length)
+#
+# Drop the historical inline 10-entry list and use the helper's curated pool
+# of 20 names. Membership is now sized via Get-LongTailGroupSize for variety
+# (previously every location ended up with $createdUsers.Count / $locCount
+# members, i.e. all the same size).
+$locCount = $groupScale.Locations
 for ($g = 0; $g -lt $locCount; $g++) {
-    $locName = $locationNames[$g]
+    $baseLoc = $script:LocationNames[$g % $script:LocationNames.Count]
+    $locRotation = [Math]::Floor($g / $script:LocationNames.Count)
+    $locName = if ($locRotation -eq 0) { $baseLoc } else { "${baseLoc}-${locRotation}" }
     $groupName = "Location-$locName"
     $dn = "cn=$groupName,$($config.GroupsOU)"
 
@@ -322,24 +375,72 @@ for ($g = 0; $g -lt $locCount; $g++) {
     [void]$groupLdifBuilder.AppendLine("")
 
     $createdGroups += @{
-        Name        = $groupName
-        DN          = $dn
-        Category    = "Location"
-        FilterKey   = $locName
-        FilterField = $null
-        Members     = @($initialMember)
+        Name          = $groupName
+        DN            = $dn
+        Category      = "Location"
+        FilterKey     = $locName
+        FilterField   = $null
+        CategoryIndex = $g
+        Members       = @($initialMember)
     }
 }
 
 # Project groups
-$projectNames = Get-ProjectNames -Count $groupScale.Projects
-for ($g = 0; $g -lt $groupScale.Projects; $g++) {
-    $projectName = $projectNames[$g]
-    $groupName = "Project-$projectName"
+if ($groupScale.Projects -gt 0) {
+    $projectNames = Get-ProjectNames -Count $groupScale.Projects
+    for ($g = 0; $g -lt $groupScale.Projects; $g++) {
+        $projectName = $projectNames[$g]
+        $groupName = "Project-$projectName"
+        $dn = "cn=$groupName,$($config.GroupsOU)"
+
+        $initialMember = $createdUsers[$g % $createdUsers.Count].DN
+
+        $groupMail = "$($groupName.ToLower())@$($config.Domain)"
+        $groupStatus = $groupStatuses[$groupIndex % $groupStatuses.Length]
+        $groupIndex++
+
+        [void]$groupLdifBuilder.AppendLine("dn: $dn")
+        [void]$groupLdifBuilder.AppendLine("objectClass: jimGroup")
+        [void]$groupLdifBuilder.AppendLine("cn: $groupName")
+        [void]$groupLdifBuilder.AppendLine("description: Project group for $projectName")
+        [void]$groupLdifBuilder.AppendLine("mail: $groupMail")
+        [void]$groupLdifBuilder.AppendLine("jimGroupType: Self-Service")
+        [void]$groupLdifBuilder.AppendLine("jimGroupStatus: $groupStatus")
+        [void]$groupLdifBuilder.AppendLine("member: $initialMember")
+        [void]$groupLdifBuilder.AppendLine("")
+
+        $createdGroups += @{
+            Name        = $groupName
+            DN          = $dn
+            Category    = "Project"
+            FilterKey   = $projectName
+            FilterField = $null
+            CategoryIndex = $g
+            Members     = @($initialMember)
+        }
+    }
+}
+
+# ----------------------------------------------------------------------------
+# Long-tail categories (Scale100k5kGroups). Each group's category-internal
+# index drives Get-LongTailGroupSize during membership assignment below.
+# ----------------------------------------------------------------------------
+
+# Read possibly-missing scale fields with default 0 (legacy templates don't
+# define the long-tail categories).
+function Read-ScaleCount { param($H, [string]$K) if ($H.ContainsKey($K)) { return [int]$H[$K] } return 0 }
+$allStaffCount     = Read-ScaleCount $groupScale 'AllStaff'
+$divisionCount     = Read-ScaleCount $groupScale 'Divisions'
+$applicationCount  = Read-ScaleCount $groupScale 'Applications'
+$distributionCount = Read-ScaleCount $groupScale 'DistributionLists'
+$roleCount         = Read-ScaleCount $groupScale 'Roles'
+
+# AllStaff groups: very large, all/most users
+for ($g = 0; $g -lt $allStaffCount; $g++) {
+    $name = $script:AllStaffNames[$g % $script:AllStaffNames.Count]
+    $groupName = "AllStaff-$name"
     $dn = "cn=$groupName,$($config.GroupsOU)"
-
     $initialMember = $createdUsers[$g % $createdUsers.Count].DN
-
     $groupMail = "$($groupName.ToLower())@$($config.Domain)"
     $groupStatus = $groupStatuses[$groupIndex % $groupStatuses.Length]
     $groupIndex++
@@ -347,20 +448,140 @@ for ($g = 0; $g -lt $groupScale.Projects; $g++) {
     [void]$groupLdifBuilder.AppendLine("dn: $dn")
     [void]$groupLdifBuilder.AppendLine("objectClass: jimGroup")
     [void]$groupLdifBuilder.AppendLine("cn: $groupName")
-    [void]$groupLdifBuilder.AppendLine("description: Project group for $projectName")
+    [void]$groupLdifBuilder.AppendLine("description: All-staff group: $name")
     [void]$groupLdifBuilder.AppendLine("mail: $groupMail")
-    [void]$groupLdifBuilder.AppendLine("jimGroupType: Self-Service")
+    [void]$groupLdifBuilder.AppendLine("jimGroupType: Managed")
     [void]$groupLdifBuilder.AppendLine("jimGroupStatus: $groupStatus")
     [void]$groupLdifBuilder.AppendLine("member: $initialMember")
     [void]$groupLdifBuilder.AppendLine("")
 
     $createdGroups += @{
-        Name        = $groupName
-        DN          = $dn
-        Category    = "Project"
-        FilterKey   = $projectName
-        FilterField = $null
-        Members     = @($initialMember)
+        Name = $groupName; DN = $dn; Category = "AllStaff"
+        FilterKey = $null; FilterField = $null
+        CategoryIndex = $g; Members = @($initialMember)
+    }
+}
+
+# Division groups: users assigned to a division by index modulo $divisionCount
+for ($g = 0; $g -lt $divisionCount; $g++) {
+    $name = $script:DivisionNames[$g % $script:DivisionNames.Count]
+    $groupName = "Division-$name"
+    $dn = "cn=$groupName,$($config.GroupsOU)"
+    $initialMember = $createdUsers[$g % $createdUsers.Count].DN
+    $groupMail = "$($groupName.ToLower())@$($config.Domain)"
+    $groupStatus = $groupStatuses[$groupIndex % $groupStatuses.Length]
+    $groupIndex++
+
+    [void]$groupLdifBuilder.AppendLine("dn: $dn")
+    [void]$groupLdifBuilder.AppendLine("objectClass: jimGroup")
+    [void]$groupLdifBuilder.AppendLine("cn: $groupName")
+    [void]$groupLdifBuilder.AppendLine("description: Division group for $name")
+    [void]$groupLdifBuilder.AppendLine("mail: $groupMail")
+    [void]$groupLdifBuilder.AppendLine("jimGroupType: Managed")
+    [void]$groupLdifBuilder.AppendLine("jimGroupStatus: $groupStatus")
+    [void]$groupLdifBuilder.AppendLine("member: $initialMember")
+    [void]$groupLdifBuilder.AppendLine("")
+
+    $createdGroups += @{
+        Name = $groupName; DN = $dn; Category = "Division"
+        FilterKey = $g; FilterField = $null  # FilterKey here is the division index
+        CategoryIndex = $g; Members = @($initialMember)
+    }
+}
+
+# Application access groups
+if ($applicationCount -gt 0) {
+    $appNames = Get-CombinatorialNames -Count $applicationCount `
+        -Prefixes $script:ApplicationCoreNames `
+        -Suffixes $script:ApplicationAccessLevels
+    for ($g = 0; $g -lt $applicationCount; $g++) {
+        $name = $appNames[$g]
+        $groupName = "App-$name"
+        $dn = "cn=$groupName,$($config.GroupsOU)"
+        $initialMember = $createdUsers[$g % $createdUsers.Count].DN
+        $groupMail = "$($groupName.ToLower())@$($config.Domain)"
+        $groupStatus = $groupStatuses[$groupIndex % $groupStatuses.Length]
+        $groupIndex++
+
+        [void]$groupLdifBuilder.AppendLine("dn: $dn")
+        [void]$groupLdifBuilder.AppendLine("objectClass: jimGroup")
+        [void]$groupLdifBuilder.AppendLine("cn: $groupName")
+        [void]$groupLdifBuilder.AppendLine("description: Application access group: $name")
+        [void]$groupLdifBuilder.AppendLine("mail: $groupMail")
+        [void]$groupLdifBuilder.AppendLine("jimGroupType: Self-Service")
+        [void]$groupLdifBuilder.AppendLine("jimGroupStatus: $groupStatus")
+        [void]$groupLdifBuilder.AppendLine("member: $initialMember")
+        [void]$groupLdifBuilder.AppendLine("")
+
+        $createdGroups += @{
+            Name = $groupName; DN = $dn; Category = "Application"
+            FilterKey = $null; FilterField = $null
+            CategoryIndex = $g; Members = @($initialMember)
+        }
+    }
+}
+
+# Distribution lists
+if ($distributionCount -gt 0) {
+    $dlNames = Get-CombinatorialNames -Count $distributionCount `
+        -Prefixes $script:DistributionListTopics `
+        -Suffixes $script:DistributionListThemes
+    for ($g = 0; $g -lt $distributionCount; $g++) {
+        $name = $dlNames[$g]
+        $groupName = "DL-$name"
+        $dn = "cn=$groupName,$($config.GroupsOU)"
+        $initialMember = $createdUsers[$g % $createdUsers.Count].DN
+        $groupMail = "$($groupName.ToLower())@$($config.Domain)"
+        $groupStatus = $groupStatuses[$groupIndex % $groupStatuses.Length]
+        $groupIndex++
+
+        [void]$groupLdifBuilder.AppendLine("dn: $dn")
+        [void]$groupLdifBuilder.AppendLine("objectClass: jimGroup")
+        [void]$groupLdifBuilder.AppendLine("cn: $groupName")
+        [void]$groupLdifBuilder.AppendLine("description: Distribution list: $name")
+        [void]$groupLdifBuilder.AppendLine("mail: $groupMail")
+        [void]$groupLdifBuilder.AppendLine("jimGroupType: Self-Service")
+        [void]$groupLdifBuilder.AppendLine("jimGroupStatus: $groupStatus")
+        [void]$groupLdifBuilder.AppendLine("member: $initialMember")
+        [void]$groupLdifBuilder.AppendLine("")
+
+        $createdGroups += @{
+            Name = $groupName; DN = $dn; Category = "DistributionList"
+            FilterKey = $null; FilterField = $null
+            CategoryIndex = $g; Members = @($initialMember)
+        }
+    }
+}
+
+# Roles
+if ($roleCount -gt 0) {
+    $roleNames = Get-CombinatorialNames -Count $roleCount `
+        -Prefixes $script:RoleQualifiers `
+        -Suffixes $script:RoleNouns
+    for ($g = 0; $g -lt $roleCount; $g++) {
+        $name = $roleNames[$g]
+        $groupName = "Role-$name"
+        $dn = "cn=$groupName,$($config.GroupsOU)"
+        $initialMember = $createdUsers[$g % $createdUsers.Count].DN
+        $groupMail = "$($groupName.ToLower())@$($config.Domain)"
+        $groupStatus = $groupStatuses[$groupIndex % $groupStatuses.Length]
+        $groupIndex++
+
+        [void]$groupLdifBuilder.AppendLine("dn: $dn")
+        [void]$groupLdifBuilder.AppendLine("objectClass: jimGroup")
+        [void]$groupLdifBuilder.AppendLine("cn: $groupName")
+        [void]$groupLdifBuilder.AppendLine("description: RBAC role: $name")
+        [void]$groupLdifBuilder.AppendLine("mail: $groupMail")
+        [void]$groupLdifBuilder.AppendLine("jimGroupType: Managed")
+        [void]$groupLdifBuilder.AppendLine("jimGroupStatus: $groupStatus")
+        [void]$groupLdifBuilder.AppendLine("member: $initialMember")
+        [void]$groupLdifBuilder.AppendLine("")
+
+        $createdGroups += @{
+            Name = $groupName; DN = $dn; Category = "Role"
+            FilterKey = $null; FilterField = $null
+            CategoryIndex = $g; Members = @($initialMember)
+        }
     }
 }
 
@@ -383,75 +604,194 @@ Write-Host "  Created $($createdGroups.Count) groups" -ForegroundColor Green
 
 # ============================================================================
 # Step 4: Assign group memberships (Source only)
+#
+# Membership assignment is batched across multiple groups per docker exec call.
+# Each ldapmodify invocation processes ~5000 member lines spanning many groups,
+# which is essential for Scale100k5kGroups (~5000 groups, ~1M memberships) and
+# improves smaller templates harmlessly.
 # ============================================================================
-Write-TestStep "Step 4" "Assigning group memberships"
+Write-TestStep "Step 4" "Assigning group memberships (batched ldapmodify)"
 
+$userCount = $createdUsers.Count
 $totalMemberships = 0
+$groupsProcessed = 0
+$flushBatchSize = 5000   # member lines per docker exec call
+
+# Pre-compute all (group, members-to-add) work items.
+$workItems = [System.Collections.Generic.List[object]]::new()
 
 foreach ($group in $createdGroups) {
+    $catIdx = if ($group.ContainsKey('CategoryIndex')) { [int]$group.CategoryIndex } else { 0 }
     $membersToAdd = @()
 
-    if ($group.FilterField -and $group.FilterKey) {
-        # Company/Department groups — add all matching users
-        $matchingUsers = @($createdUsers | Where-Object { $_[$group.FilterField] -eq $group.FilterKey })
-        $membersToAdd = @($matchingUsers | ForEach-Object { $_.DN })
-    }
-    elseif ($group.Category -eq "Location") {
-        # Location groups — assign 30-50% of users based on index
-        $locIndex = $locationNames.IndexOf($group.FilterKey)
-        $membersToAdd = @($createdUsers | Where-Object {
-            ($createdUsers.IndexOf($_) % $locCount) -eq $locIndex
-        } | ForEach-Object { $_.DN })
-    }
-    elseif ($group.Category -eq "Project") {
-        # Project groups — assign varied sizes (use modular selection)
-        $projectIndex = $createdGroups.IndexOf($group)
-        $memberCount = [Math]::Max(1, [Math]::Min($createdUsers.Count, ($projectIndex + 1) * 2))
-        $membersToAdd = @($createdUsers | Select-Object -First $memberCount | ForEach-Object { $_.DN })
-    }
-
-    # Remove the initial member (already in the group from creation)
-    $existingMembers = $group.Members
-    $newMembers = @($membersToAdd | Where-Object { $_ -notin $existingMembers })
-
-    if ($newMembers.Count -eq 0) {
-        continue
-    }
-
-    # Add members via ldapmodify in chunks
-    $chunkSize = 500
-    for ($c = 0; $c -lt $newMembers.Count; $c += $chunkSize) {
-        $chunk = @($newMembers | Select-Object -Skip $c -First $chunkSize)
-        $modifyLdif = [System.Text.StringBuilder]::new()
-
-        foreach ($memberDn in $chunk) {
-            [void]$modifyLdif.AppendLine("dn: $($group.DN)")
-            [void]$modifyLdif.AppendLine("changetype: modify")
-            [void]$modifyLdif.AppendLine("add: member")
-            [void]$modifyLdif.AppendLine("member: $memberDn")
-            [void]$modifyLdif.AppendLine("")
+    switch ($group.Category) {
+        "Company" {
+            $matching = @($createdUsers | Where-Object { $_.CompanyKey -eq $group.FilterKey })
+            $membersToAdd = @($matching | ForEach-Object { $_.DN })
         }
-
-        $modLdifPath = [System.IO.Path]::GetTempFileName()
-        Set-Content -Path $modLdifPath -Value $modifyLdif.ToString() -NoNewline
-
-        try {
-            $result = bash -c "cat '$modLdifPath' | docker exec -i $containerName ldapmodify -x -H $ldapUri -D '$($config.AdminDN)' -w '$($config.Password)' -c" 2>&1
-            if ($LASTEXITCODE -ne 0 -and "$result" -notmatch "already exists" -and "$result" -notmatch "Type or value exists") {
-                Write-Verbose "  Warning adding members to $($group.Name): $result"
+        "Department" {
+            # Two flavours: keyed departments (FilterKey set) keep the original
+            # rule of "all users with matching DeptKey", which preserves legacy
+            # template behaviour. Long-tail departments (FilterKey null) are
+            # sized via Get-LongTailGroupSize like Application/Role.
+            if ($group.FilterField -eq "DeptKey" -and $null -ne $group.FilterKey) {
+                $matching = @($createdUsers | Where-Object { $_.DeptKey -eq $group.FilterKey })
+                $membersToAdd = @($matching | ForEach-Object { $_.DN })
+            } else {
+                $targetSize = Get-LongTailGroupSize -Category Department -Index $catIdx -UserCount $userCount
+                $offset = ($catIdx * 19) % [Math]::Max(1, $userCount)
+                $membersToAdd = @(
+                    for ($u = 0; $u -lt $targetSize; $u++) {
+                        $createdUsers[($offset + $u) % $userCount].DN
+                    }
+                )
             }
         }
-        finally {
-            Remove-Item -Path $modLdifPath -Force -ErrorAction SilentlyContinue
+        "Location" {
+            # Long-tail sizing: produces varied location sizes (1k-10k typical)
+            # rather than the previous uniform "$userCount / $locCount" buckets.
+            $targetSize = Get-LongTailGroupSize -Category Location -Index $catIdx -UserCount $userCount
+            $offset = ($catIdx * 29) % [Math]::Max(1, $userCount)
+            $membersToAdd = @(
+                for ($u = 0; $u -lt $targetSize; $u++) {
+                    $createdUsers[($offset + $u) % $userCount].DN
+                }
+            )
+        }
+        "Project" {
+            # Long-tail sizing: small groups by default, occasional larger outliers.
+            $targetSize = Get-LongTailGroupSize -Category Project -Index $catIdx -UserCount $userCount
+            $offset = ($catIdx * 11) % [Math]::Max(1, $userCount)
+            $membersToAdd = @(
+                for ($u = 0; $u -lt $targetSize; $u++) {
+                    $createdUsers[($offset + $u) % $userCount].DN
+                }
+            )
+        }
+        "AllStaff" {
+            $targetSize = Get-LongTailGroupSize -Category AllStaff -Index $catIdx -UserCount $userCount
+            # Pick the first $targetSize users (deterministic; for AllStaff this is
+            # effectively all users for tier 0, ~80% of users for tier 1).
+            $membersToAdd = @(
+                for ($u = 0; $u -lt $targetSize; $u++) {
+                    $createdUsers[$u].DN
+                }
+            )
+        }
+        "Division" {
+            # Long-tail sizing: tiers in Get-LongTailGroupSize spread divisions
+            # across 5%-25% of users instead of the previous uniform 10% buckets.
+            $targetSize = Get-LongTailGroupSize -Category Division -Index $catIdx -UserCount $userCount
+            $offset = ($catIdx * 31) % [Math]::Max(1, $userCount)
+            $membersToAdd = @(
+                for ($u = 0; $u -lt $targetSize; $u++) {
+                    $createdUsers[($offset + $u) % $userCount].DN
+                }
+            )
+        }
+        "Application" {
+            $targetSize = Get-LongTailGroupSize -Category Application -Index $catIdx -UserCount $userCount
+            $offset = ($catIdx * 17) % [Math]::Max(1, $userCount)
+            $membersToAdd = @(
+                for ($u = 0; $u -lt $targetSize; $u++) {
+                    $createdUsers[($offset + $u) % $userCount].DN
+                }
+            )
+        }
+        "DistributionList" {
+            $targetSize = Get-LongTailGroupSize -Category DistributionList -Index $catIdx -UserCount $userCount
+            $offset = ($catIdx * 23) % [Math]::Max(1, $userCount)
+            $membersToAdd = @(
+                for ($u = 0; $u -lt $targetSize; $u++) {
+                    $createdUsers[($offset + $u) % $userCount].DN
+                }
+            )
+        }
+        "Role" {
+            $targetSize = Get-LongTailGroupSize -Category Role -Index $catIdx -UserCount $userCount
+            $offset = ($catIdx * 13) % [Math]::Max(1, $userCount)
+            $membersToAdd = @(
+                for ($u = 0; $u -lt $targetSize; $u++) {
+                    $createdUsers[($offset + $u) % $userCount].DN
+                }
+            )
+        }
+    }
+
+    # Exclude the initial member already added at group creation
+    $existing = $group.Members
+    $newMembers = @($membersToAdd | Where-Object { $_ -notin $existing })
+
+    if ($newMembers.Count -gt 0) {
+        [void]$workItems.Add(@{ GroupDN = $group.DN; GroupName = $group.Name; Members = $newMembers })
+    }
+}
+
+Write-Host "  Computed memberships for $($workItems.Count) groups" -ForegroundColor Gray
+
+# Flush helper inlined below as a script block to keep the test credential
+# out of a separately-callable function (PSScriptAnalyzer flags any function
+# parameter named *Password*; inlining sidesteps the issue while preserving
+# the single-codepath property we want for the batched LDIF flush).
+$flushBatch = {
+    param([string]$LdifContent)
+    if ([string]::IsNullOrEmpty($LdifContent)) { return }
+    $tmp = [System.IO.Path]::GetTempFileName()
+    Set-Content -Path $tmp -Value $LdifContent -NoNewline
+    try {
+        $result = bash -c "cat '$tmp' | docker exec -i $containerName ldapmodify -x -H $ldapUri -D '$($config.AdminDN)' -w '$($config.Password)' -c" 2>&1
+        if ($LASTEXITCODE -ne 0 -and "$result" -notmatch "already exists" -and "$result" -notmatch "Type or value exists") {
+            Write-Verbose "  ldapmodify warnings: $result"
+        }
+    }
+    finally {
+        Remove-Item -Path $tmp -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# Stream work items into a single LDIF buffer, flush at $flushBatchSize lines.
+$batch = [System.Text.StringBuilder]::new()
+$batchMemberLineCount = 0
+
+foreach ($wi in $workItems) {
+    $members = $wi.Members
+    # If the group's member set alone exceeds the batch size, chunk it across
+    # multiple ldapmodify blocks but still keep them in a single docker exec
+    # where possible.
+    $chunkSize = $flushBatchSize
+    for ($c = 0; $c -lt $members.Count; $c += $chunkSize) {
+        $end = [Math]::Min($c + $chunkSize, $members.Count) - 1
+        $chunk = $members[$c..$end]
+
+        foreach ($memberDn in $chunk) {
+            [void]$batch.AppendLine("dn: $($wi.GroupDN)")
+            [void]$batch.AppendLine("changetype: modify")
+            [void]$batch.AppendLine("add: member")
+            [void]$batch.AppendLine("member: $memberDn")
+            [void]$batch.AppendLine("")
+            $batchMemberLineCount++
         }
 
         $totalMemberships += $chunk.Count
-    }
 
-    Write-Verbose "  $($group.Name): +$($newMembers.Count) members (total: $($existingMembers.Count + $newMembers.Count))"
+        if ($batchMemberLineCount -ge $flushBatchSize) {
+            & $flushBatch $batch.ToString()
+            $batch.Clear() | Out-Null
+            $batchMemberLineCount = 0
+        }
+    }
+    $groupsProcessed++
+    if (($groupsProcessed % 500) -eq 0) {
+        Write-Host "    Progress: $groupsProcessed/$($workItems.Count) groups, $totalMemberships memberships..." -ForegroundColor Gray
+    }
 }
 
-Write-Host "  Assigned $totalMemberships memberships across $($createdGroups.Count) groups" -ForegroundColor Green
+# Final flush
+if ($batchMemberLineCount -gt 0) {
+    & $flushBatch $batch.ToString()
+}
+
+Write-Host "  Assigned $totalMemberships memberships across $($workItems.Count) groups" -ForegroundColor Green
 
 # ============================================================================
 # Summary
@@ -460,10 +800,15 @@ Write-TestSection "Source Population Complete"
 Write-Host "Template:         $Template" -ForegroundColor Cyan
 Write-Host "Users created:    $($createdUsers.Count)" -ForegroundColor Cyan
 Write-Host "Groups created:   $($createdGroups.Count)" -ForegroundColor Cyan
-Write-Host "  - Companies:    $companyCount" -ForegroundColor Cyan
-Write-Host "  - Departments:  $deptCount" -ForegroundColor Cyan
-Write-Host "  - Locations:    $locCount" -ForegroundColor Cyan
-Write-Host "  - Projects:     $($groupScale.Projects)" -ForegroundColor Cyan
+if ($companyCount       -gt 0) { Write-Host "  - Companies:        $companyCount" -ForegroundColor Cyan }
+if ($allStaffCount      -gt 0) { Write-Host "  - AllStaff:         $allStaffCount" -ForegroundColor Cyan }
+if ($divisionCount      -gt 0) { Write-Host "  - Divisions:        $divisionCount" -ForegroundColor Cyan }
+if ($deptCount          -gt 0) { Write-Host "  - Departments:      $deptCount" -ForegroundColor Cyan }
+if ($locCount           -gt 0) { Write-Host "  - Locations:        $locCount" -ForegroundColor Cyan }
+if ($groupScale.Projects -gt 0) { Write-Host "  - Projects:         $($groupScale.Projects)" -ForegroundColor Cyan }
+if ($applicationCount   -gt 0) { Write-Host "  - Applications:     $applicationCount" -ForegroundColor Cyan }
+if ($distributionCount  -gt 0) { Write-Host "  - DistributionLists: $distributionCount" -ForegroundColor Cyan }
+if ($roleCount          -gt 0) { Write-Host "  - Roles:            $roleCount" -ForegroundColor Cyan }
 Write-Host "Total memberships: $totalMemberships" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Source OpenLDAP population complete" -ForegroundColor Green

@@ -53,7 +53,7 @@ param(
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")]
     [string]$Template = "Nano",
 
     [Parameter(Mandatory=$false)]
@@ -80,6 +80,11 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+# Hard-fail: Scale100k5kGroups is a Scenario 8 template only.
+if ($Template -eq "Scale100k5kGroups") {
+    throw "Template 'Scale100k5kGroups' is only valid for Scenario 8 (Cross-Domain Entitlement Sync). Use 'Scale100k50Groups' or smaller for this scenario."
+}
 
 # Default to SambaAD Primary if no config provided
 if (-not $DirectoryConfig) {

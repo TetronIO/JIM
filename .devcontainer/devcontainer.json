@@ -231,7 +231,12 @@
   // Claude Code OAuth flow then completes against the server but the local
   // token write fails with EACCES and the agent stays unauthenticated. The
   // chown is idempotent and safe to re-run on every container start.
-  "postStartCommand": "sudo chown vscode:vscode /ssh-agent 2>/dev/null || true; sudo chown -R vscode:vscode /home/vscode/.claude || true",
+  // heal-docker-creds.sh strips stale VS Code credential-forwarding shims
+  // from ~/.docker/config.json that survive rebuilds via the persistent home
+  // volume; without it the second-and-later opens of the project fail at
+  // image pull with "error getting credentials - err: exit status 255". See
+  // the script header for the full diagnosis.
+  "postStartCommand": "sudo chown vscode:vscode /ssh-agent 2>/dev/null || true; sudo chown -R vscode:vscode /home/vscode/.claude || true; bash ${containerWorkspaceFolder}/.devcontainer/heal-docker-creds.sh || true",
   // Re-run configure-signing.sh on every attach. This compensates for VS
   // Code's Dev Containers extension syncing the host ~/.gitconfig into the
   // container during the attach phase, *after* setup.sh's initial call from

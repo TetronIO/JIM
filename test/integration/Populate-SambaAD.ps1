@@ -10,7 +10,7 @@
     based on the specified template scale
 
 .PARAMETER Template
-    Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100K, Scale200K, Scale500K, Scale750K, Scale1M)
+    Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups)
 
 .PARAMETER Instance
     Which Samba AD instance to populate (Primary, Source, Target)
@@ -21,7 +21,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")]
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]
@@ -34,6 +34,12 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+# Hard-fail: Scale100k5kGroups is the long-tail OpenLDAP-only template used by
+# Scenario 8. It is not valid for the basic Samba populator either.
+if ($Template -eq "Scale100k5kGroups") {
+    throw "Template 'Scale100k5kGroups' is not supported on Samba AD. Use 'Scale100k50Groups' for Samba scale testing, or run with -DirectoryType OpenLDAP."
+}
 
 # Import helpers
 . "$PSScriptRoot/utils/Test-Helpers.ps1"
@@ -157,7 +163,7 @@ $usersOU = "OU=TestUsers,$domainDN"
 # sAMAccountName "amelia.sullivan1" would collide with a JIM-provisioned user in OU=Corp
 # with the same sAMAccountName. The CSV generator (Generate-TestCSV.ps1) uses indices 1..N,
 # so we offset AD users by 500,000 to guarantee non-overlapping names at all template sizes
-# (Scale1M = 1M users).
+# (Scale1m80Groups = 1M users).
 $adIndexOffset = 500000
 
 # Windows FILETIME epoch: January 1, 1601 00:00:00 UTC

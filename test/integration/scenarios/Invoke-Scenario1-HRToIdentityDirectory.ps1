@@ -16,7 +16,7 @@
     Which test step to execute (Joiner, Leaver, Mover, Reconnection, All)
 
 .PARAMETER Template
-    Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100K, Scale200K, Scale500K, Scale750K, Scale1M)
+    Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups)
 
 .PARAMETER JIMUrl
     The URL of the JIM instance (default: http://localhost:5200 for host access)
@@ -47,7 +47,7 @@ param(
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")]
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]
@@ -78,6 +78,13 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $ConfirmPreference = 'None'  # Disable confirmation prompts for non-interactive execution
+
+# Hard-fail: Scale100k5kGroups is a Scenario 8 (Cross-Domain Entitlement Sync)
+# template; the long-tail group shape it generates is only meaningful there.
+# Other scenarios should use Scale100k50Groups or smaller.
+if ($Template -eq "Scale100k5kGroups") {
+    throw "Template 'Scale100k5kGroups' is only valid for Scenario 8 (Cross-Domain Entitlement Sync). Use 'Scale100k50Groups' or smaller for this scenario."
+}
 
 # Default to SambaAD Primary if no config provided
 if (-not $DirectoryConfig) {
@@ -403,7 +410,7 @@ try {
         # Pair list reused for both parity checks in this step: once before the
         # first CSV import (detects truncation between setup-seed and first read)
         # and once before Training Full Import (the specific read that failed in
-        # the 08:47:22 Scale100K incident). See Assert-ConnectorVolumeCsvParity.
+        # the 08:47:22 Scale100k50Groups incident). See Assert-ConnectorVolumeCsvParity.
         $csvParityPairs = @(
             @{ HostPath = "$PSScriptRoot/../../test-data/hr-users.csv";         ContainerPath = '/connector-files/test-data/hr-users.csv' }
             @{ HostPath = "$PSScriptRoot/../../test-data/training-records.csv"; ContainerPath = '/connector-files/test-data/training-records.csv' }
@@ -459,7 +466,7 @@ try {
             Write-Host ""
             Write-Host "Establishing Training data baseline (joins to HR-created MVOs)..." -ForegroundColor Gray
 
-            # Parity probe: the 08:47:22 Scale100K incident truncated the volume
+            # Parity probe: the 08:47:22 Scale100k50Groups incident truncated the volume
             # CSVs between the HR sync and this import. Check again here so a
             # recurrence fails with a clear error (naming the caller via
             # .last-seed) rather than silently producing 3 training records.

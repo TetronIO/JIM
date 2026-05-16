@@ -169,6 +169,12 @@ All dependency updates from Dependabot require human review before merging - the
 - Check `.env` connection string
 - Apply migrations if needed
 
+**Image pull / build fails with `error getting credentials - err: exit status 255`:**
+- Symptom: `jim-build`, `jim-stack`, or integration tests fail at the BuildKit image-resolve step, even for public images like `docker/dockerfile:1`.
+- Cause: a stale VS Code Dev Containers credential-forwarding shim (`credsStore: dev-containers-<uuid>` in `~/.docker/config.json`) whose host peer has gone away after a rebuild/reconnect. BuildKit treats the helper's non-zero exit as fatal where the Docker CLI tolerates it.
+- Auto-heal: `.devcontainer/heal-docker-creds.sh` runs on every container start via `postStartCommand` and strips dev-containers shims unconditionally (`docker login` credentials under `auths` are preserved).
+- Manual fix if you hit it before the next start: `bash .devcontainer/heal-docker-creds.sh` then retry.
+
 **Sync Activities Failing with UnhandledError:**
 - UnhandledError items in Activities indicate code/logic bugs, not data problems
 - Check worker logs for the full exception stack trace using: `docker compose logs jim.worker --tail=1000 | grep -A 5 "Unhandled.*sync error"`

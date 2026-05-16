@@ -154,7 +154,7 @@ cd /workspaces/JIM
 # Run a specific scenario directly
 ./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory
 
-# Run with a specific template size (Nano, Micro, Small, Medium, Large, Scale100K, Scale200K, Scale500K, Scale750K, Scale1M)
+# Run with a specific template size (Nano, Micro, Small, Medium, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups)
 ./test/integration/Run-IntegrationTests.ps1 -Template Small
 
 # Run against OpenLDAP instead of Samba AD
@@ -164,7 +164,7 @@ cd /workspaces/JIM
 ./test/integration/Run-IntegrationTests.ps1 -Scenario All -Template Small -DirectoryType All
 
 # Run against BOTH directory types with different template sizes per directory
-./test/integration/Run-IntegrationTests.ps1 -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Scale100K
+./test/integration/Run-IntegrationTests.ps1 -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Scale100k50Groups
 
 # Run only a specific test step (Joiner, Mover, Leaver, Reconnection, etc.)
 ./test/integration/Run-IntegrationTests.ps1 -Step Joiner
@@ -220,17 +220,18 @@ These flags are for human developer iteration only. Claude must not use them bec
 - **Small**: 100 users, 20 groups (~2 min) - Small business scenarios
 - **Medium**: 1,000 users, 100 groups (~2 min) - Medium enterprise
 - **Large**: 10,000 users, 500 groups (~15 min) - Large enterprise
-- **Scale100K**: 100,000 users, 50 groups - Requires 20+ GB host RAM (OOM-killed on 16 GB machines; a 16 GB Codespace is not sufficient)
+- **Scale100k50Groups**: 100,000 users, 50 groups - Requires 20+ GB host RAM (OOM-killed on 16 GB machines; a 16 GB Codespace is not sufficient)
+- **Scale100k5kGroups**: 100,000 users, ~5,027 groups (realistic long-tail shape) - OpenLDAP only, Scenario 8 only. Hard-fails if combined with `-DirectoryType SambaAD` or any non-Scenario-8 scenario. Same memory requirements as Scale100k50Groups.
 
 **OpenLDAP accesslog MDB map size (IMPORTANT for large templates):**
 
 The OpenLDAP accesslog database uses an MDB storage engine with a fixed maximum map size (`olcDbMaxSize`). When the map is full, OpenLDAP **silently stops recording changes**; delta imports will find zero modifications and sync changes will be lost. There is no error message; the writes just stop.
 
-The map size is configured in `test/integration/docker/openldap/scripts/01-add-second-suffix.sh`. Current setting: **8 GB** (sufficient for Scale100K / 100K objects with large group membership operations). If adding templates beyond Scale100K (e.g. Scale1M / 1M objects), increase the accesslog `olcDbMaxSize` proportionally (estimate ~10 MB per 1,000 objects for the initial population, plus additional capacity for sync cycles and group membership writes).
+The map size is configured in `test/integration/docker/openldap/scripts/01-add-second-suffix.sh`. Current setting: **8 GB** (sufficient for Scale100k50Groups / 100K objects with large group membership operations). If adding templates beyond Scale100k50Groups (e.g. Scale1m80Groups / 1M objects), increase the accesslog `olcDbMaxSize` proportionally (estimate ~10 MB per 1,000 objects for the initial population, plus additional capacity for sync cycles and group membership writes).
 
 ## CSV cache
 
-The three large, deterministic HR CSVs (`hr-users.csv`, `departments.csv`, `training-records.csv`) are cached by `test/integration/Get-OrGenerate-TestCSV.ps1`. At Scale100K the cache turns ~100 s of CSV generation into a sub-second tar extraction.
+The three large, deterministic HR CSVs (`hr-users.csv`, `departments.csv`, `training-records.csv`) are cached by `test/integration/Get-OrGenerate-TestCSV.ps1`. At Scale100k50Groups the cache turns ~100 s of CSV generation into a sub-second tar extraction.
 
 **Callers that use the cache (templated by the caller, potentially large):**
 - `Invoke-IntegrationTests.ps1` (main runner, Step 3 populate)
@@ -256,7 +257,7 @@ Do NOT reintroduce `Get-Date` into these code paths. If you add a new determinis
 
 **Not cached:** `cross-domain-users.csv`. It is a header-only export target that the File connector appends to during the test. The wrapper regenerates it fresh on every run (including cache hits) to avoid leaking state between runs.
 
-**Docker seeding runs every time.** The cache archive holds file contents only; the `jim-connector-files-volume` state is not cached. Both cache-hit and cache-miss paths call `Write-FilesToConnectorVolume` (plural) to copy the four CSVs into the volume via a single rootless `docker run --user 1654:1654 busybox` that mounts the volume and the source directory. Files land owned by UID 1654 directly (no `chown` or `jim.worker` exec required), which is both faster and better aligned with the read-only rootfs hardening. Wall-clock is ~1 s for a full Scale100K-sized payload (~70 MB across four files). The legacy per-file `Write-FileToConnectorVolume` still exists as a thin wrapper for single-file callers.
+**Docker seeding runs every time.** The cache archive holds file contents only; the `jim-connector-files-volume` state is not cached. Both cache-hit and cache-miss paths call `Write-FilesToConnectorVolume` (plural) to copy the four CSVs into the volume via a single rootless `docker run --user 1654:1654 busybox` that mounts the volume and the source directory. Files land owned by UID 1654 directly (no `chown` or `jim.worker` exec required), which is both faster and better aligned with the read-only rootfs hardening. Wall-clock is ~1 s for a full Scale100k50Groups-sized payload (~70 MB across four files). The legacy per-file `Write-FileToConnectorVolume` still exists as a thin wrapper for single-file callers.
 
 **Flags:**
 - `-IgnoreCache` — force regeneration and overwrite any existing cache entry

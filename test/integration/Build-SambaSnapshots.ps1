@@ -22,7 +22,7 @@
     Which scenario to build snapshots for (Scenario1, Scenario8, All)
 
 .PARAMETER Template
-    Data size template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100K, Scale200K, Scale500K, Scale750K, Scale1M)
+    Data size template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups)
 
 .PARAMETER Registry
     Container registry prefix (default: local, no registry prefix)
@@ -37,7 +37,7 @@
     ./Build-SambaSnapshots.ps1 -Scenario All -Template Medium
 
 .EXAMPLE
-    ./Build-SambaSnapshots.ps1 -Scenario Scenario8 -Template Scale100K -Force
+    ./Build-SambaSnapshots.ps1 -Scenario Scenario8 -Template Scale100k50Groups -Force
 #>
 
 param(
@@ -46,7 +46,7 @@ param(
     [string]$Scenario = "All",
 
     [Parameter(Mandatory = $true)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")]
     [string]$Template,
 
     [Parameter(Mandatory = $false)]
@@ -310,7 +310,7 @@ foreach ($scen in $scenariosToProcess) {
                     & "$scriptRoot/docker/samba-ad-prebuilt/Build-SambaImages.ps1" -Images Source
                 }
 
-                $memLimit = if ($Template -in @("Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")) { "8G" } else { "2G" }
+                $memLimit = if ($Template -in @("Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")) { "8G" } else { "2G" }
 
                 Build-Snapshot `
                     -BaseImage $baseImage `

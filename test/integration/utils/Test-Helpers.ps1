@@ -181,7 +181,7 @@ function Get-TemplateScale {
     #>
     param(
         [Parameter(Mandatory=$true)]
-        [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100K", "Scale200K", "Scale500K", "Scale750K", "Scale1M")]
+        [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")]
         [string]$Template
     )
 
@@ -220,30 +220,40 @@ function Get-TemplateScale {
         # samba-tool holds an LDB write lock per call, making millions of membership
         # writes impractical. Fewer groups with higher avg memberships gives better
         # coverage without the population time explosion.
-        Scale100K = @{
+        Scale100k50Groups = @{
             Users = 100000
             Groups = 50
             AvgMemberships = 12
         }
-        Scale200K = @{
+        Scale200k55Groups = @{
             Users = 200000
             Groups = 55
             AvgMemberships = 12
         }
-        Scale500K = @{
+        Scale500k65Groups = @{
             Users = 500000
             Groups = 65
             AvgMemberships = 13
         }
-        Scale750K = @{
+        Scale750k70Groups = @{
             Users = 750000
             Groups = 70
             AvgMemberships = 14
         }
-        Scale1M = @{
+        Scale1m80Groups = @{
             Users = 1000000
             Groups = 80
             AvgMemberships = 15
+        }
+        # Scale100k5kGroups: realistic long-tail group shape for Scenario 8 only.
+        # Group counts and per-user membership average are driven by the per-category
+        # logic in Test-GroupHelpers.ps1 (Get-Scenario8GroupScale). Values below are
+        # informational and are used by Generate-TestCSV / CSV cache keying only;
+        # the Samba populator must reject this template before it gets here.
+        Scale100k5kGroups = @{
+            Users = 100000
+            Groups = 5027
+            AvgMemberships = 9
         }
     }
 
@@ -775,7 +785,7 @@ function Write-FilesToConnectorVolume {
 
         This replaces the per-file `docker exec -i -u app jim.worker tee ...` streaming pattern.
         For bulk seeding (e.g. the four CSVs in Step 5 of the integration harness) this cuts
-        Scale100K Step 5 from ~15-25 s to ~1-3 s by eliminating the per-file docker exec round-
+        Scale100k50Groups Step 5 from ~15-25 s to ~1-3 s by eliminating the per-file docker exec round-
         trips and the PowerShell-pipe-over-stdin transfer.
 
         Correctness notes:
@@ -1105,7 +1115,7 @@ function Assert-ConnectorVolumeCsvParity {
         profile fires. Write-FilesToConnectorVolume already verifies sizes at seed
         time; this helper catches the narrower failure mode where the volume was
         seeded correctly but something truncated the file between seed and read
-        (the 08:47:22 Scale100K incident we investigated).
+        (the 08:47:22 Scale100k50Groups incident we investigated).
 
         On mismatch, throws with the container path, expected (host) size, and
         actual (volume) size so the transcript captures exactly which file
@@ -2583,7 +2593,7 @@ function Start-ConnectorVolumeAuditor {
         can identify the caller for any unexpected mutation.
 
         Overhead is negligible on typical scenario runs: inotify is kernel-side
-        and the sidecar only emits events when they occur. A Scale100K run with
+        and the sidecar only emits events when they occur. A Scale100k50Groups run with
         ~4 CSV writes produces a handful of log lines.
 
         Returns a handle for the companion Stop-ConnectorVolumeAuditor helper.
