@@ -122,11 +122,11 @@ Choose a template based on your testing goals:
 - **MediumLarge**: 5,000 users, 250 groups - **< 5 min** - Large medium enterprise, performance validation
 - **Large**: 10,000 users, 500 groups - **< 15 min** - Large enterprise, performance baselines
 - **Scale100k50Groups**: 100,000 users, 50 groups - **< 2 hours** - Very large enterprise, stress testing (**requires 20+ GB host RAM**; see note below)
-- **Scale200k55Groups**: 200,000 users, 70 groups - **TBD** - Very large enterprise, extended stress testing (**requires 24+ GB host RAM**)
-- **Scale500k65Groups**: 500,000 users, 100 groups - **TBD** - Massive enterprise, scale validation (**requires 32+ GB host RAM**)
-- **Scale750k70Groups**: 750,000 users, 120 groups - **TBD** - Near-million scale validation (**requires 32+ GB host RAM**)
-- **Scale1m80Groups**: 1,000,000 users, 150 groups - **TBD** - Global enterprise, scale limits (**requires 64+ GB host RAM**)
-- **Scale100k5kGroups**: 100,000 users, ~5,027 groups (realistic long-tail shape) - **< 2 hours** - Scenario 8 entitlement sync against representative enterprise group topology. **OpenLDAP only**; rejected on Samba AD. Same memory requirements as Scale100k50Groups.
+- **Scale200k55Groups**: 200,000 users, 55 groups - **TBD** - Very large enterprise, extended stress testing (**requires 24+ GB host RAM**)
+- **Scale500k65Groups**: 500,000 users, 65 groups - **TBD** - Massive enterprise, scale validation (**requires 32+ GB host RAM**)
+- **Scale750k70Groups**: 750,000 users, 70 groups - **TBD** - Near-million scale validation (**requires 32+ GB host RAM**)
+- **Scale1m80Groups**: 1,000,000 users, 70 groups - **TBD** - Global enterprise, scale limits (**requires 64+ GB host RAM**). _Note: the name's "80" reflects the originally planned group count; the actual count is 70. Group-count reshaping for the 200k-1m tier is deferred to a follow-up._
+- **Scale100k5kGroups**: 100,000 users, 5,027 groups (realistic long-tail shape) - **< 2 hours** - Scenario 8 entitlement sync against representative enterprise group topology. **OpenLDAP only**; rejected on Samba AD. Same memory requirements as Scale100k50Groups.
 
 > **Memory requirements for large templates:** The Scale100k50Groups and above templates require significantly more memory than smaller templates. The worker loads all imported objects into memory during processing; a 100K object import produces a worker peak working set of approximately 2.3 GB, plus 1–2 GB for the database during bulk inserts. **A 16 GB machine is not sufficient for Scale100k50Groups**; the worker will be OOM-killed during the save phase even without IDE overhead. In a GitHub Codespace (16 GB total), the problem is worse because the IDE and dev tools consume additional memory. Run Scale100k50Groups tests on a machine with at least 20–24 GB total RAM. See the [Deployment Guide - Memory Scaling](../DEPLOYMENT_GUIDE.md#memory-scaling-by-identity-object-count) for detailed requirements.
 
@@ -231,7 +231,7 @@ For automated testing in GitHub Actions:
 
 ```mermaid
 flowchart TD
-    T["<b>WORKFLOW TRIGGER</b> (Manual via workflow_dispatch)<br/>- Select Template: Micro / Small / Medium / Large / Scale100k50Groups-Scale1m80Groups<br/>- Select Phase: 1 (MVP) or 2 (Post-MVP)"]
+    T["<b>WORKFLOW TRIGGER</b> (Manual via workflow_dispatch)<br/>- Select Template: Micro / Small / Medium / Large / Scale100k50Groups-Scale1m80Groups / Scale100k5kGroups<br/>- Select Phase: 1 (MVP) or 2 (Post-MVP)"]
     S1["<b>1. STAND UP</b><br/>- JIM stack<br/>- External systems"]
     S2["<b>2. BUILD JIM</b><br/>- dotnet build<br/>- Wait ready"]
     S3["<b>3. CONFIGURE</b><br/>- Setup scripts<br/>- Populate data"]
@@ -306,7 +306,7 @@ Each scenario script supports a `-Step` parameter that controls which test case 
 
 **Common parameters across all scenario scripts**:
 - `-Step <StepName>` - Execute a specific test step (or `All` for full sequence)
-- `-Template <Size>` - Data scale template (Nano, Micro, Small, Medium, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups)
+- `-Template <Size>` - Data scale template (Nano, Micro, Small, Medium, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups)
 - `-TemplateSambaAD <Size>` - Override `-Template` for Samba AD when using `-DirectoryType All`
 - `-TemplateOpenLDAP <Size>` - Override `-Template` for OpenLDAP when using `-DirectoryType All`
 - `-WaitSeconds <N>` - Override default wait time between steps (default: 60)
@@ -381,11 +381,12 @@ Choose the appropriate template based on test goals:
 | **Medium** | 1,000     | 100     | 8               | 1,100         | Medium enterprise, CI/CD          | < 2 min    |
 | **MediumLarge** | 5,000 | 250     | 9               | 5,250         | Large medium enterprise, validation | < 5 min  |
 | **Large**  | 10,000    | 500     | 10              | 10,500        | Large enterprise, baselines       | < 15 min   |
-| **Scale100k50Groups** | 100,000   | 2,000   | 12              | 102,000       | Very large enterprise, stress     | < 2 hours  |
-| **Scale200k55Groups** | 200,000   | 3,000   | 13              | 203,000       | Very large enterprise, extended   | TBD        |
-| **Scale500k65Groups** | 500,000   | 5,000   | 14              | 505,000       | Massive enterprise, validation    | TBD        |
-| **Scale750k70Groups** | 750,000   | 7,500   | 14              | 757,500       | Near-million scale validation     | TBD        |
-| **Scale1m80Groups** | 1,000,000 | 10,000  | 15              | 1,010,000     | Global enterprise, scale limits   | TBD        |
+| **Scale100k50Groups** | 100,000   | 50      | 12              | 100,050       | Very large enterprise, stress     | < 2 hours  |
+| **Scale100k5kGroups** | 100,000   | 5,027   | ~9 (measured)   | 105,027       | Scenario 8 long-tail group shape (OpenLDAP only) | < 2 hours |
+| **Scale200k55Groups** | 200,000   | 55      | 12              | 200,055       | Very large enterprise, extended   | TBD        |
+| **Scale500k65Groups** | 500,000   | 65      | 13              | 500,065       | Massive enterprise, validation    | TBD        |
+| **Scale750k70Groups** | 750,000   | 70      | 14              | 750,070       | Near-million scale validation     | TBD        |
+| **Scale1m80Groups** | 1,000,000 | 70      | 15              | 1,000,070     | Global enterprise, scale limits (group count reshape pending) | TBD |
 
 ### Data Characteristics
 
@@ -1236,7 +1237,7 @@ See `.github/workflows/integration-tests.yml` for complete workflow definition.
     [Detailed description of what this scenario validates]
 
 .PARAMETER Template
-    Data scale template (Micro, Small, Medium, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups)
+    Data scale template (Micro, Small, Medium, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups)
 
 .EXAMPLE
     ./Invoke-ScenarioX-Name.ps1 -Template Medium
@@ -1534,6 +1535,8 @@ The diagnostics infrastructure uses `System.Diagnostics.ActivitySource` (the .NE
 ## Samba AD Snapshot Images
 
 For larger templates (Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups), populating Samba AD with test data (users, groups, memberships) can take **many hours**. To avoid repeating this on every test run, the framework supports **snapshot images**: pre-populated Docker images that start in seconds.
+
+> Note: `Scale100k5kGroups` is OpenLDAP-only (it hard-fails on Samba AD), so Samba snapshots don't apply. OpenLDAP snapshots are built via [`Build-OpenLDAPSnapshots.ps1`](../test/integration/Build-OpenLDAPSnapshots.ps1).
 
 ### How Snapshots Work
 
