@@ -19,9 +19,9 @@ Integration tests generate realistic AD environments with users, groups, and mem
 | Scale500k65Groups   | 500,000    | 65      | ~3,000,000       | TBD         |
 | Scale750k70Groups   | 750,000    | 70      | ~5,000,000       | TBD         |
 | Scale1m80Groups     | 1,000,000  | 70      | ~7,000,000       | <8hr        |
-| Scale100k5kGroups   | 100,000    | ~5,027  | ~900,000         | <2hr (OpenLDAP only, Scenario 8 only) |
+| Scale100k5kGroups   | 100,000    | 5,027   | ~752,000         | <2hr (OpenLDAP only, Scenario 8 only) |
 
-> Counts above reflect the actual group counts in `Get-Scenario8GroupScale` and `Get-TemplateScale`. The 200k-1m tier group counts are due for review (see [`engineering/plans/SCALE_TEMPLATES_RESHAPE.md`](plans/SCALE_TEMPLATES_RESHAPE.md)).
+> Counts above reflect the actual group counts in `Get-Scenario8GroupScale` and `Get-TemplateScale`. The Scale100k5kGroups membership figure is measured (the long-tail tier tables in `Get-LongTailGroupSize` lean toward smaller groups, so the total comes in below a naive expected-value calculation). The 200k-1m tier group counts are due for review (see [`engineering/plans/doing/SCALE_TEMPLATES_RESHAPE.md`](plans/doing/SCALE_TEMPLATES_RESHAPE.md)).
 
 ## Current Performance Issues
 

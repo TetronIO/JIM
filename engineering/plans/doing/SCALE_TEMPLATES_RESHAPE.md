@@ -1,6 +1,6 @@
 # Scale Templates Reshape
 
-- **Status:** Planned
+- **Status:** Doing (Phases 1-4 and 6 complete; Phase 5 population validation done, deeper performance characterisation pending)
 - **Issue:** [#741](https://github.com/TetronIO/JIM/issues/741)
 
 ## Overview
@@ -11,7 +11,7 @@ Rename the five `Scale*` integration test templates to encode their group count 
 
 ### Problem
 
-The current `Scale100K` template has **50 groups** for **100,000 users**. This was reduced from an originally planned 2,040 groups because `samba-tool group addmembers` holds an LDB write lock per call, making millions of membership writes impractical against Samba AD. The reduction was a workaround, not a deliberate design choice (documented in [`Test-Helpers.ps1:219-222`](../../test/integration/utils/Test-Helpers.ps1#L219-L222) and [`Test-GroupHelpers.ps1:118-121`](../../test/integration/utils/Test-GroupHelpers.ps1#L118-L121)).
+The current `Scale100K` template has **50 groups** for **100,000 users**. This was reduced from an originally planned 2,040 groups because `samba-tool group addmembers` holds an LDB write lock per call, making millions of membership writes impractical against Samba AD. The reduction was a workaround, not a deliberate design choice (documented in [`Test-Helpers.ps1:219-222`](../../../test/integration/utils/Test-Helpers.ps1#L219-L222) and [`Test-GroupHelpers.ps1:118-121`](../../../test/integration/utils/Test-GroupHelpers.ps1#L118-L121)).
 
 Now that OpenLDAP support is implemented and OpenLDAP does not share Samba's per-call locking bottleneck, we can offer a more representative dataset. A real 100,000-person organisation typically has 5,000-15,000 groups distributed as a long tail, not 50 large groups.
 
@@ -39,8 +39,8 @@ Two further problems compound this:
 
 Scale templates are defined in two PowerShell helper functions, both supporting the same set of names:
 
-- `Get-TemplateScale` in [`test/integration/utils/Test-Helpers.ps1`](../../test/integration/utils/Test-Helpers.ps1) returns `Users`, `Groups`, `AvgMemberships` per template. Consumed by [`Populate-SambaAD.ps1`](../../test/integration/Populate-SambaAD.ps1) and [`Populate-OpenLDAP.ps1`](../../test/integration/Populate-OpenLDAP.ps1) (used by Scenarios 1, 7, 9).
-- `Get-Scenario8GroupScale` in [`test/integration/utils/Test-GroupHelpers.ps1`](../../test/integration/utils/Test-GroupHelpers.ps1) returns category-aware counts (`Companies`, `Departments`, `Locations`, `Projects`) per template. Consumed by Scenario 8 populators.
+- `Get-TemplateScale` in [`test/integration/utils/Test-Helpers.ps1`](../../../test/integration/utils/Test-Helpers.ps1) returns `Users`, `Groups`, `AvgMemberships` per template. Consumed by [`Populate-SambaAD.ps1`](../../../test/integration/Populate-SambaAD.ps1) and [`Populate-OpenLDAP.ps1`](../../../test/integration/Populate-OpenLDAP.ps1) (used by Scenarios 1, 7, 9).
+- `Get-Scenario8GroupScale` in [`test/integration/utils/Test-GroupHelpers.ps1`](../../../test/integration/utils/Test-GroupHelpers.ps1) returns category-aware counts (`Companies`, `Departments`, `Locations`, `Projects`) per template. Consumed by Scenario 8 populators.
 
 Current Scale100K shape via `Get-Scenario8GroupScale`:
 
@@ -108,7 +108,7 @@ No data flow changes. The new template is a different parameter value that selec
 
 ## Implementation Phases
 
-### Phase 1: Template Rename
+### Phase 1: Template Rename ✅
 
 **Goal:** Mechanical rename of the five existing scale templates with no behavioural change.
 
@@ -141,7 +141,7 @@ CSV cache: cache filenames embed the template name. Renames invalidate cache ent
 
 **Validation:** Run Scenario 1 against `Scale100k50Groups` (renamed). Confirm population produces the same user/group/membership counts as the previous `Scale100K`. Snapshot/CSV cache regeneration is expected.
 
-### Phase 2: Long-Tail Group Model
+### Phase 2: Long-Tail Group Model ✅
 
 **Goal:** Implement the new group shape in helper functions, ready for use by Scenario 8 populators.
 
@@ -160,7 +160,7 @@ CSV cache: cache filenames embed the template name. Renames invalidate cache ent
 - Membership size distribution follows expected ranges per category
 - All groups have unique names
 
-### Phase 3: Populator Extension
+### Phase 3: Populator Extension ✅
 
 **Goal:** Make the OpenLDAP Scenario 8 populator handle ~5,000 groups and ~1M memberships within the existing time budget.
 
@@ -187,7 +187,7 @@ Same guard mirrored in `Run-IntegrationTests.ps1` parameter validation and the i
 
 **Validation:** Full population run against OpenLDAP Scale100k5kGroups; measure wall-clock time and confirm under 15 minutes for population alone. Compare end-state directory contents (group count, total memberships, category distribution) against expected values.
 
-### Phase 4: Scenario Restriction
+### Phase 4: Scenario Restriction ✅
 
 **Goal:** Restrict `Scale100k5kGroups` to Scenario 8.
 
@@ -207,20 +207,30 @@ Apply to: `Invoke-Scenario1-HRToIdentityDirectory.ps1`, `Invoke-Scenario7-ClearC
 
 **Validation:** Try running each non-Scenario-8 scenario with `Scale100k5kGroups`; confirm clear error before any work starts.
 
-### Phase 5: JIM-Side Validation Run
+### Phase 5: JIM-Side Validation Run (Partial)
 
 **Goal:** Characterise the performance and correctness profile of the new template against JIM.
 
-**Activities:**
+**Status:**
 
-- Full Scenario 8 run against `Scale100k5kGroups` (OpenLDAP only)
-- Capture metrics: import time, sync time, export time, worker memory peak, database row counts
-- Compare against the same Scenario 8 run at `Scale100k50Groups` to characterise where the cost differs (more reference resolutions, more delta sync invocations, more individual group writes)
-- If JIM-side regressions surface, decide whether to address them in this change or file follow-up issues
+- Population side fully validated end-to-end. First run produced 4,932 groups instead of 5,027 and revealed four bugs in the OpenLDAP populator (Department cap at `$sortedDepartmentKeys.Length`, Location cap at the hardcoded inline list, plus uniform-size Division and Location memberships from modulo bucketing rather than the tier table). Bugs fixed in a follow-up commit; second run produced the expected 5,027 groups with the full long-tail bucket distribution.
+- Deeper performance characterisation (per-phase wall-clock, worker memory peak, DB row counts at each stage, comparison against `Scale100k50Groups`) **not yet captured** — to be tracked separately.
 
-**Validation:** Run completes within the existing Scale100K time budget (< 2 hours). All Scenario 8 assertions pass.
+**Activities completed:**
 
-### Phase 6: Documentation Sweep
+- Full population run against OpenLDAP. Source and Target both reached 5,027 groups and 751,768 memberships per CS; sync replication produced identical state on both directories.
+- Long-tail buckets verified: groups <50 members = 3,698; 50-199 = 1,022; 200-999 = 232; 1,000-4,999 = 49; 5,000-19,999 = 22; 20,000-49,999 = 2; 50,000+ = 2 (the two all-staff groups).
+- Tier tables confirmed firing as designed across all 8 categories.
+
+**Activities still pending:**
+
+- Capture detailed timing metrics: import time, sync time, export time, worker memory peak, database row counts.
+- Compare against the same Scenario 8 run at `Scale100k50Groups` to characterise where the cost differs.
+- File follow-up issues for any JIM-side regressions surfaced by the comparison.
+
+**Validation criterion (still applies):** Run completes within the existing Scale100K time budget (< 2 hours). All Scenario 8 assertions pass.
+
+### Phase 6: Documentation Sweep ✅
 
 **Goal:** Update active documentation to reflect the new template names and the addition of `Scale100k5kGroups`.
 
@@ -247,7 +257,7 @@ Apply to: `Invoke-Scenario1-HRToIdentityDirectory.ps1`, `Invoke-Scenario7-ClearC
 ## Success Criteria
 
 1. All five renamed templates pass their existing scenario tests with no behavioural change
-2. `Scale100k5kGroups` populates an OpenLDAP directory with approximately 5,000 groups and approximately 900,000 memberships in under 15 minutes
+2. `Scale100k5kGroups` populates an OpenLDAP directory with 5,027 groups and approximately 750,000 memberships in under 15 minutes (initial estimate was ~900k; tier tables in `Get-LongTailGroupSize` lean toward smaller groups, so the measured total comes in lower while preserving the intended long-tail shape)
 3. Full Scenario 8 run against `Scale100k5kGroups` completes within the existing Scale100K time budget (< 2 hours)
 4. `Scale100k5kGroups` selection against Samba AD or non-Scenario-8 scenarios fails immediately with a clear error message
 5. Documentation is consistent: no active docs reference the old template names
@@ -279,5 +289,14 @@ Apply to: `Invoke-Scenario1-HRToIdentityDirectory.ps1`, `Invoke-Scenario7-ClearC
 
 ## Open Items
 
-- Confirm casing for `Scale1m80Groups` vs `Scale1M80Groups` during implementation review
-- Decide whether to publish a one-time cleanup script for orphaned snapshot images and CSV cache entries, or document the manual cleanup commands in the PR description
+- Capture the Phase 5 deep performance characterisation (per-phase timings, worker memory peak, database row counts, comparison against `Scale100k50Groups`). To be tracked in a follow-up issue rather than blocking this work.
+
+## Decisions Recorded
+
+- **Naming case:** lowercase `k` and `m` after the numeral (`Scale100k5kGroups`, `Scale1m80Groups`).
+- **Snapshot/CSV cache cleanup:** no one-time script; orphaned images and cache entries are harmless and self-evict next time the user runs `docker image prune` or empties the CSV cache. Documented in the PR description rather than codified.
+- **Layered naming convention** (for future scale tier reshapes):
+  - Tier 1: base names from a curated pool
+  - Tier 2: `{base}-{qualifier}` from a 5-entry qualifier pool
+  - Tier 3: `{base}-{qualifier}-{N}` with a hyphen-separated serial
+  Implemented for Department (`Get-DepartmentNames`) and for combinatorial categories via `Get-CombinatorialNames`.
