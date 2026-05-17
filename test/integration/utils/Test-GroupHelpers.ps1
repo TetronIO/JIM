@@ -61,7 +61,7 @@ function Get-Scenario8GroupScale {
     #>
     param(
         [Parameter(Mandatory=$true)]
-        [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")]
+        [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")]
         [string]$Template
     )
 
@@ -176,6 +176,65 @@ function Get-Scenario8GroupScale {
             Roles             = 400     # ~20-500 members each
             TotalGroups       = 5027
             Users             = 100000
+        }
+        # Higher-tier long-tail templates. Same category model as Scale100k5kGroups,
+        # scaled sub-linearly for org-structure categories (AllStaff/Divisions/
+        # Locations/Departments) and roughly linearly for the ad-hoc tail
+        # (Projects/DistributionLists). OpenLDAP only; Samba populators hard-fail.
+        # Per-category absolute sizes (e.g. project = 5-30 members) come from
+        # Get-LongTailGroupSize unchanged; the bigger user pool gets distributed
+        # across a larger group count rather than inflating per-group sizes.
+        Scale200k10kGroups = @{
+            Companies         = 0
+            AllStaff          = 2
+            Divisions         = 12
+            Locations         = 20
+            Departments       = 150
+            Applications      = 800
+            Projects          = 6000
+            DistributionLists = 2000
+            Roles             = 1000
+            TotalGroups       = 9984
+            Users             = 200000
+        }
+        Scale500k25kGroups = @{
+            Companies         = 0
+            AllStaff          = 2
+            Divisions         = 15
+            Locations         = 30
+            Departments       = 250
+            Applications      = 1500
+            Projects          = 16000
+            DistributionLists = 5000
+            Roles             = 2200
+            TotalGroups       = 24997
+            Users             = 500000
+        }
+        Scale750k40kGroups = @{
+            Companies         = 0
+            AllStaff          = 3
+            Divisions         = 18
+            Locations         = 40
+            Departments       = 350
+            Applications      = 2500
+            Projects          = 27000
+            DistributionLists = 7500
+            Roles             = 2600
+            TotalGroups       = 40011
+            Users             = 750000
+        }
+        Scale1m60kGroups = @{
+            Companies         = 0
+            AllStaff          = 3
+            Divisions         = 20
+            Locations         = 50
+            Departments       = 500
+            Applications      = 4000
+            Projects          = 38000
+            DistributionLists = 13000
+            Roles             = 4500
+            TotalGroups       = 60073
+            Users             = 1000000
         }
     }
 
@@ -824,7 +883,7 @@ function New-Scenario8GroupSet {
     #>
     param(
         [Parameter(Mandatory=$true)]
-        [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")]
+        [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")]
         [string]$Template,
 
         [Parameter(Mandatory=$false)]
@@ -862,14 +921,14 @@ function New-Scenario8GroupSet {
         $globalIndex++
     }
 
-    # AllStaff groups (Scale100k5kGroups)
+    # AllStaff groups (long-tail templates)
     for ($i = 0; $i -lt $allStaffCount; $i++) {
         $name = $script:AllStaffNames[$i % $script:AllStaffNames.Count]
         [void]$groups.Add((New-TestGroup -Category "AllStaff" -Name $name -Index $globalIndex -Domain $Domain))
         $globalIndex++
     }
 
-    # Division groups (Scale100k5kGroups)
+    # Division groups (long-tail templates)
     for ($i = 0; $i -lt $divisionCount; $i++) {
         $name = $script:DivisionNames[$i % $script:DivisionNames.Count]
         [void]$groups.Add((New-TestGroup -Category "Division" -Name $name -Index $globalIndex -Domain $Domain))
@@ -906,7 +965,7 @@ function New-Scenario8GroupSet {
         }
     }
 
-    # Application access groups (Scale100k5kGroups)
+    # Application access groups (long-tail templates)
     if ($applicationCount -gt 0) {
         $appNames = Get-CombinatorialNames -Count $applicationCount `
             -Prefixes $script:ApplicationCoreNames `
@@ -917,7 +976,7 @@ function New-Scenario8GroupSet {
         }
     }
 
-    # Distribution lists (Scale100k5kGroups)
+    # Distribution lists (long-tail templates)
     if ($distributionCount -gt 0) {
         $dlNames = Get-CombinatorialNames -Count $distributionCount `
             -Prefixes $script:DistributionListTopics `
@@ -928,7 +987,7 @@ function New-Scenario8GroupSet {
         }
     }
 
-    # Roles (Scale100k5kGroups)
+    # Roles (long-tail templates)
     if ($roleCount -gt 0) {
         $roleNames = Get-CombinatorialNames -Count $roleCount `
             -Prefixes $script:RoleQualifiers `

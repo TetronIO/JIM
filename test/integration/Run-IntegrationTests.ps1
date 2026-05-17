@@ -173,7 +173,7 @@ param(
     [string]$Scenario,
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")]
     [string]$Template = "Nano",
 
     [Parameter(Mandatory=$false)]
@@ -215,11 +215,11 @@ param(
     [switch]$DisableChangeTracking,
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")]
     [string]$TemplateSambaAD,
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")]
     [string]$TemplateOpenLDAP,
 
     [Parameter(Mandatory=$false)]
@@ -250,25 +250,26 @@ $repoRoot = (Get-Item $scriptRoot).Parent.Parent.FullName
 # Import helpers early so Get-DirectoryConfig is available
 . "$scriptRoot/utils/Test-Helpers.ps1"
 
-# Hard-fail: Scale100k5kGroups is OpenLDAP only. Reject early at the orchestrator
-# level so users discover the constraint at selection time, not 30 minutes into
-# population. The populator scripts have matching guards (defence in depth).
-function Test-Scale100k5kGroupsCompatibility {
+# Hard-fail: the long-tail templates (Scale100k5kGroups through Scale1m60kGroups)
+# are OpenLDAP only. Reject early at the orchestrator level so users discover
+# the constraint at selection time, not hours into population. The populator
+# scripts have matching guards (defence in depth).
+$script:LongTailTemplates = @("Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")
+function Test-LongTailTemplateCompatibility {
     param([string]$Template, [string]$DirectoryType, [string]$TemplateSambaAD, [string]$TemplateOpenLDAP)
-    # The new template is OpenLDAP only.
     $offendingValues = @()
-    if ($Template -eq "Scale100k5kGroups" -and $DirectoryType -in @("SambaAD", "All")) {
-        $offendingValues += "-Template Scale100k5kGroups -DirectoryType $DirectoryType"
+    if ($Template -in $script:LongTailTemplates -and $DirectoryType -in @("SambaAD", "All")) {
+        $offendingValues += "-Template $Template -DirectoryType $DirectoryType"
     }
-    if ($TemplateSambaAD -eq "Scale100k5kGroups") {
-        $offendingValues += "-TemplateSambaAD Scale100k5kGroups"
+    if ($TemplateSambaAD -in $script:LongTailTemplates) {
+        $offendingValues += "-TemplateSambaAD $TemplateSambaAD"
     }
     if ($offendingValues.Count -gt 0) {
-        $msg = "Scale100k5kGroups is OpenLDAP only (Scenario 8 long-tail group shape). Samba AD cannot populate ~5000 groups within the time budget. Rejected: $($offendingValues -join ', '). Use -Template Scale100k50Groups for Samba scale testing, or pin to -DirectoryType OpenLDAP."
+        $msg = "The long-tail templates ($($script:LongTailTemplates -join ', ')) are OpenLDAP only (Scenario 8 long-tail group shape). Samba AD cannot populate thousands of groups within the time budget. Rejected: $($offendingValues -join ', '). Use -Template Scale100k50Groups or another capped-groups template for Samba scale testing, or pin to -DirectoryType OpenLDAP."
         throw $msg
     }
 }
-Test-Scale100k5kGroupsCompatibility -Template $Template -DirectoryType $DirectoryType `
+Test-LongTailTemplateCompatibility -Template $Template -DirectoryType $DirectoryType `
     -TemplateSambaAD $TemplateSambaAD -TemplateOpenLDAP $TemplateOpenLDAP
 
 # Resolve directory configuration (used throughout for Docker profiles, population, setup)
@@ -670,11 +671,25 @@ function Show-TemplateMenu {
             Time = "~2 hours"
         }
         @{
+            Name = "Scale200k10kGroups"
+            Users = 200000
+            Groups = 9984
+            Description = "200K users, long-tail group shape (OpenLDAP + Scenario 8 only)"
+            Time = "~3 hours"
+        }
+        @{
             Name = "Scale500k65Groups"
             Users = 500000
             Groups = 65
             Description = "500K users"
             Time = "~3 hours"
+        }
+        @{
+            Name = "Scale500k25kGroups"
+            Users = 500000
+            Groups = 24997
+            Description = "500K users, long-tail group shape (OpenLDAP + Scenario 8 only)"
+            Time = "~6 hours"
         }
         @{
             Name = "Scale750k70Groups"
@@ -684,11 +699,25 @@ function Show-TemplateMenu {
             Time = "~4 hours"
         }
         @{
+            Name = "Scale750k40kGroups"
+            Users = 750000
+            Groups = 40011
+            Description = "750K users, long-tail group shape (OpenLDAP + Scenario 8 only)"
+            Time = "~9 hours"
+        }
+        @{
             Name = "Scale1m80Groups"
             Users = 1000000
             Groups = 80
             Description = "1M users, stress testing"
             Time = "~6 hours"
+        }
+        @{
+            Name = "Scale1m60kGroups"
+            Users = 1000000
+            Groups = 60073
+            Description = "1M users, long-tail group shape (OpenLDAP + Scenario 8 only)"
+            Time = "~12 hours"
         }
     )
 
@@ -2115,7 +2144,7 @@ if ($Scenario -like "*Scenario8*" -and $DirectoryType -ne "OpenLDAP") {
     # Scale Samba container memory for larger templates (ldbadd is memory-intensive —
     # it loads the full LDB into memory, so memory needs grow with user count)
     # Only needed when NOT using snapshots (snapshots don't run ldbadd)
-    if (-not $script:UsingSnapshots -and $Template -in @("Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")) {
+    if (-not $script:UsingSnapshots -and $Template -in @("Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")) {
         $env:SAMBA_SOURCE_MEMORY = "8G"
         $env:SAMBA_TARGET_MEMORY = "4G"
         Write-Host "  Samba source memory scaled to 8G for $Template template" -ForegroundColor Gray
@@ -2766,7 +2795,7 @@ Write-Section "Step 6: Capturing Performance Metrics"
 # Skip detailed metrics capture for large templates - parsing the worker logs becomes
 # prohibitively expensive (CPU and memory) due to the volume of DiagnosticListener lines.
 # Use -CaptureMetrics to force capture regardless of template size.
-$metricsSkippedTemplates = @("MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")
+$metricsSkippedTemplates = @("MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")
 if ($Template -in $metricsSkippedTemplates -and -not $CaptureMetrics) {
     Write-Warning "Skipping detailed performance metrics for '$Template' template (log volume too large for efficient parsing)"
     Write-Step "Use -CaptureMetrics to force capture (this will be slow)"

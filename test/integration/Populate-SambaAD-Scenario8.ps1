@@ -16,7 +16,7 @@
       - OU=Entitlements (entitlement groups)
 
 .PARAMETER Template
-    Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups)
+    Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups, Scale200k10kGroups, Scale500k25kGroups, Scale750k40kGroups, Scale1m60kGroups)
 
 .PARAMETER Instance
     Which Samba AD instance to populate (Source or Target)
@@ -32,7 +32,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")]
     [string]$Template = "Nano",
 
     [Parameter(Mandatory=$false)]
@@ -46,12 +46,14 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# Hard-fail: the long-tail Scale100k5kGroups template is OpenLDAP only.
-# Samba AD's per-call LDB write lock makes ~5000 groups / ~1M memberships
-# impractical within the time budget. Surface the constraint immediately
-# rather than letting the run start and time out hours later.
-if ($Template -eq "Scale100k5kGroups") {
-    throw "Template 'Scale100k5kGroups' is not supported on Samba AD. Use 'Scale100k50Groups' for Samba scale testing, or run this template with -DirectoryType OpenLDAP."
+# Hard-fail: the long-tail templates are OpenLDAP only.
+# Samba AD's per-call LDB write lock makes the long-tail shape (thousands of
+# groups, millions of memberships) impractical within the time budget. Surface
+# the constraint immediately rather than letting the run start and time out
+# hours later.
+$longTailTemplates = @("Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")
+if ($Template -in $longTailTemplates) {
+    throw "Template '$Template' is not supported on Samba AD. Use 'Scale100k50Groups' or another capped-groups template for Samba scale testing, or run this template with -DirectoryType OpenLDAP."
 }
 
 # Import helpers

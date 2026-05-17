@@ -181,7 +181,7 @@ function Get-TemplateScale {
     #>
     param(
         [Parameter(Mandatory=$true)]
-        [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")]
+        [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")]
         [string]$Template
     )
 
@@ -254,6 +254,32 @@ function Get-TemplateScale {
             Users = 100000
             Groups = 5027
             AvgMemberships = 9
+        }
+        # Higher-tier long-tail templates. Same Scenario 8 + OpenLDAP-only constraint
+        # as Scale100k5kGroups: category counts grow sub-linearly for org-structure
+        # categories (Divisions, Locations, Departments) and roughly linearly for the
+        # ad-hoc tail (Projects, DistributionLists). The AvgMemberships values below
+        # are informational; the populator emits the real distribution via
+        # Get-LongTailGroupSize.
+        Scale200k10kGroups = @{
+            Users = 200000
+            Groups = 9984
+            AvgMemberships = 8
+        }
+        Scale500k25kGroups = @{
+            Users = 500000
+            Groups = 24997
+            AvgMemberships = 10
+        }
+        Scale750k40kGroups = @{
+            Users = 750000
+            Groups = 40011
+            AvgMemberships = 11
+        }
+        Scale1m60kGroups = @{
+            Users = 1000000
+            Groups = 60073
+            AvgMemberships = 13
         }
     }
 
