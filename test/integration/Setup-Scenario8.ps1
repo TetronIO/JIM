@@ -735,22 +735,9 @@ else {
     Write-Host "  Sync rule '$targetUserExportRuleName' already exists" -ForegroundColor Gray
 }
 
-# Target Import (users - for confirming import)
-$targetUserImportRuleName = "$targetLabel Import Users"
-$targetUserImportRule = $existingRules | Where-Object { $_.name -eq $targetUserImportRuleName }
-if (-not $targetUserImportRule) {
-    $targetUserImportRule = New-JIMSyncRule `
-        -Name $targetUserImportRuleName `
-        -ConnectedSystemId $targetSystem.id `
-        -ConnectedSystemObjectTypeId $targetUserType.id `
-        -MetaverseObjectTypeId $mvUserType.id `
-        -Direction Import `
-        -PassThru
-    Write-Host "  ✓ Created: $targetUserImportRuleName" -ForegroundColor Green
-}
-else {
-    Write-Host "  Sync rule '$targetUserImportRuleName' already exists" -ForegroundColor Gray
-}
+# Note: no target Import Users sync rule. The target system is provisioned-only in this
+# scenario and contributes no attributes to the metaverse. Confirming-import joins are
+# handled by the connected system's Simple Mode matching rules (configured below).
 
 # --- Group Sync Rules ---
 # Source Import (groups)
