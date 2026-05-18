@@ -38,7 +38,7 @@
     // Docker 28 has been validated against the pinned containerd 2.2.x; whether
     // Docker 29.x also works once containerd is fixed has not been tested.
     // Revisit both pins together when moby-containerd 2.3.x is repaired.
-    "ghcr.io/devcontainers/features/docker-in-docker:2.16.1": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2.17.0": {
       "version": "28",
       "moby": true,
       "dockerDashComposeVersion": "v2"
