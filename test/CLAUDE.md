@@ -154,7 +154,7 @@ cd /workspaces/JIM
 # Run a specific scenario directly
 ./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory
 
-# Run with a specific template size (Nano, Micro, Small, Medium, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups)
+# Run with a specific template size (Nano, Micro, Small, Medium, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups; or long-tail / OpenLDAP-only Scale100k5kGroups, Scale200k10kGroups, Scale500k25kGroups, Scale750k40kGroups, Scale1m60kGroups)
 ./test/integration/Run-IntegrationTests.ps1 -Template Small
 
 # Run against OpenLDAP instead of Samba AD
@@ -222,12 +222,13 @@ These flags are for human developer iteration only. Claude must not use them bec
 - **Large**: 10,000 users, 500 groups (~15 min) - Large enterprise
 - **Scale100k50Groups**: 100,000 users, 50 groups - Requires 20+ GB host RAM (OOM-killed on 16 GB machines; a 16 GB Codespace is not sufficient)
 - **Scale100k5kGroups**: 100,000 users, ~5,027 groups (realistic long-tail shape) - OpenLDAP only, Scenario 8 only. Hard-fails if combined with `-DirectoryType SambaAD` or any non-Scenario-8 scenario. Same memory requirements as Scale100k50Groups.
+- **Scale200k10kGroups / Scale500k25kGroups / Scale750k40kGroups / Scale1m60kGroups**: long-tail templates extending the Scale100k5kGroups model to 200k/500k/750k/1m users. OpenLDAP only, Scenario 8 only — same hard-fail behaviour as Scale100k5kGroups. RAM requirements scale roughly with user count (28+ / 40+ / 48+ / 64+ GB recommended). The 1m60k tier also needs the OpenLDAP accesslog `olcDbMaxSize` raised proportionally; see the section below.
 
 **OpenLDAP accesslog MDB map size (IMPORTANT for large templates):**
 
 The OpenLDAP accesslog database uses an MDB storage engine with a fixed maximum map size (`olcDbMaxSize`). When the map is full, OpenLDAP **silently stops recording changes**; delta imports will find zero modifications and sync changes will be lost. There is no error message; the writes just stop.
 
-The map size is configured in `test/integration/docker/openldap/scripts/01-add-second-suffix.sh`. Current setting: **8 GB** (sufficient for Scale100k50Groups / 100K objects with large group membership operations). If adding templates beyond Scale100k50Groups (e.g. Scale1m80Groups / 1M objects), increase the accesslog `olcDbMaxSize` proportionally (estimate ~10 MB per 1,000 objects for the initial population, plus additional capacity for sync cycles and group membership writes).
+The map size is configured in `test/integration/docker/openldap/scripts/01-add-second-suffix.sh`. Current setting: **8 GB** (sufficient for Scale100k50Groups / 100K objects with large group membership operations, and tested against Scale100k5kGroups at ~5,000 groups / ~1M memberships). For higher-tier long-tail templates (Scale200k10kGroups, Scale500k25kGroups, Scale750k40kGroups, Scale1m60kGroups) or templates beyond Scale100k50Groups (e.g. Scale1m80Groups / 1M objects), increase the accesslog `olcDbMaxSize` proportionally (estimate ~10 MB per 1,000 objects for the initial population, plus additional capacity for sync cycles and group membership writes). Scale1m60kGroups (~1.06M objects, ~10M memberships) needs at least 32 GB; raise it before running.
 
 ## CSV cache
 

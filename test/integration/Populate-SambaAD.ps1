@@ -10,7 +10,7 @@
     based on the specified template scale
 
 .PARAMETER Template
-    Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups)
+    Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups, Scale200k10kGroups, Scale500k25kGroups, Scale750k40kGroups, Scale1m60kGroups)
 
 .PARAMETER Instance
     Which Samba AD instance to populate (Primary, Source, Target)
@@ -21,7 +21,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")]
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]
@@ -35,10 +35,11 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# Hard-fail: Scale100k5kGroups is the long-tail OpenLDAP-only template used by
-# Scenario 8. It is not valid for the basic Samba populator either.
-if ($Template -eq "Scale100k5kGroups") {
-    throw "Template 'Scale100k5kGroups' is not supported on Samba AD. Use 'Scale100k50Groups' for Samba scale testing, or run with -DirectoryType OpenLDAP."
+# Hard-fail: the long-tail templates are OpenLDAP-only Scenario 8 templates.
+# They are not valid for the basic Samba populator either.
+$longTailTemplates = @("Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")
+if ($Template -in $longTailTemplates) {
+    throw "Template '$Template' is not supported on Samba AD. Use 'Scale100k50Groups' or another capped-groups template for Samba scale testing, or run this template with -DirectoryType OpenLDAP."
 }
 
 # Import helpers

@@ -21,7 +21,7 @@
     - ou=Entitlements (empty — JIM provisions groups here)
 
 .PARAMETER Template
-    Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups)
+    Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups, Scale200k10kGroups, Scale500k25kGroups, Scale750k40kGroups, Scale1m60kGroups)
 
 .PARAMETER Instance
     Which suffix to populate (Source or Target)
@@ -37,7 +37,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")]
     [string]$Template = "Nano",
 
     [Parameter(Mandatory=$false)]
@@ -422,8 +422,10 @@ if ($groupScale.Projects -gt 0) {
 }
 
 # ----------------------------------------------------------------------------
-# Long-tail categories (Scale100k5kGroups). Each group's category-internal
-# index drives Get-LongTailGroupSize during membership assignment below.
+# Long-tail categories (Scale100k5kGroups / Scale200k10kGroups /
+# Scale500k25kGroups / Scale750k40kGroups / Scale1m60kGroups). Each group's
+# category-internal index drives Get-LongTailGroupSize during membership
+# assignment below.
 # ----------------------------------------------------------------------------
 
 # Read possibly-missing scale fields with default 0 (legacy templates don't
@@ -607,8 +609,9 @@ Write-Host "  Created $($createdGroups.Count) groups" -ForegroundColor Green
 #
 # Membership assignment is batched across multiple groups per docker exec call.
 # Each ldapmodify invocation processes ~5000 member lines spanning many groups,
-# which is essential for Scale100k5kGroups (~5000 groups, ~1M memberships) and
-# improves smaller templates harmlessly.
+# which is essential for the long-tail templates (Scale100k5kGroups through
+# Scale1m60kGroups, up to ~60k groups and ~10M memberships) and improves
+# smaller templates harmlessly.
 # ============================================================================
 Write-TestStep "Step 4" "Assigning group memberships (batched ldapmodify)"
 
