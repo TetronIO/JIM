@@ -40,6 +40,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         using var syncSpan = Diagnostics.Sync.StartSpan("FullSync");
         syncSpan.SetTag("connectedSystemId", _connectedSystem.Id);
         syncSpan.SetTag("connectedSystemName", _connectedSystem.Name);
+        syncSpan.SetTag("connectorType", _connectedSystem.ConnectorDefinition.Name);
 
         Log.Verbose("PerformFullSyncAsync: Starting");
 

@@ -117,7 +117,11 @@ public class SyncImportTaskProcessor
         using var importSpan = Diagnostics.Sync.StartSpan(importSpanName);
         importSpan.SetTag("connectedSystemId", _connectedSystem.Id);
         importSpan.SetTag("connectedSystemName", _connectedSystem.Name);
-        importSpan.SetTag("connectorType", _connector.GetType().Name);
+        // Use ConnectorDefinition.Name so all four root spans (FullSync, DeltaSync, Import, Export)
+        // identify the connector with the same string. Worker.cs already dereferences
+        // connectedSystem.ConnectorDefinition.Name when creating the connector instance, so this
+        // navigation property is reliably populated by the time we reach this processor.
+        importSpan.SetTag("connectorType", _connectedSystem.ConnectorDefinition.Name);
 
         Log.Verbose("PerformImportAsync: Starting");
 
