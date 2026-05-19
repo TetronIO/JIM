@@ -123,7 +123,7 @@ else
     for var in JIM_DB_PASSWORD JIM_SSO_AUTHORITY JIM_SSO_CLIENT_ID JIM_SSO_SECRET \
                JIM_SSO_API_SCOPE JIM_SSO_VALID_ISSUERS JIM_SSO_CLAIM_TYPE \
                JIM_SSO_MV_ATTRIBUTE JIM_SSO_INITIAL_ADMIN JIM_LOG_LEVEL JIM_LOG_PATH \
-               JIM_LOG_REQUESTS; do
+               JIM_LOG_REQUESTS JIM_BENCH_API_URL JIM_BENCH_API_KEY; do
         if [ -n "${!var}" ]; then
             sed -i "s|^${var}=.*|${var}=${!var}|" .env
             print_success "  Applied Codespaces secret: ${var}"
@@ -132,6 +132,20 @@ else
 
     print_success ".env created from .env.example"
     print_success "SSO pre-configured for bundled Keycloak (admin/admin, user/user)"
+fi
+
+# Surface JIM-Bench metrics streaming as a pending action when the key is
+# missing or blank, so users notice that integration test runs from this
+# devcontainer won't appear on the bench dashboard until it's set. The URL
+# can sit at the default; only the key is treated as required.
+if [ -f .env ] && ! grep -q '^JIM_BENCH_API_KEY=..*$' .env 2>/dev/null; then
+    PENDING_ACTIONS+="  ▶ Integration test metrics streaming is disabled (JIM_BENCH_API_KEY
+      is empty in .env). Without it, integration test runs from this
+      devcontainer will not appear on the JIM-Bench Grafana dashboard.
+      To enable: paste the JIM-Bench ingestion API key after
+      JIM_BENCH_API_KEY= in .env (no quotes).
+
+"
 fi
 
 # 4. Auto-tune PostgreSQL for devcontainer specs

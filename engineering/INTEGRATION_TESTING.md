@@ -2136,10 +2136,14 @@ Metrics streaming is opt-in. Set these variables in `.env` (or supply via the ru
 
 | Variable | Description |
 |----------|-------------|
-| `JIM_BENCH_API_URL` | Bench ingestion endpoint |
-| `JIM_BENCH_API_KEY` | Bench API key (provisioned by `scripts/Set-JIMBenchSecrets.ps1`) |
+| `JIM_BENCH_API_URL` | Bench ingestion endpoint (e.g. `https://bench-api.junctional.io`) |
+| `JIM_BENCH_API_KEY` | Bench ingestion API key |
 
-When either variable is missing the runner skips the streaming step and continues without error, so untracked local runs keep working. See `engineering/plans/done/476-integration-test-metrics-jim-side.md` and the `bench-sync.yml` workflow for end-to-end details.
+For **local devcontainer use**, set both directly in `.env` (the `.env.example` template has commented-out lines ready to uncomment). The devcontainer setup script (`.devcontainer/setup.sh`) prints a pending-action reminder at the end of container creation if `JIM_BENCH_API_KEY` is empty, so you'll notice if streaming is silently disabled. Codespaces users can set the two variables as Codespaces secrets and setup.sh will propagate them into `.env` automatically.
+
+For **CI/CD use**, `scripts/Set-JIMBenchSecrets.ps1` is an interactive helper that provisions the same two values (plus `JIM_BENCH_DISPATCH_TOKEN`) as **GitHub Actions secrets** on the repo — it does not write to your local `.env`.
+
+When either variable is missing the runner skips the streaming step and continues without error, so untracked local runs keep working. See `engineering/plans/doing/476-integration-test-metrics-jim-side.md` and the `bench-sync.yml` workflow for end-to-end details.
 
 ---
 

@@ -1,5 +1,9 @@
 # Plan: Integration Test Metrics - JIM Repo Scope (#476)
 
+- **Status:** Doing (JIM-side phases 1–4 merged; end-to-end validation pending)
+- **Issue:** [#476](https://github.com/TetronIO/JIM/issues/476)
+- **Note:** Implementation is complete on the JIM side, but no devcontainer has yet been verified to put data on the JIM-Bench dashboard. Move to `done/` once a run from a devcontainer with `JIM_BENCH_API_KEY` set is confirmed to appear on https://bench.junctional.io. Outstanding work on the metrics platform itself (Grafana trends/regression dashboards, cross-repo dispatch receiver, devcontainer docs) is tracked in `TetronIO/JIM-Bench`.
+
 ## Design Decisions (from planning discussion)
 
 1. **Span enrichment** (Phase 1) adds `cumulativeObjectCount` and `wallClockOffsetMs` tags to existing spans. These enrich the local performance tree at Debug level and flow to the API when streamed.
