@@ -106,11 +106,20 @@ while ($true) {
 # Serilog console output (which Microsoft.Extensions.Logging routes to stderr by
 # default in some configurations) is captured alongside stdout.
 try {
+    # Serilog's default Console output template prepends `[HH:MM:SS LVL] ` to every line.
+    # The bench server-side parser anchors its regex at `^DiagnosticListener:` and cannot
+    # tolerate the prefix, so we strip it here before buffering. Format produced by
+    # Serilog.Sinks.Console's default template is `[hh:mm:ss XXX] <message>` where XXX is
+    # the 3-letter level (DBG/INF/WRN/ERR/VRB/FTL). We keep the regex tight on that shape
+    # so unexpected prefixes (e.g. ANSI sequences if someone enables them) fail loud rather
+    # than silently mangling lines.
+    $prefixPattern = '^\[\d{2}:\d{2}:\d{2}\s+(?:VRB|DBG|INF|WRN|ERR|FTL)\]\s+'
+
     & docker logs -f $ContainerName 2>&1 | ForEach-Object {
-        $line = $_
+        $line = $_ -replace $prefixPattern, ''
 
         # Only capture DiagnosticListener spans and MetricsCheckpoint lines
-        if ($line -match "DiagnosticListener:" -or $line -match "MetricsCheckpoint:") {
+        if ($line -match "^DiagnosticListener:" -or $line -match "^MetricsCheckpoint:") {
             $buffer.Add($line)
         }
 

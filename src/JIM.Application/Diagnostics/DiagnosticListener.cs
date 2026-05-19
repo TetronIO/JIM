@@ -78,6 +78,15 @@ public sealed class DiagnosticListener : IDisposable
             tagsList.Insert(0, $"parentId={parentId}");
         }
 
+        // Slow operations are tagged inside the bracket rather than prefixed to the path.
+        // The previous "[SLOW] " inline prefix broke downstream parsers that anchor on the
+        // span name (e.g. JIM-Bench's LogLineParser), and the Warning log level still
+        // signals slowness to humans skim-reading docker logs.
+        if (isSlowOperation)
+        {
+            tagsList.Add("slow=true");
+        }
+
         var tags = string.Join(", ", tagsList);
         var tagsSuffix = string.IsNullOrEmpty(tags) ? "" : $" [{tags}]";
 
@@ -85,15 +94,15 @@ public sealed class DiagnosticListener : IDisposable
         var parentName = activity.Parent?.DisplayName;
         var hierarchyPrefix = parentName != null ? $"{parentName} > " : "";
 
-        // Log format: "Parent > Child completed in Xms" for parseable output
-        // Use Warning level for slow operations but keep name format consistent for tree parsing
+        // Log format: "Parent > Child completed in Xms" for parseable output.
+        // The :l format specifier on each string argument tells Serilog to render
+        // literally (no surrounding "" quotes), which both the JIM Step 6 parser
+        // and the JIM-Bench server-side parser depend on.
         var logLevel = isSlowOperation ? Serilog.Events.LogEventLevel.Warning : _logLevel;
-        var slowMarker = isSlowOperation ? "[SLOW] " : "";
 
         Log.Write(
             logLevel,
-            "DiagnosticListener: {SlowMarker}{HierarchyPrefix}{SpanName} completed in {DurationMs:F1}ms{Tags}",
-            slowMarker,
+            "DiagnosticListener: {HierarchyPrefix:l}{SpanName:l} completed in {DurationMs:F1}ms{Tags:l}",
             hierarchyPrefix,
             activity.DisplayName,
             durationMs,
