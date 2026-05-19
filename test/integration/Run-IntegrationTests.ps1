@@ -2670,21 +2670,13 @@ if ($metricsStreamingEnabled) {
     Write-Step "Capturing host fingerprint..."
     $metricsHostFingerprint = & "$scriptRoot/Get-HostFingerprint.ps1"
 
-    $workerLogPath = Join-Path $scriptRoot "results" "logs" "worker"
-    # Find the most recent worker log file (Serilog names files with date suffixes)
-    # The streaming script will wait for the file to appear if the container hasn't started writing yet
-    $workerLogFile = Get-ChildItem -Path $workerLogPath -Filter "jim.worker.*.log" -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    if ($workerLogFile) {
-        $workerLogFilePath = $workerLogFile.FullName
-    } else {
-        # Construct expected path; the streaming script will wait for it to appear
-        $workerLogFilePath = Join-Path $workerLogPath "jim.worker.$(Get-Date -Format 'yyyyMMdd').log"
-    }
-
     Write-Step "Starting metrics streaming to $($env:JIM_BENCH_API_URL)..."
+    # Stream-WorkerLogs.ps1 follows the worker container via `docker logs -f`,
+    # not the bind-mounted log file. The file sink writes CLEF JSON, which the
+    # bench server-side parser (a port of the runner's Step 6 regex) cannot
+    # ingest; the docker logs plaintext output matches the parser format.
     $metricsStreamJob = Start-Job -FilePath "$scriptRoot/Stream-WorkerLogs.ps1" -ArgumentList @(
-        $workerLogFilePath,
+        "jim.worker",
         $env:JIM_BENCH_API_URL,
         $env:JIM_BENCH_API_KEY,
         $metricsRunId,
