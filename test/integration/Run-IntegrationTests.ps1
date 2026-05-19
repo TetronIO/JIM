@@ -1736,6 +1736,12 @@ if (Test-Path $envFilePath) {
     }
 }
 $metricsStreamingEnabled = $env:JIM_BENCH_API_URL -and $env:JIM_BENCH_API_KEY
+# Pre-declare metrics tracking vars so the resolved-config banner and the
+# post-scenario submission block can reference them under Set-StrictMode
+# even on code paths where streaming is disabled or never started.
+$metricsRunId = if ($metricsStreamingEnabled) { [Guid]::NewGuid().ToString() } else { $null }
+$metricsStreamJob = $null
+$metricsHostFingerprint = $null
 if ($metricsStreamingEnabled) {
     Write-Host "  Metrics Streaming:       ${GREEN}Enabled${NC}"
     Write-Host "                           ${GRAY}$($env:JIM_BENCH_API_URL)${NC}"
@@ -2647,10 +2653,10 @@ if ($scenarioNumber -and $scenariosAcceptingExportParams -contains $scenarioNumb
     }
 }
 
-# Start metrics streaming background job (if enabled)
-$metricsRunId = [Guid]::NewGuid().ToString()
-$metricsStreamJob = $null
-$metricsHostFingerprint = $null
+# Start metrics streaming background job (if enabled).
+# $metricsRunId / $metricsStreamJob / $metricsHostFingerprint were pre-declared
+# earlier alongside $metricsStreamingEnabled so the resolved-config banner can
+# reference them under Set-StrictMode.
 if ($metricsStreamingEnabled) {
     Write-Step "Capturing host fingerprint..."
     $metricsHostFingerprint = & "$scriptRoot/Get-HostFingerprint.ps1"
