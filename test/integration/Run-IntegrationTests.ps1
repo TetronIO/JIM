@@ -1717,6 +1717,24 @@ if ($DisableChangeTracking) {
 }
 
 # Metrics streaming status
+# Hydrate JIM_BENCH_* from .env into the process env when not already set,
+# so a single .env definition both configures the Docker stack and enables
+# the runner's streaming path. The devcontainer setup script reminds users
+# to populate JIM_BENCH_API_KEY in .env for this reason.
+$envFilePath = Join-Path $repoRoot ".env"
+if (Test-Path $envFilePath) {
+    $envContent = Get-Content $envFilePath -Raw
+    foreach ($benchVar in @('JIM_BENCH_API_URL', 'JIM_BENCH_API_KEY')) {
+        if (-not [Environment]::GetEnvironmentVariable($benchVar)) {
+            if ($envContent -match "(?m)^$benchVar=(.+)$") {
+                $benchValue = $Matches[1].Trim()
+                if ($benchValue) {
+                    Set-Item "env:$benchVar" $benchValue
+                }
+            }
+        }
+    }
+}
 $metricsStreamingEnabled = $env:JIM_BENCH_API_URL -and $env:JIM_BENCH_API_KEY
 if ($metricsStreamingEnabled) {
     Write-Host "  Metrics Streaming:       ${GREEN}Enabled${NC}"
