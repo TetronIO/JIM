@@ -84,11 +84,14 @@ $payload = @{
     completedAt     = (Get-Date).ToUniversalTime().ToString("o")
 }
 
-# Include wall-clock timings from result file if available
+# Include wall-clock timings from result file if available.
+# Use PSObject.Properties rather than direct property access so this stays
+# silent under Set-StrictMode when the result file is the wall-clock-only
+# shape (no Timings sub-object); a missing property is expected, not an error.
 if ($ResultFile -and (Test-Path $ResultFile)) {
     try {
         $resultData = Get-Content $ResultFile -Raw | ConvertFrom-Json
-        if ($resultData.Timings) {
+        if ($resultData.PSObject.Properties.Name -contains 'Timings' -and $resultData.Timings) {
             $payload.wallClockTimings = $resultData.Timings
         }
     }

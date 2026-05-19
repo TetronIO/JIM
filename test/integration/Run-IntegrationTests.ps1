@@ -2034,6 +2034,15 @@ $workerLogMount = Join-Path $scriptRoot "results" "logs" "worker"
 if (-not (Test-Path $workerLogMount)) {
     New-Item -ItemType Directory -Path $workerLogMount -Force | Out-Null
 }
+# Make the bind-mount writable by the worker container's non-root user (UID 1654,
+# baked into JIM.Worker/Dockerfile). Host bind mounts inherit the host directory's
+# permissions, and the host dir is owned by UID 1000 mode 0755 — UID 1654 has no
+# write access, so Serilog's file sink fails silently and no jim.worker.<date>.log
+# is ever created. Without this chmod, Stream-WorkerLogs.ps1 spins until its 120s
+# timeout and metrics streaming produces only the summary, not per-span data.
+if ($IsLinux -or $IsMacOS) {
+    & chmod 0777 $workerLogMount 2>$null
+}
 
 Write-Step "Starting JIM stack..."
 $jimResult = docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d 2>&1
