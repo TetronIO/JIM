@@ -1676,6 +1676,12 @@ public class SynchronisationController(
         if (request.EnforceState.HasValue)
             syncRule.EnforceState = request.EnforceState.Value;
 
+        if (request.InboundOutOfScopeAction.HasValue)
+            syncRule.InboundOutOfScopeAction = request.InboundOutOfScopeAction.Value;
+
+        if (request.OutboundDeprovisionAction.HasValue)
+            syncRule.OutboundDeprovisionAction = request.OutboundDeprovisionAction.Value;
+
         var apiKey = await GetCurrentApiKeyAsync();
         bool success;
         if (apiKey != null)

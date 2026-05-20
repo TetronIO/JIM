@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- ✨ The Sync Rule update API (`PUT /api/v1/synchronisation/sync-rules/{id}`) and the `Set-JIMSyncRule` cmdlet now accept `InboundOutOfScopeAction` and `OutboundDeprovisionAction`, so the actions taken when a CSO or MVO falls out of a rule's scope can be configured programmatically without going through the admin UI.
+- 🧪 Integration test Scenario 10 covers the full sync rule scoping transition matrix end-to-end: inbound enter/in-scope/exit (Disconnect and RemainJoined), outbound enter/exit (Disconnect and Delete), and the cross-system cascade where an inbound HR change deprovisions an MVO on the same sync run (#656).
+
 ## [0.10.3] - 2026-05-10
 
 ### Added

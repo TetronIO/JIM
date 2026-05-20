@@ -31,6 +31,16 @@ function Set-JIMSyncRule {
     .PARAMETER ProvisionToConnectedSystem
         For Export rules, sets whether objects will be provisioned to the Connected System.
 
+    .PARAMETER InboundOutOfScopeAction
+        For Import rules: action to take when a CSO falls out of this rule's scope.
+        Valid values: Disconnect (break the join and recall contributed attributes),
+        RemainJoined (keep the join intact and stop further attribute flow).
+
+    .PARAMETER OutboundDeprovisionAction
+        For Export rules: action to take when an MVO falls out of this rule's scope.
+        Valid values: Disconnect (break the join, leave the CSO untouched in the target system),
+        Delete (queue a delete PendingExport so the CSO is removed from the target system).
+
     .PARAMETER PassThru
         If specified, returns the updated Sync Rule object.
 
@@ -89,6 +99,14 @@ function Set-JIMSyncRule {
         [Parameter()]
         [bool]$ProvisionToConnectedSystem,
 
+        [Parameter()]
+        [ValidateSet('Disconnect', 'RemainJoined')]
+        [string]$InboundOutOfScopeAction,
+
+        [Parameter()]
+        [ValidateSet('Disconnect', 'Delete')]
+        [string]$OutboundDeprovisionAction,
+
         [switch]$PassThru
     )
 
@@ -121,6 +139,14 @@ function Set-JIMSyncRule {
 
         if ($PSBoundParameters.ContainsKey('ProvisionToConnectedSystem')) {
             $body.provisionToConnectedSystem = $ProvisionToConnectedSystem
+        }
+
+        if ($PSBoundParameters.ContainsKey('InboundOutOfScopeAction')) {
+            $body.inboundOutOfScopeAction = $InboundOutOfScopeAction
+        }
+
+        if ($PSBoundParameters.ContainsKey('OutboundDeprovisionAction')) {
+            $body.outboundDeprovisionAction = $OutboundDeprovisionAction
         }
 
         if ($body.Count -eq 0) {

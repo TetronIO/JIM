@@ -81,6 +81,13 @@ pwsh test/integration/Invoke-IntegrationTests.ps1 -ScenariosOnly
 - **Scenario 1: HR to Enterprise Directory** - Joiner, Mover, Leaver, Reconnection
 - **Scenario 2: Directory to Directory Sync** - Placeholder (not implemented)
 - **Scenario 3: GALSYNC** - Placeholder (not implemented)
+- **Scenario 4: Deletion Rules** - MVO deletion triggers and attribute recall
+- **Scenario 5: Matching Rules** - Join logic, projection, deduplication
+- **Scenario 6: Scheduler Service** - End-to-end scheduled run profile execution
+- **Scenario 7: Clear Connected System Objects** - Bulk CSO removal workflow
+- **Scenario 8: Cross-Domain Entitlement Sync** - Large-scale group/entitlement sync
+- **Scenario 9: Partition-Scoped Imports** - Partition filtering on import run profiles
+- **Scenario 10: Sync Rule Scoping Behaviour** - Inbound/outbound scope transitions, deprovisioning actions, cross-system cascade (issue #656)
 
 ### Phase 2 (Planned)
 - Database connector testing (requires [#170](https://github.com/TetronIO/JIM/issues/170))

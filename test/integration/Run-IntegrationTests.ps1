@@ -50,13 +50,13 @@
     Export Concurrency setting for LDAP connectors. Controls how many LDAP operations
     are pipelined concurrently during export. Default: 1 (sequential).
     Higher values improve throughput but increase load on the target directory.
-    Only applies to scenarios with LDAP exports (Scenarios 1, 2, 8).
+    Only applies to scenarios with LDAP exports (Scenarios 1, 2, 8, 10).
 
 .PARAMETER MaxExportParallelism
     Maximum number of parallel export batches for Connected Systems. Controls how many
     export batches are processed concurrently. Default: 1 (sequential).
     Higher values improve throughput for large exports.
-    Only applies to scenarios with LDAP exports (Scenarios 1, 2, 8).
+    Only applies to scenarios with LDAP exports (Scenarios 1, 2, 8, 10).
 
 .PARAMETER TimeoutSeconds
     Maximum time to wait for services to be ready. Default: 180 seconds.
@@ -486,6 +486,7 @@ function Show-ScenarioMenu {
                 "*Scenario7*" { "Clear Connected System Objects testing" }
                 "*Scenario8*" { "Cross-domain entitlement synchronisation" }
                 "*Scenario9*" { "Partition-scoped import run profiles" }
+                "*Scenario10*" { "Sync rule scoping behaviour" }
                 default { "Integration test scenario" }
             }
         }
@@ -2619,7 +2620,7 @@ if ($script:UsingSnapshots -or $script:UsingOpenLDAPSnapshots) {
 # Export tuning params only apply to scenarios that accept them and have LDAP exports
 # Scenarios 1, 2, 8: pass through to their setup scripts
 # Scenario 6: passes through to its internal Setup-Scenario1 call
-$scenariosAcceptingExportParams = @("1", "2", "6", "8")
+$scenariosAcceptingExportParams = @("1", "2", "6", "8", "10")
 if ($scenarioNumber -and $scenariosAcceptingExportParams -contains $scenarioNumber) {
     if ($PSBoundParameters.ContainsKey('ExportConcurrency')) {
         $scenarioParams.ExportConcurrency = $ExportConcurrency

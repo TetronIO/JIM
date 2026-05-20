@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.ComponentModel.DataAnnotations;
+using JIM.Models.Core;
 using JIM.Models.Logic;
 
 namespace JIM.Web.Models.Api;
@@ -97,4 +98,19 @@ public class UpdateSyncRuleRequest
     /// Only applicable when Direction = Export.
     /// </summary>
     public bool? EnforceState { get; set; }
+
+    /// <summary>
+    /// For Import rules: Action to take when a CSO falls out of this rule's scope
+    /// (Disconnect breaks the join and recalls contributed attributes; RemainJoined
+    /// keeps the join intact and stops further attribute flow). Only applicable when
+    /// Direction = Import.
+    /// </summary>
+    public InboundOutOfScopeAction? InboundOutOfScopeAction { get; set; }
+
+    /// <summary>
+    /// For Export rules: Action to take when an MVO falls out of this rule's scope
+    /// (Disconnect breaks the join and leaves the CSO untouched in the target system;
+    /// Delete queues a delete PendingExport). Only applicable when Direction = Export.
+    /// </summary>
+    public OutboundDeprovisionAction? OutboundDeprovisionAction { get; set; }
 }
