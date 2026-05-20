@@ -431,8 +431,11 @@ else if (_syncRule != null)
                     <MudAlert Severity="Severity.Info" Class="mt-3" Variant="Variant.Outlined" Dense="true">
                         @if (_syncRule.InboundOutOfScopeAction == InboundOutOfScopeAction.Disconnect)
                         {
-                            <text>Objects that fall out of scope will be disconnected from their Metaverse object. This may trigger
-                            attribute removal and MVO deletion rules if it was the last connector.</text>
+                            <text>Objects that fall out of scope will be disconnected from their Metaverse object. Whether
+                            attributes contributed by this connected system are also recalled depends on the Connected System
+                            object type's "Remove contributed attributes on obsoletion" setting, the Metaverse object type's
+                            deletion grace period, and whether the Metaverse object is slated for immediate deletion. If this
+                            was the last connector, the Metaverse object type's deletion rule may also fire.</text>
                         }
                         else
                         {
