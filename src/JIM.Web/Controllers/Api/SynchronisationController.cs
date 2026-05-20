@@ -2308,13 +2308,20 @@ public class SynchronisationController(
         // Set the appropriate attribute based on sync rule direction
         if (syncRule.Direction == SyncRuleDirection.Export)
         {
-            // Export rules evaluate Metaverse attributes
+            // Export rules evaluate Metaverse attributes. Resolve the attribute from the
+            // sync rule's already-tracked MetaverseObjectType.Attributes graph rather than
+            // a separate Metaverse repository call: that would return a second untracked
+            // instance with the same Id and throw "another instance with the same key value
+            // is already being tracked" on SaveChanges. This mirrors the inbound path
+            // immediately below.
             if (!request.MetaverseAttributeId.HasValue)
                 return BadRequest(ApiErrorResponse.BadRequest("MetaverseAttributeId is required for export sync rules."));
 
-            var mvAttribute = await _application.Metaverse.GetMetaverseAttributeAsync(request.MetaverseAttributeId.Value);
+            var mvAttribute = syncRule.MetaverseObjectType?.Attributes
+                .FirstOrDefault(a => a.Id == request.MetaverseAttributeId.Value);
+
             if (mvAttribute == null)
-                return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {request.MetaverseAttributeId} not found."));
+                return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {request.MetaverseAttributeId} not found on this sync rule's Metaverse object type."));
 
             criterion.MetaverseAttribute = mvAttribute;
         }

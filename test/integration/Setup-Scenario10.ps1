@@ -141,7 +141,7 @@ $delimiterSetting = $csvConnectorFull.settings | Where-Object { $_.name -eq "Del
 $objectTypeSetting = $csvConnectorFull.settings | Where-Object { $_.name -eq "Object Type" }
 
 $hrSettings = @{}
-if ($filePathSetting) { $hrSettings[$filePathSetting.id] = @{ stringValue = "/connector-files/test-data/hr-users.csv" } }
+if ($filePathSetting) { $hrSettings[$filePathSetting.id] = @{ stringValue = "/connector-files/test-data/scenario10-hr-users.csv" } }
 if ($delimiterSetting) { $hrSettings[$delimiterSetting.id] = @{ stringValue = "," } }
 if ($objectTypeSetting) { $hrSettings[$objectTypeSetting.id] = @{ stringValue = "person" } }
 
@@ -366,10 +366,12 @@ Write-Host "  OK Created $importMappingsCreated import attribute flow mappings" 
 Write-TestStep "Step 12" "Adding scoping criteria to import rule"
 
 $importScopeGroup = New-JIMScopingCriteriaGroup -SyncRuleId $importRule.id -Type All -PassThru
+$hrDepartmentAttr = $hrPersonType.attributes | Where-Object { $_.name -eq "department" }
+if (-not $hrDepartmentAttr) { throw "HR 'department' attribute not found on person object type" }
 New-JIMScopingCriterion `
     -SyncRuleId $importRule.id `
     -GroupId $importScopeGroup.id `
-    -ConnectedSystemAttributeName "department" `
+    -ConnectedSystemAttributeId $hrDepartmentAttr.id `
     -ComparisonType Equals `
     -StringValue "Finance" | Out-Null
 
@@ -428,27 +430,50 @@ foreach ($mapping in $exportMappings) {
         Write-Host "    WARNING Could not map $($mapping.MVAttr) -> $($mapping.CSAttr)" -ForegroundColor Yellow
     }
 }
-Write-Host "  OK Created $exportMappingsCreated export attribute flow mappings" -ForegroundColor Green
+
+# Expression-based DN mapping. LDAP creates objects by DN, so the connector needs an
+# expression that yields the target DN for the CSO from the MVO's attributes.
+$dnAttr = $ldapUserType.attributes | Where-Object { $_.name -eq "distinguishedName" }
+if (-not $dnAttr) { throw "LDAP 'distinguishedName' attribute not found on schema; cannot configure DN mapping" }
+$dnExpression = if ($isOpenLDAP) {
+    '"uid=" + mv["Account Name"] + ",' + $DirectoryConfig.UserContainer + '"'
+} else {
+    '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=TestUsers,' + $DirectoryConfig.BaseDN + '"'
+}
+New-JIMSyncRuleMapping -SyncRuleId $exportRule.id `
+    -TargetConnectedSystemAttributeId $dnAttr.id `
+    -Expression $dnExpression | Out-Null
+$exportMappingsCreated++
+
+Write-Host "  OK Created $exportMappingsCreated export attribute flow mappings (incl. DN expression)" -ForegroundColor Green
 
 # Step 14: Add scoping criteria to export rule - Department Equals 'Finance' (MV-side)
 Write-TestStep "Step 14" "Adding scoping criteria to export rule"
 
 $exportScopeGroup = New-JIMScopingCriteriaGroup -SyncRuleId $exportRule.id -Type All -PassThru
+$mvDepartmentAttr = $mvAttributes | Where-Object { $_.name -eq "Department" }
+if (-not $mvDepartmentAttr) { throw "Metaverse 'Department' attribute not found" }
 New-JIMScopingCriterion `
     -SyncRuleId $exportRule.id `
     -GroupId $exportScopeGroup.id `
-    -MetaverseAttributeName "Department" `
+    -MetaverseAttributeId $mvDepartmentAttr.id `
     -ComparisonType Equals `
     -StringValue "Finance" | Out-Null
 
-# Set explicit default OutboundDeprovisionAction = Disconnect (overridden by scenario sub-tests)
-Set-JIMSyncRule -Id $exportRule.id -OutboundDeprovisionAction Disconnect | Out-Null
-Write-Host "  OK Export rule scoped to Department = 'Finance' (OutboundDeprovisionAction=Disconnect)" -ForegroundColor Green
+# Set explicit default OutboundDeprovisionAction = Disconnect (overridden by scenario sub-tests).
+# EnforceState is disabled here because Scenario 10 is testing scoping transitions, not drift
+# correction. With EnforceState=true (the production default), an LDAP Full Sync run during a
+# scope test queues corrective UPDATE pending exports for every minor LDAP/MV attribute mismatch,
+# which then conflict with the scoping-driven CREATE/DELETE pending exports we are actually
+# trying to verify. Drift detection is exercised in its own dedicated coverage elsewhere.
+Set-JIMSyncRule -Id $exportRule.id -OutboundDeprovisionAction Disconnect -EnforceState $false | Out-Null
+Write-Host "  OK Export rule scoped to Department = 'Finance' (OutboundDeprovisionAction=Disconnect, EnforceState=false)" -ForegroundColor Green
 
 # Step 15: Create Run Profiles
 Write-TestStep "Step 15" "Creating run profiles"
 
-New-JIMRunProfile -Name "Full Import" -ConnectedSystemId $hrSystem.id -RunType "FullImport" | Out-Null
+$hrCsvFilePath = "/connector-files/test-data/scenario10-hr-users.csv"
+New-JIMRunProfile -Name "Full Import" -ConnectedSystemId $hrSystem.id -RunType "FullImport" -FilePath $hrCsvFilePath | Out-Null
 New-JIMRunProfile -Name "Full Synchronisation" -ConnectedSystemId $hrSystem.id -RunType "FullSynchronisation" | Out-Null
 Write-Host "  OK HR run profiles: Full Import, Full Synchronisation" -ForegroundColor Green
 

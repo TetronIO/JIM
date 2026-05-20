@@ -9,8 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- ✨ The Sync Rule update API (`PUT /api/v1/synchronisation/sync-rules/{id}`) and the `Set-JIMSyncRule` cmdlet now accept `InboundOutOfScopeAction` and `OutboundDeprovisionAction`, so the actions taken when a CSO or MVO falls out of a rule's scope can be configured programmatically without going through the admin UI.
-- 🧪 Integration test Scenario 10 covers the full sync rule scoping transition matrix end-to-end: inbound enter/in-scope/exit (Disconnect and RemainJoined), outbound enter/exit (Disconnect and Delete), and the cross-system cascade where an inbound HR change deprovisions an MVO on the same sync run (#656).
+- ✨ The Sync Rule update API (`PUT /api/v1/synchronisation/sync-rules/{id}`) and the `Set-JIMSyncRule` cmdlet now accept `InboundOutOfScopeAction`, `OutboundDeprovisionAction`, and `EnforceState`, so the actions taken when a CSO or MVO falls out of a rule's scope and the rule's drift-detection setting can all be configured programmatically without going through the admin UI.
+- 🧪 Integration test Scenario 10 covers sync rule scoping behaviour end-to-end: inbound enter/in-scope-update/exit transitions (both Disconnect and RemainJoined actions), outbound provisioning of in-scope objects, and round-trip persistence of scoping criteria operators (Equals/Contains/StartsWith) across nested AND groups (#656). Outbound exit-scope and cross-system cascade transitions are tracked as follow-on work in the scenario header.
+
+### Fixed
+
+- 🐛 Adding a scoping criteria group or a criterion to an existing Sync Rule via the API no longer throws an EF Core change tracker conflict on save. The Sync Rule load path was using NoTracking with split queries, which produced duplicate instances of shared attribute entities and caused `Database.Update()` to fail with "another instance with the same key value is already being tracked". The load now uses tracked queries so identity resolution dedupes correctly and the change tracker handles property modifications, collection additions, and collection removals through normal SaveChanges. Adding a criterion through the API to an export rule also no longer fails with the same error: the controller now resolves the chosen Metaverse attribute from the already-tracked Sync Rule graph rather than issuing a second untracked read.
+
+### Changed
+
+- 💄 Metaverse Object and Connected System Object detail pages now show a skeleton loading state while data is being retrieved, replacing the blank-page-with-leftover-icon flash that briefly appeared on cold or large-object loads. Loads that finish within 200ms skip the skeleton entirely to avoid a flicker; loads exceeding 5 seconds surface an unobtrusive "still loading" message so administrators waiting on very large groups know the page is working.
 
 ## [0.10.3] - 2026-05-10
 

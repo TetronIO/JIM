@@ -112,6 +112,9 @@ function Set-JIMSyncRule {
         [ValidateSet('Disconnect', 'Delete')]
         [string]$OutboundDeprovisionAction,
 
+        [Parameter()]
+        [bool]$EnforceState,
+
         [switch]$PassThru
     )
 
@@ -152,6 +155,10 @@ function Set-JIMSyncRule {
 
         if ($PSBoundParameters.ContainsKey('OutboundDeprovisionAction')) {
             $body.outboundDeprovisionAction = $OutboundDeprovisionAction
+        }
+
+        if ($PSBoundParameters.ContainsKey('EnforceState')) {
+            $body.enforceState = $EnforceState
         }
 
         if ($body.Count -eq 0) {
