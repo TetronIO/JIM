@@ -33,8 +33,13 @@ function Set-JIMSyncRule {
 
     .PARAMETER InboundOutOfScopeAction
         For Import rules: action to take when a CSO falls out of this rule's scope.
-        Valid values: Disconnect (break the join and recall contributed attributes),
-        RemainJoined (keep the join intact and stop further attribute flow).
+        Valid values:
+          - Disconnect: break the CSO -> MVO join. Whether attributes contributed by
+            this connected system are also recalled from the MVO depends on the CSO
+            type's RemoveContributedAttributesOnObsoletion flag, the MVO type's
+            deletion grace period, and whether the MVO is slated for immediate
+            deletion.
+          - RemainJoined: keep the join intact and stop further attribute flow.
 
     .PARAMETER OutboundDeprovisionAction
         For Export rules: action to take when an MVO falls out of this rule's scope.

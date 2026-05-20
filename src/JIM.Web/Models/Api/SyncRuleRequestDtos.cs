@@ -100,9 +100,12 @@ public class UpdateSyncRuleRequest
     public bool? EnforceState { get; set; }
 
     /// <summary>
-    /// For Import rules: Action to take when a CSO falls out of this rule's scope
-    /// (Disconnect breaks the join and recalls contributed attributes; RemainJoined
-    /// keeps the join intact and stops further attribute flow). Only applicable when
+    /// For Import rules: Action to take when a CSO falls out of this rule's scope.
+    /// Disconnect breaks the CSO -> MVO join; whether the attributes contributed by
+    /// this connected system are also recalled from the MVO depends on the CSO type's
+    /// RemoveContributedAttributesOnObsoletion flag, the MVO type's deletion grace
+    /// period, and whether the MVO is slated for immediate deletion. RemainJoined
+    /// keeps the join intact and stops further attribute flow. Only applicable when
     /// Direction = Import.
     /// </summary>
     public InboundOutOfScopeAction? InboundOutOfScopeAction { get; set; }
