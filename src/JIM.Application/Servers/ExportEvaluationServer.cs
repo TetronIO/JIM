@@ -500,29 +500,13 @@ public class ExportEvaluationServer
                 return null; // No pending export needed for disconnect
 
             case OutboundDeprovisionAction.Delete:
-                // Create a pending export to delete the CSO from the target system
-                Log.Information("HandleOutboundDeprovisioningAsync: Creating delete PendingExport for CSO {CsoId} (OutboundDeprovisionAction=Delete)",
+                // Create (or reclaim) a Delete PendingExport for this CSO. The helper handles
+                // the collision case where a previous export's PE is still attached to the CSO
+                // because the next confirming import hasn't run yet to reconcile it away.
+                Log.Information("HandleOutboundDeprovisioningAsync: Ensuring delete PendingExport for CSO {CsoId} (OutboundDeprovisionAction=Delete)",
                     cso.Id);
 
-                // Only set the FK property (ConnectedSystemObjectId), NOT the navigation property (ConnectedSystemObject).
-                // Setting both can cause EF Core change tracker conflicts where the FK gets overwritten.
-                var pendingExport = new PendingExport
-                {
-                    Id = Guid.NewGuid(),
-                    ConnectedSystemId = cso.ConnectedSystemId,
-                    ConnectedSystemObjectId = cso.Id,
-                    ChangeType = PendingExportChangeType.Delete,
-                    Status = PendingExportStatus.Pending,
-                    SourceMetaverseObjectId = mvo.Id,
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                await SyncRepo.CreatePendingExportAsync(pendingExport);
-
-                Log.Information("HandleOutboundDeprovisioningAsync: Created delete PendingExport {ExportId} for CSO {CsoId} in system {SystemId}",
-                    pendingExport.Id, cso.Id, cso.ConnectedSystemId);
-
-                return pendingExport;
+                return await EnsureDeletePendingExportAsync(cso, mvo.Id);
 
             default:
                 Log.Warning("HandleOutboundDeprovisioningAsync: Unknown OutboundDeprovisionAction {Action} for rule {RuleName}",
@@ -563,56 +547,15 @@ public class ExportEvaluationServer
                 continue;
             }
 
-            // Check for an existing pending export for this CSO before creating a new one.
-            // This prevents duplicate PEs when EvaluateMvoDeletionAsync is called multiple times
-            // for the same MVO (e.g., via housekeeping retry after a failed deletion attempt),
-            // or when a Create PE exists from provisioning that was never exported.
-            var existingPe = await SyncRepo.GetPendingExportByConnectedSystemObjectIdAsync(cso.Id);
-
-            if (existingPe != null)
-            {
-                if (existingPe.ChangeType == PendingExportChangeType.Delete)
-                {
-                    // Delete PE already exists — skip creation to avoid duplicates
-                    Log.Information("EvaluateMvoDeletionAsync: Delete PendingExport {ExistingPeId} already exists for CSO {CsoId} (status: {Status}). Skipping duplicate creation.",
-                        existingPe.Id, cso.Id, existingPe.Status);
-                    pendingExports.Add(existingPe);
-
-                    // Still disconnect the CSO
-                    cso.MetaverseObjectId = null;
-                    cso.JoinType = ConnectedSystemObjectJoinType.NotJoined;
-                    cso.DateJoined = null;
-                    await SyncRepo.UpdateConnectedSystemObjectAsync(cso);
-                    continue;
-                }
-
-                // A non-Delete PE exists (e.g., a stale Create or Update PE from provisioning).
-                // Delete it and replace with the Delete PE, since the MVO is being deleted.
-                Log.Information("EvaluateMvoDeletionAsync: Replacing existing {ChangeType} PendingExport {ExistingPeId} for CSO {CsoId} with Delete PE",
-                    existingPe.ChangeType, existingPe.Id, cso.Id);
-                await SyncRepo.DeletePendingExportAsync(existingPe);
-            }
-
-            // Only set the FK property (ConnectedSystemObjectId), NOT the navigation property (ConnectedSystemObject).
-            // Setting both can cause EF Core change tracker conflicts where the FK gets overwritten.
-            var pendingExport = new PendingExport
-            {
-                Id = Guid.NewGuid(),
-                ConnectedSystemId = cso.ConnectedSystemId,
-                ConnectedSystemObjectId = cso.Id,
-                ChangeType = PendingExportChangeType.Delete,
-                Status = PendingExportStatus.Pending,
-                SourceMetaverseObjectId = mvo.Id,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            // Store the secondary external ID (e.g., DN for LDAP) in AttributeValueChanges.
-            // This is critical for delete exports because the CSO may be deleted before the export runs,
-            // and connectors like LDAP need the DN to perform the delete operation.
+            // Build the secondary external ID (e.g. DN for LDAP) as an attribute change to
+            // attach to the PE. The CSO will be disconnected from the MVO right after this and
+            // may be deleted by housekeeping before the export runs; connectors like LDAP need
+            // the DN preserved on the PE to perform the actual delete.
+            var attributeValueChanges = new List<PendingExportAttributeValueChange>();
             var secondaryIdAttrValue = cso.SecondaryExternalIdAttributeValue;
             if (secondaryIdAttrValue?.Attribute != null && !string.IsNullOrEmpty(secondaryIdAttrValue.StringValue))
             {
-                pendingExport.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+                attributeValueChanges.Add(new PendingExportAttributeValueChange
                 {
                     Id = Guid.NewGuid(),
                     Attribute = secondaryIdAttrValue.Attribute,
@@ -621,8 +564,8 @@ public class ExportEvaluationServer
                     ChangeType = PendingExportAttributeChangeType.Update
                 });
 
-                Log.Debug("EvaluateMvoDeletionAsync: Stored secondary external ID '{Value}' (attr {AttrName}) for delete export {ExportId}",
-                    secondaryIdAttrValue.StringValue, secondaryIdAttrValue.Attribute.Name, pendingExport.Id);
+                Log.Debug("EvaluateMvoDeletionAsync: Will store secondary external ID '{Value}' (attr {AttrName}) on delete PE for CSO {CsoId}",
+                    secondaryIdAttrValue.StringValue, secondaryIdAttrValue.Attribute.Name, cso.Id);
             }
             else
             {
@@ -630,7 +573,7 @@ public class ExportEvaluationServer
                     cso.Id);
             }
 
-            await SyncRepo.CreatePendingExportAsync(pendingExport);
+            var pendingExport = await EnsureDeletePendingExportAsync(cso, mvo.Id, attributeValueChanges);
             pendingExports.Add(pendingExport);
 
             // Disconnect the CSO from the MVO to prevent spurious sync processing after the MVO is deleted.
@@ -641,11 +584,81 @@ public class ExportEvaluationServer
             cso.DateJoined = null;
             await SyncRepo.UpdateConnectedSystemObjectAsync(cso);
 
-            Log.Information("EvaluateMvoDeletionAsync: Created delete PendingExport {ExportId} for CSO {CsoId} in system {SystemId}, CSO disconnected from MVO",
+            Log.Information("EvaluateMvoDeletionAsync: Delete PendingExport {ExportId} ensured for CSO {CsoId} in system {SystemId}, CSO disconnected from MVO",
                 pendingExport.Id, cso.Id, cso.ConnectedSystemId);
         }
 
         return pendingExports;
+    }
+
+    /// <summary>
+    /// Creates a Delete PendingExport for the given CSO, handling collisions with any
+    /// existing PendingExport already attached to that CSO.
+    /// </summary>
+    /// <remarks>
+    /// PendingExports has a unique index on ConnectedSystemObjectId (filtered NOT NULL),
+    /// so only one PE per CSO is allowed at a time. After a successful export the PE row
+    /// stays attached to the CSO until the next import on the target system reconciles
+    /// it away; if a sync fires the deprovision cascade or an MVO deletion in that window
+    /// (overlapping schedules, late or failed imports), a naive insert hits the unique
+    /// constraint. This helper centralises the collision policy so every Delete-PE-creation
+    /// path observes it: if an existing Delete PE is found it's reused; any other change
+    /// type is deleted and replaced with the Delete PE.
+    /// </remarks>
+    /// <param name="cso">The CSO to deprovision.</param>
+    /// <param name="sourceMetaverseObjectId">The MVO that triggered the deprovisioning, recorded on the PE for causality tracing.</param>
+    /// <param name="attributeValueChanges">
+    /// Optional attribute value changes to attach to a freshly-created PE (for example, the
+    /// secondary external ID so a connector can still resolve the target DN after the CSO
+    /// is detached from the MVO). Ignored when reusing an existing Delete PE.
+    /// </param>
+    /// <returns>The Delete PendingExport for the CSO — either the existing one reused, or a newly created one.</returns>
+    private async Task<PendingExport> EnsureDeletePendingExportAsync(
+        ConnectedSystemObject cso,
+        Guid sourceMetaverseObjectId,
+        List<PendingExportAttributeValueChange>? attributeValueChanges = null)
+    {
+        var existingPe = await SyncRepo.GetPendingExportByConnectedSystemObjectIdAsync(cso.Id);
+
+        if (existingPe != null)
+        {
+            if (existingPe.ChangeType == PendingExportChangeType.Delete)
+            {
+                Log.Information("EnsureDeletePendingExportAsync: Delete PendingExport {ExistingPeId} already exists for CSO {CsoId} (status: {Status}). Reusing.",
+                    existingPe.Id, cso.Id, existingPe.Status);
+                return existingPe;
+            }
+
+            Log.Information("EnsureDeletePendingExportAsync: Replacing existing {ChangeType} PendingExport {ExistingPeId} for CSO {CsoId} with Delete PE",
+                existingPe.ChangeType, existingPe.Id, cso.Id);
+            await SyncRepo.DeletePendingExportAsync(existingPe);
+        }
+
+        // Only set the FK property (ConnectedSystemObjectId), NOT the navigation property (ConnectedSystemObject).
+        // Setting both can cause EF Core change tracker conflicts where the FK gets overwritten.
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = cso.ConnectedSystemId,
+            ConnectedSystemObjectId = cso.Id,
+            ChangeType = PendingExportChangeType.Delete,
+            Status = PendingExportStatus.Pending,
+            SourceMetaverseObjectId = sourceMetaverseObjectId,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        if (attributeValueChanges != null)
+        {
+            foreach (var avc in attributeValueChanges)
+                pendingExport.AttributeValueChanges.Add(avc);
+        }
+
+        await SyncRepo.CreatePendingExportAsync(pendingExport);
+
+        Log.Information("EnsureDeletePendingExportAsync: Created delete PendingExport {ExportId} for CSO {CsoId} in system {SystemId}",
+            pendingExport.Id, cso.Id, cso.ConnectedSystemId);
+
+        return pendingExport;
     }
 
     /// <summary>

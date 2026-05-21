@@ -415,6 +415,155 @@ public class ExportEvaluationTests
             "Should create exactly one new Delete PE");
     }
 
+    #region EvaluateOutOfScopeExportsAsync (cascade) — Delete-PE collision handling
+
+    /// <summary>
+    /// Pushes the MVO out of the export rule's scope (so the cascade fires) and configures
+    /// the rule with <c>OutboundDeprovisionAction.Delete</c>. Returns the provisioned CSO so
+    /// callers can pre-seed an existing PendingExport on it.
+    /// </summary>
+    private ConnectedSystemObject ArrangeCascadeDeleteWithOutOfScopeMvo(MetaverseObject mvo)
+    {
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        exportRule.OutboundDeprovisionAction = OutboundDeprovisionAction.Delete;
+
+        // Scope criterion that the MVO cannot satisfy (its EmployeeId is "E123").
+        exportRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Type = SearchGroupType.All,
+            Criteria = new List<SyncRuleScopingCriteria>
+            {
+                new()
+                {
+                    MetaverseAttribute = employeeIdAttr,
+                    ComparisonType = SearchComparisonType.Equals,
+                    StringValue = "OUT-OF-SCOPE-MARKER"
+                }
+            }
+        });
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var provisionedCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = exportRule.ConnectedSystemId,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned
+        };
+
+        ConnectedSystemObjectsData.Add(provisionedCso);
+        SyncRepo.SeedConnectedSystemObject(provisionedCso);
+        return provisionedCso;
+    }
+
+    /// <summary>
+    /// Tests the bug repro: when the cascade fires and the target CSO still has an
+    /// <c>Exported</c>-status PE from a prior export (the next confirming import hasn't
+    /// reconciled it away yet), creating a Delete PE used to throw a unique-constraint
+    /// violation against PostgreSQL's PendingExports index. After the fix, the cascade
+    /// reuses the existing Delete PE rather than duplicating it.
+    /// </summary>
+    [Test]
+    public async Task EvaluateOutOfScopeExportsAsync_WhenDeletePeAlreadyExistsOnTargetCso_ReusesItAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var cso = ArrangeCascadeDeleteWithOutOfScopeMvo(mvo);
+
+        var existingDeletePe = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = cso.ConnectedSystemId,
+            ConnectedSystemObjectId = cso.Id,
+            ConnectedSystemObject = cso,
+            ChangeType = PendingExportChangeType.Delete,
+            Status = PendingExportStatus.Exported,
+            SourceMetaverseObjectId = mvo.Id,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5)
+        };
+        PendingExportsData.Add(existingDeletePe);
+        SyncRepo.SeedPendingExport(existingDeletePe);
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(mvo);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Count, Is.EqualTo(1), "Cascade should still report exactly one PE");
+        Assert.That(result[0].Id, Is.EqualTo(existingDeletePe.Id), "Cascade should reuse the existing Delete PE, not duplicate it");
+        Assert.That(SyncRepo.PendingExports.Count, Is.EqualTo(1), "Repo must still contain exactly one PE");
+    }
+
+    /// <summary>
+    /// When a non-Delete PE (typically a stale Create from provisioning that never
+    /// completed an export round-trip) is attached to the target CSO at cascade time,
+    /// it is deleted and replaced with a Delete PE.
+    /// </summary>
+    [Test]
+    public async Task EvaluateOutOfScopeExportsAsync_WhenCreatePeExistsOnTargetCso_ReplacesWithDeletePeAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var cso = ArrangeCascadeDeleteWithOutOfScopeMvo(mvo);
+
+        var existingCreatePe = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = cso.ConnectedSystemId,
+            ConnectedSystemObjectId = cso.Id,
+            ConnectedSystemObject = cso,
+            ChangeType = PendingExportChangeType.Create,
+            Status = PendingExportStatus.Pending,
+            SourceMetaverseObjectId = mvo.Id,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5)
+        };
+        PendingExportsData.Add(existingCreatePe);
+        SyncRepo.SeedPendingExport(existingCreatePe);
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(mvo);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Count, Is.EqualTo(1), "Cascade should produce exactly one PE");
+        Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Delete), "Cascade should produce a Delete PE");
+        Assert.That(result[0].Id, Is.Not.EqualTo(existingCreatePe.Id), "The Create PE should have been replaced");
+        Assert.That(SyncRepo.PendingExports.Values.Count(pe => pe.ChangeType == PendingExportChangeType.Delete), Is.EqualTo(1),
+            "Repo should contain exactly one Delete PE");
+        Assert.That(SyncRepo.PendingExports.Values.Any(pe => pe.Id == existingCreatePe.Id), Is.False,
+            "The original Create PE should have been removed");
+    }
+
+    /// <summary>
+    /// Baseline cascade behaviour: no existing PE, a fresh Delete PE is created.
+    /// </summary>
+    [Test]
+    public async Task EvaluateOutOfScopeExportsAsync_WhenNoExistingPe_CreatesNewDeletePeAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var cso = ArrangeCascadeDeleteWithOutOfScopeMvo(mvo);
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(mvo);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Count, Is.EqualTo(1), "Cascade should produce exactly one PE");
+        Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Delete));
+        Assert.That(result[0].ConnectedSystemObjectId, Is.EqualTo(cso.Id));
+        Assert.That(result[0].SourceMetaverseObjectId, Is.EqualTo(mvo.Id));
+    }
+
+    #endregion
+
     /// <summary>
     /// Tests that MVOs without a type set are handled gracefully.
     /// </summary>
