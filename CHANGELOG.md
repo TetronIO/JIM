@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - 💄 Metaverse Object and Connected System Object detail pages now show a skeleton loading state while data is being retrieved, replacing the blank-page-with-leftover-icon flash that briefly appeared on cold or large-object loads. Loads that finish within 200ms skip the skeleton entirely to avoid a flicker; loads exceeding 5 seconds surface an unobtrusive "still loading" message so administrators waiting on very large groups know the page is working.
+- ⚡ Several internal call sites that only needed the connected system entity for a null check, a name read, or a single scalar property now route through the lightweight `GetConnectedSystemCoreAsync` retrieval variant rather than the full graph load (#494). Covers connected system deletion and deletion-preview, run profile create/delete/update, sync rule create/update/delete and object matching rule context lookup in `ConnectedSystemServer`; sync/clear/delete worker task creation in `TaskingServer`; and the clear-objects and deletion error-recovery paths in `Worker`. The remaining `GetConnectedSystemAsync` callers (the synchronisation engine, schema and partition mutation endpoints, the GET connected system detail endpoint, and partition selection validation) genuinely need the full graph and are unchanged.
 
 ## [0.10.3] - 2026-05-10
 

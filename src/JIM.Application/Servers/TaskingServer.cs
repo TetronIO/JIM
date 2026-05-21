@@ -76,7 +76,8 @@ namespace JIM.Application.Servers
                 partitionWarning = validationResult.WarningMessage;
 
                 // every CRUD operation requires tracking with an activity...
-                var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemAsync(synchronisationWorkerTask.ConnectedSystemId);
+                // Core: only .Name is read for activity context; run profiles are loaded separately.
+                var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemCoreAsync(synchronisationWorkerTask.ConnectedSystemId);
                 var runProfiles = await Application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(synchronisationWorkerTask.ConnectedSystemId);
                 var runProfile = runProfiles.Single(rp => rp.Id == synchronisationWorkerTask.ConnectedSystemRunProfileId);
                 var activity = new Activity
@@ -116,7 +117,8 @@ namespace JIM.Application.Servers
             else if (workerTask is ClearConnectedSystemObjectsWorkerTask clearConnectedSystemObjectsTask)
             {
                 // every crud operation requires tracking with an activity...
-                var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemAsync(clearConnectedSystemObjectsTask.ConnectedSystemId);
+                // Core: only .Name is read for activity context.
+                var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemCoreAsync(clearConnectedSystemObjectsTask.ConnectedSystemId);
                 var activity = new Activity
                 {
                     TargetName = connectedSystem?.Name,
@@ -133,7 +135,8 @@ namespace JIM.Application.Servers
             {
                 // Connected System deletion requires tracking with an activity for audit purposes.
                 // The TargetName must be populated since the Connected System will be deleted.
-                var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemAsync(deleteConnectedSystemTask.ConnectedSystemId);
+                // Core: only .Name is read for activity context.
+                var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemCoreAsync(deleteConnectedSystemTask.ConnectedSystemId);
                 var activity = new Activity
                 {
                     TargetName = connectedSystem?.Name ?? $"Connected System {deleteConnectedSystemTask.ConnectedSystemId}",
