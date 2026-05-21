@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 The integration test `Get-LDAPUser` helper no longer reports a non-existent user as "exists" against Samba AD. Samba returns referral lines (`# refldap://...`) even when the search filter matches no objects; the previous parser treated those referrals as attribute key/value pairs and built a non-empty result hashtable, causing `Test-LDAPUserExists` to return true for any deleted user. The parser now skips LDIF comment lines and requires a parsed `dn:` attribute before returning a result.
 - 🐛 Adding a scoping criteria group or a criterion to an existing Sync Rule via the API no longer throws an EF Core change tracker conflict on save. The Sync Rule load path was using NoTracking with split queries, which produced duplicate instances of shared attribute entities and caused `Database.Update()` to fail with "another instance with the same key value is already being tracked". The load now uses tracked queries so identity resolution dedupes correctly and the change tracker handles property modifications, collection additions, and collection removals through normal SaveChanges. Adding a criterion through the API to an export rule also no longer fails with the same error: the controller now resolves the chosen Metaverse attribute from the already-tracked Sync Rule graph rather than issuing a second untracked read.
 
 ### Changed

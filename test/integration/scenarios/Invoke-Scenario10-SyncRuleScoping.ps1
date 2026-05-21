@@ -302,7 +302,30 @@ function Reset-JIMForCascadeTest {
     $null = Invoke-FullImportAndSync -SystemId $hrSys.id -Label "Cascade-baseline (project)"
     $null = Invoke-Export -SystemId $ldapSys.id -Label "Cascade-baseline (export)"
 
-    Write-Host "  OK Cascade baseline ready" -ForegroundColor Green
+    # A successful export leaves a PendingExport row with status=Exported attached to each
+    # newly-created CSO. The PendingExports table has a unique index on ConnectedSystemObjectId
+    # (filtered WHERE NOT NULL), so a subsequent cascade attempt to queue a Delete PE for
+    # the same CSO clashes with the leftover Exported row. The reconciliation that clears
+    # the stale row only runs during an import on the target system, so we run a confirming
+    # LDAP Full Import here to mirror the normal production loop.
+    $impProfileLdap = (Get-JIMRunProfile -ConnectedSystemId $ldapSys.id) | Where-Object { $_.name -eq "Full Import" }
+    if ($impProfileLdap) {
+        $confirm = Start-JIMRunProfile -ConnectedSystemId $ldapSys.id -RunProfileId $impProfileLdap.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $confirm.activityId -Name "Cascade-baseline (confirming LDAP import)"
+    }
+
+    # Strip the import rule's scoping so subsequent attribute changes (e.g. Department:
+    # Finance -> Sales) actually flow to the MVO. With the default Setup-Scenario10 config
+    # both rules are scoped on Department=Finance; if we left the import rule scoped, a
+    # CSO moving to Sales would be marked out-of-inbound-scope and attribute flow would be
+    # suppressed, leaving the MVO's Department stuck at Finance. The outbound cascade
+    # (EvaluateOutOfScopeExportsAsync) only fires when an MVO attribute genuinely changes,
+    # so we need attribute flow to be unconditional here.
+    foreach ($group in @(Get-JIMScopingCriteria -SyncRuleId $impRule)) {
+        Remove-JIMScopingCriteriaGroup -SyncRuleId $impRule -GroupId $group.id -Confirm:$false | Out-Null
+    }
+
+    Write-Host "  OK Cascade baseline ready (LDAP confirming import done, import scope cleared)" -ForegroundColor Green
     return @{ HRSystemId = $hrSys.id; LDAPSystemId = $ldapSys.id; ImportRuleId = $impRule; ExportRuleId = $expRule }
 }
 
@@ -591,8 +614,11 @@ try {
             $null = $r
 
             # In Disconnect mode the inline cascade should NOT queue a Delete PendingExport.
-            $pendingDeletes = Get-JIMPendingExport -ConnectedSystemId $ids.LDAPSystemId -Count -ChangeType Delete
-            $deleteCount = if ($pendingDeletes -is [int]) { $pendingDeletes } else { $pendingDeletes.count }
+            # Enumerate rather than use -Count: the count endpoint returns a primitive that
+            # Invoke-RestMethod sometimes deserialises in a way that breaks strict-mode
+            # property access; enumerating + filtering is more robust.
+            $pendingExports = @(Get-JIMPendingExport -ConnectedSystemId $ids.LDAPSystemId -All)
+            $deleteCount = @($pendingExports | Where-Object { $_.changeType -eq 'Delete' }).Count
             if ($deleteCount -ne 0) {
                 throw "T6 Disconnect mode queued $deleteCount Delete PendingExport(s); expected 0"
             }
@@ -671,8 +697,10 @@ try {
 
             Set-JIMSyncRule -Id $ids.ExportRuleId -OutboundDeprovisionAction Delete | Out-Null
 
-            $beforeDeletes = Get-JIMPendingExport -ConnectedSystemId $ids.LDAPSystemId -Count -ChangeType Delete
-            $beforeCount = if ($beforeDeletes -is [int]) { $beforeDeletes } else { $beforeDeletes.count }
+            # Enumerate (not -Count) to side-step the strict-mode primitive-deserialisation
+            # quirk observed on the count endpoint.
+            $beforeDeletes = @(Get-JIMPendingExport -ConnectedSystemId $ids.LDAPSystemId -All)
+            $beforeCount = @($beforeDeletes | Where-Object { $_.changeType -eq 'Delete' }).Count
 
             # Move Aria out of scope. We run import + sync only, NOT export.
             $users[0].department = "Sales"
@@ -681,8 +709,8 @@ try {
             $null = $r
 
             # Inline cascade should have queued a Delete PendingExport on the LDAP system.
-            $afterDeletes = Get-JIMPendingExport -ConnectedSystemId $ids.LDAPSystemId -Count -ChangeType Delete
-            $afterCount = if ($afterDeletes -is [int]) { $afterDeletes } else { $afterDeletes.count }
+            $afterDeletes = @(Get-JIMPendingExport -ConnectedSystemId $ids.LDAPSystemId -All)
+            $afterCount = @($afterDeletes | Where-Object { $_.changeType -eq 'Delete' }).Count
 
             if ($afterCount -le $beforeCount) {
                 throw "T8 expected inline cascade to queue a Delete PendingExport on LDAP after inbound sync; before=$beforeCount, after=$afterCount"
