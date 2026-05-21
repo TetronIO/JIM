@@ -1,0 +1,31 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Composite skeleton that mirrors the silhouette of Pages/Admin/ConnectedSystemObjectDetail.razor:
+   a page header, a one-line subtitle, a horizontal info chip strip, an outlined tab bar
+   with two tabs, and the attribute table body. *@
+<PageHeaderSkeleton Animation="@Animation" />
+
+<div class="cso-detail-skeleton-subtitle mt-2">
+    <MudSkeleton SkeletonType="SkeletonType.Text" Width="80%" Height="18px" Animation="@Animation" />
+    <MudSkeleton SkeletonType="SkeletonType.Text" Width="55%" Height="18px" Animation="@Animation" />
+</div>
+
+@* ─── Info chip strip ─── *@
+<MudPaper Class="pa-4 mt-4" Outlined="true">
+    <div class="cso-detail-skeleton-chip-row">
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="120px" Height="28px" Animation="@Animation" />
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="140px" Height="28px" Animation="@Animation" />
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="180px" Height="28px" Animation="@Animation" />
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="160px" Height="28px" Animation="@Animation" />
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="200px" Height="28px" Animation="@Animation" />
+    </div>
+</MudPaper>
+
+<TabBarSkeleton TabCount="2" Animation="@Animation" />
+<AttributeTableSkeleton Rows="8" Animation="@Animation" />
+
+@code {
+    [Parameter]
+    public Animation Animation { get; set; } = Animation.Wave;
+}
