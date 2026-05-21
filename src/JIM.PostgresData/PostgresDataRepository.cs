@@ -29,6 +29,7 @@ public class PostgresDataRepository : IRepository
     public ISecurityRepository Security { get; }
     public ISeedingRepository Seeding { get; }
     public IServiceSettingsRepository ServiceSettings { get; }
+    public ISystemRepository System { get; }
     public ITaskingRepository Tasking { get; }
     public ITrustedCertificateRepository TrustedCertificates { get; }
 
@@ -74,6 +75,7 @@ public class PostgresDataRepository : IRepository
         Security = new SecurityRepository(this);
         Seeding = new SeedingRepository(this);
         ServiceSettings = new ServiceSettingsRepository(this);
+        System = new SystemRepository(this);
         Tasking = new TaskingRepository(this);
         TrustedCertificates = new TrustedCertificateRepository(this);
     }

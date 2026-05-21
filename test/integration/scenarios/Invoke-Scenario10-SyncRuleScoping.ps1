@@ -16,25 +16,21 @@
 
     Outbound scoping (Export rule, LDAP target):
       - OutboundEnterScope:      MVO with Department=Finance -> CSO provisioned in LDAP
+      - OutboundExitDisconnect:  MVO leaves Finance with Disconnect action -> LDAP row stays,
+                                 no PendingExport queued
+      - OutboundExitDelete:      MVO leaves Finance with Delete action -> Deprovisioned RPEI
+                                 on the next Export run, LDAP row removed
+      - CrossSystemCascade:      EvaluateOutOfScopeExportsAsync runs inline during inbound
+                                 sync, so the Delete PendingExport appears immediately after
+                                 the sync (before any Export run)
+
+    Each of the three cascade sub-tests above runs against a freshly reset JIM instance
+    (Reset-JIMSystem followed by Setup-Scenario10) so the assertions are not polluted
+    by intermediate state from the inbound block.
 
     Scoping criteria operators (sandbox rule built on the fly):
       - CriteriaOperators:       Text Equals/Contains/StartsWith + Numeric LessThan +
                                  Boolean equality + nested AND/OR groups all evaluate correctly.
-
-    Deferred follow-on coverage (issue #656 mentions these; tracked separately because
-    they need per-test connector-system isolation to verify reliably in a single run):
-      - OutboundExitDisconnect   verify Disconnect mode keeps LDAP row, no PendingExport queued
-      - OutboundExitDelete       verify Delete mode emits Deprovisioned RPEI + removes LDAP row
-      - CrossSystemCascade       verify inline cascade during inbound sync queues PendingExport(Delete)
-
-      The state coupling between the inbound transitions and a long-running outbound
-      block makes single-run verification of these brittle: by the time the outbound
-      assertions fire, the MVO graph has been through several enter/exit transitions
-      and pending-export reconciliation that produce side effects (orphan MVOs,
-      stale CSO stubs from prior export attempts) which break the "isolate one
-      transition" assertions. Verifying these reliably needs each sub-test to run
-      against a freshly torn-down JIM stack, which is a separate runner-level
-      concern rather than a scenario-script concern.
 
     Coverage that lives in other scenarios (referenced, not duplicated here):
       - WhenAuthoritativeSourceDisconnected leaver cascade -> Scenario 1, Scenario 4
@@ -71,7 +67,8 @@ param(
     [ValidateSet(
         "InboundEnterScope", "InboundInScopeUpdate",
         "InboundExitDisconnect", "InboundExitRemainJoined",
-        "OutboundEnterScope", "CriteriaOperators", "All")]
+        "OutboundEnterScope", "OutboundExitDisconnect", "OutboundExitDelete",
+        "CrossSystemCascade", "CriteriaOperators", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -256,6 +253,57 @@ function Reset-ToOutboundBaseline {
     $null = $r
 
     Write-Host "  OK Outbound baseline ready" -ForegroundColor Green
+}
+
+function Reset-JIMForCascadeTest {
+    param([object[]]$BaseUsers, [hashtable]$DirectoryConfig)
+
+    # Full factory reset: wipes JIM's database back to post-seed state (preserves
+    # built-in attributes, types, roles, connector definitions, and the infrastructure
+    # API key). Each cascade sub-test starts from this clean slate so the MVO graph
+    # carries zero residual state from earlier tests.
+    Write-Host "  Running Reset-JIMSystem..." -ForegroundColor Gray
+    $resetResult = Reset-JIMSystem -Force
+    Write-Host ("  OK Reset complete (removed {0} connected systems, {1} MVOs, {2} sync rules)" -f `
+        $resetResult.connectedSystemsRemoved, `
+        $resetResult.metaverseObjectsRemoved, `
+        $resetResult.syncRulesRemoved) -ForegroundColor Gray
+
+    # Reset wipes JIM's view of the world, but the LDAP container still holds whatever
+    # rows earlier exports created. Wipe the test users so the next provisioning run
+    # creates them cleanly.
+    Remove-LDAPTestUsers -Users $BaseUsers -DirectoryConfig $DirectoryConfig
+
+    # Re-run setup to rebuild connected systems, sync rules, run profiles, etc.
+    Write-Host "  Re-running Setup-Scenario10..." -ForegroundColor Gray
+    & "$PSScriptRoot/../Setup-Scenario10.ps1" `
+        -JIMUrl $JIMUrl `
+        -ApiKey $ApiKey `
+        -Template $Template `
+        -ExportConcurrency $ExportConcurrency `
+        -MaxExportParallelism $MaxExportParallelism `
+        -DirectoryConfig $DirectoryConfig
+
+    # Setup-Scenario10 removes and re-imports the module, so we need to do the same
+    # here before the caller continues with cmdlet calls.
+    $modulePath = "$PSScriptRoot/../../../src/JIM.PowerShell/JIM.psd1"
+    Import-Module $modulePath -Force -ErrorAction Stop
+    Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
+
+    # Seed the baseline HR CSV (everyone in Finance / in scope) and project the MVOs,
+    # then export so the LDAP target carries the matching CSOs.
+    Write-HRCsv -Users $BaseUsers
+
+    $hrSys = (Get-JIMConnectedSystem) | Where-Object { $_.name -eq $hrSystemName }
+    $ldapSys = (Get-JIMConnectedSystem) | Where-Object { $_.name -eq $ldapSystemName }
+    $impRule = Get-RuleId -Name $importRuleName
+    $expRule = Get-RuleId -Name $exportRuleName
+
+    $null = Invoke-FullImportAndSync -SystemId $hrSys.id -Label "Cascade-baseline (project)"
+    $null = Invoke-Export -SystemId $ldapSys.id -Label "Cascade-baseline (export)"
+
+    Write-Host "  OK Cascade baseline ready" -ForegroundColor Green
+    return @{ HRSystemId = $hrSys.id; LDAPSystemId = $ldapSys.id; ImportRuleId = $impRule; ExportRuleId = $expRule }
 }
 
 function Invoke-FullImportAndSync {
@@ -517,33 +565,136 @@ try {
     }
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Deferred coverage (issue #656):
-    #
-    #   - OutboundExitDisconnect  Move an in-scope MVO out of scope with
-    #                             OutboundDeprovisionAction = Disconnect and
-    #                             verify the LDAP row stays + no PendingExport
-    #                             is queued (HandleOutboundDeprovisioningAsync
-    #                             returns null for Disconnect).
-    #
-    #   - OutboundExitDelete      Same shape as Disconnect but with
-    #                             OutboundDeprovisionAction = Delete; expect
-    #                             a Deprovisioned RPEI on the next Export run
-    #                             and the LDAP row to be removed.
-    #
-    #   - CrossSystemCascade      Verify EvaluateOutOfScopeExportsAsync runs
-    #                             inline during inbound sync (not deferred):
-    #                             with Delete mode, a Delete PendingExport
-    #                             must appear immediately after the inbound
-    #                             sync, before any Export run.
-    #
-    # These three transitions need fully-isolated per-test connector state to
-    # verify reliably in a single scenario run — the MVO graph after the
-    # inbound block carries enough residual coupling (orphan MVOs, stale
-    # pending exports from intermediate enter/exit transitions) that the
-    # assertions become brittle. They are tracked as follow-on work and are
-    # implementable on top of this scenario once we have a per-test teardown
-    # primitive in the runner.
+    # T6 (OutboundExitDisconnect): export rule in Disconnect mode. Move an
+    # in-scope MVO out of scope and verify the LDAP row stays + no Delete
+    # PendingExport is queued (HandleOutboundDeprovisioningAsync returns null
+    # for Disconnect).
     # ─────────────────────────────────────────────────────────────────────────
+    if (Test-StepEnabled "OutboundExitDisconnect") {
+        Write-TestSection "Test 6: Outbound Exit Scope (Disconnect)"
+        try {
+            $users = $baseUsers | ForEach-Object { $_.PSObject.Copy() }
+            $ids = Reset-JIMForCascadeTest -BaseUsers $users -DirectoryConfig $DirectoryConfig
+
+            # Confirm the baseline: Aria is in LDAP after the cascade-baseline export.
+            if (-not (Test-LDAPUserExists -UserIdentifier $users[0].samAccountName -DirectoryConfig $DirectoryConfig)) {
+                throw "T6 baseline expected $($users[0].samAccountName) in LDAP after cascade-baseline export"
+            }
+
+            Set-JIMSyncRule -Id $ids.ExportRuleId -OutboundDeprovisionAction Disconnect | Out-Null
+
+            # Move Aria out of scope via HR
+            $users[0].department = "Sales"
+            Write-HRCsv -Users $users
+
+            $r = Invoke-FullImportAndSync -SystemId $ids.HRSystemId -Label "T6"
+            $null = $r
+
+            # In Disconnect mode the inline cascade should NOT queue a Delete PendingExport.
+            $pendingDeletes = Get-JIMPendingExport -ConnectedSystemId $ids.LDAPSystemId -Count -ChangeType Delete
+            $deleteCount = if ($pendingDeletes -is [int]) { $pendingDeletes } else { $pendingDeletes.count }
+            if ($deleteCount -ne 0) {
+                throw "T6 Disconnect mode queued $deleteCount Delete PendingExport(s); expected 0"
+            }
+
+            # Run an export anyway to confirm nothing destructive happens.
+            $exp = Invoke-Export -SystemId $ids.LDAPSystemId -Label "T6"
+            $deprovisionedCount = Get-ActivityChangeCount -ActivityId $exp.activityId -ChangeType "Deprovisioned"
+            if ($deprovisionedCount -ne 0) {
+                throw "T6 export produced $deprovisionedCount Deprovisioned RPEIs; expected 0 in Disconnect mode"
+            }
+
+            # And the LDAP row must still be there.
+            if (-not (Test-LDAPUserExists -UserIdentifier $users[0].samAccountName -DirectoryConfig $DirectoryConfig)) {
+                throw "T6 Disconnect mode unexpectedly removed $($users[0].samAccountName) from LDAP"
+            }
+
+            Add-StepResult -Name "OutboundExitDisconnect" -Success $true -Note "Disconnect mode: no Delete PendingExport, no Deprovisioned RPEI, LDAP row preserved"
+        }
+        catch {
+            Add-StepResult -Name "OutboundExitDisconnect" -Success $false -ErrorMsg $_.Exception.Message
+            Write-Host "  FAIL $_" -ForegroundColor Red
+        }
+    }
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # T7 (OutboundExitDelete): export rule in Delete mode. Move an in-scope MVO
+    # out of scope and verify that the next Export run emits a Deprovisioned
+    # RPEI and removes the LDAP row.
+    # ─────────────────────────────────────────────────────────────────────────
+    if (Test-StepEnabled "OutboundExitDelete") {
+        Write-TestSection "Test 7: Outbound Exit Scope (Delete)"
+        try {
+            $users = $baseUsers | ForEach-Object { $_.PSObject.Copy() }
+            $ids = Reset-JIMForCascadeTest -BaseUsers $users -DirectoryConfig $DirectoryConfig
+
+            if (-not (Test-LDAPUserExists -UserIdentifier $users[0].samAccountName -DirectoryConfig $DirectoryConfig)) {
+                throw "T7 baseline expected $($users[0].samAccountName) in LDAP after cascade-baseline export"
+            }
+
+            Set-JIMSyncRule -Id $ids.ExportRuleId -OutboundDeprovisionAction Delete | Out-Null
+
+            # Move Aria out of scope
+            $users[0].department = "Sales"
+            Write-HRCsv -Users $users
+
+            $r = Invoke-FullImportAndSync -SystemId $ids.HRSystemId -Label "T7"
+            $null = $r
+
+            $exp = Invoke-Export -SystemId $ids.LDAPSystemId -Label "T7"
+            Assert-ActivityHasChanges -ActivityId $exp.activityId -Name "T7 Export" -ExpectedChangeType "Deprovisioned" -MinCount 1
+
+            # The LDAP row must be gone.
+            if (Test-LDAPUserExists -UserIdentifier $users[0].samAccountName -DirectoryConfig $DirectoryConfig) {
+                throw "T7 Delete mode left $($users[0].samAccountName) in LDAP after export"
+            }
+
+            Add-StepResult -Name "OutboundExitDelete" -Success $true -Note "Delete mode: Deprovisioned RPEI emitted, LDAP row removed"
+        }
+        catch {
+            Add-StepResult -Name "OutboundExitDelete" -Success $false -ErrorMsg $_.Exception.Message
+            Write-Host "  FAIL $_" -ForegroundColor Red
+        }
+    }
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # T8 (CrossSystemCascade): verify that EvaluateOutOfScopeExportsAsync fires
+    # INLINE during inbound sync. With Delete mode set, moving an in-scope MVO
+    # out of scope via HR import must produce a Delete PendingExport on the
+    # LDAP system immediately after the sync, before any Export run.
+    # ─────────────────────────────────────────────────────────────────────────
+    if (Test-StepEnabled "CrossSystemCascade") {
+        Write-TestSection "Test 8: Cross-System Cascade (inline)"
+        try {
+            $users = $baseUsers | ForEach-Object { $_.PSObject.Copy() }
+            $ids = Reset-JIMForCascadeTest -BaseUsers $users -DirectoryConfig $DirectoryConfig
+
+            Set-JIMSyncRule -Id $ids.ExportRuleId -OutboundDeprovisionAction Delete | Out-Null
+
+            $beforeDeletes = Get-JIMPendingExport -ConnectedSystemId $ids.LDAPSystemId -Count -ChangeType Delete
+            $beforeCount = if ($beforeDeletes -is [int]) { $beforeDeletes } else { $beforeDeletes.count }
+
+            # Move Aria out of scope. We run import + sync only, NOT export.
+            $users[0].department = "Sales"
+            Write-HRCsv -Users $users
+            $r = Invoke-FullImportAndSync -SystemId $ids.HRSystemId -Label "T8"
+            $null = $r
+
+            # Inline cascade should have queued a Delete PendingExport on the LDAP system.
+            $afterDeletes = Get-JIMPendingExport -ConnectedSystemId $ids.LDAPSystemId -Count -ChangeType Delete
+            $afterCount = if ($afterDeletes -is [int]) { $afterDeletes } else { $afterDeletes.count }
+
+            if ($afterCount -le $beforeCount) {
+                throw "T8 expected inline cascade to queue a Delete PendingExport on LDAP after inbound sync; before=$beforeCount, after=$afterCount"
+            }
+
+            Add-StepResult -Name "CrossSystemCascade" -Success $true -Note "Inline cascade queued a Delete PendingExport on LDAP during inbound sync (before any Export run)"
+        }
+        catch {
+            Add-StepResult -Name "CrossSystemCascade" -Success $false -ErrorMsg $_.Exception.Message
+            Write-Host "  FAIL $_" -ForegroundColor Red
+        }
+    }
 
     # ─────────────────────────────────────────────────────────────────────────
     # T9 (CriteriaOperators): Build a sandbox sync rule with mixed criteria
@@ -553,6 +704,14 @@ try {
     if (Test-StepEnabled "CriteriaOperators") {
         Write-TestSection "Test 9: Scoping Criteria Operators (sandbox rule)"
         try {
+            # Re-resolve the LDAP system: cascade sub-tests above run Reset-JIMSystem,
+            # which wipes and recreates the connected system with a new ID. The
+            # $ldapSystem captured in Step 0 may now be stale.
+            $ldapSystem = (Get-JIMConnectedSystem) | Where-Object { $_.name -eq $ldapSystemName }
+            if (-not $ldapSystem) {
+                throw "Connected system '$ldapSystemName' not found at the start of T9"
+            }
+
             # Build a temporary export rule on the same LDAP system so we can verify
             # criteria evaluation without disturbing the primary export rule.
             $ldapObjectTypes = Get-JIMConnectedSystem -Id $ldapSystem.id -ObjectTypes
