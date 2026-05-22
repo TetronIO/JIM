@@ -1742,8 +1742,11 @@ if ($DisableChangeTracking) {
     Write-Host "  Change Tracking:         ${CYAN}Enabled${NC}"
 }
 
-# Metrics streaming status
+# Metrics streaming status. Generate the run ID up-front so the summary block
+# below (and later streaming kickoff) can reference it without tripping
+# Set-StrictMode on an uninitialised variable.
 $metricsStreamingEnabled = $env:JIM_BENCH_API_URL -and $env:JIM_BENCH_API_KEY
+$metricsRunId = if ($metricsStreamingEnabled) { [Guid]::NewGuid().ToString() } else { $null }
 if ($metricsStreamingEnabled) {
     Write-Host "  Metrics Streaming:       ${GREEN}Enabled${NC}"
     Write-Host "                           ${GRAY}$($env:JIM_BENCH_API_URL)${NC}"
@@ -2655,8 +2658,9 @@ if ($scenarioNumber -and $scenariosAcceptingExportParams -contains $scenarioNumb
     }
 }
 
-# Start metrics streaming background job (if enabled)
-$metricsRunId = [Guid]::NewGuid().ToString()
+# Start metrics streaming background job (if enabled). $metricsRunId was
+# generated earlier alongside $metricsStreamingEnabled so the summary block
+# could reference it.
 $metricsStreamJob = $null
 $metricsHostFingerprint = $null
 if ($metricsStreamingEnabled) {
