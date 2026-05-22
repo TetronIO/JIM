@@ -29,8 +29,15 @@
     by intermediate state from the inbound block.
 
     Scoping criteria operators (sandbox rule built on the fly):
-      - CriteriaOperators:       Text Equals/Contains/StartsWith + Numeric LessThan +
-                                 Boolean equality + nested AND/OR groups all evaluate correctly.
+      - CriteriaOperators:       Round-trip persistence of text Equals/StartsWith/Contains
+                                 criteria within a single All (AND) scoping group via the
+                                 public API. Evaluation of these operators against MVOs is
+                                 exercised by T1-T8 for Equals only; broader operator,
+                                 attribute-type, and group-structure evaluation coverage
+                                 (NotEquals, comparison operators, non-text types, Any/OR
+                                 groups, nested groups, CaseSensitive=false) is tracked as
+                                 follow-on work for a dedicated scoping evaluation matrix
+                                 scenario.
 
     Coverage that lives in other scenarios (referenced, not duplicated here):
       - WhenAuthoritativeSourceDisconnected leaver cascade -> Scenario 1, Scenario 4

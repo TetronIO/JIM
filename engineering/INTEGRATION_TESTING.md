@@ -9,6 +9,23 @@
 
 ---
 
+## Table of Contents
+
+1. [Quick Start](#-quick-start)
+2. [Test Lifecycle Quick Reference](#test-lifecycle-quick-reference)
+3. [Overview](#overview)
+4. [Architecture](#architecture)
+5. [Data Scale Templates](#data-scale-templates)
+6. [Test Scenarios](#test-scenarios)
+7. [Setup & Configuration](#setup--configuration)
+8. [Running Tests Locally](#running-tests-locally)
+9. [CI/CD Integration](#cicd-integration)
+10. [Writing New Scenarios](#writing-new-scenarios)
+11. [Troubleshooting](#troubleshooting)
+12. [Known Issues & TODOs](#known-issues--todos)
+
+---
+
 ## ⚡ Quick Start
 
 **First time running integration tests?** Use the single-command runner:
@@ -49,6 +66,8 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario6-SchedulerService"        # Scheduler service testing
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario7-ClearConnectedSystemObjects" # Clear connector space testing
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync"  # Group sync between domains
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario9-PartitionScopedImports"  # Partition-scoped import run profiles
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario10-SyncRuleScoping"          # Sync rule scoping behaviour (inbound + outbound)
 
 # Run with a specific template size
 ./test/integration/Run-IntegrationTests.ps1 -Template Nano
@@ -73,6 +92,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync" -Step Provision  # Scenario 2: Provision, ForwardSync, ReverseSync
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario7-ClearConnectedSystemObjects" -Step DeleteHistory  # Scenario 7: DeleteHistory, KeepHistory, EdgeCases
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync" -Step InitialSync  # Scenario 8: InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario10-SyncRuleScoping" -Step InboundEnterScope  # Scenario 10: InboundEnterScope/InboundInScopeUpdate/InboundExitDisconnect/InboundExitRemainJoined/OutboundEnterScope/OutboundExitDisconnect/OutboundExitDelete/CrossSystemCascade/CriteriaOperators
 
 # Combine scenario, template, and step
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync" -Template Small -Step All
@@ -115,6 +135,7 @@ This single script handles everything:
 | `Scenario7-ClearConnectedSystemObjects` | Clear connector space testing | samba-ad-primary / openldap-primary | ✅ |
 | `Scenario8-CrossDomainEntitlementSync` | Group sync between APAC and EMEA domains | samba-ad-source, samba-ad-target / openldap-primary | ✅ |
 | `Scenario9-PartitionScopedImports` | Partition-scoped import run profiles | samba-ad-primary / openldap-primary | ✅ |
+| `Scenario10-SyncRuleScoping` | Sync rule scoping behaviour: inbound enter/in-scope-update/exit (Disconnect, RemainJoined); outbound enter/exit (Disconnect, Delete); cross-system inline cascade; criteria persistence | file (HR CSV), samba-ad-primary / openldap-primary | ✅ |
 
 **Available Templates (`-Template` parameter):**
 
@@ -184,23 +205,6 @@ See [Data Scale Templates](#data-scale-templates) for detailed template specific
 - `Start-IntegrationTestEnvironment.ps1` - Starts JIM + Samba AD (used by runner)
 - `Wait-SambaReady.ps1` - Checks if Samba AD is ready
 - `Setup-InfrastructureApiKey.ps1` - Creates API key for testing
-
----
-
-## Table of Contents
-
-1. [Quick Start](#-quick-start)
-2. [Test Lifecycle Quick Reference](#test-lifecycle-quick-reference)
-3. [Overview](#overview)
-4. [Architecture](#architecture)
-5. [Data Scale Templates](#data-scale-templates)
-6. [Test Scenarios](#test-scenarios)
-7. [Setup & Configuration](#setup--configuration)
-8. [Running Tests Locally](#running-tests-locally)
-9. [CI/CD Integration](#cicd-integration)
-10. [Writing New Scenarios](#writing-new-scenarios)
-11. [Troubleshooting](#troubleshooting)
-12. [Known Issues & TODOs](#known-issues--todos)
 
 ---
 
@@ -838,9 +842,61 @@ These scenarios test group management capabilities - a core ILM function where t
 
 ---
 
+#### Scenario 10: Sync Rule Scoping Behaviour
+
+**Purpose**: Validate the full sync rule scoping transition matrix end-to-end — what JIM does when an object enters scope, stays in scope while attributes change, and leaves scope, on both the inbound (Import rule) and outbound (Export rule) sides; plus the cross-system inline cascade and round-trip persistence of common criteria operators.
+
+**Systems**:
+- Source: CSV (HR system, File connector)
+- Target: Panoply AD (or OpenLDAP)
+
+Both connected systems are built from scratch by `Setup-Scenario10.ps1`; the scenario is independent of Scenario 1's larger HR + Training fixture.
+
+**Test Steps** (executed sequentially by `-Step All`):
+
+| Step | Test Case | Description |
+|------|-----------|-------------|
+| 1 | **InboundEnterScope** | New CSO matching `department=Finance` projects an MVO |
+| 2 | **InboundInScopeUpdate** | In-scope CSO update flows the title change to the MVO |
+| 3 | **InboundExitDisconnect** | CSO moves to `Sales` with `InboundOutOfScopeAction=Disconnect` -> `DisconnectedOutOfScope` RPEI, join broken |
+| 4 | **InboundExitRemainJoined** | Same exit with `RemainJoined` -> `OutOfScopeRetainJoin` RPEI, join preserved, no attribute flow |
+| 5 | **OutboundEnterScope** | In-scope MVO provisions a CSO in the target directory |
+| 6 | **OutboundExitDisconnect** | MVO leaves scope with `OutboundDeprovisionAction=Disconnect` -> target row preserved, no PendingExport queued |
+| 7 | **OutboundExitDelete** | MVO leaves scope with `Delete` -> Deprovisioned RPEI on next Export run, target row removed |
+| 8 | **CrossSystemCascade** | `EvaluateOutOfScopeExportsAsync` runs inline during sync -> Delete PendingExport queued immediately, before any Export run |
+| 9 | **CriteriaOperators** | Round-trip persistence of text `Equals`/`StartsWith`/`Contains` criteria in a single `All` group via the public API |
+
+**Script**: `test/integration/scenarios/Invoke-Scenario10-SyncRuleScoping.ps1`
+
+**Execution Model**:
+
+```powershell
+# Run all 9 sub-tests in order (default)
+./Invoke-Scenario10-SyncRuleScoping.ps1 -Step All
+
+# Run a single sub-test (useful for debugging a specific transition)
+./Invoke-Scenario10-SyncRuleScoping.ps1 -Step OutboundExitDelete
+./Invoke-Scenario10-SyncRuleScoping.ps1 -Step CrossSystemCascade
+```
+
+The three cascade sub-tests (6, 7, 8) each run against a freshly-reset JIM instance (via `Reset-JIMSystem` + re-running `Setup-Scenario10`) so the assertions are not polluted by intermediate state from the inbound block. The reset is the production-realistic Export -> confirming Import -> next Sync loop.
+
+**Scope deliberately omitted from this scenario** (tracked separately):
+- Evaluation of `NotEquals` and comparison operators (`GreaterThan`, `LessThan`, `GreaterThanOrEquals`, `LessThanOrEquals`)
+- Non-text attribute types in criteria (Number, LongNumber, DateTime, Boolean, Guid)
+- `Any` (OR) group type and nested groups with mixed All/Any logic
+- `CaseSensitive=false` text comparison
+- Missing/null attribute value handling in criteria evaluation
+
+These belong in a dedicated scoping evaluation matrix scenario rather than expanding this one, which is intentionally kept fast and shaped to cover the *transition matrix* most ILM deployments will configure.
+
+---
+
 ### Phase 2 (Post-MVP) - Database Scenarios
 
-#### Scenario 9: Multi-Source Aggregation
+> The scenario numbers below (Multi-Source Aggregation, Database Source/Target, Performance Baselines) were originally drafted as 9, 10, and 11; those numbers are now taken by implemented Phase 1 scenarios (Partition-Scoped Imports, Sync Rule Scoping). The renumbered planned scenarios start at 11.
+
+#### Scenario 11: Multi-Source Aggregation
 
 **Purpose**: Validate multiple database sources feeding the metaverse with join rules and attribute precedence.
 
@@ -876,7 +932,7 @@ These scenarios test group management capabilities - a core ILM function where t
 
 ---
 
-#### Scenario 10: Database Source/Target
+#### Scenario 12: Database Source/Target
 
 **Purpose**: Validate database connector import/export capabilities.
 
@@ -910,7 +966,7 @@ These scenarios test group management capabilities - a core ILM function where t
 
 ---
 
-#### Scenario 11: Performance Baselines
+#### Scenario 13: Performance Baselines
 
 **Purpose**: Establish performance characteristics at various scales.
 
@@ -1822,9 +1878,11 @@ JIM/
 | Scenario 5 | ✅ Complete | Matching rules: 4/5 tests passing, MultipleRules run separately |
 | Scenario 6 | ✅ Complete | Scheduler service (Create, ManualTrigger, AutoTrigger, Overlap, MultiStep, Parallel) |
 | Scenario 8 | ✅ Complete | All 6 tests (InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup) |
+| Scenario 9 | ✅ Complete | Partition-scoped import run profiles |
+| Scenario 10 | ✅ Complete | Sync rule scoping behaviour: 9 sub-tests covering the full inbound + outbound scope transition matrix, cross-system inline cascade, and criteria persistence (#656) |
 | Entitlement (JIM-to-AD) | ⏸️ Deferred | Requires Internal MVO design |
 | Entitlement (Convert Authority) | ⏸️ Deferred | Requires Internal MVO design |
-| Scenarios 9-11 | ⏳ Post-MVP | Database scenarios: requires Database Connector (#170) |
+| Scenarios 11-13 | ⏳ Post-MVP | Database scenarios (multi-source aggregation, database source/target, performance baselines): require Database Connector (#170) |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
 
 ### Scenario 8 Complete (2026-01-20)
