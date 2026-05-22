@@ -490,6 +490,15 @@ foreach ($cell in $tierCells) {
             }
             elseif ($null -eq $v) { '' }
             elseif ($v -is [bool]) { if ($v) { 'true' } else { 'false' } }
+            elseif ($v -is [datetime]) {
+                # ConvertFrom-Json auto-converts ISO date strings into [DateTime] objects,
+                # and [string] on a DateTime uses the current culture's format. The worker
+                # container runs with en-GB, where "01/15/2020" fails to parse (day 15 of
+                # month 1 is fine, but 01/15 means day=1, month=15 - invalid). Force ISO
+                # 8601 round-trip format ('o') so the connector parses consistently
+                # regardless of host or container culture.
+                $v.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+            }
             else { [string]$v }
         }
         $quoted = $values | ForEach-Object {
@@ -623,15 +632,6 @@ Write-Host "  OK Full Synchronisation complete (activity ID: $($syncActivity.act
 
 Write-TestStep "Step 15" "Reading per-cell projections and comparing to expected sets"
 
-# Diagnostic: how many CSOs and MVOs actually exist post-sync? Helps distinguish
-# "import didn't happen" from "scoping rejected everything" from "assertion bug".
-$diagCsos = Get-JIMConnectedSystemObject -ConnectedSystemId $matrixSystem.id -Count -ErrorAction SilentlyContinue
-Write-Host "  Diagnostic: $diagCsos CSO(s) in connector space" -ForegroundColor DarkGray
-
-$diagActivities = Get-JIMActivity -PageSize 5
-foreach ($act in $diagActivities) {
-    Write-Host ("  Diagnostic activity: {0} status={1} processed={2} projected={3} oosDisc={4} errors={5}" -f $act.targetName, $act.status, $act.objectsProcessed, $act.totalProjected, $act.totalDisconnectedOutOfScope, $act.totalErrors) -ForegroundColor DarkGray
-}
 
 $cellResults = New-Object System.Collections.Generic.List[object]
 $cellPass = 0
@@ -689,12 +689,8 @@ Write-Host "  Matrix results: $cellPass passed, $cellFail failed (tier: $activeT
 # ─── Final teardown ────────────────────────────────────────────────────────────
 
 Write-TestStep "Step 16" "Final factory reset"
-if ($cellFail -eq 0) {
-    Reset-JIMSystem -Force | Out-Null
-    Write-Host "  OK Reset complete" -ForegroundColor Green
-} else {
-    Write-Host "  (skipped - leaving state for forensics; matrix had $cellFail failures)" -ForegroundColor Yellow
-}
+Reset-JIMSystem -Force | Out-Null
+Write-Host "  OK Reset complete" -ForegroundColor Green
 
 # ─── Result aggregation ────────────────────────────────────────────────────────
 
