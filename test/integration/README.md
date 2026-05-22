@@ -138,9 +138,14 @@ Integration test results can be automatically streamed to the JIM-Bench ingestio
 
 ### Enabling Metrics Streaming
 
-Set two environment variables (in `.env` or export them in your shell):
+Set two environment variables. Either add them to `.env` (the runner hydrates them into its own process environment when not already exported), or export them in your shell. If both are present, the exported shell value wins.
 
 ```bash
+# Option A: add to .env (canonical for the project)
+JIM_BENCH_API_URL=https://bench-api.junctional.io
+JIM_BENCH_API_KEY=your-api-key
+
+# Option B: export in the current shell (overrides .env for this session)
 export JIM_BENCH_API_URL=https://bench-api.junctional.io
 export JIM_BENCH_API_KEY=your-api-key
 ```

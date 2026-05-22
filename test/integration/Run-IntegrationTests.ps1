@@ -250,6 +250,31 @@ $repoRoot = (Get-Item $scriptRoot).Parent.Parent.FullName
 # Import helpers early so Get-DirectoryConfig is available
 . "$scriptRoot/utils/Test-Helpers.ps1"
 
+# Hydrate JIM_BENCH_* from .env when not already set in the process environment.
+# .env is the canonical config surface for the project, but Docker Compose only
+# reads it for containers; PowerShell doesn't auto-load it. Shell wins (so a
+# deliberate `export` still overrides), .env is the fallback. Scoped to the two
+# bench keys only; we don't want to silently leak unrelated .env values into
+# the host environment.
+$envFilePath = Join-Path $repoRoot ".env"
+if (Test-Path $envFilePath) {
+    foreach ($key in @("JIM_BENCH_API_URL", "JIM_BENCH_API_KEY")) {
+        if ([string]::IsNullOrEmpty([Environment]::GetEnvironmentVariable($key))) {
+            $match = Select-String -Path $envFilePath -Pattern "^\s*$key\s*=\s*(.*)$" | Select-Object -First 1
+            if ($match) {
+                $value = $match.Matches[0].Groups[1].Value.Trim()
+                # Strip surrounding single or double quotes if present
+                if ($value -match '^"(.*)"$' -or $value -match "^'(.*)'$") {
+                    $value = $matches[1]
+                }
+                if (-not [string]::IsNullOrEmpty($value)) {
+                    Set-Item -Path "env:$key" -Value $value
+                }
+            }
+        }
+    }
+}
+
 # Hard-fail: the long-tail templates (Scale100k5kGroups through Scale1m60kGroups)
 # are OpenLDAP only. Reject early at the orchestrator level so users discover
 # the constraint at selection time, not hours into population. The populator
