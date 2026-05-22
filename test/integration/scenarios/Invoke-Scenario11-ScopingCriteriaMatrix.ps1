@@ -478,8 +478,17 @@ foreach ($cell in $tierCells) {
     $csoTypeName = Get-CsoTypeName -CellName $cell.name
     foreach ($row in $manifest.seed) {
         $values = $columns | ForEach-Object {
-            $v = $row.$_
-            if ($null -eq $v) { '' }
+            $col = $_
+            $v = $row.$col
+            # The external ID column (Sc11EmployeeId) is the worker's primary external ID and
+            # must be unique across the ENTIRE import - not just per-CSO-type. We fan out by
+            # prefixing with the cell's CSO type name so each cell's E001 is distinct from
+            # every other cell's E001 in the connector space. The assertion strips this
+            # prefix back off when comparing against the manifest's expected EmployeeId set.
+            if ($col -eq 'Sc11EmployeeId' -and $null -ne $v) {
+                "${csoTypeName}::$v"
+            }
+            elseif ($null -eq $v) { '' }
             elseif ($v -is [bool]) { if ($v) { 'true' } else { 'false' } }
             else { [string]$v }
         }
@@ -593,20 +602,36 @@ Write-Host "  OK All sync rules configured" -ForegroundColor Green
 
 Write-TestStep "Step 13" "Creating Full Import run profile"
 
-$runProfile = New-JIMRunProfile -ConnectedSystemId $matrixSystem.id -Name 'Sc11 Full Import' `
+$importProfile = New-JIMRunProfile -ConnectedSystemId $matrixSystem.id -Name 'Sc11 Full Import' `
     -RunType FullImport -FilePath '/connector-files/test-data/scenario11-matrix.csv' -PassThru
-Write-Host "  OK Run profile created (ID: $($runProfile.id))" -ForegroundColor Green
+$syncProfile = New-JIMRunProfile -ConnectedSystemId $matrixSystem.id -Name 'Sc11 Full Synchronisation' `
+    -RunType FullSynchronisation -PassThru
+Write-Host "  OK Run profiles created (Import: $($importProfile.id), Sync: $($syncProfile.id))" -ForegroundColor Green
 
-# ─── Run the inbound sync ──────────────────────────────────────────────────────
+# ─── Run Full Import then Full Synchronisation ─────────────────────────────────
+# Import brings the CSV rows into the connector space as CSOs. Synchronisation runs
+# the sync rule evaluator over those CSOs, applying scoping and projecting MVOs.
 
-Write-TestStep "Step 14" "Running Full Import (single sync evaluates all $($tierCells.Count) rules)"
+Write-TestStep "Step 14" "Running Full Import + Full Synchronisation (single sync evaluates all $($tierCells.Count) rules)"
 
-$activity = Start-JIMRunProfile -ConnectedSystemId $matrixSystem.id -RunProfileId $runProfile.id -Wait -PassThru
-Write-Host "  OK Full Import complete (activity ID: $($activity.activityId))" -ForegroundColor Green
+$importActivity = Start-JIMRunProfile -ConnectedSystemId $matrixSystem.id -RunProfileId $importProfile.id -Wait -PassThru
+Write-Host "  OK Full Import complete (activity ID: $($importActivity.activityId))" -ForegroundColor Green
+$syncActivity = Start-JIMRunProfile -ConnectedSystemId $matrixSystem.id -RunProfileId $syncProfile.id -Wait -PassThru
+Write-Host "  OK Full Synchronisation complete (activity ID: $($syncActivity.activityId))" -ForegroundColor Green
 
 # ─── Per-cell assertions ───────────────────────────────────────────────────────
 
 Write-TestStep "Step 15" "Reading per-cell projections and comparing to expected sets"
+
+# Diagnostic: how many CSOs and MVOs actually exist post-sync? Helps distinguish
+# "import didn't happen" from "scoping rejected everything" from "assertion bug".
+$diagCsos = Get-JIMConnectedSystemObject -ConnectedSystemId $matrixSystem.id -Count -ErrorAction SilentlyContinue
+Write-Host "  Diagnostic: $diagCsos CSO(s) in connector space" -ForegroundColor DarkGray
+
+$diagActivities = Get-JIMActivity -PageSize 5
+foreach ($act in $diagActivities) {
+    Write-Host ("  Diagnostic activity: {0} status={1} processed={2} projected={3} oosDisc={4} errors={5}" -f $act.targetName, $act.status, $act.objectsProcessed, $act.totalProjected, $act.totalDisconnectedOutOfScope, $act.totalErrors) -ForegroundColor DarkGray
+}
 
 $cellResults = New-Object System.Collections.Generic.List[object]
 $cellPass = 0
@@ -616,24 +641,28 @@ foreach ($cell in $tierCells) {
     $mvType = $cellMvTypes[$cell.name]
     $expected = @($cell.expected | Sort-Object)
 
+    $csoTypeName = Get-CsoTypeName -CellName $cell.name
+    $expectedPrefix = "${csoTypeName}::"
     $mvos = @(Get-JIMMetaverseObject -ObjectTypeId $mvType.id -All -Attributes 'Sc11EmployeeId')
     $actual = @()
     foreach ($mvo in $mvos) {
-        # The MV object DTO exposes attributes as a hashtable keyed by name OR an array
-        # of {name, values}; handle both. Sc11EmployeeId is a single-valued text attribute.
+        # MetaverseObjectHeaderDto exposes .attributes as a flat hashtable keyed by
+        # attribute name, with single-valued attributes stored as the bare value
+        # (multi-valued attributes would be an array). Sc11EmployeeId is single-valued.
         $eidValue = $null
         if ($mvo.PSObject.Properties.Name -contains 'attributes' -and $mvo.attributes) {
-            $attrEntry = $mvo.attributes | Where-Object {
-                ($_.PSObject.Properties.Name -contains 'name' -and $_.name -eq 'Sc11EmployeeId') -or
-                ($_.PSObject.Properties.Name -contains 'attributeName' -and $_.attributeName -eq 'Sc11EmployeeId')
-            } | Select-Object -First 1
-            if ($attrEntry) {
-                if ($attrEntry.PSObject.Properties.Name -contains 'stringValue') { $eidValue = $attrEntry.stringValue }
-                elseif ($attrEntry.PSObject.Properties.Name -contains 'values' -and $attrEntry.values) { $eidValue = @($attrEntry.values)[0] }
-                elseif ($attrEntry.PSObject.Properties.Name -contains 'value')  { $eidValue = $attrEntry.value }
+            $eidValue = $mvo.attributes.Sc11EmployeeId
+        }
+        if ($eidValue) {
+            # Strip the cell-specific prefix the CSV builder applied so we compare against
+            # the manifest's bare EmployeeId set (E001, E002, ...).
+            $stringValue = [string]$eidValue
+            if ($stringValue.StartsWith($expectedPrefix)) {
+                $actual += $stringValue.Substring($expectedPrefix.Length)
+            } else {
+                $actual += $stringValue
             }
         }
-        if ($eidValue) { $actual += $eidValue }
     }
     $actual = @($actual | Sort-Object)
 
@@ -660,8 +689,12 @@ Write-Host "  Matrix results: $cellPass passed, $cellFail failed (tier: $activeT
 # ─── Final teardown ────────────────────────────────────────────────────────────
 
 Write-TestStep "Step 16" "Final factory reset"
-Reset-JIMSystem -Force | Out-Null
-Write-Host "  OK Reset complete" -ForegroundColor Green
+if ($cellFail -eq 0) {
+    Reset-JIMSystem -Force | Out-Null
+    Write-Host "  OK Reset complete" -ForegroundColor Green
+} else {
+    Write-Host "  (skipped - leaving state for forensics; matrix had $cellFail failures)" -ForegroundColor Yellow
+}
 
 # ─── Result aggregation ────────────────────────────────────────────────────────
 
