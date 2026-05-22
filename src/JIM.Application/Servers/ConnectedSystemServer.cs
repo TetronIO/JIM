@@ -645,7 +645,8 @@ public class ConnectedSystemServer
     /// <returns>A preview showing counts of affected objects and any warnings.</returns>
     public async Task<ConnectedSystemDeletionPreview?> GetDeletionPreviewAsync(int connectedSystemId)
     {
-        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Core: only Name and Status are read below; the rest of the preview comes from dedicated count queries.
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
             return null;
 
@@ -713,8 +714,8 @@ public class ConnectedSystemServer
         Log.Information("DeleteAsync: Starting deletion for Connected System {Id}, initiated by {User}, deleteChangeHistory={DeleteHistory}",
             connectedSystemId, initiatedBy?.DisplayName ?? "System", deleteChangeHistory);
 
-        // Get the Connected System
-        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Get the Connected System (Core: only Name and Status are read, and Status is updated via the entity).
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
         {
             Log.Warning("DeleteAsync: Connected System {Id} not found", connectedSystemId);
@@ -823,8 +824,8 @@ public class ConnectedSystemServer
         Log.Information("DeleteAsync: Starting deletion for Connected System {Id}, initiated by API key {ApiKeyName}, deleteChangeHistory={DeleteHistory}",
             connectedSystemId, initiatedByApiKey.Name, deleteChangeHistory);
 
-        // Get the Connected System
-        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        // Get the Connected System (Core: only Name and Status are read, and Status is updated via the entity).
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
         {
             Log.Warning("DeleteAsync: Connected System {Id} not found", connectedSystemId);
@@ -3875,8 +3876,8 @@ public class ConnectedSystemServer
         if (connectedSystemRunProfile == null)
             throw new ArgumentNullException(nameof(connectedSystemRunProfile));
 
-        // need to get the connected system, so we can validate the run profile
-        var connectedSystem = await GetConnectedSystemAsync(connectedSystemRunProfile.ConnectedSystemId) ?? throw new ArgumentException("No such Connected System found!");
+        // Core: IsRunProfileValid only reads ConnectorDefinition.Supports* and we read .Name for activity context.
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId) ?? throw new ArgumentException("No such Connected System found!");
         if (!IsRunProfileValid(connectedSystem, connectedSystemRunProfile))
             throw new ArgumentException("Run profile is not valid for the Connector!");
 
@@ -3906,7 +3907,8 @@ public class ConnectedSystemServer
         if (connectedSystemRunProfile == null)
             throw new ArgumentNullException(nameof(connectedSystemRunProfile));
 
-        var connectedSystem = await GetConnectedSystemAsync(connectedSystemRunProfile.ConnectedSystemId) ?? throw new ArgumentException("No such Connected System found!");
+        // Core: IsRunProfileValid only reads ConnectorDefinition.Supports* and we read .Name for activity context.
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId) ?? throw new ArgumentException("No such Connected System found!");
         if (!IsRunProfileValid(connectedSystem, connectedSystemRunProfile))
             throw new ArgumentException("Run profile is not valid for the Connector!");
 
@@ -3931,8 +3933,8 @@ public class ConnectedSystemServer
         if (connectedSystemRunProfile == null)
             return;
 
-        // Get connected system name for activity context
-        var connectedSystem = await GetConnectedSystemAsync(connectedSystemRunProfile.ConnectedSystemId);
+        // Get connected system name for activity context (Core: only .Name is read).
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId);
 
         // every CRUD operation requires tracking with an activity...
         var activity = new Activity
@@ -3957,8 +3959,8 @@ public class ConnectedSystemServer
         if (connectedSystemRunProfile == null)
             return;
 
-        // Get connected system name for activity context
-        var connectedSystem = await GetConnectedSystemAsync(connectedSystemRunProfile.ConnectedSystemId);
+        // Get connected system name for activity context (Core: only .Name is read).
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId);
 
         var activity = new Activity
         {
@@ -3979,8 +3981,8 @@ public class ConnectedSystemServer
         if (connectedSystemRunProfile == null)
             throw new ArgumentNullException(nameof(connectedSystemRunProfile));
 
-        // Get connected system name for activity context
-        var connectedSystem = await GetConnectedSystemAsync(connectedSystemRunProfile.ConnectedSystemId);
+        // Get connected system name for activity context (Core: only .Name is read).
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId);
 
         // every CRUD operation requires tracking with an activity...
         var activity = new Activity
@@ -4006,8 +4008,8 @@ public class ConnectedSystemServer
         if (connectedSystemRunProfile == null)
             throw new ArgumentNullException(nameof(connectedSystemRunProfile));
 
-        // Get connected system name for activity context
-        var connectedSystem = await GetConnectedSystemAsync(connectedSystemRunProfile.ConnectedSystemId);
+        // Get connected system name for activity context (Core: only .Name is read).
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId);
 
         var activity = new Activity
         {
@@ -4364,8 +4366,9 @@ public class ConnectedSystemServer
             // Clear any matching rules that may have been provided
             if (syncRule.ConnectedSystemId > 0)
             {
+                // Core: only ObjectMatchingRuleMode (a scalar on the entity) is read below.
                 var connectedSystem = syncRule.ConnectedSystem ??
-                    await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(syncRule.ConnectedSystemId);
+                    await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(syncRule.ConnectedSystemId);
 
                 if (connectedSystem?.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem)
                 {
@@ -4385,11 +4388,11 @@ public class ConnectedSystemServer
             syncRule.ObjectMatchingRules.Clear();
             syncRule.ProjectToMetaverse = null;
         }
-        
-        
-        // Get connected system name for activity context
+
+
+        // Get connected system name for activity context (Core: only .Name is read).
         var connectedSystemForContext = syncRule.ConnectedSystem ??
-            (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(syncRule.ConnectedSystemId) : null);
+            (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(syncRule.ConnectedSystemId) : null);
 
         // every crud operation must be tracked via an Activity
         var activity = new Activity
@@ -4443,8 +4446,9 @@ public class ConnectedSystemServer
 
             if (syncRule.ConnectedSystemId > 0)
             {
+                // Core: only ObjectMatchingRuleMode (a scalar on the entity) is read below.
                 var connectedSystem = syncRule.ConnectedSystem ??
-                    await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(syncRule.ConnectedSystemId);
+                    await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(syncRule.ConnectedSystemId);
 
                 if (connectedSystem?.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem)
                 {
@@ -4464,9 +4468,9 @@ public class ConnectedSystemServer
             syncRule.ProjectToMetaverse = null;
         }
 
-        // Get connected system name for activity context
+        // Get connected system name for activity context (Core: only .Name is read).
         var connectedSystemForContext = syncRule.ConnectedSystem ??
-            (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(syncRule.ConnectedSystemId) : null);
+            (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(syncRule.ConnectedSystemId) : null);
 
         var activity = new Activity
         {
@@ -4500,9 +4504,9 @@ public class ConnectedSystemServer
 
     public async Task DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy)
     {
-        // Get connected system name for activity context
+        // Get connected system name for activity context (Core: only .Name is read).
         var connectedSystem = syncRule.ConnectedSystem ??
-            (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(syncRule.ConnectedSystemId) : null);
+            (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(syncRule.ConnectedSystemId) : null);
 
         // every crud operation must be tracked via an Activity
         var activity = new Activity
@@ -4522,9 +4526,9 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task DeleteSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey)
     {
-        // Get connected system name for activity context
+        // Get connected system name for activity context (Core: only .Name is read).
         var connectedSystem = syncRule.ConnectedSystem ??
-            (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(syncRule.ConnectedSystemId) : null);
+            (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(syncRule.ConnectedSystemId) : null);
 
         var activity = new Activity
         {
@@ -4555,10 +4559,10 @@ public class ConnectedSystemServer
         if (rule.ConnectedSystemObjectType?.ConnectedSystem != null)
             return rule.ConnectedSystemObjectType.ConnectedSystem.Name;
 
-        // Navigation property not loaded - fetch the Connected System
+        // Navigation property not loaded - fetch the Connected System (Core: only .Name is read).
         if (rule.ConnectedSystemObjectType != null)
         {
-            var connectedSystem = await GetConnectedSystemAsync(rule.ConnectedSystemObjectType.ConnectedSystemId);
+            var connectedSystem = await GetConnectedSystemCoreAsync(rule.ConnectedSystemObjectType.ConnectedSystemId);
             return connectedSystem?.Name;
         }
 
@@ -4567,7 +4571,7 @@ public class ConnectedSystemServer
             var objectType = await Application.Repository.ConnectedSystems.GetObjectTypeAsync(rule.ConnectedSystemObjectTypeId.Value);
             if (objectType != null)
             {
-                var connectedSystem = await GetConnectedSystemAsync(objectType.ConnectedSystemId);
+                var connectedSystem = await GetConnectedSystemCoreAsync(objectType.ConnectedSystemId);
                 return connectedSystem?.Name;
             }
         }
