@@ -76,6 +76,98 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
+    /// Create a Metaverse Object Type
+    /// </summary>
+    /// <param name="request">The Object Type creation request.</param>
+    /// <returns>The created Object Type details.</returns>
+    /// <response code="201">Object Type created successfully.</response>
+    /// <response code="400">Invalid request or validation failed.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("object-types", Name = "CreateObjectType")]
+    [ProducesResponseType(typeof(MetaverseObjectTypeDetailDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CreateObjectTypeAsync([FromBody] CreateMetaverseObjectTypeRequest request)
+    {
+        _logger.LogInformation("Creating metaverse object type: {Name}", LogSanitiser.Sanitise(request.Name));
+
+        // Reject collisions on Name or PluralName up front. The DB has unique constraints
+        // but a 400 with a clear message is a better caller experience than a 500 from EF.
+        var existingByName = await _application.Metaverse.GetMetaverseObjectTypeAsync(request.Name, includeChildObjects: false);
+        if (existingByName != null)
+            return BadRequest(ApiErrorResponse.BadRequest($"Object type with name '{request.Name}' already exists."));
+
+        var existingByPluralName = await _application.Metaverse.GetMetaverseObjectTypeByPluralNameAsync(request.PluralName, includeChildObjects: false);
+        if (existingByPluralName != null)
+            return BadRequest(ApiErrorResponse.BadRequest($"Object type with plural name '{request.PluralName}' already exists."));
+
+        // Negative grace period is never valid; the DB column tolerates it but the semantic is nonsense.
+        if (request.DeletionGracePeriod.HasValue && request.DeletionGracePeriod.Value < TimeSpan.Zero)
+            return BadRequest(ApiErrorResponse.BadRequest("DeletionGracePeriod cannot be negative."));
+
+        var deletionRule = request.DeletionRule ?? MetaverseObjectDeletionRule.Manual;
+
+        // WhenAuthoritativeSourceDisconnected requires at least one trigger system; same rule as Update.
+        if (deletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected &&
+            (request.DeletionTriggerConnectedSystemIds == null || request.DeletionTriggerConnectedSystemIds.Count == 0))
+        {
+            return BadRequest(ApiErrorResponse.BadRequest("WhenAuthoritativeSourceDisconnected deletion rule requires at least one authoritative source to be specified in DeletionTriggerConnectedSystemIds."));
+        }
+
+        // Validate trigger system IDs exist if supplied (regardless of rule type, to surface
+        // bad input early rather than silently storing dead IDs).
+        if (request.DeletionTriggerConnectedSystemIds != null && request.DeletionTriggerConnectedSystemIds.Count > 0)
+        {
+            foreach (var connectedSystemId in request.DeletionTriggerConnectedSystemIds)
+            {
+                var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+                if (connectedSystem == null)
+                    return BadRequest(ApiErrorResponse.BadRequest($"Connected system with ID {connectedSystemId} not found."));
+            }
+        }
+
+        var objectType = new MetaverseObjectType
+        {
+            Name = request.Name,
+            PluralName = request.PluralName,
+            Icon = request.Icon,
+            BuiltIn = false,
+            DeletionRule = deletionRule,
+            DeletionGracePeriod = (request.DeletionGracePeriod.HasValue && request.DeletionGracePeriod.Value > TimeSpan.Zero)
+                ? request.DeletionGracePeriod.Value
+                : null,
+            DeletionTriggerConnectedSystemIds = request.DeletionTriggerConnectedSystemIds ?? new List<int>(),
+            Created = DateTime.UtcNow,
+            Attributes = new List<MetaverseAttribute>()
+        };
+
+        // Associate with existing attributes if specified. Look each one up so we surface
+        // a clear 400 rather than letting EF raise a confusing FK error inside the create call.
+        if (request.AttributeIds != null && request.AttributeIds.Count > 0)
+        {
+            foreach (var attributeId in request.AttributeIds)
+            {
+                var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(attributeId);
+                if (attribute == null)
+                    return BadRequest(ApiErrorResponse.BadRequest($"Attribute with ID {attributeId} not found."));
+
+                objectType.Attributes.Add(attribute);
+            }
+        }
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        if (apiKey != null)
+            await _application.Metaverse.CreateMetaverseObjectTypeAsync(objectType, apiKey);
+        else
+            await _application.Metaverse.CreateMetaverseObjectTypeAsync(objectType, (MetaverseObject?)null);
+
+        _logger.LogInformation("Created metaverse object type: {Id} ({Name})", objectType.Id, LogSanitiser.Sanitise(objectType.Name));
+
+        var result = await _application.Metaverse.GetMetaverseObjectTypeAsync(objectType.Id, includeChildObjects: false);
+        return Created($"/api/v1/metaverse/object-types/{objectType.Id}", MetaverseObjectTypeDetailDto.FromEntity(result!));
+    }
+
+    /// <summary>
     /// Update a Metaverse Object Type
     /// </summary>
     /// <param name="id">The unique identifier of the Object Type.</param>
