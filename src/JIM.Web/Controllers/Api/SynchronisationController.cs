@@ -2318,7 +2318,7 @@ public class SynchronisationController(
                 return BadRequest(ApiErrorResponse.BadRequest("MetaverseAttributeId is required for export sync rules."));
 
             var mvAttribute = syncRule.MetaverseObjectType?.Attributes
-                .FirstOrDefault(a => a.Id == request.MetaverseAttributeId.Value);
+                .FirstOrDefault(a => a.Id == request.MetaverseAttributeId);
 
             if (mvAttribute == null)
                 return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {request.MetaverseAttributeId} not found on this sync rule's Metaverse object type."));
@@ -2333,7 +2333,7 @@ public class SynchronisationController(
 
             // Get the CS attribute from the sync rule's connected system object type
             var csAttribute = syncRule.ConnectedSystemObjectType?.Attributes
-                .FirstOrDefault(a => a.Id == request.ConnectedSystemAttributeId.Value);
+                .FirstOrDefault(a => a.Id == request.ConnectedSystemAttributeId);
 
             if (csAttribute == null)
                 return NotFound(ApiErrorResponse.NotFound($"Connected System attribute with ID {request.ConnectedSystemAttributeId} not found in sync rule's object type."));

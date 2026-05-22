@@ -445,7 +445,6 @@ public class ExportEvaluationTests
             }
         });
 
-        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
         var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
         var provisionedCso = new ConnectedSystemObject
         {
