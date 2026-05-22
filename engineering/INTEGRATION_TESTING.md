@@ -76,6 +76,9 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync"  # Group sync between domains
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario9-PartitionScopedImports"  # Partition-scoped import run profiles
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario10-SyncRuleScoping"          # Sync rule scoping behaviour (inbound + outbound)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix"    # Scoping criteria evaluation matrix (Default tier)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix" -Quick      # Quick tier (~12 cells, < 90s)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix" -Exhaustive # Exhaustive tier (~152 cells, < 10 min)
 
 # Run with a specific template size
 ./test/integration/Run-IntegrationTests.ps1 -Template Nano
@@ -101,6 +104,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario7-ClearConnectedSystemObjects" -Step DeleteHistory  # Scenario 7: DeleteHistory, KeepHistory, EdgeCases
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync" -Step InitialSync  # Scenario 8: InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario10-SyncRuleScoping" -Step InboundEnterScope  # Scenario 10: InboundEnterScope/InboundInScopeUpdate/InboundExitDisconnect/InboundExitRemainJoined/OutboundEnterScope/OutboundExitDisconnect/OutboundExitDelete/CrossSystemCascade/CriteriaOperators
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix" -OperatorFilter NotEquals  # Scenario 11: filter to cells using a single operator
 
 # Combine scenario, template, and step
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync" -Template Small -Step All
@@ -145,6 +149,7 @@ This single script handles everything:
 | `Scenario8-CrossDomainEntitlementSync` | Group sync between APAC and EMEA domains | samba-ad-source, samba-ad-target / openldap-primary | ✅ |
 | `Scenario9-PartitionScopedImports` | Partition-scoped import run profiles | samba-ad-primary / openldap-primary | ✅ |
 | `Scenario10-SyncRuleScoping` | Sync rule scoping behaviour: inbound enter/in-scope-update/exit (Disconnect, RemainJoined); outbound enter/exit (Disconnect, Delete); cross-system inline cascade; criteria persistence | file (HR CSV), samba-ad-primary / openldap-primary | ✅ |
+| `Scenario11-ScopingCriteriaMatrix` | Scoping criteria evaluation matrix: full operator x value-type x group-structure coverage via batched per-cell CSO and MV types. Three tiers: Quick (~12 cells, < 90s), Default (~41 cells, < 5 min), Exhaustive (~152 cells, < 10 min). Round-trip persistence and API negative-cell probes run first. | file (bespoke deterministic seed) | n/a |
 
 **Available Templates (`-Template` parameter):**
 
@@ -981,13 +986,80 @@ The three cascade sub-tests (6, 7, 8) each run against a freshly-reset JIM insta
 
 These belong in a dedicated scoping evaluation matrix scenario rather than expanding this one, which is intentionally kept fast and shaped to cover the *transition matrix* most ILM deployments will configure.
 
+The dedicated scoping evaluation matrix scenario is Scenario 11 (below).
+
+---
+
+#### Scenario 11: Scoping Criteria Evaluation Matrix
+
+**Purpose**: Exercise the full operator x value-type x group-structure evaluation matrix that `SyncRuleScopingCriteria` exposes, complementing Scenario 10 which covers the lifecycle action matrix on a single operator. Designed as the natural place to catch regressions in `ScopingEvaluationServer` and the scoping API surface as new operators or value carriers are added.
+
+**Systems**:
+- File connector with column-based object-type discovery (one CSO type per matrix cell).
+- No LDAP step; the matrix is template-independent and DirectoryConfig-agnostic.
+
+**Three coverage tiers** (PRD: [engineering/prd/PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md](prd/PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md)):
+
+| Tier | Selector | Cells (approx) | Target | Purpose |
+|------|----------|----------------|--------|---------|
+| Quick | `-Quick` | ~12 | < 90s | Fast PR feedback. One cell per `SearchComparisonType` operator. |
+| Default | *(no flag)* | ~41 | < 5 min | Every applicable `(operator x value-type)` pair with text `CaseSensitive` variants, plus at least one `All`/`Any`/nested group representative. |
+| Exhaustive | `-Exhaustive` | ~152 | < 10 min | Full Cartesian on `(operator x value-type x group-structure)`. Reserved for pre-release runs and post-evaluator-refactor verification. |
+
+**Script**: `test/integration/scenarios/Invoke-Scenario11-ScopingCriteriaMatrix.ps1`
+
+**Manifest**: `test/integration/scenarios/data/scoping-criteria-matrix.json` (generated by `Build-ScopingCriteriaMatrix.ps1`; canonical artifact, do not edit by hand).
+
+**Architecture (Option 1: per-cell CSO types under batched sync)**:
+
+1. The seed CSV is fanned out so each cell has its own copy of the 15-row seed, tagged with a unique `ObjectType` column value.
+2. The file connector's column-based object-type discovery creates one CSO type per cell.
+3. The scenario creates one MV object type per cell so per-cell projection sets can be read back by type.
+4. The scenario creates one inbound sync rule per cell with its scoping criteria attached.
+5. **One** Full Import run evaluates every rule against the seed (the worker's `EvaluateProjection` runs once per CSO; because each rule's source CSO type is unique to that cell, the `FirstOrDefault` contest is uncontested).
+6. Per-cell assertions query MVOs by their dedicated MV type Id and compare the `EmployeeId` set to the manifest's expected list.
+
+The batched approach is what makes Exhaustive fit inside its wall-clock budget; per-cell sync would be ~30 min for the same coverage.
+
+**Execution Model**:
+
+```powershell
+# Default tier (~5 min)
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario11-ScopingCriteriaMatrix
+
+# Quick tier for PR feedback (~90s)
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario11-ScopingCriteriaMatrix -Quick
+
+# Exhaustive tier for pre-release (~10 min)
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario11-ScopingCriteriaMatrix -Exhaustive
+
+# Filter to a single operator across the chosen tier
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario11-ScopingCriteriaMatrix -OperatorFilter NotEquals
+
+# Filter to a single fully-qualified cell name (debug-friendly)
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario11-ScopingCriteriaMatrix -Step Text.Equals.Single.CS
+
+# Skip the API negative-cell probes (saves a few seconds; useful in CI noise reduction)
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario11-ScopingCriteriaMatrix -IncludeNegativeCells:$false
+```
+
+**Sub-tests** (in order):
+
+| Phase | Test Case | Description |
+|-------|-----------|-------------|
+| 1 | **Round-trip persistence** | One criterion per value-carrier type (Text, Number, LongNumber, DateTime, Boolean, Guid) configured via the API; read back via the group endpoint to verify every typed field round-trips intact. Runs in every tier. |
+| 2 | **Negative-cell probes** | Three or more semantically-invalid `(operator, value-type)` combinations (e.g. `Contains` on Boolean, `GreaterThan` on Guid). Observed API status recorded; informational only - the current evaluator silently returns false rather than 400-ing, which is a known SHOULD. Skip with `-IncludeNegativeCells:$false`. |
+| 3 | **Matrix cells** | Every cell in the selected tier runs as its own pass/fail assertion. Per-cell expected `EmployeeId` set is pre-computed in the manifest using the same null-handling and case-folding logic as `ScopingEvaluationServer`. |
+
+**Teardown**: A single `Reset-JIMSystem -Force` at scenario end wipes every sandbox object type, attribute, sync rule, and projected MVO so the host is left re-runnable.
+
 ---
 
 ### Phase 2 (Road-mapped) - Database Scenarios
 
-> The scenario numbers below (Multi-Source Aggregation, Database Source/Target, Performance Baselines) were originally drafted as 9, 10, and 11; those numbers are now taken by implemented Phase 1 scenarios (Partition-Scoped Imports, Sync Rule Scoping). The renumbered planned scenarios start at 11.
+> The scenario numbers below (Multi-Source Aggregation, Database Source/Target, Performance Baselines) were originally drafted as 9, 10, and 11; those numbers are now taken by implemented Phase 1 scenarios (Partition-Scoped Imports, Sync Rule Scoping, Scoping Criteria Matrix). The renumbered planned scenarios start at 12.
 
-#### Scenario 11: Multi-Source Aggregation
+#### Scenario 12: Multi-Source Aggregation
 
 **Purpose**: Validate multiple database sources feeding the metaverse with join rules and attribute precedence.
 
@@ -1006,24 +1078,24 @@ These belong in a dedicated scoping evaluation matrix scenario rather than expan
 | 3 | **Precedence** | SQL Server authoritative for email/phone, Oracle for department/title |
 | 4 | **DataTypes** | VARCHAR, NVARCHAR, DATE, DATETIME, INT, BIT -> correct mapping |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario9-MultiSourceAggregation.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario12-MultiSourceAggregation.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Individual steps
-./Invoke-Scenario9-MultiSourceAggregation.ps1 -Step InitialLoad -Template Small
-./Invoke-Scenario9-MultiSourceAggregation.ps1 -Step JoinRules -Template Small
-./Invoke-Scenario9-MultiSourceAggregation.ps1 -Step Precedence -Template Small
-./Invoke-Scenario9-MultiSourceAggregation.ps1 -Step DataTypes -Template Small
+./Invoke-Scenario12-MultiSourceAggregation.ps1 -Step InitialLoad -Template Small
+./Invoke-Scenario12-MultiSourceAggregation.ps1 -Step JoinRules -Template Small
+./Invoke-Scenario12-MultiSourceAggregation.ps1 -Step Precedence -Template Small
+./Invoke-Scenario12-MultiSourceAggregation.ps1 -Step DataTypes -Template Small
 
 # Run all steps sequentially
-./Invoke-Scenario9-MultiSourceAggregation.ps1 -Step All -Template Small
+./Invoke-Scenario12-MultiSourceAggregation.ps1 -Step All -Template Small
 ```
 
 ---
 
-#### Scenario 12: Database Source/Target
+#### Scenario 13: Database Source/Target
 
 **Purpose**: Validate database connector import/export capabilities.
 
@@ -1040,24 +1112,24 @@ These belong in a dedicated scoping evaluation matrix scenario rather than expan
 | 3 | **DataTypes** | Data type handling (text, numeric, date, boolean) |
 | 4 | **MultiValue** | Multi-valued attributes (if supported) |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario10-DatabaseSourceTarget.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario13-DatabaseSourceTarget.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Individual steps
-./Invoke-Scenario10-DatabaseSourceTarget.ps1 -Step Import -Template Small
-./Invoke-Scenario10-DatabaseSourceTarget.ps1 -Step Export -Template Small
-./Invoke-Scenario10-DatabaseSourceTarget.ps1 -Step DataTypes -Template Small
-./Invoke-Scenario10-DatabaseSourceTarget.ps1 -Step MultiValue -Template Small
+./Invoke-Scenario13-DatabaseSourceTarget.ps1 -Step Import -Template Small
+./Invoke-Scenario13-DatabaseSourceTarget.ps1 -Step Export -Template Small
+./Invoke-Scenario13-DatabaseSourceTarget.ps1 -Step DataTypes -Template Small
+./Invoke-Scenario13-DatabaseSourceTarget.ps1 -Step MultiValue -Template Small
 
 # Run all steps sequentially
-./Invoke-Scenario10-DatabaseSourceTarget.ps1 -Step All -Template Small
+./Invoke-Scenario13-DatabaseSourceTarget.ps1 -Step All -Template Small
 ```
 
 ---
 
-#### Scenario 13: Performance Baselines
+#### Scenario 14: Performance Baselines
 
 **Purpose**: Establish performance characteristics at various scales.
 
@@ -1956,6 +2028,8 @@ JIM/
         │   ├── Invoke-Scenario8-CrossDomainEntitlementSync.ps1   # Group sync between domains
         │   ├── Invoke-Scenario9-PartitionScopedImports.ps1       # Partition-scoped import run profiles
         │   ├── Invoke-Scenario10-SyncRuleScoping.ps1             # Sync rule scoping behaviour
+        │   ├── Invoke-Scenario11-ScopingCriteriaMatrix.ps1       # Scoping criteria evaluation matrix
+        │   ├── data/                                             # Per-scenario data + manifests (incl. Scenario 11 matrix)
         │   └── data/                                              # Scenario-specific CSV overlays (Scenarios 4, 5)
         ├── docker/
         │   ├── samba-ad-prebuilt/                                # Custom prebuilt Samba AD base image
@@ -2029,9 +2103,10 @@ JIM/
 | Scenario 8 | ✅ Complete | All 6 tests (InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup) plus ImportToMV diagnostic step |
 | Scenario 9 | ✅ Complete | Partition-scoped import run profiles |
 | Scenario 10 | ✅ Complete | Sync rule scoping behaviour: 9 sub-tests covering the full inbound + outbound scope transition matrix, cross-system inline cascade, and criteria persistence (#656) |
+| Scenario 11 | ✅ Complete | Scoping criteria evaluation matrix: three tiers (Quick / Default / Exhaustive) covering operator x value-type x group-structure end-to-end via batched per-cell CSO types, plus round-trip persistence and API negative-cell probes |
 | Entitlement (JIM-to-AD) | ⏸️ Deferred | Requires Internal MVO design |
 | Entitlement (Convert Authority) | ⏸️ Deferred | Requires Internal MVO design |
-| Scenarios 11-13 | ⏳ Road-mapped | Database scenarios (multi-source aggregation, database source/target, performance baselines): require Database Connector (#170) |
+| Scenarios 12-14 | ⏳ Road-mapped | Database scenarios (multi-source aggregation, database source/target, performance baselines): require Database Connector (#170) |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
 
 ### Remaining Work
