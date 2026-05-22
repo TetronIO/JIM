@@ -198,6 +198,13 @@ function Get-LDAPUser {
     $lines = $result -split "`n"
 
     foreach ($line in $lines) {
+        # LDIF comments start with '#' (referrals like '# refldap://...' appear in Samba AD
+        # responses even when no objects match the filter). Skip them — otherwise the regex
+        # below matches the referral as if it were an attribute line and Test-LDAPUserExists
+        # would return true for a non-existent user.
+        if ($line -match '^\s*#') {
+            continue
+        }
         if ($line -match "^([^:]+):\s*(.+)$") {
             $key = $matches[1]
             $value = $matches[2]
@@ -215,6 +222,13 @@ function Get-LDAPUser {
                 $user[$key] = $value
             }
         }
+    }
+
+    # An LDAP search result that didn't match any object still carries referrals; once
+    # those are stripped, an empty hashtable means "no user". Require at least a 'dn'
+    # attribute to be confident we parsed a real result.
+    if (-not $user.ContainsKey('dn')) {
+        return $null
     }
 
     return $user

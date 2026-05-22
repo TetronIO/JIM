@@ -1,0 +1,137 @@
+@implements IDisposable
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@if (IsLoading)
+{
+    @if (_showSkeleton)
+    {
+        @Loading
+        @if (_showLongLoadMessage && LongLoadMessage != null)
+        {
+            <div class="loading-gate-long-message mt-4">
+                @LongLoadMessage
+            </div>
+        }
+    }
+}
+else
+{
+    <div class="loading-gate-fade-in">
+        @Loaded
+    </div>
+}
+
+@code {
+    /// <summary>
+    /// True while the page's data is loading. When this flips back to false, the loaded
+    /// content fades in. When it flips to true again, the gate restarts its delay timers.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public bool IsLoading { get; set; }
+
+    /// <summary>
+    /// Milliseconds to wait before showing the skeleton. Loads that finish faster than this
+    /// never show a skeleton at all, which avoids a flash on warm/cached requests.
+    /// </summary>
+    [Parameter]
+    public int SkeletonDelayMs { get; set; } = 200;
+
+    /// <summary>
+    /// Milliseconds after which the long-load message appears beneath the skeleton. Measured
+    /// from when loading started, not from when the skeleton appeared.
+    /// </summary>
+    [Parameter]
+    public int LongLoadDelayMs { get; set; } = 5000;
+
+    /// <summary>
+    /// Skeleton fragment shown while loading takes longer than <see cref="SkeletonDelayMs"/>.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? Loading { get; set; }
+
+    /// <summary>
+    /// Real content fragment shown once loading completes.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? Loaded { get; set; }
+
+    /// <summary>
+    /// Optional fragment shown beneath the skeleton once loading exceeds
+    /// <see cref="LongLoadDelayMs"/>. Use it to set expectations on objects that are slow
+    /// to retrieve (for example, very large group memberships).
+    /// </summary>
+    [Parameter]
+    public RenderFragment? LongLoadMessage { get; set; }
+
+    private bool _showSkeleton;
+    private bool _showLongLoadMessage;
+    private bool _previousIsLoading;
+    private CancellationTokenSource? _cts;
+
+    protected override void OnParametersSet()
+    {
+        if (IsLoading == _previousIsLoading)
+            return;
+
+        _previousIsLoading = IsLoading;
+        if (IsLoading)
+            StartTimers();
+        else
+            StopTimers();
+    }
+
+    private void StartTimers()
+    {
+        StopTimers();
+        _showSkeleton = false;
+        _showLongLoadMessage = false;
+        _cts = new CancellationTokenSource();
+        _ = RunTimersAsync(_cts.Token);
+    }
+
+    private void StopTimers()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
+        _showSkeleton = false;
+        _showLongLoadMessage = false;
+    }
+
+    private async Task RunTimersAsync(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(SkeletonDelayMs, token);
+            _showSkeleton = true;
+            await InvokeAsync(StateHasChanged);
+
+            var remainingDelay = LongLoadDelayMs - SkeletonDelayMs;
+            if (remainingDelay <= 0)
+            {
+                _showLongLoadMessage = true;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
+            await Task.Delay(remainingDelay, token);
+            _showLongLoadMessage = true;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException)
+        {
+            // Expected when IsLoading flips back to false or the component is disposed.
+        }
+        catch (ObjectDisposedException)
+        {
+            // Expected if the CancellationTokenSource was disposed mid-delay.
+        }
+    }
+
+    public void Dispose()
+    {
+        StopTimers();
+    }
+}

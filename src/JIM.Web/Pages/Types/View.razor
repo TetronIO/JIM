@@ -17,7 +17,18 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>@MetaverseObjectType?.Name: @_displayName</PageTitle>
+<PageTitle>@(MetaverseObject == null ? "Loading…" : $"{MetaverseObjectType?.Name}: {_displayName}")</PageTitle>
+
+<LoadingGate IsLoading="@(MetaverseObject == null)">
+    <Loading>
+        <MvoDetailSkeleton />
+    </Loading>
+    <LongLoadMessage>
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+            Still loading. Large objects can take a few seconds to retrieve.
+        </MudAlert>
+    </LongLoadMessage>
+    <Loaded>
 <MudText Typo="Typo.h4"><MudIcon Icon="@Helpers.ResolveObjectTypeIcon(MetaverseObjectType?.Icon)" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>@MetaverseObjectType?.Name:</span> <span class="mud-primary-text">@_displayName</span></MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
@@ -170,6 +181,8 @@
         </ChildContent>
     </NavigableMudTabs>
 }
+    </Loaded>
+</LoadingGate>
 
 @code {
     [Parameter]

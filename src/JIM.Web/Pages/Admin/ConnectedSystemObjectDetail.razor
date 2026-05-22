@@ -16,7 +16,18 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Connected System Object: @GetDisplayIdentifier()</PageTitle>
+<PageTitle>@(ConnectedSystemObject == null ? "Loading…" : $"Connected System Object: {GetDisplayIdentifier()}")</PageTitle>
+
+<LoadingGate IsLoading="@(ConnectedSystemHeader == null || ConnectedSystemObject == null)">
+    <Loading>
+        <CsoDetailSkeleton />
+    </Loading>
+    <LongLoadMessage>
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+            Still loading. Large objects can take a few seconds to retrieve.
+        </MudAlert>
+    </LongLoadMessage>
+    <Loaded>
 <MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connected System Object:</span> <span class="mud-primary-text">@GetDisplayIdentifier()</span>
 </MudText>
 <MudBreadcrumbs Items="Breadcrumbs" Class="ps-0"></MudBreadcrumbs>
@@ -300,6 +311,8 @@
     </NavigableMudTabs>
     </div>
 }
+    </Loaded>
+</LoadingGate>
 
 @code {
     /// <summary>

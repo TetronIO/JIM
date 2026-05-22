@@ -53,6 +53,7 @@ public class JimApplication : IDisposable
     public SearchServer Search { get; }
     public SecurityServer Security { get; }
     public ServiceSettingsServer ServiceSettings { get; }
+    public SystemServer System { get; }
     public TaskingServer Tasking { get; }
 
     public JimApplication(IRepository dataRepository, IMemoryCache? cache = null, ISyncRepository? syncRepository = null)
@@ -78,6 +79,7 @@ public class JimApplication : IDisposable
         Security = new SecurityServer(this);
         Seeding = new SeedingServer(this);
         ServiceSettings = new ServiceSettingsServer(this);
+        System = new SystemServer(this);
         Tasking = new TaskingServer(this);
         Log.Verbose("The JIM Application has started.");
     }

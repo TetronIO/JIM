@@ -17,6 +17,7 @@ public interface IRepository : IDisposable
     public ISecurityRepository Security { get; }
     public ISeedingRepository Seeding { get; }
     public IServiceSettingsRepository ServiceSettings { get; }
+    public ISystemRepository System { get; }
     public ITaskingRepository Tasking { get; }
     public ITrustedCertificateRepository TrustedCertificates { get; }
 

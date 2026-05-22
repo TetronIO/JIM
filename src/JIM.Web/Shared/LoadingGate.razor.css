@@ -1,0 +1,17 @@
+/* Fade the loaded content in over 200ms once data is ready. The fade plays once
+   on mount of the wrapper div; subsequent re-renders of the parent do not retrigger
+   the animation because the div stays in the DOM. */
+.loading-gate-fade-in {
+    animation: loading-gate-fade-in 200ms ease-out;
+}
+
+@keyframes loading-gate-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* The long-load message slot fades in gently when it appears, so it does not snap
+   onto screen 5 seconds into the load. */
+.loading-gate-long-message {
+    animation: loading-gate-fade-in 300ms ease-out;
+}

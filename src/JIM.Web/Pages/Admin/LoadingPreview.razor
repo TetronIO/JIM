@@ -1,0 +1,254 @@
+@page "/admin/loading-preview"
+@attribute [Authorize(Roles = "Administrator")]
+@implements IDisposable
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+<PageTitle>Loading Preview</PageTitle>
+<MudText Typo="Typo.h4">Loading Preview</MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
+    A reference for the skeleton loading states JIM shows on detail pages while data is being retrieved.
+    Use the simulation controls below to compare how each timing window feels, including the long-load
+    message that appears for slow responses such as very large group memberships.
+</MudText>
+
+@* ─── Live simulation ─── *@
+<MudPaper Class="pa-5 mt-5" Outlined="true" Elevation="0">
+    <MudText Typo="Typo.h5" Class="mb-4">Live simulation</MudText>
+
+    <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-4">
+        <MudText Typo="Typo.body1" Class="mud-text-secondary">Composite:</MudText>
+        <MudButtonGroup OverrideStyles="false">
+            <MudButton Variant="@(_selectedComposite == "mvo" ? Variant.Filled : Variant.Outlined)"
+                       Color="Color.Primary"
+                       OnClick="@(() => _selectedComposite = "mvo")">MVO detail</MudButton>
+            <MudButton Variant="@(_selectedComposite == "cso" ? Variant.Filled : Variant.Outlined)"
+                       Color="Color.Primary"
+                       OnClick="@(() => _selectedComposite = "cso")">CSO detail</MudButton>
+        </MudButtonGroup>
+
+        <MudDivider Vertical="true" FlexItem="true" />
+
+        <MudText Typo="Typo.body1" Class="mud-text-secondary">Animation:</MudText>
+        <MudButtonGroup OverrideStyles="false">
+            <MudButton Variant="@(_animation == Animation.Wave ? Variant.Filled : Variant.Outlined)"
+                       Color="Color.Primary"
+                       OnClick="@(() => _animation = Animation.Wave)">Wave</MudButton>
+            <MudButton Variant="@(_animation == Animation.Pulse ? Variant.Filled : Variant.Outlined)"
+                       Color="Color.Primary"
+                       OnClick="@(() => _animation = Animation.Pulse)">Pulse</MudButton>
+        </MudButtonGroup>
+    </MudStack>
+
+    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-2">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                   StartIcon="@Icons.Material.Filled.FlashOn"
+                   OnClick="@(() => SimulateLoadAsync(100))">Fast (100 ms)</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                   StartIcon="@Icons.Material.Filled.Schedule"
+                   OnClick="@(() => SimulateLoadAsync(1500))">Normal (1.5 s)</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                   StartIcon="@Icons.Material.Filled.HourglassBottom"
+                   OnClick="@(() => SimulateLoadAsync(8000))">Slow (8 s)</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                   StartIcon="@Icons.Material.Filled.Cancel"
+                   OnClick="CancelSimulation">Cancel</MudButton>
+    </MudStack>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+        Fast should suppress the skeleton entirely (no flash). Normal shows the skeleton then fades to content.
+        Slow shows the long-load message at 5 seconds. Cancel verifies timer disposal mid-load.
+    </MudText>
+
+    <div class="loading-preview-sandbox">
+        <LoadingGate IsLoading="@_simulatedLoading">
+            <Loading>
+                @if (_selectedComposite == "mvo")
+                {
+                    <MvoDetailSkeleton Animation="@_animation" />
+                }
+                else
+                {
+                    <CsoDetailSkeleton Animation="@_animation" />
+                }
+            </Loading>
+            <LongLoadMessage>
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                    Still loading. Large objects can take a few seconds to retrieve.
+                </MudAlert>
+            </LongLoadMessage>
+            <Loaded>
+                @if (_selectedComposite == "mvo")
+                {
+                    <MudText Typo="Typo.h4">
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />
+                        <span>Users:</span> <span class="mud-primary-text">alice.johnson@@example.com</span>
+                    </MudText>
+                    <MudBreadcrumbs Items="_sampleBreadcrumbs" Class="ps-0"></MudBreadcrumbs>
+                    <MudPaper Class="pa-4 mt-6" Outlined="true">
+                        <MudText Typo="Typo.body1">Simulated loaded content. In production this slot renders the real detail markup.</MudText>
+                    </MudPaper>
+                }
+                else
+                {
+                    <MudText Typo="Typo.h4">
+                        <MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />
+                        <span>Connected System Object:</span> <span class="mud-primary-text">CN=alice.johnson,OU=Users</span>
+                    </MudText>
+                    <MudBreadcrumbs Items="_sampleBreadcrumbs" Class="ps-0"></MudBreadcrumbs>
+                    <MudPaper Class="pa-4 mt-6" Outlined="true">
+                        <MudText Typo="Typo.body1">Simulated loaded content. In production this slot renders the real detail markup.</MudText>
+                    </MudPaper>
+                }
+            </Loaded>
+        </LoadingGate>
+    </div>
+</MudPaper>
+
+@* ─── Composite skeletons (static) ─── *@
+<MudPaper Class="pa-5 mt-5" Outlined="true" Elevation="0">
+    <MudText Typo="Typo.h5" Class="mb-4">Composite skeletons</MudText>
+    <MudText Typo="Typo.body1" Class="mud-text-secondary mb-4">
+        Each composite mirrors the silhouette of a specific JIM detail page so that the skeleton-to-content
+        swap does not visually jump.
+    </MudText>
+
+    <MudText Typo="Typo.h6" Class="mb-2">MvoDetailSkeleton</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+        Used by <span class="jim-code-inline">Pages/Types/View.razor</span>.
+    </MudText>
+    <div class="loading-preview-static-sample">
+        <MvoDetailSkeleton />
+    </div>
+
+    <MudDivider Class="my-6" />
+
+    <MudText Typo="Typo.h6" Class="mb-2">CsoDetailSkeleton</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+        Used by <span class="jim-code-inline">Pages/Admin/ConnectedSystemObjectDetail.razor</span>.
+    </MudText>
+    <div class="loading-preview-static-sample">
+        <CsoDetailSkeleton />
+    </div>
+</MudPaper>
+
+@* ─── Primitives ─── *@
+<MudPaper Class="pa-5 mt-5" Outlined="true" Elevation="0">
+    <MudText Typo="Typo.h5" Class="mb-4">Primitives</MudText>
+    <MudText Typo="Typo.body1" Class="mud-text-secondary mb-4">
+        The composites above are built from these primitive components. Reuse them when adding skeletons
+        to new detail pages.
+    </MudText>
+
+    <MudText Typo="Typo.h6" Class="mb-2">PageHeaderSkeleton</MudText>
+    <div class="loading-preview-static-sample mb-6">
+        <PageHeaderSkeleton />
+    </div>
+
+    <MudText Typo="Typo.h6" Class="mb-2">InfoPanelSkeleton (4 rows)</MudText>
+    <div class="loading-preview-static-sample mb-6">
+        <InfoPanelSkeleton Rows="4" OmitTopMargin="true" />
+    </div>
+
+    <MudText Typo="Typo.h6" Class="mb-2">TabBarSkeleton (3 tabs)</MudText>
+    <div class="loading-preview-static-sample mb-6">
+        <TabBarSkeleton TabCount="3" />
+    </div>
+
+    <MudText Typo="Typo.h6" Class="mb-2">AttributeTableSkeleton (5 rows)</MudText>
+    <div class="loading-preview-static-sample">
+        <AttributeTableSkeleton Rows="5" />
+    </div>
+</MudPaper>
+
+@* ─── Animation comparison ─── *@
+<MudPaper Class="pa-5 mt-5 mb-5" Outlined="true" Elevation="0">
+    <MudText Typo="Typo.h5" Class="mb-4">Animation comparison</MudText>
+    <MudText Typo="Typo.body1" Class="mud-text-secondary mb-4">
+        Wave and Pulse rendered side by side at identical sizes. The live simulation above uses whichever
+        is selected; use this section to pick a default before settling the codebase on one.
+    </MudText>
+
+    <MudGrid Spacing="4">
+        <MudItem xs="12" md="6">
+            <MudText Typo="Typo.h6" Class="mb-2">Wave</MudText>
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudStack Spacing="2">
+                    <MudSkeleton SkeletonType="SkeletonType.Text" Width="60%" Height="20px" Animation="Animation.Wave" />
+                    <MudSkeleton SkeletonType="SkeletonType.Text" Width="80%" Height="20px" Animation="Animation.Wave" />
+                    <MudSkeleton SkeletonType="SkeletonType.Text" Width="45%" Height="20px" Animation="Animation.Wave" />
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="100%" Height="80px" Animation="Animation.Wave" />
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudText Typo="Typo.h6" Class="mb-2">Pulse</MudText>
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudStack Spacing="2">
+                    <MudSkeleton SkeletonType="SkeletonType.Text" Width="60%" Height="20px" Animation="Animation.Pulse" />
+                    <MudSkeleton SkeletonType="SkeletonType.Text" Width="80%" Height="20px" Animation="Animation.Pulse" />
+                    <MudSkeleton SkeletonType="SkeletonType.Text" Width="45%" Height="20px" Animation="Animation.Pulse" />
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="100%" Height="80px" Animation="Animation.Pulse" />
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@code {
+    private bool _simulatedLoading;
+    private string _selectedComposite = "mvo";
+    private Animation _animation = Animation.Wave;
+    private CancellationTokenSource? _simulationCts;
+
+    private readonly List<BreadcrumbItem> _breadcrumbs = new()
+    {
+        new("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new("Admin", href: "/admin"),
+        new("Loading Preview", href: null, disabled: true)
+    };
+
+    private readonly List<BreadcrumbItem> _sampleBreadcrumbs = new()
+    {
+        new("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new("Sample", href: "#"),
+        new("Loaded view", href: null, disabled: true)
+    };
+
+    private async Task SimulateLoadAsync(int durationMs)
+    {
+        _simulationCts?.Cancel();
+        _simulationCts?.Dispose();
+        _simulationCts = new CancellationTokenSource();
+        var token = _simulationCts.Token;
+
+        _simulatedLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            await Task.Delay(durationMs, token);
+            _simulatedLoading = false;
+            StateHasChanged();
+        }
+        catch (TaskCanceledException)
+        {
+            // Cancel button or a follow-up click interrupted this simulation.
+        }
+    }
+
+    private void CancelSimulation()
+    {
+        _simulationCts?.Cancel();
+        _simulatedLoading = false;
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        _simulationCts?.Cancel();
+        _simulationCts?.Dispose();
+        _simulationCts = null;
+    }
+}

@@ -7,6 +7,37 @@
 /* MUDBLAZOR CUSTOMISATIONS */
 /* Note: Colour palettes are defined in css/themes/ files, not here. */
 
+/* Skeleton refinements applied to all MudSkeleton instances. The MudBlazor
+   defaults render rectangle variants with hard right-angle corners, which look
+   inconsistent next to text-variant bars that already appear rounded (the text
+   variant uses --mud-default-borderradius), and the wave shimmer uses a 4%
+   black overlay that is nearly invisible on dark themes. These rules round the
+   rectangles and bump the wave contrast so the shimmer actually reads on both
+   light and dark surfaces.
+   Class name verified against MudBlazor v9.4.0 source: SkeletonType.Rectangle
+   emits .mud-skeleton-rectangle (singular, lowercased via ToStringFast). */
+.mud-skeleton-rectangle {
+    border-radius: var(--mud-default-borderradius, 4px);
+}
+
+.mud-skeleton-wave::after {
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.55),
+        transparent
+    ) !important;
+}
+
+body.jim-dark-mode .mud-skeleton-wave::after {
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.18),
+        transparent
+    ) !important;
+}
+
 .mud-simple-table table * tr>th {
     font-weight: 500;
     font-size: 0.875rem;

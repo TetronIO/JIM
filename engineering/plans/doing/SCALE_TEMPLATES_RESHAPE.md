@@ -239,7 +239,6 @@ Apply to: `Invoke-Scenario1-HRToIdentityDirectory.ps1`, `Invoke-Scenario7-ClearC
 - `test/integration/README.md` (template table)
 - `test/CLAUDE.md` (template lists, examples, accesslog MDB sizing note)
 - `engineering/INTEGRATION_TESTING.md` (template parameter docs, scenario × template matrix, command examples, `-PreRelease` description)
-- `engineering/INTEGRATION_TESTING_PERFORMANCE.md` (template scale table at the top)
 - `docs/administration/deployment.md` (memory scaling table references)
 - `engineering/CACHING_STRATEGY.md` (referenced template numbers)
 - `CLAUDE.md` (project root, if it references Scale100K specifically)

@@ -1,0 +1,12 @@
+.info-panel-skeleton-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.4rem 0;
+}
+
+.info-panel-skeleton-row + .info-panel-skeleton-row {
+    border-top: 1px solid var(--mud-palette-lines-default);
+    margin-top: 0.4rem;
+    padding-top: 0.7rem;
+}
