@@ -86,10 +86,17 @@ param(
     [bool]$IncludeNegativeCells = $true,
 
     [Parameter(Mandatory=$false)]
-    [hashtable]$DirectoryConfig
+    [hashtable]$DirectoryConfig,
+
+    # Accepted for runner-API compatibility (passed by Run-IntegrationTests.ps1 when
+    # using directory snapshot images). Scenario 11 has no LDAP step and no AD users
+    # to populate, so this is a no-op here; suppressing unused-variable analysis.
+    [Parameter(Mandatory=$false)]
+    [switch]$SkipPopulate
 )
 
 Set-StrictMode -Version Latest
+$null = $SkipPopulate
 $ErrorActionPreference = 'Stop'
 $ConfirmPreference = 'None'
 
@@ -107,11 +114,14 @@ function Get-MvTypeName {
     return "Sc11Mvo_$($CellName -replace '\.', '_')"
 }
 
-# Build the API request body for a single scoping criterion against a CSO type.
-# Resolves the attribute name to the CSO type's attribute Id, then attaches the
-# right typed value carrier.
-function New-CriterionBody {
+# Build a New-JIMScopingCriterion call from a manifest criterion record. Resolves
+# the attribute name against the CSO type's discovered attributes, picks the right
+# -*Value parameter for the cell's valueType, and forwards CaseSensitive when the
+# manifest specifies it.
+function Add-CriterionFromManifest {
     param(
+        [Parameter(Mandatory)][int]$SyncRuleId,
+        [Parameter(Mandatory)][int]$GroupId,
         [Parameter(Mandatory)]$Criterion,
         [Parameter(Mandatory)]$CsoType
     )
@@ -121,34 +131,25 @@ function New-CriterionBody {
         throw "Criterion references attribute '$($Criterion.attribute)' which is not on CSO type '$($CsoType.name)'"
     }
 
-    $body = @{
-        connectedSystemAttributeId = $csAttr.id
-        comparisonType = $Criterion.operator
+    $apiArgs = @{
+        SyncRuleId                   = $SyncRuleId
+        GroupId                      = $GroupId
+        ConnectedSystemAttributeId   = $csAttr.id
+        ComparisonType               = $Criterion.operator
     }
     if ($null -ne $Criterion.caseSensitive) {
-        $body.caseSensitive = $Criterion.caseSensitive
+        $apiArgs.CaseSensitive = [bool]$Criterion.caseSensitive
     }
-
     switch ($Criterion.valueType) {
-        'Text'       { $body.stringValue = [string]$Criterion.value }
-        'Number'     { $body.intValue = [int]$Criterion.value }
-        'LongNumber' { $body.longValue = [long]$Criterion.value }
-        'DateTime'   { $body.dateTimeValue = ([datetime]$Criterion.value).ToString('o') }
-        'Boolean'    { $body.boolValue = [bool]$Criterion.value }
-        'Guid'       { $body.guidValue = ([Guid]$Criterion.value).ToString() }
+        'Text'       { $apiArgs.StringValue   = [string]$Criterion.value }
+        'Number'     { $apiArgs.IntValue      = [int]$Criterion.value }
+        'LongNumber' { $apiArgs.LongValue     = [long]$Criterion.value }
+        'DateTime'   { $apiArgs.DateTimeValue = [datetime]$Criterion.value }
+        'Boolean'    { $apiArgs.BoolValue     = [bool]$Criterion.value }
+        'Guid'       { $apiArgs.GuidValue     = [Guid]$Criterion.value }
         default      { throw "Unsupported criterion valueType '$($Criterion.valueType)'" }
     }
-    return $body
-}
-
-# POST a criterion to a specific group.
-function Add-CriterionToGroup {
-    param(
-        [Parameter(Mandatory)][int]$SyncRuleId,
-        [Parameter(Mandatory)][int]$GroupId,
-        [Parameter(Mandatory)][hashtable]$Body
-    )
-    Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/scoping-criteria/$GroupId/criteria" -Method 'POST' -Body $Body | Out-Null
+    New-JIMScopingCriterion @apiArgs | Out-Null
 }
 
 # Configure scoping for a single cell against its sync rule. Handles all four group
@@ -160,40 +161,29 @@ function Set-CellScoping {
         [Parameter(Mandatory)]$CsoType
     )
 
-    $primaryBody = New-CriterionBody -Criterion $Cell.primary -CsoType $CsoType
-
     switch ($Cell.group) {
         'Single' {
             $g = New-JIMScopingCriteriaGroup -SyncRuleId $SyncRuleId -Type 'All' -PassThru
-            Add-CriterionToGroup -SyncRuleId $SyncRuleId -GroupId $g.id -Body $primaryBody
+            Add-CriterionFromManifest -SyncRuleId $SyncRuleId -GroupId $g.id -Criterion $Cell.primary -CsoType $CsoType
         }
         'AllPair' {
             $g = New-JIMScopingCriteriaGroup -SyncRuleId $SyncRuleId -Type 'All' -PassThru
-            Add-CriterionToGroup -SyncRuleId $SyncRuleId -GroupId $g.id -Body $primaryBody
-            $secondaryBody = New-CriterionBody -Criterion $Cell.secondary -CsoType $CsoType
-            Add-CriterionToGroup -SyncRuleId $SyncRuleId -GroupId $g.id -Body $secondaryBody
+            Add-CriterionFromManifest -SyncRuleId $SyncRuleId -GroupId $g.id -Criterion $Cell.primary -CsoType $CsoType
+            Add-CriterionFromManifest -SyncRuleId $SyncRuleId -GroupId $g.id -Criterion $Cell.secondary -CsoType $CsoType
         }
         'AnyPair' {
             $g = New-JIMScopingCriteriaGroup -SyncRuleId $SyncRuleId -Type 'Any' -PassThru
-            Add-CriterionToGroup -SyncRuleId $SyncRuleId -GroupId $g.id -Body $primaryBody
-            $secondaryBody = New-CriterionBody -Criterion $Cell.secondary -CsoType $CsoType
-            Add-CriterionToGroup -SyncRuleId $SyncRuleId -GroupId $g.id -Body $secondaryBody
+            Add-CriterionFromManifest -SyncRuleId $SyncRuleId -GroupId $g.id -Criterion $Cell.primary -CsoType $CsoType
+            Add-CriterionFromManifest -SyncRuleId $SyncRuleId -GroupId $g.id -Criterion $Cell.secondary -CsoType $CsoType
         }
         'Nested' {
-            # (primary OR tertiary) AND secondary
-            # Top group is All; child Any group holds primary + tertiary; secondary sits
-            # alongside the child group in the top All.
+            # (primary OR tertiary) AND secondary - top All, child Any holds primary + tertiary,
+            # secondary sits alongside the child group in the top All.
             $top = New-JIMScopingCriteriaGroup -SyncRuleId $SyncRuleId -Type 'All' -PassThru
-
-            $childBody = @{ type = 'Any'; position = 0 }
-            $child = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/scoping-criteria/$($top.id)/child-groups" -Method 'POST' -Body $childBody
-
-            Add-CriterionToGroup -SyncRuleId $SyncRuleId -GroupId $child.id -Body $primaryBody
-            $tertiaryBody = New-CriterionBody -Criterion $Cell.tertiary -CsoType $CsoType
-            Add-CriterionToGroup -SyncRuleId $SyncRuleId -GroupId $child.id -Body $tertiaryBody
-
-            $secondaryBody = New-CriterionBody -Criterion $Cell.secondary -CsoType $CsoType
-            Add-CriterionToGroup -SyncRuleId $SyncRuleId -GroupId $top.id -Body $secondaryBody
+            $child = New-JIMScopingCriteriaGroup -SyncRuleId $SyncRuleId -ParentGroupId $top.id -Type 'Any' -PassThru
+            Add-CriterionFromManifest -SyncRuleId $SyncRuleId -GroupId $child.id -Criterion $Cell.primary -CsoType $CsoType
+            Add-CriterionFromManifest -SyncRuleId $SyncRuleId -GroupId $child.id -Criterion $Cell.tertiary -CsoType $CsoType
+            Add-CriterionFromManifest -SyncRuleId $SyncRuleId -GroupId $top.id -Criterion $Cell.secondary -CsoType $CsoType
         }
         default {
             throw "Unknown cell group structure '$($Cell.group)'"
@@ -300,11 +290,7 @@ $rtAttrs['DateTime'] = New-JIMMetaverseAttribute -Name 'Sc11Rt_DateTime' -Type D
 $rtAttrs['Boolean']  = New-JIMMetaverseAttribute -Name 'Sc11Rt_Boolean'  -Type Boolean  -ErrorAction Stop
 $rtAttrs['Guid']     = New-JIMMetaverseAttribute -Name 'Sc11Rt_Guid'     -Type Guid     -ErrorAction Stop
 
-# LongNumber is not yet in the New-JIMMetaverseAttribute -Type ValidateSet; fall back
-# to the raw API. This gap is filed as follow-up; for the round-trip test we just
-# need the attribute to exist so the criterion has somewhere to live.
-$rtLongBody = @{ name = 'Sc11Rt_LongNumber'; type = 8; attributePlurality = 0 }
-$rtAttrs['LongNumber'] = Invoke-JIMApi -Endpoint '/api/v1/metaverse/attributes' -Method 'POST' -Body $rtLongBody
+$rtAttrs['LongNumber'] = New-JIMMetaverseAttribute -Name 'Sc11Rt_LongNumber' -Type LongNumber -ErrorAction Stop
 
 $rtMvType = New-JIMMetaverseObjectType -Name 'Sc11RoundTripMVO' -PluralName 'Sc11RoundTripMVOs' `
     -AttributeIds @($rtAttrs.Values | ForEach-Object { $_.id }) -ErrorAction Stop
@@ -314,7 +300,9 @@ $rtTestDataDir = "$PSScriptRoot/../test-data"
 $null = New-Item -ItemType Directory -Force -Path $rtTestDataDir
 $rtCsvHostPath = Join-Path $rtTestDataDir 'scenario11-roundtrip.csv'
 "ObjectType,EmployeeId`nSc11RoundTripCSO,E000" | Set-Content -Path $rtCsvHostPath -Encoding utf8 -NoNewline
-Write-FilesToConnectorVolume -SourceDir $rtTestDataDir -Files @('scenario11-roundtrip.csv') | Out-Null
+Write-FilesToConnectorVolume -SourceDir $rtTestDataDir -Files @(
+    @{ SourceFile = 'scenario11-roundtrip.csv'; DestinationPath = '/connector-files/test-data/scenario11-roundtrip.csv' }
+) | Out-Null
 
 $csvConnectorDef = Get-JIMConnectorDefinition | Where-Object { $_.name -eq 'JIM File Connector' }
 $csvConnectorFull = Get-JIMConnectorDefinition -Id $csvConnectorDef.id
@@ -355,22 +343,27 @@ $rtCases = @(
 $roundTripPass = 0
 $roundTripFail = 0
 foreach ($case in $rtCases) {
-    $body = @{
-        metaverseAttributeId = $case.attr
-        comparisonType = $case.op
-        caseSensitive = $false
+    $apiArgs = @{
+        SyncRuleId           = $rtRule.id
+        GroupId              = $rtGroup.id
+        MetaverseAttributeId = $case.attr
+        ComparisonType       = $case.op
+        CaseSensitive        = $false
+        PassThru             = $true
     }
-    $body[$case.field] = if ($case.key -eq 'DateTime') {
-        ($case.value).ToString('o')
-    } elseif ($case.key -eq 'Guid') {
-        ($case.value).ToString()
-    } else {
-        $case.value
+    # Pick the cmdlet parameter matching the value carrier under test.
+    switch ($case.key) {
+        'Text'       { $apiArgs.StringValue   = $case.value }
+        'Number'     { $apiArgs.IntValue      = $case.value }
+        'LongNumber' { $apiArgs.LongValue     = $case.value }
+        'DateTime'   { $apiArgs.DateTimeValue = $case.value }
+        'Boolean'    { $apiArgs.BoolValue     = $case.value }
+        'Guid'       { $apiArgs.GuidValue     = $case.value }
     }
+    $created = New-JIMScopingCriterion @apiArgs
 
-    $created = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$($rtRule.id)/scoping-criteria/$($rtGroup.id)/criteria" -Method 'POST' -Body $body
     # Read back via the group endpoint to verify persistence-then-retrieval round-trips.
-    $persisted = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$($rtRule.id)/scoping-criteria/$($rtGroup.id)"
+    $persisted = Get-JIMScopingCriteria -SyncRuleId $rtRule.id -GroupId $rtGroup.id
     $criterion = $persisted.criteria | Where-Object { $_.id -eq $created.id }
     if (-not $criterion) {
         Write-Host "    FAIL $($case.key): criterion not persisted on read-back" -ForegroundColor Red
@@ -416,16 +409,25 @@ if ($IncludeNegativeCells) {
     )
 
     foreach ($case in $negCases) {
-        $body = @{
-            metaverseAttributeId = $case.attr
-            comparisonType = $case.op
+        # Use the cmdlet so the same code-path validation runs. The cmdlet doesn't
+        # enforce type-vs-value pairings, so it'll happily forward an invalid combo
+        # to the API and we observe the API's response.
+        $apiArgs = @{
+            SyncRuleId           = $rtRule.id
+            GroupId              = $rtGroup.id
+            MetaverseAttributeId = $case.attr
+            ComparisonType       = $case.op
+            ErrorAction          = 'Stop'
         }
-        $body[$case.valueField] = $case.v
+        switch ($case.valueField) {
+            'stringValue' { $apiArgs.StringValue = $case.v }
+            'intValue'    { $apiArgs.IntValue    = $case.v }
+        }
 
         $observed = 'unknown'
         try {
-            Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$($rtRule.id)/scoping-criteria/$($rtGroup.id)/criteria" -Method 'POST' -Body $body -ErrorAction Stop | Out-Null
-            $observed = '201 created'
+            New-JIMScopingCriterion @apiArgs | Out-Null
+            $observed = '201 created (no validation - known SHOULD gap)'
         }
         catch {
             $msg = $_.Exception.Message
@@ -455,10 +457,7 @@ foreach ($attr in $manifest.seedAttributes) {
         'DateTime'   { $created = New-JIMMetaverseAttribute -Name $attr.name -Type DateTime -ErrorAction Stop }
         'Boolean'    { $created = New-JIMMetaverseAttribute -Name $attr.name -Type Boolean  -ErrorAction Stop }
         'Guid'       { $created = New-JIMMetaverseAttribute -Name $attr.name -Type Guid     -ErrorAction Stop }
-        'LongNumber' {
-            $body = @{ name = $attr.name; type = 8; attributePlurality = 0 }
-            $created = Invoke-JIMApi -Endpoint '/api/v1/metaverse/attributes' -Method 'POST' -Body $body
-        }
+        'LongNumber' { $created = New-JIMMetaverseAttribute -Name $attr.name -Type LongNumber -ErrorAction Stop }
         default      { throw "Unknown manifest attribute type '$($attr.type)' for '$($attr.name)'" }
     }
     $mvAttrIds[$attr.name] = $created.id
@@ -497,7 +496,9 @@ $matrixCsvPath = Join-Path $matrixCsvDir 'scenario11-matrix.csv'
 [System.IO.File]::WriteAllLines($matrixCsvPath, $lines, [System.Text.UTF8Encoding]::new($false))
 Write-Host "  OK Wrote fanned-out CSV: $($lines.Count - 1) data rows for $($tierCells.Count) cells" -ForegroundColor Green
 
-Write-FilesToConnectorVolume -SourceDir $matrixCsvDir -Files @('scenario11-matrix.csv') | Out-Null
+Write-FilesToConnectorVolume -SourceDir $matrixCsvDir -Files @(
+    @{ SourceFile = 'scenario11-matrix.csv'; DestinationPath = '/connector-files/test-data/scenario11-matrix.csv' }
+) | Out-Null
 Write-Host "  OK CSV staged into connector volume" -ForegroundColor Green
 
 # ─── Create the connected system and import schema ─────────────────────────────
@@ -535,7 +536,7 @@ foreach ($csoType in $matrixCsoTypes) {
     $attrUpdates = @{}
     foreach ($attr in $csoType.attributes) {
         if ($attr.name -eq 'ObjectType') { continue }
-        $attrUpdates[$attr.id] = @{ selected = $true; isExternalId = ($attr.name -eq 'EmployeeId') }
+        $attrUpdates[$attr.id] = @{ selected = $true; isExternalId = ($attr.name -eq 'Sc11EmployeeId') }
     }
     Set-JIMConnectedSystemAttribute -ConnectedSystemId $matrixSystem.id -ObjectTypeId $csoType.id -AttributeUpdates $attrUpdates | Out-Null
     $csoTypeByName[$csoType.name] = $csoType
@@ -572,6 +573,17 @@ foreach ($cell in $tierCells) {
         -ConnectedSystemObjectTypeId $csoType.id -MetaverseObjectTypeId $mvType.id `
         -Direction Import -ProjectToMetaverse -PassThru
 
+    # Add an attribute-flow rule so the projected MVO has Sc11EmployeeId set. Per-cell
+    # assertions read back this attribute to identify which seed rows the rule projected.
+    # Without the flow, projection still happens but the MVO has no readable identifier
+    # to compare against the expected EmployeeId set.
+    $csoEmployeeIdAttr = $csoType.attributes | Where-Object { $_.name -eq 'Sc11EmployeeId' } | Select-Object -First 1
+    if (-not $csoEmployeeIdAttr) {
+        throw "CSO type '$csoTypeName' has no Sc11EmployeeId attribute - matrix CSV is malformed."
+    }
+    New-JIMSyncRuleMapping -SyncRuleId $rule.id -SourceConnectedSystemAttributeId $csoEmployeeIdAttr.id `
+        -TargetMetaverseAttributeId $mvAttrIds['Sc11EmployeeId'] | Out-Null
+
     Set-CellScoping -SyncRuleId $rule.id -Cell $cell -CsoType $csoType
     $cellRules[$cell.name] = $rule
 }
@@ -590,7 +602,7 @@ Write-Host "  OK Run profile created (ID: $($runProfile.id))" -ForegroundColor G
 Write-TestStep "Step 14" "Running Full Import (single sync evaluates all $($tierCells.Count) rules)"
 
 $activity = Start-JIMRunProfile -ConnectedSystemId $matrixSystem.id -RunProfileId $runProfile.id -Wait -PassThru
-Write-Host "  OK Full Import complete (activity ID: $($activity.id))" -ForegroundColor Green
+Write-Host "  OK Full Import complete (activity ID: $($activity.activityId))" -ForegroundColor Green
 
 # ─── Per-cell assertions ───────────────────────────────────────────────────────
 
@@ -604,16 +616,16 @@ foreach ($cell in $tierCells) {
     $mvType = $cellMvTypes[$cell.name]
     $expected = @($cell.expected | Sort-Object)
 
-    $mvos = @(Get-JIMMetaverseObject -ObjectTypeId $mvType.id -All -Attributes 'EmployeeId')
+    $mvos = @(Get-JIMMetaverseObject -ObjectTypeId $mvType.id -All -Attributes 'Sc11EmployeeId')
     $actual = @()
     foreach ($mvo in $mvos) {
         # The MV object DTO exposes attributes as a hashtable keyed by name OR an array
-        # of {name, values}; handle both. The EmployeeId is a single-valued text attribute.
+        # of {name, values}; handle both. Sc11EmployeeId is a single-valued text attribute.
         $eidValue = $null
         if ($mvo.PSObject.Properties.Name -contains 'attributes' -and $mvo.attributes) {
             $attrEntry = $mvo.attributes | Where-Object {
-                ($_.PSObject.Properties.Name -contains 'name' -and $_.name -eq 'EmployeeId') -or
-                ($_.PSObject.Properties.Name -contains 'attributeName' -and $_.attributeName -eq 'EmployeeId')
+                ($_.PSObject.Properties.Name -contains 'name' -and $_.name -eq 'Sc11EmployeeId') -or
+                ($_.PSObject.Properties.Name -contains 'attributeName' -and $_.attributeName -eq 'Sc11EmployeeId')
             } | Select-Object -First 1
             if ($attrEntry) {
                 if ($attrEntry.PSObject.Properties.Name -contains 'stringValue') { $eidValue = $attrEntry.stringValue }

@@ -46,14 +46,14 @@ $ErrorActionPreference = 'Stop'
 # has all attributes null so null-handling is exercised by every cell.
 
 $seedAttributes = @(
-    @{ name = 'EmployeeId';         type = 'Text';       isExternalId = $true }
-    @{ name = 'Department';         type = 'Text' }
-    @{ name = 'JobTitle';           type = 'Text' }
-    @{ name = 'EmployeeNumber';     type = 'Number' }
-    @{ name = 'LongEmployeeNumber'; type = 'LongNumber' }
-    @{ name = 'HireDate';           type = 'DateTime' }
-    @{ name = 'IsActive';           type = 'Boolean' }
-    @{ name = 'DepartmentId';       type = 'Guid' }
+    @{ name = 'Sc11EmployeeId';         type = 'Text';       isExternalId = $true }
+    @{ name = 'Sc11Department';         type = 'Text' }
+    @{ name = 'Sc11JobTitle';           type = 'Text' }
+    @{ name = 'Sc11EmployeeNumber';     type = 'Number' }
+    @{ name = 'Sc11LongEmployeeNumber'; type = 'LongNumber' }
+    @{ name = 'Sc11HireDate';           type = 'DateTime' }
+    @{ name = 'Sc11IsActive';           type = 'Boolean' }
+    @{ name = 'Sc11DepartmentId';       type = 'Guid' }
 )
 
 $guidA = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
@@ -64,21 +64,21 @@ $guidE = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'
 $guidF = 'ffffffff-ffff-ffff-ffff-ffffffffffff'
 
 $seed = @(
-    [ordered]@{ EmployeeId='E001'; Department='Finance';          JobTitle='Manager';        EmployeeNumber=100;   LongEmployeeNumber=5000000000;  HireDate='2020-01-15T00:00:00Z'; IsActive=$true;  DepartmentId=$guidA }
-    [ordered]@{ EmployeeId='E002'; Department='finance';          JobTitle='Senior Manager'; EmployeeNumber=200;   LongEmployeeNumber=6000000000;  HireDate='2021-06-30T00:00:00Z'; IsActive=$false; DepartmentId=$guidB }
-    [ordered]@{ EmployeeId='E003'; Department='FinancePartners';  JobTitle='Director';       EmployeeNumber=1000;  LongEmployeeNumber=-1;          HireDate='2022-03-01T00:00:00Z'; IsActive=$true;  DepartmentId=$guidC }
-    [ordered]@{ EmployeeId='E004'; Department='CorporateFinance'; JobTitle='VP';             EmployeeNumber=5000;  LongEmployeeNumber=1;           HireDate='2023-08-15T00:00:00Z'; IsActive=$true;  DepartmentId=$guidA }
-    [ordered]@{ EmployeeId='E005'; Department='Sales';            JobTitle='Executive';      EmployeeNumber=50;    LongEmployeeNumber=0;           HireDate='1970-01-01T00:00:00Z'; IsActive=$false; DepartmentId=$guidD }
-    [ordered]@{ EmployeeId='E006'; Department='Sales';            JobTitle='Rep';            EmployeeNumber=75;    LongEmployeeNumber=100;         HireDate='2024-01-01T00:00:00Z'; IsActive=$true;  DepartmentId=$guidD }
-    [ordered]@{ EmployeeId='E007'; Department='IT';               JobTitle='Engineer';       EmployeeNumber=-10;   LongEmployeeNumber=99999999999; HireDate='2025-11-15T00:00:00Z'; IsActive=$true;  DepartmentId=$guidA }
-    [ordered]@{ EmployeeId='E008'; Department='IT';               JobTitle='Senior Engineer'; EmployeeNumber=10000; LongEmployeeNumber=4000000000;  HireDate='2026-01-01T00:00:00Z'; IsActive=$false; DepartmentId=$guidB }
-    [ordered]@{ EmployeeId='E009'; Department='HR';               JobTitle='Officer';        EmployeeNumber=250;   LongEmployeeNumber=2500000000;  HireDate='2019-05-20T00:00:00Z'; IsActive=$true;  DepartmentId=$guidE }
-    [ordered]@{ EmployeeId='E010'; Department='HR';               JobTitle='Lead';           EmployeeNumber=0;     LongEmployeeNumber=3000000000;  HireDate='2018-12-01T00:00:00Z'; IsActive=$false; DepartmentId=$guidF }
-    [ordered]@{ EmployeeId='E011'; Department='HR';               JobTitle='Manager';        EmployeeNumber=-1;    LongEmployeeNumber=1500000000;  HireDate='2026-03-15T00:00:00Z'; IsActive=$true;  DepartmentId=$guidA }
-    [ordered]@{ EmployeeId='E012'; Department='Engineering';      JobTitle='Junior';         EmployeeNumber=1;     LongEmployeeNumber=100000;      HireDate='2025-06-01T00:00:00Z'; IsActive=$false; DepartmentId=$guidB }
-    [ordered]@{ EmployeeId='E013'; Department='Engineering';      JobTitle='Senior';         EmployeeNumber=30;    LongEmployeeNumber=7500000000;  HireDate='2017-09-09T00:00:00Z'; IsActive=$true;  DepartmentId=$guidC }
-    [ordered]@{ EmployeeId='E014'; Department='Marketing';        JobTitle='Specialist';     EmployeeNumber=500;   LongEmployeeNumber=800000;      HireDate='2024-12-31T00:00:00Z'; IsActive=$true;  DepartmentId=$guidD }
-    [ordered]@{ EmployeeId='E015'; Department=$null;              JobTitle=$null;            EmployeeNumber=$null; LongEmployeeNumber=$null;       HireDate=$null;                  IsActive=$null;   DepartmentId=$null }
+    [ordered]@{ Sc11EmployeeId='E001'; Sc11Department='Finance';          Sc11JobTitle='Manager';        Sc11EmployeeNumber=100;   Sc11LongEmployeeNumber=5000000000;  Sc11HireDate='2020-01-15T00:00:00Z'; Sc11IsActive=$true;  Sc11DepartmentId=$guidA }
+    [ordered]@{ Sc11EmployeeId='E002'; Sc11Department='finance';          Sc11JobTitle='Senior Manager'; Sc11EmployeeNumber=200;   Sc11LongEmployeeNumber=6000000000;  Sc11HireDate='2021-06-30T00:00:00Z'; Sc11IsActive=$false; Sc11DepartmentId=$guidB }
+    [ordered]@{ Sc11EmployeeId='E003'; Sc11Department='FinancePartners';  Sc11JobTitle='Director';       Sc11EmployeeNumber=1000;  Sc11LongEmployeeNumber=-1;          Sc11HireDate='2022-03-01T00:00:00Z'; Sc11IsActive=$true;  Sc11DepartmentId=$guidC }
+    [ordered]@{ Sc11EmployeeId='E004'; Sc11Department='CorporateFinance'; Sc11JobTitle='VP';             Sc11EmployeeNumber=5000;  Sc11LongEmployeeNumber=1;           Sc11HireDate='2023-08-15T00:00:00Z'; Sc11IsActive=$true;  Sc11DepartmentId=$guidA }
+    [ordered]@{ Sc11EmployeeId='E005'; Sc11Department='Sales';            Sc11JobTitle='Executive';      Sc11EmployeeNumber=50;    Sc11LongEmployeeNumber=0;           Sc11HireDate='1970-01-01T00:00:00Z'; Sc11IsActive=$false; Sc11DepartmentId=$guidD }
+    [ordered]@{ Sc11EmployeeId='E006'; Sc11Department='Sales';            Sc11JobTitle='Rep';            Sc11EmployeeNumber=75;    Sc11LongEmployeeNumber=100;         Sc11HireDate='2024-01-01T00:00:00Z'; Sc11IsActive=$true;  Sc11DepartmentId=$guidD }
+    [ordered]@{ Sc11EmployeeId='E007'; Sc11Department='IT';               Sc11JobTitle='Engineer';       Sc11EmployeeNumber=-10;   Sc11LongEmployeeNumber=99999999999; Sc11HireDate='2025-11-15T00:00:00Z'; Sc11IsActive=$true;  Sc11DepartmentId=$guidA }
+    [ordered]@{ Sc11EmployeeId='E008'; Sc11Department='IT';               Sc11JobTitle='Senior Engineer'; Sc11EmployeeNumber=10000; Sc11LongEmployeeNumber=4000000000;  Sc11HireDate='2026-01-01T00:00:00Z'; Sc11IsActive=$false; Sc11DepartmentId=$guidB }
+    [ordered]@{ Sc11EmployeeId='E009'; Sc11Department='HR';               Sc11JobTitle='Officer';        Sc11EmployeeNumber=250;   Sc11LongEmployeeNumber=2500000000;  Sc11HireDate='2019-05-20T00:00:00Z'; Sc11IsActive=$true;  Sc11DepartmentId=$guidE }
+    [ordered]@{ Sc11EmployeeId='E010'; Sc11Department='HR';               Sc11JobTitle='Lead';           Sc11EmployeeNumber=0;     Sc11LongEmployeeNumber=3000000000;  Sc11HireDate='2018-12-01T00:00:00Z'; Sc11IsActive=$false; Sc11DepartmentId=$guidF }
+    [ordered]@{ Sc11EmployeeId='E011'; Sc11Department='HR';               Sc11JobTitle='Manager';        Sc11EmployeeNumber=-1;    Sc11LongEmployeeNumber=1500000000;  Sc11HireDate='2026-03-15T00:00:00Z'; Sc11IsActive=$true;  Sc11DepartmentId=$guidA }
+    [ordered]@{ Sc11EmployeeId='E012'; Sc11Department='Engineering';      Sc11JobTitle='Junior';         Sc11EmployeeNumber=1;     Sc11LongEmployeeNumber=100000;      Sc11HireDate='2025-06-01T00:00:00Z'; Sc11IsActive=$false; Sc11DepartmentId=$guidB }
+    [ordered]@{ Sc11EmployeeId='E013'; Sc11Department='Engineering';      Sc11JobTitle='Senior';         Sc11EmployeeNumber=30;    Sc11LongEmployeeNumber=7500000000;  Sc11HireDate='2017-09-09T00:00:00Z'; Sc11IsActive=$true;  Sc11DepartmentId=$guidC }
+    [ordered]@{ Sc11EmployeeId='E014'; Sc11Department='Marketing';        Sc11JobTitle='Specialist';     Sc11EmployeeNumber=500;   Sc11LongEmployeeNumber=800000;      Sc11HireDate='2024-12-31T00:00:00Z'; Sc11IsActive=$true;  Sc11DepartmentId=$guidD }
+    [ordered]@{ Sc11EmployeeId='E015'; Sc11Department=$null;              Sc11JobTitle=$null;            Sc11EmployeeNumber=$null; Sc11LongEmployeeNumber=$null;       Sc11HireDate=$null;                  Sc11IsActive=$null;   Sc11DepartmentId=$null }
 )
 
 # ─── Helper: compute the expected match-set for a criterion against the seed ────
@@ -181,7 +181,7 @@ function Get-ExpectedMatches {
             default { $false }
         }
 
-        if ($hit) { $hits += $row.EmployeeId }
+        if ($hit) { $hits += $row.Sc11EmployeeId }
     }
 
     return ,$hits
@@ -209,18 +209,18 @@ $equalityOperators = @('Equals', 'NotEquals')
 # Per-type axis: which operators are applicable, and a canonical comparison value
 # chosen so the expected set is non-trivial against the seed.
 $typeAxes = @(
-    @{ valueType = 'Text';       attribute = 'Department';         operators = $textOperators;       canonicalValue = 'Finance' }
-    @{ valueType = 'Number';     attribute = 'EmployeeNumber';     operators = $comparisonOperators; canonicalValue = 100 }
-    @{ valueType = 'LongNumber'; attribute = 'LongEmployeeNumber'; operators = $comparisonOperators; canonicalValue = 5000000000 }
-    @{ valueType = 'DateTime';   attribute = 'HireDate';           operators = $comparisonOperators; canonicalValue = '2022-01-01T00:00:00Z' }
-    @{ valueType = 'Boolean';    attribute = 'IsActive';           operators = $equalityOperators;   canonicalValue = $true }
-    @{ valueType = 'Guid';       attribute = 'DepartmentId';       operators = $equalityOperators;   canonicalValue = $guidA }
+    @{ valueType = 'Text';       attribute = 'Sc11Department';         operators = $textOperators;       canonicalValue = 'Finance' }
+    @{ valueType = 'Number';     attribute = 'Sc11EmployeeNumber';     operators = $comparisonOperators; canonicalValue = 100 }
+    @{ valueType = 'LongNumber'; attribute = 'Sc11LongEmployeeNumber'; operators = $comparisonOperators; canonicalValue = 5000000000 }
+    @{ valueType = 'DateTime';   attribute = 'Sc11HireDate';           operators = $comparisonOperators; canonicalValue = '2022-01-01T00:00:00Z' }
+    @{ valueType = 'Boolean';    attribute = 'Sc11IsActive';           operators = $equalityOperators;   canonicalValue = $true }
+    @{ valueType = 'Guid';       attribute = 'Sc11DepartmentId';       operators = $equalityOperators;   canonicalValue = $guidA }
 )
 
 # Secondary criterion used in AllPair / AnyPair / Nested cells. Chosen so the
 # combined expected set is non-trivial (not always empty, not always universal).
 $secondary = @{
-    attribute = 'IsActive'
+    attribute = 'Sc11IsActive'
     operator = 'Equals'
     valueType = 'Boolean'
     value = $true
@@ -229,7 +229,7 @@ $secondary = @{
 
 # Tertiary criterion used in nested `(A OR B) AND C` cells.
 $tertiary = @{
-    attribute = 'Department'
+    attribute = 'Sc11Department'
     operator = 'Equals'
     valueType = 'Text'
     value = 'HR'

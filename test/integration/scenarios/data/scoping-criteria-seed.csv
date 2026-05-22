@@ -1,4 +1,4 @@
-"EmployeeId","Department","JobTitle","EmployeeNumber","LongEmployeeNumber","HireDate","IsActive","DepartmentId"
+"Sc11EmployeeId","Sc11Department","Sc11JobTitle","Sc11EmployeeNumber","Sc11LongEmployeeNumber","Sc11HireDate","Sc11IsActive","Sc11DepartmentId"
 "E001","Finance","Manager","100","5000000000","2020-01-15T00:00:00Z","True","aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 "E002","finance","Senior Manager","200","6000000000","2021-06-30T00:00:00Z","False","bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 "E003","FinancePartners","Director","1000","-1","2022-03-01T00:00:00Z","True","cccccccc-cccc-cccc-cccc-cccccccccccc"

@@ -2525,6 +2525,7 @@ $step5Start = Get-Date
 
 # Extract scenario number from name (e.g., "Scenario1-HRToIdentityDirectory" -> "1")
 $scenarioNumber = if ($Scenario -match 'Scenario(\d+)') { $Matches[1] } else { $null }
+$isScenario11 = ($scenarioNumber -eq "11")
 
 if ($SetupOnly) {
     # SetupOnly mode: configure JIM with connected systems and sync rules, then stop
@@ -2779,7 +2780,6 @@ if ($scenarioNumber -and $scenariosAcceptingExportParams -contains $scenarioNumb
 # Scenario 11 (Scoping Criteria Matrix) accepts -Quick, -Exhaustive, -OperatorFilter,
 # -IncludeNegativeCells. Only pass these when running Scenario 11; other scenarios
 # don't define them and would error on unexpected parameters.
-$isScenario11 = ($scenarioNumber -eq "11")
 if ($isScenario11) {
     if ($Quick)       { $scenarioParams.Quick = $true }
     if ($Exhaustive)  { $scenarioParams.Exhaustive = $true }
