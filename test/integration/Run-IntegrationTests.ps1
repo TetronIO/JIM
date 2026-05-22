@@ -469,9 +469,13 @@ function Test-OpenLDAPSnapshotAvailable {
 
 # Interactive scenario selection function
 function Show-ScenarioMenu {
-    # Discover available scenarios
+    # Discover available scenarios. Sort by the numeric index embedded in the filename
+    # (Scenario1, Scenario2, ..., Scenario10, Scenario11) rather than lexically — a plain
+    # Sort-Object Name puts Scenario10/Scenario11 between Scenario1 and Scenario2.
     $scenariosPath = Join-Path $scriptRoot "scenarios"
-    $scenarioFiles = Get-ChildItem $scenariosPath -Filter "Invoke-*.ps1" | Sort-Object Name
+    $scenarioFiles = Get-ChildItem $scenariosPath -Filter "Invoke-*.ps1" | Sort-Object {
+        if ($_.BaseName -match 'Scenario(\d+)') { [int]$Matches[1] } else { [int]::MaxValue }
+    }, Name
 
     if ($scenarioFiles.Count -eq 0) {
         Write-Host "${RED}No scenario scripts found in $scenariosPath${NC}"
