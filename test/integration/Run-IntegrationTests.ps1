@@ -226,7 +226,23 @@ param(
     [switch]$PreRelease,
 
     [Parameter(Mandatory=$false)]
-    [switch]$ContinueOnFailure
+    [switch]$ContinueOnFailure,
+
+    # ─── Scenario 11 (Scoping Criteria Matrix) — coverage and shape options ───
+    # Mutually exclusive: pick one tier, or neither for Default. Ignored by every
+    # scenario except Scenario11-ScopingCriteriaMatrix.
+
+    [Parameter(Mandatory=$false)]
+    [switch]$Quick,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$Exhaustive,
+
+    [Parameter(Mandatory=$false)]
+    [string]$OperatorFilter,
+
+    [Parameter(Mandatory=$false)]
+    [bool]$IncludeNegativeCells
 )
 
 Set-StrictMode -Version Latest
@@ -512,6 +528,7 @@ function Show-ScenarioMenu {
                 "*Scenario8*" { "Cross-domain entitlement synchronisation" }
                 "*Scenario9*" { "Partition-scoped import run profiles" }
                 "*Scenario10*" { "Sync rule scoping behaviour" }
+                "*Scenario11*" { "Sync rule scoping criteria evaluation matrix" }
                 default { "Integration test scenario" }
             }
         }
@@ -1039,11 +1056,90 @@ function Show-ChangeTrackingMenu {
     return ($selectedIndex -eq 1)
 }
 
+function Show-Scenario11CoverageMenu {
+    # Scenario 11 (Scoping Criteria Matrix) coverage tier picker.
+    # Returns one of 'Quick', 'Default', or 'Exhaustive'.
+    $options = @(
+        @{
+            Name = "Default (Full)"
+            Description = "Full matrix at default coverage"
+            Details = "Every applicable (operator x type) pair plus 3 group structures (~41 cells, < 5 min)"
+            Value = "Default"
+        }
+        @{
+            Name = "Quick"
+            Description = "One cell per operator"
+            Details = "Fast PR-feedback subset, no group nesting or CS variants (~12 cells, < 90s)"
+            Value = "Quick"
+        }
+        @{
+            Name = "Exhaustive"
+            Description = "Full Cartesian on (operator x type x group)"
+            Details = "Pre-release / post-evaluator-refactor verification (~152 cells, < 10 min)"
+            Value = "Exhaustive"
+        }
+    )
+
+    $selectedIndex = 0
+    $exitMenu = $false
+
+    [Console]::CursorVisible = $false
+
+    try {
+        while (-not $exitMenu) {
+            Clear-Host
+
+            Write-Host ""
+            Write-Host "${CYAN}$("=" * 70)${NC}"
+            Write-Host "${CYAN}  JIM Integration Test - Scenario 11 Coverage Tier${NC}"
+            Write-Host "${CYAN}$("=" * 70)${NC}"
+            Write-Host ""
+            Write-Host "${GRAY}Use ↑/↓ arrow keys to navigate, Enter to select, Esc to exit${NC}"
+            Write-Host ""
+
+            for ($i = 0; $i -lt $options.Count; $i++) {
+                $opt = $options[$i]
+
+                if ($i -eq $selectedIndex) {
+                    Write-Host "${GREEN}► $($opt.Name)${NC} ${GRAY}— $($opt.Description)${NC}"
+                    Write-Host "${GRAY}  $($opt.Details)${NC}"
+                }
+                else {
+                    Write-Host "  $($opt.Name) ${GRAY}— $($opt.Description)${NC}"
+                    Write-Host "${GRAY}  $($opt.Details)${NC}"
+                }
+                Write-Host ""
+            }
+
+            $key = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+
+            switch ($key.VirtualKeyCode) {
+                38 { $selectedIndex = [Math]::Max(0, $selectedIndex - 1) }
+                40 { $selectedIndex = [Math]::Min($options.Count - 1, $selectedIndex + 1) }
+                13 { $exitMenu = $true }
+                27 {
+                    Write-Host ""
+                    Write-Host "${YELLOW}Cancelled by user${NC}"
+                    [Console]::CursorVisible = $true
+                    exit 0
+                }
+            }
+        }
+    }
+    finally {
+        [Console]::CursorVisible = $true
+    }
+
+    Clear-Host
+    return $options[$selectedIndex].Value
+}
+
 # Track if user explicitly set Template parameter
 $TemplateWasExplicitlySet = $PSBoundParameters.ContainsKey('Template')
 $DirectoryTypeWasExplicitlySet = $PSBoundParameters.ContainsKey('DirectoryType')
 $LogLevelWasExplicitlySet = $PSBoundParameters.ContainsKey('LogLevel')
 $ChangeTrackingWasExplicitlySet = $PSBoundParameters.ContainsKey('DisableChangeTracking')
+$Scenario11CoverageWasExplicitlySet = $Quick -or $Exhaustive
 
 # Scenarios that provision their own fixed test data and don't use the Template parameter
 # for data sizing. These scenarios accept Template but it has no effect on test execution.
@@ -1051,7 +1147,8 @@ $templateIrrelevantScenarios = @(
     "*Scenario2*",   # Cross-Domain Sync - uses fixed test users (crossdomain.test1, etc.)
     "*Scenario3*",   # GAL Sync - not yet implemented
     "*Scenario4*",   # Deletion Rules - provisions individual test users, ignores template
-    "*Scenario6*"    # Scheduler Service - tests scheduler functionality, no data template needed
+    "*Scenario6*",   # Scheduler Service - tests scheduler functionality, no data template needed
+    "*Scenario11*"   # Scoping Criteria Matrix - bespoke deterministic seed, template informational
 )
 
 function Test-TemplateRelevant {
@@ -1117,6 +1214,17 @@ if (-not $Scenario) {
     # Show change tracking menu only if not explicitly provided
     if (-not $ChangeTrackingWasExplicitlySet) {
         $DisableChangeTracking = Show-ChangeTrackingMenu
+    }
+
+    # Scenario 11 coverage tier prompt - only shown when running Scenario 11 and
+    # the user didn't already pass -Quick or -Exhaustive on the command line.
+    if ($Scenario -like "*Scenario11*" -and -not $Scenario11CoverageWasExplicitlySet) {
+        $tierChoice = Show-Scenario11CoverageMenu
+        switch ($tierChoice) {
+            'Quick'      { $Quick = $true }
+            'Exhaustive' { $Exhaustive = $true }
+            'Default'    { } # neither switch set
+        }
     }
 }
 
@@ -2627,6 +2735,16 @@ if ($metricsStreamingEnabled) {
     Write-Host "  Metrics Streaming:       Enabled ($($env:JIM_BENCH_API_URL))"
     Write-Host "  Metrics Run ID:          $metricsRunId"
 }
+if ($isScenario11) {
+    $tierLabel = if ($Quick) { 'Quick' } elseif ($Exhaustive) { 'Exhaustive' } else { 'Default' }
+    Write-Host "  Coverage Tier:           $tierLabel"
+    if ($PSBoundParameters.ContainsKey('OperatorFilter') -and -not [string]::IsNullOrWhiteSpace($OperatorFilter)) {
+        Write-Host "  Operator Filter:         $OperatorFilter"
+    }
+    if ($PSBoundParameters.ContainsKey('IncludeNegativeCells')) {
+        Write-Host "  Include Negative Cells:  $IncludeNegativeCells"
+    }
+}
 if ($IgnoreSnapshots) {
     Write-Host "  Ignore Snapshots:        Yes"
 }
@@ -2655,6 +2773,21 @@ if ($scenarioNumber -and $scenariosAcceptingExportParams -contains $scenarioNumb
     }
     if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) {
         $scenarioParams.MaxExportParallelism = $MaxExportParallelism
+    }
+}
+
+# Scenario 11 (Scoping Criteria Matrix) accepts -Quick, -Exhaustive, -OperatorFilter,
+# -IncludeNegativeCells. Only pass these when running Scenario 11; other scenarios
+# don't define them and would error on unexpected parameters.
+$isScenario11 = ($scenarioNumber -eq "11")
+if ($isScenario11) {
+    if ($Quick)       { $scenarioParams.Quick = $true }
+    if ($Exhaustive)  { $scenarioParams.Exhaustive = $true }
+    if ($PSBoundParameters.ContainsKey('OperatorFilter') -and -not [string]::IsNullOrWhiteSpace($OperatorFilter)) {
+        $scenarioParams.OperatorFilter = $OperatorFilter
+    }
+    if ($PSBoundParameters.ContainsKey('IncludeNegativeCells')) {
+        $scenarioParams.IncludeNegativeCells = $IncludeNegativeCells
     }
 }
 
@@ -3310,6 +3443,16 @@ if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) { $rerunParts += "-M
 if ($TimeoutSeconds -ne 180) { $rerunParts += "-TimeoutSeconds $TimeoutSeconds" }
 if ($CaptureMetrics) { $rerunParts += "-CaptureMetrics" }
 if ($IgnoreSnapshots) { $rerunParts += "-IgnoreSnapshots" }
+if ($isScenario11) {
+    if ($Quick)      { $rerunParts += "-Quick" }
+    if ($Exhaustive) { $rerunParts += "-Exhaustive" }
+    if ($PSBoundParameters.ContainsKey('OperatorFilter') -and -not [string]::IsNullOrWhiteSpace($OperatorFilter)) {
+        $rerunParts += "-OperatorFilter $OperatorFilter"
+    }
+    if ($PSBoundParameters.ContainsKey('IncludeNegativeCells')) {
+        $rerunParts += "-IncludeNegativeCells `$$IncludeNegativeCells"
+    }
+}
 Write-Host "  $($rerunParts -join ' ')"
 Write-Host ""
 

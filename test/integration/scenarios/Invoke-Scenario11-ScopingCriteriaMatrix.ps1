@@ -28,9 +28,13 @@
     no effect on the cell list, the seed, or expected match-sets.
 
 .PARAMETER Step
-    Cell-level filter. "All" (default) runs every cell in the chosen tier. A bare
-    operator name (e.g. "NotContains") runs every cell using that operator. A fully
-    qualified cell name (e.g. "Text.Equals.Single.CS") runs a single cell.
+    Cell-name filter. "All" (default) runs every cell in the chosen tier; a fully
+    qualified cell name (e.g. "Text.Equals.Single.CS") runs a single cell. Composes
+    with -OperatorFilter via AND.
+
+.PARAMETER OperatorFilter
+    Operator-level filter. "All" (default) places no restriction; a bare operator
+    name (e.g. "NotContains") restricts cells to that operator. Composes with -Step.
 
 .PARAMETER Template
     Data scale template. Informational only - the matrix uses its bespoke deterministic
@@ -59,6 +63,9 @@
 param(
     [Parameter(Mandatory=$false)]
     [string]$Step = "All",
+
+    [Parameter(Mandatory=$false)]
+    [string]$OperatorFilter = "All",
 
     [Parameter(Mandatory=$false)]
     [string]$Template = "Nano",
@@ -245,6 +252,14 @@ Write-Host "  OK Loaded manifest: $($allCells.Count) cells defined" -ForegroundC
 
 $tierCells = @($allCells | Where-Object { $_.tiers -contains $activeTier })
 
+if ($OperatorFilter -ne 'All' -and -not [string]::IsNullOrWhiteSpace($OperatorFilter)) {
+    $filteredByOp = @($tierCells | Where-Object { $_.primary.operator -eq $OperatorFilter })
+    if ($filteredByOp.Count -eq 0) {
+        throw "-OperatorFilter '$OperatorFilter' did not match any cell's operator in tier '$activeTier'. Use a SearchComparisonType operator name or 'All'."
+    }
+    $tierCells = $filteredByOp
+}
+
 if ($Step -ne 'All') {
     $byName = @($tierCells | Where-Object { $_.name -eq $Step })
     $byOperator = @($tierCells | Where-Object { $_.primary.operator -eq $Step })
@@ -253,12 +268,12 @@ if ($Step -ne 'All') {
     } elseif ($byOperator.Count -gt 0) {
         $tierCells = $byOperator
     } else {
-        throw "-Step '$Step' did not match any cell name or operator in the $activeTier tier."
+        throw "-Step '$Step' did not match any cell name or operator in the $activeTier tier (after operator filter '$OperatorFilter')."
     }
 }
 
 if ($tierCells.Count -eq 0) {
-    throw "No cells selected for tier '$activeTier' with -Step '$Step'."
+    throw "No cells selected for tier '$activeTier' with -Step '$Step' and -OperatorFilter '$OperatorFilter'."
 }
 
 Write-Host "  OK Selected $($tierCells.Count) cells for tier '$activeTier'" -ForegroundColor Green
