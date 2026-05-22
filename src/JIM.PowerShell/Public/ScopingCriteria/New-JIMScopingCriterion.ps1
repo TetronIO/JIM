@@ -40,6 +40,9 @@ function New-JIMScopingCriterion {
     .PARAMETER IntValue
         The integer value to compare against (for number attributes).
 
+    .PARAMETER LongValue
+        The 64-bit integer value to compare against (for long number attributes).
+
     .PARAMETER DateTimeValue
         The date/time value to compare against (for datetime attributes).
 
@@ -48,6 +51,10 @@ function New-JIMScopingCriterion {
 
     .PARAMETER GuidValue
         The GUID value to compare against (for GUID attributes).
+
+    .PARAMETER CaseSensitive
+        When provided as $false, text comparisons ignore case differences. When omitted
+        the server default (true) applies. Only meaningful for Text attribute comparisons.
 
     .PARAMETER PassThru
         If specified, returns the created criterion object.
@@ -113,6 +120,9 @@ function New-JIMScopingCriterion {
         [int]$IntValue,
 
         [Parameter()]
+        [long]$LongValue,
+
+        [Parameter()]
         [datetime]$DateTimeValue,
 
         [Parameter()]
@@ -120,6 +130,9 @@ function New-JIMScopingCriterion {
 
         [Parameter()]
         [guid]$GuidValue,
+
+        [Parameter()]
+        [bool]$CaseSensitive,
 
         [switch]$PassThru
     )
@@ -202,6 +215,9 @@ function New-JIMScopingCriterion {
         if ($PSBoundParameters.ContainsKey('IntValue')) {
             $body.intValue = $IntValue
         }
+        if ($PSBoundParameters.ContainsKey('LongValue')) {
+            $body.longValue = $LongValue
+        }
         if ($PSBoundParameters.ContainsKey('DateTimeValue')) {
             $body.dateTimeValue = $DateTimeValue.ToString('o')
         }
@@ -210,6 +226,9 @@ function New-JIMScopingCriterion {
         }
         if ($PSBoundParameters.ContainsKey('GuidValue')) {
             $body.guidValue = $GuidValue.ToString()
+        }
+        if ($PSBoundParameters.ContainsKey('CaseSensitive')) {
+            $body.caseSensitive = $CaseSensitive
         }
 
         if ($PSCmdlet.ShouldProcess("Scoping Criteria Group $GroupId", "Add Criterion ($attrDisplay $ComparisonType)")) {
