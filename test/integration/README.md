@@ -87,7 +87,8 @@ pwsh test/integration/Invoke-IntegrationTests.ps1 -ScenariosOnly
 - **Scenario 7: Clear Connected System Objects** - Bulk CSO removal workflow
 - **Scenario 8: Cross-Domain Entitlement Sync** - Large-scale group/entitlement sync
 - **Scenario 9: Partition-Scoped Imports** - Partition filtering on import run profiles
-- **Scenario 10: Sync Rule Scoping Behaviour** - Inbound/outbound scope transitions, deprovisioning actions, cross-system cascade (issue #656)
+- **Scenario 10: Sync Rule Scoping Behaviour** - Inbound/outbound scope transitions, deprovisioning actions, cross-system cascade
+- **Scenario 11: Scoping Criteria Evaluation Matrix** - Operator x value-type x group-structure coverage via per-cell CSO/MV types; three coverage tiers (Quick / Default / Exhaustive), round-trip persistence and API negative-cell probes
 
 ### Phase 2 (Planned)
 - Database connector testing (requires [#170](https://github.com/TetronIO/JIM/issues/170))
