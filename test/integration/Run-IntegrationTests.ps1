@@ -1152,6 +1152,7 @@ $templateIrrelevantScenarios = @(
     "*Scenario3*",   # GAL Sync - not yet implemented
     "*Scenario4*",   # Deletion Rules - provisions individual test users, ignores template
     "*Scenario6*",   # Scheduler Service - tests scheduler functionality, no data template needed
+    "*Scenario10*",  # Sync Rule Scoping - template-independent, only a handful of explicit test users
     "*Scenario11*"   # Scoping Criteria Matrix - bespoke deterministic seed, template informational
 )
 

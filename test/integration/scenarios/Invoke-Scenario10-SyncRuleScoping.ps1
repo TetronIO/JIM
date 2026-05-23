@@ -3,7 +3,7 @@
 
 <#
 .SYNOPSIS
-    Test Scenario 10: Sync Rule Scoping Behaviour (issue #656)
+    Test Scenario 10: Sync Rule Scoping Behaviour
 
 .DESCRIPTION
     Exercises the full sync rule scoping transition matrix end-to-end:
@@ -204,10 +204,19 @@ function Get-RuleId {
 function Remove-LDAPTestUsers {
     param([object[]]$Users, [hashtable]$DirectoryConfig)
     if ($DirectoryConfig.UserObjectClass -eq "inetOrgPerson") {
-        # OpenLDAP path - use ldapdelete via the container
+        # OpenLDAP path - use ldapdelete via the container.
+        # -H is required: openldap-primary listens on port 1389, and without an explicit
+        # URI ldapdelete defaults to ldap://localhost:389 and silently fails to connect.
+        $ldapUri = "ldap://localhost:$($DirectoryConfig.Port)"
         foreach ($u in $Users) {
             $dn = "uid=$($u.samAccountName),$($DirectoryConfig.UserContainer)"
-            docker exec $DirectoryConfig.ContainerName ldapdelete -x -D $DirectoryConfig.BindDN -w $DirectoryConfig.BindPassword $dn 2>&1 | Out-Null
+            $output = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H $ldapUri `
+                -D $DirectoryConfig.BindDN -w $DirectoryConfig.BindPassword $dn 2>&1
+            # Exit 0 = deleted, 32 = no such object (idempotent no-op). Anything else
+            # would silently leave stale entries in the directory, so surface it.
+            if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 32) {
+                throw "ldapdelete failed for $dn (exit $LASTEXITCODE): $output"
+            }
         }
     }
     else {
