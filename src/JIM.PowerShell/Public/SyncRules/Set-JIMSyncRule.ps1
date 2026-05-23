@@ -31,6 +31,21 @@ function Set-JIMSyncRule {
     .PARAMETER ProvisionToConnectedSystem
         For Export rules, sets whether objects will be provisioned to the Connected System.
 
+    .PARAMETER InboundOutOfScopeAction
+        For Import rules: action to take when a CSO falls out of this rule's scope.
+        Valid values:
+          - Disconnect: break the CSO -> MVO join. Whether attributes contributed by
+            this connected system are also recalled from the MVO depends on the CSO
+            type's RemoveContributedAttributesOnObsoletion flag, the MVO type's
+            deletion grace period, and whether the MVO is slated for immediate
+            deletion.
+          - RemainJoined: keep the join intact and stop further attribute flow.
+
+    .PARAMETER OutboundDeprovisionAction
+        For Export rules: action to take when an MVO falls out of this rule's scope.
+        Valid values: Disconnect (break the join, leave the CSO untouched in the target system),
+        Delete (queue a delete PendingExport so the CSO is removed from the target system).
+
     .PARAMETER PassThru
         If specified, returns the updated Sync Rule object.
 
@@ -89,6 +104,17 @@ function Set-JIMSyncRule {
         [Parameter()]
         [bool]$ProvisionToConnectedSystem,
 
+        [Parameter()]
+        [ValidateSet('Disconnect', 'RemainJoined')]
+        [string]$InboundOutOfScopeAction,
+
+        [Parameter()]
+        [ValidateSet('Disconnect', 'Delete')]
+        [string]$OutboundDeprovisionAction,
+
+        [Parameter()]
+        [bool]$EnforceState,
+
         [switch]$PassThru
     )
 
@@ -121,6 +147,18 @@ function Set-JIMSyncRule {
 
         if ($PSBoundParameters.ContainsKey('ProvisionToConnectedSystem')) {
             $body.provisionToConnectedSystem = $ProvisionToConnectedSystem
+        }
+
+        if ($PSBoundParameters.ContainsKey('InboundOutOfScopeAction')) {
+            $body.inboundOutOfScopeAction = $InboundOutOfScopeAction
+        }
+
+        if ($PSBoundParameters.ContainsKey('OutboundDeprovisionAction')) {
+            $body.outboundDeprovisionAction = $OutboundDeprovisionAction
+        }
+
+        if ($PSBoundParameters.ContainsKey('EnforceState')) {
+            $body.enforceState = $EnforceState
         }
 
         if ($body.Count -eq 0) {

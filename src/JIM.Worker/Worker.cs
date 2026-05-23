@@ -388,8 +388,9 @@ public class Worker : BackgroundService
                                     }
                                     else
                                     {
-                                        // we need a little more information on the connected system, so retrieve it
-                                        var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(clearConnectedSystemObjectsTask.ConnectedSystemId, withChangeTracking: true);
+                                        // we just need to verify the connected system exists; ClearConnectedSystemObjectsAsync
+                                        // operates on the ID directly, so Core is sufficient here.
+                                        var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemCoreAsync(clearConnectedSystemObjectsTask.ConnectedSystemId, withChangeTracking: true);
                                         if (connectedSystem == null)
                                         {
                                             Log.Warning($"ExecuteAsync: Connected system id {clearConnectedSystemObjectsTask.ConnectedSystemId} doesn't exist. Cannot continue.");
@@ -443,9 +444,10 @@ public class Worker : BackgroundService
                                     catch (Exception ex)
                                     {
                                         // Reset Connected System status so deletion can be retried
+                                        // (Core: only Status is read and updated on the tracked entity.)
                                         try
                                         {
-                                            var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(deleteConnectedSystemTask.ConnectedSystemId, withChangeTracking: true);
+                                            var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemCoreAsync(deleteConnectedSystemTask.ConnectedSystemId, withChangeTracking: true);
                                             if (connectedSystem != null && connectedSystem.Status == ConnectedSystemStatus.Deleting)
                                             {
                                                 connectedSystem.Status = ConnectedSystemStatus.Active;

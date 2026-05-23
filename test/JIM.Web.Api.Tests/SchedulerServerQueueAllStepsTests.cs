@@ -67,17 +67,24 @@ public class SchedulerServerQueueAllStepsTests
             SupportsPartitions = false
         };
 
-        _mockConnectedSystemRepository.Setup(r => r.GetConnectedSystemAsync(It.IsAny<int>(), It.IsAny<bool>()))
-            .ReturnsAsync((int id, bool _) => new ConnectedSystem
+        // TaskingServer.CreateWorkerTaskAsync uses Core for the sync run-profile activity (read .Name only),
+        // and Full for ValidatePartitionSelectionsAsync (reads Partitions/Containers via the entity extension).
+        ConnectedSystem BuildSystem(int id) => new()
+        {
+            Id = id,
+            Name = $"System {id}",
+            ConnectorDefinition = connectorDefinition,
+            RunProfiles = new List<ConnectedSystemRunProfile>
             {
-                Id = id,
-                Name = $"System {id}",
-                ConnectorDefinition = connectorDefinition,
-                RunProfiles = new List<ConnectedSystemRunProfile>
-                {
-                    new() { Id = id * 100, Name = "Full Import", RunType = ConnectedSystemRunType.FullImport }
-                }
-            });
+                new() { Id = id * 100, Name = "Full Import", RunType = ConnectedSystemRunType.FullImport }
+            }
+        };
+
+        _mockConnectedSystemRepository.Setup(r => r.GetConnectedSystemAsync(It.IsAny<int>(), It.IsAny<bool>()))
+            .ReturnsAsync((int id, bool _) => BuildSystem(id));
+
+        _mockConnectedSystemRepository.Setup(r => r.GetConnectedSystemCoreAsync(It.IsAny<int>(), It.IsAny<bool>()))
+            .ReturnsAsync((int id, bool _) => BuildSystem(id));
 
         _mockConnectedSystemRepository.Setup(r => r.GetConnectedSystemRunProfilesAsync(It.IsAny<int>()))
             .ReturnsAsync((int id) => new List<ConnectedSystemRunProfile>

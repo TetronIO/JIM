@@ -1,0 +1,12 @@
+.cso-detail-skeleton-subtitle {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.cso-detail-skeleton-chip-row {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    align-items: center;
+}

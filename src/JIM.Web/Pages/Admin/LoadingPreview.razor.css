@@ -1,0 +1,14 @@
+.loading-preview-sandbox {
+    border: 1px dashed var(--mud-palette-lines-default);
+    border-radius: 4px;
+    padding: 1rem;
+    background-color: var(--mud-palette-surface);
+    min-height: 200px;
+}
+
+.loading-preview-static-sample {
+    border: 1px dashed var(--mud-palette-lines-default);
+    border-radius: 4px;
+    padding: 1rem;
+    background-color: var(--mud-palette-surface);
+}

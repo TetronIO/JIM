@@ -1,0 +1,12 @@
+.page-header-skeleton-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.page-header-skeleton-breadcrumbs {
+    display: flex;
+    gap: 1rem;
+    margin-top: 0.5rem;
+    padding-bottom: 0.25rem;
+}

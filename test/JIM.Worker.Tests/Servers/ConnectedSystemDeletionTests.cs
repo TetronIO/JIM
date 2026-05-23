@@ -80,7 +80,7 @@ public class ConnectedSystemDeletionTests
             Status = ConnectedSystemStatus.Active
         };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1)).ReturnsAsync(500);
         _mockCsRepo.Setup(r => r.GetSyncRuleCountAsync(1)).ReturnsAsync(3);
         _mockCsRepo.Setup(r => r.GetRunProfileCountAsync(1)).ReturnsAsync(2);
@@ -114,7 +114,7 @@ public class ConnectedSystemDeletionTests
     public async Task GetDeletionPreviewAsync_WithNonExistentId_ReturnsNullAsync()
     {
         // Arrange
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(999)).ReturnsAsync((ConnectedSystem?)null);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(999, It.IsAny<bool>())).ReturnsAsync((ConnectedSystem?)null);
 
         // Act
         var result = await _jim.ConnectedSystems.GetDeletionPreviewAsync(999);
@@ -130,7 +130,7 @@ public class ConnectedSystemDeletionTests
         var connectedSystem = new ConnectedSystem { Id = 1, Name = "Test System" };
         var runningTask = new SynchronisationWorkerTask { Id = Guid.NewGuid() };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1)).ReturnsAsync(100);
         _mockCsRepo.Setup(r => r.GetSyncRuleCountAsync(1)).ReturnsAsync(0);
         _mockCsRepo.Setup(r => r.GetRunProfileCountAsync(1)).ReturnsAsync(0);
@@ -156,7 +156,7 @@ public class ConnectedSystemDeletionTests
         // Arrange
         var connectedSystem = new ConnectedSystem { Id = 1, Name = "Large System" };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1)).ReturnsAsync(5000); // > 1000 threshold
         _mockCsRepo.Setup(r => r.GetSyncRuleCountAsync(1)).ReturnsAsync(0);
         _mockCsRepo.Setup(r => r.GetRunProfileCountAsync(1)).ReturnsAsync(0);
@@ -181,7 +181,7 @@ public class ConnectedSystemDeletionTests
         // Arrange
         var connectedSystem = new ConnectedSystem { Id = 1, Name = "Test System" };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1)).ReturnsAsync(100);
         _mockCsRepo.Setup(r => r.GetSyncRuleCountAsync(1)).ReturnsAsync(5);
         _mockCsRepo.Setup(r => r.GetRunProfileCountAsync(1)).ReturnsAsync(0);
@@ -205,7 +205,7 @@ public class ConnectedSystemDeletionTests
         // Arrange
         var connectedSystem = new ConnectedSystem { Id = 1, Name = "Test System" };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1)).ReturnsAsync(100);
         _mockCsRepo.Setup(r => r.GetSyncRuleCountAsync(1)).ReturnsAsync(0);
         _mockCsRepo.Setup(r => r.GetRunProfileCountAsync(1)).ReturnsAsync(0);
@@ -229,7 +229,7 @@ public class ConnectedSystemDeletionTests
         // Arrange
         var connectedSystem = new ConnectedSystem { Id = 1, Name = "Test System" };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1)).ReturnsAsync(100);
         _mockCsRepo.Setup(r => r.GetSyncRuleCountAsync(1)).ReturnsAsync(0);
         _mockCsRepo.Setup(r => r.GetRunProfileCountAsync(1)).ReturnsAsync(0);
@@ -258,7 +258,7 @@ public class ConnectedSystemDeletionTests
             Status = ConnectedSystemStatus.Deleting
         };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1)).ReturnsAsync(100);
         _mockCsRepo.Setup(r => r.GetSyncRuleCountAsync(1)).ReturnsAsync(0);
         _mockCsRepo.Setup(r => r.GetRunProfileCountAsync(1)).ReturnsAsync(0);
@@ -284,7 +284,7 @@ public class ConnectedSystemDeletionTests
     public async Task DeleteAsync_WithNonExistentId_ReturnsFailedResultAsync()
     {
         // Arrange
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(999)).ReturnsAsync((ConnectedSystem?)null);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(999, It.IsAny<bool>())).ReturnsAsync((ConnectedSystem?)null);
 
         // Act
         var result = await _jim.ConnectedSystems.DeleteAsync(999, _initiatedBy);
@@ -304,7 +304,7 @@ public class ConnectedSystemDeletionTests
             Name = "Test System",
             Status = ConnectedSystemStatus.Deleting
         };
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
 
         // Act
         var result = await _jim.ConnectedSystems.DeleteAsync(1, _initiatedBy);
@@ -324,7 +324,7 @@ public class ConnectedSystemDeletionTests
             Name = "Test System",
             Status = ConnectedSystemStatus.Active
         };
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
         _mockCsRepo.Setup(r => r.GetRunningSyncTaskAsync(1)).ReturnsAsync((SynchronisationWorkerTask?)null);
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1)).ReturnsAsync(100);
@@ -350,7 +350,7 @@ public class ConnectedSystemDeletionTests
         };
         var runningTask = new SynchronisationWorkerTask { Id = Guid.NewGuid() };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
         _mockCsRepo.Setup(r => r.GetRunningSyncTaskAsync(1)).ReturnsAsync(runningTask);
 
@@ -375,7 +375,7 @@ public class ConnectedSystemDeletionTests
             Status = ConnectedSystemStatus.Active
         };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
         _mockCsRepo.Setup(r => r.GetRunningSyncTaskAsync(1)).ReturnsAsync((SynchronisationWorkerTask?)null);
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1)).ReturnsAsync(5000); // > 1000 threshold
@@ -401,7 +401,7 @@ public class ConnectedSystemDeletionTests
             Status = ConnectedSystemStatus.Active
         };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
         _mockCsRepo.Setup(r => r.GetRunningSyncTaskAsync(1)).ReturnsAsync((SynchronisationWorkerTask?)null);
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1)).ReturnsAsync(100); // < 1000 threshold
@@ -427,7 +427,7 @@ public class ConnectedSystemDeletionTests
             Status = ConnectedSystemStatus.Active
         };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
         _mockCsRepo.Setup(r => r.GetRunningSyncTaskAsync(1)).ReturnsAsync((SynchronisationWorkerTask?)null);
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1)).ReturnsAsync(100);
@@ -454,7 +454,7 @@ public class ConnectedSystemDeletionTests
             Status = ConnectedSystemStatus.Active
         };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
         _mockCsRepo.Setup(r => r.GetRunningSyncTaskAsync(1)).ReturnsAsync((SynchronisationWorkerTask?)null);
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1)).ReturnsAsync(100);
@@ -483,7 +483,7 @@ public class ConnectedSystemDeletionTests
             Status = ConnectedSystemStatus.Active
         };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
         _mockCsRepo.Setup(r => r.GetRunningSyncTaskAsync(1)).ReturnsAsync((SynchronisationWorkerTask?)null);
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1)).ReturnsAsync(100);
@@ -513,7 +513,7 @@ public class ConnectedSystemDeletionTests
         var innerException = new InvalidOperationException("Inner error");
         var outerException = new Exception("Outer error", innerException);
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
         _mockCsRepo.Setup(r => r.GetRunningSyncTaskAsync(1)).ReturnsAsync((SynchronisationWorkerTask?)null);
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1)).ReturnsAsync(100);
@@ -538,7 +538,7 @@ public class ConnectedSystemDeletionTests
             Status = ConnectedSystemStatus.Active
         };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
         _mockCsRepo.Setup(r => r.GetRunningSyncTaskAsync(1)).ReturnsAsync((SynchronisationWorkerTask?)null);
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1)).ReturnsAsync(1000); // exactly at threshold
@@ -562,7 +562,7 @@ public class ConnectedSystemDeletionTests
             Status = ConnectedSystemStatus.Active
         };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
         _mockCsRepo.Setup(r => r.GetRunningSyncTaskAsync(1)).ReturnsAsync((SynchronisationWorkerTask?)null);
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1)).ReturnsAsync(1001); // just above threshold
@@ -585,7 +585,7 @@ public class ConnectedSystemDeletionTests
             Status = ConnectedSystemStatus.Active
         };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
         _mockCsRepo.Setup(r => r.GetRunningSyncTaskAsync(1)).ReturnsAsync((SynchronisationWorkerTask?)null);
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1)).ReturnsAsync(0);
@@ -743,7 +743,7 @@ public class ConnectedSystemDeletionTests
         };
         var orphanedMvo = new MetaverseObject { Id = Guid.NewGuid() };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
         _mockCsRepo.Setup(r => r.GetRunningSyncTaskAsync(1)).ReturnsAsync((SynchronisationWorkerTask?)null);
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1)).ReturnsAsync(100);
@@ -774,7 +774,7 @@ public class ConnectedSystemDeletionTests
             Status = ConnectedSystemStatus.Active
         };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
         _mockCsRepo.Setup(r => r.GetRunningSyncTaskAsync(1)).ReturnsAsync((SynchronisationWorkerTask?)null);
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(1)).ReturnsAsync(5000);
@@ -801,7 +801,7 @@ public class ConnectedSystemDeletionTests
         };
         var runningTask = new SynchronisationWorkerTask { Id = Guid.NewGuid() };
 
-        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
         _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>())).Returns(Task.CompletedTask);
         _mockCsRepo.Setup(r => r.GetRunningSyncTaskAsync(1)).ReturnsAsync(runningTask);
 

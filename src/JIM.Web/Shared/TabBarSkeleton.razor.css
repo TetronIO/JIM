@@ -1,0 +1,4 @@
+.tab-bar-skeleton {
+    display: flex;
+    gap: 0.5rem;
+}

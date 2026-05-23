@@ -1,0 +1,14 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Composite skeleton that mirrors the silhouette of Pages/Types/View.razor: a page
+   header (icon + title + breadcrumbs), an outlined tab bar with three tabs, and an
+   outlined content panel for the active tab's body. *@
+<PageHeaderSkeleton Animation="@Animation" />
+<TabBarSkeleton TabCount="3" Animation="@Animation" />
+<InfoPanelSkeleton Rows="6" Animation="@Animation" />
+
+@code {
+    [Parameter]
+    public Animation Animation { get; set; } = Animation.Wave;
+}

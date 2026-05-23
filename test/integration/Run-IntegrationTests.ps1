@@ -50,13 +50,13 @@
     Export Concurrency setting for LDAP connectors. Controls how many LDAP operations
     are pipelined concurrently during export. Default: 1 (sequential).
     Higher values improve throughput but increase load on the target directory.
-    Only applies to scenarios with LDAP exports (Scenarios 1, 2, 8).
+    Only applies to scenarios with LDAP exports (Scenarios 1, 2, 8, 10).
 
 .PARAMETER MaxExportParallelism
     Maximum number of parallel export batches for Connected Systems. Controls how many
     export batches are processed concurrently. Default: 1 (sequential).
     Higher values improve throughput for large exports.
-    Only applies to scenarios with LDAP exports (Scenarios 1, 2, 8).
+    Only applies to scenarios with LDAP exports (Scenarios 1, 2, 8, 10).
 
 .PARAMETER TimeoutSeconds
     Maximum time to wait for services to be ready. Default: 180 seconds.
@@ -249,6 +249,31 @@ $repoRoot = (Get-Item $scriptRoot).Parent.Parent.FullName
 
 # Import helpers early so Get-DirectoryConfig is available
 . "$scriptRoot/utils/Test-Helpers.ps1"
+
+# Hydrate JIM_BENCH_* from .env when not already set in the process environment.
+# .env is the canonical config surface for the project, but Docker Compose only
+# reads it for containers; PowerShell doesn't auto-load it. Shell wins (so a
+# deliberate `export` still overrides), .env is the fallback. Scoped to the two
+# bench keys only; we don't want to silently leak unrelated .env values into
+# the host environment.
+$envFilePath = Join-Path $repoRoot ".env"
+if (Test-Path $envFilePath) {
+    foreach ($key in @("JIM_BENCH_API_URL", "JIM_BENCH_API_KEY")) {
+        if ([string]::IsNullOrEmpty([Environment]::GetEnvironmentVariable($key))) {
+            $match = Select-String -Path $envFilePath -Pattern "^\s*$key\s*=\s*(.*)$" | Select-Object -First 1
+            if ($match) {
+                $value = $match.Matches[0].Groups[1].Value.Trim()
+                # Strip surrounding single or double quotes if present
+                if ($value -match '^"(.*)"$' -or $value -match "^'(.*)'$") {
+                    $value = $matches[1]
+                }
+                if (-not [string]::IsNullOrEmpty($value)) {
+                    Set-Item -Path "env:$key" -Value $value
+                }
+            }
+        }
+    }
+}
 
 # Hard-fail: the long-tail templates (Scale100k5kGroups through Scale1m60kGroups)
 # are OpenLDAP only. Reject early at the orchestrator level so users discover
@@ -486,6 +511,7 @@ function Show-ScenarioMenu {
                 "*Scenario7*" { "Clear Connected System Objects testing" }
                 "*Scenario8*" { "Cross-domain entitlement synchronisation" }
                 "*Scenario9*" { "Partition-scoped import run profiles" }
+                "*Scenario10*" { "Sync rule scoping behaviour" }
                 default { "Integration test scenario" }
             }
         }
@@ -1716,8 +1742,11 @@ if ($DisableChangeTracking) {
     Write-Host "  Change Tracking:         ${CYAN}Enabled${NC}"
 }
 
-# Metrics streaming status
+# Metrics streaming status. Generate the run ID up-front so the summary block
+# below (and later streaming kickoff) can reference it without tripping
+# Set-StrictMode on an uninitialised variable.
 $metricsStreamingEnabled = $env:JIM_BENCH_API_URL -and $env:JIM_BENCH_API_KEY
+$metricsRunId = if ($metricsStreamingEnabled) { [Guid]::NewGuid().ToString() } else { $null }
 if ($metricsStreamingEnabled) {
     Write-Host "  Metrics Streaming:       ${GREEN}Enabled${NC}"
     Write-Host "                           ${GRAY}$($env:JIM_BENCH_API_URL)${NC}"
@@ -2619,7 +2648,7 @@ if ($script:UsingSnapshots -or $script:UsingOpenLDAPSnapshots) {
 # Export tuning params only apply to scenarios that accept them and have LDAP exports
 # Scenarios 1, 2, 8: pass through to their setup scripts
 # Scenario 6: passes through to its internal Setup-Scenario1 call
-$scenariosAcceptingExportParams = @("1", "2", "6", "8")
+$scenariosAcceptingExportParams = @("1", "2", "6", "8", "10")
 if ($scenarioNumber -and $scenariosAcceptingExportParams -contains $scenarioNumber) {
     if ($PSBoundParameters.ContainsKey('ExportConcurrency')) {
         $scenarioParams.ExportConcurrency = $ExportConcurrency
@@ -2629,8 +2658,9 @@ if ($scenarioNumber -and $scenariosAcceptingExportParams -contains $scenarioNumb
     }
 }
 
-# Start metrics streaming background job (if enabled)
-$metricsRunId = [Guid]::NewGuid().ToString()
+# Start metrics streaming background job (if enabled). $metricsRunId was
+# generated earlier alongside $metricsStreamingEnabled so the summary block
+# could reference it.
 $metricsStreamJob = $null
 $metricsHostFingerprint = $null
 if ($metricsStreamingEnabled) {

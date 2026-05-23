@@ -12,6 +12,67 @@
     Toggle dark mode to verify visual consistency across both modes.
 </MudText>
 
+@* ─── Other previews ─── *@
+<MudPaper Class="pa-5 mt-5" Outlined="true" Elevation="0">
+    <MudText Typo="Typo.h5" Class="mb-2">Other previews</MudText>
+    <MudText Typo="Typo.body1" Class="mud-text-secondary mb-4">
+        Links to the other design and demo surfaces in JIM, so this page can act as a single hub for reviewing UI states.
+    </MudText>
+    <MudGrid Spacing="3">
+        <MudItem xs="12" sm="6" md="4">
+            <MudCard Outlined="true">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6">Loading states</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary my-2">
+                        Skeleton loaders and load-timing behaviour on detail pages. Simulate fast, normal, and slow loads
+                        and compare Wave against Pulse animations.
+                    </MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Available to administrators.</MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                               EndIcon="@Icons.Material.Filled.OpenInNew"
+                               Href="/admin/loading-preview">Open</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4">
+            <MudCard Outlined="true">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6">Error pages</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary my-2">
+                        Unhandled error and not-authorised page previews, plus a button that triggers a real exception
+                        through the error boundary.
+                    </MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Development environment only.</MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                               EndIcon="@Icons.Material.Filled.OpenInNew"
+                               Href="/dev/error-pages">Open</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4">
+            <MudCard Outlined="true">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6">Operations queue (demo data)</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary my-2">
+                        The Operations page Queue tab populated with mocked worker tasks across every status, for
+                        reviewing the table layout without running real jobs.
+                    </MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Development environment only.</MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                               EndIcon="@Icons.Material.Filled.OpenInNew"
+                               Href="/admin/operations?d=true">Open</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
 @* ─── Typography ─── *@
 <MudPaper Class="pa-5 mt-5" Outlined="true" Elevation="0">
     <MudText Typo="Typo.h5" Class="mb-4">Typography</MudText>
