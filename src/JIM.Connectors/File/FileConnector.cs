@@ -357,11 +357,8 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
                     if (schemaObjectType.Attributes.All(a => a.Type != AttributeDataType.NotSet))
                         continue;
 
-                    foreach (var schemaAttribute in schemaObjectType.Attributes)
+                    foreach (var schemaAttribute in schemaObjectType.Attributes.Where(a => a.Type == AttributeDataType.NotSet))
                     {
-                        if (schemaAttribute.Type != AttributeDataType.NotSet)
-                            continue;
-
                         var field = reader.CsvReader.GetField(schemaAttribute.Name);
 
                         // some fields may be null/empty, skip those and hopefully we'll find

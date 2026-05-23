@@ -100,10 +100,9 @@ public class MetaverseRepository : IMetaverseRepository
         // Attach existing MetaverseAttributes so EF recognises them as existing entities
         // and only creates join-table entries (not duplicate attribute rows). Mirrors the
         // attach-then-Added pattern used in CreateMetaverseAttributeAsync.
-        foreach (var attribute in metaverseObjectType.Attributes)
+        foreach (var attribute in metaverseObjectType.Attributes.Where(a => Repository.Database.Entry(a).State == EntityState.Detached))
         {
-            if (Repository.Database.Entry(attribute).State == EntityState.Detached)
-                Repository.Database.MetaverseAttributes.Attach(attribute);
+            Repository.Database.MetaverseAttributes.Attach(attribute);
         }
 
         Repository.Database.Entry(metaverseObjectType).State = EntityState.Added;
