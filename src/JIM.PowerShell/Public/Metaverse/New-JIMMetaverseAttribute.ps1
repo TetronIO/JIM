@@ -15,7 +15,7 @@ function New-JIMMetaverseAttribute {
 
     .PARAMETER Type
         The data type of the attribute.
-        Valid values: Text, Integer, DateTime, Boolean, Reference, Guid, Binary
+        Valid values: Text, Integer, LongNumber, DateTime, Boolean, Reference, Guid, Binary
 
     .PARAMETER AttributePlurality
         Whether the attribute is single-valued or multi-valued.
@@ -62,7 +62,7 @@ function New-JIMMetaverseAttribute {
         [string]$Name,
 
         [Parameter(Mandatory)]
-        [ValidateSet('Text', 'Integer', 'DateTime', 'Boolean', 'Reference', 'Guid', 'Binary')]
+        [ValidateSet('Text', 'Integer', 'LongNumber', 'DateTime', 'Boolean', 'Reference', 'Guid', 'Binary')]
         [string]$Type,
 
         [Parameter()]
@@ -82,18 +82,19 @@ function New-JIMMetaverseAttribute {
 
         # Map type string to enum integer value (AttributeDataType enum)
         $typeMap = @{
-            'Text'      = 1
-            'Number'    = 2
-            'Integer'   = 2  # Alias for Number
-            'DateTime'  = 3
-            'Binary'    = 4
-            'Reference' = 5
-            'Guid'      = 6
-            'Boolean'   = 7
+            'Text'       = 1
+            'Number'     = 2
+            'Integer'    = 2  # Alias for Number
+            'DateTime'   = 3
+            'Binary'     = 4
+            'Reference'  = 5
+            'Guid'       = 6
+            'Boolean'    = 7
+            'LongNumber' = 8
         }
         $typeValue = $typeMap[$Type]
         if ($null -eq $typeValue) {
-            Write-Error "Invalid type '$Type'. Valid values: Text, Number, Integer, DateTime, Binary, Reference, Guid, Boolean"
+            Write-Error "Invalid type '$Type'. Valid values: Text, Number, Integer, LongNumber, DateTime, Binary, Reference, Guid, Boolean"
             return
         }
 

@@ -24,6 +24,13 @@ public interface IMetaverseRepository
 
     public Task<MetaverseObjectType?> GetMetaverseObjectTypeByPluralNameAsync(string pluralName, bool includeChildObjects);
 
+    /// <summary>
+    /// Creates a new Metaverse Object Type. Caller is responsible for ensuring Name and
+    /// PluralName are unique and that BuiltIn is set appropriately (false for customer-created types).
+    /// </summary>
+    /// <param name="metaverseObjectType">The object type to create.</param>
+    public Task CreateMetaverseObjectTypeAsync(MetaverseObjectType metaverseObjectType);
+
     public Task UpdateMetaverseObjectTypeAsync(MetaverseObjectType metaverseObjectType);
     #endregion
 

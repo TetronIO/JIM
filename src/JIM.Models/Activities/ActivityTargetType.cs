@@ -15,5 +15,6 @@ public enum ActivityTargetType
     ObjectMatchingRule = 7,
     MetaverseAttribute = 8,
     ServiceSetting = 9,
-    HistoryRetentionCleanup = 10
+    HistoryRetentionCleanup = 10,
+    MetaverseObjectType = 11
 }

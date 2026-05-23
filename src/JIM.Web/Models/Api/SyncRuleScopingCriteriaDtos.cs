@@ -58,6 +58,11 @@ public class SyncRuleScopingCriteriaDto
     public int? IntValue { get; set; }
 
     /// <summary>
+    /// The long integer value to compare against (for long number attributes).
+    /// </summary>
+    public long? LongValue { get; set; }
+
+    /// <summary>
     /// The date/time value to compare against (for datetime attributes).
     /// </summary>
     public DateTime? DateTimeValue { get; set; }
@@ -90,6 +95,7 @@ public class SyncRuleScopingCriteriaDto
             ComparisonType = entity.ComparisonType.ToString(),
             StringValue = entity.StringValue,
             IntValue = entity.IntValue,
+            LongValue = entity.LongValue,
             DateTimeValue = entity.DateTimeValue,
             BoolValue = entity.BoolValue,
             GuidValue = entity.GuidValue,
@@ -232,6 +238,11 @@ public class CreateScopingCriterionRequest
     /// The integer value to compare against (for number attributes).
     /// </summary>
     public int? IntValue { get; set; }
+
+    /// <summary>
+    /// The long integer value to compare against (for long number attributes).
+    /// </summary>
+    public long? LongValue { get; set; }
 
     /// <summary>
     /// The date/time value to compare against (for datetime attributes).

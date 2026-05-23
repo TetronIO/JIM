@@ -112,6 +112,7 @@
         'Get-JIMMetaverseObjectChangeHistory',
         'Search-JIMMetaverseObject',
         'Get-JIMMetaverseObjectType',
+        'New-JIMMetaverseObjectType',
         'Set-JIMMetaverseObjectType',
         'Get-JIMMetaverseAttribute',
         'New-JIMMetaverseAttribute',

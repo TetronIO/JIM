@@ -60,6 +60,58 @@ public class MetaverseServer
     }
 
     /// <summary>
+    /// Creates a new Metaverse Object Type, audited and tracked as an Activity.
+    /// </summary>
+    /// <param name="objectType">The object type to create. Name and PluralName must be unique.</param>
+    /// <param name="initiatedBy">The Metaverse Object that initiated the creation (may be null for system-initiated).</param>
+    public async Task CreateMetaverseObjectTypeAsync(MetaverseObjectType objectType, MetaverseObject? initiatedBy)
+    {
+        if (objectType == null)
+            throw new ArgumentNullException(nameof(objectType));
+
+        Log.Debug("CreateMetaverseObjectTypeAsync() called for {ObjectType}", objectType.Name);
+
+        var activity = new Activity
+        {
+            TargetName = objectType.Name,
+            TargetType = ActivityTargetType.MetaverseObjectType,
+            TargetOperationType = ActivityTargetOperationType.Create
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        AuditHelper.SetCreated(objectType, initiatedBy);
+        await Application.Repository.Metaverse.CreateMetaverseObjectTypeAsync(objectType);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Creates a new Metaverse Object Type, audited and tracked as an Activity. API-key initiator overload.
+    /// </summary>
+    /// <param name="objectType">The object type to create. Name and PluralName must be unique.</param>
+    /// <param name="initiatedByApiKey">The API key that initiated the creation.</param>
+    public async Task CreateMetaverseObjectTypeAsync(MetaverseObjectType objectType, ApiKey initiatedByApiKey)
+    {
+        if (objectType == null)
+            throw new ArgumentNullException(nameof(objectType));
+
+        Log.Debug("CreateMetaverseObjectTypeAsync() called for {ObjectType} (API key initiated)", objectType.Name);
+
+        var activity = new Activity
+        {
+            TargetName = objectType.Name,
+            TargetType = ActivityTargetType.MetaverseObjectType,
+            TargetOperationType = ActivityTargetOperationType.Create
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+
+        AuditHelper.SetCreated(objectType, initiatedByApiKey);
+        await Application.Repository.Metaverse.CreateMetaverseObjectTypeAsync(objectType);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
     /// Updates an existing Metaverse Object Type.
     /// </summary>
     /// <param name="objectType">The object type to update.</param>

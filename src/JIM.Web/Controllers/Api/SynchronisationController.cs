@@ -2299,6 +2299,7 @@ public class SynchronisationController(
             ComparisonType = comparisonType,
             StringValue = request.StringValue,
             IntValue = request.IntValue,
+            LongValue = request.LongValue,
             DateTimeValue = request.DateTimeValue,
             BoolValue = request.BoolValue,
             GuidValue = request.GuidValue,

@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.ComponentModel.DataAnnotations;
 using JIM.Models.Core;
 
 namespace JIM.Web.Models.Api;
@@ -42,6 +43,54 @@ public class MetaverseObjectTypeDetailDto
                 .ToList() ?? new()
         };
     }
+}
+
+/// <summary>
+/// Request DTO for creating a new MetaverseObjectType.
+/// </summary>
+public class CreateMetaverseObjectTypeRequest
+{
+    /// <summary>
+    /// The singular name of the object type (e.g., "User"). Must be unique.
+    /// </summary>
+    [Required]
+    [StringLength(200, MinimumLength = 1)]
+    public string Name { get; set; } = null!;
+
+    /// <summary>
+    /// The plural name of the object type (e.g., "Users"). Must be unique.
+    /// </summary>
+    [Required]
+    [StringLength(200, MinimumLength = 1)]
+    public string PluralName { get; set; } = null!;
+
+    /// <summary>
+    /// Optional MudBlazor icon name to associate with the object type in the UI.
+    /// </summary>
+    public string? Icon { get; set; }
+
+    /// <summary>
+    /// Optional list of existing Metaverse Attribute IDs to associate with this object type.
+    /// Attributes can also be associated later via PUT /metaverse/attributes/{id}.
+    /// </summary>
+    public List<int>? AttributeIds { get; set; }
+
+    /// <summary>
+    /// Determines when Metaverse Objects of this type should be automatically deleted.
+    /// Defaults to Manual when omitted.
+    /// </summary>
+    public MetaverseObjectDeletionRule? DeletionRule { get; set; }
+
+    /// <summary>
+    /// Optional grace period before deletion is executed.
+    /// </summary>
+    public TimeSpan? DeletionGracePeriod { get; set; }
+
+    /// <summary>
+    /// List of connected system IDs that are authoritative sources for deletion.
+    /// Required when DeletionRule is WhenAuthoritativeSourceDisconnected.
+    /// </summary>
+    public List<int>? DeletionTriggerConnectedSystemIds { get; set; }
 }
 
 /// <summary>

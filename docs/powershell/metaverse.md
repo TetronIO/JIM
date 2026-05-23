@@ -117,6 +117,57 @@ Set-JIMMetaverseObjectType -Id 1 -DeletionRule WhenAuthoritativeSourceDisconnect
 
 ---
 
+### New-JIMMetaverseObjectType
+
+Creates a new Metaverse Object Type. Use this when the built-in `User`, `Group`, and other seeded types do not fit; for example, modelling `Device`, `Contractor`, or `ServiceAccount` identities. The new type is created with `BuiltIn = false` so it can be removed via `Reset-JIMSystem` or by administrators in the UI later.
+
+#### Syntax
+
+```powershell
+New-JIMMetaverseObjectType -Name <string> -PluralName <string>
+    [-Icon <string>] [-AttributeIds <int[]>]
+    [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
+    [-DeletionTriggerConnectedSystemIds <int[]>]
+```
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Name` | `string` | Yes | | Singular name of the new type. Must be unique. |
+| `PluralName` | `string` | Yes | | Plural name of the new type. Must be unique. |
+| `Icon` | `string` | No | | Optional MudBlazor icon name to associate with the type in the UI. |
+| `AttributeIds` | `int[]` | No | | Optional array of existing Metaverse attribute IDs to associate with this type at creation time. Attributes can also be associated later. |
+| `DeletionRule` | `string` | No | `Manual` | Controls when objects of this type are automatically deleted. Valid values: `Manual`, `WhenLastConnectorDisconnected`, `WhenAuthoritativeSourceDisconnected`. |
+| `DeletionGracePeriod` | `TimeSpan` | No | | Grace period before deletion is executed. Use `[TimeSpan]::Zero` for immediate deletion. Ignored when `DeletionRule` is `Manual`. |
+| `DeletionTriggerConnectedSystemIds` | `int[]` | No | | Required when `DeletionRule` is `WhenAuthoritativeSourceDisconnected`. The connected system IDs whose disconnect triggers deletion. |
+
+!!! info "ShouldProcess"
+    This cmdlet supports `ShouldProcess` with a **Medium** impact level. Use `-WhatIf` to preview changes or `-Confirm` to require confirmation.
+
+#### Output
+
+The newly created object type definition.
+
+#### Examples
+
+```powershell title="Create a simple custom type"
+New-JIMMetaverseObjectType -Name "Device" -PluralName "Devices"
+```
+
+```powershell title="Create a type with attributes attached at creation"
+New-JIMMetaverseObjectType -Name "Contractor" -PluralName "Contractors" -AttributeIds 1,2,3
+```
+
+```powershell title="Create a type that is auto-deleted seven days after its authoritative source disconnects"
+New-JIMMetaverseObjectType -Name "ServiceAccount" -PluralName "ServiceAccounts" `
+    -DeletionRule WhenAuthoritativeSourceDisconnected `
+    -DeletionTriggerConnectedSystemIds 5 `
+    -DeletionGracePeriod ([TimeSpan]::FromDays(7))
+```
+
+---
+
 ## Attributes
 
 ### Get-JIMMetaverseAttribute
@@ -181,7 +232,7 @@ New-JIMMetaverseAttribute -Name <string> -Type <string> [-AttributePlurality <st
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Name` | `string` | Yes | | The name of the new attribute |
-| `Type` | `string` | Yes | | The data type. Valid values: `Text`, `Integer`, `DateTime`, `Boolean`, `Reference`, `Guid`, `Binary` |
+| `Type` | `string` | Yes | | The data type. Valid values: `Text`, `Integer`, `LongNumber`, `DateTime`, `Boolean`, `Reference`, `Guid`, `Binary` |
 | `AttributePlurality` | `string` | No | `SingleValued` | Whether the attribute holds one or many values. Valid values: `SingleValued`, `MultiValued` |
 | `ObjectTypeIds` | `int[]` | No | | Object type IDs to associate the attribute with |
 

@@ -336,32 +336,58 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
                         suggestion: "Ensure all rows in your CSV file have the same number of columns as the header row. Check for missing commas or values.");
                 }
 
-                var schemaObjectType = schema.ObjectTypes[0];
-                foreach (var schemaAttribute in schemaObjectType.Attributes)
+                // Type-infer ALL discovered object types per row. The previous implementation
+                // only inspected schema.ObjectTypes[0], so when column-based object-type
+                // discovery produced multiple types from the same CSV, every type beyond
+                // the first ended up with all attributes silently defaulted to Text - even
+                // though the columns are physically shared and their values are typeable.
+                // Symptom: any scoping rule that compared a numeric / DateTime / Boolean
+                // column on the affected object types matched zero rows, because the values
+                // were stored in StringValue rather than the typed column.
+                //
+                // The CSV is a single tabular file with one column-set, so the same row's
+                // field value applies to every type's like-named attribute. Iterating all
+                // types per row keeps the inference cost the same order of magnitude as
+                // before (still bounded by maxRowsToInspect = 50) but produces correct
+                // schemas for every discovered type.
+                foreach (var schemaObjectType in schema.ObjectTypes)
                 {
-                    var field = reader.CsvReader.GetField(schemaAttribute.Name);
-
-                    // some fields may be null/empty, skip those and hopefully we'll find
-                    // a value we can inspect in a later row.
-                    if (field == null || string.IsNullOrEmpty(field))
+                    // Skip object types that already have every attribute typed; saves
+                    // re-checking late in the row sweep on warm runs.
+                    if (schemaObjectType.Attributes.All(a => a.Type != AttributeDataType.NotSet))
                         continue;
 
-                    // attempt to infer the data type
-                    // conflating integers and doubles may turn out to be a bad idea
-                    if (int.TryParse(field, out _) || double.TryParse(field, out _))
-                        schemaAttribute.Type = AttributeDataType.Number;
-                    else if (bool.TryParse(field, out _))
-                        schemaAttribute.Type = AttributeDataType.Boolean;
-                    else if (Guid.TryParse(field, out _))
-                        schemaAttribute.Type = AttributeDataType.Guid;
-                    else if (DateTime.TryParse(field, out _))
-                        schemaAttribute.Type = AttributeDataType.DateTime;
-                    else
-                        schemaAttribute.Type = AttributeDataType.Text;
+                    foreach (var schemaAttribute in schemaObjectType.Attributes.Where(a => a.Type == AttributeDataType.NotSet))
+                    {
+                        var field = reader.CsvReader.GetField(schemaAttribute.Name);
 
-                    // if all fields have a type definition, stop inspecting
-                    if (schemaObjectType.Attributes.All(a => a.Type != AttributeDataType.NotSet))
-                        break;
+                        // some fields may be null/empty, skip those and hopefully we'll find
+                        // a value we can inspect in a later row.
+                        if (field == null || string.IsNullOrEmpty(field))
+                            continue;
+
+                        // Attempt to infer the data type. Integer parsing is tried narrowest-
+                        // to-widest so we don't bucket a LongNumber value into a Number column
+                        // that can't hold it at import time. The original implementation fell
+                        // through to Number on double.TryParse, which silently mistyped any
+                        // value outside Int32 range and failed at row ingestion with
+                        // "Failed to parse attribute 'X' as Number". This matters for ID
+                        // fields, large counters, and timestamps stored as epoch nanoseconds.
+                        if (int.TryParse(field, out _))
+                            schemaAttribute.Type = AttributeDataType.Number;
+                        else if (long.TryParse(field, out _))
+                            schemaAttribute.Type = AttributeDataType.LongNumber;
+                        else if (double.TryParse(field, out _))
+                            schemaAttribute.Type = AttributeDataType.Number;
+                        else if (bool.TryParse(field, out _))
+                            schemaAttribute.Type = AttributeDataType.Boolean;
+                        else if (Guid.TryParse(field, out _))
+                            schemaAttribute.Type = AttributeDataType.Guid;
+                        else if (DateTime.TryParse(field, out _))
+                            schemaAttribute.Type = AttributeDataType.DateTime;
+                        else
+                            schemaAttribute.Type = AttributeDataType.Text;
+                    }
                 }
 
                 rowsInspected++;
