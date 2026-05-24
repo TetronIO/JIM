@@ -67,8 +67,13 @@ public sealed class DiagnosticListener : IDisposable
         var durationMs = activity.Duration.TotalMilliseconds;
         var isSlowOperation = durationMs >= _slowOperationThresholdMs;
 
-        // Build tags list including parent ID for accurate tree reconstruction
-        var tagsList = activity.Tags.Select(t => $"{t.Key}={t.Value}").ToList();
+        // Build tags list including parent ID for accurate tree reconstruction.
+        // IMPORTANT: use TagObjects, not Tags. Activity.Tags only yields KeyValuePair<string, string?>
+        // (string-valued tags); int/double-valued tags set via Activity.SetTag(string, object?)
+        // live in TagObjects only and would silently disappear from the rendered message —
+        // including cumulativeObjectCount, wallClockOffsetMs, csoCount, etc., which downstream
+        // parsers (JIM Step 6 + JIM-Bench LogLineParser) read off the log line.
+        var tagsList = activity.TagObjects.Select(t => $"{t.Key}={t.Value}").ToList();
 
         // Add parentId to enable proper parent-child time tracking in the tree display
         // Without this, child times across multiple parent invocations get incorrectly summed
