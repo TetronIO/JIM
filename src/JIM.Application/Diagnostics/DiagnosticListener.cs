@@ -90,9 +90,20 @@ public sealed class DiagnosticListener : IDisposable
         var tags = string.Join(", ", tagsList);
         var tagsSuffix = string.IsNullOrEmpty(tags) ? "" : $" [{tags}]";
 
-        // Determine parent context for hierarchical display
-        var parentName = activity.Parent?.DisplayName;
-        var hierarchyPrefix = parentName != null ? $"{parentName} > " : "";
+        // Determine root-operation context for hierarchical display. Walk up the activity
+        // chain to find the topmost ancestor; emit "{Root} > {Child}" rather than
+        // "{ImmediateParent} > {Child}" so downstream parsers (JIM Step 6 + JIM-Bench)
+        // can identify the root operation (FullSync, DeltaSync, Import, Export, etc.)
+        // even when emitted from a deeply nested span. The full ancestry is still
+        // recoverable via the parentId tag, which Step 6 uses to rebuild the perf tree.
+        Activity? rootActivity = activity;
+        while (rootActivity?.Parent != null)
+        {
+            rootActivity = rootActivity.Parent;
+        }
+        var hierarchyPrefix = (rootActivity != null && rootActivity != activity)
+            ? $"{rootActivity.DisplayName} > "
+            : "";
 
         // Log format: "Parent > Child completed in Xms" for parseable output.
         // The :l format specifier on each string argument tells Serilog to render
