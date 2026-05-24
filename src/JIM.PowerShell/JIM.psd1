@@ -112,6 +112,7 @@
         'Get-JIMMetaverseObjectChangeHistory',
         'Search-JIMMetaverseObject',
         'Get-JIMMetaverseObjectType',
+        'New-JIMMetaverseObjectType',
         'Set-JIMMetaverseObjectType',
         'Get-JIMMetaverseAttribute',
         'New-JIMMetaverseAttribute',
@@ -161,7 +162,8 @@
         'Get-JIMHealth',
         'Get-JIMVersion',
         'Get-JIMAuthConfig',
-        'Get-JIMUserInfo'
+        'Get-JIMUserInfo',
+        'Reset-JIMSystem'
     )
 
     # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.

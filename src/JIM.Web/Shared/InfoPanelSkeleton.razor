@@ -1,0 +1,40 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Mirrors the silhouette of an outlined MudPaper info panel: a caption-style label
+   beside a body-style value, repeated across N rows. *@
+<MudPaper Class="@PaperClass" Outlined="true">
+    @for (var i = 0; i < Rows; i++)
+    {
+        <div class="info-panel-skeleton-row">
+            <MudSkeleton SkeletonType="SkeletonType.Text" Width="@LabelWidth" Height="18px" Animation="@Animation" />
+            <MudSkeleton SkeletonType="SkeletonType.Text" Width="@ValueWidth" Height="18px" Animation="@Animation" />
+        </div>
+    }
+</MudPaper>
+
+@code {
+    /// <summary>
+    /// Number of label/value row pairs to render.
+    /// </summary>
+    [Parameter]
+    public int Rows { get; set; } = 4;
+
+    /// <summary>
+    /// When true, omits the standard <c>mt-6</c> top margin to match the first-panel-on-page
+    /// convention from src/CLAUDE.md.
+    /// </summary>
+    [Parameter]
+    public bool OmitTopMargin { get; set; }
+
+    [Parameter]
+    public string LabelWidth { get; set; } = "30%";
+
+    [Parameter]
+    public string ValueWidth { get; set; } = "70%";
+
+    [Parameter]
+    public Animation Animation { get; set; } = Animation.Wave;
+
+    private string PaperClass => OmitTopMargin ? "pa-4" : "pa-4 mt-6";
+}

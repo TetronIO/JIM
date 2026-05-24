@@ -1,0 +1,40 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Mirrors the silhouette of the standard JIM detail-page header: an icon-large MudIcon
+   beside a Typo.h4 title, followed by a row of breadcrumbs. *@
+<div class="page-header-skeleton">
+    <div class="page-header-skeleton-title">
+        <MudSkeleton SkeletonType="SkeletonType.Circle" Width="40px" Height="40px" Animation="@Animation" />
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="@TitleWidth" Height="34px" Animation="@Animation" />
+    </div>
+    <div class="page-header-skeleton-breadcrumbs">
+        @for (var i = 0; i < BreadcrumbCount; i++)
+        {
+            <MudSkeleton SkeletonType="SkeletonType.Text" Width="80px" Height="16px" Animation="@Animation" />
+        }
+    </div>
+</div>
+
+@code {
+    /// <summary>
+    /// Number of breadcrumb placeholders to render. Defaults to 3, which matches most
+    /// detail pages.
+    /// </summary>
+    [Parameter]
+    public int BreadcrumbCount { get; set; } = 3;
+
+    /// <summary>
+    /// CSS width for the title rectangle. Defaults to a value that approximates the typical
+    /// length of "Type: identifier" titles on JIM detail pages.
+    /// </summary>
+    [Parameter]
+    public string TitleWidth { get; set; } = "60%";
+
+    /// <summary>
+    /// Skeleton animation. Wave reads as more deliberate than Pulse; the loading lab page
+    /// lets a reviewer compare both before settling on a default.
+    /// </summary>
+    [Parameter]
+    public Animation Animation { get; set; } = Animation.Wave;
+}

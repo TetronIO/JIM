@@ -81,6 +81,14 @@ pwsh test/integration/Invoke-IntegrationTests.ps1 -ScenariosOnly
 - **Scenario 1: HR to Enterprise Directory** - Joiner, Mover, Leaver, Reconnection
 - **Scenario 2: Directory to Directory Sync** - Placeholder (not implemented)
 - **Scenario 3: GALSYNC** - Placeholder (not implemented)
+- **Scenario 4: Deletion Rules** - MVO deletion triggers and attribute recall
+- **Scenario 5: Matching Rules** - Join logic, projection, deduplication
+- **Scenario 6: Scheduler Service** - End-to-end scheduled run profile execution
+- **Scenario 7: Clear Connected System Objects** - Bulk CSO removal workflow
+- **Scenario 8: Cross-Domain Entitlement Sync** - Large-scale group/entitlement sync
+- **Scenario 9: Partition-Scoped Imports** - Partition filtering on import run profiles
+- **Scenario 10: Sync Rule Scoping Behaviour** - Inbound/outbound scope transitions, deprovisioning actions, cross-system cascade
+- **Scenario 11: Scoping Criteria Evaluation Matrix** - Operator x value-type x group-structure coverage via per-cell CSO/MV types; three coverage tiers (Quick / Default / Exhaustive), round-trip persistence and API negative-cell probes
 
 ### Phase 2 (Planned)
 - Database connector testing (requires [#170](https://github.com/TetronIO/JIM/issues/170))
@@ -131,9 +139,14 @@ Integration test results can be automatically streamed to the JIM-Bench ingestio
 
 ### Enabling Metrics Streaming
 
-Set two environment variables (in `.env` or export them in your shell):
+Set two environment variables. Either add them to `.env` (the runner hydrates them into its own process environment when not already exported), or export them in your shell. If both are present, the exported shell value wins.
 
 ```bash
+# Option A: add to .env (canonical for the project)
+JIM_BENCH_API_URL=https://bench-api.junctional.io
+JIM_BENCH_API_KEY=your-api-key
+
+# Option B: export in the current shell (overrides .env for this session)
 export JIM_BENCH_API_URL=https://bench-api.junctional.io
 export JIM_BENCH_API_KEY=your-api-key
 ```

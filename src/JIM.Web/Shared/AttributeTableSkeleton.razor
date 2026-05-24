@@ -1,0 +1,39 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Mirrors the silhouette of the CSO attributes table: an outlined MudPaper containing
+   N rows, each with an attribute-name cell and a value cell of varying widths. *@
+<MudPaper Class="pa-0 mt-6" Outlined="true">
+    <div class="attribute-table-skeleton">
+        <div class="attribute-table-skeleton-header">
+            <MudSkeleton SkeletonType="SkeletonType.Text" Width="80px" Height="14px" Animation="@Animation" />
+            <MudSkeleton SkeletonType="SkeletonType.Text" Width="60px" Height="14px" Animation="@Animation" />
+            <MudSkeleton SkeletonType="SkeletonType.Text" Width="50px" Height="14px" Animation="@Animation" />
+            <MudSkeleton SkeletonType="SkeletonType.Text" Width="70px" Height="14px" Animation="@Animation" />
+        </div>
+        @for (var i = 0; i < Rows; i++)
+        {
+            var valueWidth = _valueWidths[i % _valueWidths.Length];
+            <div class="attribute-table-skeleton-row">
+                <MudSkeleton SkeletonType="SkeletonType.Text" Width="140px" Height="20px" Animation="@Animation" />
+                <MudSkeleton SkeletonType="SkeletonType.Text" Width="@valueWidth" Height="20px" Animation="@Animation" />
+                <MudSkeleton SkeletonType="SkeletonType.Text" Width="60px" Height="20px" Animation="@Animation" />
+                <MudSkeleton SkeletonType="SkeletonType.Text" Width="70px" Height="20px" Animation="@Animation" />
+            </div>
+        }
+    </div>
+</MudPaper>
+
+@code {
+    /// <summary>
+    /// Number of attribute row placeholders to render.
+    /// </summary>
+    [Parameter]
+    public int Rows { get; set; } = 8;
+
+    [Parameter]
+    public Animation Animation { get; set; } = Animation.Wave;
+
+    // Value-cell widths vary row-to-row so the silhouette doesn't look like a uniform grid.
+    private static readonly string[] _valueWidths = { "240px", "320px", "180px", "280px", "200px", "300px" };
+}

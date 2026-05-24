@@ -40,7 +40,11 @@ Never retrofit a test after the fix; never commit new functionality without test
 
 **Plan before building:** For any task with 3+ steps or architectural decisions, use plan mode. If you have spent more than 2-3 attempts on the same problem without progress, stop, re-plan, and consider asking the user - they can often see what you are missing.
 
-**Demand quality:** Simplicity first; find root causes, not band-aids; for non-trivial changes pause and ask "is there a more elegant way?"; would a staff engineer approve this? (Skip the introspection for simple obvious fixes.)
+**Demand quality:** Simplicity first; find root causes, not band-aids; for non-trivial changes pause and ask "is there a more elegant way?"; would a staff engineer approve this? (Skip the introspection for simple obvious fixes.) Prefer durable, belt-and-braces fixes over minimal one-off patches; if you offer a smaller fix, call out the tradeoff explicitly so the user can choose.
+
+**Debugging:** Lead with the diagnosis in one or two sentences; offer detail on request. Never reach for a hardcoded path or env-specific patch to make a symptom go away; investigate the underlying cause first. Sub-agent summaries describe intent, not observed behaviour: verify any subtle claim against the source before acting on it.
+
+**Bulk edits:** Avoid `sed`-based bulk rewrites on files that may have been partially modified by hand or by earlier tool calls; prefer targeted `Edit` calls, or dry-run the diff first. After any bulk edit, grep the touched files for unintended duplicates (e.g. repeated `ValidateSet` entries, duplicated `using` lines).
 
 **Pushback & honesty:**
 
@@ -157,6 +161,8 @@ For new features or significant changes:
 - **Reuse the existing feature branch; never create a new one because the current branch's name "doesn't fit" the task.** If you start work and find yourself already checked out on a feature branch (i.e. not `main`), commit your changes there. Do not create `feature/<something-else>` for an unrelated task. The user runs multiple chat sessions in parallel and tracks work by branch; spawning new branches makes commits invisible across sessions. If the scope has genuinely broadened, surface it: "this commit is unrelated to the current branch name; want me to rename the branch or stay on it?" and let the user decide. Only branch off `main` when the user explicitly asks, or when you have just merged/finished the previous branch and are starting fresh from a clean `main`.
 - Never automatically create a PR or merge to `main` - the user must explicitly instruct
 - Build and test pass before commit (per Critical Rules); push and PR only when the user asks
+- Before filing a new GitHub issue, ALWAYS search existing open and closed issues for duplicates: `gh issue list --state all --search "<keywords>"`. Surface any close matches to the user before creating a new one.
+- Dependabot does not auto-rebase PRs when they fall behind `main`. After merging any PR in a batch, comment `@dependabot rebase` on each remaining open Dependabot PR via `gh pr comment <num> --body '@dependabot rebase'`.
 
 ### Merging via gh CLI
 

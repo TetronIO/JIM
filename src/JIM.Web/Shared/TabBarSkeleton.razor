@@ -1,0 +1,27 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Mirrors the silhouette of the outlined NavigableMudTabs bar: a row of tab-button-sized
+   rectangles inside an outlined container. *@
+<MudPaper Class="pa-3 mt-6" Outlined="true" Elevation="0">
+    <div class="tab-bar-skeleton">
+        @for (var i = 0; i < TabCount; i++)
+        {
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="@TabWidth" Height="36px" Animation="@Animation" />
+        }
+    </div>
+</MudPaper>
+
+@code {
+    /// <summary>
+    /// Number of tab placeholders to render.
+    /// </summary>
+    [Parameter]
+    public int TabCount { get; set; } = 3;
+
+    [Parameter]
+    public string TabWidth { get; set; } = "120px";
+
+    [Parameter]
+    public Animation Animation { get; set; } = Animation.Wave;
+}

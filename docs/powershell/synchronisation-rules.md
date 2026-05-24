@@ -603,26 +603,26 @@ Adds an individual scoping criterion to a group. Each criterion compares an attr
 # By metaverse attribute ID
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -MetaverseAttributeId <int> -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-DateTimeValue <datetime>]
-    [-BoolValue <bool>] [-GuidValue <guid>] [-PassThru]
+    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
+    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-PassThru]
 
 # By metaverse attribute name
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -MetaverseAttributeName <string> -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-DateTimeValue <datetime>]
-    [-BoolValue <bool>] [-GuidValue <guid>] [-PassThru]
+    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
+    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-PassThru]
 
 # By connected system attribute ID
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -ConnectedSystemAttributeId <int> -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-DateTimeValue <datetime>]
-    [-BoolValue <bool>] [-GuidValue <guid>] [-PassThru]
+    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
+    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-PassThru]
 
 # By connected system attribute name
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -ConnectedSystemAttributeName <string> -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-DateTimeValue <datetime>]
-    [-BoolValue <bool>] [-GuidValue <guid>] [-PassThru]
+    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
+    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-PassThru]
 ```
 
 ### Parameters
@@ -637,10 +637,12 @@ New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
 | `ConnectedSystemAttributeName` | `string` | Yes (ByCsName set) | | The connected system attribute name to evaluate; auto-resolves to ID (import rules only) |
 | `ComparisonType` | `string` | Yes | | The comparison operator. Valid values: `Equals`, `NotEquals`, `StartsWith`, `NotStartsWith`, `EndsWith`, `NotEndsWith`, `Contains`, `NotContains`, `LessThan`, `LessThanOrEquals`, `GreaterThan`, `GreaterThanOrEquals`. |
 | `StringValue` | `string` | No | | String value to compare against |
-| `IntValue` | `int` | No | | Integer value to compare against |
+| `IntValue` | `int` | No | | Integer value to compare against (`Number` attributes) |
+| `LongValue` | `long` | No | | 64-bit integer value to compare against (`LongNumber` attributes) |
 | `DateTimeValue` | `datetime` | No | | Date/time value to compare against (ISO 8601 format) |
 | `BoolValue` | `bool` | No | | Boolean value to compare against |
 | `GuidValue` | `guid` | No | | GUID value to compare against |
+| `CaseSensitive` | `bool` | No | `$false` | If `$true`, string comparisons are case-sensitive. Only meaningful with `StringValue`. |
 | `PassThru` | `switch` | No | `$false` | Returns the created criterion object |
 
 ### Output

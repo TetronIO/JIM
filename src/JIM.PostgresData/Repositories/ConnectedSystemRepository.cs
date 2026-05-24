@@ -4082,7 +4082,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task<SyncRule?> GetSyncRuleAsync(int id)
     {
+        // AsTracking() is essential here even though the DbContext default is NoTracking:
+        //   - It gives identity resolution across the Includes below, so the same
+        //     ConnectedSystemObjectTypeAttribute reached via ObjectType.Attributes AND via
+        //     AttributeFlowRules.Sources.ConnectedSystemAttribute materialises as a single
+        //     instance (AsSplitQuery + NoTracking would materialise it twice).
+        //   - Every write-path controller follows the load -> mutate -> save pattern and
+        //     relies on EF's change tracker to detect property modifications, collection
+        //     adds (e.g. new ObjectScopingCriteriaGroup) and collection removals on
+        //     SaveChanges. With NoTracking, those mutations are invisible to EF.
         return await Repository.Database.SyncRules
+            .AsTracking()
             .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
             .Include(sr => sr.AttributeFlowRules)
             .ThenInclude(afr => afr.TargetConnectedSystemAttribute)
@@ -4128,7 +4138,19 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task UpdateSyncRuleAsync(SyncRule syncRule)
     {
-        Repository.Database.Update(syncRule);
+        // All current callers pass a SyncRule already tracked by the change tracker
+        // (loaded via GetSyncRuleAsync earlier in the same request scope). Relying on
+        // EF Core's change detection during SaveChanges persists property mutations,
+        // collection adds (e.g. a new ObjectScopingCriteriaGroup) and collection
+        // removals (e.g. cleared ObjectMatchingRules) without us needing to walk the
+        // graph ourselves.
+        //
+        // Database.Update(syncRule) used to be called here, but it traverses the full
+        // navigation graph and re-attaches every reachable entity as Modified. The
+        // SyncRule graph reaches the same ConnectedSystemAttribute via two paths
+        // (ObjectType.Attributes and AttributeFlowRules.Sources.ConnectedSystemAttribute),
+        // and re-attaching either of those collided with the existing tracker entries
+        // — throwing "another instance with the same key value is already being tracked".
         await Repository.Database.SaveChangesAsync();
     }
         
