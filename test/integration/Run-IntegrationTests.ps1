@@ -1855,11 +1855,32 @@ if ($DisableChangeTracking) {
     Write-Host "  Change Tracking:         ${CYAN}Enabled${NC}"
 }
 
-# Metrics streaming status. Generate the run ID up-front so the summary block
-# below (and later streaming kickoff) can reference it without tripping
-# Set-StrictMode on an uninitialised variable.
+# Metrics streaming status.
+# Hydrate JIM_BENCH_* from .env into the process env when not already set,
+# so a single .env definition both configures the Docker stack and enables
+# the runner's streaming path. The devcontainer setup script reminds users
+# to populate JIM_BENCH_API_KEY in .env for this reason.
+$envFilePath = Join-Path $repoRoot ".env"
+if (Test-Path $envFilePath) {
+    $envContent = Get-Content $envFilePath -Raw
+    foreach ($benchVar in @('JIM_BENCH_API_URL', 'JIM_BENCH_API_KEY')) {
+        if (-not [Environment]::GetEnvironmentVariable($benchVar)) {
+            if ($envContent -match "(?m)^$benchVar=(.+)$") {
+                $benchValue = $Matches[1].Trim()
+                if ($benchValue) {
+                    Set-Item "env:$benchVar" $benchValue
+                }
+            }
+        }
+    }
+}
 $metricsStreamingEnabled = $env:JIM_BENCH_API_URL -and $env:JIM_BENCH_API_KEY
+# Pre-declare metrics tracking vars so the resolved-config banner and the
+# post-scenario submission block can reference them under Set-StrictMode
+# even on code paths where streaming is disabled or never started.
 $metricsRunId = if ($metricsStreamingEnabled) { [Guid]::NewGuid().ToString() } else { $null }
+$metricsStreamJob = $null
+$metricsHostFingerprint = $null
 if ($metricsStreamingEnabled) {
     Write-Host "  Metrics Streaming:       ${GREEN}Enabled${NC}"
     Write-Host "                           ${GRAY}$($env:JIM_BENCH_API_URL)${NC}"
@@ -2151,6 +2172,15 @@ Write-Section "Step 3: Starting Services"
 $workerLogMount = Join-Path $scriptRoot "results" "logs" "worker"
 if (-not (Test-Path $workerLogMount)) {
     New-Item -ItemType Directory -Path $workerLogMount -Force | Out-Null
+}
+# Make the bind-mount writable by the worker container's non-root user (UID 1654,
+# baked into JIM.Worker/Dockerfile). Host bind mounts inherit the host directory's
+# permissions, and the host dir is owned by UID 1000 mode 0755 — UID 1654 has no
+# write access, so Serilog's file sink fails silently and no jim.worker.<date>.log
+# is ever created. Without this chmod, Stream-WorkerLogs.ps1 spins until its 120s
+# timeout and metrics streaming produces only the summary, not per-span data.
+if ($IsLinux -or $IsMacOS) {
+    & chmod 0777 $workerLogMount 2>$null
 }
 
 Write-Step "Starting JIM stack..."
@@ -2796,30 +2826,21 @@ if ($isScenario11) {
     }
 }
 
-# Start metrics streaming background job (if enabled). $metricsRunId was
-# generated earlier alongside $metricsStreamingEnabled so the summary block
-# could reference it.
-$metricsStreamJob = $null
-$metricsHostFingerprint = $null
+# Start metrics streaming background job (if enabled).
+# $metricsRunId / $metricsStreamJob / $metricsHostFingerprint were pre-declared
+# earlier alongside $metricsStreamingEnabled so the resolved-config banner can
+# reference them under Set-StrictMode.
 if ($metricsStreamingEnabled) {
     Write-Step "Capturing host fingerprint..."
     $metricsHostFingerprint = & "$scriptRoot/Get-HostFingerprint.ps1"
 
-    $workerLogPath = Join-Path $scriptRoot "results" "logs" "worker"
-    # Find the most recent worker log file (Serilog names files with date suffixes)
-    # The streaming script will wait for the file to appear if the container hasn't started writing yet
-    $workerLogFile = Get-ChildItem -Path $workerLogPath -Filter "jim.worker.*.log" -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    if ($workerLogFile) {
-        $workerLogFilePath = $workerLogFile.FullName
-    } else {
-        # Construct expected path; the streaming script will wait for it to appear
-        $workerLogFilePath = Join-Path $workerLogPath "jim.worker.$(Get-Date -Format 'yyyyMMdd').log"
-    }
-
     Write-Step "Starting metrics streaming to $($env:JIM_BENCH_API_URL)..."
+    # Stream-WorkerLogs.ps1 follows the worker container via `docker logs -f`,
+    # not the bind-mounted log file. The file sink writes CLEF JSON, which the
+    # bench server-side parser (a port of the runner's Step 6 regex) cannot
+    # ingest; the docker logs plaintext output matches the parser format.
     $metricsStreamJob = Start-Job -FilePath "$scriptRoot/Stream-WorkerLogs.ps1" -ArgumentList @(
-        $workerLogFilePath,
+        "jim.worker",
         $env:JIM_BENCH_API_URL,
         $env:JIM_BENCH_API_KEY,
         $metricsRunId,

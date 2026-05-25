@@ -86,6 +86,7 @@ public class SyncExportTaskProcessor
         using var exportSpan = Diagnostics.Sync.StartSpan("Export");
         exportSpan.SetTag("connectedSystemId", _connectedSystem.Id);
         exportSpan.SetTag("connectedSystemName", _connectedSystem.Name);
+        exportSpan.SetTag("connectorType", _connectedSystem.ConnectorDefinition.Name);
         exportSpan.SetTag("runMode", _runMode.ToString());
 
         Log.Information("PerformExportAsync: Starting export for {SystemName} (RunMode: {RunMode})",

@@ -1,23 +1,26 @@
 # Plan: Integration Test Metrics - JIM Repo Scope (#476)
 
+- **Status:** Done
+- **Issue:** [#476](https://github.com/TetronIO/JIM/issues/476)
+- **Note:** End-to-end validated 2026-05-25 via Scenario1-HRToIdentityDirectory Large; dashboards confirmed at https://bench.tetron.io. Outstanding metrics-platform work (run-relative X axis on the Throughput Profile, Grafana trends/regression dashboards, cross-repo dispatch receiver, devcontainer-side bench access docs) is tracked in `TetronIO/JIM-Bench`.
+
 ## Design Decisions (from planning discussion)
 
 1. **Span enrichment** (Phase 1) adds `cumulativeObjectCount` and `wallClockOffsetMs` tags to existing spans. These enrich the local performance tree at Debug level and flow to the API when streamed.
 2. **MetricsCheckpoints** (Phase 1b) are lightweight structured log lines emitted at `Information` level, guaranteeing throughput profile data regardless of log level. Emitted every ~1000 objects or at natural phase boundaries.
-3. **Log streaming** (Phase 3) uses a background PowerShell job that tails the worker log file via a bind mount during the test run. Streams DiagnosticListener lines + MetricsCheckpoint lines to the Metrics API in batches. The devcontainer never holds or processes the full log volume.
+3. **Log streaming** (Phase 3) uses a background PowerShell job that follows the worker container's stdout via `docker logs -f` during the test run. Streams DiagnosticListener lines + MetricsCheckpoint lines to the Metrics API in batches. The devcontainer never holds or processes the full log volume. (Note: initial implementation tailed the Serilog file sink via a bind mount, but the file sink uses `RenderedCompactJsonFormatter` (CLEF JSON) while the bench-side parser expects the same plaintext format the runner's Step 6 metrics extraction already parses. Switched to `docker logs -f` so both local Step 6 and bench streaming consume identical plaintext output.)
 4. **Architectural separation**: all reporting/submission logic lives in `test/integration/`. Product code changes are limited to span tags + MetricsCheckpoint log lines. No Serilog sink, no product dependency on the Metrics API.
 5. **Two-tier data model**: Tier 1 (always available at any log level) = MetricsCheckpoints + runner wall-clock + pass/fail. Tier 2 (Debug level) = full DiagnosticListener span tree. The API and Grafana handle both tiers.
 
 ## Data Flow
 
 ```
-+---------------------------+       bind mount        +-------------------+
-| jim.worker container      | --------------------->  | Log file on host  |
-| (writes to /var/log/jim/) |  jim-logs-volume        | (accessible to    |
-+---------------------------+                         |  test runner)     |
-                                                      +--------+----------+
++---------------------------+    docker logs -f       +-------------------+
+| jim.worker container      | --------------------->  | Stream-WorkerLogs |
+| (Serilog console sink,    |    (stdout/stderr,      | .ps1 background   |
+|  plaintext output)        |     plaintext)          | job               |
++---------------------------+                         +--------+----------+
                                                                |
-                                            Get-Content -Wait (background job)
                                             filters DiagnosticListener + MetricsCheckpoint
                                             enriches with run context (runId, scenario, template, host)
                                             batches every 200 lines or 5 seconds

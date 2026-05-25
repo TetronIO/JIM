@@ -152,6 +152,16 @@ public static class TestUtilities
 
     public static List<ConnectedSystem> GetConnectedSystemData()
     {
+        // ConnectorDefinition is non-nullable on ConnectedSystem (production always loads it
+        // via Include). Provide a stub so processors that tag diagnostic spans with
+        // connectedSystem.ConnectorDefinition.Name don't NullReferenceException in tests.
+        var connectorDefinition = new ConnectorDefinition
+        {
+            Id = 1,
+            Name = "JIM Test Connector",
+            BuiltIn = true
+        };
+
         return new List<ConnectedSystem>
         {
             new()
@@ -159,14 +169,16 @@ public static class TestUtilities
                 Id = 1,
                 Name = "Dummy Source System",
                 // Use SyncRule mode since tests add matching rules to SyncRules
-                ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule
+                ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule,
+                ConnectorDefinition = connectorDefinition
             },
             new()
             {
                 Id = 2,
                 Name = "Dummy Target System",
                 // Use SyncRule mode since tests add matching rules to SyncRules
-                ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule
+                ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule,
+                ConnectorDefinition = connectorDefinition
             }
         };
     }

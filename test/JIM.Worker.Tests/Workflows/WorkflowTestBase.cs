@@ -108,12 +108,22 @@ public abstract class WorkflowTestBase
     /// </summary>
     protected async Task<ConnectedSystem> CreateConnectedSystemAsync(string name)
     {
+        // ConnectorDefinition is non-nullable on ConnectedSystem (production always loads it
+        // via Include). Provide a stub here so processors that tag diagnostic spans with
+        // connectedSystem.ConnectorDefinition.Name don't NullReferenceException in tests.
+        var connectorDefinition = new ConnectorDefinition
+        {
+            Name = "JIM Test Connector",
+            BuiltIn = true
+        };
         var connectedSystem = new ConnectedSystem
         {
             Name = name,
-            ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule
+            ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule,
+            ConnectorDefinition = connectorDefinition
         };
 
+        DbContext.ConnectorDefinitions.Add(connectorDefinition);
         DbContext.ConnectedSystems.Add(connectedSystem);
         await DbContext.SaveChangesAsync();
 

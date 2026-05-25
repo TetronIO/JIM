@@ -67,8 +67,13 @@ public sealed class DiagnosticListener : IDisposable
         var durationMs = activity.Duration.TotalMilliseconds;
         var isSlowOperation = durationMs >= _slowOperationThresholdMs;
 
-        // Build tags list including parent ID for accurate tree reconstruction
-        var tagsList = activity.Tags.Select(t => $"{t.Key}={t.Value}").ToList();
+        // Build tags list including parent ID for accurate tree reconstruction.
+        // IMPORTANT: use TagObjects, not Tags. Activity.Tags only yields KeyValuePair<string, string?>
+        // (string-valued tags); int/double-valued tags set via Activity.SetTag(string, object?)
+        // live in TagObjects only and would silently disappear from the rendered message —
+        // including cumulativeObjectCount, wallClockOffsetMs, csoCount, etc., which downstream
+        // parsers (JIM Step 6 + JIM-Bench LogLineParser) read off the log line.
+        var tagsList = activity.TagObjects.Select(t => $"{t.Key}={t.Value}").ToList();
 
         // Add parentId to enable proper parent-child time tracking in the tree display
         // Without this, child times across multiple parent invocations get incorrectly summed
@@ -78,22 +83,55 @@ public sealed class DiagnosticListener : IDisposable
             tagsList.Insert(0, $"parentId={parentId}");
         }
 
+        // rootSpanId is the unique-per-execution identifier — it's the same string
+        // for the root span and every descendant within one trace. Downstream
+        // (JIM-Bench) uses it to partition throughput series per sync execution
+        // so two sync runs against the same connected system in the same test
+        // run don't get collapsed into one line. Emitted on every span so the
+        // join semantics in bench are uniform between root rows (test_operations)
+        // and child rows (throughput_samples).
+        var rootSpanId = activity.RootId;
+        if (!string.IsNullOrEmpty(rootSpanId))
+        {
+            tagsList.Insert(0, $"rootSpanId={rootSpanId}");
+        }
+
+        // Slow operations are tagged inside the bracket rather than prefixed to the path.
+        // The previous "[SLOW] " inline prefix broke downstream parsers that anchor on the
+        // span name (e.g. JIM-Bench's LogLineParser), and the Warning log level still
+        // signals slowness to humans skim-reading docker logs.
+        if (isSlowOperation)
+        {
+            tagsList.Add("slow=true");
+        }
+
         var tags = string.Join(", ", tagsList);
         var tagsSuffix = string.IsNullOrEmpty(tags) ? "" : $" [{tags}]";
 
-        // Determine parent context for hierarchical display
-        var parentName = activity.Parent?.DisplayName;
-        var hierarchyPrefix = parentName != null ? $"{parentName} > " : "";
+        // Determine root-operation context for hierarchical display. Walk up the activity
+        // chain to find the topmost ancestor; emit "{Root} > {Child}" rather than
+        // "{ImmediateParent} > {Child}" so downstream parsers (JIM Step 6 + JIM-Bench)
+        // can identify the root operation (FullSync, DeltaSync, Import, Export, etc.)
+        // even when emitted from a deeply nested span. The full ancestry is still
+        // recoverable via the parentId tag, which Step 6 uses to rebuild the perf tree.
+        Activity? rootActivity = activity;
+        while (rootActivity?.Parent != null)
+        {
+            rootActivity = rootActivity.Parent;
+        }
+        var hierarchyPrefix = (rootActivity != null && rootActivity != activity)
+            ? $"{rootActivity.DisplayName} > "
+            : "";
 
-        // Log format: "Parent > Child completed in Xms" for parseable output
-        // Use Warning level for slow operations but keep name format consistent for tree parsing
+        // Log format: "Parent > Child completed in Xms" for parseable output.
+        // The :l format specifier on each string argument tells Serilog to render
+        // literally (no surrounding "" quotes), which both the JIM Step 6 parser
+        // and the JIM-Bench server-side parser depend on.
         var logLevel = isSlowOperation ? Serilog.Events.LogEventLevel.Warning : _logLevel;
-        var slowMarker = isSlowOperation ? "[SLOW] " : "";
 
         Log.Write(
             logLevel,
-            "DiagnosticListener: {SlowMarker}{HierarchyPrefix}{SpanName} completed in {DurationMs:F1}ms{Tags}",
-            slowMarker,
+            "DiagnosticListener: {HierarchyPrefix:l}{SpanName:l} completed in {DurationMs:F1}ms{Tags:l}",
             hierarchyPrefix,
             activity.DisplayName,
             durationMs,

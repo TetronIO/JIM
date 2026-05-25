@@ -115,14 +115,37 @@ else {
 }
 
 # --- Disk Type ---
+# Three possible values: ssd, hdd, virtual.
+# "virtual" covers VM block devices (Hyper-V / WSL2 / virtio in general) where
+# ROTA is meaningless: the WSL2 kernel exposes virtio block devices that always
+# report rotational=1 regardless of whether the Windows host underneath is NVMe
+# or spinning. Reporting "hdd" in that case misleads bench dashboards that
+# group runs by storage class, so we label the host class with the medium we
+# can actually identify (virtual) rather than guess the underlying hardware.
 $diskType = "unknown"
 if ($IsLinux) {
-    # Find the root device and check if it's rotational
-    $lsblkOutput = lsblk -d -o NAME,ROTA -n 2>$null
+    # Filter to TYPE=disk so loop/ram/dm devices don't get picked as the "first disk".
+    # lsblk lists loop0..N before sda on devcontainers, which previously caused the
+    # first-line parse to read a loopback device and report rotational=1 → hdd.
+    $lsblkOutput = lsblk -d -o NAME,ROTA,TYPE,MODEL,VENDOR -n 2>$null |
+        Where-Object { ($_ -split "\s+", 5)[2] -eq "disk" }
     if ($lsblkOutput) {
-        # Get the first disk device (typically sda or vda)
-        $firstDisk = ($lsblkOutput | Select-Object -First 1).Trim() -split "\s+"
-        if ($firstDisk.Count -ge 2) {
+        $firstDisk = ($lsblkOutput | Select-Object -First 1).Trim() -split "\s+", 5
+        # Detect Hyper-V / WSL2 virtual disks by model/vendor strings.
+        # Examples seen in the wild: model="Virtual Disk" vendor="Msft" (WSL2),
+        # vendor="VMware" (VMware Workstation), model contains "QEMU" (KVM).
+        $diskMeta = ($firstDisk[3..4] -join " ").ToLowerInvariant()
+        $isVirtual = $diskMeta -match "virtual disk|msft|vmware|qemu|virtio"
+        if (-not $isVirtual) {
+            # Cross-check against /proc/version so we still flag WSL2 even if the
+            # device strings ever change in a future Windows release.
+            $procVersion = Get-Content /proc/version -ErrorAction SilentlyContinue
+            if ($procVersion -match "microsoft|WSL") { $isVirtual = $true }
+        }
+        if ($isVirtual) {
+            $diskType = "virtual"
+        }
+        elseif ($firstDisk.Count -ge 2) {
             $diskType = if ($firstDisk[1] -eq "0") { "ssd" } else { "hdd" }
         }
     }

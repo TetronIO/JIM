@@ -108,10 +108,20 @@ public class SyncImportTaskProcessor
 
     public async Task PerformImportAsync()
     {
-        using var importSpan = Diagnostics.Sync.StartSpan("FullImport");
+        // This processor handles both full and delta imports; the span name reflects which.
+        // Mirrors the FullSync / DeltaSync pattern (two distinct span names), so downstream
+        // consumers (local Step 6 perf tree, JIM-Bench dashboards) can differentiate.
+        var importSpanName = _connectedSystemRunProfile.RunType == ConnectedSystemRunType.DeltaImport
+            ? "DeltaImport"
+            : "FullImport";
+        using var importSpan = Diagnostics.Sync.StartSpan(importSpanName);
         importSpan.SetTag("connectedSystemId", _connectedSystem.Id);
         importSpan.SetTag("connectedSystemName", _connectedSystem.Name);
-        importSpan.SetTag("connectorType", _connector.GetType().Name);
+        // Use ConnectorDefinition.Name so all four root spans (FullSync, DeltaSync, Import, Export)
+        // identify the connector with the same string. Worker.cs already dereferences
+        // connectedSystem.ConnectorDefinition.Name when creating the connector instance, so this
+        // navigation property is reliably populated by the time we reach this processor.
+        importSpan.SetTag("connectorType", _connectedSystem.ConnectorDefinition.Name);
 
         Log.Verbose("PerformImportAsync: Starting");
 
@@ -237,6 +247,7 @@ public class SyncImportTaskProcessor
                         : "Importing objects from connected system";
                     await _syncRepo.UpdateActivityMessageAsync(_activity, fetchMessage);
                     using (Diagnostics.Connector.StartSpan("ImportPage")
+                        .SetTag("connectedSystemId", _connectedSystem.Id)
                         .SetTag("pageNumber", pageNumber)
                         .SetTag("cumulativeObjectCount", totalObjectsImported)
                         .SetTag("wallClockOffsetMs", importPhaseSw.Elapsed.TotalMilliseconds))

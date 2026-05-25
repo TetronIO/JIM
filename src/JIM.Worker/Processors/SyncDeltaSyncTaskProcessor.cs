@@ -39,6 +39,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         using var syncSpan = Diagnostics.Sync.StartSpan("DeltaSync");
         syncSpan.SetTag("connectedSystemId", _connectedSystem.Id);
         syncSpan.SetTag("connectedSystemName", _connectedSystem.Name);
+        syncSpan.SetTag("connectorType", _connectedSystem.ConnectorDefinition.Name);
 
         Log.Verbose("PerformDeltaSyncAsync: Starting");
 
