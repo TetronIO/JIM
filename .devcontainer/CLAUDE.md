@@ -140,6 +140,18 @@ All dependency updates from Dependabot require human review before merging - the
 - PostgreSQL memory settings automatically optimized
 - Use `jim-db` or `jim-stack` aliases (already configured)
 
+## Host SSH config inside the container
+
+Your host `~/.ssh` directory is bind-mounted **read-only** at `/host-ssh` and `setup.sh` mirrors it into the container's writable `~/.ssh` on every create (with `vscode` ownership and the permissions ssh expects). Whatever `Host` aliases, keys, and `known_hosts` you have configured on the host will work inside the devcontainer — useful for SSH-based diagnostic access to anything you've already set up.
+
+The mount is read-only, so the container can never modify your host keys. Nothing project-specific is encoded here; the public repo doesn't know which hosts you've aliased.
+
+If your host doesn't have `~/.ssh` yet, create it before opening the devcontainer:
+
+```bash
+mkdir -p ~/.ssh && chmod 700 ~/.ssh
+```
+
 ## Persistent State Across Rebuilds
 
 `/home/vscode/.claude` is mounted from a Docker named volume `jim-claude-state` so Claude Code's project memory, user-level settings, credentials and session backups survive `Rebuild Container`. Without the volume, that directory sits in the container's writable layer and is wiped on every rebuild.

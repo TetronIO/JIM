@@ -291,10 +291,21 @@
   //    the Codespaces caveat and cross-platform notes. Note: fresh
   //    named volumes mount as root:root; postStartCommand chowns the
   //    mountpoint to vscode so Claude Code can write into it.
+  //  - Host SSH directory bind-mounted read-only at /host-ssh. Generic
+  //    plumbing only - nothing project-specific lives here; the contents
+  //    are whatever you have configured on your host. setup.sh mirrors
+  //    this into the container's writable ~/.ssh on create, so the vscode
+  //    user owns its own copy with correct UID/permissions (the source is
+  //    owned by the host user's UID and is 0600, which the container user
+  //    can't always read directly on Docker Desktop). The bind itself
+  //    stays read-only, so the container can never modify your host keys.
+  //    If your host doesn't have ~/.ssh yet, create it before opening the
+  //    devcontainer: `mkdir -p ~/.ssh && chmod 700 ~/.ssh`.
   "mounts": [
     "source=/var/run/docker.sock,target=/var/run/docker-host.sock,type=bind",
     "source=/run/host-services/ssh-auth.sock,target=/ssh-agent,type=bind",
-    "source=jim-claude-state,target=/home/vscode/.claude,type=volume"
+    "source=jim-claude-state,target=/home/vscode/.claude,type=volume",
+    "source=${localEnv:HOME}/.ssh,target=/host-ssh,type=bind,readonly"
   ],
   // Container environment variables
   "containerEnv": {

@@ -328,7 +328,43 @@ else
 "
 fi
 
-# 13. Display useful information
+# 13. Mirror host SSH directory into the container's writable ~/.ssh
+# The host's ~/.ssh is bind-mounted read-only at /host-ssh (see devcontainer.json
+# "mounts"). We can't ssh straight from there because:
+#   * the files are owned by the host user's UID (which may not be 1000 on
+#     macOS / Docker Desktop), and key files are typically 0600, so the
+#     vscode user often can't read them directly;
+#   * ssh refuses to load a config or key from a directory that isn't strictly
+#     owned by the current user.
+# Mirror the directory into ~/.ssh on every container create with vscode as
+# the owner and 0600/0644 permissions ssh expects. The mount stays read-only,
+# so we can never modify the host's keys from inside the container.
+# Nothing project-specific is named here - whatever aliases / keys you have on
+# the host work in the container, nothing more.
+#
+# cp -rL dereferences symlinks so the actual file contents land in ~/.ssh.
+# Only the host's ~/.ssh is bind-mounted, so a symlink that points outside
+# (e.g. into a dotfiles repo at ~/.dotfiles/keys/) will fail to resolve and
+# cp will report it - better than silently leaving a dangling link that
+# ssh would then refuse to use. Workaround if you hit this: move the
+# real key file into ~/.ssh, or replace the symlink with a copy.
+if [ -d /host-ssh ] && [ -n "$(ls -A /host-ssh 2>/dev/null)" ]; then
+    print_step "Mirroring host SSH directory into container..."
+    mkdir -p ~/.ssh
+    chmod 700 ~/.ssh
+    if cp -rL /host-ssh/. ~/.ssh/ 2>&1; then
+        find ~/.ssh -type f -exec chmod 0600 {} \;
+        find ~/.ssh -type f -name '*.pub' -exec chmod 0644 {} \;
+        [ -f ~/.ssh/known_hosts ] && chmod 0644 ~/.ssh/known_hosts
+        print_success "Host SSH config mirrored to ~/.ssh"
+    else
+        print_warning "Some entries in /host-ssh could not be copied (often a symlink pointing outside ~/.ssh - move the real file into ~/.ssh on the host)."
+    fi
+else
+    print_step "No host SSH config to mirror (/host-ssh empty or absent)"
+fi
+
+# 14. Display useful information
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${GREEN}✓ JIM Development Environment Ready!${NC}"
