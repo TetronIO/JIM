@@ -469,6 +469,7 @@ public class ExportExecutionServer
                             // Execute batch via connector
                             List<ConnectedSystemExportResult> exportResults;
                             using (Diagnostics.Diagnostics.Connector.StartSpan("ExportBatch")
+                                .SetTag("connectedSystemId", connectedSystem.Id)
                                 .SetTag("batchSize", immediateExports.Count)
                                 .SetTag("cumulativeObjectCount", processedCount + immediateExports.Count)
                                 .SetTag("wallClockOffsetMs", exportPhaseStopwatch.Elapsed.TotalMilliseconds))

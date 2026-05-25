@@ -144,6 +144,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
 
             int processedInPage = 0;
             using (Diagnostics.Sync.StartSpan("ProcessCsoLoop")
+                .SetTag("connectedSystemId", _connectedSystem.Id)
                 .SetTag("csoCount", csoPagedResult.Results.Count)
                 .SetTag("cumulativeObjectCount", _activity.ObjectsProcessed + csoPagedResult.Results.Count)
                 .SetTag("wallClockOffsetMs", csoPhaseStopwatch.Elapsed.TotalMilliseconds))

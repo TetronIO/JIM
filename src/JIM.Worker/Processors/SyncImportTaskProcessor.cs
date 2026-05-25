@@ -247,6 +247,7 @@ public class SyncImportTaskProcessor
                         : "Importing objects from connected system";
                     await _syncRepo.UpdateActivityMessageAsync(_activity, fetchMessage);
                     using (Diagnostics.Connector.StartSpan("ImportPage")
+                        .SetTag("connectedSystemId", _connectedSystem.Id)
                         .SetTag("pageNumber", pageNumber)
                         .SetTag("cumulativeObjectCount", totalObjectsImported)
                         .SetTag("wallClockOffsetMs", importPhaseSw.Elapsed.TotalMilliseconds))
