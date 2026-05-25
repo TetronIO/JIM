@@ -2188,7 +2188,7 @@ For **local devcontainer use**, set both directly in `.env` (the `.env.example` 
 
 For **CI/CD use**, `scripts/Set-JIMBenchSecrets.ps1` is an interactive helper that provisions the same two values (plus `JIM_BENCH_DISPATCH_TOKEN`) as **GitHub Actions secrets** on the repo — it does not write to your local `.env`.
 
-When either variable is missing the runner skips the streaming step and continues without error, so untracked local runs keep working. See `engineering/plans/doing/476-integration-test-metrics-jim-side.md` and the `bench-sync.yml` workflow for end-to-end details.
+When either variable is missing the runner skips the streaming step and continues without error, so untracked local runs keep working. See `engineering/plans/done/476-integration-test-metrics-jim-side.md` and the `bench-sync.yml` workflow for end-to-end details.
 
 ---
 
