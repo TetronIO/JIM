@@ -87,12 +87,25 @@ public class WorkflowTestHarness : IDisposable
         var connector = new MockCallConnector();
         configureConnector?.Invoke(connector);
 
+        // Stub ConnectorDefinition so processors that tag diagnostic spans with
+        // connectedSystem.ConnectorDefinition.Name don't NullReferenceException
+        // under EF in-memory (the Worker production path populates this via
+        // Include; the harness loads ConnectedSystem from the in-memory store
+        // and would otherwise leave the navigation property null).
+        var connectorDefinition = new ConnectorDefinition
+        {
+            Name = "JIM Test Connector",
+            BuiltIn = true
+        };
+
         var connectedSystem = new ConnectedSystem
         {
             Name = name,
-            ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule
+            ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule,
+            ConnectorDefinition = connectorDefinition
         };
 
+        _dbContext.ConnectorDefinitions.Add(connectorDefinition);
         _dbContext.ConnectedSystems.Add(connectedSystem);
         await _dbContext.SaveChangesAsync();
 
