@@ -83,6 +83,19 @@ public sealed class DiagnosticListener : IDisposable
             tagsList.Insert(0, $"parentId={parentId}");
         }
 
+        // rootSpanId is the unique-per-execution identifier — it's the same string
+        // for the root span and every descendant within one trace. Downstream
+        // (JIM-Bench) uses it to partition throughput series per sync execution
+        // so two sync runs against the same connected system in the same test
+        // run don't get collapsed into one line. Emitted on every span so the
+        // join semantics in bench are uniform between root rows (test_operations)
+        // and child rows (throughput_samples).
+        var rootSpanId = activity.RootId;
+        if (!string.IsNullOrEmpty(rootSpanId))
+        {
+            tagsList.Insert(0, $"rootSpanId={rootSpanId}");
+        }
+
         // Slow operations are tagged inside the bracket rather than prefixed to the path.
         // The previous "[SLOW] " inline prefix broke downstream parsers that anchor on the
         // span name (e.g. JIM-Bench's LogLineParser), and the Warning log level still
