@@ -301,11 +301,14 @@
   //    stays read-only, so the container can never modify your host keys.
   //    If your host doesn't have ~/.ssh yet, create it before opening the
   //    devcontainer: `mkdir -p ~/.ssh && chmod 700 ~/.ssh`.
+  //    Cross-platform path: USERPROFILE is set on Windows, HOME is set on
+  //    macOS/Linux; the concatenation ${localEnv:USERPROFILE}${localEnv:HOME}
+  //    resolves correctly on every platform because exactly one is non-empty.
   "mounts": [
     "source=/var/run/docker.sock,target=/var/run/docker-host.sock,type=bind",
     "source=/run/host-services/ssh-auth.sock,target=/ssh-agent,type=bind",
     "source=jim-claude-state,target=/home/vscode/.claude,type=volume",
-    "source=${localEnv:HOME}/.ssh,target=/host-ssh,type=bind,readonly"
+    "source=${localEnv:USERPROFILE}${localEnv:HOME}/.ssh,target=/host-ssh,type=bind,readonly"
   ],
   // Container environment variables
   "containerEnv": {
