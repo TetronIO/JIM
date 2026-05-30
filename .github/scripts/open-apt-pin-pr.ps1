@@ -136,24 +136,31 @@ if ($DryRun) {
 }
 
 # Reset (or create) the bot branch at the base tip so the PR contains exactly one
-# fresh commit and updates cleanly in place.
+# fresh commit and updates cleanly in place. Note: native `gh` failures do NOT
+# raise a terminating error in PowerShell, so branch existence is probed via
+# $LASTEXITCODE, not try/catch, and each mutation's exit code is checked.
 $refPath = "repos/$Repository/git/refs/heads/$Branch"
-$exists = $true
-try { Invoke-Gh @('api', $refPath, '--silent') } catch { $exists = $false }
-if ($exists) {
+Invoke-Gh @('api', $refPath, '--silent') 2>$null
+$branchExists = ($LASTEXITCODE -eq 0)
+if ($branchExists) {
     Write-Host "Resetting $Branch to $baseSha"
     Invoke-Gh @('api', '-X', 'PATCH', $refPath, '-f', "sha=$baseSha", '-F', 'force=true') | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Failed to reset branch $Branch to $baseSha." }
 } else {
     Write-Host "Creating $Branch at $baseSha"
     Invoke-Gh @('api', '-X', 'POST', "repos/$Repository/git/refs", '-f', "ref=refs/heads/$Branch", '-f', "sha=$baseSha") | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Failed to create branch $Branch at $baseSha." }
 }
 
-# Create the signed commit via GraphQL.
+# Create the signed commit via GraphQL. Parse the response explicitly so a
+# GraphQL-level error (which still exits 0 in some cases) is caught.
 $tmp = New-TemporaryFile
 try {
     $payload | Out-File -FilePath $tmp -Encoding utf8
-    $commitOid = (Get-Content -Raw $tmp | & gh api graphql --input - --jq '.data.createCommitOnBranch.commit.oid').Trim()
-    if (-not $commitOid) { throw 'createCommitOnBranch returned no commit oid.' }
+    $resp = Get-Content -Raw $tmp | & gh api graphql --input -
+    if ($LASTEXITCODE -ne 0) { throw "createCommitOnBranch call failed (exit $LASTEXITCODE): $resp" }
+    $commitOid = ($resp | ConvertFrom-Json).data.createCommitOnBranch.commit.oid
+    if (-not $commitOid) { throw "createCommitOnBranch returned no commit oid: $resp" }
     Write-Host "Created signed commit $commitOid on $Branch"
 } finally {
     Remove-Item $tmp -ErrorAction SilentlyContinue
