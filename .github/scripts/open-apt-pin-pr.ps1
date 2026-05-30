@@ -28,9 +28,11 @@
     an already-open PR is updated in place rather than duplicated, and the branch
     never accumulates stale history.
 
-    Requires: gh CLI authenticated with a token carrying `contents: write` and
-    `pull-requests: write` (the workflow's GITHUB_TOKEN). $env:GITHUB_REPOSITORY
-    must be set (it is in Actions); otherwise pass -Repository owner/repo.
+    Requires: GH_TOKEN set to a token carrying `contents: write` and
+    `pull-requests: write`. In the apt-pin-check workflow this is a GitHub App
+    installation token (a service principal), not a personal or GITHUB_TOKEN
+    credential. $env:GITHUB_REPOSITORY must be set (it is in Actions); otherwise
+    pass -Repository owner/repo.
 
 .PARAMETER BodyFile
     Path to a file containing the markdown table of proposed bumps (the `pr_body`
