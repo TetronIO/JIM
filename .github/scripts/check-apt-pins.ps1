@@ -167,7 +167,13 @@ for spec in "$@"; do
 done
 '@
 
+# Normalise to LF: this file may be checked out with CRLF line endings (git
+# autocrlf on .ps1), and carriage returns inside the script break bash when it
+# is passed via `bash -c` ("syntax error near unexpected token $'do\r'").
+$containerScript = $containerScript -replace "`r", ''
+
 $results = @()
+$queryFailures = @()
 
 foreach ($group in ($pins | Group-Object image_ref)) {
     $imageRef = $group.Name
@@ -182,13 +188,16 @@ foreach ($group in ($pins | Group-Object image_ref)) {
 
     $specs = @($group.Group | ForEach-Object { "$($_.package)|$($_.version)" })
 
-    # `bash -s -- <args>` reads the script from stdin (the here-string piped in)
-    # and exposes <args> as positional parameters ($@). Pull happened above so
-    # this run is offline-fast.
-    $raw = $containerScript | docker run --rm --platform $platform --user root --entrypoint bash -i $imageRef -s -- @specs 2>$null | Out-String
+    # Pass the script as a `bash -c` argument with the specs as positional
+    # parameters ($@). This is more portable than piping the script on stdin
+    # (`bash -s`), which silently delivered nothing on the GitHub-hosted runner.
+    # Capture stderr too so a container failure is diagnosable rather than silent.
+    $raw = docker run --rm --platform $platform --user root --entrypoint bash $imageRef -c $containerScript -- @specs 2>&1 | Out-String
 
+    $rowCount = 0
     foreach ($rln in ($raw -split "`n")) {
         if ($rln -notmatch '^RESULT\|') { continue }
+        $rowCount++
         $f = $rln.Trim() -split '\|'
         $results += [pscustomobject]@{
             image_ref   = $imageRef
@@ -200,6 +209,23 @@ foreach ($group in ($pins | Group-Object image_ref)) {
             security    = ($f[6] -eq 'yes')
         }
     }
+
+    # A query that returns no rows for an image we have pins for means the check
+    # did not actually run (e.g. apt-get update failed, or the container errored).
+    # Treat that as a hard failure, never as "all current": a silent false
+    # negative would leave the pins unmonitored while looking healthy.
+    if ($rowCount -lt $specs.Count) {
+        $queryFailures += $imageRef
+        Write-Host "ERROR: expected $($specs.Count) result(s) from $imageRef but got $rowCount. Container output:"
+        Write-Host ($raw.Trim())
+    }
+}
+
+if ($queryFailures.Count -gt 0) {
+    Write-Host ''
+    Write-Host "FATAL: apt pin check could not complete for $($queryFailures.Count) base image(s): $($queryFailures -join ', ')"
+    Write-Host 'Refusing to report a result; the pins are NOT confirmed current.'
+    exit 1
 }
 
 # --- Report -----------------------------------------------------------------
