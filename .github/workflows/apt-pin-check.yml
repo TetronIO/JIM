@@ -72,4 +72,4 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: ./.github/scripts/open-apt-pin-pr.ps1 -BodyFile apt-pin-pr-body.md
+        run: ./.github/scripts/open-apt-pin-pr.ps1 -BodyFile apt-pin-pr-body.md -BaseBranch test/apt-pin-smoke -Branch automation/apt-pin-smoke
