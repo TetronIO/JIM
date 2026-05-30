@@ -80,7 +80,7 @@ This directly supports NIST SP 800-53 SI-7 (Software, Firmware, and Information 
 |-------------|------------------------|--------|
 | GV.OC - Organisational Context | JIM designed for regulated environments; air-gapped deployment supported | Implemented |
 | GV.RM - Risk Management Strategy | Threat modelling required for new features (CLAUDE.md) | Implemented |
-| GV.SC - Supply Chain Risk Management | Dependency review, SBOM generation, pinned versions (CLAUDE.md). Production Docker base images are digest-pinned and the policy is enforced by CI (`.github/workflows/ci.yml` `discover-base-images` job), not just documented. | Implemented |
+| GV.SC - Supply Chain Risk Management | Dependency review, SBOM generation, pinned versions (CLAUDE.md). Production Docker base images are digest-pinned and the policy is enforced by CI (`.github/workflows/ci.yml` `discover-base-images` job), not just documented. The exact apt package versions pinned within those images are monitored for available updates by the `apt-pin-check` workflow, which raises a reviewed PR when a newer, installable version is published. | Implemented |
 
 ### IDENTIFY (ID) - Understand cybersecurity risks
 

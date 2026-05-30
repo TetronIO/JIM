@@ -962,7 +962,7 @@ All dependency updates require human review before merging. Dependabot proposes 
 All production Dockerfiles pin their dependencies for reproducible, auditable builds:
 
 - **Base image digests**: Each `FROM` line includes a `@sha256:` digest, locking the exact OS + runtime layer. This prevents builds on different dates producing different images.
-- **Functional apt packages**: Libraries that JIM calls at runtime (libldap, cifs-utils) are pinned to exact versions (e.g., `libldap-2.5-0=2.5.13+dfsg-5`).
+- **Functional apt packages**: Libraries that JIM calls at runtime (libldap, cifs-utils, krb5) are pinned to exact versions (e.g., `libldap2=2.6.10+dfsg-0ubuntu0.24.04.1`).
 - **Diagnostic utilities**: Tools like `curl` and `iputils-ping` are not pinned, as they are only used for health checks and debugging, not functional code paths.
 
 **The digest-pinning policy is machine-enforced.** Every production Dockerfile carries the directive `# jim-compliance: production-image` near the top of the file. The CI workflow (`.github/workflows/ci.yml`, `discover-base-images` job) scans the repository for Dockerfiles with this directive, parses every external `FROM` line, and fails the build if any of them is missing a `@sha256:` digest. The underlying script is [`.github/scripts/discover-base-images.ps1`](../.github/scripts/discover-base-images.ps1).
@@ -988,8 +988,35 @@ Before merging a Docker digest update PR:
 To check available package versions in a new base image:
 ```bash
 docker run --rm <image>@<new-digest> bash -c \
-  "apt-get update -qq && apt-cache policy libldap-common libldap-2.5-0 cifs-utils"
+  "apt-get update -qq && apt-cache policy libldap-common libldap2 cifs-utils libgssapi-krb5-2"
 ```
+
+##### Automated apt pin update detection (`apt-pin-check`)
+
+Checking those pinned apt versions by hand (step 1 above) is easy to forget, and the two systems you might expect to catch a stale pin do not:
+
+- **Dependabot** only parses `FROM` lines for the Docker ecosystem; it never sees a `pkg=version` pinned inside a `RUN apt-get install`.
+- **The `scan-base-images` Trivy job** scans each base image *by digest*. The packages JIM pins are installed *on top of* the base image, so they exist only in the built JIM image, which that job does not scan. (They are scanned at release time by the built-image Trivy step in `release.yml`, but only for HIGH/CRITICAL and only when a release is cut.)
+
+The `apt-pin-check` workflow ([`.github/workflows/apt-pin-check.yml`](../.github/workflows/apt-pin-check.yml)) closes the gap. Daily, and on demand via *Run workflow*, it:
+
+1. Discovers the same production Dockerfiles, parses every pinned `pkg=version`, and attributes each pin to the base image of the build stage it is installed into.
+2. Queries that base image's archive for the current candidate version and flags any pin that is behind, noting whether the update comes from the `-security` pocket.
+3. **Validates that the candidate is actually installable** in that base image (`apt-get install --dry-run`) before proposing it. This matters because CI does not build the JIM images on a PR, so the bot must not propose an unbuildable version.
+4. Raises, or updates in place, a single pull request bumping the validated pins, for the same human review every other dependency update gets.
+
+Backing scripts: [`.github/scripts/check-apt-pins.ps1`](../.github/scripts/check-apt-pins.ps1) (detection, installability validation, and the `-Apply` rewrite) and [`.github/scripts/open-apt-pin-pr.ps1`](../.github/scripts/open-apt-pin-pr.ps1) (PR creation). Both run locally from the repository root for ad hoc checks; `check-apt-pins.ps1` needs Docker.
+
+**Identity.** The PR is opened by the `jim-automation` GitHub App, an org-owned service principal, not a personal token. This is deliberate:
+
+- `main` requires signed commits. The bot creates its commit through the GitHub API (the GraphQL `createCommitOnBranch` mutation), which GitHub signs as *Verified*; an App installation token authorises it.
+- A PR opened with the default `GITHUB_TOKEN` does not trigger CI, so it could never satisfy branch protection. App-authored events do trigger CI, so the bump PR runs the required checks and is mergeable.
+
+The App's credentials are the `APT_PIN_BOT_APP_ID` and `APT_PIN_BOT_PRIVATE_KEY` repository secrets; the workflow mints a short-lived (1 hour) installation token from them per run, so nothing personal is stored or used. The App is scoped to Contents and Pull requests (read/write) on this repository only.
+
+**Adding a new pinned apt package** needs no change here: pin it as `pkg=version` in a production Dockerfile and the next run picks it up automatically, the same zero-config story as digest discovery.
+
+Evaluate an `apt-pin-check` PR the same way as a Docker digest update: review the package changelog, run the LDAP/AD integration tests for any libldap or krb5 change, then squash-merge.
 
 ##### When the scan-base-images gate blocks on an upstream-only CVE
 

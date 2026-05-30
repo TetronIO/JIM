@@ -1,0 +1,75 @@
+# Detects when newer versions of the apt packages pinned in production
+# Dockerfiles are available in the base image's Ubuntu archive, and raises a PR
+# bumping them for evaluation.
+#
+# These pins (libldap2, cifs-utils, libgssapi-krb5-2, ...) are invisible to
+# Dependabot (its docker ecosystem only parses FROM lines) and to the CI base
+# image Trivy scan (the packages are added on top of the base, so they only
+# exist in the built JIM image, which CI does not scan). Without this workflow a
+# newer package, security or otherwise, sits unnoticed until release time.
+#
+# See .github/scripts/check-apt-pins.ps1 (detection + installability validation)
+# and .github/scripts/open-apt-pin-pr.ps1 (signed-commit PR).
+#
+# Identity / token choice.
+#   The PR is opened as a GitHub App (an org-owned service principal), not a
+#   personal token. Two reasons:
+#     1. `main` requires signed commits; commits created via the GitHub API (here,
+#        the GraphQL createCommitOnBranch mutation in open-apt-pin-pr.ps1) are
+#        signed by GitHub, and an App installation token authorises them.
+#     2. A PR opened with the default GITHUB_TOKEN does NOT trigger the CI /
+#        required-check workflows, so it could never satisfy branch protection.
+#        App-authored events DO trigger them, so the bump PR runs CI and can merge.
+#   The App's credentials live in two secrets, APT_PIN_BOT_APP_ID and
+#   APT_PIN_BOT_PRIVATE_KEY. The workflow mints a short-lived (1 hour) installation
+#   token from them per run; nothing personal is stored or used.
+
+name: apt-pin-check
+
+on:
+  schedule:
+    # Daily at 06:30 UTC, ahead of the 09:00 London Dependabot base-image poll,
+    # so a fresh archive (Ubuntu publishes security updates throughout the day)
+    # is reflected promptly.
+    - cron: '30 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: apt-pin-check
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - name: Detect and apply available apt pin updates
+        id: check
+        shell: pwsh
+        run: |
+          ./.github/scripts/check-apt-pins.ps1 -Apply
+          # Exit 2 means "updates applied"; treat as success for the workflow.
+          if ($LASTEXITCODE -eq 2) { exit 0 }
+          exit $LASTEXITCODE
+
+      - name: Mint GitHub App installation token
+        if: steps.check.outputs.has_updates == 'true'
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          app-id: ${{ secrets.APT_PIN_BOT_APP_ID }}
+          private-key: ${{ secrets.APT_PIN_BOT_PRIVATE_KEY }}
+
+      - name: Open or update bump PR
+        if: steps.check.outputs.has_updates == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: ./.github/scripts/open-apt-pin-pr.ps1 -BodyFile apt-pin-pr-body.md
