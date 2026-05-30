@@ -1,0 +1,68 @@
+# Detects when newer versions of the apt packages pinned in production
+# Dockerfiles are available in the base image's Ubuntu archive, and raises a PR
+# bumping them for evaluation.
+#
+# These pins (libldap2, cifs-utils, libgssapi-krb5-2, ...) are invisible to
+# Dependabot (its docker ecosystem only parses FROM lines) and to the CI base
+# image Trivy scan (the packages are added on top of the base, so they only
+# exist in the built JIM image, which CI does not scan). Without this workflow a
+# newer package, security or otherwise, sits unnoticed until release time.
+#
+# See .github/scripts/check-apt-pins.ps1 (detection + installability validation)
+# and .github/scripts/open-apt-pin-pr.ps1 (signed-commit PR).
+#
+# IMPORTANT: token choice.
+#   `main` requires signed commits, so the PR commit is created via the GitHub
+#   API (which signs it). However, a PR opened with the default GITHUB_TOKEN does
+#   NOT trigger the CI / required-check workflows, so it can never satisfy branch
+#   protection and merge. To get a mergeable PR, provide a repo/PR-scoped token
+#   as the `APT_PIN_BOT_TOKEN` secret (a fine-grained PAT with contents:write +
+#   pull-requests:write, or a GitHub App installation token). The workflow falls
+#   back to GITHUB_TOKEN if the secret is absent, but the resulting PR will need a
+#   maintainer to nudge CI (e.g. close/reopen) before it can merge.
+
+name: apt-pin-check
+
+on:
+  schedule:
+    # Daily at 06:30 UTC, ahead of the 09:00 London Dependabot base-image poll,
+    # so a fresh archive (Ubuntu publishes security updates throughout the day)
+    # is reflected promptly.
+    - cron: '30 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: apt-pin-check
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - name: Detect and apply available apt pin updates
+        id: check
+        shell: pwsh
+        run: |
+          ./.github/scripts/check-apt-pins.ps1 -Apply
+          # Exit 2 means "updates applied"; treat as success for the workflow.
+          if ($LASTEXITCODE -eq 2) { exit 0 }
+          exit $LASTEXITCODE
+
+      - name: Open or update bump PR
+        if: steps.check.outputs.has_updates == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.APT_PIN_BOT_TOKEN || github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          if (-not '${{ secrets.APT_PIN_BOT_TOKEN }}') {
+            Write-Host '::warning::APT_PIN_BOT_TOKEN not set; PR opened with GITHUB_TOKEN will not trigger CI and cannot merge until a maintainer nudges it.'
+          }
+          ./.github/scripts/open-apt-pin-pr.ps1 -BodyFile apt-pin-pr-body.md

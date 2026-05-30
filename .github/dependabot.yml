@@ -66,6 +66,11 @@ updates:
   # image. Run:
   #   docker run --rm <image>@<new-digest> bash -c "apt-get update -qq && apt-cache policy <pkg>"
   #
+  # Detection of available apt pin updates is automated by the apt-pin-check
+  # workflow (.github/workflows/apt-pin-check.yml), which raises a PR when a
+  # newer, installable version is published. Dependabot cannot do this itself:
+  # its docker ecosystem only parses FROM lines, not `pkg=version` inside RUN.
+  #
   # Polled daily so that upstream base image rebuilds (Microsoft rebuilds .NET
   # images within 12 hours of an Ubuntu noble update, and on the second Tuesday
   # of each month for lower-severity CVEs) are picked up promptly. JIM's own
