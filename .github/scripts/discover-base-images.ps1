@@ -122,11 +122,25 @@ foreach ($dockerfile in $dockerfiles) {
             continue
         }
 
+        # Derive a stable category slug from the image repository (registry +
+        # path), stripping the tag and digest. This is what the downstream scan
+        # job uses as the SARIF category. It MUST be stable across line-number
+        # changes and digest bumps: the category was previously keyed by
+        # Dockerfile line number, so any FROM-line move (or a change in which
+        # deduplicated occurrence represented an image) orphaned the old category.
+        # Orphaned categories are never scanned again, so their alerts could never
+        # auto-close; they stayed open forever showing stale package versions.
+        # Keying by repository makes the category stable so fixed findings close.
+        #   mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:... -> mcr-microsoft-com-dotnet-aspnet
+        $repository = (($imageRef -split '@')[0]) -replace ':[^/:]+$', ''
+        $imageName  = ($repository -replace '[^A-Za-z0-9]+', '-').Trim('-')
+
         Write-Host "  line ${lineNumber}: $imageRef (ok)"
         $results += [pscustomobject]@{
             dockerfile = $relativePath
             line       = $lineNumber
             image_ref  = $imageRef
+            image_name = $imageName
         }
     }
 }
