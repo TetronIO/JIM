@@ -573,6 +573,12 @@
 
     protected override void OnParametersSet()
     {
+        // The ConnectedSystem parameter is replaced wholesale on reload (e.g. after a schema refresh or save),
+        // so a previously-resolved _selectedObjectType can become a stale, detached instance. Rebind it to the
+        // matching type in the fresh collection (by Id, to preserve the active selection), then fall back to the
+        // first selected type (which is how a single auto-selected type surfaces after import).
+        if (_selectedObjectType != null)
+            _selectedObjectType = ConnectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == _selectedObjectType.Id);
         _selectedObjectType ??= ConnectedSystem.ObjectTypes?.FirstOrDefault(q => q.Selected);
 
         if (_selectedObjectType != null)
@@ -622,10 +628,9 @@
         {
             _schemaRefreshResult = await jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(ConnectedSystem, user);
 
-            // if there's just a single object type in the schema, auto-select it
-            if (ConnectedSystem.ObjectTypes is { Count: 1 })
-                HandleSelectedObjectTypeClick(ConnectedSystem.ObjectTypes[0], true);
-
+            // A single, newly-discovered object type is auto-selected and persisted server-side (see
+            // ImportConnectedSystemSchemaAsync); the reload below surfaces it, and OnParametersSet binds it as
+            // the active object type so the admin lands straight on attribute selection.
             await OnConnectedSystemChanged.InvokeAsync();
         }
         catch (CsvParsingException ex)
@@ -701,7 +706,7 @@
         // attribute the update to the user
         using var jim = JimFactory.Create();
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-        await jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user);
+        await jim.ConnectedSystems.UpdateConnectedSystemSchemaAsync(ConnectedSystem, user);
         Snackbar.Add("Your attribute changes have been saved.", Severity.Success);
 
         await OnConnectedSystemChanged.InvokeAsync();

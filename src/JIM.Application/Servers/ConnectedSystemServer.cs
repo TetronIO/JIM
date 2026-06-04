@@ -297,6 +297,43 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Updates an existing Connected System including reconciliation of its schema (object types and attributes).
+    /// Use this from the schema configuration UI, where the object type/attribute collection is the authoritative
+    /// payload; <see cref="UpdateConnectedSystemAsync(ConnectedSystem, MetaverseObject?)"/> does not persist
+    /// object type/attribute changes. See issue #782.
+    /// </summary>
+    public async Task UpdateConnectedSystemSchemaAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
+    {
+        if (connectedSystem == null)
+            throw new ArgumentNullException(nameof(connectedSystem));
+
+        if (!AreRunProfilesValid(connectedSystem))
+            throw new ArgumentException("connectedSystem.RunProfiles has some of a run type that is not supported by the Connector.");
+
+        Log.Verbose($"UpdateConnectedSystemSchemaAsync() called for {connectedSystem}");
+
+        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
+        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+
+        AuditHelper.SetUpdated(connectedSystem, initiatedBy);
+
+        // every CRUD operation requires tracking with an activity...
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConnectedSystemId = connectedSystem.Id
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        SanitiseConnectedSystemUserInput(connectedSystem);
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(connectedSystem);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
     /// Validates, sanitises, and persists a Connected System update without creating an Activity record.
     /// Used internally by operations that already have their own parent activity (ImportSchema, ImportHierarchy,
     /// RefreshAndAutoSelectContainers), where creating a child Update activity would be noise.
@@ -336,6 +373,32 @@ public class ConnectedSystemServer
         AuditHelper.SetUpdated(connectedSystem, initiatorType, initiatorId, initiatorName);
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+    }
+
+    /// <summary>
+    /// As <see cref="PersistConnectedSystemUpdateAsync(ConnectedSystem, MetaverseObject?)"/>, but also reconciles
+    /// the object types and attributes. Used by schema import, where the object type collection is the payload.
+    /// </summary>
+    private async Task PersistConnectedSystemSchemaUpdateAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
+    {
+        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
+        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        AuditHelper.SetUpdated(connectedSystem, initiatedBy);
+        SanitiseConnectedSystemUserInput(connectedSystem);
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(connectedSystem);
+    }
+
+    /// <summary>
+    /// As <see cref="PersistConnectedSystemUpdateAsync(ConnectedSystem, ApiKey)"/>, but also reconciles the
+    /// object types and attributes. Used by schema import (API key initiated).
+    /// </summary>
+    private async Task PersistConnectedSystemSchemaUpdateAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
+    {
+        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
+        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        AuditHelper.SetUpdated(connectedSystem, initiatedByApiKey);
+        SanitiseConnectedSystemUserInput(connectedSystem);
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(connectedSystem);
     }
 
     /// <summary>
@@ -1178,7 +1241,13 @@ public class ConnectedSystemServer
         result.TotalObjectTypes = connectedSystem.ObjectTypes.Count;
         result.TotalAttributes = connectedSystem.ObjectTypes.Sum(ot => ot.Attributes?.Count ?? 0);
 
-        await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedBy);
+        // If the schema yielded exactly one, newly-discovered object type, auto-select it so the admin lands
+        // straight on attribute selection. Gated on "newly added" so a refresh never re-selects a type the
+        // admin previously deselected.
+        if (connectedSystem.ObjectTypes.Count == 1 && result.AddedObjectTypes.Count == 1)
+            connectedSystem.ObjectTypes[0].Selected = true;
+
+        await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedBy);
 
         // finish the activity
         await Application.Activities.CompleteActivityAsync(activity);
@@ -1332,7 +1401,7 @@ public class ConnectedSystemServer
         result.TotalObjectTypes = connectedSystem.ObjectTypes.Count;
         result.TotalAttributes = connectedSystem.ObjectTypes.Sum(ot => ot.Attributes?.Count ?? 0);
 
-        await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedByApiKey);
+        await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedByApiKey);
 
         await Application.Activities.CompleteActivityAsync(activity);
 
