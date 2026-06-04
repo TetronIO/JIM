@@ -78,7 +78,22 @@ When the container is created, `setup.sh` automatically:
 5. ✅ Starts PostgreSQL database
 6. ✅ Applies Entity Framework migrations
 7. ✅ Builds the JIM solution
-8. ✅ Creates helpful shell aliases
+8. ✅ Installs the Playwright MCP browser (Chromium) for in-IDE UI validation
+9. ✅ Creates helpful shell aliases
+
+### UI Validation (Playwright MCP)
+
+The repo ships a [Playwright MCP](https://github.com/microsoft/playwright-mcp) server (configured in `.mcp.json`) so Claude Code can drive a real Chromium to validate Blazor/MVC UI changes from the IDE (navigate, click, fill forms, read the rendered accessibility tree). JIM has no automated UI test suite, so this is the primary way to confirm a UI change actually renders and behaves as intended.
+
+The browser binary is **not** baked into the container image; `setup.sh` installs it on container creation, pinned so the Chromium build matches what the MCP server expects. If it is ever missing (for example after the MCP server is upgraded to a build that needs a newer Chromium), reinstall it manually:
+
+```bash
+# Install the Chromium build the pinned Playwright MCP server uses
+npm install -g @playwright/mcp@0.0.75
+node "$(find "$(npm root -g)/@playwright/mcp" -path '*/playwright-core/cli.js' | head -1)" install chromium
+```
+
+The Chromium shared libraries it depends on are already present in the image (installed for Puppeteer / `jim-diagrams`), so no `--with-deps` / `sudo` step is needed.
 
 ### Port Forwarding
 
