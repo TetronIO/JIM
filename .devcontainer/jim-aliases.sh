@@ -289,24 +289,34 @@ _jim_kill_local() {
 }
 
 # Self-heal stale Docker credential helper references at command time.
+#
 # The VS Code Dev Containers extension's per-session credsStore shim
-# (docker-credential-dev-containers-<uuid>) can disappear mid-session
-# (extension reload, host VS Code restart, etc.) while the reference in
-# ~/.docker/config.json persists, making every docker pull/build fail with
-# "error getting credentials - err: exit status 255". setup.sh handles this
-# at container creation; this runs at command time to handle the in-session
-# breakage. See setup.sh for the full background.
+# (docker-credential-dev-containers-<uuid>) is unreliable from BuildKit even
+# when its helper binary is present: it proxies credential lookups to the host
+# VS Code over a /tmp IPC, and when that peer is momentarily unreachable
+# (extension reload, reconnect, a build firing before VS Code re-establishes
+# it) the shim exits 255 and BuildKit aborts resolving even public images,
+# failing with "error getting credentials - err: exit status 255". setup.sh
+# and postStartCommand heal this at container create/start, but VS Code
+# re-injects the credsStore on every reconnect, so we re-run the heal here,
+# immediately before each docker build/up.
+#
+# Delegates to the canonical .devcontainer/heal-docker-creds.sh so heal logic
+# lives in exactly one place. This was previously a separate inline copy that
+# only stripped when the helper binary was *missing*; it drifted from the
+# canonical script (which strips any dev-containers-* shim unconditionally),
+# let the unreliable-but-present shim through, and broke jim-build. Do not
+# reintroduce inline logic here - fix heal-docker-creds.sh instead.
 _jim_heal_docker_creds() {
-  local cfg="$HOME/.docker/config.json"
-  [ -f "$cfg" ] || return 0
-  command -v jq >/dev/null 2>&1 || return 0
-  local creds_store
-  creds_store=$(jq -r '.credsStore // empty' "$cfg" 2>/dev/null)
-  [ -n "$creds_store" ] || return 0
-  command -v "docker-credential-$creds_store" >/dev/null 2>&1 && return 0
-  echo "Stale Docker credsStore '$creds_store' (helper binary missing) - removing from $cfg"
-  local tmp
-  tmp=$(mktemp) && jq 'del(.credsStore)' "$cfg" > "$tmp" && mv "$tmp" "$cfg"
+  local script
+  if [ -f "$HOME/.devcontainer/heal-docker-creds.sh" ]; then
+    script="$HOME/.devcontainer/heal-docker-creds.sh"
+  elif [ -f "/workspaces/JIM/.devcontainer/heal-docker-creds.sh" ]; then
+    script="/workspaces/JIM/.devcontainer/heal-docker-creds.sh"
+  else
+    return 0
+  fi
+  bash "$script"
 }
 
 # Clear any previous aliases before defining functions (zsh cannot redefine alias as function)

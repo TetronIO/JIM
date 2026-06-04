@@ -183,9 +183,10 @@ mkdir -p ~/.ssh && chmod 700 ~/.ssh
 
 **Image pull / build fails with `error getting credentials - err: exit status 255`:**
 - Symptom: `jim-build`, `jim-stack`, or integration tests fail at the BuildKit image-resolve step, even for public images like `docker/dockerfile:1`.
-- Cause: a stale VS Code Dev Containers credential-forwarding shim (`credsStore: dev-containers-<uuid>` in `~/.docker/config.json`) whose host peer has gone away after a rebuild/reconnect. BuildKit treats the helper's non-zero exit as fatal where the Docker CLI tolerates it.
-- Auto-heal: `.devcontainer/heal-docker-creds.sh` runs on every container start via `postStartCommand` and strips dev-containers shims unconditionally (`docker login` credentials under `auths` are preserved).
-- Manual fix if you hit it before the next start: `bash .devcontainer/heal-docker-creds.sh` then retry.
+- Cause: the VS Code Dev Containers credential-forwarding shim (`credsStore: dev-containers-<uuid>` in `~/.docker/config.json`) proxies credential lookups to the host VS Code over a `/tmp` IPC. When that peer is momentarily unreachable (reconnect, extension reload, or a build firing before VS Code re-establishes it) the shim exits 255 and BuildKit aborts resolving even public images. The shim is unreliable even when its helper binary is present, so the heal strips it on sight rather than only when the binary is missing.
+- Prevented at source: `dev.containers.dockerCredentialHelper: false` in `devcontainer.json` tells VS Code not to inject the credsStore at all. This setting is read host-side, so it is not guaranteed to apply on every client (plain `devcontainer` CLI, Codespaces, older extension versions); the heal below is the safety net.
+- Auto-heal: `.devcontainer/heal-docker-creds.sh` strips any `dev-containers-*` credsStore unconditionally (`docker login` credentials under `auths` are preserved). It runs at container create (`setup.sh`), on every start (`postStartCommand`), and at command time before every build/stack/test via the `jim-*` aliases, which all delegate to that one script. The command-time run is what catches mid-session re-poisoning, since VS Code re-injects the credsStore on reconnect after `postStartCommand` has already run.
+- Manual fix if you ever hit it: `bash .devcontainer/heal-docker-creds.sh` then retry.
 
 **Sync Activities Failing with UnhandledError:**
 - UnhandledError items in Activities indicate code/logic bugs, not data problems

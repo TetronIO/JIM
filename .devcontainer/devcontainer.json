@@ -141,7 +141,25 @@
           "initialise"
         ],
         // Port forwarding - use localhost instead of 127.0.0.1 for Entra ID compatibility
-        "remote.localPortHost": "localhost"
+        "remote.localPortHost": "localhost",
+        // Stop the Dev Containers extension forwarding host Docker credentials
+        // into the container by writing { "credsStore": "dev-containers-<uuid>" }
+        // to ~/.docker/config.json and installing a matching shim binary. That
+        // shim proxies credential lookups back to the host VS Code over a /tmp
+        // IPC; when the peer is momentarily unreachable (reconnect, extension
+        // reload, a build firing before VS Code re-establishes it) the shim
+        // exits 255 and BuildKit aborts resolving even public images like
+        // docker/dockerfile:1 ("error getting credentials - err: exit status
+        // 255"). JIM's builds only pull public images, so forwarding host
+        // credentials buys nothing and is pure liability here.
+        //
+        // NOTE: dev.containers.* is read host-side, so this committed value is
+        // not guaranteed to take effect on every client (plain devcontainer
+        // CLI, Codespaces, older extension versions). The command-time heal in
+        // jim-aliases.sh (delegating to .devcontainer/heal-docker-creds.sh)
+        // remains the safety net that strips any dev-containers-* credsStore
+        // before each build regardless of client.
+        "dev.containers.dockerCredentialHelper": false
       }
     }
   },
