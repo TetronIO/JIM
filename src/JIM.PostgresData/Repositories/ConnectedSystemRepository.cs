@@ -404,6 +404,28 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem)
     {
+        MarkConnectedSystemGraphForUpdate(connectedSystem);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    public async Task UpdateConnectedSystemSchemaAsync(ConnectedSystem connectedSystem)
+    {
+        // Reconcile the object types/attributes against tracked current state first (adds + updates),
+        // then mark the rest of the graph, and persist everything in a single SaveChanges. This exists
+        // because UpdateConnectedSystemAsync (like the partition and setting-value handling it already
+        // performs) cannot pick up new/changed object types on a detached ConnectedSystem: UpdateDetachedSafe
+        // marks only the root entity and does not traverse the graph. See issue #782.
+        await ReconcileObjectTypesAsync(connectedSystem);
+        MarkConnectedSystemGraphForUpdate(connectedSystem);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Marks a (typically detached) Connected System and its partitions, containers and setting values for
+    /// update without traversing into the Objects graph. Does not call SaveChanges; the caller persists.
+    /// </summary>
+    private void MarkConnectedSystemGraphForUpdate(ConnectedSystem connectedSystem)
+    {
         // Handle new partitions and containers explicitly - EF Core doesn't automatically detect new items
         // in collections that were loaded from a separate query and then modified.
         // Also handle existing partitions/containers that are detached (e.g. when the entity was loaded
@@ -447,7 +469,74 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // After ClearChangeTracker(), Update() would traverse Objects → MVO → Type → Attributes
         // causing PK violations on the MetaverseObjectType ↔ MetaverseAttribute join table.
         Repository.UpdateDetachedSafe(connectedSystem);
-        await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Reconciles the supplied Connected System's ObjectTypes (and their Attributes) against the current
+    /// tracked database state: existing entities (matched by Id) have their scalar values updated; new
+    /// entities (Id == 0, or an Id no longer present) are inserted. Removal of object types/attributes that
+    /// are absent from the supplied collection is intentionally NOT performed here, because deleting schema
+    /// entries that may be referenced by sync rules requires reference-aware handling (see issue #782).
+    /// Does not call SaveChanges; the caller persists.
+    /// </summary>
+    private async Task ReconcileObjectTypesAsync(ConnectedSystem connectedSystem)
+    {
+        if (connectedSystem.ObjectTypes == null || connectedSystem.ObjectTypes.Count == 0)
+            return;
+
+        // Load the current schema tracked so EF computes the correct INSERT/UPDATE operations against it.
+        var current = await Repository.Database.ConnectedSystemObjectTypes
+            .AsTracking()
+            .Include(ot => ot.Attributes)
+            .Where(ot => ot.ConnectedSystemId == connectedSystem.Id)
+            .ToListAsync();
+        var currentById = current.ToDictionary(ot => ot.Id);
+
+        foreach (var incomingType in connectedSystem.ObjectTypes)
+        {
+            if (incomingType.Id != 0 && currentById.TryGetValue(incomingType.Id, out var trackedType))
+            {
+                // Existing object type: copy scalar values onto the tracked instance, then reconcile attributes.
+                Repository.Database.Entry(trackedType).CurrentValues.SetValues(incomingType);
+                ReconcileAttributes(trackedType, incomingType);
+            }
+            else
+            {
+                // New object type: insert it (and its attributes) under this Connected System. Null the parent
+                // navigation and set the scalar FK so Add() does not pull the detached ConnectedSystem into the graph.
+                incomingType.Id = 0;
+                incomingType.ConnectedSystem = null!;
+                incomingType.ConnectedSystemId = connectedSystem.Id;
+                Repository.Database.ConnectedSystemObjectTypes.Add(incomingType);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reconciles the attributes of a tracked object type against the supplied (detached) object type:
+    /// existing attributes (matched by Id) have their scalar values updated; new attributes (Id == 0) are
+    /// inserted. Removals are not performed (see <see cref="ReconcileObjectTypesAsync"/>).
+    /// </summary>
+    private void ReconcileAttributes(ConnectedSystemObjectType trackedType, ConnectedSystemObjectType incomingType)
+    {
+        var trackedById = trackedType.Attributes.ToDictionary(a => a.Id);
+
+        foreach (var incomingAttribute in incomingType.Attributes)
+        {
+            if (incomingAttribute.Id != 0 && trackedById.TryGetValue(incomingAttribute.Id, out var trackedAttribute))
+            {
+                Repository.Database.Entry(trackedAttribute).CurrentValues.SetValues(incomingAttribute);
+            }
+            else
+            {
+                // New attribute on an existing object type: link it to the tracked object type (whose FK is a
+                // shadow property) so EF inserts it against that type. trackedType is already tracked, so Add
+                // does not drag a detached graph in.
+                incomingAttribute.Id = 0;
+                incomingAttribute.ConnectedSystemObjectType = trackedType;
+                Repository.Database.ConnectedSystemAttributes.Add(incomingAttribute);
+            }
+        }
     }
 
     /// <summary>

@@ -746,6 +746,17 @@ public interface IConnectedSystemRepository
     public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates);
 
     public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
+
+    /// <summary>
+    /// Persists a Connected System update including reconciliation of its ObjectTypes and their Attributes.
+    /// Unlike <see cref="UpdateConnectedSystemAsync"/>, which only persists the root plus partitions and
+    /// setting values, this method also adds newly-discovered object types/attributes and applies updates to
+    /// existing ones. It is used by schema import and the schema selection save path, where the object type
+    /// collection is the authoritative payload. Removal of object types/attributes that disappeared at the
+    /// source is intentionally out of scope here (see issue #782); those require reference-aware deletion.
+    /// </summary>
+    public Task UpdateConnectedSystemSchemaAsync(ConnectedSystem connectedSystem);
+
     public Task UpdateSyncRuleAsync(SyncRule syncRule);
 
 
