@@ -207,7 +207,25 @@ else
     print_warning "Structurizr package.json not found - skipping diagram export setup"
 fi
 
-# 8. Build the solution
+# 8. Install Playwright browser for the Playwright MCP server (in-IDE UI validation)
+print_step "Installing Playwright MCP browser (Chromium)..."
+# The Playwright MCP server (.mcp.json) drives a real Chromium to validate UI changes from the IDE.
+# The browser binary is not baked into the image, so install it here. The version below is pinned so the
+# downloaded Chromium build is deterministic; keep it aligned with the build referenced by the server in
+# .mcp.json (its --executable-path, or its pinned @playwright/mcp version). Installing via the package's own
+# bundled playwright-core guarantees the revision matches. Idempotent (skips the download when already
+# present) and non-fatal (never blocks container creation).
+PLAYWRIGHT_MCP_VERSION="0.0.75"
+if npm install -g "@playwright/mcp@${PLAYWRIGHT_MCP_VERSION}" --silent 2>/dev/null \
+    && PLAYWRIGHT_CORE_CLI="$(find "$(npm root -g)/@playwright/mcp" -path '*/playwright-core/cli.js' 2>/dev/null | head -1)" \
+    && [ -n "$PLAYWRIGHT_CORE_CLI" ] \
+    && node "$PLAYWRIGHT_CORE_CLI" install chromium >/dev/null 2>&1; then
+    print_success "Playwright MCP browser installed (Chromium)"
+else
+    print_warning "Playwright MCP browser install failed - UI validation via the Playwright MCP will be unavailable until installed manually (see .devcontainer/README.md)"
+fi
+
+# 9. Build the solution
 print_step "Building JIM solution..."
 if dotnet build JIM.sln --verbosity quiet --no-restore; then
     print_success "Solution built successfully"
@@ -215,7 +233,7 @@ else
     print_warning "Build had warnings or errors. Run 'dotnet build JIM.sln' to see details."
 fi
 
-# 9. Configure Git commit signing
+# 10. Configure Git commit signing
 # Delegates to .devcontainer/configure-signing.sh which handles Codespaces
 # (via gh-gpgsign) and local devcontainers (via forwarded SSH agent) and
 # prints a prominent warning if neither is available. Returns non-zero if
@@ -260,7 +278,7 @@ else
     print_warning "Failed to set core.hooksPath; pre-commit checks will not run"
 fi
 
-# 10. Create useful shell aliases
+# 11. Create useful shell aliases
 print_step "Creating shell aliases..."
 
 # Add source line to .zshrc if not already present
@@ -288,7 +306,7 @@ if ! grep -q "source.*jim-aliases.sh" ~/.bashrc; then
     echo "fi" >> ~/.bashrc
 fi
 
-# 11. Install Claude Code CLI
+# 12. Install Claude Code CLI
 print_step "Installing Claude Code CLI..."
 if command -v npm >/dev/null 2>&1; then
     if npm install -g @anthropic-ai/claude-code --silent 2>/dev/null; then
@@ -300,7 +318,7 @@ else
     print_warning "npm not found - skipping Claude Code CLI install"
 fi
 
-# 12. Check gh CLI authentication
+# 13. Check gh CLI authentication
 # The gh CLI is used for PR/issue operations and other GitHub API calls.
 # It is NOT involved in git push/pull (SSH remote handles that) or commit
 # signing (SSH agent forward handles that), so a missing gh token is not
@@ -328,7 +346,7 @@ else
 "
 fi
 
-# 13. Mirror host SSH directory into the container's writable ~/.ssh
+# 14. Mirror host SSH directory into the container's writable ~/.ssh
 # The host's ~/.ssh is bind-mounted read-only at /host-ssh (see devcontainer.json
 # "mounts"). We can't ssh straight from there because:
 #   * the files are owned by the host user's UID (which may not be 1000 on
@@ -364,7 +382,7 @@ else
     print_step "No host SSH config to mirror (/host-ssh empty or absent)"
 fi
 
-# 14. Display useful information
+# 15. Display useful information
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${GREEN}✓ JIM Development Environment Ready!${NC}"
