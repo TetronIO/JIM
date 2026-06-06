@@ -99,35 +99,35 @@
                         {
                             <tr>
                                 <td><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Success" Class="me-1" /><span>Object Types Added</span></div></td>
-                                <td>@string.Join(", ", result.AddedObjectTypes)</td>
+                                <td class="jim-text-code">@string.Join(", ", result.AddedObjectTypes)</td>
                             </tr>
                         }
                         @if (result.RemovedObjectTypes.Count > 0)
                         {
                             <tr>
                                 <td><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Error" Class="me-1" /><span>Object Types Removed</span></div></td>
-                                <td>@string.Join(", ", result.RemovedObjectTypes)</td>
+                                <td class="jim-text-code">@string.Join(", ", result.RemovedObjectTypes)</td>
                             </tr>
                         }
                         @if (result.UpdatedObjectTypes.Count > 0)
                         {
                             <tr>
                                 <td><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Update" Color="Color.Info" Class="me-1" /><span>Object Types Updated</span></div></td>
-                                <td>@string.Join(", ", result.UpdatedObjectTypes)</td>
+                                <td class="jim-text-code">@string.Join(", ", result.UpdatedObjectTypes)</td>
                             </tr>
                         }
                         @foreach (var kvp in result.AddedAttributes)
                         {
                             <tr>
                                 <td><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Success" Class="me-1" /><span>Attributes Added (@kvp.Key)</span></div></td>
-                                <td>@string.Join(", ", kvp.Value)</td>
+                                <td class="jim-text-code">@string.Join(", ", kvp.Value)</td>
                             </tr>
                         }
                         @foreach (var kvp in result.RemovedAttributes)
                         {
                             <tr>
                                 <td><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Warning" Class="me-1" /><span>Attributes Removed (@kvp.Key)</span></div></td>
-                                <td>@string.Join(", ", kvp.Value)</td>
+                                <td class="jim-text-code">@string.Join(", ", kvp.Value)</td>
                             </tr>
                         }
                     </tbody>
