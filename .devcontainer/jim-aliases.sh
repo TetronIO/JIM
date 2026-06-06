@@ -469,6 +469,38 @@ jim-diagrams() {
   container_name="jim-structurizr-export"
   port=8085
 
+  # Resolve a launchable Chromium for the SVG export. Chrome for Testing (what
+  # Puppeteer downloads) has no Linux arm64 build, so on arm64 hosts the bundled
+  # Chrome cannot launch ("rosetta error: failed to open elf ... ld-linux-x86-64.so.2").
+  # Fall back to a native Chromium (Playwright's, or a system one) and hand it to
+  # Puppeteer via PUPPETEER_EXECUTABLE_PATH. On x86_64 the bundled Chrome is used unchanged.
+  if [ -z "${PUPPETEER_EXECUTABLE_PATH:-}" ]; then
+    case "$(uname -m)" in
+      aarch64 | arm64)
+        local native_chrome candidate
+        native_chrome="$(find "${HOME}/.cache/ms-playwright" -type f -path '*/chrome-linux/chrome' 2>/dev/null | head -n1)"
+        if [ -z "${native_chrome}" ]; then
+          for candidate in chromium chromium-browser google-chrome-stable google-chrome; do
+            if command -v "${candidate}" > /dev/null 2>&1; then
+              native_chrome="$(command -v "${candidate}")"
+              break
+            fi
+          done
+        fi
+        if [ -z "${native_chrome}" ]; then
+          echo "ERROR: No launchable Chromium found for diagram export."
+          echo "       Chrome for Testing has no Linux arm64 build, so Puppeteer's bundled"
+          echo "       Chrome cannot run on this host. Install one with"
+          echo "       'npx playwright install chromium' (or apt), or set"
+          echo "       PUPPETEER_EXECUTABLE_PATH to a working browser, then retry."
+          return 1
+        fi
+        export PUPPETEER_EXECUTABLE_PATH="${native_chrome}"
+        echo "arm64 host detected: using native Chromium for export: ${PUPPETEER_EXECUTABLE_PATH}"
+        ;;
+    esac
+  fi
+
   # Verify Puppeteer/Chrome are available (installed by devcontainer setup)
   if [ ! -d "${structurizr_dir}/node_modules" ]; then
     echo "Installing Puppeteer dependencies..."
