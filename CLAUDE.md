@@ -4,6 +4,7 @@
 
 This file holds cross-cutting rules and pointers. Detailed conventions live in folder-specific CLAUDE.md files which load automatically when you work in those subtrees:
 - `src/CLAUDE.md` - code style, copyright headers, layer rules, common dev tasks
+- `src/JIM.Web/CLAUDE.md` - Blazor/MudBlazor UI conventions, shared UI components
 - `src/JIM.Application/CLAUDE.md` - synchronisation integrity (full requirements)
 - `test/CLAUDE.md` - TDD patterns, test data, integration testing
 - `.devcontainer/CLAUDE.md` - commands, aliases, Docker, environment

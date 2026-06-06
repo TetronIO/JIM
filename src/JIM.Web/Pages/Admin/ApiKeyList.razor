@@ -26,10 +26,7 @@
 <MudTable Items="@_apiKeys" Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="@(_dense ? "mt-5 mb-5 dense-body-only" : "mt-5 mb-5")" SortLabel="Sort By"
     Filter="new Func<ApiKey, bool>(FilterFunc)" Outlined="true" Elevation="0" Loading="@_loading">
     <ToolBarContent>
-        <MudTooltip Text="@(_dense ? "Normal row spacing" : "Compact row spacing")" Arrow="true" Placement="Placement.Top">
-            <MudIconButton Icon="@(_dense ? Icons.Material.Filled.DensitySmall : Icons.Material.Filled.DensityMedium)"
-                           Variant="Variant.Filled" Color="Color.Default" Size="Size.Small" OnClick="OnToggleDense" />
-        </MudTooltip>
+        <TableDensityToggle @bind-Dense="_dense" />
         <MudText Class="mx-2 mud-text-disabled">|</MudText>
         <MudButton OnClick="ShowCreateDialog" StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary"
             DropShadow="false">Create API Key</MudButton>
@@ -335,12 +332,6 @@
         _apiKeys = await jim.Repository.ApiKeys.GetAllAsync();
         _availableRoles = await jim.Security.GetRolesAsync();
         _loading = false;
-    }
-
-    private async Task OnToggleDense()
-    {
-        _dense = !_dense;
-        await PreferenceService.SetTableDenseAsync(_dense);
     }
 
     private bool FilterFunc(ApiKey element)

@@ -23,10 +23,7 @@
 
 <MudTable Items="@_headers" Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="@(_dense ? "mt-5 mb-5 dense-body-only" : "mt-5 mb-5")" SortLabel="Sort By" Filter="new Func<ConnectorDefinitionHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
     <ToolBarContent>
-        <MudTooltip Text="@(_dense ? "Normal row spacing" : "Compact row spacing")" Arrow="true" Placement="Placement.Top">
-            <MudIconButton Icon="@(_dense ? Icons.Material.Filled.DensitySmall : Icons.Material.Filled.DensityMedium)"
-                           Variant="Variant.Filled" Color="Color.Default" Size="Size.Small" OnClick="OnToggleDense" />
-        </MudTooltip>
+        <TableDensityToggle @bind-Dense="_dense" />
         <MudText Class="mx-2 mud-text-disabled">|</MudText>
         <MudText Typo="Typo.h6">Connectors</MudText>
         <MudSpacer />
@@ -41,10 +38,28 @@
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Name" Class="jim-nowrap"><MudLink Href="@("/admin/connected-systems/connectors/"+context.Id)">@context.Name</MudLink></MudTd>
-        <MudTd DataLabel="Description">@context.Description</MudTd>
+        <MudTd DataLabel="Description">
+            @if (string.IsNullOrEmpty(context.Description))
+            {
+                <EmptyValue />
+            }
+            else
+            {
+                @context.Description
+            }
+        </MudTd>
         <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
         <MudTd DataLabel="In-use?">@(context.InUse ? "Yes" : "No")</MudTd>
-        <MudTd DataLabel="Version(s)">@(!string.IsNullOrEmpty(context.Versions) ? context.Versions :"-")</MudTd>
+        <MudTd DataLabel="Version(s)">
+            @if (string.IsNullOrEmpty(context.Versions))
+            {
+                <EmptyValue />
+            }
+            else
+            {
+                @context.Versions
+            }
+        </MudTd>
     </RowTemplate>
     <NoRecordsContent>
         There are no connectors
@@ -76,12 +91,6 @@
             _dense = await PreferenceService.GetTableDenseAsync() == true;
             StateHasChanged();
         }
-    }
-
-    private async Task OnToggleDense()
-    {
-        _dense = !_dense;
-        await PreferenceService.SetTableDenseAsync(_dense);
     }
 
     private bool FilterFunc1(ConnectorDefinitionHeader element) => FilterFunc(element, _searchString);

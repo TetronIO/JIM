@@ -608,7 +608,7 @@
                     }
                     else
                     {
-                        <span class="mud-text-disabled">-</span>
+                        <EmptyValue />
                     }
                 </MudTd>
             </RowTemplate>
@@ -664,7 +664,7 @@
                     }
                     else
                     {
-                        <span class="mud-text-disabled">-</span>
+                        <EmptyValue />
                     }
                 </MudTd>
                 <MudTd DataLabel="Message">
@@ -674,7 +674,7 @@
                     }
                     else
                     {
-                        <span class="mud-text-disabled">-</span>
+                        <EmptyValue />
                     }
                 </MudTd>
                 <MudTd DataLabel="Status">
@@ -687,7 +687,7 @@
                     }
                     else
                     {
-                        <span class="mud-text-disabled">-</span>
+                        <EmptyValue />
                     }
                 </MudTd>
                 <MudTd DataLabel="Duration">@(context.ExecutionTime?.ToAbbreviatedString() ?? "-")</MudTd>

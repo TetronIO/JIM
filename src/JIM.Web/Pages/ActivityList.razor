@@ -180,7 +180,7 @@
             }
             else
             {
-                <MudText Typo="Typo.body2" Class="mud-text-disabled">-</MudText>
+                <EmptyValue />
             }
         </MudTd>
         <MudTd DataLabel="Outcomes">
@@ -404,7 +404,7 @@
             else
             {
                 @* Stats not applicable for this activity type *@
-                <MudText Typo="Typo.body2" Class="mud-text-disabled" Style="display: flex; align-items: center; justify-content: center; height: 100%; width: 100%;">-</MudText>
+                <EmptyValue />
             }
         </MudTd>
         <MudTd DataLabel="Type">@context.TargetType.ToString().SplitOnCapitalLetters()</MudTd>

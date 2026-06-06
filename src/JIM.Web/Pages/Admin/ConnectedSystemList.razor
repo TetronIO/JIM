@@ -32,10 +32,7 @@
 
 <MudTable Items="@_connectedSystemHeaders" Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="@(_dense ? "mt-5 mb-5 dense-body-only" : "mt-5 mb-5")" SortLabel="Sort By" Filter="new Func<ConnectedSystemHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
     <ToolBarContent>
-        <MudTooltip Text="@(_dense ? "Normal row spacing" : "Compact row spacing")" Arrow="true" Placement="Placement.Top">
-            <MudIconButton Icon="@(_dense ? Icons.Material.Filled.DensitySmall : Icons.Material.Filled.DensityMedium)"
-                           Variant="Variant.Filled" Color="Color.Default" Size="Size.Small" OnClick="OnToggleDense" />
-        </MudTooltip>
+        <TableDensityToggle @bind-Dense="_dense" />
         <MudSpacer />
         <MudTextField @bind-Value="_searchString" Variant="Variant.Outlined" Placeholder="Search" Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
     </ToolBarContent>
@@ -49,7 +46,16 @@
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Name"><MudLink Href="@(Utilities.GetConnectedSystemHref(context))">@context.Name</MudLink></MudTd>
-        <MudTd DataLabel="Description">@context.Description</MudTd>
+        <MudTd DataLabel="Description">
+            @if (string.IsNullOrEmpty(context.Description))
+            {
+                <EmptyValue />
+            }
+            else
+            {
+                @context.Description
+            }
+        </MudTd>
         <MudTd DataLabel="Stats">
             <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                 <MudTooltip Text="Objects" Arrow="true" Placement="Placement.Top">
@@ -121,12 +127,6 @@
             _dense = await PreferenceService.GetTableDenseAsync() == true;
             StateHasChanged();
         }
-    }
-
-    private async Task OnToggleDense()
-    {
-        _dense = !_dense;
-        await PreferenceService.SetTableDenseAsync(_dense);
     }
 
     private static int GetPercentage(int total, int part)
