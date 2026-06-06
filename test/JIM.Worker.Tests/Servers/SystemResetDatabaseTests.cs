@@ -7,6 +7,7 @@ using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.Servers;
@@ -30,6 +31,10 @@ public class SystemResetDatabaseTests
         var options = new DbContextOptionsBuilder<JimDbContext>()
             .UseNpgsql(_connectionString)
             .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
+            // Mirror JimDbContext.OnConfiguring: the production model carries deliberate snapshot drift,
+            // so the pending-model-changes warning is suppressed there. The DI options constructor bypasses
+            // OnConfiguring, so suppress it here too (otherwise Migrate() throws once all migrations are applied).
+            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
             .Options;
         return new JimDbContext(options);
     }
