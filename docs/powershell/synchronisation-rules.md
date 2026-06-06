@@ -154,7 +154,8 @@ Modifies an existing synchronisation rule. Supports renaming, toggling enabled s
 ```powershell
 # By ID (default)
 Set-JIMSyncRule -Id <int> [-Name <string>] [-ProjectToMetaverse <bool>]
-    [-ProvisionToConnectedSystem <bool>] [-PassThru]
+    [-ProvisionToConnectedSystem <bool>] [-InboundOutOfScopeAction <string>]
+    [-OutboundDeprovisionAction <string>] [-EnforceState <bool>] [-PassThru]
 
 # Enable shortcut
 Set-JIMSyncRule -Id <int> -Enable [-PassThru]
@@ -165,7 +166,8 @@ Set-JIMSyncRule -Id <int> -Disable [-PassThru]
 # By input object
 Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>]
     [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>]
-    [-PassThru]
+    [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>]
+    [-EnforceState <bool>] [-PassThru]
 ```
 
 ### Parameters
@@ -179,6 +181,9 @@ Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>]
 | `Disable` | `switch` | Yes (Disable set) | | Disables the synchronisation rule |
 | `ProjectToMetaverse` | `bool` | No | | Controls whether the rule projects new metaverse objects |
 | `ProvisionToConnectedSystem` | `bool` | No | | Controls whether the rule provisions new connected system objects |
+| `InboundOutOfScopeAction` | `string` | No | | Import rules: action when a CSO falls out of the rule's scope. `Disconnect` breaks the CSO to MVO join; `RemainJoined` keeps the join and stops further attribute flow |
+| `OutboundDeprovisionAction` | `string` | No | | Export rules: action when an MVO falls out of the rule's scope. `Disconnect` leaves the CSO untouched in the target system; `Delete` queues a delete so the CSO is removed from the target |
+| `EnforceState` | `bool` | No | | Enables drift detection: re-asserts the rule's expected attribute values when the target system has drifted from them |
 | `PassThru` | `switch` | No | `$false` | Returns the updated synchronisation rule object |
 
 ### Output
@@ -207,6 +212,10 @@ Get-JIMSyncRule -ConnectedSystemName "HR System" | Set-JIMSyncRule -Disable
 
 ```powershell title="Enable projection on an existing import rule"
 Set-JIMSyncRule -Id 5 -ProjectToMetaverse $true -PassThru
+```
+
+```powershell title="Set out-of-scope handling and drift detection on an export rule"
+Set-JIMSyncRule -Id 5 -OutboundDeprovisionAction Delete -EnforceState $true
 ```
 
 ---
