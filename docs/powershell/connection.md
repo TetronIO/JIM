@@ -16,7 +16,7 @@ Establishes a connection to a JIM instance. This must be called before using any
 
 ```powershell
 # Interactive SSO (default)
-Connect-JIM -Url <string> [-Force] [-TimeoutSeconds <int>]
+Connect-JIM -Url <string> [-Force] [-NoPersist] [-TimeoutSeconds <int>]
 
 # API Key
 Connect-JIM -Url <string> -ApiKey <string>
@@ -28,7 +28,8 @@ Connect-JIM -Url <string> -ApiKey <string>
 |------|------|----------|---------|-------------|
 | `Url` | `string` | Yes (Position 0) | | Base URL of the JIM instance, e.g. `https://jim.example.com` |
 | `ApiKey` | `string` | Yes for ApiKey set (Position 1) | | API key for non-interactive authentication |
-| `Force` | `switch` | No (Interactive only) | `$false` | Forces re-authentication even if a valid session already exists |
+| `Force` | `switch` | No (Interactive only) | `$false` | Forces re-authentication even if a valid session already exists. Ignores and overwrites any persisted refresh token |
+| `NoPersist` | `switch` | No (Interactive only) | `$false` | Authenticates for this session only, without reading from or writing to the OS credential store |
 | `TimeoutSeconds` | `int` | No (Interactive only) | `300` | How long (in seconds) to wait for interactive authentication to complete. Valid range: 30 to 600. |
 
 ### Output
@@ -60,6 +61,10 @@ Connect-JIM -Url "https://jim.example.com" -Force
 Connect-JIM -Url "https://jim.example.com" -TimeoutSeconds 60
 ```
 
+```powershell title="Interactive SSO without persisting the token (shared machine)"
+Connect-JIM -Url "https://jim.example.com" -NoPersist
+```
+
 ```powershell title="API key authentication for automation"
 Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_ak_7f3e..."
 ```
@@ -74,6 +79,15 @@ Connect-JIM "https://jim.example.com" "jim_ak_7f3e..."
 - **API key authentication** is recommended for automation, CI/CD pipelines, and headless environments where a browser is not available.
 - OAuth sessions are cached locally; tokens are refreshed automatically when they approach expiry.
 - If a valid session already exists, `Connect-JIM` reuses it unless `-Force` is specified.
+- **Token persistence (interactive SSO):** after an interactive sign-in, the OAuth refresh token is saved to the operating system's credential store so that a new terminal can reconnect silently without opening a browser. The next `Connect-JIM` to the same URL prints `Connected to JIM using cached credentials` and skips the browser. Only the refresh token is stored, never the access token (a fresh access token is obtained from it on demand). The store used per platform is:
+
+    | Platform | Credential store |
+    |----------|------------------|
+    | Windows | Credential Manager (DPAPI, per-user) |
+    | macOS | login Keychain |
+    | Linux | libsecret (`secret-tool`), when present |
+
+    No password is required to unlock these stores beyond your normal OS sign-in. On systems with no usable store (typically headless Linux or SSH sessions without a keyring), persistence is skipped and the module prints a notice; use `-ApiKey` for unattended scenarios. Use `-NoPersist` to opt out of persistence for a session, and `-Force` to ignore and overwrite a persisted token. Persistence requires the identity provider to issue a refresh token, which depends on the `offline_access` scope being permitted on the public client (see [SSO Setup](../administration/sso-setup.md)).
 - To disconnect, use [Disconnect-JIM](#disconnect-jim). To verify your session, use [Test-JIMConnection](#test-jimconnection).
 
 ---
@@ -85,12 +99,17 @@ Disconnects from the current JIM instance and clears session state.
 ### Syntax
 
 ```powershell
-Disconnect-JIM
+Disconnect-JIM [-Url <string>] [-ClearCache]
+Disconnect-JIM -All
 ```
 
 ### Parameters
 
-None.
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ClearCache` | `switch` | No | `$false` | Also remove the persisted refresh token from the OS credential store. Without `-Url`, targets the currently connected instance |
+| `Url` | `string` | No | | Remove the persisted refresh token for a specific instance. Implies `-ClearCache`; works even when not connected |
+| `All` | `switch` | No | `$false` | Remove every persisted JIM refresh token from this machine |
 
 ### Output
 
@@ -98,19 +117,27 @@ None. Writes informational messages to the host confirming disconnection.
 
 ### Examples
 
-```powershell title="Disconnect from JIM"
+```powershell title="Disconnect from JIM (persisted token kept)"
 Disconnect-JIM
 ```
 
-```powershell title="Connect, perform work, then disconnect"
-Connect-JIM -Url "https://jim.example.com"
-# ... perform administrative tasks ...
-Disconnect-JIM
+```powershell title="Disconnect and forget the persisted token for this instance"
+Disconnect-JIM -ClearCache
+```
+
+```powershell title="Remove a specific instance's persisted token (even if not connected)"
+Disconnect-JIM -Url "https://jim.example.com" -ClearCache
+```
+
+```powershell title="Remove every persisted JIM token from this machine"
+Disconnect-JIM -All
 ```
 
 ### Notes
 
 - Clears access tokens and refresh tokens from memory.
+- By default the **persisted** refresh token in the OS credential store is left intact, so a later `Connect-JIM` can still reconnect silently. Use `-ClearCache` (or `-Url`, or `-All`) to remove it.
+- `-ClearCache`, `-Url`, and `-All` work even when there is no active connection, since clearing the credential store is a maintenance operation independent of session state.
 - Does **not** sign you out of your identity provider. If you authenticated via SSO, your identity provider session remains active.
 - After disconnecting, you must call [Connect-JIM](#connect-jim) again before using other JIM cmdlets.
 

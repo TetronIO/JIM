@@ -90,6 +90,18 @@ function Invoke-TokenRefresh {
             $script:JIMConnection.RefreshToken = $tokens.RefreshToken
             $script:JIMConnection.TokenExpiresAt = $tokens.ExpiresAt
             Write-Verbose "Successfully refreshed access token"
+
+            # Write the rotated refresh token back to the credential store so the
+            # persisted copy stays usable in future sessions (most IdPs rotate
+            # refresh tokens on each use).
+            if ($script:JIMConnection.Persisted) {
+                try {
+                    Save-JIMToken -BaseUrl $script:JIMConnection.Url -RefreshToken $tokens.RefreshToken | Out-Null
+                }
+                catch {
+                    Write-Verbose "Failed to persist refreshed token: $_"
+                }
+            }
         }
         catch {
             throw "Access token expired and refresh failed. Please run Connect-JIM again to re-authenticate. Error: $_"

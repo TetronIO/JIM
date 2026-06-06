@@ -92,6 +92,18 @@ Describe 'Connect-JIM' {
             $timeoutParam.ParameterSets.Keys | Should -Contain 'Interactive'
             $timeoutParam.ParameterSets.Keys | Should -Not -Contain 'ApiKey'
         }
+
+        It 'Should have a NoPersist switch parameter' {
+            $command = Get-Command Connect-JIM
+            $command.Parameters['NoPersist'].SwitchParameter | Should -BeTrue
+        }
+
+        It 'NoPersist should only be in Interactive parameter set' {
+            $command = Get-Command Connect-JIM
+            $noPersistParam = $command.Parameters['NoPersist']
+            $noPersistParam.ParameterSets.Keys | Should -Contain 'Interactive'
+            $noPersistParam.ParameterSets.Keys | Should -Not -Contain 'ApiKey'
+        }
     }
 
     Context 'Help Documentation' {
@@ -153,6 +165,61 @@ Describe 'Disconnect-JIM' {
         It 'Should have CmdletBinding' {
             $command = Get-Command Disconnect-JIM
             $command.CmdletBinding | Should -BeTrue
+        }
+    }
+
+    Context 'Cache-clearing parameters' {
+
+        It 'Should have a ClearCache switch parameter' {
+            (Get-Command Disconnect-JIM).Parameters['ClearCache'].SwitchParameter | Should -BeTrue
+        }
+
+        It 'Should have a Url parameter' {
+            (Get-Command Disconnect-JIM).Parameters['Url'] | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have an All switch parameter' {
+            (Get-Command Disconnect-JIM).Parameters['All'].SwitchParameter | Should -BeTrue
+        }
+
+        It 'All should be in its own parameter set, separate from Url' {
+            $command = Get-Command Disconnect-JIM
+            $command.Parameters['All'].ParameterSets.Keys | Should -Not -Contain 'Default'
+            $command.Parameters['Url'].ParameterSets.Keys | Should -Not -Contain 'All'
+        }
+
+        It 'Should reject an invalid Url' {
+            { Disconnect-JIM -Url 'not-a-url' -ClearCache } | Should -Throw '*Invalid URL*'
+        }
+    }
+
+    Context 'Cache-clearing behaviour' {
+
+        It 'Does not touch the credential store by default' {
+            InModuleScope JIM {
+                $script:JIMConnection = $null
+                Mock Remove-JIMToken { 0 }
+                Disconnect-JIM
+                Should -Invoke Remove-JIMToken -Times 0
+            }
+        }
+
+        It 'Removes the persisted token for an explicit -Url even when not connected' {
+            InModuleScope JIM {
+                $script:JIMConnection = $null
+                Mock Remove-JIMToken { 1 }
+                Disconnect-JIM -Url 'https://jim.example.com' -ClearCache
+                Should -Invoke Remove-JIMToken -Times 1 -ParameterFilter { $BaseUrl -eq 'https://jim.example.com' }
+            }
+        }
+
+        It 'Removes all persisted tokens with -All' {
+            InModuleScope JIM {
+                $script:JIMConnection = $null
+                Mock Remove-JIMToken { 3 }
+                Disconnect-JIM -All
+                Should -Invoke Remove-JIMToken -Times 1 -ParameterFilter { $All.IsPresent }
+            }
         }
     }
 

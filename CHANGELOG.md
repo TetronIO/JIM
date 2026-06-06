@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- ✨ The PowerShell module now persists your interactive SSO sign-in across terminal sessions: after `Connect-JIM`, opening a new terminal reconnects silently without a browser. Only the refresh token is stored, in the operating system's credential store (Credential Manager on Windows, login Keychain on macOS, libsecret on Linux), with no extra password beyond your normal OS sign-in. Use `Connect-JIM -NoPersist` to opt out for a session, `-Force` to re-authenticate and overwrite the stored token, and `Disconnect-JIM -ClearCache` / `-Url` / `-All` to remove stored tokens. Headless Linux without a keyring falls back to in-memory tokens and points you to `-ApiKey`.
+
+### Changed
+
+- 🔄 JIM now requests the `offline_access` scope during interactive authentication so the identity provider issues a refresh token. This enables reliable in-session token renewal and the new PowerShell token persistence. Existing SSO deployments should ensure `offline_access` is permitted on the interactive/public client; see the updated SSO setup guide.
+
 ## [0.11.0] - 2026-06-06
 
 ### Added
