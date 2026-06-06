@@ -3,12 +3,16 @@
 
 <#
 .SYNOPSIS
-    Opens (or updates) a pull request bumping the apt package pins that
-    check-apt-pins.ps1 -Apply has rewritten in the working tree.
+    Opens (or updates) a pull request publishing the version-pin bumps that a
+    `check-*-pins.ps1 -Apply` step has rewritten in the working tree.
 
 .DESCRIPTION
-    Run after `check-apt-pins.ps1 -Apply` has modified one or more Dockerfiles.
-    It publishes those changes as a PR for human evaluation.
+    Run after a detection script (check-apt-pins.ps1, check-tooling-pins.ps1, ...)
+    has rewritten one or more pinned versions in place. This script publishes
+    those changes as a PR for human evaluation. It is pin-source agnostic: what
+    set of files it commits, the commit message, the branch, and the PR label are
+    all supplied by the caller, so the same signed-commit machinery serves every
+    Dependabot-invisible pin bot.
 
     Two constraints shape the implementation:
 
@@ -18,25 +22,41 @@
          show as "Verified", so this script commits via the GraphQL
          createCommitOnBranch mutation rather than git.
 
-      2. CI does not build the JIM images on a PR, so the bump is not build-tested
-         in CI. check-apt-pins.ps1 already validates installability against the
-         base image before proposing, which is the mitigation; this script only
+      2. CI does not necessarily build/test the bump on a PR. Each detection
+         script is responsible for validating its own bumps before proposing
+         (e.g. check-apt-pins.ps1 proves installability); this script only
          publishes what that step validated.
 
-    Idempotency: the bot uses a single stable branch. On each run the branch is
+    Idempotency: each bot uses a single stable branch. On each run the branch is
     reset to the tip of the base branch and a fresh single commit is applied, so
     an already-open PR is updated in place rather than duplicated, and the branch
     never accumulates stale history.
 
     Requires: GH_TOKEN set to a token carrying `contents: write` and
-    `pull-requests: write`. In the apt-pin-check workflow this is a GitHub App
+    `pull-requests: write`. In the pin-check workflows this is a GitHub App
     installation token (a service principal), not a personal or GITHUB_TOKEN
     credential. $env:GITHUB_REPOSITORY must be set (it is in Actions); otherwise
     pass -Repository owner/repo.
 
 .PARAMETER BodyFile
     Path to a file containing the markdown table of proposed bumps (the `pr_body`
-    output of check-apt-pins.ps1). Embedded in the PR description.
+    output of the detection script). Embedded in the PR description.
+
+.PARAMETER FilePattern
+    Regex matched against `git diff --name-only` to select which changed files to
+    commit. Scopes the commit strictly to the pin files and guards against
+    committing a stray working-tree artefact (e.g. the generated *-pr-body.md).
+    Defaults to Dockerfiles (the apt bot).
+
+.PARAMETER CommitHeadline
+    The commit/PR title. Defaults to the apt bot's headline.
+
+.PARAMETER CommitBodyIntro
+    The prose paragraph placed above the bump table in the commit/PR body.
+    Defaults to the apt bot's intro.
+
+.PARAMETER Label
+    The label applied to a newly-created PR. Defaults to 'dependencies'.
 
 .PARAMETER BaseBranch
     The branch to target and reset from. Defaults to 'main'.
@@ -55,6 +75,14 @@
 [CmdletBinding()]
 param(
     [string]$BodyFile,
+    [string]$FilePattern = '(^|/)Dockerfile$',
+    [string]$CommitHeadline = 'chore(deps): bump pinned apt package versions',
+    [string]$CommitBodyIntro = @'
+Newer versions of apt packages pinned in production Dockerfiles are available in
+the Ubuntu archive and have been validated as installable against the pinned base
+image. Raised for evaluation by the apt-pin-check workflow.
+'@,
+    [string]$Label = 'dependencies',
     [string]$BaseBranch = 'main',
     [string]$Branch = 'automation/apt-pin-updates',
     [string]$Repository = $env:GITHUB_REPOSITORY,
@@ -65,11 +93,11 @@ $ErrorActionPreference = 'Stop'
 
 if (-not $Repository) { throw 'Repository not set. Pass -Repository owner/repo or set GITHUB_REPOSITORY.' }
 
-# Files changed by the -Apply step. Scope strictly to Dockerfiles: the bump only
-# ever rewrites pinned versions in Dockerfiles, and this guards against
-# committing any other stray working-tree artefact (e.g. the generated
-# apt-pin-pr-body.md).
-$changed = @(git diff --name-only | Where-Object { $_ -match '(^|/)Dockerfile$' })
+# Files changed by the -Apply step. Scope strictly to the pin files via the
+# caller-supplied pattern: the bump only ever rewrites pinned versions in those
+# files, and this guards against committing any other stray working-tree
+# artefact (e.g. the generated *-pr-body.md).
+$changed = @(git diff --name-only | Where-Object { $_ -match $FilePattern })
 if ($changed.Count -eq 0) {
     Write-Host 'No working-tree changes; nothing to propose.'
     exit 0
@@ -78,11 +106,9 @@ if ($changed.Count -eq 0) {
 Write-Host "Changed files:"; $changed | ForEach-Object { Write-Host "  $_" }
 
 $prBody = if ($BodyFile -and (Test-Path $BodyFile)) { Get-Content -Path $BodyFile -Raw } else { '' }
-$commitHeadline = 'chore(deps): bump pinned apt package versions'
+$commitHeadline = $CommitHeadline
 $commitBody = @"
-Newer versions of apt packages pinned in production Dockerfiles are available in
-the Ubuntu archive and have been validated as installable against the pinned base
-image. Raised for evaluation by the apt-pin-check workflow.
+$CommitBodyIntro
 
 $prBody
 "@
@@ -175,5 +201,5 @@ if ($openPr) {
 } else {
     Write-Host 'Opening new PR ...'
     Invoke-Gh @('pr', 'create', '--repo', $Repository, '--base', $BaseBranch, '--head', $Branch,
-        '--title', $commitHeadline, '--body', $commitBody, '--label', 'dependencies') | Out-Null
+        '--title', $commitHeadline, '--body', $commitBody, '--label', $Label) | Out-Null
 }
