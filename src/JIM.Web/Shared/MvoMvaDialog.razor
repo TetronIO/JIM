@@ -20,10 +20,7 @@
                       FixedHeader="true" Height="400px"
                       Loading="@_loading" LoadingProgressColor="Color.Primary">
                 <ToolBarContent>
-                    <MudTooltip Text="@(_dense ? "Normal row spacing" : "Compact row spacing")" Arrow="true" Placement="Placement.Top">
-                        <MudIconButton Icon="@(_dense ? Icons.Material.Filled.DensitySmall : Icons.Material.Filled.DensityMedium)"
-                                       Variant="Variant.Filled" Color="Color.Default" Size="Size.Small" OnClick="OnToggleDense" />
-                    </MudTooltip>
+                    <TableDensityToggle @bind-Dense="_dense" />
                     <MudSpacer />
                     <MudTextField T="string" Value="@_searchText"
                                   ValueChanged="@OnSearch"
@@ -73,10 +70,7 @@
                       FixedHeader="true" Height="400px"
                       Loading="@_loading" LoadingProgressColor="Color.Primary">
                 <ToolBarContent>
-                    <MudTooltip Text="@(_dense ? "Normal row spacing" : "Compact row spacing")" Arrow="true" Placement="Placement.Top">
-                        <MudIconButton Icon="@(_dense ? Icons.Material.Filled.DensitySmall : Icons.Material.Filled.DensityMedium)"
-                                       Variant="Variant.Filled" Color="Color.Default" Size="Size.Small" OnClick="OnToggleDense" />
-                    </MudTooltip>
+                    <TableDensityToggle @bind-Dense="_dense" />
                     <MudSpacer />
                     <MudTextField T="string" Value="@_searchText"
                                   ValueChanged="@OnSearch"
@@ -148,12 +142,6 @@
                 // JS interop not yet available, will retry on next render
             }
         }
-    }
-
-    private async Task OnToggleDense()
-    {
-        _dense = !_dense;
-        await PreferenceService.SetTableDenseAsync(_dense);
     }
 
     private async Task<TableData<MetaverseObjectAttributeValue>> ServerReloadAsync(

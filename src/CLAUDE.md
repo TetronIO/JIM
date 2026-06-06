@@ -118,9 +118,6 @@ CodeQL runs on every PR via the github-code-quality bot and comments on rule vio
 - **Redundant null-conditional**: do not use `?.` on a variable that has already been null-checked with an early return. The `?.` is redundant once control flow guarantees non-null, and CodeQL flags it.
 - **Implicit filter in `foreach`**: do not write `foreach (var x in xs) { if (predicate) ... }` - CodeQL flags this as "Missed opportunity to use Where". Push the predicate into the iterator: `foreach (var x in xs.Where(x => predicate)) ...`. This applies whenever the body's first (or only) statement is an `if` whose single branch acts on `x`; the guard should move into the sequence so the loop iterates only matching elements.
 
-**Nullable Dereference in Razor:**
-- When accessing a nullable `.Value` property in Razor markup (e.g. `context.LastUpdated.Value`), capture it into a local variable inside the `@if (x.HasValue)` block: `var lastUpdated = context.LastUpdated.Value;` then use the local variable in markup expressions. This avoids repeated nullable dereference warnings from code analysis.
-
 **File Organisation:**
 - One class per file - each class should have its own `.cs` file named after the class
 - Exception: Enums are grouped into a single file per area/folder (e.g., `ConnectedSystemEnums.cs`, `PendingExportEnums.cs`)
@@ -160,48 +157,7 @@ Repository and server methods that load a single entity follow a weight-based ta
 
 **When adding a new retrieval method, start from the lightest variant that works**; only promote to a heavier one if the caller actually needs the additional data.
 
-**Razor Comments:**
-- **Section headers**: Use box-drawing delimiters: `@* ─── Section Title ─── *@` (U+2500 horizontal box-drawing character). One line, standing alone between markup blocks, to visually separate major page sections.
-- **Inline comments**: Use plain comments: `@* Explanation of what follows *@`. Brief, contextual, placed immediately above or beside the relevant markup.
-- Do NOT use multi-line banner comments (`===`, `amamam`, or similar filler characters). One line is enough.
-
-**Tabs:**
-- Use `<NavigableMudTabs>` instead of `<MudTabs>` for all top-level page tabs; it syncs the active tab with a `?t=slug` query string, enabling browser back/forward navigation
-- Use plain `<MudTabs>` only for tabs inside dialogs or nested sub-tabs where URL navigation is not needed
-
-**Alerts:**
-- ALWAYS use `Variant="Variant.Outlined"` on all `<MudAlert>` components
-- This ensures a consistent outlined style across the entire UI
-
-**Panel Spacing (target: uniform `mt-6` visual gaps between all block-level sections):**
-- Use `Class="pa-4 mt-6"` on `<MudPaper Outlined="true">` panels to ensure consistent vertical spacing between sections
-- Exception: the **first** panel on a page should omit `mt-6` (use just `Class="pa-4"`) so there is no unnecessary top margin
-- **After intro text**: `MudText` with `Typo.subtitle1` renders as a `<p>` with its own bottom margin (~16px). The first panel after intro text should use `mt-4` (not `mt-6`) so the combined gap matches `mt-6` visually
-- **Tab content spacing**: Use `TabPanelsClass="pa-0 mt-6"` on `NavigableMudTabs` / `MudTabs` so the gap between tab headers and tab panel content matches the surrounding spacing
-- **Tabs margin**: `NavigableMudTabs` may not honour `Class` for outer margin; wrap in `<div class="mt-6">` to guarantee spacing above the tab bar
-
-**Tooltips:**
-- ALWAYS use `Arrow="true" Placement="Placement.Top"` on all `<MudTooltip>` components
-- This ensures tooltips appear above the element with a downward-pointing arrow, consistent across the entire UI
-- **Exception:** tooltips anchored to elements inside the mini-drawer (e.g. the `DrawerUserMenu` avatar when the drawer is collapsed) should use `Placement.Right` so they emerge into the main content area rather than overlapping the drawer itself. This exception is scoped to drawer-anchored tooltips only; do not extend it to other contexts.
-
-**UI Element Sizing:**
-- ALWAYS use normal/default sizes for ALL UI elements when adding new components
-- Text: Use `Typo.body1` (default readable size)
-- Chips: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium)
-- Buttons: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium)
-- Icons: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium)
-- Other MudBlazor components: Omit Size parameter to use default sizing
-- Only use smaller sizes (`Typo.body2`, `Size.Small`, etc.) when explicitly requested by the user
-- Users prefer readable, appropriately-sized UI elements by default
-
-**MudTable Row Density:**
-- All new data tables should include a density toggle allowing users to switch between normal and compact row spacing
-- Use `Dense="@_dense"` and `Class="@(_dense ? "dense-body-only" : "")"` on the `MudTable`; the `dense-body-only` CSS class keeps header rows at normal height while body rows are compact
-- Add a `MudButton` with `StartIcon` (not `MudIconButton`, which renders circular) in the `ToolBarContent` to toggle density, using `Icons.Material.Filled.DensitySmall` / `DensityMedium`
-- Persist the preference via `IUserPreferenceService.GetTableDenseAsync()` / `SetTableDenseAsync()` (stored in browser localStorage under a single shared key, so the setting applies globally across all pages)
-- Default to normal spacing (`_dense = false`); load the saved preference in `OnAfterRenderAsync` with `catch (InvalidOperationException)` for JS interop retry
-- See `Pages/Types/Index.razor` for the reference implementation
+**Blazor / MudBlazor UI conventions live in `JIM.Web/CLAUDE.md`** (loads automatically when working under `JIM.Web`): row density, empty values, tooltips, alerts, panel spacing, element sizing, tabs, Razor comments, and nullable dereference in Razor. Shared components: `<TableDensityToggle>` (the compact-row toggle) and `<EmptyValue>` (the low-lighted empty-cell hyphen). Prefer these over hand-rolled markup.
 
 ## Architecture Quick Reference
 

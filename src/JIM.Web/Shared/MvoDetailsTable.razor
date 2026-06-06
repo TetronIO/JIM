@@ -10,10 +10,7 @@
 {
     <MudPaper Class="pa-0 mt-3" Outlined="true">
         <div class="d-flex justify-start pa-2 jim-attribute-table-toolbar">
-            <MudTooltip Text="@(_dense ? "Normal row spacing" : "Compact row spacing")" Arrow="true" Placement="Placement.Top">
-                <MudIconButton Icon="@(_dense ? Icons.Material.Filled.DensitySmall : Icons.Material.Filled.DensityMedium)"
-                               Variant="Variant.Filled" Color="Color.Default" Size="Size.Small" OnClick="OnToggleDense" />
-            </MudTooltip>
+            <TableDensityToggle @bind-Dense="_dense" />
         </div>
         <MudSimpleTable Hover="true" Dense="@_dense" Elevation="0" Class="jim-attribute-table">
             <thead>
@@ -197,12 +194,6 @@
                 // JS interop not yet available, will retry on next render
             }
         }
-    }
-
-    private async Task OnToggleDense()
-    {
-        _dense = !_dense;
-        await PreferenceService.SetTableDenseAsync(_dense);
     }
 
     private record MvoAttributeTableGroup(

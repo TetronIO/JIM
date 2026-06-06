@@ -514,8 +514,11 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     font-weight: 300;
 }
 
+/* !important is required so the monospace font and size win over MudBlazor's
+   table cell typography rules (e.g. .mud-table-root .mud-table-body .mud-table-cell
+   and .mud-simple-table table * tr>td), which are more specific than a single class. */
 .jim-text-code {
-    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace !important;
     font-size: 0.9em !important;
 }
 
@@ -1117,6 +1120,25 @@ html[lang] .mud-alert-position {
     top: 12px;
     right: 12px;
     margin: 0 !important;
+}
+
+/* Schema refresh change table - keep the Change Type column on a single line */
+.jim-schema-change-table th:first-child,
+.jim-schema-change-table td:first-child {
+    white-space: nowrap;
+}
+
+/* The schema change table sits inside an outlined alert that carries a subtle
+   semantic-colour tint (see the theme .mud-alert-outlined-info rules). A table's
+   default opaque surface fill coincides with that tint in dark mode but clashes
+   with it in light mode (a 6% tint reads as off-white against the table's pure
+   white surface). Make the table transparent so it inherits the alert's tint in
+   every theme and both modes; the row borders still provide structure.
+   html[lang] gives (0,2,2) to beat MudBlazor's .mud-table surface fill. */
+html[lang] .jim-schema-change-table,
+html[lang] .jim-schema-change-table th,
+html[lang] .jim-schema-change-table td {
+    background-color: transparent !important;
 }
 
 /* Table group header rows - subtle background tint for category emphasis */

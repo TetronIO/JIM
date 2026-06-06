@@ -1,0 +1,31 @@
+@inject IUserPreferenceService PreferenceService
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Toolbar control that toggles a MudTable between normal and compact (dense) row spacing. *@
+@* Two-way bind Dense to the page's _dense field (@bind-Dense="_dense"); this control persists the *@
+@* choice globally via IUserPreferenceService. The page must still load the saved preference on first *@
+@* render so the table paints at the correct density immediately. See JIM.Web/CLAUDE.md "Row density". *@
+<MudTooltip Text="@(Dense ? "Normal row spacing" : "Compact row spacing")" Arrow="true" Placement="Placement.Top">
+    <MudIconButton Icon="@(Dense ? Icons.Material.Filled.DensitySmall : Icons.Material.Filled.DensityMedium)"
+                   Variant="Variant.Filled" Color="Color.Default" Size="Size.Small" OnClick="ToggleAsync" />
+</MudTooltip>
+
+@code {
+    /// <summary>
+    /// Whether the associated table is currently in compact (dense) row mode. Two-way bindable.
+    /// </summary>
+    [Parameter]
+    public bool Dense { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> DenseChanged { get; set; }
+
+    private async Task ToggleAsync()
+    {
+        var dense = !Dense;
+        await PreferenceService.SetTableDenseAsync(dense);
+        await DenseChanged.InvokeAsync(dense);
+    }
+}
