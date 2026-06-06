@@ -244,6 +244,8 @@ The changelog is a **customer-facing product document**. The audience is adminis
 - Keep entries concise: one line per change, describe what changed from the user's perspective
 - Lead each entry with an appropriate emoji (✨ new, 🐛 fix, ⚡ performance, 🔄 changed, 🗑️ removed, 🔒 security, 📦 deployment/infrastructure, 🖥️ UI/UX)
 
+**Enforcement:** `scripts/Lint-Changelog.ps1` (run on PRs touching `CHANGELOG.md` via the `changelog-lint` workflow, and at release time) hard-fails any entry that does not lead with one of the canonical emojis above, and warns on entries that look internal (test scenarios, EF Core internals, `*Async` names) or are too long. An off-list emoji almost always means the entry is not customer-facing and should be removed.
+
 **At release time:** Move all `[Unreleased]` entries to a new version section and update comparison links at the bottom of the file. See Release Process below.
 
 ---

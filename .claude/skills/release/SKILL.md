@@ -180,39 +180,32 @@ git commit -m "docs: update documentation and diagrams for v<version> release"
 
 ## Changelog Validation
 
-Before proceeding with version updates, validate that the changelog is complete.
+Before proceeding with version updates, validate AND prune the `[Unreleased]` section. Entries are written at PR time by whoever made the change, optimised for "did I capture my change" rather than "would a customer care", so the section accumulates test-only, internal, and over-long entries. **The default failure mode of this step is letting those through.** It is therefore removal- and tightening-biased, not just gap-finding. Do NOT characterise the section as "fine" or "well-maintained" without running every entry through the checks below.
 
-Per CLAUDE.md, changelog entries should be added with each commit/PR — but things can be missed. This step catches gaps.
+1. **Run the mechanical lint first** (zero false positives; catches off-list emojis):
+   ```
+   pwsh -File ./scripts/Lint-Changelog.ps1 -WarningsAsErrors
+   ```
+   Every **ERROR** must be resolved before release: an entry leading with an off-list emoji (e.g. a test tube or lipstick) is almost always a non-customer-facing entry that should be **removed**, not re-emojied. Treat every **WARNING** (too long; references a test scenario/integration test; exposes EF Core internals; names an internal `*Async` method; describes a refactor) as a removal-or-rewrite candidate to resolve, not noise to skip.
 
-1. **Get the last release tag**:
+2. **Get the last release tag and list commits since it**:
    ```
    git describe --tags --abbrev=0
-   ```
-
-2. **List all commits since the last release**, excluding docs-only, CI, and test-only changes:
-   ```
    git log <last-tag>..HEAD --oneline --no-merges
    ```
 
-3. **Cross-reference commits against the `[Unreleased]` section** of `CHANGELOG.md`. For each commit, determine if it warrants a changelog entry using the rules from CLAUDE.md:
-   - **Needs entry**: New features, bug fixes, performance improvements, changed behaviour, removed functionality — anything a customer or administrator would care about
-   - **Does NOT need entry**: Documentation-only (`.md`), CI/CD workflows, dev tooling, refactoring with no user-facing impact, test-only changes, trivial internal changes
+3. **Audit EVERY existing `[Unreleased]` entry for removal (mandatory pass).** For each entry, classify keep/remove against the "When NOT to add an entry" rules in `engineering/CLAUDE.md`. **Remove** (do not keep "just in case") anything that is:
+   - test-only — integration/unit test scenarios or helpers (a `🧪`-style entry should essentially never ship to customers);
+   - dev tooling, CI/CD, or build infrastructure;
+   - internal refactoring with no user-facing impact (e.g. an entry whose substance is "now routes through the lightweight `SomethingAsync` variant");
+   - a trivial UI or internal tweak a customer would not notice or care about.
+   Present the proposed removals to the user with a one-line reason each, and confirm before deleting.
 
-4. **Report findings** to the user:
-   - List any commits that appear to be missing from the changelog (user-facing changes with no corresponding entry)
-   - List any commits that were correctly excluded (docs, CI, tests, refactoring)
-   - If gaps are found, propose changelog entries and ask the user to confirm before adding them
+4. **Find missing entries.** Cross-reference the commit list against what remains: list any user-facing change (feature, fix, performance, behaviour change, removal) with no corresponding entry, propose wording, and confirm before adding. Correctly-excluded commits (docs, CI, tests, refactoring) need no entry.
 
-5. **Review tone, length, and quality of existing entries.** The changelog is a customer-facing product document. Entries should:
-   - Be written as product changes (benefit/outcome), not developer notes (implementation detail)
-   - Be succinct: one sentence per entry, two at most. Flag any entry longer than two sentences for tightening
-   - Avoid internal class/method/file names, step-by-step fix explanations, framework-default tutorials, and "previously X / now Y" multi-clause sentences (full criteria in `engineering/CLAUDE.md`)
-   - Lead with an emoji for visual scanning (✨ new, 🐛 fix, ⚡ performance, 🔄 changed, 🗑️ removed, 🔒 security, 📦 deployment, 🖥️ UI/UX)
-   - Make JIM appear useful, reliable, sophisticated, and exciting
-   - Exclude internal/trivial changes that don't matter to customers
-   If existing entries need rewording or shortening to meet this standard, propose edits.
+5. **Tighten every kept entry (default, not optional).** Rewrite each remaining entry to one sentence, two at most: benefit-led, dropping internal class/method/file names, "previously X / now Y" chains, and step-by-step fix narration (full criteria in `engineering/CLAUDE.md`). Lead with a canonical emoji (✨ new, 🐛 fix, ⚡ performance, 🔄 changed, 🗑️ removed, 🔒 security, 📦 deployment, 🖥️ UI/UX). Present the rewrites. Accuracy is not the bar here, customer-readability is — do not leave an over-long entry because it is "correct".
 
-6. **If entries need adding or rewording**, update the `[Unreleased]` section of `CHANGELOG.md` with the confirmed changes before proceeding.
+6. **Apply the confirmed removals, additions, and rewrites to `[Unreleased]`, then re-run the lint clean** (`pwsh -File ./scripts/Lint-Changelog.ps1 -WarningsAsErrors` exits 0) before proceeding.
 
 ## Version Confirmation
 
