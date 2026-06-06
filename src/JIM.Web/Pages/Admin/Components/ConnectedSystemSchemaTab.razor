@@ -72,7 +72,7 @@
               ShowCloseIcon="true"
               CloseIconClicked="HandleCloseSchemaRefreshResult">
         <MudText Typo="Typo.subtitle1" Class="mb-2">
-            Schema Refresh @(result.Success ? "Complete" : "Failed")
+            <strong>Schema Refresh @(result.Success ? "Complete" : "Failed")</strong>
         </MudText>
 
         @if (result.Success)
@@ -87,7 +87,7 @@
             }
             else
             {
-                <MudSimpleTable Dense="true" Hover="true" Bordered="true" Class="mt-2">
+                <MudSimpleTable Dense="true" Hover="true" Bordered="true" Elevation="0" Class="mt-2 jim-schema-change-table">
                     <thead>
                         <tr>
                             <th>Change Type</th>
@@ -98,35 +98,35 @@
                         @if (result.AddedObjectTypes.Count > 0)
                         {
                             <tr>
-                                <td><MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Success" Class="me-1" /> Object Types Added</td>
+                                <td><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Success" Class="me-1" /><span>Object Types Added</span></div></td>
                                 <td>@string.Join(", ", result.AddedObjectTypes)</td>
                             </tr>
                         }
                         @if (result.RemovedObjectTypes.Count > 0)
                         {
                             <tr>
-                                <td><MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Error" Class="me-1" /> Object Types Removed</td>
+                                <td><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Error" Class="me-1" /><span>Object Types Removed</span></div></td>
                                 <td>@string.Join(", ", result.RemovedObjectTypes)</td>
                             </tr>
                         }
                         @if (result.UpdatedObjectTypes.Count > 0)
                         {
                             <tr>
-                                <td><MudIcon Icon="@Icons.Material.Filled.Update" Color="Color.Info" Class="me-1" /> Object Types Updated</td>
+                                <td><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Update" Color="Color.Info" Class="me-1" /><span>Object Types Updated</span></div></td>
                                 <td>@string.Join(", ", result.UpdatedObjectTypes)</td>
                             </tr>
                         }
                         @foreach (var kvp in result.AddedAttributes)
                         {
                             <tr>
-                                <td><MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Success" Class="me-1" /> Attributes Added (@kvp.Key)</td>
+                                <td><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Success" Class="me-1" /><span>Attributes Added (@kvp.Key)</span></div></td>
                                 <td>@string.Join(", ", kvp.Value)</td>
                             </tr>
                         }
                         @foreach (var kvp in result.RemovedAttributes)
                         {
                             <tr>
-                                <td><MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Warning" Class="me-1" /> Attributes Removed (@kvp.Key)</td>
+                                <td><div class="d-flex align-center"><MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Warning" Class="me-1" /><span>Attributes Removed (@kvp.Key)</span></div></td>
                                 <td>@string.Join(", ", kvp.Value)</td>
                             </tr>
                         }

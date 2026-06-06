@@ -1119,6 +1119,12 @@ html[lang] .mud-alert-position {
     margin: 0 !important;
 }
 
+/* Schema refresh change table - keep the Change Type column on a single line */
+.jim-schema-change-table th:first-child,
+.jim-schema-change-table td:first-child {
+    white-space: nowrap;
+}
+
 /* Table group header rows - subtle background tint for category emphasis */
 .mud-table-cell-custom-group {
     background-color: var(--mud-palette-background-grey) !important;
