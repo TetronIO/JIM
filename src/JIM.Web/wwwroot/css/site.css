@@ -1128,6 +1128,19 @@ html[lang] .mud-alert-position {
     white-space: nowrap;
 }
 
+/* The schema change table sits inside an outlined alert that carries a subtle
+   semantic-colour tint (see the theme .mud-alert-outlined-info rules). A table's
+   default opaque surface fill coincides with that tint in dark mode but clashes
+   with it in light mode (a 6% tint reads as off-white against the table's pure
+   white surface). Make the table transparent so it inherits the alert's tint in
+   every theme and both modes; the row borders still provide structure.
+   html[lang] gives (0,2,2) to beat MudBlazor's .mud-table surface fill. */
+html[lang] .jim-schema-change-table,
+html[lang] .jim-schema-change-table th,
+html[lang] .jim-schema-change-table td {
+    background-color: transparent !important;
+}
+
 /* Table group header rows - subtle background tint for category emphasis */
 .mud-table-cell-custom-group {
     background-color: var(--mud-palette-background-grey) !important;
