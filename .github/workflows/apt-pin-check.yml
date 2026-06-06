@@ -9,13 +9,13 @@
 # newer package, security or otherwise, sits unnoticed until release time.
 #
 # See .github/scripts/check-apt-pins.ps1 (detection + installability validation)
-# and .github/scripts/open-apt-pin-pr.ps1 (signed-commit PR).
+# and .github/scripts/open-pin-pr.ps1 (the shared signed-commit PR opener).
 #
 # Identity / token choice.
 #   The PR is opened as a GitHub App (an org-owned service principal), not a
 #   personal token. Two reasons:
 #     1. `main` requires signed commits; commits created via the GitHub API (here,
-#        the GraphQL createCommitOnBranch mutation in open-apt-pin-pr.ps1) are
+#        the GraphQL createCommitOnBranch mutation in open-pin-pr.ps1) are
 #        signed by GitHub, and an App installation token authorises them.
 #     2. A PR opened with the default GITHUB_TOKEN does NOT trigger the CI /
 #        required-check workflows, so it could never satisfy branch protection.
@@ -72,4 +72,4 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: ./.github/scripts/open-apt-pin-pr.ps1 -BodyFile apt-pin-pr-body.md
+        run: ./.github/scripts/open-pin-pr.ps1 -BodyFile apt-pin-pr-body.md

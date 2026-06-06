@@ -1005,7 +1005,7 @@ The `apt-pin-check` workflow ([`.github/workflows/apt-pin-check.yml`](../.github
 3. **Validates that the candidate is actually installable** in that base image (`apt-get install --dry-run`) before proposing it. This matters because CI does not build the JIM images on a PR, so the bot must not propose an unbuildable version.
 4. Raises, or updates in place, a single pull request bumping the validated pins, for the same human review every other dependency update gets.
 
-Backing scripts: [`.github/scripts/check-apt-pins.ps1`](../.github/scripts/check-apt-pins.ps1) (detection, installability validation, and the `-Apply` rewrite) and [`.github/scripts/open-apt-pin-pr.ps1`](../.github/scripts/open-apt-pin-pr.ps1) (PR creation). Both run locally from the repository root for ad hoc checks; `check-apt-pins.ps1` needs Docker.
+Backing scripts: [`.github/scripts/check-apt-pins.ps1`](../.github/scripts/check-apt-pins.ps1) (detection, installability validation, and the `-Apply` rewrite) and [`.github/scripts/open-pin-pr.ps1`](../.github/scripts/open-pin-pr.ps1) (the shared signed-commit PR opener, also used by `tooling-pin-check` below). Both run locally from the repository root for ad hoc checks; `check-apt-pins.ps1` needs Docker.
 
 **Identity.** The PR is opened by the `jim-automation` GitHub App, an org-owned service principal, not a personal token. This is deliberate:
 
@@ -1017,6 +1017,23 @@ The App's credentials are the `APT_PIN_BOT_APP_ID` and `APT_PIN_BOT_PRIVATE_KEY`
 **Adding a new pinned apt package** needs no change here: pin it as `pkg=version` in a production Dockerfile and the next run picks it up automatically, the same zero-config story as digest discovery.
 
 Evaluate an `apt-pin-check` PR the same way as a Docker digest update: review the package changelog, run the LDAP/AD integration tests for any libldap or krb5 change, then squash-merge.
+
+##### Automated tooling pin update detection (`tooling-pin-check`)
+
+A handful of development tools are pinned to exact versions in places Dependabot does not read, for the same reason apt pins are invisible to it: they are not in a manifest its ecosystems parse.
+
+- **`@playwright/mcp`** (the Playwright MCP server used for UI validation) is pinned in **both** `.devcontainer/setup.sh` (install-at-create) and `.mcp.json` (launch-at-runtime). The two must move in lockstep or the installed browser and the running server drift apart.
+- **`dotnet-ef`** (the EF Core CLI) is installed via `dotnet tool install` in `.devcontainer/setup.sh`; it is not a `.csproj` reference, so the nuget ecosystem never sees it.
+
+The `tooling-pin-check` workflow ([`.github/workflows/tooling-pin-check.yml`](../.github/workflows/tooling-pin-check.yml)) closes the gap. Weekly, and on demand via *Run workflow*, it reads each pinned version, queries the upstream registry (npm or NuGet) for the latest stable release, and raises (or updates in place) a single PR bumping any that are behind. When a tool is pinned in more than one file, every location is rewritten to the same version, so a Playwright bump can never leave the two files inconsistent. A registry query that fails is treated as a hard error, never as "current", so a stale pin is never silently masked.
+
+Backing scripts: [`.github/scripts/check-tooling-pins.ps1`](../.github/scripts/check-tooling-pins.ps1) (detection via registry HTTP lookups; no Docker needed) and the shared [`.github/scripts/open-pin-pr.ps1`](../.github/scripts/open-pin-pr.ps1). Both run locally from the repository root for ad hoc checks.
+
+**Identity** is the same as `apt-pin-check`, and it reuses the **same** `APT_PIN_BOT` App and its `APT_PIN_BOT_APP_ID` / `APT_PIN_BOT_PRIVATE_KEY` secrets: a signed commit via `createCommitOnBranch`, App-authored so CI's required checks fire and the PR is mergeable. The App is already scoped to Contents and Pull requests (read/write) on this repository, which is all this workflow needs, so adding it required no new credential.
+
+**Adding a new manually-pinned tool:** add an entry to the `$tools` manifest at the top of `check-tooling-pins.ps1` (name, registry, package id, and one regex-located pin site per file). The next run picks it up. This is the single place to look when you pin a new dev tool outside a Dependabot-readable manifest.
+
+Ranges (e.g. the `mkdocs>=1.6,<2` pins in `setup.sh`) are deliberately out of scope: a range already absorbs minor and patch releases, so only the upper bound is a periodic judgment call rather than an automatable bump.
 
 ##### When the scan-base-images gate blocks on an upstream-only CVE
 
