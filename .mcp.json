@@ -5,9 +5,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "@playwright/mcp@latest",
-        "--executable-path",
-        "/home/vscode/.cache/ms-playwright/chromium-1224/chrome-linux/chrome",
+        "@playwright/mcp@0.0.75",
         "--headless",
         "--isolated",
         "--no-sandbox"
