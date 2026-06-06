@@ -206,7 +206,54 @@ if ($user.isAdministrator) {
 
 ---
 
+## Reset-JIMSystem
+
+Performs a factory reset against the connected JIM instance, wiping all customer-configured data and configuration while preserving the schema, seeded built-ins, and infrastructure access. This operation is destructive and cannot be undone.
+
+### Syntax
+
+```powershell
+Reset-JIMSystem [-Force] [-WhatIf] [-Confirm]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt |
+
+### Output
+
+Returns a `PSCustomObject` containing the counts of removed entities (for example `connectedSystemsRemoved`, `syncRulesRemoved`, `metaverseObjectsRemoved`).
+
+**ShouldProcess impact level:** High. The cmdlet prompts for confirmation by default; pass `-Force` to suppress.
+
+### Examples
+
+```powershell title="Factory reset with confirmation"
+Reset-JIMSystem
+```
+
+```powershell title="Factory reset without prompting"
+Reset-JIMSystem -Force
+```
+
+```powershell title="Capture and report on what was removed"
+$result = Reset-JIMSystem -Force
+"Removed $($result.connectedSystemsRemoved) connected systems"
+```
+
+### Notes
+
+- Requires an active connection via [Connect-JIM](connection.md#connect-jim) and the **Administrator** role.
+- **Removed:** all Connected Systems, Sync Rules, Schedules, Activities, Pending Exports, Metaverse Objects, and all custom (`BuiltIn = false`) Metaverse Object Types, Attributes, Roles, Connector Definitions, Predefined Searches, and Example Data Sets, plus customer-created API Keys and Trusted Certificates.
+- **Preserved:** the database schema and EF Core migration history, all built-in Metaverse Attributes, Object Types, Roles, Connector Definitions, Example Data Sets, and Predefined Searches, the singleton Service Settings record, and infrastructure API keys (`IsInfrastructureKey = true`).
+- The reset is refused with a non-terminating error (HTTP 409) when any Activity is currently in progress; wait for activities to finish or cancel them before retrying.
+- Files stored under the connector files mount (typically `/connector-files`) are **not** wiped; remove them out-of-band if a clean filesystem is also required.
+
+---
+
 ## See also
 
-- [Interactive API reference](../api/reference/): covers the system endpoints (health, readiness, liveness, version, auth config, user info)
+- [Interactive API reference](../api/reference/): covers the system endpoints (health, readiness, liveness, version, auth config, user info, factory reset)
 - [Connection](connection.md): establishing and managing connections to JIM
