@@ -187,6 +187,33 @@ try
                 // Otherwise use default Cookie authentication
                 return null;
             };
+
+            // Global authentication epoch: reject any cookie issued before
+            // ServiceSettings.SessionsValidFromUtc, forcing re-authentication. A factory reset advances
+            // this value so every existing portal session is invalidated at once (no stale role claims
+            // or Metaverse Object references survive a wipe). API keys are unaffected; they are
+            // validated against the database per request via their own scheme.
+            options.Events = new CookieAuthenticationEvents
+            {
+                OnValidatePrincipal = async context =>
+                {
+                    var issuedUtc = context.Properties?.IssuedUtc;
+                    if (issuedUtc == null)
+                        return;
+
+                    var factory = context.HttpContext.RequestServices.GetService<IJimApplicationFactory>();
+                    if (factory == null)
+                        return;
+
+                    using var jim = factory.Create();
+                    var serviceSettings = await jim.ServiceSettings.GetServiceSettingsAsync();
+                    if (serviceSettings?.SessionsValidFromUtc is { } validFrom && issuedUtc.Value.UtcDateTime < validFrom)
+                    {
+                        context.RejectPrincipal();
+                        await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                    }
+                }
+            };
         })
         .AddOpenIdConnect(options =>
         {

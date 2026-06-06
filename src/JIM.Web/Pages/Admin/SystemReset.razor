@@ -1,0 +1,191 @@
+@page "/admin/system-reset"
+@attribute [Authorize(Roles = "Administrator")]
+@using JIM.Models.Activities
+@using Microsoft.AspNetCore.Components.Authorization
+@inject IJimApplicationFactory JimFactory
+@inject ISnackbar Snackbar
+@inject NavigationManager NavManager
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+<PageTitle>Factory Reset</PageTitle>
+
+<MudText Typo="Typo.h4" Color="Color.Error"><MudIcon Icon="@Icons.Material.Filled.RestartAlt" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Factory Reset</MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
+    Wipe all customer data and configuration to return JIM to a fresh state.
+</MudText>
+
+<MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-4">
+    <strong>Take a database backup before continuing.</strong> This operation permanently deletes data and
+    <strong>cannot be undone</strong>. If anything is wrong, a backup is the only way to recover.
+</MudAlert>
+
+<MudPaper Outlined="true" Class="pa-4 mt-6 jim-paper-danger-zone">
+    <MudText Typo="Typo.h6" Color="Color.Error">What a factory reset does</MudText>
+    <MudText Class="mt-2">Permanently removes:</MudText>
+    <ul class="mt-2 ml-4">
+        <li>All Connected Systems and their Connector Space objects</li>
+        <li>All Sync Rules, Schedules, Run Profiles and Pending Exports</li>
+        <li>All Metaverse Objects and their change history</li>
+        <li>All Activities and all custom configuration (object types, attributes, roles, connectors, searches, example data)</li>
+        <li>Customer-created API keys and trusted certificates</li>
+    </ul>
+    <MudText Class="mt-3">Preserves:</MudText>
+    <ul class="mt-2 ml-4">
+        <li>The database schema and built-in configuration</li>
+        <li>The infrastructure API key and service settings</li>
+        <li><strong>Administrator users</strong> (unless you choose to remove them below)</li>
+    </ul>
+    <MudText Class="mt-3">
+        A record of this reset is written to the Activity log, and <strong>every signed-in user (including you)
+        is signed out</strong> and must authenticate again.
+    </MudText>
+</MudPaper>
+
+<MudPaper Outlined="true" Class="pa-4 mt-6">
+    <MudCheckBox @bind-Value="_includeAdministrators" Color="Color.Error">
+        <MudText>Also delete administrator users</MudText>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Leaves a true brand-new install. Only use this if you intend to hand the system over or start completely fresh.
+        </MudText>
+    </MudCheckBox>
+
+    @if (_includeAdministrators)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-4">
+            After this, the only ways to regain administrative access are:
+            <ul class="mt-2 ml-4">
+                <li>the <strong>infrastructure API key</strong> (REST API / PowerShell module), and</li>
+                <li>the <strong>default administrator</strong>, recreated when they next sign in via SSO
+                    (requires an initial administrator to be configured).</li>
+            </ul>
+            If neither is available, you will be locked out of the portal.
+        </MudAlert>
+
+        <MudCheckBox @bind-Value="_acknowledgeLockout" Color="Color.Error" Class="mt-2">
+            <MudText>I understand the administrator lockout risk and want to proceed</MudText>
+        </MudCheckBox>
+    }
+</MudPaper>
+
+<MudPaper Outlined="true" Class="pa-4 mt-6">
+    <MudTextField @bind-Value="_confirmText"
+                  Label="Type RESET to confirm"
+                  Variant="Variant.Outlined"
+                  Immediate="true"
+                  FullWidth="false" />
+    <MudButton Variant="Variant.Filled"
+               Color="Color.Error"
+               Class="mt-4"
+               DropShadow="false"
+               StartIcon="@Icons.Material.Filled.RestartAlt"
+               OnClick="HandleShowConfirmationAsync"
+               Disabled="@(!IsConfirmValid() || _resetInProgress)">
+        @if (_resetInProgress)
+        {
+            <MudProgressCircular Class="ms-n1" Indeterminate="true" Size="Size.Small" />
+            <span class="ms-2">Resetting...</span>
+        }
+        else
+        {
+            <text>Factory Reset</text>
+        }
+    </MudButton>
+</MudPaper>
+
+<MudDialog @bind-Visible="_confirmVisible" Options="_confirmDialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" Class="mr-3" /> Confirm factory reset
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4">
+            This permanently wipes all customer data and configuration and <strong>cannot be undone</strong>.
+            Make sure you have a database backup.
+        </MudAlert>
+        <MudText>
+            @(_includeAdministrators
+                ? "Administrators WILL be removed. The portal may be inaccessible afterwards."
+                : "Administrators will be preserved.")
+        </MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _confirmVisible = false)" DropShadow="false">Cancel</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" DropShadow="false" OnClick="HandleResetConfirmedAsync">
+            Wipe everything
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private readonly List<BreadcrumbItem> _breadcrumbs = new()
+    {
+        new("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new("Administration", href: "/admin"),
+        new("Factory Reset", href: null, disabled: true)
+    };
+
+    private readonly DialogOptions _confirmDialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Small };
+    private bool _includeAdministrators;
+    private bool _acknowledgeLockout;
+    private string? _confirmText;
+    private bool _confirmVisible;
+    private bool _resetInProgress;
+
+    private bool IsConfirmValid()
+    {
+        if (!string.Equals(_confirmText?.Trim(), "RESET", StringComparison.Ordinal))
+            return false;
+
+        // Removing administrators requires the lockout risk to be acknowledged in the UI.
+        if (_includeAdministrators && !_acknowledgeLockout)
+            return false;
+
+        return true;
+    }
+
+    private Task HandleShowConfirmationAsync()
+    {
+        if (IsConfirmValid())
+            _confirmVisible = true;
+        return Task.CompletedTask;
+    }
+
+    private async Task HandleResetConfirmedAsync()
+    {
+        _confirmVisible = false;
+        _resetInProgress = true;
+        StateHasChanged();
+
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+
+            await jim.System.ResetSystemAsync(
+                ActivityInitiatorType.User,
+                user.Id,
+                user.DisplayName,
+                _includeAdministrators,
+                acknowledgeAdministratorLockout: _acknowledgeLockout);
+
+            Snackbar.Add("Factory reset complete. You will be signed out.", Severity.Success);
+
+            // The reset advanced the authentication epoch, so a full request will force re-authentication.
+            await Task.Delay(1500);
+            NavManager.NavigateTo("/", forceLoad: true);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _resetInProgress = false;
+            Snackbar.Add($"Reset refused: {ex.Message}", Severity.Error);
+            StateHasChanged();
+        }
+    }
+}
