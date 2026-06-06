@@ -514,8 +514,11 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     font-weight: 300;
 }
 
+/* !important is required so the monospace font and size win over MudBlazor's
+   table cell typography rules (e.g. .mud-table-root .mud-table-body .mud-table-cell
+   and .mud-simple-table table * tr>td), which are more specific than a single class. */
 .jim-text-code {
-    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace !important;
     font-size: 0.9em !important;
 }
 
