@@ -342,6 +342,34 @@ Provide the Actions URL for monitoring:
 https://github.com/TetronIO/JIM/actions
 ```
 
+## Step 9: Long-form Release Announcement (GitHub Discussions)
+
+The curated `CHANGELOG.md` / GitHub Release notes are intentionally terse and customer-facing. The detail that does NOT belong there (performance work, test-coverage expansion, internal hardening) has a home here instead: a long-form announcement in GitHub Discussions, written for an interested-but-external reader. This is where the entries the Changelog Validation step removed can resurface, reframed as outcomes.
+
+**Prerequisites:** Discussions enabled on the repo with an **Announcements** category (maintainer-post-only, which suits release notes), and `gh` authenticated with permission to create discussions. If Discussions is disabled or the user does not want an announcement for this release, skip this step; it is additive.
+
+1. **Draft the announcement.** You write it (you have the full context at release time). Synthesise it from the curated `[<version>]` changelog section, the full commit range (`git log <previous-tag>..v<version> --no-merges`), and the merged PR titles/bodies in that range. Write it in the JIM product-team voice, more expansive than the changelog, with sections roughly like:
+   - a one-paragraph headline ("what's in v<version>");
+   - **What's new** — the customer-facing features, each expanded with why it matters and a short example where useful;
+   - **Fixes** — notable corrected behaviour;
+   - **Under the hood** — the engineering, performance, quality, and testing improvements that were (rightly) kept out of the changelog, reframed as outcomes ("X is now faster / more robust") rather than internal method names;
+   - **Upgrade notes** — anything an operator must know (e.g. a licence change, a config change);
+   - links to the GitHub Release and the full changelog.
+   Write it to `/tmp/release-discussion-v<version>.md` (outside the repo; do NOT commit it).
+
+2. **Human review is mandatory.** This is public, customer-facing, AI-drafted content. Present the draft path to the user and ask them to review and edit `/tmp/release-discussion-v<version>.md` before anything is posted. Do NOT post unreviewed; there is no "draft" state in GitHub Discussions, so review happens before publishing, not after.
+
+3. **Post it once approved:**
+   ```
+   # Dry run first to confirm the repository and Announcements category resolve:
+   pwsh -File ./scripts/Publish-ReleaseDiscussion.ps1 -Title "JIM v<version>" -BodyFile /tmp/release-discussion-v<version>.md -WhatIf
+   # Then post:
+   pwsh -File ./scripts/Publish-ReleaseDiscussion.ps1 -Title "JIM v<version>" -BodyFile /tmp/release-discussion-v<version>.md
+   ```
+   The script resolves the category and prints the published discussion URL.
+
+4. **Cross-link** (optional): append the discussion URL to the GitHub Release notes (`gh release edit v<version>`) so readers can find the long-form write-up, and report the URL to the user.
+
 ## Recovery: PR rejected after release commit was made
 
 If you created the release commit and tried to push directly to `main` (e.g. with `git push origin main --tags`), the tag will push but `main` will be rejected by branch protection. To recover:
