@@ -60,4 +60,14 @@ public class ServiceSettings
     /// Note: Longer periods negatively affect database size and system performance.
     /// </summary>
     public TimeSpan HistoryRetentionPeriod { get; set; } = TimeSpan.FromDays(30);
+
+    /// <summary>
+    /// The cut-off point (UTC) before which all interactive sign-in sessions are considered invalid.
+    /// Authentication cookies issued before this timestamp are rejected on their next request, forcing
+    /// the user to re-authenticate. This is the global "auth epoch": bumping it de-authenticates every
+    /// existing portal session at once. A factory reset advances this value as its final step so that
+    /// no stale role claims or Metaverse Object references survive the wipe.
+    /// Null means no cut-off has ever been set (all otherwise-valid cookies are accepted).
+    /// </summary>
+    public DateTime? SessionsValidFromUtc { get; set; }
 }

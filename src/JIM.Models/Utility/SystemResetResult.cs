@@ -29,4 +29,16 @@ public class SystemResetResult
     public int CustomExampleDataSetsRemoved { get; set; }
     public int CustomApiKeysRemoved { get; set; }
     public int TrustedCertificatesRemoved { get; set; }
+
+    /// <summary>
+    /// Number of Metaverse Objects holding the built-in Administrator role that were preserved by the reset.
+    /// Zero when the reset was performed with administrators included in the wipe.
+    /// </summary>
+    public int AdministratorsRetained { get; set; }
+
+    /// <summary>
+    /// Number of Metaverse Objects holding the built-in Administrator role that were removed by the reset.
+    /// Non-zero only when the reset was performed with administrators included in the wipe.
+    /// </summary>
+    public int AdministratorsRemoved { get; set; }
 }

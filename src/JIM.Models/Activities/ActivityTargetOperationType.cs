@@ -28,5 +28,9 @@ public enum ActivityTargetOperationType
     /// <summary>
     /// Reverts a Service Setting to its default value.
     /// </summary>
-    Revert = 8
+    Revert = 8,
+    /// <summary>
+    /// Records a system-wide factory reset (wipe of all customer data and configuration).
+    /// </summary>
+    Reset = 9
 }
