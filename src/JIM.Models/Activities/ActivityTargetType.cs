@@ -16,5 +16,9 @@ public enum ActivityTargetType
     MetaverseAttribute = 8,
     ServiceSetting = 9,
     HistoryRetentionCleanup = 10,
-    MetaverseObjectType = 11
+    MetaverseObjectType = 11,
+    /// <summary>
+    /// A system-wide operation that is not scoped to a single entity, such as a factory reset.
+    /// </summary>
+    System = 12
 }

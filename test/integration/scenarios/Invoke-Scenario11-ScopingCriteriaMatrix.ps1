@@ -271,7 +271,7 @@ Write-Host "  OK Selected $($tierCells.Count) cells for tier '$activeTier'" -For
 # ─── Factory reset to clean state ───────────────────────────────────────────────
 
 Write-TestStep "Step 3" "Factory-resetting JIM to a clean state"
-Reset-JIMSystem -Force | Out-Null
+Reset-JIMSystem -Force -IncludeAdministrators -AcknowledgeAdministratorLockout | Out-Null
 Write-Host "  OK Reset complete" -ForegroundColor Green
 
 # ─── Round-trip persistence sub-test (PRD req 20-21) ────────────────────────────
@@ -442,7 +442,7 @@ if ($IncludeNegativeCells) {
 
 # Reset between sub-tests and main matrix so the state is pristine.
 Write-TestStep "Step 6" "Factory-resetting JIM between sub-tests and main matrix"
-Reset-JIMSystem -Force | Out-Null
+Reset-JIMSystem -Force -IncludeAdministrators -AcknowledgeAdministratorLockout | Out-Null
 Write-Host "  OK Reset complete" -ForegroundColor Green
 
 # ─── Main matrix setup: shared MV attributes ─────────────────────────────────
@@ -689,7 +689,7 @@ Write-Host "  Matrix results: $cellPass passed, $cellFail failed (tier: $activeT
 # ─── Final teardown ────────────────────────────────────────────────────────────
 
 Write-TestStep "Step 16" "Final factory reset"
-Reset-JIMSystem -Force | Out-Null
+Reset-JIMSystem -Force -IncludeAdministrators -AcknowledgeAdministratorLockout | Out-Null
 Write-Host "  OK Reset complete" -ForegroundColor Green
 
 # ─── Result aggregation ────────────────────────────────────────────────────────

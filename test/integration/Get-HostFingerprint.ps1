@@ -124,18 +124,29 @@ else {
 # can actually identify (virtual) rather than guess the underlying hardware.
 $diskType = "unknown"
 if ($IsLinux) {
-    # Filter to TYPE=disk so loop/ram/dm devices don't get picked as the "first disk".
-    # lsblk lists loop0..N before sda on devcontainers, which previously caused the
-    # first-line parse to read a loopback device and report rotational=1 → hdd.
+    # Filter to TYPE=disk so loop/ram/dm devices don't get picked as the "first disk",
+    # and exclude pseudo block devices that also report TYPE=disk but are not the
+    # root volume: network-block (nbd*) and compressed-RAM (zram*) devices. On
+    # devcontainers lsblk lists loop0..N and nbd0..15 before the real disk (vda /
+    # sda), which previously caused the first-line parse to read a phantom device
+    # (reporting a misleading rotational flag, or a short row that crashed the
+    # [3..4] meta parse below under Set-StrictMode).
     $lsblkOutput = lsblk -d -o NAME,ROTA,TYPE,MODEL,VENDOR -n 2>$null |
-        Where-Object { ($_ -split "\s+", 5)[2] -eq "disk" }
+        Where-Object {
+            $fields = $_ -split "\s+", 5
+            $fields[2] -eq "disk" -and $fields[0] -notmatch '^(nbd|zram|ram|loop|sr|fd)'
+        }
     if ($lsblkOutput) {
         $firstDisk = ($lsblkOutput | Select-Object -First 1).Trim() -split "\s+", 5
-        # Detect Hyper-V / WSL2 virtual disks by model/vendor strings.
-        # Examples seen in the wild: model="Virtual Disk" vendor="Msft" (WSL2),
-        # vendor="VMware" (VMware Workstation), model contains "QEMU" (KVM).
-        $diskMeta = ($firstDisk[3..4] -join " ").ToLowerInvariant()
-        $isVirtual = $diskMeta -match "virtual disk|msft|vmware|qemu|virtio"
+        # Detect virtual disks. Two signals:
+        #  1. Model/vendor strings (Hyper-V/WSL2 "Virtual Disk"/"Msft", "VMware", "QEMU").
+        #  2. Device naming: virtio (vd*) and Xen (xvd*) block devices are always virtual.
+        # Select-Object -Skip 3 (rather than [3..4]) tolerates rows with blank
+        # MODEL/VENDOR columns, which split to fewer than 5 fields and would
+        # otherwise throw "Index was outside the bounds of the array" under strict mode.
+        $diskMeta = (($firstDisk | Select-Object -Skip 3) -join " ").ToLowerInvariant()
+        $isVirtual = ($diskMeta -match "virtual disk|msft|vmware|qemu|virtio") -or
+                     ($firstDisk[0] -match '^(vd|xvd)')
         if (-not $isVirtual) {
             # Cross-check against /proc/version so we still flag WSL2 even if the
             # device strings ever change in a future Windows release.

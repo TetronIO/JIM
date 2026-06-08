@@ -208,12 +208,12 @@ if ($user.isAdministrator) {
 
 ## Reset-JIMSystem
 
-Performs a factory reset against the connected JIM instance, wiping all customer-configured data and configuration while preserving the schema, seeded built-ins, and infrastructure access. This operation is destructive and cannot be undone.
+Performs a factory reset against the connected JIM instance, wiping all data and configuration while preserving the schema, seeded built-ins, and infrastructure access. By default the administrator users are preserved so you are not locked out of the portal. This operation is destructive and cannot be undone; take a database backup first.
 
 ### Syntax
 
 ```powershell
-Reset-JIMSystem [-Force] [-WhatIf] [-Confirm]
+Reset-JIMSystem [-Force] [-IncludeAdministrators] [-AcknowledgeAdministratorLockout] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -221,6 +221,8 @@ Reset-JIMSystem [-Force] [-WhatIf] [-Confirm]
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt |
+| `IncludeAdministrators` | `switch` | No | `$false` | Also removes the Metaverse Objects holding the built-in Administrator role, leaving a true brand-new install. By default these are preserved |
+| `AcknowledgeAdministratorLockout` | `switch` | No | `$false` | Acknowledges the lockout risk so an administrator-inclusive wipe may proceed when no initial administrator is configured. Ignored unless `-IncludeAdministrators` is set |
 
 ### Output
 
@@ -246,8 +248,10 @@ $result = Reset-JIMSystem -Force
 ### Notes
 
 - Requires an active connection via [Connect-JIM](connection.md#connect-jim) and the **Administrator** role.
-- **Removed:** all Connected Systems, Sync Rules, Schedules, Activities, Pending Exports, Metaverse Objects, and all custom (`BuiltIn = false`) Metaverse Object Types, Attributes, Roles, Connector Definitions, Predefined Searches, and Example Data Sets, plus customer-created API Keys and Trusted Certificates.
-- **Preserved:** the database schema and EF Core migration history, all built-in Metaverse Attributes, Object Types, Roles, Connector Definitions, Example Data Sets, and Predefined Searches, the singleton Service Settings record, and infrastructure API keys (`IsInfrastructureKey = true`).
+- **Removed:** all Connected Systems (and their objects and change history), Metaverse Objects (and their change history), Sync Rules, Object Matching Rules, Schedules (and their executions), Activities, Pending Exports, and all custom (`BuiltIn = false`) Metaverse Object Types, Attributes, Roles, Connector Definitions, Predefined Searches, Example Data Sets, and Example Data Templates, plus non-infrastructure API Keys and Trusted Certificates.
+- **Preserved:** the database schema and EF Core migration history, all built-in Metaverse Attributes, Object Types, Roles, Connector Definitions, Example Data Sets, and Predefined Searches, the singleton Service Settings record, infrastructure API keys (`IsInfrastructureKey = true`), and (unless `-IncludeAdministrators` is supplied) the Metaverse Objects holding the Administrator role.
+- A **Reset activity** recording who initiated the wipe is always created, and **every signed-in portal session is invalidated**; users (including administrators) must sign in again. API keys are unaffected.
+- With `-IncludeAdministrators` and no initial administrator configured (`JIM_SSO_INITIAL_ADMIN`), the reset is refused (HTTP 409) unless `-AcknowledgeAdministratorLockout` is also supplied, because the portal would otherwise be inaccessible afterwards.
 - The reset is refused with a non-terminating error (HTTP 409) when any Activity is currently in progress; wait for activities to finish or cancel them before retrying.
 - Files stored under the connector files mount (typically `/connector-files`) are **not** wiped; remove them out-of-band if a clean filesystem is also required.
 

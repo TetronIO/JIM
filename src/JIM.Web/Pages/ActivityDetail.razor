@@ -144,9 +144,9 @@
 
             @if (!string.IsNullOrEmpty(_activity.Message))
             {
-                <MudItem xs="12" sm="6" md="4">
+                <MudItem xs="12">
                     <MudText Typo="Typo.button" Class="mud-text-secondary">Message:</MudText>
-                    <MudText>@_activity.Message</MudText>
+                    <MudText Style="white-space: pre-line;">@_activity.Message</MudText>
                 </MudItem>
             }
         </MudGrid>
@@ -163,7 +163,7 @@
             <MudStack Spacing="2">
                 @if (!string.IsNullOrEmpty(_activity.Message))
                 {
-                    <MudText Typo="Typo.body1">@_activity.Message</MudText>
+                    <MudText Typo="Typo.body1" Style="white-space: pre-line;">@_activity.Message</MudText>
                 }
                 @if (isIndeterminate)
                 {
