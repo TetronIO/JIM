@@ -172,7 +172,8 @@ public class SystemResetDatabaseTests
     [Test]
     public async Task ResetSystemAsync_IncludeAdministrators_RemovesAdministratorsTooAsync()
     {
-        var (adminId, _) = await SeedAsync();
+        // Seed for its side effect; neither returned id is used in this total-wipe assertion.
+        await SeedAsync();
 
         await using (var ctx = NewContext())
         {
