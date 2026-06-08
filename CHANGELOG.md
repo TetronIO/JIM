@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🔄 Factory reset now **preserves administrator users by default** (so you are not locked out) and always records a Reset activity attributed to whoever initiated it. The previous behaviour of also removing administrators is available via the new `-IncludeAdministrators` switch on `Reset-JIMSystem` (and `includeAdministrators` on `POST /api/v1/system/reset`), guarded against lockout when no initial administrator is configured.
 
+### Fixed
+
+- 🐛 Deleting a Connected System no longer fails with a database error (`column ... does not exist`); the bulk-deletion SQL referenced sync-rule-mapping columns that were removed in an earlier schema change.
+
 ### Security
 
 - 🔒 A factory reset now invalidates every existing portal sign-in session, so no stale access or privileges survive the wipe; users must re-authenticate. API key access is unaffected.

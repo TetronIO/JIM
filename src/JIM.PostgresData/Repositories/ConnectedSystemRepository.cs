@@ -4446,23 +4446,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             @"DELETE FROM ""ConnectedSystemRunProfiles"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
-        // 5. Delete SyncRuleMappingSourceParamValues (child of SyncRuleMappingSource)
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"DELETE FROM ""SyncRuleMappingSourceParamValues""
-              WHERE ""SyncRuleMappingSourceId"" IN (
-                SELECT sms.""Id"" FROM ""SyncRuleMappingSources"" sms
-                INNER JOIN ""SyncRuleMappings"" srm ON sms.""SyncRuleMappingId"" = srm.""Id""
-                INNER JOIN ""SyncRules"" sr ON srm.""AttributeFlowSynchronisationRuleId"" = sr.""Id""
-                WHERE sr.""ConnectedSystemId"" = {0}
-              )",
-            connectedSystemId);
+        // 5. (SyncRuleMappingSourceParamValues are intentionally not deleted here: the table has no
+        //    foreign key to SyncRuleMappingSource in the current schema and is not populated anywhere
+        //    in the application, so there is nothing to scope to this connected system.)
 
         // 6. Delete SyncRuleMappingSources (child of SyncRuleMapping)
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""SyncRuleMappingSources""
               WHERE ""SyncRuleMappingId"" IN (
                 SELECT srm.""Id"" FROM ""SyncRuleMappings"" srm
-                INNER JOIN ""SyncRules"" sr ON srm.""AttributeFlowSynchronisationRuleId"" = sr.""Id""
+                INNER JOIN ""SyncRules"" sr ON srm.""SyncRuleId"" = sr.""Id""
                 WHERE sr.""ConnectedSystemId"" = {0}
               )",
             connectedSystemId);
@@ -4470,8 +4463,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // 7. Delete SyncRuleMappings (attribute flow rules)
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""SyncRuleMappings""
-              WHERE ""AttributeFlowSynchronisationRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})
-                 OR ""ObjectMatchingSynchronisationRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
+              WHERE ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
             connectedSystemId);
 
         // 8. Delete SyncRuleScopingCriteria (child of SyncRuleScopingCriteriaGroup)
