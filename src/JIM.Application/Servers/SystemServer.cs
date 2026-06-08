@@ -109,9 +109,7 @@ public class SystemServer
             TargetType = ActivityTargetType.System,
             TargetOperationType = ActivityTargetOperationType.Reset,
             TargetName = "Factory reset",
-            Message = includeAdministrators
-                ? $"Factory reset completed (administrators removed). Removed {result.ConnectedSystemsRemoved} connected systems and {result.MetaverseObjectsRemoved} metaverse objects."
-                : $"Factory reset completed (administrators retained: {result.AdministratorsRetained}). Removed {result.ConnectedSystemsRemoved} connected systems and {result.MetaverseObjectsRemoved} metaverse objects."
+            Message = result.BuildResetMessage(includeAdministrators)
         };
         await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
         // Mark it complete immediately: the reset is a point-in-time event, and leaving it InProgress

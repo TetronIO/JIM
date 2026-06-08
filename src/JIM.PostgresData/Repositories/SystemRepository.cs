@@ -44,8 +44,14 @@ internal sealed class SystemRepository : ISystemRepository
             ConnectedSystemsRemoved = await _repository.Database.ConnectedSystems.CountAsync(),
             ConnectedSystemObjectsRemoved = await _repository.Database.ConnectedSystemObjects.CountAsync(),
             MetaverseObjectsRemoved = includeAdministrators ? totalMvoCount : totalMvoCount - adminMvoCount,
+            // Change history is truncated in full in both modes (the preserve-administrators path does not
+            // snapshot it), so these are whole-table counts rather than admin-adjusted ones.
+            MetaverseObjectChangesRemoved = await _repository.Database.MetaverseObjectChanges.CountAsync(),
+            ConnectedSystemObjectChangesRemoved = await _repository.Database.ConnectedSystemObjectChanges.CountAsync(),
             SyncRulesRemoved = await _repository.Database.SyncRules.CountAsync(),
+            ObjectMatchingRulesRemoved = await _repository.Database.ObjectMatchingRules.CountAsync(),
             SchedulesRemoved = await _repository.Database.Schedules.CountAsync(),
+            ScheduleExecutionsRemoved = await _repository.Database.ScheduleExecutions.CountAsync(),
             ActivitiesRemoved = await _repository.Database.Activities.CountAsync(),
             PendingExportsRemoved = await _repository.Database.PendingExports.CountAsync(),
             CustomMetaverseObjectTypesRemoved = await _repository.Database.MetaverseObjectTypes.CountAsync(t => !t.BuiltIn),
@@ -54,6 +60,7 @@ internal sealed class SystemRepository : ISystemRepository
             CustomConnectorDefinitionsRemoved = await _repository.Database.ConnectorDefinitions.CountAsync(c => !c.BuiltIn),
             CustomPredefinedSearchesRemoved = await _repository.Database.PredefinedSearches.CountAsync(s => !s.BuiltIn),
             CustomExampleDataSetsRemoved = await _repository.Database.ExampleDataSets.CountAsync(s => !s.BuiltIn),
+            CustomExampleDataTemplatesRemoved = await _repository.Database.ExampleDataTemplates.CountAsync(t => !t.BuiltIn),
             CustomApiKeysRemoved = await _repository.Database.ApiKeys.CountAsync(k => !k.IsInfrastructureKey),
             TrustedCertificatesRemoved = await _repository.Database.TrustedCertificates.CountAsync(),
             AdministratorsRetained = includeAdministrators ? 0 : adminMvoCount,
@@ -103,14 +110,18 @@ internal sealed class SystemRepository : ISystemRepository
         _repository.Database.ChangeTracker.Clear();
 
         Log.Information(
-            "ResetSystemAsync: Completed. Removed {ConnectedSystems} connected systems, {Csos} CSOs, {Mvos} MVOs ({AdminsRetained} administrators retained, {AdminsRemoved} removed), {SyncRules} sync rules, {Schedules} schedules, {Activities} activities, {PendingExports} pending exports, {CustomTypes} custom MV object types, {CustomAttrs} custom MV attributes, {CustomRoles} custom roles, {CustomConnectors} custom connector definitions, {CustomSearches} custom predefined searches, {CustomDataSets} custom example data sets, {CustomApiKeys} custom API keys, {Certs} trusted certificates",
+            "ResetSystemAsync: Completed. Removed {ConnectedSystems} connected systems, {Csos} CSOs, {Mvos} MVOs ({AdminsRetained} administrators retained, {AdminsRemoved} removed), {MvoChanges} MVO change records, {CsoChanges} CSO change records, {SyncRules} sync rules, {MatchingRules} object matching rules, {Schedules} schedules, {ScheduleExecutions} schedule executions, {Activities} activities, {PendingExports} pending exports, {CustomTypes} custom MV object types, {CustomAttrs} custom MV attributes, {CustomRoles} custom roles, {CustomConnectors} custom connector definitions, {CustomSearches} custom predefined searches, {CustomDataSets} custom example data sets, {CustomDataTemplates} custom example data templates, {CustomApiKeys} custom API keys, {Certs} trusted certificates",
             result.ConnectedSystemsRemoved,
             result.ConnectedSystemObjectsRemoved,
             result.MetaverseObjectsRemoved,
             result.AdministratorsRetained,
             result.AdministratorsRemoved,
+            result.MetaverseObjectChangesRemoved,
+            result.ConnectedSystemObjectChangesRemoved,
             result.SyncRulesRemoved,
+            result.ObjectMatchingRulesRemoved,
             result.SchedulesRemoved,
+            result.ScheduleExecutionsRemoved,
             result.ActivitiesRemoved,
             result.PendingExportsRemoved,
             result.CustomMetaverseObjectTypesRemoved,
@@ -119,6 +130,7 @@ internal sealed class SystemRepository : ISystemRepository
             result.CustomConnectorDefinitionsRemoved,
             result.CustomPredefinedSearchesRemoved,
             result.CustomExampleDataSetsRemoved,
+            result.CustomExampleDataTemplatesRemoved,
             result.CustomApiKeysRemoved,
             result.TrustedCertificatesRemoved);
 

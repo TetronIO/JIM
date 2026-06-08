@@ -2,7 +2,10 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Enums;
+using JIM.Models.ExampleData;
 using JIM.Models.Logic;
+using JIM.Models.Scheduling;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.PostgresData;
@@ -185,5 +188,80 @@ public class SystemResetDatabaseTests
         Assert.That(await verify.MetaverseObjects.AnyAsync(), Is.False, "All MVOs including administrators must be removed.");
         Assert.That(await verify.Roles.AnyAsync(r => r.BuiltIn), Is.True, "Built-in roles must still be preserved.");
         Assert.That(await verify.ServiceSettings.AnyAsync(), Is.True);
+    }
+
+    /// <summary>
+    /// Verifies the counts added to close the reporting completeness gap: object matching rules,
+    /// schedule executions, change history (metaverse + connected-system object changes), and custom
+    /// example data templates. Built-in example data templates must be preserved (only the custom one counted).
+    /// </summary>
+    [Test]
+    public async Task ResetSystemAsync_CapturesNewlyCountedObjectTypesAsync()
+    {
+        await using (var ctx = NewContext())
+        {
+            var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
+            var connectedSystem = new ConnectedSystem { Name = "Test System", ConnectorDefinition = connectorDefinition };
+            var userType = new MetaverseObjectType { Name = Constants.BuiltInObjectTypes.User, PluralName = "Users", BuiltIn = true };
+            var mvo = new MetaverseObject { Type = userType, Roles = new List<Role>() };
+            var schedule = new Schedule { Name = "Nightly" };
+
+            ctx.ConnectorDefinitions.Add(connectorDefinition);
+            ctx.ConnectedSystems.Add(connectedSystem);
+            ctx.MetaverseObjectTypes.Add(userType);
+            ctx.MetaverseObjects.Add(mvo);
+            ctx.Schedules.Add(schedule);
+            ctx.ObjectMatchingRules.Add(new ObjectMatchingRule { Order = 1 });
+            ctx.ExampleDataTemplates.Add(new ExampleDataTemplate { Name = "Custom Template", BuiltIn = false });
+            ctx.ExampleDataTemplates.Add(new ExampleDataTemplate { Name = "Built-in Template", BuiltIn = true });
+
+            // Save the parents first so the connected system has a generated id for the CSO change FK.
+            await ctx.SaveChangesAsync();
+
+            ctx.MetaverseObjectChanges.Add(new MetaverseObjectChange
+            {
+                MetaverseObject = mvo,
+                ChangeTime = DateTime.UtcNow,
+                ChangeType = ObjectChangeType.Created,
+                ChangeInitiatorType = MetaverseObjectChangeInitiatorType.System
+            });
+            ctx.ConnectedSystemObjectChanges.Add(new ConnectedSystemObjectChange
+            {
+                ConnectedSystemId = connectedSystem.Id,
+                ChangeTime = DateTime.UtcNow,
+                ChangeType = ObjectChangeType.Added
+            });
+            ctx.ScheduleExecutions.Add(new ScheduleExecution
+            {
+                Schedule = schedule,
+                ScheduleName = schedule.Name,
+                Status = ScheduleExecutionStatus.Completed
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            var result = await repository.System.ResetSystemAsync(includeAdministrators: true);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(result.ObjectMatchingRulesRemoved, Is.EqualTo(1));
+                Assert.That(result.ScheduleExecutionsRemoved, Is.EqualTo(1));
+                Assert.That(result.SchedulesRemoved, Is.EqualTo(1));
+                Assert.That(result.MetaverseObjectChangesRemoved, Is.EqualTo(1));
+                Assert.That(result.ConnectedSystemObjectChangesRemoved, Is.EqualTo(1));
+                Assert.That(result.CustomExampleDataTemplatesRemoved, Is.EqualTo(1), "Only the non-built-in template should be counted.");
+            });
+        }
+
+        await using var verify = NewContext();
+        Assert.That(await verify.ObjectMatchingRules.AnyAsync(), Is.False);
+        Assert.That(await verify.ScheduleExecutions.AnyAsync(), Is.False);
+        Assert.That(await verify.MetaverseObjectChanges.AnyAsync(), Is.False);
+        Assert.That(await verify.ConnectedSystemObjectChanges.AnyAsync(), Is.False);
+        Assert.That(await verify.ExampleDataTemplates.AnyAsync(t => !t.BuiltIn), Is.False, "Custom template must be removed.");
+        Assert.That(await verify.ExampleDataTemplates.AnyAsync(t => t.BuiltIn), Is.True, "Built-in template must be preserved.");
     }
 }
