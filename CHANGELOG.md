@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- ✨ Factory reset is now available in the portal: a new Administration danger area (`/admin/system-reset`) with a backup warning, type-to-confirm, and an optional "delete administrators" path.
+- ✨ Factory reset is now available in the portal: a new Administration danger area (`/admin/factory-reset`) with a backup warning, type-to-confirm, and an optional "delete administrators" path.
 
 ### Changed
 

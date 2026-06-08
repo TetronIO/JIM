@@ -1,4 +1,4 @@
-@page "/admin/system-reset"
+@page "/admin/factory-reset"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Models.Activities
 @using Microsoft.AspNetCore.Components.Authorization
@@ -14,23 +14,22 @@
 <MudText Typo="Typo.h4" Color="Color.Error"><MudIcon Icon="@Icons.Material.Filled.RestartAlt" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Factory Reset</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
-    Wipe all customer data and configuration to return JIM to a fresh state.
+    Wipe all data and configuration to return JIM to a fresh state.
 </MudText>
 
-<MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-4">
-    <strong>Take a database backup before continuing.</strong> This operation permanently deletes data and
-    <strong>cannot be undone</strong>. If anything is wrong, a backup is the only way to recover.
-</MudAlert>
-
-<MudPaper Outlined="true" Class="pa-4 mt-6 jim-paper-danger-zone">
+<MudPaper Outlined="true" Class="pa-4 mt-4 jim-paper-danger-zone">
     <MudText Typo="Typo.h6" Color="Color.Error">What a factory reset does</MudText>
+    <MudText Class="mt-2">
+        <strong>Take a database backup before continuing.</strong> This operation permanently deletes data and
+        <strong>cannot be undone</strong>; if anything is wrong, a backup is the only way to recover.
+    </MudText>
     <MudText Class="mt-2">Permanently removes:</MudText>
     <ul class="mt-2 ml-4">
         <li>All Connected Systems and their Connector Space objects</li>
         <li>All Sync Rules, Schedules, Run Profiles and Pending Exports</li>
         <li>All Metaverse Objects and their change history</li>
         <li>All Activities and all custom configuration (object types, attributes, roles, connectors, searches, example data)</li>
-        <li>Customer-created API keys and trusted certificates</li>
+        <li>API keys (except the infrastructure key) and trusted certificates</li>
     </ul>
     <MudText Class="mt-3">Preserves:</MudText>
     <ul class="mt-2 ml-4">
@@ -59,7 +58,7 @@
             <ul class="mt-2 ml-4">
                 <li>the <strong>infrastructure API key</strong> (REST API / PowerShell module), and</li>
                 <li>the <strong>default administrator</strong>, recreated when they next sign in via SSO
-                    (requires an initial administrator to be configured).</li>
+                    (requires the initial administrator to be configured in the .env file).</li>
             </ul>
             If neither is available, you will be locked out of the portal.
         </MudAlert>
@@ -103,7 +102,7 @@
     </TitleContent>
     <DialogContent>
         <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4">
-            This permanently wipes all customer data and configuration and <strong>cannot be undone</strong>.
+            This permanently wipes all data and configuration and <strong>cannot be undone</strong>.
             Make sure you have a database backup.
         </MudAlert>
         <MudText>

@@ -4,14 +4,14 @@
 function Reset-JIMSystem {
     <#
     .SYNOPSIS
-        Wipes all customer data and configuration from JIM.
+        Wipes all data and configuration from JIM.
 
     .DESCRIPTION
         Performs a factory reset against the connected JIM instance, removing all
-        customer-configured Connected Systems, Sync Rules, Schedules, Activities,
+        configured Connected Systems, Sync Rules, Schedules, Activities,
         Pending Exports, Metaverse Objects, custom Metaverse Object Types, custom
         Metaverse Attributes, custom Roles, custom Connector Definitions, custom
-        Predefined Searches, custom Example Data Sets, customer-created API Keys,
+        Predefined Searches, custom Example Data Sets, non-infrastructure API Keys,
         and Trusted Certificates.
 
         By default the Metaverse Objects holding the built-in Administrator role are preserved,
@@ -59,12 +59,12 @@ function Reset-JIMSystem {
     .EXAMPLE
         Reset-JIMSystem
 
-        Prompts for confirmation, then wipes all customer data and configuration, preserving administrators.
+        Prompts for confirmation, then wipes all data and configuration, preserving administrators.
 
     .EXAMPLE
         Reset-JIMSystem -Force
 
-        Wipes all customer data and configuration without prompting, preserving administrators.
+        Wipes all data and configuration without prompting, preserving administrators.
 
     .EXAMPLE
         Reset-JIMSystem -Force -IncludeAdministrators -AcknowledgeAdministratorLockout
@@ -98,9 +98,9 @@ function Reset-JIMSystem {
         $target = $script:JIMConnection.BaseUri ?? 'the connected JIM instance'
 
         $scope = if ($IncludeAdministrators) {
-            "Factory reset: wipe ALL customer data and configuration, INCLUDING administrators"
+            "Factory reset: wipe ALL data and configuration, INCLUDING administrators"
         } else {
-            "Factory reset: wipe ALL customer data and configuration (administrators preserved)"
+            "Factory reset: wipe ALL data and configuration (administrators preserved)"
         }
 
         if ($Force -or $PSCmdlet.ShouldProcess($target, $scope)) {

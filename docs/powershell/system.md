@@ -208,7 +208,7 @@ if ($user.isAdministrator) {
 
 ## Reset-JIMSystem
 
-Performs a factory reset against the connected JIM instance, wiping all customer-configured data and configuration while preserving the schema, seeded built-ins, and infrastructure access. By default the administrator users are preserved so you are not locked out of the portal. This operation is destructive and cannot be undone; take a database backup first.
+Performs a factory reset against the connected JIM instance, wiping all data and configuration while preserving the schema, seeded built-ins, and infrastructure access. By default the administrator users are preserved so you are not locked out of the portal. This operation is destructive and cannot be undone; take a database backup first.
 
 ### Syntax
 
@@ -248,7 +248,7 @@ $result = Reset-JIMSystem -Force
 ### Notes
 
 - Requires an active connection via [Connect-JIM](connection.md#connect-jim) and the **Administrator** role.
-- **Removed:** all Connected Systems, Sync Rules, Schedules, Activities, Pending Exports, Metaverse Objects (and their change history), and all custom (`BuiltIn = false`) Metaverse Object Types, Attributes, Roles, Connector Definitions, Predefined Searches, and Example Data Sets, plus customer-created API Keys and Trusted Certificates.
+- **Removed:** all Connected Systems, Sync Rules, Schedules, Activities, Pending Exports, Metaverse Objects (and their change history), and all custom (`BuiltIn = false`) Metaverse Object Types, Attributes, Roles, Connector Definitions, Predefined Searches, and Example Data Sets, plus non-infrastructure API Keys and Trusted Certificates.
 - **Preserved:** the database schema and EF Core migration history, all built-in Metaverse Attributes, Object Types, Roles, Connector Definitions, Example Data Sets, and Predefined Searches, the singleton Service Settings record, infrastructure API keys (`IsInfrastructureKey = true`), and (unless `-IncludeAdministrators` is supplied) the Metaverse Objects holding the Administrator role.
 - A **Reset activity** recording who initiated the wipe is always created, and **every signed-in portal session is invalidated**; users (including administrators) must sign in again. API keys are unaffected.
 - With `-IncludeAdministrators` and no initial administrator configured (`JIM_SSO_INITIAL_ADMIN`), the reset is refused (HTTP 409) unless `-AcknowledgeAdministratorLockout` is also supplied, because the portal would otherwise be inaccessible afterwards.

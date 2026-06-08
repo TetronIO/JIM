@@ -32,7 +32,7 @@ public class SystemController(ILogger<SystemController> logger, JimApplication a
     /// Factory reset
     /// </summary>
     /// <remarks>
-    /// Wipes all customer data and configuration from the database, preserving the schema,
+    /// Wipes all data and configuration from the database, preserving the schema,
     /// EF Core migration history, and the rows seeded at first launch (built-in metaverse
     /// attributes and object types, built-in roles, built-in connector definitions,
     /// built-in example data sets and templates, built-in predefined searches, the
