@@ -55,6 +55,14 @@ No glazing. Do not call an idea "great", "brilliant", or "smart" without concret
 
 If the answer is "no" or "this will not work", say so in the first sentence. The more certain I sound, the more I need pushback.
 
+**Response style:** Optimise for my reading time. I care about outputs, not your reasoning.
+
+- Lead with the result: is it done, does it work, what is the verdict. First sentence, every time.
+- Cut the thought process, the options you did not take, and anything restating what I already know. Do not narrate how you got there; give me the outcome.
+- Be brief. If a point does not change what I think or do, drop it. Prefer a tight paragraph or a few bullets over a wall of text.
+- If you need anything from me, collect it into an **`Over to you:`** bullet list at the very end of the response; never bury an ask mid-text. If you need nothing, do not add the section.
+- For any non-trivial response, open with a one-line summary I can read in isolation: did it work, do I need to act.
+
 ## Synchronisation Integrity
 
 **SYNCHRONISATION INTEGRITY IS PARAMOUNT.** Sync operations are the core of JIM; customers depend on it not corrupting their data.
