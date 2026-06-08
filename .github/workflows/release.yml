@@ -515,7 +515,7 @@ jobs:
   #
   # Auth: the cross-repo dispatch cannot use the default GITHUB_TOKEN (scoped to
   # this repo only). We mint a short-lived installation token for the
-  # jim-automation GitHub App, whose credentials are stored in the APT_PIN_BOT_*
+  # jim-automation GitHub App, whose credentials are stored in the JIM_AUTOMATION_*
   # secrets (shared automation account; also installed on TetronIO/junctional.io
   # with Contents: write). The token is scoped to junctional.io alone.
   notify-site:
@@ -533,8 +533,8 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
         with:
-          app-id: ${{ secrets.APT_PIN_BOT_APP_ID }}
-          private-key: ${{ secrets.APT_PIN_BOT_PRIVATE_KEY }}
+          app-id: ${{ secrets.JIM_AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.JIM_AUTOMATION_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: junctional.io
 
