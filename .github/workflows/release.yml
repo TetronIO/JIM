@@ -502,3 +502,49 @@ jobs:
             ./docker-compose.yml \
             ./docker-compose.production.yml \
             ./.env.example
+
+  # Job 6: Notify the junctional.io marketing site to rebuild.
+  # The site fetches the current JIM version from GitHub at build time, so a
+  # rebuild is needed after each release for the displayed version to update.
+  # We send a repository_dispatch event; junctional.io's deploy workflow listens
+  # for type 'jim-release' on its default branch.
+  #
+  # Gated to stable releases only (same `!contains(github.ref, '-')` condition the
+  # Docker `latest` tag uses) so a prerelease tag does not push an alpha version
+  # onto the public site.
+  #
+  # Auth: the cross-repo dispatch cannot use the default GITHUB_TOKEN (scoped to
+  # this repo only). We mint a short-lived installation token for the
+  # jim-automation GitHub App, whose credentials are stored in the APT_PIN_BOT_*
+  # secrets (shared automation account; also installed on TetronIO/junctional.io
+  # with Contents: write). The token is scoped to junctional.io alone.
+  notify-site:
+    name: Notify junctional.io
+    runs-on: ubuntu-latest
+    needs: create-release
+    if: ${{ !contains(github.ref, '-') }}
+
+    # This job authenticates with the app installation token, not GITHUB_TOKEN.
+    permissions:
+      contents: read
+
+    steps:
+      - name: Mint junctional.io-scoped token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          app-id: ${{ secrets.APT_PIN_BOT_APP_ID }}
+          private-key: ${{ secrets.APT_PIN_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: junctional.io
+
+      # Non-fatal: the release itself has already published by this point, so a
+      # transient dispatch failure must not mark the release run as failed. The
+      # step still surfaces a red annotation if it fails.
+      - name: Dispatch rebuild to junctional.io
+        continue-on-error: true
+        uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0  # v3.0.0
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          repository: ${{ github.repository_owner }}/junctional.io
+          event-type: jim-release
