@@ -108,7 +108,7 @@ public class SystemServer
         {
             TargetType = ActivityTargetType.System,
             TargetOperationType = ActivityTargetOperationType.Reset,
-            TargetName = "System factory reset",
+            TargetName = "Factory reset",
             Message = includeAdministrators
                 ? $"Factory reset completed (administrators removed). Removed {result.ConnectedSystemsRemoved} connected systems and {result.MetaverseObjectsRemoved} metaverse objects."
                 : $"Factory reset completed (administrators retained: {result.AdministratorsRetained}). Removed {result.ConnectedSystemsRemoved} connected systems and {result.MetaverseObjectsRemoved} metaverse objects."
