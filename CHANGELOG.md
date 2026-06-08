@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- 🐛 Deleting a Connected System no longer fails with a database error (`column ... does not exist`); the bulk-deletion SQL referenced sync-rule-mapping columns that were removed in an earlier schema change.
+- 🐛 Deleting a Connected System no longer fails with a database error. The bulk-deletion SQL referenced sync-rule-mapping columns removed in an earlier schema change (`column ... does not exist`), and did not remove the system's object matching rules before the sync rules and object types they reference (foreign key violation). Both are fixed, and the deletion is covered by new database-backed tests.
 
 ### Security
 

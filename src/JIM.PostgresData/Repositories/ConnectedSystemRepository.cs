@@ -4482,6 +4482,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
               WHERE ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
             connectedSystemId);
 
+        // 9b. Delete Object Matching Rules for this system before the Sync Rules and Object Types they
+        //     reference (those foreign keys do not cascade). Their Sources and source parameter values
+        //     are removed automatically via ON DELETE CASCADE. An OMR belongs to this system when it is
+        //     scoped to one of its object types or one of its sync rules.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ObjectMatchingRules""
+              WHERE ""ConnectedSystemObjectTypeId"" IN (SELECT ""Id"" FROM ""ConnectedSystemObjectTypes"" WHERE ""ConnectedSystemId"" = {0})
+                 OR ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
+            connectedSystemId);
+
         // 10. Delete Sync Rules
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0}",

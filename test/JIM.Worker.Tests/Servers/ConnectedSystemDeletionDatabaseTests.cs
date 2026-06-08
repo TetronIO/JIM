@@ -138,4 +138,62 @@ public class ConnectedSystemDeletionDatabaseTests
         Assert.That(await verify.SyncRuleMappings.AnyAsync(), Is.False, "Sync rule mappings should be removed.");
         Assert.That(await verify.SyncRuleMappingSources.AnyAsync(), Is.False, "Sync rule mapping sources should be removed.");
     }
+
+    [Test]
+    public async Task DeleteConnectedSystemAsync_WithObjectMatchingRule_RemovesTheWholeGraphAsync()
+    {
+        int systemId;
+        await using (var seed = NewContext())
+        {
+            var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
+            var system = new ConnectedSystem { Name = "Matched System", ConnectorDefinition = connectorDefinition };
+            var csType = new ConnectedSystemObjectType { Name = "USER", ConnectedSystem = system };
+            var mvType = new JIM.Models.Core.MetaverseObjectType { Name = "User", PluralName = "Users", BuiltIn = true };
+
+            var rule = new SyncRule
+            {
+                Name = "Import Rule",
+                ConnectedSystem = system,
+                ConnectedSystemObjectType = csType,
+                MetaverseObjectType = mvType,
+                Direction = SyncRuleDirection.Import,
+                Enabled = true
+            };
+
+            // An object matching rule referencing both the system's object type and its sync rule, with a
+            // source and a source parameter value (the OMR source graph cascades from the rule).
+            var omr = new ObjectMatchingRule
+            {
+                Order = 0,
+                ConnectedSystemObjectType = csType,
+                SyncRule = rule,
+                MetaverseObjectType = mvType
+            };
+            var omrSource = new ObjectMatchingRuleSource { Order = 0, Expression = "\"literal\"" };
+            omrSource.ParameterValues.Add(new ObjectMatchingRuleSourceParamValue { Name = "p" });
+            omr.Sources.Add(omrSource);
+
+            seed.ConnectorDefinitions.Add(connectorDefinition);
+            seed.ConnectedSystems.Add(system);
+            seed.ConnectedSystemObjectTypes.Add(csType);
+            seed.MetaverseObjectTypes.Add(mvType);
+            seed.SyncRules.Add(rule);
+            seed.ObjectMatchingRules.Add(omr);
+            await seed.SaveChangesAsync();
+            systemId = system.Id;
+        }
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            await repository.ConnectedSystems.DeleteConnectedSystemAsync(systemId, deleteChangeHistory: true);
+        }
+
+        await using var verify = NewContext();
+        Assert.That(await verify.ConnectedSystems.AnyAsync(), Is.False, "Connected system should be removed.");
+        Assert.That(await verify.SyncRules.AnyAsync(), Is.False, "Sync rules should be removed.");
+        Assert.That(await verify.ObjectMatchingRules.AnyAsync(), Is.False, "Object matching rules should be removed.");
+        Assert.That(await verify.ObjectMatchingRuleSources.AnyAsync(), Is.False, "Object matching rule sources should be removed.");
+        Assert.That(await verify.ObjectMatchingRuleSourceParamValues.AnyAsync(), Is.False, "Object matching rule source parameter values should be removed.");
+    }
 }
