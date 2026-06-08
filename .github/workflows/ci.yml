@@ -93,41 +93,54 @@ jobs:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
     # Pull the base image into the local Docker daemon so Trivy can read it via
-    # source="docker". Without this step, Trivy on GitHub-hosted runners was
-    # exiting 1 after the "Detecting vulnerabilities" log line with no findings
-    # written to the SARIF file (phantom failure). Running the same Trivy version
-    # with the same env vars locally against a digest-pinned image always returned
-    # exit 0 with zero findings, confirming the root cause was image acquisition,
-    # not vulnerability detection. See PR #520 discussion.
+    # --image-src docker. Without this step, network image acquisition was a
+    # source of phantom failures (Trivy exiting 1 after "Detecting
+    # vulnerabilities" with no SARIF written). A digest-pinned local image always
+    # scans cleanly. See PR #520 discussion.
     - name: Pull base image
       run: docker pull ${{ matrix.image_ref }}
 
     - name: Scan base image for vulnerabilities
       id: trivy
-      # Scan with no severity filter: trivy-action's severity filter was
-      # observed to drop findings correctly locally but not in CI (LOW-severity
-      # CVEs leaked through despite severity=CRITICAL,HIGH). We instead let
-      # Trivy emit every finding into the SARIF and apply our own CVSS-based
-      # filter in the next step, which is both more reliable and more honest
-      # (uses the same CVSS score GitHub Code Scanning uses to classify alerts).
-      # We DO keep ignore-unfixed: there's no value in blocking on CVEs that
-      # have no upstream fix available.
+      # Run Trivy from its pinned container image rather than via
+      # aquasecurity/trivy-action + setup-trivy. The action path re-downloaded
+      # the Trivy binary from the GitHub releases API on every run, which failed
+      # intermittently on GitHub-hosted runners ("unable to find 'vX.Y.Z'"), and
+      # the action wrapper independently exited 1 without writing a SARIF
+      # (phantom failure). Both flakes blocked unrelated PRs at random. Calling
+      # the pinned binary directly removes the release-API lookup entirely and
+      # lets us own the exit code. See PR #520 and #800.
+      #
+      # github.token authenticates the vuln-DB pull from ghcr.io, avoiding the
+      # anonymous rate limit (the one external dependency left on the hot path).
+      #
+      # No severity filter on the scan: we emit every finding to the SARIF and
+      # apply our own CVSS-based gate in the next step (more reliable than the
+      # action's filter, and uses the same score GitHub Code Scanning shows).
+      # ignore-unfixed stays on: no value blocking on CVEs with no upstream fix.
+      #
+      # image_ref is passed via env, not interpolated into the run script, to
+      # avoid GitHub Actions expression-injection (flagged by CodeQL actions).
       env:
-        TRIVY_IGNORE_UNFIXED: 'true'
-      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # 0.36.0
-      with:
-        image-ref: ${{ matrix.image_ref }}
-        format: 'sarif'
-        output: 'trivy-results.sarif'
-        # Do not rely on trivy-action's exit-code mechanism: it was observed to
-        # exit 1 without producing findings in the SARIF file. We evaluate
-        # findings explicitly in the next step.
-        exit-code: '0'
-        cache: 'false'
-        # Repo-root .trivyignore suppresses CVEs that are false positives or
-        # already mitigated at the application layer. Every suppression MUST
-        # include a justification and review date in the file itself.
-        trivyignores: '.trivyignore'
+        # aquasec/trivy:0.70.0 pinned by digest (supply-chain governance).
+        TRIVY_IMAGE: 'aquasec/trivy:0.70.0@sha256:be1190afcb28352bfddc4ddeb71470835d16462af68d310f9f4bca710961a41e'
+        IMAGE_REF: ${{ matrix.image_ref }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        docker run --rm \
+          -v /var/run/docker.sock:/var/run/docker.sock \
+          -v "$GITHUB_WORKSPACE:/workspace" \
+          -w /workspace \
+          -e GITHUB_TOKEN \
+          -e TRIVY_IGNORE_UNFIXED=true \
+          "$TRIVY_IMAGE" image \
+          --scanners vuln \
+          --format sarif \
+          --output trivy-results.sarif \
+          --ignorefile .trivyignore \
+          --image-src docker \
+          --exit-code 0 \
+          "$IMAGE_REF"
 
     - name: Fail build on fixable HIGH/CRITICAL Trivy findings
       shell: pwsh
@@ -200,7 +213,7 @@ jobs:
 
     - name: Upload Trivy scan results to GitHub code scanning
       if: always() && hashFiles('trivy-results.sarif') != ''
-      uses: github/codeql-action/upload-sarif@03e4368ac7daa2bd82b3e85262f3bf87ee112f57  # v3.36.0
+      uses: github/codeql-action/upload-sarif@dd903d2e4f5405488e5ef1422510ee31c8b32357  # v3.36.2
       with:
         sarif_file: trivy-results.sarif
         # Category is keyed by image repository (stable), not Dockerfile line

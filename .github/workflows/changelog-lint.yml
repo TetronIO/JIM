@@ -1,23 +1,26 @@
 name: changelog-lint
 
 # Mechanical backstop for the changelog quality rules in engineering/CLAUDE.md.
-# Runs on PRs that touch CHANGELOG.md and hard-fails when an entry in the
-# [Unreleased] section does not lead with a canonical emoji (the tell for a
-# non-customer-facing entry). Verbose/internal-looking entries are surfaced as
-# warnings for the author to confirm or remove.
+# Hard-fails when an entry in the [Unreleased] section does not lead with a
+# canonical emoji (the tell for a non-customer-facing entry); verbose/internal-
+# looking entries are surfaced as warnings for the author to confirm or remove.
+#
+# Runs on every PR (no path filter) so it always reports a status and can safely
+# be a required check: a path-filtered required check never reports on PRs that
+# do not match, which blocks the merge indefinitely. Linting an empty or clean
+# [Unreleased] is cheap and passes.
 
 on:
   pull_request:
-    paths:
-      - 'CHANGELOG.md'
-      - 'scripts/Lint-Changelog.ps1'
-      - '.github/workflows/changelog-lint.yml'
 
 permissions:
   contents: read
 
 jobs:
   lint:
+    # Explicit job name so the required-check context is the stable, descriptive
+    # "changelog-lint" rather than the bare job id "lint".
+    name: changelog-lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1

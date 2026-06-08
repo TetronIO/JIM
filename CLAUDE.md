@@ -55,6 +55,14 @@ No glazing. Do not call an idea "great", "brilliant", or "smart" without concret
 
 If the answer is "no" or "this will not work", say so in the first sentence. The more certain I sound, the more I need pushback.
 
+**Response style:** Optimise for my reading time. I care about outputs, not your reasoning.
+
+- Lead with the result: is it done, does it work, what is the verdict. First sentence, every time.
+- Cut the thought process, the options you did not take, and anything restating what I already know. Do not narrate how you got there; give me the outcome.
+- Be brief. If a point does not change what I think or do, drop it. Prefer a tight paragraph or a few bullets over a wall of text.
+- If you need anything from me, collect it into an **`Over to you:`** bullet list at the very end of the response; never bury an ask mid-text. If you need nothing, do not add the section.
+- For any non-trivial response, open with a one-line summary I can read in isolation: did it work, do I need to act.
+
 ## Synchronisation Integrity
 
 **SYNCHRONISATION INTEGRITY IS PARAMOUNT.** Sync operations are the core of JIM; customers depend on it not corrupting their data.
@@ -167,7 +175,7 @@ For new features or significant changes:
 
 ### Merging via gh CLI
 
-`main` is protected by a ruleset that requires seven status checks to pass before a merge is allowed: `build-and-test`, `discover-base-images`, `scan-base-images-summary`, the three CodeQL analyses (`Analyze (actions)`, `Analyze (csharp)`, `Analyze (javascript-typescript)`), and `claude-review`. Strict mode is on, so the PR must be up to date with `main`. Zero approvals are required, but unresolved review threads block the merge.
+`main` is protected by a ruleset that requires eight status checks to pass before a merge is allowed: `build-and-test`, `discover-base-images`, `scan-base-images-summary`, the three CodeQL analyses (`Analyze (actions)`, `Analyze (csharp)`, `Analyze (javascript-typescript)`), `claude-review`, and `changelog-lint`. Strict mode is on, so the PR must be up to date with `main`. Zero approvals are required, but unresolved review threads block the merge.
 
 - Default merge command: `gh pr merge <n> --squash --delete-branch --auto`. The `--auto` flag queues the merge so it lands the moment all required checks go green.
 - An immediate `gh pr merge` failure right after `gh pr create` is **expected**, not a blocker. The checks haven't started yet. Don't escalate it; just use `--auto`.
