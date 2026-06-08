@@ -451,10 +451,15 @@ db.local.yml
 *.exe
 env
 
-# Claude Code configuration (ignore all except commands and skills)
-.claude/*
+# Claude Code configuration: ignore local state, keep tracked commands and skills.
+# Re-include the directories AND their contents (the `/**` lines), otherwise git's
+# working-tree operations (add, rebase) mishandle the tracked files under a parent
+# that the glob excluded.
+.claude/**
 !.claude/commands/
+!.claude/commands/**
 !.claude/skills/
+!.claude/skills/**
 
 # Integration test artifacts
 test/integration/results/
