@@ -279,7 +279,7 @@ function Reset-JIMForCascadeTest {
     # API key). Each cascade sub-test starts from this clean slate so the MVO graph
     # carries zero residual state from earlier tests.
     Write-Host "  Running Reset-JIMSystem..." -ForegroundColor Gray
-    $resetResult = Reset-JIMSystem -Force
+    $resetResult = Reset-JIMSystem -Force -IncludeAdministrators -AcknowledgeAdministratorLockout
     Write-Host ("  OK Reset complete (removed {0} connected systems, {1} MVOs, {2} sync rules)" -f `
         $resetResult.connectedSystemsRemoved, `
         $resetResult.metaverseObjectsRemoved, `

@@ -132,7 +132,31 @@
     </MudItem>
 </MudGrid>
 
+@* ─── Danger Zone (hidden by default; click the link to reveal destructive actions) ─── *@
+<MudDivider Class="mt-8 mb-4" />
+<div class="d-flex align-center cursor-pointer" style="width: fit-content;" @onclick="@(() => _dangerZoneExpanded = !_dangerZoneExpanded)">
+    <MudIcon Icon="@Icons.Material.Filled.WarningAmber" Color="Color.Error" Size="Size.Small" Class="me-2" />
+    <MudText Typo="Typo.body2" Color="Color.Error" Style="font-weight: 500;">Danger Zone</MudText>
+    <MudIcon Icon="@Icons.Material.Filled.ExpandMore" Color="Color.Error" Size="Size.Small" Class="ms-1"
+             Style="@($"transition: transform .25s ease; transform: rotate({(_dangerZoneExpanded ? "180" : "0")}deg);")" />
+</div>
+<MudCollapse Expanded="_dangerZoneExpanded">
+    <MudGrid Class="mt-3" Spacing="4">
+        <MudItem xs="12" sm="6" md="4">
+            <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/factory-reset"))">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                    <MudIcon Icon="@Icons.Material.Filled.RestartAlt" Color="Color.Error" />
+                    <MudText Typo="Typo.body1" Style="font-weight: 500;">Factory Reset</MudText>
+                </MudStack>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Wipe all data and configuration to start fresh</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudCollapse>
+
 @code {
+    private bool _dangerZoneExpanded;
+
     private readonly List<BreadcrumbItem> _breadcrumbs = new()
     {
         new("Home", href: "/", icon: Icons.Material.Filled.Home),

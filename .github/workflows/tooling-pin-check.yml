@@ -15,15 +15,15 @@
 # signed-commit PR opener, also used by apt-pin-check).
 #
 # Identity / token choice is identical to apt-pin-check: the PR is opened by the
-# APT_PIN_BOT GitHub App, not the default GITHUB_TOKEN. Two reasons:
+# jim-automation GitHub App, not the default GITHUB_TOKEN. Two reasons:
 #   1. `main` requires signed commits; commits created via the GitHub API (the
 #      GraphQL createCommitOnBranch mutation in open-pin-pr.ps1) are signed by
 #      GitHub, and an App installation token authorises them.
 #   2. A PR opened with GITHUB_TOKEN does NOT trigger the required-check
 #      workflows, so it could never satisfy branch protection. App-authored
 #      events DO trigger them, so the bump PR runs CI and can merge.
-# The App's credentials are reused from apt-pin-check (APT_PIN_BOT_APP_ID /
-# APT_PIN_BOT_PRIVATE_KEY); the App is already scoped to Contents and Pull
+# The App's credentials are reused from apt-pin-check (JIM_AUTOMATION_APP_ID /
+# JIM_AUTOMATION_PRIVATE_KEY); the App is already scoped to Contents and Pull
 # requests (read/write) on this repository, which is all this workflow needs.
 
 name: tooling-pin-check
@@ -64,8 +64,8 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
         with:
-          app-id: ${{ secrets.APT_PIN_BOT_APP_ID }}
-          private-key: ${{ secrets.APT_PIN_BOT_PRIVATE_KEY }}
+          app-id: ${{ secrets.JIM_AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.JIM_AUTOMATION_PRIVATE_KEY }}
 
       - name: Open or update bump PR
         if: steps.check.outputs.has_updates == 'true'

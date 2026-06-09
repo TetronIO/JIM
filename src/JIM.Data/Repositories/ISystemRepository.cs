@@ -22,5 +22,10 @@ public interface ISystemRepository
     /// Callers must enforce their own pre-conditions (no sync activity in progress, authorisation).
     /// This method does not check; it just wipes.
     /// </remarks>
-    public Task<SystemResetResult> ResetSystemAsync();
+    /// <param name="includeAdministrators">
+    /// When <c>false</c> (the default behaviour), Metaverse Objects holding the built-in Administrator
+    /// role are preserved so the operator is not locked out of the portal. When <c>true</c>, those
+    /// administrator identities are removed as well, leaving a true brand-new install.
+    /// </param>
+    public Task<SystemResetResult> ResetSystemAsync(bool includeAdministrators);
 }
