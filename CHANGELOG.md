@@ -16,10 +16,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🔄 JIM now requests the `offline_access` scope during interactive authentication so the identity provider issues a refresh token. This enables reliable in-session token renewal and the new PowerShell token persistence. Existing SSO deployments should ensure `offline_access` is permitted on the interactive/public client; see the updated SSO setup guide.
 - 🔄 Factory reset now **preserves administrator users by default** (so you are not locked out) and always records a Reset activity attributed to whoever initiated it. The previous behaviour of also removing administrators is available via the new `-IncludeAdministrators` switch on `Reset-JIMSystem` (and `includeAdministrators` on `POST /api/v1/system/reset`), guarded against lockout when no initial administrator is configured.
+- 🔄 The reconnection overlay now shows live attempt progress (for example, "Attempt 2 of 5...") while JIM re-establishes a dropped connection.
+
+### Fixed
+
+- 🐛 Deleting a Connected System no longer fails with a database error. The bulk-deletion SQL referenced sync-rule-mapping columns removed in an earlier schema change (`column ... does not exist`), and did not remove the system's object matching rules before the sync rules and object types they reference (foreign key violation). Both are fixed, and the deletion is covered by new database-backed tests.
+- 🐛 Deleting a Connected System that has been synchronised no longer fails with a foreign-key database error, and the deletion is now atomic: it either completes fully or rolls back, rather than leaving the system behind with its objects already removed. Run profiles, partitions, activities, metaverse change history, and metaverse attribute values contributed by the system are now removed or detached in the correct order. Metaverse attribute values contributed by the deleted system are retained with their contributor link cleared (attribute recall remains a synchronisation-time behaviour).
 
 ### Security
 
 - 🔒 A factory reset now invalidates every existing portal sign-in session, so no stale access or privileges survive the wipe; users must re-authenticate. API key access is unaffected.
+- 🔒 The REST API now rejects request bodies containing duplicate JSON property names, removing an ambiguous-parsing and request-smuggling vector.
 
 ## [0.11.0] - 2026-06-06
 
