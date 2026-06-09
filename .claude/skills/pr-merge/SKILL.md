@@ -1,6 +1,6 @@
 ---
 name: pr-merge
-description: Take a feature branch through to a clean squash-merge — rebase on origin/main, build/test, open PR, resolve code-quality bot feedback, queue auto-merge, then clean up local + remote refs.
+description: Take a feature branch through to a clean squash-merge — merge origin/main, build/test, open PR, resolve code-quality bot feedback, queue auto-merge, then clean up local + remote refs.
 argument-hint: "[optional PR title — under 70 chars; if omitted, derive one from the commit log]"
 ---
 
@@ -42,6 +42,8 @@ If `$ARGUMENTS` is non-empty, treat it as the proposed PR title (still under 70 
 
 This is the step previously missed. Strict mode means it has to happen *before* the PR exists, otherwise the PR is born BEHIND and `--auto` is blocked.
 
+**Merge, don't rebase.** Because the PR lands as a squash, the feature branch's pre-merge history is discarded on merge. Rebasing therefore buys linear history that is immediately thrown away, while costing per-commit conflict resolution (the same conflict re-surfaces once per replayed commit) and a force-push (which the harness gates). A merge resolves each conflict once, needs only a plain `git push`, and satisfies strict-mode "up to date" identically; it is exactly what GitHub's own "Update branch" button does. See CLAUDE.md → "Bringing a feature branch up to date with `main`".
+
 1. **Update local `main`:**
    ```
    git checkout main
@@ -54,17 +56,18 @@ This is the step previously missed. Strict mode means it has to happen *before* 
    git log --oneline HEAD..origin/main
    ```
    - If empty, the branch is already current — skip to the build/test step.
-   - If non-empty, rebase onto `origin/main`:
+   - If non-empty, merge `origin/main` into the branch:
      ```
-     git rebase origin/main
+     git merge origin/main
      ```
-   - **If the rebase produces conflicts**, stop and surface them to the user. Do NOT auto-resolve; the user has to decide.
-   - After a successful rebase, force-push with lease:
+   - `CHANGELOG.md` carries a `merge=union` driver (`.gitattributes`), so concurrent `[Unreleased]` entries combine automatically rather than conflicting. After the merge, eyeball the `[Unreleased]` section for duplicated `###` headers or bullets and tidy if needed.
+   - **If the merge produces other (non-CHANGELOG) conflicts**, stop and surface them to the user. Do NOT auto-resolve; the user has to decide.
+   - Push normally (no force needed):
      ```
-     git push --force-with-lease
+     git push
      ```
 
-   Fallback: if for some reason the rebase route is unavailable (e.g. user has explicitly asked not to rewrite history), create the PR first and then `gh pr update-branch <n>` immediately. This produces a merge commit on the feature branch, but the squash-merge collapses it away.
+   Opt-in rebase: only if the user explicitly wants linear pre-squash history. Then `git rebase origin/main` followed by `git push --force-with-lease`. Note the merge backend can report a misleading "local changes would be overwritten" on a clean tree; `git -c rebase.backend=apply rebase origin/main` gets past it.
 
 ## Build and test
 

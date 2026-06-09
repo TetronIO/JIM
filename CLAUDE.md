@@ -173,6 +173,18 @@ For new features or significant changes:
 - Before filing a new GitHub issue, ALWAYS search existing open and closed issues for duplicates: `gh issue list --state all --search "<keywords>"`. Surface any close matches to the user before creating a new one.
 - Dependabot does not auto-rebase PRs when they fall behind `main`. After merging any PR in a batch, comment `@dependabot rebase` on each remaining open Dependabot PR via `gh pr comment <num> --body '@dependabot rebase'`.
 
+### Bringing a feature branch up to date with `main`
+
+**Merge, don't rebase.** `main` squash-merges, so a feature branch's pre-merge history is discarded on landing. Rebasing therefore buys linear history that is immediately thrown away, while costing per-commit conflict resolution (the same conflict re-surfaces once per replayed commit) and a force-push (which the harness gates). A merge resolves each conflict once, needs only a plain `git push`, and satisfies the strict-mode "up to date" check identically; it is exactly what GitHub's own "Update branch" button does.
+
+```bash
+git fetch origin --prune
+git merge origin/main      # then git push (no force needed)
+```
+
+- `CHANGELOG.md` carries a `merge=union` driver (`.gitattributes`), so concurrent `[Unreleased]` entries combine automatically rather than conflicting. After merging, eyeball that section for duplicated `###` headers or bullets and tidy if needed.
+- Only rebase when the user explicitly wants linear pre-squash history. If you do, and the merge backend reports a misleading "local changes would be overwritten" on a clean tree, `git -c rebase.backend=apply rebase origin/main` gets past it.
+
 ### Merging via gh CLI
 
 `main` is protected by a ruleset that requires eight status checks to pass before a merge is allowed: `build-and-test`, `discover-base-images`, `scan-base-images-summary`, the three CodeQL analyses (`Analyze (actions)`, `Analyze (csharp)`, `Analyze (javascript-typescript)`), `claude-review`, and `changelog-lint`. Strict mode is on, so the PR must be up to date with `main`. Zero approvals are required, but unresolved review threads block the merge.

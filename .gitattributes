@@ -24,6 +24,11 @@
 *.css text eol=lf
 *.md text eol=lf
 
+# CHANGELOG: union-merge concurrent [Unreleased] entries so parallel branches and
+# releases combine automatically instead of conflicting on every merge/rebase.
+# Caveat: may leave duplicate section headers or bullets; tidy at release time.
+CHANGELOG.md merge=union
+
 # Binary files
 *.png binary
 *.jpg binary

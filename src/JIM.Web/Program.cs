@@ -347,12 +347,10 @@ try
     builder.Services.AddRazorPages();
     builder.Services.AddServerSideBlazor();
 
-    // Add API controller support with JSON serialization configured to use string enums
+    // Add API controller support with JSON serialisation policy centralised in
+    // ApiJsonConfiguration (see that class for the rationale and for unit tests).
     builder.Services.AddControllers()
-        .AddJsonOptions(options =>
-        {
-            options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
-        });
+        .AddJsonOptions(options => JIM.Web.ApiJsonConfiguration.Configure(options.JsonSerializerOptions));
     builder.Services.AddEndpointsApiExplorer();
 
     // Increase MaxDepth for the HTTP JSON options used by the OpenAPI schema generator.
