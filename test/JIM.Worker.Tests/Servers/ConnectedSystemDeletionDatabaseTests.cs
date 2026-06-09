@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities;
+using JIM.Models.Core;
+using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.PostgresData;
@@ -195,5 +198,252 @@ public class ConnectedSystemDeletionDatabaseTests
         Assert.That(await verify.ObjectMatchingRules.AnyAsync(), Is.False, "Object matching rules should be removed.");
         Assert.That(await verify.ObjectMatchingRuleSources.AnyAsync(), Is.False, "Object matching rule sources should be removed.");
         Assert.That(await verify.ObjectMatchingRuleSourceParamValues.AnyAsync(), Is.False, "Object matching rule source parameter values should be removed.");
+    }
+
+    /// <summary>
+    /// Identifiers captured from <see cref="SeedFullGraphAsync"/> so the deletion tests can assert both removal
+    /// of the connected-system graph and foreign-key null-out on retained audit rows.
+    /// </summary>
+    private sealed class FullGraphIds
+    {
+        public int SystemId { get; init; }
+        public Guid ContributedMvavId { get; init; }
+        public Guid UnresolvedMvavId { get; init; }
+        public Guid MvoChangeId { get; init; }
+        public Guid CsoChangeId { get; init; }
+        public Guid ActivityId { get; init; }
+    }
+
+    /// <summary>
+    /// Seeds a complete connected-system dependency graph: partition, container, run profile, object type and
+    /// attribute, sync rule (+ mapping + source), a CSO (+ attribute value), a metaverse object with one attribute
+    /// value contributed by the system and one unresolved reference to a CSO, a metaverse object change, a
+    /// connected-system object change (+ attribute + value) and an activity. Every inbound foreign key the deletion
+    /// must null or reorder is populated, so the fixture exercises the full delete path an empty or sync-rules-only
+    /// seed cannot reach. This is the graph that reproduces the partition / run-profile FK violation and the
+    /// metaverse-contribution FK violations from issue context.
+    /// </summary>
+    private async Task<FullGraphIds> SeedFullGraphAsync()
+    {
+        await using var seed = NewContext();
+
+        // --- Phase 1: connected system, schema, partition, container, sync rule graph ---
+        var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
+        var system = new ConnectedSystem { Name = "Full Graph System", ConnectorDefinition = connectorDefinition };
+        var csType = new ConnectedSystemObjectType { Name = "USER", ConnectedSystem = system, Selected = true };
+        var csAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "accountName", ConnectedSystemObjectType = csType, Type = AttributeDataType.Text, Selected = true, IsExternalId = true
+        };
+        csType.Attributes.Add(csAttr);
+
+        var mvType = new MetaverseObjectType { Name = "User", PluralName = "Users", BuiltIn = true };
+        var mvTextAttr = new MetaverseAttribute { Name = "accountName", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued, BuiltIn = true };
+        var mvRefAttr = new MetaverseAttribute { Name = "manager", Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.SingleValued, BuiltIn = true };
+
+        var partition = new ConnectedSystemPartition { ConnectedSystem = system, Name = "DC=test", ExternalId = "DC=test", Selected = true };
+        var container = new ConnectedSystemContainer { Partition = partition, Name = "OU=Users", ExternalId = "OU=Users,DC=test", Selected = true };
+
+        var rule = new SyncRule
+        {
+            Name = "Import Rule",
+            ConnectedSystem = system,
+            ConnectedSystemObjectType = csType,
+            MetaverseObjectType = mvType,
+            Direction = SyncRuleDirection.Import,
+            Enabled = true
+        };
+        var mapping = new SyncRuleMapping { SyncRule = rule };
+        mapping.Sources.Add(new SyncRuleMappingSource { Order = 0, Expression = "\"literal\"" });
+
+        seed.AddRange(connectorDefinition, system, csType, mvType, mvTextAttr, mvRefAttr, partition, container, rule, mapping);
+        await seed.SaveChangesAsync();
+
+        // --- Phase 2: run profile, CSO graph, metaverse object + values, change records ---
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            Name = "Full Import",
+            ConnectedSystemId = system.Id,
+            Partition = partition,
+            RunType = ConnectedSystemRunType.FullImport
+        };
+
+        var cso = new ConnectedSystemObject
+        {
+            Type = csType,
+            ConnectedSystem = system,
+            Partition = partition,
+            ExternalIdAttributeId = csAttr.Id,
+            Status = ConnectedSystemObjectStatus.Normal
+        };
+        var csoAttrValue = new ConnectedSystemObjectAttributeValue { Attribute = csAttr, StringValue = "jdoe", ConnectedSystemObject = cso };
+        cso.AttributeValues.Add(csoAttrValue);
+
+        var mvo = new MetaverseObject { Type = mvType };
+        var contributedMvav = new MetaverseObjectAttributeValue { Attribute = mvTextAttr, StringValue = "jdoe", MetaverseObject = mvo, ContributedBySystem = system };
+        var unresolvedMvav = new MetaverseObjectAttributeValue { Attribute = mvRefAttr, MetaverseObject = mvo, UnresolvedReferenceValue = cso };
+        mvo.AttributeValues.Add(contributedMvav);
+        mvo.AttributeValues.Add(unresolvedMvav);
+
+        var mvoChange = new MetaverseObjectChange
+        {
+            MetaverseObject = mvo,
+            ChangeTime = DateTime.UtcNow,
+            ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule,
+            ChangeType = ObjectChangeType.Updated,
+            SyncRule = rule,
+            SyncRuleName = rule.Name
+        };
+
+        var csoChange = new ConnectedSystemObjectChange
+        {
+            ConnectedSystemId = system.Id,
+            ChangeTime = DateTime.UtcNow,
+            ChangeType = ObjectChangeType.Updated,
+            DeletedObjectType = csType,
+            DeletedObjectExternalIdAttributeValue = csoAttrValue,
+            ConnectedSystemObject = cso
+        };
+        var csoChangeAttr = new ConnectedSystemObjectChangeAttribute
+        {
+            ConnectedSystemChange = csoChange,
+            Attribute = csAttr,
+            AttributeName = "accountName",
+            AttributeType = AttributeDataType.Text
+        };
+        csoChangeAttr.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue
+        {
+            ConnectedSystemObjectChangeAttribute = csoChangeAttr,
+            ValueChangeType = ValueChangeType.Add,
+            StringValue = "jdoe",
+            ReferenceValue = cso
+        });
+        csoChange.AttributeChanges.Add(csoChangeAttr);
+
+        seed.AddRange(runProfile, cso, mvo, mvoChange, csoChange);
+        await seed.SaveChangesAsync();
+
+        // --- Phase 3: activity referencing the now-persisted run profile and sync rule (scalar FKs) ---
+        var activity = new Activity
+        {
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Delete,
+            TargetName = system.Name,
+            Status = ActivityStatus.Complete,
+            Executed = DateTime.UtcNow,
+            InitiatedByType = ActivityInitiatorType.System,
+            ConnectedSystemId = system.Id,
+            ConnectedSystemRunProfileId = runProfile.Id,
+            SyncRuleId = rule.Id
+        };
+        seed.Add(activity);
+        await seed.SaveChangesAsync();
+
+        return new FullGraphIds
+        {
+            SystemId = system.Id,
+            ContributedMvavId = contributedMvav.Id,
+            UnresolvedMvavId = unresolvedMvav.Id,
+            MvoChangeId = mvoChange.Id,
+            CsoChangeId = csoChange.Id,
+            ActivityId = activity.Id
+        };
+    }
+
+    [Test]
+    public async Task DeleteConnectedSystemAsync_FullGraph_DeleteChangeHistory_RemovesSystemAndNullsAuditFksAsync()
+    {
+        var ids = await SeedFullGraphAsync();
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            // Before the fix this throws PostgresException 23503 (foreign key violation): deleting the CSO breaches
+            // MetaverseObjectAttributeValues.UnresolvedReferenceValueId, and deleting partitions breaches
+            // ConnectedSystemRunProfiles.PartitionId.
+            await repository.ConnectedSystems.DeleteConnectedSystemAsync(ids.SystemId, deleteChangeHistory: true);
+        }
+
+        await using var verify = NewContext();
+
+        // Connected-system graph fully removed.
+        Assert.That(await verify.ConnectedSystems.AnyAsync(), Is.False, "Connected system should be removed.");
+        Assert.That(await verify.SyncRules.AnyAsync(), Is.False, "Sync rules should be removed.");
+        Assert.That(await verify.ConnectedSystemRunProfiles.AnyAsync(), Is.False, "Run profiles should be removed.");
+        Assert.That(await verify.ConnectedSystemPartitions.AnyAsync(), Is.False, "Partitions should be removed.");
+        Assert.That(await verify.ConnectedSystemObjects.AnyAsync(), Is.False, "CSOs should be removed.");
+        Assert.That(await verify.ConnectedSystemObjectChanges.AnyAsync(), Is.False, "Change history should be removed when deleteChangeHistory is true.");
+
+        // Retained audit rows survive with their now-dead foreign keys nulled.
+        var activity = await verify.Activities.SingleAsync(a => a.Id == ids.ActivityId);
+        Assert.That(activity.ConnectedSystemId, Is.Null, "Activity ConnectedSystemId should be nulled.");
+        Assert.That(activity.ConnectedSystemRunProfileId, Is.Null, "Activity ConnectedSystemRunProfileId should be nulled.");
+        Assert.That(activity.SyncRuleId, Is.Null, "Activity SyncRuleId should be nulled.");
+
+        Assert.That(await verify.MetaverseObjects.AnyAsync(), Is.True, "Surviving metaverse object should be retained.");
+        var contributedMvav = await verify.MetaverseObjectAttributeValues.SingleAsync(av => av.Id == ids.ContributedMvavId);
+        Assert.That(contributedMvav.ContributedBySystemId, Is.Null, "Contributed metaverse attribute value should keep the value but null the contributor.");
+        var unresolvedMvav = await verify.MetaverseObjectAttributeValues.SingleAsync(av => av.Id == ids.UnresolvedMvavId);
+        Assert.That(unresolvedMvav.UnresolvedReferenceValueId, Is.Null, "Unresolved reference to a deleted CSO should be nulled.");
+
+        var mvoChange = await verify.MetaverseObjectChanges.SingleAsync(c => c.Id == ids.MvoChangeId);
+        Assert.That(mvoChange.SyncRuleId, Is.Null, "Metaverse object change should keep the record but null the deleted sync rule FK.");
+    }
+
+    [Test]
+    public async Task DeleteConnectedSystemAsync_FullGraph_PreserveChangeHistory_RetainsChangesWithNulledFksAsync()
+    {
+        var ids = await SeedFullGraphAsync();
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            await repository.ConnectedSystems.DeleteConnectedSystemAsync(ids.SystemId, deleteChangeHistory: false);
+        }
+
+        await using var verify = NewContext();
+
+        Assert.That(await verify.ConnectedSystems.AnyAsync(), Is.False, "Connected system should be removed.");
+        Assert.That(await verify.SyncRules.AnyAsync(), Is.False, "Sync rules should be removed.");
+        Assert.That(await verify.ConnectedSystemObjects.AnyAsync(), Is.False, "CSOs should be removed.");
+        Assert.That(await verify.ConnectedSystemObjectTypes.AnyAsync(), Is.False, "Object types should be removed.");
+
+        // Change history is retained, with foreign keys to the now-deleted schema/objects nulled.
+        // DeletedObjectTypeId / DeletedObjectExternalIdAttributeValueId / AttributeId / ReferenceValueId are shadow
+        // FKs (no CLR property), so they are read via EF.Property projections which work under NoTracking.
+        Assert.That(await verify.ConnectedSystemObjectChanges.AnyAsync(c => c.Id == ids.CsoChangeId), Is.True,
+            "Change history should be retained when deleteChangeHistory is false.");
+
+        var deletedObjectTypeId = await verify.ConnectedSystemObjectChanges
+            .Where(c => c.Id == ids.CsoChangeId)
+            .Select(c => EF.Property<int?>(c, "DeletedObjectTypeId"))
+            .SingleAsync();
+        Assert.That(deletedObjectTypeId, Is.Null, "Retained change should null its deleted-object-type FK.");
+
+        var deletedExternalIdAttributeValueId = await verify.ConnectedSystemObjectChanges
+            .Where(c => c.Id == ids.CsoChangeId)
+            .Select(c => EF.Property<Guid?>(c, "DeletedObjectExternalIdAttributeValueId"))
+            .SingleAsync();
+        Assert.That(deletedExternalIdAttributeValueId, Is.Null, "Retained change should null its deleted-attribute-value FK.");
+
+        var csoChange = await verify.ConnectedSystemObjectChanges.SingleAsync(c => c.Id == ids.CsoChangeId);
+        Assert.That(csoChange.ConnectedSystemObjectId, Is.Null, "Retained change should null its CSO FK (SetNull cascade).");
+
+        var changeAttributeFk = await verify.ConnectedSystemObjectChangeAttributes
+            .Select(a => EF.Property<int?>(a, "AttributeId"))
+            .SingleAsync();
+        Assert.That(changeAttributeFk, Is.Null, "Retained change attribute should null its attribute FK (SetNull cascade).");
+
+        var changeValueReferenceFk = await verify.ConnectedSystemObjectChangeAttributeValues
+            .Select(v => EF.Property<Guid?>(v, "ReferenceValueId"))
+            .SingleAsync();
+        Assert.That(changeValueReferenceFk, Is.Null, "Retained change value should null its CSO reference FK (SetNull cascade).");
+
+        // Same audit-preservation behaviour as the delete-history path.
+        var activity = await verify.Activities.SingleAsync(a => a.Id == ids.ActivityId);
+        Assert.That(activity.ConnectedSystemRunProfileId, Is.Null, "Activity ConnectedSystemRunProfileId should be nulled.");
+        Assert.That(activity.SyncRuleId, Is.Null, "Activity SyncRuleId should be nulled.");
+        var contributedMvav = await verify.MetaverseObjectAttributeValues.SingleAsync(av => av.Id == ids.ContributedMvavId);
+        Assert.That(contributedMvav.ContributedBySystemId, Is.Null, "Contributed metaverse attribute value should null the contributor.");
     }
 }
