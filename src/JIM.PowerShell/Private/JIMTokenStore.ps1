@@ -479,7 +479,7 @@ function Remove-JIMToken {
     #>
     # ShouldProcess is intentionally not implemented: this is a private helper, and
     # the user-facing destructive intent is expressed through Disconnect-JIM
-    # (-ClearCache / -Url / -All), which is where any confirmation would belong.
+    # (its default, -Url, or -All), which is where any confirmation would belong.
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
     [CmdletBinding(DefaultParameterSetName = 'Single')]
     [OutputType([int])]

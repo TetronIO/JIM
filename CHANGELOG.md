@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- ✨ The PowerShell module now persists your interactive SSO sign-in across terminal sessions: after `Connect-JIM`, opening a new terminal reconnects silently without a browser. Only the refresh token is stored, in the operating system's credential store (Credential Manager on Windows, login Keychain on macOS, libsecret on Linux), with no extra password beyond your normal OS sign-in. Use `Connect-JIM -NoPersist` to opt out for a session, `-Force` to re-authenticate and overwrite the stored token, and `Disconnect-JIM -ClearCache` / `-Url` / `-All` to remove stored tokens. Headless Linux without a keyring falls back to in-memory tokens and points you to `-ApiKey`.
+- ✨ The PowerShell module now persists your interactive SSO sign-in across terminal sessions: after `Connect-JIM`, opening a new terminal reconnects silently without a browser. Only the refresh token is stored, in the operating system's credential store (Credential Manager on Windows, login Keychain on macOS, libsecret on Linux), with no extra password beyond your normal OS sign-in. Use `Connect-JIM -NoPersist` to opt out for a session, `-Force` to re-authenticate and overwrite the stored token, and `Disconnect-JIM` to remove the stored token for the current instance (`-Url` for a specific instance, `-All` for every instance). Headless Linux without a keyring falls back to in-memory tokens and points you to `-ApiKey`.
 - ✨ Factory reset is now available in the portal: a new Administration danger area (`/admin/factory-reset`) with a backup warning, type-to-confirm, and an optional "delete administrators" path.
 
 ### Changed

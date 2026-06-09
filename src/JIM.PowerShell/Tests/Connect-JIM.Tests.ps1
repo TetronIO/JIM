@@ -168,10 +168,10 @@ Describe 'Disconnect-JIM' {
         }
     }
 
-    Context 'Cache-clearing parameters' {
+    Context 'Parameters' {
 
-        It 'Should have a ClearCache switch parameter' {
-            (Get-Command Disconnect-JIM).Parameters['ClearCache'].SwitchParameter | Should -BeTrue
+        It 'Should not have a ClearCache parameter (retired)' {
+            (Get-Command Disconnect-JIM).Parameters.Keys | Should -Not -Contain 'ClearCache'
         }
 
         It 'Should have a Url parameter' {
@@ -189,18 +189,27 @@ Describe 'Disconnect-JIM' {
         }
 
         It 'Should reject an invalid Url' {
-            { Disconnect-JIM -Url 'not-a-url' -ClearCache } | Should -Throw '*Invalid URL*'
+            { Disconnect-JIM -Url 'not-a-url' } | Should -Throw '*Invalid URL*'
         }
     }
 
-    Context 'Cache-clearing behaviour' {
+    Context 'Disconnect-and-forget behaviour' {
 
-        It 'Does not touch the credential store by default' {
+        It 'Removes the persisted token for the currently connected instance by default' {
             InModuleScope JIM {
-                $script:JIMConnection = $null
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'OAuth' }
+                Mock Remove-JIMToken { 1 }
+                Disconnect-JIM
+                Should -Invoke Remove-JIMToken -Times 1 -ParameterFilter { $BaseUrl -eq 'https://jim.example.com' }
+            }
+        }
+
+        It 'Removes the persisted token regardless of auth method (API key session)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
                 Mock Remove-JIMToken { 0 }
                 Disconnect-JIM
-                Should -Invoke Remove-JIMToken -Times 0
+                Should -Invoke Remove-JIMToken -Times 1 -ParameterFilter { $BaseUrl -eq 'https://jim.example.com' }
             }
         }
 
@@ -208,8 +217,17 @@ Describe 'Disconnect-JIM' {
             InModuleScope JIM {
                 $script:JIMConnection = $null
                 Mock Remove-JIMToken { 1 }
-                Disconnect-JIM -Url 'https://jim.example.com' -ClearCache
-                Should -Invoke Remove-JIMToken -Times 1 -ParameterFilter { $BaseUrl -eq 'https://jim.example.com' }
+                Disconnect-JIM -Url 'https://other.example.com'
+                Should -Invoke Remove-JIMToken -Times 1 -ParameterFilter { $BaseUrl -eq 'https://other.example.com' }
+            }
+        }
+
+        It 'Does not touch the credential store when not connected and no -Url' {
+            InModuleScope JIM {
+                $script:JIMConnection = $null
+                Mock Remove-JIMToken { 0 }
+                Disconnect-JIM
+                Should -Invoke Remove-JIMToken -Times 0
             }
         }
 

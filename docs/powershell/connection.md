@@ -94,12 +94,12 @@ Connect-JIM "https://jim.example.com" "jim_ak_7f3e..."
 
 ## Disconnect-JIM
 
-Disconnects from the current JIM instance and clears session state.
+Disconnects from a JIM instance and forgets its persisted credentials.
 
 ### Syntax
 
 ```powershell
-Disconnect-JIM [-Url <string>] [-ClearCache]
+Disconnect-JIM [-Url <string>]
 Disconnect-JIM -All
 ```
 
@@ -107,9 +107,8 @@ Disconnect-JIM -All
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ClearCache` | `switch` | No | `$false` | Also remove the persisted refresh token from the OS credential store. Without `-Url`, targets the currently connected instance |
-| `Url` | `string` | No | | Remove the persisted refresh token for a specific instance. Implies `-ClearCache`; works even when not connected |
-| `All` | `switch` | No | `$false` | Remove every persisted JIM refresh token from this machine |
+| `Url` | `string` | No | currently connected instance | The instance to disconnect and forget. Works even when not connected to it |
+| `All` | `switch` | No | `$false` | Remove every persisted JIM refresh token from this machine, across all instances |
 
 ### Output
 
@@ -117,16 +116,12 @@ None. Writes informational messages to the host confirming disconnection.
 
 ### Examples
 
-```powershell title="Disconnect from JIM (persisted token kept)"
+```powershell title="Disconnect and forget the connected instance"
 Disconnect-JIM
 ```
 
-```powershell title="Disconnect and forget the persisted token for this instance"
-Disconnect-JIM -ClearCache
-```
-
-```powershell title="Remove a specific instance's persisted token (even if not connected)"
-Disconnect-JIM -Url "https://jim.example.com" -ClearCache
+```powershell title="Forget a specific instance's persisted token (even if not connected)"
+Disconnect-JIM -Url "https://jim.example.com"
 ```
 
 ```powershell title="Remove every persisted JIM token from this machine"
@@ -135,9 +130,9 @@ Disconnect-JIM -All
 
 ### Notes
 
-- Clears access tokens and refresh tokens from memory.
-- By default the **persisted** refresh token in the OS credential store is left intact, so a later `Connect-JIM` can still reconnect silently. Use `-ClearCache` (or `-Url`, or `-All`) to remove it.
-- `-ClearCache`, `-Url`, and `-All` work even when there is no active connection, since clearing the credential store is a maintenance operation independent of session state.
+- Clears the in-memory session (access and refresh tokens) **and** removes the persisted refresh token for the targeted instance from the OS credential store, so a later `Connect-JIM` must authenticate again. By default the targeted instance is the connected one; use `-Url` for a specific instance or `-All` for every instance.
+- Removal is **auth-agnostic**: a stored refresh token for the instance is removed even if the cleared session authenticated with an API key. API keys themselves are never persisted by the module, so for an API-key-only session there is simply nothing in the store to remove.
+- `-Url` and `-All` work even when there is no active connection, since clearing the credential store is a maintenance operation independent of session state. A bare `Disconnect-JIM` while not connected has no instance to target and does nothing.
 - Does **not** sign you out of your identity provider. If you authenticated via SSO, your identity provider session remains active.
 - After disconnecting, you must call [Connect-JIM](#connect-jim) again before using other JIM cmdlets.
 
