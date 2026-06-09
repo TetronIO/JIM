@@ -160,30 +160,29 @@ else
     print_warning "postgres-tune.sh not found - skipping auto-tuning"
 fi
 
-# 5. Install PowerShell Pester module for testing (socat is in the Dockerfile)
+# 5. Install PowerShell (.NET global tool)
+# PowerShell is installed as a NuGet global tool under ~/.dotnet/tools (added to
+# PATH after the EF tools install above) rather than relying on the copy bundled
+# in the base image, which is a preview (7.6.0-preview.4) and is stripped by the
+# Dockerfile. `dotnet tool install`/`update` resolves the latest *stable* release
+# by default (prereleases need an explicit --prerelease flag) and is
+# architecture-independent. The current stable (7.6.x) targets .NET 10, matching
+# the SDK in the Dockerfile; it stays runtime-compatible as long as it targets the
+# SDK's .NET major. Update a running container in place with:
+#   dotnet tool update --global PowerShell
+print_step "Installing PowerShell (.NET global tool)..."
+if dotnet tool install --global PowerShell 2>/dev/null || dotnet tool update --global PowerShell 2>/dev/null; then
+    print_success "PowerShell installed ($(pwsh -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>/dev/null))"
+else
+    print_warning "PowerShell installation failed - install manually: dotnet tool install --global PowerShell"
+fi
+
+# 5a. Install PowerShell Pester module for testing (socat is in the Dockerfile)
 print_step "Installing PowerShell Pester module..."
 if pwsh -NoProfile -Command 'Set-PSRepository PSGallery -InstallationPolicy Trusted; Install-Module -Name Pester -MinimumVersion 5.0 -Force -Scope CurrentUser' 2>/dev/null; then
     print_success "Pester module installed"
 else
     print_warning "Pester installation failed - you can install manually: Install-Module -Name Pester -MinimumVersion 5.0 -Force"
-fi
-
-# 5a. Make the nested pwsh binary executable for non-root users.
-# The `pwsh` shim at /usr/bin/pwsh works for all users, but PowerShell's own Start-Process
-# resolves to the real binary at /usr/share/powershell/.store/.../pwsh, which ships with
-# 0744 permissions (only root can exec). That blocks any PowerShell script from spawning
-# a pwsh subprocess (e.g. the integration runner's docker-stats capture), with a confusing
-# "Permission denied" error. A single chmod +x on the real binary fixes it permanently.
-print_step "Fixing nested pwsh binary permissions..."
-nested_pwsh=$(find /usr/share/powershell/.store -name 'pwsh' -type f 2>/dev/null | head -1)
-if [ -n "$nested_pwsh" ] && [ ! -x "$nested_pwsh" ]; then
-    if sudo chmod +x "$nested_pwsh" 2>/dev/null; then
-        print_success "Made $nested_pwsh executable for all users"
-    else
-        print_warning "Could not chmod $nested_pwsh; pwsh subprocess spawning may fail"
-    fi
-else
-    print_success "Nested pwsh binary already executable (or not found)"
 fi
 
 # 6. Install MkDocs Material for documentation preview

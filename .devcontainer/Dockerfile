@@ -23,6 +23,16 @@ RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
     && /tmp/dotnet-install.sh --version 10.0.203 --install-dir /usr/share/dotnet --no-path \
     && rm /tmp/dotnet-install.sh
 
+# Remove the PowerShell bundled in the base image. The
+# mcr.microsoft.com/devcontainers/dotnet:1-10.0-noble image was built during the
+# .NET 10 RC window and ships PowerShell 7.6.0-preview.4 (the only build targeting
+# .NET 10 at the time) at /usr/share/powershell, symlinked from /usr/bin/pwsh.
+# We standardise on a stable PowerShell installed as a .NET global tool in
+# setup.sh; removing the base copy leaves that as the single, unambiguous `pwsh`
+# on PATH instead of letting the preview shadow it (/usr/bin precedes
+# ~/.dotnet/tools). Re-evaluate when the base image ships a stable PowerShell.
+RUN rm -rf /usr/share/powershell /usr/bin/pwsh /usr/local/bin/pwsh
+
 # Remove stale Yarn apt repo that breaks feature installs (expired GPG key)
 RUN rm -f /etc/apt/sources.list.d/yarn.list 2>/dev/null; \
     rm -f /etc/apt/keyrings/yarn.gpg 2>/dev/null; \

@@ -2854,16 +2854,14 @@ if ($metricsStreamingEnabled) {
 # Start docker stats capture as a detached pwsh process so we can correlate per-container
 # memory and CPU with the scenario phases. Uses Start-Process rather than Start-Job
 # because Start-Job's runspace adds unnecessary overhead for a fire-and-forget script.
-# The explicit /usr/bin/pwsh path is the distro shim; bare "pwsh" resolves Start-Process
-# to a nested .store binary whose permissions can cause "Permission denied" on some
-# devcontainer images (see .devcontainer/setup.sh for the complementary chmod fix).
+# "pwsh" resolves via PATH to the .NET global-tool install (the devcontainer's only
+# PowerShell; see .devcontainer/setup.sh), whose apphost spawns cleanly via Start-Process.
 $dockerStatsProcess = $null
 $dockerStatsPath = $null
 if (Get-Command docker -ErrorAction SilentlyContinue) {
     $dockerStatsPath = Join-Path $scriptRoot "results" "docker-stats-$Scenario-$Template-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').csv"
     Write-Step "Starting docker stats capture -> $dockerStatsPath"
-    $pwshPath = if (Test-Path '/usr/bin/pwsh') { '/usr/bin/pwsh' } else { 'pwsh' }
-    $dockerStatsProcess = Start-Process -FilePath $pwshPath -ArgumentList @(
+    $dockerStatsProcess = Start-Process -FilePath 'pwsh' -ArgumentList @(
         "-NoProfile", "-File", "$scriptRoot/Capture-DockerStats.ps1",
         "-OutputPath", $dockerStatsPath, "-IntervalSeconds", "2"
     ) -PassThru -RedirectStandardOutput "$dockerStatsPath.stdout.log" -RedirectStandardError "$dockerStatsPath.stderr.log"
