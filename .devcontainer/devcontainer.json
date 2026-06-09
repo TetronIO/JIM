@@ -50,11 +50,12 @@
     // GitHub CLI
     "ghcr.io/devcontainers/features/github-cli:1.1.0": {
       "version": "latest"
-    },
-    // PowerShell - standard scripting platform
-    "ghcr.io/devcontainers/features/powershell:1.5.1": {
-      "version": "latest"
     }
+    // PowerShell is NOT a Feature. The base image already bundles PowerShell
+    // (a preview, 7.6.0-preview.4 - see the Dockerfile, which strips it), so the
+    // Feature was redundant. PowerShell is installed instead as a .NET global
+    // tool in setup.sh, which resolves the latest *stable* release by default
+    // and is architecture-independent.
   },
   // VS Code customizations
   "customizations": {
