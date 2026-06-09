@@ -251,12 +251,15 @@ function Connect-JIMInteractive {
                     }
 
                     Write-Verbose "Successfully refreshed access token"
+                    $serverVersion = Get-JIMServerVersion
+                    Show-JIMBanner -ServerVersion $serverVersion -Url $script:JIMConnection.Url
                     return [PSCustomObject]@{
-                        Url        = $script:JIMConnection.Url
-                        AuthMethod = 'OAuth'
-                        Connected  = $true
-                        ExpiresAt  = $tokens.ExpiresAt
-                        Status     = 'Connected (refreshed)'
+                        Url           = $script:JIMConnection.Url
+                        AuthMethod    = 'OAuth'
+                        Connected     = $true
+                        ServerVersion = $serverVersion
+                        ExpiresAt     = $tokens.ExpiresAt
+                        Status        = 'Connected (refreshed)'
                     }
                 }
                 catch {
@@ -325,7 +328,7 @@ function Connect-JIMInteractive {
                 $script:JIMConnection.Connected = $true
 
                 $serverVersion = Get-JIMServerVersion
-                Show-JIMBanner -ServerVersion $serverVersion -Url $BaseUrl
+                Show-JIMBanner -ServerVersion $serverVersion -Url $BaseUrl -StatusLine "Connected to JIM using cached credentials (no browser sign-in required)."
                 $userInfo = Test-JIMAuthorisation
 
                 # Persist the (possibly rotated) refresh token.
@@ -335,8 +338,6 @@ function Connect-JIMInteractive {
                 catch {
                     Write-Verbose "Failed to persist refreshed token: $_"
                 }
-
-                Write-Host "Connected to JIM using cached credentials (no browser sign-in required)." -ForegroundColor Green
 
                 return [PSCustomObject]@{
                     Url           = $script:JIMConnection.Url
@@ -409,7 +410,13 @@ function Connect-JIMInteractive {
         # Fetch server version
         $serverVersion = Get-JIMServerVersion
 
-        Show-JIMBanner -ServerVersion $serverVersion -Url $BaseUrl
+        # When the user opted out of persistence, confirm it directly under the
+        # connected line so it is obvious a new terminal will need to sign in again.
+        $bannerStatus = @()
+        if ($NoPersist) {
+            $bannerStatus += "Auth persistence disabled (-NoPersist): a new terminal will require a fresh sign-in."
+        }
+        Show-JIMBanner -ServerVersion $serverVersion -Url $BaseUrl -StatusLine $bannerStatus
 
         # Verify the user is authorised to use JIM
         $userInfo = Test-JIMAuthorisation

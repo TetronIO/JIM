@@ -15,7 +15,10 @@ function Show-JIMBanner {
         [string]$ServerVersion,
 
         [Parameter()]
-        [string]$Url
+        [string]$Url,
+
+        [Parameter()]
+        [string[]]$StatusLine = @()
     )
 
     $cyan = [System.ConsoleColor]::Cyan
@@ -40,6 +43,12 @@ function Show-JIMBanner {
     }
     else {
         Write-Host "Successfully connected to JIM!" -ForegroundColor $green
+    }
+
+    # Additional green status lines sit directly under the connected line, with no
+    # blank line in between, so related confirmations read as one block.
+    foreach ($line in $StatusLine) {
+        Write-Host $line -ForegroundColor $green
     }
     Write-Host ""
 }
