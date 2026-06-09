@@ -4337,6 +4337,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var csoCount = await Repository.Database.ConnectedSystemObjects
             .CountAsync(cso => cso.ConnectedSystemId == connectedSystemId);
 
+        // Wrap the multi-statement deletion in a transaction so a failure rolls back cleanly rather than leaving
+        // a half-deleted system (fast/hard failure over corrupted state). When called from DeleteConnectedSystemAsync
+        // the ambient transaction is reused; when called standalone (clearing connected system objects) this method
+        // owns and commits its own transaction. Npgsql does not support nested transactions, hence the ownership check.
+        var ownsTransaction = Repository.Database.Database.CurrentTransaction == null;
+        await using var transaction = ownsTransaction ? await Repository.Database.Database.BeginTransactionAsync() : null;
+
         // 1. Delete PendingExportAttributeValueChanges (child of PendingExport)
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""PendingExportAttributeValueChanges""
@@ -4358,13 +4365,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             @"UPDATE ""ConnectedSystemObjects"" SET ""MetaverseObjectId"" = NULL WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
-        // 5. Delete CSO attribute values
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"DELETE FROM ""ConnectedSystemObjectAttributeValues""
-              WHERE ""ConnectedSystemObjectId"" IN (SELECT ""Id"" FROM ""ConnectedSystemObjects"" WHERE ""ConnectedSystemId"" = {0})",
-            connectedSystemId);
-
-        // 6. Handle ConnectedSystemObjectChanges based on deleteChangeHistory flag
+        // 5. Handle ConnectedSystemObjectChanges before deleting CSO attribute values and CSOs below. The change rows
+        //    carry non-cascading FKs (DeletedObjectExternalIdAttributeValueId -> a CSO attribute value; ConnectedSystemObjectId
+        //    -> a CSO), so they must be removed (delete-history path) or have those FKs nulled (preserve-history path)
+        //    first, otherwise the attribute-value and CSO deletes are blocked.
         if (deleteChangeHistory)
         {
             // Delete change attribute values first (child records)
@@ -4392,12 +4396,20 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }
         else
         {
-            // Null CSO FK on ConnectedSystemObjectChanges (preserve audit trail)
+            // Preserve the audit trail: null the change FKs that point at the CSO attribute values and CSOs deleted
+            // below (DeletedObjectExternalIdAttributeValueId and ConnectedSystemObjectId are both non-cascading).
             await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""ConnectedSystemObjectChanges"" SET ""ConnectedSystemObjectId"" = NULL
-                  WHERE ""ConnectedSystemObjectId"" IN (SELECT ""Id"" FROM ""ConnectedSystemObjects"" WHERE ""ConnectedSystemId"" = {0})",
+                @"UPDATE ""ConnectedSystemObjectChanges""
+                  SET ""DeletedObjectExternalIdAttributeValueId"" = NULL, ""ConnectedSystemObjectId"" = NULL
+                  WHERE ""ConnectedSystemId"" = {0}",
                 connectedSystemId);
         }
+
+        // 6. Delete CSO attribute values
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ConnectedSystemObjectAttributeValues""
+              WHERE ""ConnectedSystemObjectId"" IN (SELECT ""Id"" FROM ""ConnectedSystemObjects"" WHERE ""ConnectedSystemId"" = {0})",
+            connectedSystemId);
 
         // 7. Null CSO FK on ActivityRunProfileExecutionItems
         await Repository.Database.Database.ExecuteSqlRawAsync(
@@ -4405,10 +4417,21 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
               WHERE ""ConnectedSystemObjectId"" IN (SELECT ""Id"" FROM ""ConnectedSystemObjects"" WHERE ""ConnectedSystemId"" = {0})",
             connectedSystemId);
 
+        // 7b. Null the staged unresolved reference held by metaverse attribute values that point at a CSO in this
+        //     system. This FK does not cascade, so it would otherwise block the CSO delete below. The metaverse
+        //     object and its attribute values are retained; only the now-unresolvable reference is cleared.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""MetaverseObjectAttributeValues"" SET ""UnresolvedReferenceValueId"" = NULL
+              WHERE ""UnresolvedReferenceValueId"" IN (SELECT ""Id"" FROM ""ConnectedSystemObjects"" WHERE ""ConnectedSystemId"" = {0})",
+            connectedSystemId);
+
         // 8. Delete CSOs
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystemObjects"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
+
+        if (ownsTransaction)
+            await transaction!.CommitAsync();
 
         Log.Information("DeleteAllConnectedSystemObjectsAndDependenciesAsync: Completed for Connected System {Id}. Removed {PendingExports} pending exports, {Csos} CSOs",
             connectedSystemId, pendingExportCount, csoCount);
@@ -4422,59 +4445,110 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task DeleteConnectedSystemAsync(int connectedSystemId, bool deleteChangeHistory = false)
     {
-        // Use raw SQL for bulk deletion - much faster than EF Core tracking
-        // Delete order follows dependency graph from design doc
+        // Use raw SQL for bulk deletion - much faster than EF Core tracking. The whole operation runs in one
+        // transaction so a mid-sequence failure rolls back rather than leaving a half-deleted system (fast/hard
+        // failure over corrupted state). Delete order follows the dependency graph; foreign keys from retained
+        // audit/history rows are nulled before their targets are removed.
         Log.Information("DeleteConnectedSystemAsync: Starting bulk deletion for Connected System {Id}, deleteChangeHistory={DeleteHistory}",
             connectedSystemId, deleteChangeHistory);
 
-        // 1. Delete all CSOs and their dependencies
+        // Large systems delete many rows under one transaction; raise the command timeout to match the bulk-insert
+        // paths, restoring it after a successful commit.
+        var previousTimeout = Repository.Database.Database.GetCommandTimeout();
+        Repository.Database.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
+
+        // This method owns the transaction; the CSO-deletion helper below detects the ambient transaction and
+        // enrols in it rather than starting its own (Npgsql does not support nested transactions).
+        var ownsTransaction = Repository.Database.Database.CurrentTransaction == null;
+        await using var transaction = ownsTransaction ? await Repository.Database.Database.BeginTransactionAsync() : null;
+
+        // 1. Delete all CSOs and their dependencies (also nulls the unresolved-reference and, on the preserve-history
+        //    path, the change FKs that point at CSOs / CSO attribute values).
         await DeleteAllConnectedSystemObjectsAndDependenciesAsync(connectedSystemId, deleteChangeHistory);
 
-        // 2. Delete Containers (child of Partition)
+        // 2. Sever audit and history foreign keys that reference rows deleted below. These rows are retained for
+        //    audit; only the now-dead foreign key is nulled. They must be nulled before their targets are deleted.
+
+        // 2a. Activities referencing this system, its run profiles, or its sync rules.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""Activities"" SET ""ConnectedSystemRunProfileId"" = NULL
+              WHERE ""ConnectedSystemRunProfileId"" IN (SELECT ""Id"" FROM ""ConnectedSystemRunProfiles"" WHERE ""ConnectedSystemId"" = {0})",
+            connectedSystemId);
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""Activities"" SET ""SyncRuleId"" = NULL
+              WHERE ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
+            connectedSystemId);
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""Activities"" SET ""ConnectedSystemId"" = NULL WHERE ""ConnectedSystemId"" = {0}",
+            connectedSystemId);
+
+        // 2b. Metaverse object changes referencing this system's sync rules.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""MetaverseObjectChanges"" SET ""SyncRuleId"" = NULL
+              WHERE ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
+            connectedSystemId);
+
+        // 2c. Metaverse attribute values contributed by this system: keep the value, null the contributor.
+        //     Attribute recall (removing the values and re-evaluating precedence) is deliberately out of scope here;
+        //     it is a sync-engine concern handled on CSO obsoletion, not bulk system deletion.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""MetaverseObjectAttributeValues"" SET ""ContributedBySystemId"" = NULL WHERE ""ContributedBySystemId"" = {0}",
+            connectedSystemId);
+
+        // 2d. Example-data template attributes referencing this system's schema attributes.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ExampleDataTemplateAttributes"" SET ""ConnectedSystemObjectTypeAttributeId"" = NULL
+              WHERE ""ConnectedSystemObjectTypeAttributeId"" IN (
+                SELECT ""Id"" FROM ""ConnectedSystemAttributes""
+                WHERE ""ConnectedSystemObjectTypeId"" IN (SELECT ""Id"" FROM ""ConnectedSystemObjectTypes"" WHERE ""ConnectedSystemId"" = {0})
+              )",
+            connectedSystemId);
+
+        // 2e. On the preserve-history path, retained ConnectedSystemObjectChanges reference the object types deleted
+        //     in step 11; null that FK first. (On the delete-history path those change rows have already been removed.)
+        if (!deleteChangeHistory)
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""ConnectedSystemObjectChanges"" SET ""DeletedObjectTypeId"" = NULL WHERE ""ConnectedSystemId"" = {0}",
+                connectedSystemId);
+
+        // 3. Delete Containers (child of Partition)
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystemContainers""
               WHERE ""PartitionId"" IN (SELECT ""Id"" FROM ""ConnectedSystemPartitions"" WHERE ""ConnectedSystemId"" = {0})",
             connectedSystemId);
 
-        // 3. Delete Partitions
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"DELETE FROM ""ConnectedSystemPartitions"" WHERE ""ConnectedSystemId"" = {0}",
-            connectedSystemId);
-
-        // 4. Delete Run Profiles
+        // 4. Delete Run Profiles. Must be before Partitions: ConnectedSystemRunProfiles.PartitionId is a
+        //    non-cascading FK to ConnectedSystemPartitions, so partitions cannot be deleted while run profiles
+        //    still reference them.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystemRunProfiles"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
-        // 5. Delete SyncRuleMappingSourceParamValues (child of SyncRuleMappingSource)
+        // 5. Delete Partitions
         await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"DELETE FROM ""SyncRuleMappingSourceParamValues""
-              WHERE ""SyncRuleMappingSourceId"" IN (
-                SELECT sms.""Id"" FROM ""SyncRuleMappingSources"" sms
-                INNER JOIN ""SyncRuleMappings"" srm ON sms.""SyncRuleMappingId"" = srm.""Id""
-                INNER JOIN ""SyncRules"" sr ON srm.""AttributeFlowSynchronisationRuleId"" = sr.""Id""
-                WHERE sr.""ConnectedSystemId"" = {0}
-              )",
+            @"DELETE FROM ""ConnectedSystemPartitions"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
-        // 6. Delete SyncRuleMappingSources (child of SyncRuleMapping)
+        // 6. (SyncRuleMappingSourceParamValues are intentionally not deleted here: the table is not populated
+        //    anywhere in the application, so there is nothing to scope to this connected system.)
+
+        // 7. Delete SyncRuleMappingSources (child of SyncRuleMapping)
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""SyncRuleMappingSources""
               WHERE ""SyncRuleMappingId"" IN (
                 SELECT srm.""Id"" FROM ""SyncRuleMappings"" srm
-                INNER JOIN ""SyncRules"" sr ON srm.""AttributeFlowSynchronisationRuleId"" = sr.""Id""
+                INNER JOIN ""SyncRules"" sr ON srm.""SyncRuleId"" = sr.""Id""
                 WHERE sr.""ConnectedSystemId"" = {0}
               )",
             connectedSystemId);
 
-        // 7. Delete SyncRuleMappings (attribute flow rules)
+        // 8. Delete SyncRuleMappings (attribute flow rules)
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""SyncRuleMappings""
-              WHERE ""AttributeFlowSynchronisationRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})
-                 OR ""ObjectMatchingSynchronisationRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
+              WHERE ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
             connectedSystemId);
 
-        // 8. Delete SyncRuleScopingCriteria (child of SyncRuleScopingCriteriaGroup)
+        // 9. Delete SyncRuleScopingCriteria (child of SyncRuleScopingCriteriaGroup)
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""SyncRuleScopingCriteria""
               WHERE ""SyncRuleScopingCriteriaGroupId"" IN (
@@ -4484,42 +4558,52 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
               )",
             connectedSystemId);
 
-        // 9. Delete SyncRuleScopingCriteriaGroups
+        // 10. Delete SyncRuleScopingCriteriaGroups
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""SyncRuleScopingCriteriaGroups""
               WHERE ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
             connectedSystemId);
 
-        // 10. Delete Sync Rules
+        // 11. Delete Object Matching Rules for this system before the Sync Rules and Object Types they reference
+        //     (those foreign keys do not cascade). Their Sources and source parameter values are removed
+        //     automatically via ON DELETE CASCADE. An OMR belongs to this system when it is scoped to one of its
+        //     object types or one of its sync rules.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ObjectMatchingRules""
+              WHERE ""ConnectedSystemObjectTypeId"" IN (SELECT ""Id"" FROM ""ConnectedSystemObjectTypes"" WHERE ""ConnectedSystemId"" = {0})
+                 OR ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
+            connectedSystemId);
+
+        // 12. Delete Sync Rules
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
-        // 11. Delete Object Type Attributes
+        // 13. Delete Object Type Attributes
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystemAttributes""
               WHERE ""ConnectedSystemObjectTypeId"" IN (SELECT ""Id"" FROM ""ConnectedSystemObjectTypes"" WHERE ""ConnectedSystemId"" = {0})",
             connectedSystemId);
 
-        // 12. Delete Object Types
+        // 14. Delete Object Types
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystemObjectTypes"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
-        // 13. Delete Setting Values
+        // 15. Delete Setting Values
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystemSettingValues"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
-        // 14. Null Activity FKs (preserve audit trail)
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""Activities"" SET ""ConnectedSystemId"" = NULL WHERE ""ConnectedSystemId"" = {0}",
-            connectedSystemId);
-
-        // 15. Finally, delete the Connected System itself
+        // 16. Finally, delete the Connected System itself
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystems"" WHERE ""Id"" = {0}",
             connectedSystemId);
+
+        if (ownsTransaction)
+            await transaction!.CommitAsync();
+
+        Repository.Database.Database.SetCommandTimeout(previousTimeout);
 
         Log.Information("DeleteConnectedSystemAsync: Completed bulk deletion for Connected System {Id}", connectedSystemId);
     }
