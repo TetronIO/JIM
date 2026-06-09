@@ -372,3 +372,151 @@ Describe 'Invoke-JIMApi when not connected' {
         }
     }
 }
+
+Describe 'Invoke-TokenRefresh write-back (issue #305)' {
+
+    # Most identity providers rotate the refresh token on every use. The persisted
+    # copy must therefore be re-saved after each successful refresh, or cross-session
+    # persistence works exactly once. These tests pin that write-back contract.
+
+    It 'Persists the rotated refresh token after a successful refresh when the session is persisted' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{
+                Url            = 'https://jim.example.com'
+                AuthMethod     = 'OAuth'
+                AccessToken    = 'old-at'
+                RefreshToken   = 'old-rt'
+                TokenExpiresAt = $null
+                Persisted      = $true
+                OAuthConfig    = @{ TokenEndpoint = 'https://idp/token'; ClientId = 'jim'; Scopes = @('openid', 'offline_access') }
+            }
+            Mock Invoke-OAuthTokenRefresh { [PSCustomObject]@{ AccessToken = 'new-at'; RefreshToken = 'rotated-rt'; ExpiresAt = (Get-Date).AddHours(1) } }
+            Mock Save-JIMToken { $true }
+
+            Invoke-TokenRefresh
+
+            Should -Invoke Save-JIMToken -Times 1 -ParameterFilter {
+                $BaseUrl -eq 'https://jim.example.com' -and $RefreshToken -eq 'rotated-rt'
+            }
+            $script:JIMConnection.RefreshToken | Should -Be 'rotated-rt'
+            $script:JIMConnection.AccessToken | Should -Be 'new-at'
+        }
+    }
+
+    It 'Does not write to the credential store when the session is not persisted (-NoPersist)' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{
+                Url            = 'https://jim.example.com'
+                AuthMethod     = 'OAuth'
+                AccessToken    = 'old-at'
+                RefreshToken   = 'old-rt'
+                TokenExpiresAt = $null
+                Persisted      = $false
+                OAuthConfig    = @{ TokenEndpoint = 'https://idp/token'; ClientId = 'jim'; Scopes = @('openid') }
+            }
+            Mock Invoke-OAuthTokenRefresh { [PSCustomObject]@{ AccessToken = 'new-at'; RefreshToken = 'rotated-rt'; ExpiresAt = (Get-Date).AddHours(1) } }
+            Mock Save-JIMToken { $true }
+
+            Invoke-TokenRefresh
+
+            Should -Invoke Save-JIMToken -Times 0
+            # The in-memory token is still rotated; only the on-disk copy is skipped.
+            $script:JIMConnection.RefreshToken | Should -Be 'rotated-rt'
+        }
+    }
+
+    It 'A failed save does not surface as a terminating error (refresh still succeeds)' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{
+                Url            = 'https://jim.example.com'
+                AuthMethod     = 'OAuth'
+                AccessToken    = 'old-at'
+                RefreshToken   = 'old-rt'
+                TokenExpiresAt = $null
+                Persisted      = $true
+                OAuthConfig    = @{ TokenEndpoint = 'https://idp/token'; ClientId = 'jim'; Scopes = @('openid', 'offline_access') }
+            }
+            Mock Invoke-OAuthTokenRefresh { [PSCustomObject]@{ AccessToken = 'new-at'; RefreshToken = 'rotated-rt'; ExpiresAt = (Get-Date).AddHours(1) } }
+            Mock Save-JIMToken { throw 'keyring exploded' }
+
+            { Invoke-TokenRefresh } | Should -Not -Throw
+            $script:JIMConnection.AccessToken | Should -Be 'new-at'
+        }
+    }
+}
+
+Describe 'Connect-JIMInteractive cached reconnect (issue #305)' {
+
+    # The headline feature: a persisted refresh token lets a new terminal reconnect
+    # silently, with no browser round-trip, and re-persists the rotated token.
+
+    It 'Reconnects silently with a cached token and never opens a browser' {
+        InModuleScope JIM {
+            $script:JIMConnection = $null
+            Mock Invoke-RestMethod { [PSCustomObject]@{ authority = 'https://idp/'; clientId = 'jim'; scopes = @('openid', 'offline_access') } }
+            Mock Get-OidcDiscoveryDocument { [PSCustomObject]@{ TokenEndpoint = 'https://idp/token'; AuthorizeEndpoint = 'https://idp/authorize' } }
+            Mock Test-JIMTokenPersistenceAvailable { $true }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ status = 'Healthy' } }
+            Mock Get-JIMServerVersion { '1.2.3' }
+            Mock Show-JIMBanner { }
+            Mock Test-JIMAuthorisation { [PSCustomObject]@{ authorised = $true } }
+            Mock Save-JIMToken { $true }
+            Mock Get-JIMPersistedToken { 'cached-rt' }
+            Mock Invoke-OAuthTokenRefresh { [PSCustomObject]@{ AccessToken = 'at'; RefreshToken = 'rotated-rt'; ExpiresAt = (Get-Date).AddHours(1) } }
+            Mock Invoke-OAuthBrowserFlow { throw 'Browser flow must not run on a cached reconnect' }
+
+            $result = Connect-JIMInteractive -BaseUrl 'https://jim.example.com'
+
+            $result.Status | Should -Be 'Connected (cached)'
+            $result.Connected | Should -BeTrue
+            Should -Invoke Invoke-OAuthBrowserFlow -Times 0
+            Should -Invoke Save-JIMToken -Times 1 -ParameterFilter { $RefreshToken -eq 'rotated-rt' }
+        }
+    }
+
+    It 'Falls back to the browser and clears the stale token when the cached refresh is rejected' {
+        InModuleScope JIM {
+            $script:JIMConnection = $null
+            Mock Invoke-RestMethod { [PSCustomObject]@{ authority = 'https://idp/'; clientId = 'jim'; scopes = @('openid', 'offline_access') } }
+            Mock Get-OidcDiscoveryDocument { [PSCustomObject]@{ TokenEndpoint = 'https://idp/token'; AuthorizeEndpoint = 'https://idp/authorize' } }
+            Mock Test-JIMTokenPersistenceAvailable { $true }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ status = 'Healthy' } }
+            Mock Get-JIMServerVersion { '1.2.3' }
+            Mock Show-JIMBanner { }
+            Mock Test-JIMAuthorisation { [PSCustomObject]@{ authorised = $true } }
+            Mock Save-JIMToken { $true }
+            Mock Get-JIMPersistedToken { 'stale-rt' }
+            Mock Invoke-OAuthTokenRefresh { throw 'invalid_grant' }
+            Mock Remove-JIMToken { 1 }
+            Mock Invoke-OAuthBrowserFlow { [PSCustomObject]@{ AccessToken = 'at'; RefreshToken = 'fresh-rt'; ExpiresAt = (Get-Date).AddHours(1) } }
+
+            $result = Connect-JIMInteractive -BaseUrl 'https://jim.example.com'
+
+            Should -Invoke Remove-JIMToken -Times 1 -ParameterFilter { $BaseUrl -eq 'https://jim.example.com' }
+            Should -Invoke Invoke-OAuthBrowserFlow -Times 1
+            Should -Invoke Save-JIMToken -Times 1 -ParameterFilter { $RefreshToken -eq 'fresh-rt' }
+            $result.Connected | Should -BeTrue
+        }
+    }
+
+    It 'Skips the cached-token path entirely when -Force is set' {
+        InModuleScope JIM {
+            $script:JIMConnection = $null
+            Mock Invoke-RestMethod { [PSCustomObject]@{ authority = 'https://idp/'; clientId = 'jim'; scopes = @('openid', 'offline_access') } }
+            Mock Get-OidcDiscoveryDocument { [PSCustomObject]@{ TokenEndpoint = 'https://idp/token'; AuthorizeEndpoint = 'https://idp/authorize' } }
+            Mock Test-JIMTokenPersistenceAvailable { $true }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ status = 'Healthy' } }
+            Mock Get-JIMServerVersion { '1.2.3' }
+            Mock Show-JIMBanner { }
+            Mock Test-JIMAuthorisation { [PSCustomObject]@{ authorised = $true } }
+            Mock Save-JIMToken { $true }
+            Mock Get-JIMPersistedToken { 'cached-rt' }
+            Mock Invoke-OAuthBrowserFlow { [PSCustomObject]@{ AccessToken = 'at'; RefreshToken = 'fresh-rt'; ExpiresAt = (Get-Date).AddHours(1) } }
+
+            $null = Connect-JIMInteractive -BaseUrl 'https://jim.example.com' -Force
+
+            Should -Invoke Get-JIMPersistedToken -Times 0
+            Should -Invoke Invoke-OAuthBrowserFlow -Times 1
+        }
+    }
+}

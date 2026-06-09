@@ -215,7 +215,7 @@ function Invoke-JIMApiRequest {
                 }
             }
             403 {
-                throw "Access denied. You are authenticated but not authorised to perform this operation. This usually means your identity has not been provisioned in JIM. Sign in to the JIM web portal first, then run Connect-JIM again."
+                throw "Access denied. You are authenticated but not authorised to perform this operation. This usually means your identity has not been provisioned in JIM. Identities are created when you are synchronised into JIM from a connected system, or provisioned by an administrator. Contact your JIM administrator if this is unexpected."
             }
             404 {
                 throw "Resource not found: $errorMessage"
