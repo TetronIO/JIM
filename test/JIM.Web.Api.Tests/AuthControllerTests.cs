@@ -164,7 +164,26 @@ public class AuthControllerTests
         Assert.That(config, Is.Not.Null);
         Assert.That(config!.Scopes, Contains.Item("openid"));
         Assert.That(config.Scopes, Contains.Item("profile"));
-        Assert.That(config.Scopes.Count, Is.EqualTo(2));
+        Assert.That(config.Scopes, Contains.Item("offline_access"));
+        Assert.That(config.Scopes.Count, Is.EqualTo(3));
+    }
+
+    [Test]
+    public void GetConfig_WhenSsoConfigured_IncludesOfflineAccessScope()
+    {
+        // Arrange - offline_access is required for the IdP to issue a refresh token, which the
+        // PowerShell module persists for cross-session token caching (issue #305). Without it,
+        // providers such as Entra ID issue no refresh token and silent reconnection is impossible.
+        Environment.SetEnvironmentVariable("JIM_SSO_AUTHORITY", "https://login.panoply.org");
+        Environment.SetEnvironmentVariable("JIM_SSO_CLIENT_ID", "test-client-id");
+
+        // Act
+        var result = _controller.GetConfig() as OkObjectResult;
+        var config = result?.Value as AuthConfigResponse;
+
+        // Assert
+        Assert.That(config, Is.Not.Null);
+        Assert.That(config!.Scopes, Contains.Item("offline_access"));
     }
 
     [Test]
@@ -184,8 +203,9 @@ public class AuthControllerTests
         Assert.That(config, Is.Not.Null);
         Assert.That(config!.Scopes, Contains.Item("openid"));
         Assert.That(config.Scopes, Contains.Item("profile"));
+        Assert.That(config.Scopes, Contains.Item("offline_access"));
         Assert.That(config.Scopes, Contains.Item(apiScope));
-        Assert.That(config.Scopes.Count, Is.EqualTo(3));
+        Assert.That(config.Scopes.Count, Is.EqualTo(4));
     }
 
     [Test]

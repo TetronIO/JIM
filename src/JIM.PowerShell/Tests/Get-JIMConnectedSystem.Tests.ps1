@@ -75,11 +75,11 @@ Describe 'Get-JIMConnectedSystem' {
         }
 
         It 'Should throw when not connected' {
-            { Get-JIMConnectedSystem } | Should -Throw '*Connect-JIM*'
+            { Get-JIMConnectedSystem -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
 
         It 'Should throw when getting by ID without connection' {
-            { Get-JIMConnectedSystem -Id 1 } | Should -Throw '*Connect-JIM*'
+            { Get-JIMConnectedSystem -Id 1 -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
     }
 

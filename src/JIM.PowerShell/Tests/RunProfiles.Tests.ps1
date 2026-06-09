@@ -53,7 +53,7 @@ Describe 'Get-JIMRunProfile' {
         }
 
         It 'Should throw when not connected' {
-            { Get-JIMRunProfile -ConnectedSystemId 1 } | Should -Throw '*Connect-JIM*'
+            { Get-JIMRunProfile -ConnectedSystemId 1 -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
     }
 

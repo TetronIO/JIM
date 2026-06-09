@@ -258,7 +258,7 @@ Describe 'Get-JIMUserInfo' {
         }
 
         It 'Should throw when not connected' {
-            { Get-JIMUserInfo } | Should -Throw '*Connect-JIM*'
+            { Get-JIMUserInfo -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
     }
 

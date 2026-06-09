@@ -58,8 +58,11 @@ public class AuthController : ControllerBase
             });
         }
 
-        // Build the scopes list
-        var scopes = new List<string> { "openid", "profile" };
+        // Build the scopes list. offline_access is requested so the IdP issues a refresh token;
+        // the PowerShell module persists that refresh token to the platform credential store for
+        // cross-session token caching (issue #305) and uses it for silent in-session refresh.
+        // Without offline_access, providers such as Entra ID issue no refresh token at all.
+        var scopes = new List<string> { "openid", "profile", "offline_access" };
         if (!string.IsNullOrEmpty(apiScope))
         {
             scopes.Add(apiScope);

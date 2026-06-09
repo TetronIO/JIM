@@ -327,7 +327,7 @@ public class UserInfoControllerTests
         var messageProperty = value!.GetType().GetProperty("message");
         var message = messageProperty?.GetValue(value) as string;
         Assert.That(message, Is.Not.Null.And.Not.Empty);
-        Assert.That(message, Does.Contain("sign in").IgnoreCase.Or.Contain("web portal").IgnoreCase);
+        Assert.That(message, Does.Contain("synchronised").IgnoreCase.Or.Contain("administrator").IgnoreCase);
     }
 
     #endregion

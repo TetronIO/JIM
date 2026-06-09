@@ -74,6 +74,12 @@ function Get-JIMMetaverseObjectType {
     )
 
     process {
+        # Check connection first
+        if (-not $script:JIMConnection) {
+            Write-Error "You are not connected to JIM. Run Connect-JIM -Url <your JIM URL> to authenticate, then try again."
+            return
+        }
+
         # Resolve name to ID if using ByName parameter set
         if ($PSCmdlet.ParameterSetName -eq 'ByName') {
             try {

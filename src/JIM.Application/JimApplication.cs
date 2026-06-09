@@ -38,6 +38,7 @@ public class JimApplication : IDisposable
 
     internal SeedingServer Seeding { get; }
     public ActivityServer Activities { get; }
+    public AuthServer Auth { get; }
     public CertificateServer Certificates { get; }
     public ChangeHistoryServer ChangeHistory { get; }
     public ConnectedSystemServer ConnectedSystems { get; }
@@ -59,6 +60,7 @@ public class JimApplication : IDisposable
     public JimApplication(IRepository dataRepository, IMemoryCache? cache = null, ISyncRepository? syncRepository = null)
     {
         Activities = new ActivityServer(this);
+        Auth = new AuthServer(this);
         Certificates = new CertificateServer(this);
         ChangeHistory = new ChangeHistoryServer(this);
         ConnectedSystems = new ConnectedSystemServer(this);

@@ -64,7 +64,7 @@ Describe 'Get-JIMRole' {
         }
 
         It 'Should throw when not connected' {
-            { Get-JIMRole } | Should -Throw '*Connect-JIM*'
+            { Get-JIMRole -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
     }
 

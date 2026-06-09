@@ -80,6 +80,12 @@ function Get-JIMCertificate {
     )
 
     process {
+        # Check connection first
+        if (-not $script:JIMConnection) {
+            Write-Error "You are not connected to JIM. Run Connect-JIM -Url <your JIM URL> to authenticate, then try again."
+            return
+        }
+
         switch ($PSCmdlet.ParameterSetName) {
             'ById' {
                 Write-Verbose "Getting certificate with ID: $Id"

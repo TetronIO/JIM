@@ -9,12 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ The PowerShell module now persists your interactive SSO sign-in across terminal sessions: after `Connect-JIM`, opening a new terminal reconnects silently without a browser. Only the refresh token is stored, in the operating system's credential store (Credential Manager on Windows, login Keychain on macOS, libsecret on Linux), with no extra password beyond your normal OS sign-in. Use `Connect-JIM -NoPersist` to opt out for a session, `-Force` to re-authenticate and overwrite the stored token, and `Disconnect-JIM` to remove the stored token for the current instance (`-Url` for a specific instance, `-All` for every instance). Headless Linux without a keyring falls back to in-memory tokens and points you to `-ApiKey`.
 - ✨ Factory reset is now available in the portal: a new Administration danger area (`/admin/factory-reset`) with a backup warning, type-to-confirm, and an optional "delete administrators" path.
+- ✨ The initial administrator can now be provisioned on first contact via the PowerShell module or REST API, not just the web portal. On a fresh deployment, the configured initial admin's first authenticated call (CLI or portal) just-in-time creates their identity and grants the Administrator role, so an edge or air-gapped instance can be administered entirely from the command line without ever opening the portal. Profile attributes from a CLI-only bootstrap are backfilled on a later portal sign-in.
 
 ### Changed
 
+- 🔄 JIM now requests the `offline_access` scope during interactive authentication so the identity provider issues a refresh token. This enables reliable in-session token renewal and the new PowerShell token persistence. Existing SSO deployments should ensure `offline_access` is permitted on the interactive/public client; see the updated SSO setup guide.
 - 🔄 Factory reset now **preserves administrator users by default** (so you are not locked out) and always records a Reset activity attributed to whoever initiated it. The previous behaviour of also removing administrators is available via the new `-IncludeAdministrators` switch on `Reset-JIMSystem` (and `includeAdministrators` on `POST /api/v1/system/reset`), guarded against lockout when no initial administrator is configured.
 - 🔄 The reconnection overlay now shows live attempt progress (for example, "Attempt 2 of 5...") while JIM re-establishes a dropped connection.
+- 🔄 Running a PowerShell cmdlet before connecting now shows a clear one-line message telling you to run `Connect-JIM -Url <your JIM URL>`, instead of a raw error referencing the module's internals; the not-connected state is non-terminating by default and can be made fatal in scripts with `-ErrorAction Stop`.
 
 ### Fixed
 

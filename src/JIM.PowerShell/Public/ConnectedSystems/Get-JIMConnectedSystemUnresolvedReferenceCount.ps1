@@ -54,7 +54,7 @@ function Get-JIMConnectedSystemUnresolvedReferenceCount {
 
     process {
         if (-not $script:JIMConnection) {
-            Write-Error "Not connected to JIM. Use Connect-JIM first."
+            Write-Error "You are not connected to JIM. Run Connect-JIM -Url <your JIM URL> to authenticate, then try again."
             return
         }
 

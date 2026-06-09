@@ -123,6 +123,9 @@ Because the web and PowerShell platforms share the same **Application (client) I
 !!! note
     Entra ID requires exact redirect URI matching. If port 8400 is busy, the module will try ports 8401--8409. You may need to add additional redirect URIs if you encounter port conflicts.
 
+!!! note "Refresh tokens"
+    Setting **Allow public client flows** to **Yes** (step 8 above) is what lets Entra ID return a refresh token to the module. JIM requests the `offline_access` scope at runtime; it is a standard OIDC scope and does not need to be added as an API permission. The refresh token enables silent in-session renewal and optional cross-session token persistence.
+
 ### Step 6: Configure JIM Environment Variables
 
 Add these to your `.env` file:
@@ -226,6 +229,7 @@ This step creates the API configuration for JWT Bearer token validation.
     - `openid`
     - `profile`
     - `email`
+    - `offline_access` (required for refresh-token issuance; enables PowerShell silent renewal and token persistence)
 10. Click **Next** and then **Close**
 
 ### Step 6: Generate a Client Secret
@@ -387,6 +391,7 @@ The JIM PowerShell module uses OAuth 2.0 with PKCE for interactive browser-based
 9. Go to the **Client scopes** tab
 10. Click **Add client scope**
 11. Select `jim-api` and add as **Optional**
+12. Confirm `offline_access` is listed (Keycloak adds it as a default optional scope on new clients). If it is missing, click **Add client scope**, select `offline_access`, and add it as **Optional**. This lets the module receive a refresh token for silent renewal and token persistence.
 
 !!! note
     The PowerShell module uses loopback redirect URIs per [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252). If port 8400 is busy, the module will try ports 8401--8409. Add the corresponding redirect URIs (e.g. `http://localhost:8401/callback/` through `http://localhost:8409/callback/`) if port conflicts are likely in your environment.
@@ -461,9 +466,12 @@ The JIM server exposes `/api/v1/auth/config`, an unauthenticated discovery endpo
 
 - `authority`: the OIDC authority URL — `JIM_SSO_PUBLIC_AUTHORITY` if set, else `JIM_SSO_AUTHORITY`
 - `clientId`: the client ID for public/PKCE flows — `JIM_SSO_PUBLIC_CLIENT_ID` if set, else `JIM_SSO_CLIENT_ID`
-- `scopes`: the OAuth scopes to request, including `JIM_SSO_API_SCOPE`
+- `scopes`: the OAuth scopes to request: `openid`, `profile`, `offline_access`, and (when set) `JIM_SSO_API_SCOPE`
 
 Backend token validation (the JWT bearer middleware that protects `/api/**` endpoints) always uses `JIM_SSO_AUTHORITY` for issuer and JWKS, and `JIM_SSO_API_SCOPE` for the audience, regardless of which public client issued the token. As long as the public and confidential clients belong to the same realm/tenant and both request the same API scope, tokens from either are valid.
+
+!!! info "Why `offline_access`?"
+    JIM requests the `offline_access` scope so the identity provider issues a **refresh token**. The PowerShell module uses this for two things: silent in-session token renewal (so long-running sessions don't expire mid-task), and optional cross-session token persistence (so opening a new terminal doesn't require re-authenticating in the browser). The refresh token is the only credential persisted, and it is stored in the operating system's credential store (Credential Manager on Windows, login Keychain on macOS, libsecret on Linux); never in plain text. Your public client must be permitted to receive `offline_access`. Most identity providers grant it to public clients by default; the per-provider steps above note where it must be enabled explicitly.
 
 ---
 

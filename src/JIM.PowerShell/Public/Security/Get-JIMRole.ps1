@@ -66,6 +66,12 @@ function Get-JIMRole {
     )
 
     process {
+        # Check connection first
+        if (-not $script:JIMConnection) {
+            Write-Error "You are not connected to JIM. Run Connect-JIM -Url <your JIM URL> to authenticate, then try again."
+            return
+        }
+
         if ($PSCmdlet.ParameterSetName -eq 'ById') {
             Write-Verbose "Getting role by ID: $Id"
             try {

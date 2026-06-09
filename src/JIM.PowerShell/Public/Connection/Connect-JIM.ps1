@@ -14,15 +14,28 @@ function Connect-JIM {
         1. Interactive browser-based SSO authentication (default for interactive sessions)
         2. API key authentication (for automation, CI/CD, and scripting)
 
+        For interactive (SSO) sign-ins, the refresh token is persisted in the operating
+        system's credential store (Credential Manager on Windows, login Keychain on macOS,
+        libsecret on Linux) so that opening a new terminal reconnects silently without a
+        browser. Only the refresh token is stored, never the access token. On systems with
+        no usable credential store (typically headless Linux without a keyring), the module
+        falls back to in-memory tokens for the session. Use -NoPersist to opt out.
+
     .PARAMETER Url
         The base URL of the JIM instance, e.g., 'https://jim.company.com' or 'http://localhost:5200'.
 
     .PARAMETER ApiKey
         The API key for authentication. API keys can be created in the JIM web interface
-        under Admin > API Keys. When specified, skips interactive authentication.
+        under Admin > API Keys. When specified, skips interactive authentication. API key
+        connections never read or write the credential store.
 
     .PARAMETER Force
-        Forces re-authentication even if a valid session exists.
+        Forces re-authentication even if a valid session exists. Ignores any persisted
+        refresh token and overwrites it with the newly obtained one.
+
+    .PARAMETER NoPersist
+        Authenticates for this session only, without reading from or writing to the
+        operating system credential store. Useful on shared machines.
 
     .PARAMETER TimeoutSeconds
         How long to wait for interactive authentication to complete. Defaults to 300 (5 minutes).
@@ -50,6 +63,12 @@ function Connect-JIM {
         Connect-JIM -Url "https://jim.company.com" -Force
 
         Forces re-authentication, ignoring any cached session.
+
+    .EXAMPLE
+        Connect-JIM -Url "https://jim.company.com" -NoPersist
+
+        Connects interactively without persisting the refresh token to the OS
+        credential store (in-memory for this session only).
 
     .NOTES
         Interactive authentication requires:
@@ -80,6 +99,9 @@ function Connect-JIM {
         [switch]$Force,
 
         [Parameter(ParameterSetName = 'Interactive')]
+        [switch]$NoPersist,
+
+        [Parameter(ParameterSetName = 'Interactive')]
         [ValidateRange(30, 600)]
         [int]$TimeoutSeconds = 300
     )
@@ -99,7 +121,7 @@ function Connect-JIM {
     }
 
     # Interactive authentication
-    return Connect-JIMInteractive -BaseUrl $baseUrl -Force:$Force -TimeoutSeconds $TimeoutSeconds
+    return Connect-JIMInteractive -BaseUrl $baseUrl -Force:$Force -NoPersist:$NoPersist -TimeoutSeconds $TimeoutSeconds
 }
 
 function Connect-JIMWithApiKey {
@@ -183,6 +205,8 @@ function Connect-JIMInteractive {
 
         [switch]$Force,
 
+        [switch]$NoPersist,
+
         [int]$TimeoutSeconds = 300
     )
 
@@ -215,13 +239,27 @@ function Connect-JIMInteractive {
                     $script:JIMConnection.RefreshToken = $tokens.RefreshToken
                     $script:JIMConnection.TokenExpiresAt = $tokens.ExpiresAt
 
+                    # Write the rotated refresh token back to the credential store so the
+                    # persisted copy stays valid (most IdPs rotate refresh tokens on use).
+                    if ($script:JIMConnection.Persisted) {
+                        try {
+                            Save-JIMToken -BaseUrl $script:JIMConnection.Url -RefreshToken $tokens.RefreshToken | Out-Null
+                        }
+                        catch {
+                            Write-Verbose "Failed to persist refreshed token: $_"
+                        }
+                    }
+
                     Write-Verbose "Successfully refreshed access token"
+                    $serverVersion = Get-JIMServerVersion
+                    Show-JIMBanner -ServerVersion $serverVersion -Url $script:JIMConnection.Url
                     return [PSCustomObject]@{
-                        Url        = $script:JIMConnection.Url
-                        AuthMethod = 'OAuth'
-                        Connected  = $true
-                        ExpiresAt  = $tokens.ExpiresAt
-                        Status     = 'Connected (refreshed)'
+                        Url           = $script:JIMConnection.Url
+                        AuthMethod    = 'OAuth'
+                        Connected     = $true
+                        ServerVersion = $serverVersion
+                        ExpiresAt     = $tokens.ExpiresAt
+                        Status        = 'Connected (refreshed)'
                     }
                 }
                 catch {
@@ -248,6 +286,89 @@ function Connect-JIMInteractive {
     Write-Verbose "Fetching OIDC discovery document from $($authConfig.authority)..."
     $discovery = Get-OidcDiscoveryDocument -Authority $authConfig.authority
 
+    # Determine whether persistent token storage is in play for this session.
+    # -NoPersist opts out; otherwise it depends on whether the OS has a usable
+    # credential store (Windows/macOS always; Linux only with libsecret present).
+    $persistenceAvailable = Test-JIMTokenPersistenceAvailable
+    $usePersistence = (-not $NoPersist) -and $persistenceAvailable
+
+    # Attempt a silent reconnect using a persisted refresh token before opening a
+    # browser. Skipped when -Force is set (force always re-authenticates and then
+    # overwrites the stored token).
+    if ($usePersistence -and -not $Force) {
+        $cachedRefreshToken = Get-JIMPersistedToken -BaseUrl $BaseUrl
+        if ($cachedRefreshToken) {
+            try {
+                Write-Verbose "Found a persisted refresh token; attempting silent reconnect..."
+                $tokens = Invoke-OAuthTokenRefresh `
+                    -TokenEndpoint $discovery.TokenEndpoint `
+                    -ClientId $authConfig.clientId `
+                    -RefreshToken $cachedRefreshToken `
+                    -Scopes $authConfig.scopes
+
+                $script:JIMConnection = [PSCustomObject]@{
+                    Url            = $BaseUrl
+                    ApiKey         = $null
+                    AccessToken    = $tokens.AccessToken
+                    RefreshToken   = $tokens.RefreshToken
+                    TokenExpiresAt = $tokens.ExpiresAt
+                    AuthMethod     = 'OAuth'
+                    Connected      = $false
+                    Persisted      = $true
+                    OAuthConfig    = @{
+                        Authority     = $authConfig.authority
+                        ClientId      = $authConfig.clientId
+                        Scopes        = $authConfig.scopes
+                        TokenEndpoint = $discovery.TokenEndpoint
+                    }
+                }
+
+                Write-Verbose "Testing connection to JIM with cached credentials..."
+                $health = Invoke-JIMApi -Endpoint '/api/v1/health'
+                $script:JIMConnection.Connected = $true
+
+                $serverVersion = Get-JIMServerVersion
+                Show-JIMBanner -ServerVersion $serverVersion -Url $BaseUrl -StatusLine "Connected to JIM using cached credentials (no browser sign-in required)."
+                $userInfo = Test-JIMAuthorisation
+
+                # Persist the (possibly rotated) refresh token.
+                try {
+                    Save-JIMToken -BaseUrl $BaseUrl -RefreshToken $tokens.RefreshToken | Out-Null
+                }
+                catch {
+                    Write-Verbose "Failed to persist refreshed token: $_"
+                }
+
+                return [PSCustomObject]@{
+                    Url           = $script:JIMConnection.Url
+                    AuthMethod    = 'OAuth'
+                    Connected     = $true
+                    ServerVersion = $serverVersion
+                    ExpiresAt     = $tokens.ExpiresAt
+                    Authorised    = $userInfo.authorised ?? $null
+                    Status        = 'Connected (cached)'
+                }
+            }
+            catch {
+                Write-Verbose "Silent reconnect with persisted token failed, falling back to browser sign-in: $_"
+                $script:JIMConnection = $null
+                # Drop the stale token so we don't keep retrying a dead refresh token.
+                try {
+                    Remove-JIMToken -BaseUrl $BaseUrl | Out-Null
+                }
+                catch {
+                    Write-Verbose "Failed to remove stale persisted token: $_"
+                }
+            }
+        }
+    }
+
+    # Tell the user when persistence was wanted but the platform has no usable store
+    # (typically headless/SSH Linux without a keyring), and point them at -ApiKey.
+    if (-not $NoPersist -and -not $persistenceAvailable) {
+        Write-Host "Token persistence is unavailable on this system (no OS keyring detected); you will need to re-authenticate in new sessions. For unattended or headless use, connect with -ApiKey instead." -ForegroundColor DarkGray
+    }
+
     # Perform browser-based authentication
     Write-Host ""
     Write-Host "Starting interactive authentication with JIM..." -ForegroundColor Cyan
@@ -270,6 +391,7 @@ function Connect-JIMInteractive {
         TokenExpiresAt = $tokens.ExpiresAt
         AuthMethod     = 'OAuth'
         Connected      = $false
+        Persisted      = $usePersistence
         OAuthConfig    = @{
             Authority     = $authConfig.authority
             ClientId      = $authConfig.clientId
@@ -288,10 +410,27 @@ function Connect-JIMInteractive {
         # Fetch server version
         $serverVersion = Get-JIMServerVersion
 
-        Show-JIMBanner -ServerVersion $serverVersion -Url $BaseUrl
+        # When the user opted out of persistence, confirm it directly under the
+        # connected line so it is obvious a new terminal will need to sign in again.
+        $bannerStatus = @()
+        if ($NoPersist) {
+            $bannerStatus += "Auth persistence disabled (-NoPersist): a new terminal will require a fresh sign-in."
+        }
+        Show-JIMBanner -ServerVersion $serverVersion -Url $BaseUrl -StatusLine $bannerStatus
 
         # Verify the user is authorised to use JIM
         $userInfo = Test-JIMAuthorisation
+
+        # Persist the refresh token so future sessions can reconnect without a browser.
+        if ($usePersistence -and $tokens.RefreshToken) {
+            try {
+                Save-JIMToken -BaseUrl $BaseUrl -RefreshToken $tokens.RefreshToken | Out-Null
+                Write-Verbose "Persisted refresh token for future sessions"
+            }
+            catch {
+                Write-Warning "Connected, but failed to persist the refresh token for future sessions: $_"
+            }
+        }
 
         [PSCustomObject]@{
             Url           = $script:JIMConnection.Url

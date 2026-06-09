@@ -33,6 +33,63 @@ Remove-Module JIM
 Import-Module ./src/JIM.PowerShell/JIM.psd1
 ```
 
+## Testing a branch on your host machine
+
+Some module behaviour cannot be exercised from inside the devcontainer and must be tested from a PowerShell session on your **host** machine:
+
+- **OS credential-store persistence**: the refresh-token store writes to Windows Credential Manager, the macOS login Keychain, or Linux libsecret. The devcontainer has no usable keyring, so persistence always falls back to in-memory.
+- **Silent reconnect across sessions**: verifying that a brand-new terminal reconnects without a browser only makes sense where the token actually persists.
+- **Interactive browser-based SSO**: as noted under [Connecting to local JIM](#connecting-to-local-jim), the browser flow only works on the host.
+
+To test the branch's module on your host, copy the source tree into your user module path under the name `JIM` so a new terminal autoloads it. Importing straight from the repo path works for a single session, but copying into the module path is what lets a fresh terminal pick it up, which is exactly what the silent-reconnect tests need.
+
+=== "macOS / Linux"
+
+    ```powershell
+    $dest = "$HOME/.local/share/powershell/Modules/JIM"
+    Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue
+    Copy-Item <repo>/src/JIM.PowerShell $dest -Recurse
+    Import-Module JIM -Force
+    ```
+
+=== "Windows"
+
+    ```powershell
+    $dest = "$env:USERPROFILE\Documents\PowerShell\Modules\JIM"
+    Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue
+    Copy-Item <repo>\src\JIM.PowerShell $dest -Recurse
+    Import-Module JIM -Force
+    ```
+
+Replace `<repo>` with your host checkout path. Confirm the loaded copy is the one you just placed, not a gallery copy elsewhere on the path:
+
+```powershell
+(Get-Module JIM).Path
+```
+
+!!! warning "The copied folder shadows the gallery version"
+    While the dev folder sits in your module path it takes precedence over any gallery-installed `JIM`, and both report the same `ModuleVersion` (the branch does not bump it). `Get-Module JIM` alone cannot tell them apart; use `(Get-Module JIM).Path` to be sure which one is loaded. After editing module source on the branch, re-run the `Copy-Item` step before `Import-Module JIM -Force`, since `-Force` reloads from the copied location, not the repo.
+
+### Reverting to the gallery version
+
+When finished, remove the dev copy and restore the published module. Deleting the folder matters: `Remove-Module` only unloads it from the current session, so a new terminal would silently reload the dev build while the folder remains on the path.
+
+=== "macOS / Linux"
+
+    ```powershell
+    Remove-Module JIM -Force -ErrorAction SilentlyContinue
+    Remove-Item "$HOME/.local/share/powershell/Modules/JIM" -Recurse -Force
+    Install-Module JIM        # or Update-Module JIM if previously installed
+    ```
+
+=== "Windows"
+
+    ```powershell
+    Remove-Module JIM -Force -ErrorAction SilentlyContinue
+    Remove-Item "$env:USERPROFILE\Documents\PowerShell\Modules\JIM" -Recurse -Force
+    Install-Module JIM        # or Update-Module JIM if previously installed
+    ```
+
 ## Connecting to local JIM
 
 Start the Docker stack first:

@@ -29,8 +29,9 @@ function Test-JIMAuthorisation {
             Write-Host "WARNING: You are authenticated but not authorised to use JIM." -ForegroundColor Yellow
             Write-Host ""
             Write-Host "Your identity has not been provisioned in JIM yet." -ForegroundColor Yellow
-            Write-Host "Please sign in to the JIM web portal first to create your identity," -ForegroundColor Yellow
-            Write-Host "then reconnect with Connect-JIM." -ForegroundColor Yellow
+            Write-Host "Identities are created when you are synchronised into JIM from a" -ForegroundColor Yellow
+            Write-Host "connected system, or provisioned by an administrator." -ForegroundColor Yellow
+            Write-Host "Contact your JIM administrator if you believe this is in error." -ForegroundColor Yellow
             Write-Host ""
         }
 

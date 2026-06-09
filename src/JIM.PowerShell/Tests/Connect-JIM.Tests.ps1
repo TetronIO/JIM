@@ -92,6 +92,18 @@ Describe 'Connect-JIM' {
             $timeoutParam.ParameterSets.Keys | Should -Contain 'Interactive'
             $timeoutParam.ParameterSets.Keys | Should -Not -Contain 'ApiKey'
         }
+
+        It 'Should have a NoPersist switch parameter' {
+            $command = Get-Command Connect-JIM
+            $command.Parameters['NoPersist'].SwitchParameter | Should -BeTrue
+        }
+
+        It 'NoPersist should only be in Interactive parameter set' {
+            $command = Get-Command Connect-JIM
+            $noPersistParam = $command.Parameters['NoPersist']
+            $noPersistParam.ParameterSets.Keys | Should -Contain 'Interactive'
+            $noPersistParam.ParameterSets.Keys | Should -Not -Contain 'ApiKey'
+        }
     }
 
     Context 'Help Documentation' {
@@ -153,6 +165,79 @@ Describe 'Disconnect-JIM' {
         It 'Should have CmdletBinding' {
             $command = Get-Command Disconnect-JIM
             $command.CmdletBinding | Should -BeTrue
+        }
+    }
+
+    Context 'Parameters' {
+
+        It 'Should not have a ClearCache parameter (retired)' {
+            (Get-Command Disconnect-JIM).Parameters.Keys | Should -Not -Contain 'ClearCache'
+        }
+
+        It 'Should have a Url parameter' {
+            (Get-Command Disconnect-JIM).Parameters['Url'] | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have an All switch parameter' {
+            (Get-Command Disconnect-JIM).Parameters['All'].SwitchParameter | Should -BeTrue
+        }
+
+        It 'All should be in its own parameter set, separate from Url' {
+            $command = Get-Command Disconnect-JIM
+            $command.Parameters['All'].ParameterSets.Keys | Should -Not -Contain 'Default'
+            $command.Parameters['Url'].ParameterSets.Keys | Should -Not -Contain 'All'
+        }
+
+        It 'Should reject an invalid Url' {
+            { Disconnect-JIM -Url 'not-a-url' } | Should -Throw '*Invalid URL*'
+        }
+    }
+
+    Context 'Disconnect-and-forget behaviour' {
+
+        It 'Removes the persisted token for the currently connected instance by default' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'OAuth' }
+                Mock Remove-JIMToken { 1 }
+                Disconnect-JIM
+                Should -Invoke Remove-JIMToken -Times 1 -ParameterFilter { $BaseUrl -eq 'https://jim.example.com' }
+            }
+        }
+
+        It 'Removes the persisted token regardless of auth method (API key session)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Remove-JIMToken { 0 }
+                Disconnect-JIM
+                Should -Invoke Remove-JIMToken -Times 1 -ParameterFilter { $BaseUrl -eq 'https://jim.example.com' }
+            }
+        }
+
+        It 'Removes the persisted token for an explicit -Url even when not connected' {
+            InModuleScope JIM {
+                $script:JIMConnection = $null
+                Mock Remove-JIMToken { 1 }
+                Disconnect-JIM -Url 'https://other.example.com'
+                Should -Invoke Remove-JIMToken -Times 1 -ParameterFilter { $BaseUrl -eq 'https://other.example.com' }
+            }
+        }
+
+        It 'Does not touch the credential store when not connected and no -Url' {
+            InModuleScope JIM {
+                $script:JIMConnection = $null
+                Mock Remove-JIMToken { 0 }
+                Disconnect-JIM
+                Should -Invoke Remove-JIMToken -Times 0
+            }
+        }
+
+        It 'Removes all persisted tokens with -All' {
+            InModuleScope JIM {
+                $script:JIMConnection = $null
+                Mock Remove-JIMToken { 3 }
+                Disconnect-JIM -All
+                Should -Invoke Remove-JIMToken -Times 1 -ParameterFilter { $All.IsPresent }
+            }
         }
     }
 
@@ -251,6 +336,39 @@ Describe 'Test-JIMConnection' {
             # AuthMethod is documented in the description since PowerShell help
             # doesn't always parse .OUTPUTS structured data the same way
             $help.Description.Text | Should -Match 'AuthMethod|authentication method'
+        }
+    }
+}
+
+Describe 'Invoke-JIMApi when not connected' {
+
+    It 'Does not throw by default (non-terminating error)' {
+        InModuleScope JIM {
+            $script:JIMConnection = $null
+            { Invoke-JIMApi -Endpoint '/api/v1/health' -ErrorAction SilentlyContinue } | Should -Not -Throw
+        }
+    }
+
+    It 'Writes an error that points the user at Connect-JIM -Url' {
+        InModuleScope JIM {
+            $script:JIMConnection = $null
+            Invoke-JIMApi -Endpoint '/api/v1/health' -ErrorVariable apiError -ErrorAction SilentlyContinue | Out-Null
+            ($apiError -join "`n") | Should -Match 'Connect-JIM -Url'
+        }
+    }
+
+    It 'Throws a catchable error with -ErrorAction Stop' {
+        InModuleScope JIM {
+            $script:JIMConnection = $null
+            { Invoke-JIMApi -Endpoint '/api/v1/health' -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    It 'Returns no output (caller emits nothing)' {
+        InModuleScope JIM {
+            $script:JIMConnection = $null
+            $result = Invoke-JIMApi -Endpoint '/api/v1/health' -ErrorAction SilentlyContinue
+            $result | Should -BeNullOrEmpty
         }
     }
 }

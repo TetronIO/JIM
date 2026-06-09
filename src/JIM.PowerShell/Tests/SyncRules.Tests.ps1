@@ -63,7 +63,7 @@ Describe 'Get-JIMSyncRule' {
         }
 
         It 'Should throw when not connected' {
-            { Get-JIMSyncRule } | Should -Throw '*Connect-JIM*'
+            { Get-JIMSyncRule -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
     }
 

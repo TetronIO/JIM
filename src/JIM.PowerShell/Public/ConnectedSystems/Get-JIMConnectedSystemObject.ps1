@@ -122,6 +122,12 @@ function Get-JIMConnectedSystemObject {
     )
 
     process {
+        # Check connection first
+        if (-not $script:JIMConnection) {
+            Write-Error "You are not connected to JIM. Run Connect-JIM -Url <your JIM URL> to authenticate, then try again."
+            return
+        }
+
         switch ($PSCmdlet.ParameterSetName) {
             'Count' {
                 Write-Verbose "Getting connector space count for Connected System $ConnectedSystemId"

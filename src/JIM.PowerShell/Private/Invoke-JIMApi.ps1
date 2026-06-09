@@ -49,9 +49,14 @@ function Invoke-JIMApi {
         [string]$ContentType = 'application/json'
     )
 
-    # Check connection
+    # Not connected is an expected precondition, not a failure. Report it as a
+    # non-terminating error (matching every other cmdlet's guard) and return
+    # nothing, rather than throwing: a raw throw makes ConciseView render this
+    # helper's internal file and line, which reads like a crash. Callers can opt
+    # into terminating behaviour with -ErrorAction Stop.
     if (-not $script:JIMConnection) {
-        throw "Not connected to JIM. Use Connect-JIM first."
+        Write-Error "You are not connected to JIM. Run Connect-JIM -Url <your JIM URL> to authenticate, then try again."
+        return
     }
 
     # Proactive token refresh: check before the request if token is near expiry
@@ -90,6 +95,18 @@ function Invoke-TokenRefresh {
             $script:JIMConnection.RefreshToken = $tokens.RefreshToken
             $script:JIMConnection.TokenExpiresAt = $tokens.ExpiresAt
             Write-Verbose "Successfully refreshed access token"
+
+            # Write the rotated refresh token back to the credential store so the
+            # persisted copy stays usable in future sessions (most IdPs rotate
+            # refresh tokens on each use).
+            if ($script:JIMConnection.Persisted) {
+                try {
+                    Save-JIMToken -BaseUrl $script:JIMConnection.Url -RefreshToken $tokens.RefreshToken | Out-Null
+                }
+                catch {
+                    Write-Verbose "Failed to persist refreshed token: $_"
+                }
+            }
         }
         catch {
             throw "Access token expired and refresh failed. Please run Connect-JIM again to re-authenticate. Error: $_"
