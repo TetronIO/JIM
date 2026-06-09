@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 Factory reset now **preserves administrator users by default** (so you are not locked out) and always records a Reset activity attributed to whoever initiated it. The previous behaviour of also removing administrators is available via the new `-IncludeAdministrators` switch on `Reset-JIMSystem` (and `includeAdministrators` on `POST /api/v1/system/reset`), guarded against lockout when no initial administrator is configured.
 - 🔄 The reconnection overlay now shows live attempt progress (for example, "Attempt 2 of 5...") while JIM re-establishes a dropped connection.
 - 🔄 Running a PowerShell cmdlet before connecting now shows a clear one-line message telling you to run `Connect-JIM -Url <your JIM URL>`, instead of a raw error referencing the module's internals; the not-connected state is non-terminating by default and can be made fatal in scripts with `-ErrorAction Stop`.
+- 🔄 The "not authorised" message shown when an authenticated user lacks a JIM identity now explains that identities arrive via synchronisation or administrator provisioning, rather than directing users to sign in to the web portal first (which no longer reflects how identities are created).
 
 ### Fixed
 
