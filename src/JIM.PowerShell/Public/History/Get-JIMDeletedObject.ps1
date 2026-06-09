@@ -113,6 +113,12 @@ function Get-JIMDeletedObject {
     )
 
     process {
+        # Check connection first
+        if (-not $script:JIMConnection) {
+            Write-Error "You are not connected to JIM. Run Connect-JIM -Url <your JIM URL> to authenticate, then try again."
+            return
+        }
+
         # Build query string parameters
         $queryParams = @()
         $queryParams += "page=$Page"

@@ -44,7 +44,7 @@ Describe 'Get-JIMExampleDataSet' {
         }
 
         It 'Should throw when not connected' {
-            { Get-JIMExampleDataSet } | Should -Throw '*Connect-JIM*'
+            { Get-JIMExampleDataSet -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
     }
 
@@ -121,7 +121,7 @@ Describe 'Get-JIMExampleDataTemplate' {
         }
 
         It 'Should throw when not connected' {
-            { Get-JIMExampleDataTemplate } | Should -Throw '*Connect-JIM*'
+            { Get-JIMExampleDataTemplate -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
     }
 

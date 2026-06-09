@@ -59,7 +59,7 @@ Describe 'Get-JIMApiKey' {
         }
 
         It 'Should throw when not connected' {
-            { Get-JIMApiKey } | Should -Throw '*Connect-JIM*'
+            { Get-JIMApiKey -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
     }
 

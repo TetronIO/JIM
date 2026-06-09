@@ -100,11 +100,11 @@ Describe 'Get-JIMPendingExport' {
         }
 
         It 'Should throw when listing without connection' {
-            { Get-JIMPendingExport -ConnectedSystemId 1 } | Should -Throw '*Connect-JIM*'
+            { Get-JIMPendingExport -ConnectedSystemId 1 -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
 
         It 'Should throw when getting by ID without connection' {
-            { Get-JIMPendingExport -Id ([guid]::NewGuid()) } | Should -Throw '*Connect-JIM*'
+            { Get-JIMPendingExport -Id ([guid]::NewGuid()) -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
     }
 

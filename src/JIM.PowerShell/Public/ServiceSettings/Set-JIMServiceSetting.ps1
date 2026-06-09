@@ -53,6 +53,12 @@ function Set-JIMServiceSetting {
     )
 
     process {
+        # Check connection first
+        if (-not $script:JIMConnection) {
+            Write-Error "You are not connected to JIM. Run Connect-JIM -Url <your JIM URL> to authenticate, then try again."
+            return
+        }
+
         if ($PSCmdlet.ShouldProcess($Key, "Update service setting to '$Value'")) {
             Write-Verbose "Updating service setting: $Key = $Value"
 

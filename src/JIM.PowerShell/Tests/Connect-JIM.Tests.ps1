@@ -339,3 +339,36 @@ Describe 'Test-JIMConnection' {
         }
     }
 }
+
+Describe 'Invoke-JIMApi when not connected' {
+
+    It 'Does not throw by default (non-terminating error)' {
+        InModuleScope JIM {
+            $script:JIMConnection = $null
+            { Invoke-JIMApi -Endpoint '/api/v1/health' -ErrorAction SilentlyContinue } | Should -Not -Throw
+        }
+    }
+
+    It 'Writes an error that points the user at Connect-JIM -Url' {
+        InModuleScope JIM {
+            $script:JIMConnection = $null
+            Invoke-JIMApi -Endpoint '/api/v1/health' -ErrorVariable apiError -ErrorAction SilentlyContinue | Out-Null
+            ($apiError -join "`n") | Should -Match 'Connect-JIM -Url'
+        }
+    }
+
+    It 'Throws a catchable error with -ErrorAction Stop' {
+        InModuleScope JIM {
+            $script:JIMConnection = $null
+            { Invoke-JIMApi -Endpoint '/api/v1/health' -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    It 'Returns no output (caller emits nothing)' {
+        InModuleScope JIM {
+            $script:JIMConnection = $null
+            $result = Invoke-JIMApi -Endpoint '/api/v1/health' -ErrorAction SilentlyContinue
+            $result | Should -BeNullOrEmpty
+        }
+    }
+}

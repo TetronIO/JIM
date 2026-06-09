@@ -78,7 +78,7 @@ Describe 'Get-JIMActivity' {
         }
 
         It 'Should throw when not connected' {
-            { Get-JIMActivity } | Should -Throw '*Connect-JIM*'
+            { Get-JIMActivity -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
     }
 
@@ -137,7 +137,7 @@ Describe 'Get-JIMActivityStats' {
         }
 
         It 'Should throw when not connected' {
-            { Get-JIMActivityStats -Id ([guid]::NewGuid()) } | Should -Throw '*Connect-JIM*'
+            { Get-JIMActivityStats -Id ([guid]::NewGuid()) -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
     }
 

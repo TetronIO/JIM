@@ -56,6 +56,12 @@ function Get-JIMHistoryCount {
     )
 
     process {
+        # Check connection first
+        if (-not $script:JIMConnection) {
+            Write-Error "You are not connected to JIM. Run Connect-JIM -Url <your JIM URL> to authenticate, then try again."
+            return
+        }
+
         # If using name, resolve to ID first
         if ($PSCmdlet.ParameterSetName -eq 'ByName') {
             Write-Verbose "Looking up Connected System by name: $ConnectedSystemName"

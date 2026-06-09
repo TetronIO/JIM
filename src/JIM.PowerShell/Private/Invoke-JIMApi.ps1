@@ -49,9 +49,14 @@ function Invoke-JIMApi {
         [string]$ContentType = 'application/json'
     )
 
-    # Check connection
+    # Not connected is an expected precondition, not a failure. Report it as a
+    # non-terminating error (matching every other cmdlet's guard) and return
+    # nothing, rather than throwing: a raw throw makes ConciseView render this
+    # helper's internal file and line, which reads like a crash. Callers can opt
+    # into terminating behaviour with -ErrorAction Stop.
     if (-not $script:JIMConnection) {
-        throw "Not connected to JIM. Use Connect-JIM first."
+        Write-Error "You are not connected to JIM. Run Connect-JIM -Url <your JIM URL> to authenticate, then try again."
+        return
     }
 
     # Proactive token refresh: check before the request if token is near expiry

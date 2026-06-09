@@ -62,7 +62,7 @@ Describe 'Get-JIMCertificate' {
         }
 
         It 'Should throw when not connected' {
-            { Get-JIMCertificate } | Should -Throw '*Connect-JIM*'
+            { Get-JIMCertificate -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
     }
 

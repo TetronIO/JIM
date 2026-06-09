@@ -121,7 +121,7 @@ Describe 'Get-JIMMetaverseObject' {
         }
 
         It 'Should throw when not connected' {
-            { Get-JIMMetaverseObject } | Should -Throw '*Connect-JIM*'
+            { Get-JIMMetaverseObject -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
     }
 
@@ -197,7 +197,7 @@ Describe 'Get-JIMMetaverseObjectType' {
         }
 
         It 'Should throw when not connected' {
-            { Get-JIMMetaverseObjectType } | Should -Throw '*Connect-JIM*'
+            { Get-JIMMetaverseObjectType -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
     }
 
@@ -270,7 +270,7 @@ Describe 'Get-JIMMetaverseAttribute' {
         }
 
         It 'Should throw when not connected' {
-            { Get-JIMMetaverseAttribute } | Should -Throw '*Connect-JIM*'
+            { Get-JIMMetaverseAttribute -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
     }
 

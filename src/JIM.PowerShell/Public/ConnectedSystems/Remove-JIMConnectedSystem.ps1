@@ -72,6 +72,12 @@ function Remove-JIMConnectedSystem {
     )
 
     process {
+        # Check connection first
+        if (-not $script:JIMConnection) {
+            Write-Error "You are not connected to JIM. Run Connect-JIM -Url <your JIM URL> to authenticate, then try again."
+            return
+        }
+
         # Get the ID from InputObject if provided
         $systemId = if ($PSCmdlet.ParameterSetName -eq 'ByInputObject') {
             $InputObject.id

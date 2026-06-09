@@ -111,11 +111,11 @@ Describe 'Get-JIMConnectedSystemObject' {
         }
 
         It 'Should throw when not connected' {
-            { Get-JIMConnectedSystemObject -ConnectedSystemId 1 -Id ([guid]::NewGuid()) } | Should -Throw '*Connect-JIM*'
+            { Get-JIMConnectedSystemObject -ConnectedSystemId 1 -Id ([guid]::NewGuid()) -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
 
         It 'Should throw when not connected with Count' {
-            { Get-JIMConnectedSystemObject -ConnectedSystemId 1 -Count } | Should -Throw '*Connect-JIM*'
+            { Get-JIMConnectedSystemObject -ConnectedSystemId 1 -Count -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
     }
 
