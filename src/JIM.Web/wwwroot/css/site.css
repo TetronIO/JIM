@@ -1500,11 +1500,10 @@ html[lang] .jim-schema-change-table td {
     align-items: center;
 }
 
-#components-reconnect-modal.components-reconnect-show,
-#components-reconnect-modal.components-reconnect-failed,
-#components-reconnect-modal.components-reconnect-rejected {
-    display: flex;
-}
+/* Visibility is toggled inline (display: flex) by the custom reconnectionHandler
+   in _Layout.cshtml. Supplying a custom handler replaces Blazor's
+   DefaultReconnectionHandler, so the framework never applies the
+   components-reconnect-* classes; do not key styles off them here. */
 
 .jim-reconnect-content {
     background-color: var(--mud-palette-surface);
@@ -1542,18 +1541,7 @@ html[lang] .jim-schema-change-table td {
     font-size: 0.875rem;
     margin: 0;
     color: var(--mud-palette-text-secondary);
-}
-
-/* Failed state */
-#components-reconnect-modal.components-reconnect-failed .jim-reconnect-spinner,
-#components-reconnect-modal.components-reconnect-rejected .jim-reconnect-spinner {
-    border-top-color: var(--mud-palette-error);
-    animation: none;
-}
-
-#components-reconnect-modal.components-reconnect-failed .jim-reconnect-message::after,
-#components-reconnect-modal.components-reconnect-rejected .jim-reconnect-message::after {
-    content: " Reload the page to try again.";
+    min-height: 1.25rem;
 }
 
 /* Audit info chips - compact label that expands on hover */

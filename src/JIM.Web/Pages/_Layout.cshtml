@@ -30,7 +30,7 @@
         <div class="jim-reconnect-content">
             <div class="jim-reconnect-spinner"></div>
             <p class="jim-reconnect-message">Attempting to reconnect to JIM...</p>
-            <p class="jim-reconnect-retry"></p>
+            <p class="jim-reconnect-retry" aria-live="polite"></p>
         </div>
     </div>
 
@@ -50,6 +50,12 @@
         // the old Blazor circuit no longer exists. Rather than spinning on "Attempting
         // to reconnect" forever, reload the page after a few failed attempts so the
         // browser gets a fresh circuit from the new server.
+        //
+        // Supplying a custom reconnectionHandler replaces Blazor's
+        // DefaultReconnectionHandler, so the framework never applies the
+        // components-reconnect-* CSS classes or populates its attempt counters; we
+        // show the modal and the attempt indicator ourselves below.
+        var jimReconnectInterval = null;
         Blazor.start({
             reconnectionOptions: {
                 maxRetries: 5,
@@ -60,18 +66,27 @@
                     var modal = document.getElementById('components-reconnect-modal');
                     if (modal) modal.style.display = 'flex';
 
+                    var retryText = document.querySelector('.jim-reconnect-retry');
+
+                    // Guard against overlapping loops if the connection drops repeatedly.
+                    if (jimReconnectInterval) clearInterval(jimReconnectInterval);
+
                     var retries = 0;
-                    var interval = setInterval(async function () {
+                    jimReconnectInterval = setInterval(async function () {
                         retries++;
                         if (retries > options.maxRetries) {
-                            clearInterval(interval);
+                            clearInterval(jimReconnectInterval);
+                            jimReconnectInterval = null;
+                            if (retryText) retryText.textContent = 'Reloading...';
                             location.reload();
                             return;
                         }
+                        if (retryText) retryText.textContent = 'Attempt ' + retries + ' of ' + options.maxRetries + '...';
                         try {
                             var result = await Blazor.reconnect();
                             if (result) {
-                                clearInterval(interval);
+                                clearInterval(jimReconnectInterval);
+                                jimReconnectInterval = null;
                                 location.reload();
                             }
                         } catch (_e) {
@@ -80,6 +95,10 @@
                     }, options.retryIntervalMilliseconds);
                 },
                 onConnectionUp: function () {
+                    if (jimReconnectInterval) {
+                        clearInterval(jimReconnectInterval);
+                        jimReconnectInterval = null;
+                    }
                     var modal = document.getElementById('components-reconnect-modal');
                     if (modal) modal.style.display = 'none';
                 }
