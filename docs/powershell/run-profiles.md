@@ -281,7 +281,7 @@ Get-JIMRunProfile -ConnectedSystemId 1 |
 
 ```powershell title="Automation with error handling"
 try {
-    Start-JIMRunProfile -RunProfileId 42 -Wait -Timeout 600 -PassThru
+    Start-JIMRunProfile -RunProfileId 42 -Wait -Timeout 600 -PassThru -ErrorAction Stop
 } catch {
     Write-Error "Run profile execution failed or timed out: $_"
 }

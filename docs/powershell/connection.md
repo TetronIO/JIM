@@ -6,6 +6,15 @@ title: Connection
 
 The connection cmdlets manage authentication and session state with a JIM instance. You must establish a connection with [Connect-JIM](#connect-jim) before using any other JIM cmdlets. Use [Test-JIMConnection](#test-jimconnection) to verify your session is active, and [Disconnect-JIM](#disconnect-jim) to clean up when finished.
 
+!!! info "Running a cmdlet before connecting"
+    If you run any JIM cmdlet before `Connect-JIM`, it produces no output and reports a clear, non-terminating error telling you to connect first, for example:
+
+    ```
+    Get-JIMConnectedSystem: You are not connected to JIM. Run Connect-JIM -Url <your JIM URL> to authenticate, then try again.
+    ```
+
+    Because the error is non-terminating, a script continues by default. Add `-ErrorAction Stop` to the cmdlet (or set `$ErrorActionPreference = 'Stop'`) when you want the not-connected state to halt the script or be caught by `try/catch`.
+
 ---
 
 ## Connect-JIM
