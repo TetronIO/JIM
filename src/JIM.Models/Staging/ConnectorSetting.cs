@@ -26,4 +26,12 @@ public class ConnectorSetting
     public List<string>? DropDownValues { get; set; }
 
     public bool Required { get; set; }
+
+    /// <summary>
+    /// When set, at least one setting in the same named group must have a value supplied by the administrator.
+    /// Use for either/or requirements, where individual settings are optional but the group as a whole is required.
+    /// Grouped settings should share the same Category and be declared consecutively so the UI can render them together.
+    /// Enforced generically by JIM when validating Connected System settings; see ConnectorSettingGroupValidator.
+    /// </summary>
+    public string? RequiredGroup { get; set; }
 }

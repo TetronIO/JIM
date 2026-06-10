@@ -35,4 +35,13 @@ public class ConnectedSystemSettingValue
         // at least one value is required for the object to be valid
         return StringValue != null || StringEncryptedValue != null || IntValue.HasValue;
     }
+
+    /// <summary>
+    /// Determines whether the administrator has supplied a usable value, i.e. a non-empty string, encrypted string, or integer.
+    /// Checkbox values are excluded; a boolean always has a value, so it cannot indicate administrator intent.
+    /// </summary>
+    public bool HasUserSuppliedValue()
+    {
+        return !string.IsNullOrEmpty(StringValue) || !string.IsNullOrEmpty(StringEncryptedValue) || IntValue.HasValue;
+    }
 }

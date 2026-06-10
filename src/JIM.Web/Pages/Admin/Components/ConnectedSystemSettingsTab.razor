@@ -2,7 +2,6 @@
 @using JIM.Models.Staging
 @inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
-@inject IDialogService DialogService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -25,110 +24,53 @@
                         .Where(sv => sv.Setting.Category == settingCategory)
                         .OrderBy(sv => sv.Setting.Id)
                         .ToList();
+                    var j = 0;
                 }
-                @for (var j = 0; j < categorySettings.Count; j++)
+                @while (j < categorySettings.Count)
                 {
                     var settingValue = categorySettings[j];
-                    var isLast = j == categorySettings.Count - 1;
-                    var spacingClass = isLast ? "" : "mb-5";
+                    var requiredGroup = settingValue.Setting.RequiredGroup;
 
-                    if (settingValue.Setting.Type == ConnectedSystemSettingType.Heading)
+                    if (!string.IsNullOrEmpty(requiredGroup))
                     {
-                        <MudText Typo="Typo.h6" Class="@spacingClass">@settingValue.Setting.Name</MudText>
-                    }
-                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.Divider)
-                    {
-                        <hr />
-                    }
-                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.String)
-                    {
-                        <MudTextField T="string"
-                                      Label="@settingValue.Setting.Name"
-                                      @bind-Value="settingValue.StringValue"
-                                      Required="@settingValue.Setting.Required"
-                                      RequiredError="@($"A {settingValue.Setting.Name} is required")"
-                                      HelperText="@settingValue.Setting.Description"
-                                      Variant="Variant.Outlined"
-                                      Class="@spacingClass" />
-                    }
-                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.StringEncrypted)
-                    {
-                        var settingId = settingValue.Setting.Id;
-                        <MudTextField T="string"
-                                      Label="@settingValue.Setting.Name"
-                                      @bind-Value="settingValue.StringEncryptedValue"
-                                      Required="@settingValue.Setting.Required"
-                                      RequiredError="@($"A {settingValue.Setting.Name} is required")"
-                                      HelperText="@settingValue.Setting.Description"
-                                      InputType="@(_passwordVisibility.GetValueOrDefault(settingId) ? InputType.Text : InputType.Password)"
-                                      Adornment="Adornment.End"
-                                      AdornmentIcon="@(_passwordVisibility.GetValueOrDefault(settingId) ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
-                                      AdornmentAriaLabel="Toggle password visibility"
-                                      OnAdornmentClick="@(() => _passwordVisibility[settingId] = !_passwordVisibility.GetValueOrDefault(settingId))"
-                                      Variant="Variant.Outlined"
-                                      Class="@spacingClass" />
-                    }
-                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.Integer)
-                    {
-                        <MudTextField T="int?"
-                                      Label="@settingValue.Setting.Name"
-                                      @bind-Value="settingValue.IntValue"
-                                      Required="@settingValue.Setting.Required"
-                                      RequiredError="@($"A {settingValue.Setting.Name} is required")"
-                                      HelperText="@settingValue.Setting.Description"
-                                      InputType="InputType.Number"
-                                      Variant="Variant.Outlined"
-                                      Class="@spacingClass" />
-                    }
-                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.CheckBox)
-                    {
-                        <div class="@spacingClass">
-                            <MudSwitch @bind-Value="settingValue.CheckboxValue" Color="Color.Primary" Label="@settingValue.Setting.Name" />
-                            @if (!string.IsNullOrEmpty(settingValue.Setting.Description))
+                        // consecutive settings sharing a RequiredGroup render together: at least one of them must be supplied
+                        var groupMembers = new List<ConnectedSystemSettingValue>();
+                        while (j < categorySettings.Count && categorySettings[j].Setting.RequiredGroup == requiredGroup)
+                        {
+                            groupMembers.Add(categorySettings[j]);
+                            j++;
+                        }
+                        var groupSpacingClass = j >= categorySettings.Count ? "pa-4" : "pa-4 mb-5";
+                        var groupSatisfied = ConnectorSettingGroupValidator.IsGroupSatisfied(ConnectedSystem.SettingValues, requiredGroup);
+                        <MudPaper Outlined="true" Class="@groupSpacingClass">
+                            <MudText Typo="Typo.h6">@requiredGroup</MudText>
+                            @if (groupSatisfied)
                             {
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary ml-12">@settingValue.Setting.Description</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">Provide a value for at least one of the following settings:</MudText>
                             }
-                        </div>
-                    }
-                    else if (settingValue.Setting is { Type: ConnectedSystemSettingType.DropDown, DropDownValues: not null })
-                    {
-                        <MudSelect @bind-Value="settingValue.StringValue"
-                                   HelperText="@settingValue.Setting.Description"
-                                   Label="@settingValue.Setting.Name"
-                                   Variant="Variant.Outlined"
-                                   Class="@spacingClass"
-                                   Required="@settingValue.Setting.Required"
-                                   RequiredError="@($"A {settingValue.Setting.Name} is required")">
-                            @foreach (var dropDownValue in settingValue.Setting.DropDownValues)
+                            else
                             {
-                                <MudSelectItem T="string" Value="@dropDownValue">@dropDownValue</MudSelectItem>
+                                <MudText Typo="Typo.body2" Color="Color.Error" Class="mb-4">Provide a value for at least one of the following settings:</MudText>
                             }
-                        </MudSelect>
-                    }
-                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.Label)
-                    {
-                        <MudText Class="@spacingClass">
-                            @settingValue.Setting.Description
-                        </MudText>
-                    }
-                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.File)
-                    {
-                        <MudTextField T="string"
-                                      Label="@settingValue.Setting.Name"
-                                      @bind-Value="settingValue.StringValue"
-                                      Required="@settingValue.Setting.Required"
-                                      RequiredError="@($"A {settingValue.Setting.Name} is required")"
-                                      HelperText="@settingValue.Setting.Description"
-                                      Variant="Variant.Outlined"
-                                      ReadOnly="true"
-                                      Adornment="Adornment.End"
-                                      AdornmentIcon="@Icons.Material.Filled.FolderOpen"
-                                      OnAdornmentClick="@(() => OpenFileBrowserAsync(settingValue))"
-                                      Class="@spacingClass" />
+                            @for (var k = 0; k < groupMembers.Count; k++)
+                            {
+                                <ConnectedSystemSettingField SettingValue="@groupMembers[k]"
+                                                             CssClass="@(k == groupMembers.Count - 1 ? "" : "mb-5")"
+                                                             Immediate="true"
+                                                             IsExportOnlyMode="@ConnectedSystem.IsExportOnlyMode()"
+                                                             ValueChanged="OnSettingValueChanged"
+                                                             FileSelected="OnFileSelectedAsync" />
+                            }
+                        </MudPaper>
                     }
                     else
                     {
-                        <MudText Class="mt-b">Oops. Unknown setting type!</MudText>
+                        <ConnectedSystemSettingField SettingValue="@settingValue"
+                                                     CssClass="@(j == categorySettings.Count - 1 ? "" : "mb-5")"
+                                                     IsExportOnlyMode="@ConnectedSystem.IsExportOnlyMode()"
+                                                     ValueChanged="OnSettingValueChanged"
+                                                     FileSelected="OnFileSelectedAsync" />
+                        j++;
                     }
                 }
             </MudPaper>
@@ -164,7 +106,7 @@
         </MudAlert>
     }
 </MudForm>
-<MudButton Variant="Variant.Filled" Color="@(IsSettingsFormValid || !_settingsBeingSaved ? Color.Primary : Color.Default)" Disabled="@(!IsSettingsFormValid || _settingsBeingSaved)" Class="mt-5" DropShadow="false" OnClick="HandleValidSettingsSubmitAsync">
+<MudButton Variant="Variant.Filled" Color="@(IsSettingsFormValid || !_settingsBeingSaved ? Color.Primary : Color.Default)" Disabled="@(!IsSettingsFormValid || !AreSettingGroupsSatisfied() || _settingsBeingSaved)" Class="mt-5" DropShadow="false" OnClick="HandleValidSettingsSubmitAsync">
     @if (_settingsBeingSaved)
     {
         <MudProgressCircular Class="ms-n1" Indeterminate="true" />
@@ -194,7 +136,6 @@
     private Dictionary<string, string> SettingsFormCustomErrors { get; } = new();
     private bool _settingsBeingSaved;
     private MudForm? _settingsForm;
-    private readonly Dictionary<int, bool> _passwordVisibility = new();
 
     private async Task HandleValidSettingsSubmitAsync()
     {
@@ -237,37 +178,30 @@
         await OnConnectedSystemChanged.InvokeAsync();
     }
 
-    private async Task OpenFileBrowserAsync(ConnectedSystemSettingValue settingValue)
+    /// <summary>
+    /// Determines whether every RequiredGroup across the Connected System's settings has at least one value supplied.
+    /// Gates the save button alongside MudForm validity, as group constraints span multiple fields.
+    /// </summary>
+    private bool AreSettingGroupsSatisfied()
     {
-        var isExportMode = ConnectedSystem.IsExportOnlyMode();
-        var title = isExportMode ? "Select Export Location" : "Select File";
+        return ConnectedSystem.SettingValues
+            .Select(sv => sv.Setting.RequiredGroup)
+            .Where(g => !string.IsNullOrEmpty(g))
+            .Distinct()
+            .All(g => ConnectorSettingGroupValidator.IsGroupSatisfied(ConnectedSystem.SettingValues, g!));
+    }
 
-        var parameters = new DialogParameters<FileBrowserDialog>
+    private void OnSettingValueChanged()
+    {
+        // no action needed; handling the child component's callback re-renders this component,
+        // refreshing required-group feedback and the save button's enabled state
+    }
+
+    private async Task OnFileSelectedAsync()
+    {
+        if (_settingsForm != null)
         {
-            { x => x.Title, title },
-            { x => x.AllowNewFilename, isExportMode },
-            { x => x.InitialPath, settingValue.StringValue }
-        };
-
-        var options = new DialogOptions
-        {
-            CloseButton = true,
-            MaxWidth = MaxWidth.Medium,
-            FullWidth = true
-        };
-
-        var dialog = await DialogService.ShowAsync<FileBrowserDialog>(title, parameters, options);
-        var result = await dialog.Result;
-
-        if (result is { Canceled: false, Data: string selectedPath })
-        {
-            settingValue.StringValue = selectedPath;
-            StateHasChanged();
-
-            if (_settingsForm != null)
-            {
-                await _settingsForm.ValidateAsync();
-            }
+            await _settingsForm.ValidateAsync();
         }
     }
 }
