@@ -3,7 +3,7 @@
 - **Status:** Planned
 - **Issue**: #124
 - **Related Issues**: #123 (Event-Based Sync), #121 (Outbound Sync)
-- **Last Updated**: 2026-02-28
+- **Last Updated**: 2026-06-10
 
 ## Overview
 
@@ -882,6 +882,22 @@ PATCH operation has 5 operations, 2 fail.
 ### Compliance Tests
 - Use existing SCIM compliance test suites
 - Test with real IdPs in sandbox environments
+
+---
+
+## Future: SCIM Delta Query (Change Feed for Downstream Pullers)
+
+The design above models JIM as a SCIM server that *receives* pushes (`SupportsDeltaImport => false`; JIM does not serve changes back out). A future enhancement could let JIM also *publish* a change feed, so downstream SCIM clients efficiently poll JIM for "what changed since token X" rather than re-reading every resource. This would turn the SCIM hub into an efficient SCIM *source* that other systems synchronise from.
+
+The mechanism would be the SCIM Delta Query extension (`draft-sehgal-scim-delta-query`): a `GET /.deltaToken` to establish a baseline, and a `POST /.delta` returning only created, updated, and deleted resources since the supplied token, with a fresh token issued on the final page of results.
+
+**Status: deferred, not planned.** Rationale:
+
+- The draft is an individual Internet-Draft, never adopted as a working-group document. The latest revision (-02, dated 2025-01-09) is expired and archived (lapsed 2025-07-13), with unfinished Security and IANA sections and unregistered schema URNs.
+- No known SCIM service provider or client implements the `/.delta` endpoints today, so there is no ecosystem to consume a JIM-published feed.
+- It is net-new server surface: durable change-feed retention, delta-token issue and expiry, and per-resource authorisation re-checks on every token replay.
+
+**Watch-trigger:** revisit when a `draft-ietf-scim-delta-query` (working-group adoption) appears, or when there is concrete demand for downstream systems to pull deltas from JIM. The client-side counterpart, JIM consuming another provider's delta feed, is tracked under #545; that connector's v1 instead uses `meta.lastModified` filtering and ETags behind a pluggable change-detection strategy.
 
 ---
 
