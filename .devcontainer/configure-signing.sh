@@ -88,6 +88,55 @@ is_codespace() {
     return 1
 }
 
+# Probe that gh-gpgsign can actually produce a signature. Configuring git is
+# necessary but not sufficient in a Codespace: gh-gpgsign signs via the GitHub
+# API, which returns "Current user GPG signing disabled" unless the account has
+# GPG verification enabled for this repo (github.com/settings/codespaces). We
+# sign a throwaway, unreferenced commit object (git commit-tree -S) rather than
+# a real commit: it touches no ref and is garbage-collected, but it exercises
+# the exact signing path git uses. Returns 0 if signing works (or cannot be
+# probed), 1 if it is disabled or otherwise failing.
+verify_codespaces_signing_works() {
+    local tree probe_out
+    # No HEAD yet (unusual setup ordering / bare clone) means nothing to sign
+    # against; don't raise a false alarm.
+    tree=$(git rev-parse "HEAD^{tree}" 2>/dev/null) || return 0
+
+    if probe_out=$(echo "jim codespaces signing probe" | git commit-tree "$tree" -S 2>&1); then
+        return 0
+    fi
+
+    if echo "$probe_out" | grep -qi "signing disabled"; then
+        print_banner "$RED" "Codespaces commit signing is disabled on your account" \
+            "" \
+            "git is configured to sign, but a test signature was refused" \
+            "by the GitHub API. gh-gpgsign needs GPG verification enabled" \
+            "for your account. To fix:" \
+            "" \
+            "  1. Open github.com/settings/codespaces" \
+            "  2. Under 'GPG verification', enable it and allow this" \
+            "     repository (or select all repositories)" \
+            "  3. Restart this Codespace (Stop then Start, or rebuild) so a" \
+            "     fresh token carries the capability; the running token" \
+            "     does not pick it up until then" \
+            "" \
+            "This repository's branch ruleset requires signed commits, so" \
+            "the pre-commit hook will refuse commits until this is done." \
+            "" \
+            "See engineering/DEVELOPER_GUIDE.md 'Commit Signing' for details."
+    else
+        print_banner "$RED" "Codespaces commit signing test failed" \
+            "" \
+            "git is configured to sign, but a test signature failed for" \
+            "an unexpected reason (see the probe output below)." \
+            "" \
+            "Run 'jim-setup-signing' to retry once resolved, or see" \
+            "engineering/DEVELOPER_GUIDE.md 'Commit Signing' for details."
+    fi
+    print_warning "Signing probe output: ${probe_out}"
+    return 1
+}
+
 # Configure signing for Codespaces. The heavy lifting is already done by the
 # Codespaces system gitconfig, which sets gpg.program to the gh-gpgsign helper.
 # We just need to ensure commit.gpgsign is true and that we do NOT set
@@ -115,6 +164,16 @@ configure_codespaces_signing() {
     git config --global --unset user.signingkey 2>/dev/null || true
 
     print_success "Codespaces signing configured via gh-gpgsign helper"
+
+    # Configuring git is necessary but not sufficient: gh-gpgsign signs via the
+    # GitHub API, which refuses with "Current user GPG signing disabled" unless
+    # GPG verification is enabled for your account (and this repo) under
+    # github.com/settings/codespaces. Probe it now with a throwaway signed
+    # object so the gap surfaces during setup rather than on the first commit.
+    if ! verify_codespaces_signing_works; then
+        return 1
+    fi
+
     print_success "All commits will be signed automatically"
     return 0
 }
