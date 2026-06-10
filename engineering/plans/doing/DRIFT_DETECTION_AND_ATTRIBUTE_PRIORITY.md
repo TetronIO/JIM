@@ -1,7 +1,7 @@
 # Drift Detection and Attribute Priority Design Document
 
 - **Status:** Doing (Drift detection complete; attribute priority deferred)
-- **Last Updated**: 2026-01-17
+- **Last Updated**: 2026-06-10
 
 ## Overview
 
@@ -185,7 +185,9 @@ As noted in [SyncRuleMappingProcessor.cs:56](../src/JIM.Worker/Processors/SyncRu
 
 This "last-writer-wins" behaviour is intentionally temporary and will be replaced by proper priority resolution.
 
-**Known Limitation (Feb 2026):** When attributes are recalled (CSO obsoleted with `RemoveContributedAttributesOnObsoletion=true`), the system does not attempt to find an alternative contributor from another connected system with inbound attribute flow for the same MVO attribute. This requires the attribute priority infrastructure (Issue #91). Until then, recalled attributes are simply cleared.
+**Known Limitation (Feb 2026):** When attributes are recalled (CSO obsoleted with `RemoveContributedAttributesOnObsoletion=true`), the system does not attempt to find an alternative contributor from another connected system with inbound attribute flow for the same MVO attribute. This requires the attribute priority infrastructure (Issue #91).
+
+**Interim mitigation (implemented):** Attribute recall is skipped entirely when the MVO type has a deletion grace period configured (`SyncTaskProcessorBase`); the MVO retains its attribute values during the grace period and the Delete export fires on expiry. Without a grace period, recalled attributes are still simply cleared. Proper next-contributor fallback remains gated on attribute priority.
 
 ### The Problem
 
@@ -467,7 +469,7 @@ Attribute priority needs UI in two places:
 
 ##### 2a. Dedicated Attribute Priority Page
 
-**Location:** Metaverse -> Attribute Priority (new navigation item)
+**Location:** Deliberately undecided; gated on an admin IA review (see Future Phase 0 below). Do not assume the current admin IA should simply be extended with another menu item. Attribute priority straddles two lenses: it is configured per MVO attribute (a Schema lens; `/admin/schema` already manages object types and attributes) but stored on import sync rule mappings (a logic/flow lens, beside synchronisation rules and drift enforcement). The IA review should evaluate extending the Schema concept, introducing a Logic/Policy concept, or flat extension of the current IA (the baseline to beat, not the default). An earlier revision of this design pre-supposed "Metaverse -> Attribute Priority"; no Metaverse nav group exists.
 
 This page provides a centralised view of all MVO attributes that have multiple contributors, allowing admins to manage priority across the entire system.
 
@@ -663,6 +665,11 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 
 > **Status**: Design approved, implementation deferred to a future phase.
 
+#### Future Phase 0: Admin IA Review (prerequisite)
+
+- [ ] Review the admin area information architecture and decide where attribute priority lives (Schema concept, new Logic/Policy concept, or other); see UI section 2a above
+- [ ] Decide nav drawer vs admin-index exposure; re-home related existing pages if the review concludes so
+
 #### Future Phase 1: Schema and Model Changes
 
 - [x] Add `ContributedBySystemId` scalar FK to `MetaverseObjectAttributeValue` (prerequisite; Feb 2026, commit `41116255`)
@@ -681,7 +688,7 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 
 #### Future Phase 3: UI Updates
 
-- [ ] Create Attribute Priority page (Metaverse -> Attribute Priority)
+- [ ] Create the dedicated Attribute Priority page (location per Future Phase 0 IA review)
 - [ ] Add priority context panel to import sync rule mapping editor
 - [ ] Add "Advanced Options" section to import mapping editor with "Null is a value" checkbox
 - [ ] Add priority indicator column to sync rule list view
@@ -732,6 +739,19 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
    - Currently scoped per object type (Person, Group, etc.)
    - Is there ever a need for global priority configuration?
    - Probably not - keep scoped to object type for simplicity
+
+7. **Multivalued attributes**
+   - The design above is single-value semantics ("first non-null value wins")
+   - MVAs store one `MetaverseObjectAttributeValue` row per value with a per-row `ContributedBySystemId`, which naturally supports multi-contributor union
+   - Is priority for MVAs winner-takes-all-values, merge/union per contributor, or out of scope for the first iteration?
+
+8. **Interaction with drift detection**
+   - `DriftDetectionService.HasImportRuleForAttribute` treats any system with an import mapping as a legitimate contributor whose inbound changes are not drift
+   - Once priority exists, a low-priority contributor's inbound change can lose resolution; should the losing value sitting in that target system then be treated as drift and corrected back?
+
+9. **Admin IA**
+   - See Future Phase 0: where does attribute priority (and the configuration concepts around it) belong in the admin information architecture?
+   - Do not extend the current IA by default
 
 ---
 
