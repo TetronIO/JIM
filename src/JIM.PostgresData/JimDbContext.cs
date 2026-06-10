@@ -71,11 +71,9 @@ public class JimDbContext : DbContext
     public virtual DbSet<ServiceSetting> ServiceSettingItems { get; set; } = null!;
     public virtual DbSet<ObjectMatchingRule> ObjectMatchingRules { get; set; } = null!;
     public virtual DbSet<ObjectMatchingRuleSource> ObjectMatchingRuleSources { get; set; } = null!;
-    public virtual DbSet<ObjectMatchingRuleSourceParamValue> ObjectMatchingRuleSourceParamValues { get; set; } = null!;
     public virtual DbSet<SyncRule> SyncRules { get; set; } = null!;
     public virtual DbSet<SyncRuleMapping> SyncRuleMappings { get; set; } = null!;
     public virtual DbSet<SyncRuleMappingSource> SyncRuleMappingSources { get; set; } = null!;
-    public virtual DbSet<SyncRuleMappingSourceParamValue> SyncRuleMappingSourceParamValues { get; set; } = null!;
     public virtual DbSet<SyncRuleScopingCriteria> SyncRuleScopingCriteria { get; set; } = null!;
     public virtual DbSet<SyncRuleScopingCriteriaGroup> SyncRuleScopingCriteriaGroups { get; set; } = null!;
     public virtual DbSet<SynchronisationWorkerTask> SynchronisationWorkerTasks { get; set; } = null!;
@@ -304,12 +302,6 @@ public class JimDbContext : DbContext
             .HasMany(omr => omr.Sources)
             .WithOne(s => s.ObjectMatchingRule)
             .HasForeignKey(s => s.ObjectMatchingRuleId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<ObjectMatchingRuleSource>()
-            .HasMany(s => s.ParameterValues)
-            .WithOne(pv => pv.ObjectMatchingRuleSource)
-            .HasForeignKey(pv => pv.ObjectMatchingRuleSourceId)
             .OnDelete(DeleteBehavior.Cascade);
 
         // reduce the chance of concurrency issues by using a system attribute to identify row versions
