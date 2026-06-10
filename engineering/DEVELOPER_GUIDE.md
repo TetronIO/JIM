@@ -436,13 +436,13 @@ All commits to JIM must be cryptographically signed. Signed commits are the foun
 **Policy:**
 - Every commit on every branch must be signed.
 - The signing key must be one of: an SSH key registered as a *signing key* on GitHub, a GPG key registered on GitHub, or (inside a Codespace) the built-in `gh-gpgsign` helper.
-- The pre-commit hook at `.githooks/pre-commit` enforces this at commit time. The branch protection ruleset on `main` (see section 7 below) will additionally enforce `required_signatures` server-side once all developer environments are producing signed commits reliably.
+- The pre-commit hook at `.githooks/pre-commit` enforces this at commit time. The branch protection ruleset on `main` (see section 7 below) additionally enforces `required_signatures` server-side, so unsigned commits are rejected at push/merge time even if the local hook is bypassed.
 
 **Setup in a devcontainer (automated):**
 
 The devcontainer setup script (`.devcontainer/setup.sh`) configures signing automatically during container creation. It detects the environment and does the right thing:
 
-- **In a GitHub Codespace**: uses the built-in `gh-gpgsign` helper, which signs via the GitHub API. No key management required.
+- **In a GitHub Codespace**: uses the built-in `gh-gpgsign` helper, which signs via the GitHub API. No local key management required: GitHub signs and verifies your commits automatically. The one prerequisite is a single, account-wide, one-time toggle: enable **GPG verification** at github.com/settings/codespaces and allow this repository (or all repositories). **Do this before you create the codespace** and it just works. Without it, the API refuses to sign with `Current user GPG signing disabled`; and because the capability is minted into the codespace token at startup, enabling it on an already-running codespace requires a Stop/Start (or rebuild) to take effect. The setup script (and every attach) probes signing and prints these recovery steps if the capability is missing.
 - **In a local devcontainer**: uses the host machine's SSH agent via forwarding. Your private SSH key never enters the container; only the public identity is referenced.
 
 If signing is not successfully configured at container creation, the setup script prints a prominent warning with recovery steps. At any time, you can re-run the signing configuration via `jim-setup-signing` or inspect the current state via `jim-signing-status`.
@@ -492,7 +492,7 @@ The hook at `.githooks/pre-commit` runs automatically before every `git commit` 
 2. A signing mechanism is currently available (SSH agent with keys, or `gh-gpgsign` in Codespaces)
 3. `user.signingkey` is set (for SSH signing)
 
-If any check fails, the hook prints a prominent error with recovery steps and refuses the commit. To bypass in a genuine emergency: `git commit --no-verify`. This should not become a habit; once the branch protection ruleset enables `required_signatures` (see section 7 below), unsigned commits will be rejected at push time regardless.
+If any check fails, the hook prints a prominent error with recovery steps and refuses the commit. To bypass the local hook in a genuine emergency: `git commit --no-verify`. This is rarely useful: the `main` ruleset enforces `required_signatures` server-side (see section 7 below), so an unsigned commit is rejected at push/merge time regardless of the local hook.
 
 **Working outside the devcontainer:**
 
@@ -518,6 +518,7 @@ The `main` branch is protected by the **"Protect Main"** repository ruleset, whi
 | **Require status checks to pass** | Every required CI check must pass before merge. See the check list below. |
 | **Branches must be up to date** | PRs must be rebased onto the latest `main` before merge, so CI results reflect the actual merge state. |
 | **Require conversation resolution** | All review comment threads must be resolved before merge. |
+| **Require signed commits** | Every commit must carry a verified signature (`required_signatures`); unsigned commits are rejected at push/merge time. See section 6 for how each environment signs. |
 | **No deletion** | `main` cannot be deleted. |
 | **No force-push** | History on `main` cannot be rewritten. |
 
@@ -1442,6 +1443,7 @@ Invoke-JIMApiRequest -Method Delete -Endpoint "api/v1/connected-systems/$id"
 - **"SSH agent not available or has no keys" when committing**: your host machine's SSH agent is not forwarding a key into the devcontainer. Follow the host-side prerequisites in the [Commit Signing](#6-commit-signing-mandatory) section for your OS, then rebuild the devcontainer. The hook will not run cleanly until the agent is fully configured.
 - **Commits show as "Unverified" on GitHub**: your SSH key is signing commits correctly but has not been registered as a *Signing Key* on GitHub. Visit https://github.com/settings/keys and add your public key a second time with type "Signing Key" (this is separate from the authentication key registration). See [Commit Signing](#6-commit-signing-mandatory) for details.
 - **Signing worked yesterday, fails today**: the host SSH agent may have been restarted or lost its keys. Run `ssh-add -l` on the host to check, add the key back if missing, then either rebuild the devcontainer or run `jim-setup-signing` inside the container to re-verify.
+- **"Current user GPG signing disabled" in a Codespace**: `gh-gpgsign` signs via the GitHub API, which is refusing because GPG verification is not enabled for your account. Enable it at github.com/settings/codespaces (*GPG verification*, then allow this repository or all repositories), then restart the Codespace (Stop then Start, or rebuild) so a fresh token carries the capability; the running token will not pick it up until then. See [Commit Signing](#6-commit-signing-mandatory).
 
 **Works In Dev But Fails In CI**: the devcontainer image (`mcr.microsoft.com/devcontainers/dotnet:1-10.0-bookworm`) is not digest-pinned; it tracks the upstream `:1-10.0-bookworm` tag which can change over time. If you see a build or test succeed in your devcontainer but fail in CI (or vice versa), check whether the devcontainer image has drifted from what CI is running. Rebuild the devcontainer to pick up the latest image. If this category of problem becomes frequent, consider revisiting whether to digest-pin the devcontainer image (currently left unpinned to reduce maintenance burden since dev-only images are not part of customer-shipped artefacts).
 

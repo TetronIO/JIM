@@ -127,6 +127,8 @@ This downloads everything you need, walks you through configuration, and starts 
 
 The devcontainer includes everything pre-configured; .NET 10.0, PostgreSQL, Keycloak IdP with test users, shell aliases, and VS Code extensions. Or clone locally and open with the [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension. See the [Developer Guide](https://docs.junctional.io/developer/) for details.
 
+> **Codespaces, one-time setup:** JIM requires verified-signed commits. Before you create your codespace, enable **GPG verification** once at [github.com/settings/codespaces](https://github.com/settings/codespaces) (set it to all repositories). GitHub then signs and verifies every commit you make in any codespace automatically, with no keys to manage. Enabling it after a codespace is already running needs a stop/restart to take effect, so do it first.
+
 ### Automate
 
 ```powershell
