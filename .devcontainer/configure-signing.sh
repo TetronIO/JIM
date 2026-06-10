@@ -328,8 +328,18 @@ print_status() {
     fi
 
     echo ""
-    if [ "$gpgsign" = "true" ]; then
-        if is_codespace || ssh-add -l >/dev/null 2>&1; then
+    if is_codespace; then
+        # Actively probe rather than assume. gh-gpgsign can be configured yet
+        # still be refused by the GitHub API when GPG verification is disabled
+        # for the account, so "commit.gpgsign=true" alone does not mean signing
+        # works. verify_codespaces_signing_works prints an actionable banner on
+        # failure; on success we add the one residual caveat it cannot detect.
+        if verify_codespaces_signing_works; then
+            print_success "Signing works; your commits will be marked verified on GitHub"
+            print_warning "If you enabled GPG verification AFTER starting this codespace, stop and restart it, otherwise commits sign with a key GitHub will not verify"
+        fi
+    elif [ "$gpgsign" = "true" ]; then
+        if ssh-add -l >/dev/null 2>&1; then
             print_success "Signing is configured and should work on the next commit"
         else
             print_warning "Signing is requested but may fail (no signing source available)"
