@@ -4529,10 +4529,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             @"DELETE FROM ""ConnectedSystemPartitions"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
-        // 6. (SyncRuleMappingSourceParamValues are intentionally not deleted here: the table is not populated
-        //    anywhere in the application, so there is nothing to scope to this connected system.)
-
-        // 7. Delete SyncRuleMappingSources (child of SyncRuleMapping)
+        // 6. Delete SyncRuleMappingSources (child of SyncRuleMapping)
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""SyncRuleMappingSources""
               WHERE ""SyncRuleMappingId"" IN (
@@ -4542,13 +4539,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
               )",
             connectedSystemId);
 
-        // 8. Delete SyncRuleMappings (attribute flow rules)
+        // 7. Delete SyncRuleMappings (attribute flow rules)
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""SyncRuleMappings""
               WHERE ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
             connectedSystemId);
 
-        // 9. Delete SyncRuleScopingCriteria (child of SyncRuleScopingCriteriaGroup)
+        // 8. Delete SyncRuleScopingCriteria (child of SyncRuleScopingCriteriaGroup)
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""SyncRuleScopingCriteria""
               WHERE ""SyncRuleScopingCriteriaGroupId"" IN (
@@ -4558,44 +4555,43 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
               )",
             connectedSystemId);
 
-        // 10. Delete SyncRuleScopingCriteriaGroups
+        // 9. Delete SyncRuleScopingCriteriaGroups
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""SyncRuleScopingCriteriaGroups""
               WHERE ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
             connectedSystemId);
 
-        // 11. Delete Object Matching Rules for this system before the Sync Rules and Object Types they reference
-        //     (those foreign keys do not cascade). Their Sources and source parameter values are removed
-        //     automatically via ON DELETE CASCADE. An OMR belongs to this system when it is scoped to one of its
-        //     object types or one of its sync rules.
+        // 10. Delete Object Matching Rules for this system before the Sync Rules and Object Types they reference
+        //     (those foreign keys do not cascade). Their Sources are removed automatically via ON DELETE CASCADE.
+        //     An OMR belongs to this system when it is scoped to one of its object types or one of its sync rules.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ObjectMatchingRules""
               WHERE ""ConnectedSystemObjectTypeId"" IN (SELECT ""Id"" FROM ""ConnectedSystemObjectTypes"" WHERE ""ConnectedSystemId"" = {0})
                  OR ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
             connectedSystemId);
 
-        // 12. Delete Sync Rules
+        // 11. Delete Sync Rules
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
-        // 13. Delete Object Type Attributes
+        // 12. Delete Object Type Attributes
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystemAttributes""
               WHERE ""ConnectedSystemObjectTypeId"" IN (SELECT ""Id"" FROM ""ConnectedSystemObjectTypes"" WHERE ""ConnectedSystemId"" = {0})",
             connectedSystemId);
 
-        // 14. Delete Object Types
+        // 13. Delete Object Types
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystemObjectTypes"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
-        // 15. Delete Setting Values
+        // 14. Delete Setting Values
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystemSettingValues"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
-        // 16. Finally, delete the Connected System itself
+        // 15. Finally, delete the Connected System itself
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystems"" WHERE ""Id"" = {0}",
             connectedSystemId);

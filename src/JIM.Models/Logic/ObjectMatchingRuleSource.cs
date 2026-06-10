@@ -45,11 +45,6 @@ public class ObjectMatchingRuleSource
     public string? Expression { get; set; }
 
     /// <summary>
-    /// Parameter values for advanced matching rules with multiple sources. Not used with expression-based matching.
-    /// </summary>
-    public List<ObjectMatchingRuleSourceParamValue> ParameterValues { get; set; } = new();
-
-    /// <summary>
     /// Validates that the source is correctly configured.
     /// Must have exactly one of: attribute (CS or MV), or expression.
     /// </summary>

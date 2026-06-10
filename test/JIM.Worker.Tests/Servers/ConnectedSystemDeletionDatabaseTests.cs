@@ -173,7 +173,6 @@ public class ConnectedSystemDeletionDatabaseTests
                 MetaverseObjectType = mvType
             };
             var omrSource = new ObjectMatchingRuleSource { Order = 0, Expression = "\"literal\"" };
-            omrSource.ParameterValues.Add(new ObjectMatchingRuleSourceParamValue { Name = "p" });
             omr.Sources.Add(omrSource);
 
             seed.ConnectorDefinitions.Add(connectorDefinition);
@@ -197,7 +196,6 @@ public class ConnectedSystemDeletionDatabaseTests
         Assert.That(await verify.SyncRules.AnyAsync(), Is.False, "Sync rules should be removed.");
         Assert.That(await verify.ObjectMatchingRules.AnyAsync(), Is.False, "Object matching rules should be removed.");
         Assert.That(await verify.ObjectMatchingRuleSources.AnyAsync(), Is.False, "Object matching rule sources should be removed.");
-        Assert.That(await verify.ObjectMatchingRuleSourceParamValues.AnyAsync(), Is.False, "Object matching rule source parameter values should be removed.");
     }
 
     /// <summary>
