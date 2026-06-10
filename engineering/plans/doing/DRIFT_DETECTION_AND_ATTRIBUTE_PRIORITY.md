@@ -467,11 +467,21 @@ The `EnforceState` setting should be hidden in an **Advanced Options** section t
 
 Attribute priority needs UI in two places:
 
-##### 2a. Dedicated Attribute Priority Page
+##### 2a. Priority Management Surface
 
-**Location:** Deliberately undecided; gated on an admin IA review (see Future Phase 0 below). Do not assume the current admin IA should simply be extended with another menu item. Attribute priority straddles two lenses: it is configured per MVO attribute (a Schema lens; `/admin/schema` already manages object types and attributes) but stored on import sync rule mappings (a logic/flow lens, beside synchronisation rules and drift enforcement). The IA review should evaluate extending the Schema concept, introducing a Logic/Policy concept, or flat extension of the current IA (the baseline to beat, not the default). An earlier revision of this design pre-supposed "Metaverse -> Attribute Priority"; no Metaverse nav group exists.
+**Location and navigation model: deliberately undecided.** Both are gated on an admin IA review (see Future Phase 0 below). Do not assume the current admin IA should simply be extended with another menu item, and do not assume a single centralised "Attribute Priority" page is the right navigation model. Attribute priority straddles two lenses: it is configured per MVO attribute (a Schema lens; `/admin/schema` already manages object types and attributes) but stored on import sync rule mappings (a logic/flow lens, beside synchronisation rules and drift enforcement).
 
-This page provides a centralised view of all MVO attributes that have multiple contributors, allowing admins to manage priority across the entire system.
+Homing directions the IA review should evaluate: extending the Schema concept, introducing a Logic/Policy concept, or flat extension of the current IA (the baseline to beat, not the default).
+
+Navigation models the IA review should evaluate, none pre-selected:
+
+1. **Schema hierarchy drill-down**: Schema -> object type (e.g. User, Group) -> attribute list, with multi-contributor attributes flagged inline; precedence is managed on (or from) the attribute's own page. This is the navigation model traditional ILM solutions use, and it matches how an admin thinks when investigating one attribute.
+2. **Centralised priority view**: a single cross-attribute page listing every attribute with multiple contributors, filterable by object type. Optimises for the "review all precedence at a glance / audit" task. The mock below illustrates this candidate only.
+3. **Both**: drill-down as the primary home plus a centralised overview of attributes needing attention that links into it.
+
+An earlier revision of this design pre-supposed "Metaverse -> Attribute Priority"; no Metaverse nav group exists.
+
+The centralised-view candidate provides a single view of all MVO attributes that have multiple contributors, allowing admins to manage priority across the entire system.
 
 ```
 +-----------------------------------------------------------------------------+
@@ -668,6 +678,7 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 #### Future Phase 0: Admin IA Review (prerequisite)
 
 - [ ] Review the admin area information architecture and decide where attribute priority lives (Schema concept, new Logic/Policy concept, or other); see UI section 2a above
+- [ ] Decide the navigation model for reaching an attribute's precedence configuration (schema hierarchy drill-down, centralised view, or both)
 - [ ] Decide nav drawer vs admin-index exposure; re-home related existing pages if the review concludes so
 
 #### Future Phase 1: Schema and Model Changes
@@ -688,7 +699,7 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 
 #### Future Phase 3: UI Updates
 
-- [ ] Create the dedicated Attribute Priority page (location per Future Phase 0 IA review)
+- [ ] Build the priority management UI per the Future Phase 0 IA review outcome (per-attribute schema pages, centralised view, or both)
 - [ ] Add priority context panel to import sync rule mapping editor
 - [ ] Add "Advanced Options" section to import mapping editor with "Null is a value" checkbox
 - [ ] Add priority indicator column to sync rule list view
@@ -749,9 +760,10 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
    - `DriftDetectionService.HasImportRuleForAttribute` treats any system with an import mapping as a legitimate contributor whose inbound changes are not drift
    - Once priority exists, a low-priority contributor's inbound change can lose resolution; should the losing value sitting in that target system then be treated as drift and corrected back?
 
-9. **Admin IA**
+9. **Admin IA and navigation**
    - See Future Phase 0: where does attribute priority (and the configuration concepts around it) belong in the admin information architecture?
-   - Do not extend the current IA by default
+   - Is the navigation model schema hierarchy drill-down, a centralised view, or both?
+   - Do not extend the current IA, or default to a single centralised page, without the review
 
 ---
 
