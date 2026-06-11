@@ -24,7 +24,8 @@ public class ConnectedSystemSettingsValidationTests
         _jim = new JimApplication(new Mock<IRepository>().Object);
 
         // FileConnector validation checks the file exists for import modes
-        _tempCsvPath = Path.Combine(Path.GetTempPath(), $"jim-settings-validation-{Guid.NewGuid()}.csv");
+        var tempCsvFileName = Path.GetFileName($"jim-settings-validation-{Guid.NewGuid()}.csv");
+        _tempCsvPath = Path.Combine(Path.GetTempPath(), tempCsvFileName);
         File.WriteAllText(_tempCsvPath, "id,displayName\n1,Test User\n");
     }
 

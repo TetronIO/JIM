@@ -21,11 +21,11 @@ public static class ConnectorSettingGroupValidator
         var results = new List<ConnectorSettingValueValidationResult>();
         var groups = settingValues
             .Where(sv => !string.IsNullOrEmpty(sv.Setting.RequiredGroup))
-            .GroupBy(sv => sv.Setting.RequiredGroup!);
+            .GroupBy(sv => sv.Setting.RequiredGroup!)
+            .Select(group => group.ToList());
 
-        foreach (var group in groups)
+        foreach (var members in groups)
         {
-            var members = group.ToList();
             var suppliedCount = members.Count(sv => sv.HasUserSuppliedValue());
             var cardinality = GetGroupCardinality(members);
 
