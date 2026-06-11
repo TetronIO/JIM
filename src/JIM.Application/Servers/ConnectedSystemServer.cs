@@ -1014,7 +1014,9 @@ public class ConnectedSystemServer
                 Type = connectorSetting.Type,
                 Required = connectorSetting.Required,
                 RequiredGroup = connectorSetting.RequiredGroup,
-                RequiredGroupCardinality = connectorSetting.RequiredGroupCardinality
+                RequiredGroupCardinality = connectorSetting.RequiredGroupCardinality,
+                RequiredWhenSetting = connectorSetting.RequiredWhenSetting,
+                RequiredWhenValue = connectorSetting.RequiredWhenValue
             });
         }
     }
@@ -1027,8 +1029,9 @@ public class ConnectedSystemServer
     {
         ValidateConnectedSystemParameter(connectedSystem);
 
-        // generic validation that applies to all connectors: required-group (either/or) constraints declared in setting metadata
-        var results = ConnectorSettingGroupValidator.Validate(connectedSystem.SettingValues);
+        // generic validation that applies to all connectors: required, required-group (either/or) and required-when
+        // constraints declared in setting metadata
+        var results = ConnectorSettingValidator.Validate(connectedSystem.SettingValues);
 
         // work out what connector we need to instantiate, so that we can use its internal validation method
         // 100% expecting this to be something we need to centralise/improve later as we develop the connector definition system

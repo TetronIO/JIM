@@ -63,7 +63,7 @@ JIM automatically detects the directory type during schema discovery by inspecti
 | Host | Hostname or IP address of the directory server. IP address is fastest. | *(required)* | `dc01.corp.local` |
 | Port | Port for the LDAP connection. Use 389 for LDAP or 636 for LDAPS. | `389` | `636` |
 | Use Secure Connection (LDAPS)? | Enable LDAPS (SSL/TLS) for encrypted communication. | `false` | `true` |
-| Certificate Validation | How to validate the server's SSL certificate. Full Validation uses the system CA store plus any certificates added in Admin > Certificates. | `Full Validation` | `Skip Validation` |
+| Certificate Validation | How to validate the server's SSL certificate. Full Validation uses the system CA store plus any certificates added in Admin > Certificates. Only shown, and required, when "Use Secure Connection (LDAPS)?" is enabled. | `Full Validation` | `Skip Validation` |
 | Connection Timeout | Time in seconds to wait before giving up on a connection attempt. | `10` | `30` |
 
 ### Credentials
@@ -106,7 +106,7 @@ JIM automatically detects the directory type during schema discovery by inspecti
 | Setting | Description | Default |
 |---------|-------------|---------|
 | Delete Behaviour | How to handle object deletions: Delete (remove the object) or Disable (set the disable attribute). | `Delete` |
-| Disable Attribute | Attribute to set when disabling objects (only used when Delete Behaviour is Disable). | `userAccountControl` |
+| Disable Attribute | Attribute to set when disabling objects. Only shown, and required, when Delete Behaviour is Disable. | `userAccountControl` |
 | Export Concurrency | Maximum number of concurrent LDAP operations during export. Recommended range: 2--8. | `4` |
 | Modify Batch Size | Maximum number of values per multi-valued attribute modification in a single LDAP request. Lower values improve compatibility; higher values improve throughput. Recommended range: 50--500. | `100` |
 | Group Placeholder Member DN | Placeholder DN used for group classes that require at least one member (e.g. groupOfNames). Automatically filtered during import. Only applies to non-AD directories. | `cn=placeholder` |

@@ -43,4 +43,20 @@ public class ConnectorSetting
     /// Ignored when <see cref="RequiredGroup"/> is not set.
     /// </summary>
     public ConnectorSettingRequiredGroupCardinality RequiredGroupCardinality { get; set; } = ConnectorSettingRequiredGroupCardinality.AtLeastOne;
+
+    /// <summary>
+    /// The Name of another setting that controls whether this setting is relevant. When set, this setting is only
+    /// relevant (shown and required) while the controlling setting's current value equals <see cref="RequiredWhenValue"/>;
+    /// otherwise it is hidden in the UI and ignored by validation. Use for conditionally-relevant settings, e.g. a
+    /// setting that only applies when a "use secure connection" checkbox is enabled. Must be paired with
+    /// <see cref="RequiredWhenValue"/>. Enforced generically; see ConnectorSettingValidator.
+    /// </summary>
+    public string? RequiredWhenSetting { get; set; }
+
+    /// <summary>
+    /// The value the <see cref="RequiredWhenSetting"/> must currently hold for this setting to be relevant.
+    /// Compared as a string: for a checkbox controlling setting use "true"/"false"; for a drop-down use the option text;
+    /// for an integer use its decimal string. Ignored when <see cref="RequiredWhenSetting"/> is not set.
+    /// </summary>
+    public string? RequiredWhenValue { get; set; }
 }

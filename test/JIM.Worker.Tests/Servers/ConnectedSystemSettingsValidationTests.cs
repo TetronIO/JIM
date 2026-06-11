@@ -4,6 +4,7 @@
 using JIM.Application;
 using JIM.Connectors;
 using JIM.Connectors.File;
+using JIM.Connectors.LDAP;
 using JIM.Data;
 using JIM.Models.Staging;
 using Moq;
@@ -84,6 +85,37 @@ public class ConnectedSystemSettingsValidationTests
                                      r.ErrorMessage.Contains("only one") &&
                                      r.ErrorMessage.Contains("Object Type Column") &&
                                      r.ErrorMessage.Contains("Object Type")), Is.True);
+    }
+
+    [Test]
+    public void ValidateConnectedSystemSettings_FileConnectorMissingRequiredMode_ReturnsRequiredError()
+    {
+        // Arrange: clear the required Mode setting; the generic validator (not the connector) now enforces required values
+        var connectedSystem = CreateFileConnectorConnectedSystem();
+        connectedSystem.SettingValues.Single(sv => sv.Setting.Name == "Object Type").StringValue = "user";
+        connectedSystem.SettingValues.Single(sv => sv.Setting.Name == "Mode").StringValue = null;
+
+        // Act
+        var results = _jim.ConnectedSystems.ValidateConnectedSystemSettings(connectedSystem);
+
+        // Assert
+        Assert.That(results.Any(r => !r.IsValid && r.ErrorMessage != null && r.ErrorMessage.Contains("Mode")), Is.True);
+    }
+
+    [Test]
+    public void CopyConnectorSettingsToConnectorDefinition_CopiesRequiredWhen()
+    {
+        // Arrange
+        var connectorDefinition = new ConnectorDefinition { Name = ConnectorConstants.LdapConnectorName };
+
+        // Act
+        using var ldapConnector = new LdapConnector();
+        _jim.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition(ldapConnector, connectorDefinition);
+
+        // Assert
+        var certificateValidation = connectorDefinition.Settings.Single(s => s.Name == "Certificate Validation");
+        Assert.That(certificateValidation.RequiredWhenSetting, Is.EqualTo("Use Secure Connection (LDAPS)?"));
+        Assert.That(certificateValidation.RequiredWhenValue, Is.EqualTo("true"));
     }
 
     [Test]

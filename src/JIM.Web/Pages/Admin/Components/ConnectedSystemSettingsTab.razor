@@ -20,8 +20,10 @@
             <MudPaper Class="pa-5 mt-5" Outlined="true">
                 <MudText Typo="Typo.h5" Class="mb-5">@settingCategory.ToString()</MudText>
                 @{
+                    // settings whose RequiredWhen condition is not met are irrelevant; hide them entirely
                     var categorySettings = ConnectedSystem.SettingValues
                         .Where(sv => sv.Setting.Category == settingCategory)
+                        .Where(sv => ConnectorSettingValidator.IsConditionMet(ConnectedSystem.SettingValues, sv.Setting))
                         .OrderBy(sv => sv.Setting.Id)
                         .ToList();
                     var j = 0;
@@ -41,8 +43,8 @@
                             j++;
                         }
                         var groupSpacingClass = j >= categorySettings.Count ? "pa-4" : "pa-4 mb-5";
-                        var groupSatisfied = ConnectorSettingGroupValidator.IsGroupSatisfied(ConnectedSystem.SettingValues, requiredGroup);
-                        var groupCardinality = ConnectorSettingGroupValidator.GetGroupCardinality(groupMembers);
+                        var groupSatisfied = ConnectorSettingValidator.IsGroupSatisfied(ConnectedSystem.SettingValues, requiredGroup);
+                        var groupCardinality = ConnectorSettingValidator.GetGroupCardinality(groupMembers);
                         var groupCaption = groupCardinality == ConnectorSettingRequiredGroupCardinality.ExactlyOne
                             ? "Provide a value for exactly one of the following settings:"
                             : "Provide a value for at least one of the following settings:";
@@ -71,6 +73,7 @@
                     {
                         <ConnectedSystemSettingField SettingValue="@settingValue"
                                                      CssClass="@(j == categorySettings.Count - 1 ? "" : "mb-5")"
+                                                     IsRequired="@ConnectorSettingValidator.IsSettingRequired(ConnectedSystem.SettingValues, settingValue.Setting)"
                                                      IsExportOnlyMode="@ConnectedSystem.IsExportOnlyMode()"
                                                      ValueChanged="OnSettingValueChanged"
                                                      FileSelected="OnFileSelectedAsync" />
@@ -157,13 +160,14 @@
             if (result.IsValid)
                 continue;
 
+            // indexer assignment (not .Add) so two results targeting the same setting cannot throw a duplicate-key exception
             switch (result.SettingValue)
             {
                 case { Setting.Name: not null } when !string.IsNullOrEmpty(result.ErrorMessage):
-                    SettingsFormCustomErrors.Add(result.SettingValue.Setting.Name, result.ErrorMessage);
+                    SettingsFormCustomErrors[result.SettingValue.Setting.Name] = result.ErrorMessage;
                     break;
                 case null when !string.IsNullOrEmpty(result.ErrorMessage):
-                    SettingsFormCustomErrors.Add($"General issue {i + 1}", result.ErrorMessage);
+                    SettingsFormCustomErrors[$"General issue {i + 1}"] = result.ErrorMessage;
                     break;
             }
         }
@@ -193,7 +197,7 @@
             .Select(sv => sv.Setting.RequiredGroup)
             .Where(g => !string.IsNullOrEmpty(g))
             .Distinct()
-            .All(g => ConnectorSettingGroupValidator.IsGroupSatisfied(ConnectedSystem.SettingValues, g!));
+            .All(g => ConnectorSettingValidator.IsGroupSatisfied(ConnectedSystem.SettingValues, g!));
     }
 
     private void OnSettingValueChanged()
