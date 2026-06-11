@@ -198,7 +198,7 @@
                                 {
                                     <MudTooltip Text="CSOs Added" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Success" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Added)" Class="px-2">
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Added)" Class="jim-stat-chip">
                                             @context.TotalAdded.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
@@ -207,7 +207,7 @@
                                 {
                                     <MudTooltip Text="CSOs Updated" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Updated)" Class="px-2">
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Updated)" Class="jim-stat-chip">
                                             @context.TotalUpdated.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
@@ -216,7 +216,7 @@
                                 {
                                     <MudTooltip Text="CSO Deletions Detected" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deleted)" Class="px-2">
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deleted)" Class="jim-stat-chip">
                                             @context.TotalDeleted.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
@@ -228,7 +228,7 @@
                                 {
                                     <MudTooltip Text="MVOs Projected" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Projected)" Class="px-2">
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Projected)" Class="jim-stat-chip">
                                             @context.TotalProjected.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
@@ -237,7 +237,7 @@
                                 {
                                     <MudTooltip Text="CSOs Joined" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Secondary" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Joined)" Class="px-2">
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Joined)" Class="jim-stat-chip">
                                             @context.TotalJoined.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
@@ -246,7 +246,7 @@
                                 {
                                     <MudTooltip Text="MVOs with Attribute Flow" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.AttributeFlow)" Class="px-2">
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.AttributeFlow)" Class="jim-stat-chip">
                                             @context.TotalAttributeFlows.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
@@ -255,7 +255,7 @@
                                 {
                                     <MudTooltip Text="CSOs Disconnected" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Disconnected)" Class="px-2">
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Disconnected)" Class="jim-stat-chip">
                                             @context.TotalDisconnected.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
@@ -264,7 +264,7 @@
                                 {
                                     <MudTooltip Text="CSOs Deleted" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deleted)" Class="px-2">
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deleted)" Class="jim-stat-chip">
                                             @context.TotalDeleted.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
@@ -273,7 +273,7 @@
                                 {
                                     <MudTooltip Text="CSOs Drift Corrected" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.DriftCorrection)" Class="px-2">
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.DriftCorrection)" Class="jim-stat-chip">
                                             @context.TotalDriftCorrections.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
@@ -282,7 +282,7 @@
                                 {
                                     <MudTooltip Text="CSOs Provisioned" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOutcomeTypeIcon(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned)" Class="px-2">
+                                                 Icon="@Helpers.GetOutcomeTypeIcon(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned)" Class="jim-stat-chip">
                                             @context.TotalProvisioned.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
@@ -291,7 +291,7 @@
                                 {
                                     <MudTooltip Text="CSO Pending Exports" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.PendingExport)" Class="px-2">
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.PendingExport)" Class="jim-stat-chip">
                                             @context.TotalPendingExports.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
@@ -303,7 +303,7 @@
                                 {
                                     <MudTooltip Text="CSOs Exported" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Exported)" Class="px-2">
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Exported)" Class="jim-stat-chip">
                                             @context.TotalExported.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
@@ -312,7 +312,7 @@
                                 {
                                     <MudTooltip Text="CSOs Deprovisioned" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deprovisioned)" Class="px-2">
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deprovisioned)" Class="jim-stat-chip">
                                             @context.TotalDeprovisioned.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
@@ -322,7 +322,7 @@
                             {
                                 <MudTooltip Text="Errors" Arrow="true" Placement="Placement.Top">
                                     <MudChip T="string" Color="Color.Error" Variant="Variant.Filled"
-                                             Icon="@Icons.Material.Filled.Error" Class="px-2">
+                                             Icon="@Icons.Material.Filled.Error" Class="jim-stat-chip">
                                         @context.TotalErrors.ToString("N0")
                                     </MudChip>
                                 </MudTooltip>
@@ -333,7 +333,7 @@
                     {
                         <MudTooltip Text="No changes" Arrow="true" Placement="Placement.Top">
                             <MudChip T="string" Color="Color.Default" Variant="Variant.Text"
-                                     Icon="@Icons.Material.Outlined.CheckCircle" Class="px-2">
+                                     Icon="@Icons.Material.Outlined.CheckCircle" Class="jim-stat-chip">
                                 0
                             </MudChip>
                         </MudTooltip>

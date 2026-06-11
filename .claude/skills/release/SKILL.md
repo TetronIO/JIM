@@ -80,7 +80,6 @@ Cross-reference the identified changes against the documentation and update any 
 **Internal engineering docs (`engineering/`, not part of MkDocs site)**:
 - **`engineering/DEVELOPER_GUIDE.md`** — Comprehensive development guide
 - **`engineering/DATABASE_GUIDE.md`** — Schema, migrations, connection pooling, backup/restore
-- **`engineering/EXPRESSIONS_GUIDE.md`** — Expression language reference
 - **`engineering/TESTING_STRATEGY.md`** / **`engineering/INTEGRATION_TESTING.md`** — Testing approach
 - **`engineering/COMPLIANCE_MAPPING.md`** — Security framework mapping
 - **`engineering/CACHING_STRATEGY.md`** — Caching architecture

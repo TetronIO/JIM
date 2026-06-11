@@ -71,6 +71,23 @@ public enum ConnectedSystemSettingCategory
     Export
 }
 
+/// <summary>
+/// Controls how many settings in a RequiredGroup may have a value supplied by the administrator.
+/// </summary>
+public enum ConnectorSettingRequiredGroupCardinality
+{
+    /// <summary>
+    /// At least one setting in the group must have a value; supplying more than one is permitted.
+    /// </summary>
+    AtLeastOne,
+
+    /// <summary>
+    /// Exactly one setting in the group must have a value; supplying more than one is rejected.
+    /// Use for mutually exclusive settings.
+    /// </summary>
+    ExactlyOne
+}
+
 public enum ConnectedSystemSettingType
 {
     String,

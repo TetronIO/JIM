@@ -64,6 +64,8 @@ Objects that fall out of scope are **disconnected** from the rule. This is impor
 
 Criteria are organised into groups with AND/OR logic and support nested groups for complex conditions. Criteria expressions use the JIM [expression language](../concepts/expressions.md).
 
+Each criterion is evaluated case-sensitively by default. Where a data source is inconsistent about casing (for example `Sales` versus `SALES`), you can switch an individual criterion to case-insensitive matching; see [Case Sensitivity](../concepts/case-sensitivity.md).
+
 ## Object matching rules
 
 Object matching rules define how a Connected System Object is matched to an existing Metaverse Object. Rules specify one or more attribute pairs to compare:
@@ -78,6 +80,8 @@ JIM evaluates the matching rules in order and uses the first match found. You ca
 1. First, try to match on `employeeId` (most reliable)
 2. If no match, try `mail` (secondary)
 3. If no match, try `firstName` + `lastName` (least reliable)
+
+Attribute comparisons in a matching rule are case-sensitive by default. Where systems disagree on casing, you can make an individual rule case-insensitive; see [Case Sensitivity](../concepts/case-sensitivity.md).
 
 ### Matching outcomes
 
@@ -193,3 +197,4 @@ This rule imports full-time employees from the HR system, joins them to existing
 - [Concepts: Synchronisation Pipeline](../concepts/synchronisation-pipeline.md) -- where synchronisation rules fit in the import/sync/export flow
 - [Concepts: JML Lifecycle](../concepts/jml-lifecycle.md) -- how scoping and provisioning drive joiner/mover/leaver behaviour
 - [Concepts: Expressions](../concepts/expressions.md) -- the expression language used in scoping criteria and attribute mappings
+- [Concepts: Case Sensitivity](../concepts/case-sensitivity.md) -- where matching and scoping are exact, and how to make them case-insensitive

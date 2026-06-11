@@ -30,7 +30,7 @@ The metaverse is the authoritative identity repository:
 
 ### 3. Modularity & Extensibility
 - **Connectors**: Implement `IConnector` and related interfaces for new systems
-- **Expressions**: C#-like expression language for attribute mappings, conditional logic, and scoping filters (see [Expression Language Guide](EXPRESSIONS_GUIDE.md))
+- **Expressions**: C#-like expression language for attribute mappings, conditional logic, and scoping filters (see [Expression Language Guide](../docs/concepts/expressions.md))
 - **Object Types**: Define custom identity types beyond built-in User/Group
 - **Attributes**: Extensible attribute schema via MetaverseAttribute
 

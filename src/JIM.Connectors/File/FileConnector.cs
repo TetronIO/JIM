@@ -47,6 +47,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     private const string SettingDelimiter = "Delimiter";
     private const string SettingStopOnFirstError = "Stop On First Error";
     private const string SettingMultiValueDelimiter = "Multi-Value Delimiter";
+    private const string ObjectTypeRequiredGroup = "Object Type";
     // Mode values
     private const string ModeImportOnly = "Import Only";
     private const string ModeExportOnly = "Export Only";
@@ -69,9 +70,9 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
                 DefaultStringValue = ModeImportOnly
             },
 
-            // Object type settings
-            new() { Name = SettingObjectTypeColumn, Required = false, Description = "Optionally specify the column that contains the object type.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.String },
-            new() { Name = SettingObjectType, Required = false, Description = "Optional: Specify an object type for when the file only contains one type of object, e.g. user.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.String },
+            // Object type settings: individually optional, but JIM needs exactly one of them to determine object types, so they share a mutually exclusive required group
+            new() { Name = SettingObjectTypeColumn, Required = false, RequiredGroup = ObjectTypeRequiredGroup, RequiredGroupCardinality = ConnectorSettingRequiredGroupCardinality.ExactlyOne, Description = "The column that contains the object type. Use when the file contains more than one type of object.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.String },
+            new() { Name = SettingObjectType, Required = false, RequiredGroup = ObjectTypeRequiredGroup, RequiredGroupCardinality = ConnectorSettingRequiredGroupCardinality.ExactlyOne, Description = "A fixed object type for when the file only contains one type of object, e.g. user.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.String },
 
             // Import-specific settings
             new() { Name = SettingStopOnFirstError, Required = false, Description = "Stop processing the file when the first error is encountered. Useful for debugging data quality issues without generating large numbers of errors.", Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.CheckBox },

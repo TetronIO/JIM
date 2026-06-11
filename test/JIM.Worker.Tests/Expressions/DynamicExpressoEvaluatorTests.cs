@@ -1446,9 +1446,12 @@ public class DynamicExpressoEvaluatorTests
     }
 
     [Test]
-    public void Evaluate_MvAttributeLookup_CaseSensitiveDictionary_ReturnsNullForMismatchedCase()
+    public void Evaluate_MvAttributeLookup_DefaultComparerDictionary_StillResolvesRegardlessOfCase()
     {
-        // Without case-insensitive comparer, mismatched case returns null
+        // The caller builds the dictionary with the default (case-sensitive) comparer; this is exactly
+        // what the Test Expression API path does when it deserialises attributes from JSON. Attribute
+        // name lookups must stay case-insensitive regardless (Case Sensitivity Strategy, Category 2:
+        // schema/identifier lookups are forgiving), so AttributeAccessor normalises the comparer itself.
         var mvAttributes = new Dictionary<string, object?>
         {
             { "Department", "Engineering" }
@@ -1458,7 +1461,7 @@ public class DynamicExpressoEvaluatorTests
 
         var result = _evaluator.Evaluate("mv[\"department\"]", context);
 
-        Assert.That(result, Is.Null);
+        Assert.That(result, Is.EqualTo("Engineering"));
     }
 
     #endregion

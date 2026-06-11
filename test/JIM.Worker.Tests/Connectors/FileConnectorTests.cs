@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Connectors.File;
+using JIM.Models.Staging;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.Connectors;
@@ -29,6 +30,38 @@ public class FileConnectorTests
     public void SupportsPaging_ReturnsFalse()
     {
         Assert.That(_connector.SupportsPaging, Is.False);
+    }
+
+    #endregion
+
+    #region IConnectorSettings tests
+
+    [Test]
+    public void GetSettings_ObjectTypeSettings_ShareARequiredGroup()
+    {
+        // the File Connector needs either an Object Type Column or an Object Type to determine object types,
+        // so both settings must declare the same RequiredGroup for JIM to enforce the either/or requirement (#792)
+        var settings = _connector.GetSettings();
+
+        var objectTypeColumn = settings.Single(s => s.Name == "Object Type Column");
+        var objectType = settings.Single(s => s.Name == "Object Type");
+
+        Assert.That(objectTypeColumn.RequiredGroup, Is.Not.Null.And.Not.Empty);
+        Assert.That(objectType.RequiredGroup, Is.EqualTo(objectTypeColumn.RequiredGroup));
+    }
+
+    [Test]
+    public void GetSettings_ObjectTypeSettings_AreMutuallyExclusive()
+    {
+        // the File Connector uses either an Object Type Column or a fixed Object Type, never both,
+        // so the shared required group is declared as ExactlyOne to reject supplying both (#792)
+        var settings = _connector.GetSettings();
+
+        var objectTypeColumn = settings.Single(s => s.Name == "Object Type Column");
+        var objectType = settings.Single(s => s.Name == "Object Type");
+
+        Assert.That(objectTypeColumn.RequiredGroupCardinality, Is.EqualTo(ConnectorSettingRequiredGroupCardinality.ExactlyOne));
+        Assert.That(objectType.RequiredGroupCardinality, Is.EqualTo(ConnectorSettingRequiredGroupCardinality.ExactlyOne));
     }
 
     #endregion

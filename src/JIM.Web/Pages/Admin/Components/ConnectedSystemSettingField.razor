@@ -1,0 +1,186 @@
+@using JIM.Models.Staging
+@inject IDialogService DialogService
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@if (SettingValue.Setting.Type == ConnectedSystemSettingType.Heading)
+{
+    <MudText Typo="Typo.h6" Class="@CssClass">@SettingValue.Setting.Name</MudText>
+}
+else if (SettingValue.Setting.Type == ConnectedSystemSettingType.Divider)
+{
+    <hr />
+}
+else if (SettingValue.Setting.Type == ConnectedSystemSettingType.String)
+{
+    <MudTextField T="string"
+                  Label="@SettingValue.Setting.Name"
+                  @bind-Value="SettingValue.StringValue"
+                  @bind-Value:after="NotifyValueChangedAsync"
+                  Immediate="@Immediate"
+                  Required="@SettingValue.Setting.Required"
+                  RequiredError="@($"A {SettingValue.Setting.Name} is required")"
+                  HelperText="@SettingValue.Setting.Description"
+                  Variant="Variant.Outlined"
+                  Class="@CssClass" />
+}
+else if (SettingValue.Setting.Type == ConnectedSystemSettingType.StringEncrypted)
+{
+    <MudTextField T="string"
+                  Label="@SettingValue.Setting.Name"
+                  @bind-Value="SettingValue.StringEncryptedValue"
+                  @bind-Value:after="NotifyValueChangedAsync"
+                  Immediate="@Immediate"
+                  Required="@SettingValue.Setting.Required"
+                  RequiredError="@($"A {SettingValue.Setting.Name} is required")"
+                  HelperText="@SettingValue.Setting.Description"
+                  InputType="@(_passwordVisible ? InputType.Text : InputType.Password)"
+                  Adornment="Adornment.End"
+                  AdornmentIcon="@(_passwordVisible ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                  AdornmentAriaLabel="Toggle password visibility"
+                  OnAdornmentClick="@(() => _passwordVisible = !_passwordVisible)"
+                  Variant="Variant.Outlined"
+                  Class="@CssClass" />
+}
+else if (SettingValue.Setting.Type == ConnectedSystemSettingType.Integer)
+{
+    <MudTextField T="int?"
+                  Label="@SettingValue.Setting.Name"
+                  @bind-Value="SettingValue.IntValue"
+                  @bind-Value:after="NotifyValueChangedAsync"
+                  Immediate="@Immediate"
+                  Required="@SettingValue.Setting.Required"
+                  RequiredError="@($"A {SettingValue.Setting.Name} is required")"
+                  HelperText="@SettingValue.Setting.Description"
+                  InputType="InputType.Number"
+                  Variant="Variant.Outlined"
+                  Class="@CssClass" />
+}
+else if (SettingValue.Setting.Type == ConnectedSystemSettingType.CheckBox)
+{
+    <div class="@CssClass">
+        <MudSwitch @bind-Value="SettingValue.CheckboxValue" @bind-Value:after="NotifyValueChangedAsync" Color="Color.Primary" Label="@SettingValue.Setting.Name" />
+        @if (!string.IsNullOrEmpty(SettingValue.Setting.Description))
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary ml-12">@SettingValue.Setting.Description</MudText>
+        }
+    </div>
+}
+else if (SettingValue.Setting is { Type: ConnectedSystemSettingType.DropDown, DropDownValues: not null })
+{
+    <MudSelect @bind-Value="SettingValue.StringValue"
+               @bind-Value:after="NotifyValueChangedAsync"
+               HelperText="@SettingValue.Setting.Description"
+               Label="@SettingValue.Setting.Name"
+               Variant="Variant.Outlined"
+               Class="@CssClass"
+               Required="@SettingValue.Setting.Required"
+               RequiredError="@($"A {SettingValue.Setting.Name} is required")">
+        @foreach (var dropDownValue in SettingValue.Setting.DropDownValues)
+        {
+            <MudSelectItem T="string" Value="@dropDownValue">@dropDownValue</MudSelectItem>
+        }
+    </MudSelect>
+}
+else if (SettingValue.Setting.Type == ConnectedSystemSettingType.Label)
+{
+    <MudText Class="@CssClass">
+        @SettingValue.Setting.Description
+    </MudText>
+}
+else if (SettingValue.Setting.Type == ConnectedSystemSettingType.File)
+{
+    <MudTextField T="string"
+                  Label="@SettingValue.Setting.Name"
+                  @bind-Value="SettingValue.StringValue"
+                  Required="@SettingValue.Setting.Required"
+                  RequiredError="@($"A {SettingValue.Setting.Name} is required")"
+                  HelperText="@SettingValue.Setting.Description"
+                  Variant="Variant.Outlined"
+                  ReadOnly="true"
+                  Adornment="Adornment.End"
+                  AdornmentIcon="@Icons.Material.Filled.FolderOpen"
+                  OnAdornmentClick="OpenFileBrowserAsync"
+                  Class="@CssClass" />
+}
+else
+{
+    <MudText Class="mt-b">Oops. Unknown setting type!</MudText>
+}
+
+@code {
+    /// <summary>
+    /// Renders a single Connected System setting value as the appropriate form field for its setting type.
+    /// Used by ConnectedSystemSettingsTab for both standalone settings and required-group panels.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public ConnectedSystemSettingValue SettingValue { get; set; } = null!;
+
+    /// <summary>
+    /// CSS class applied to the field, used by the parent to control vertical spacing between settings.
+    /// </summary>
+    [Parameter]
+    public string CssClass { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Whether the Connected System is in export-only mode; affects the file browser dialog behaviour.
+    /// </summary>
+    [Parameter]
+    public bool IsExportOnlyMode { get; set; }
+
+    /// <summary>
+    /// When true, text fields update their bound value on every keystroke rather than on blur.
+    /// Used for required-group members so group feedback responds as the administrator types.
+    /// </summary>
+    [Parameter]
+    public bool Immediate { get; set; }
+
+    /// <summary>
+    /// Raised after the administrator changes the setting's value, so the parent can refresh dependent UI state.
+    /// </summary>
+    [Parameter]
+    public EventCallback ValueChanged { get; set; }
+
+    /// <summary>
+    /// Raised after a file is selected via the file browser dialog, so the parent can revalidate the form.
+    /// </summary>
+    [Parameter]
+    public EventCallback FileSelected { get; set; }
+
+    private bool _passwordVisible;
+
+    private Task NotifyValueChangedAsync()
+    {
+        return ValueChanged.InvokeAsync();
+    }
+
+    private async Task OpenFileBrowserAsync()
+    {
+        var title = IsExportOnlyMode ? "Select Export Location" : "Select File";
+
+        var parameters = new DialogParameters<FileBrowserDialog>
+        {
+            { x => x.Title, title },
+            { x => x.AllowNewFilename, IsExportOnlyMode },
+            { x => x.InitialPath, SettingValue.StringValue }
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<FileBrowserDialog>(title, parameters, options);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: string selectedPath })
+        {
+            SettingValue.StringValue = selectedPath;
+            await ValueChanged.InvokeAsync();
+            await FileSelected.InvokeAsync();
+        }
+    }
+}

@@ -69,6 +69,7 @@ Planning:
   jim-prd            - Create a new PRD from template
 
 Developer Setup:
+  jim-unlock-signing  - Start in-container ssh-agent + load key (Zed: run once per container start)
   jim-setup-signing   - (Re)configure git commit signing for this environment
   jim-signing-status  - Show current commit signing state and readiness
 
@@ -105,6 +106,61 @@ jim-signing-status() {
     return 1
   fi
   "$script" --status
+}
+
+# In-container ssh-agent for commit signing under launchers that do NOT forward
+# the host SSH agent (Zed; see zed-industries/zed#47121). On those launchers the
+# /ssh-agent bind from devcontainer.json is a dead placeholder (it only carries a
+# real agent on macOS Docker Desktop), so we run an ssh-agent *inside* the
+# container at a fixed socket and load the key once per container start with
+# `jim-unlock-signing`. Every shell that sources this file then reuses that one
+# agent. On VS Code (host agent forwarded) and Codespaces (gh-gpgsign), this is
+# unnecessary; the auto-adopt below simply no-ops because the fixed socket is
+# absent, leaving the forwarded SSH_AUTH_SOCK untouched.
+JIM_SIGNING_AGENT_SOCK="$HOME/.ssh/agent.sock"
+
+# Auto-adopt a previously-unlocked in-container agent so new shells inherit it
+# (overriding the dead /ssh-agent placeholder from containerEnv). This ONLY
+# adopts an already-running agent that has a key loaded; it never starts one, so
+# sourcing stays cheap and no stray agents are spawned.
+if [ -S "$JIM_SIGNING_AGENT_SOCK" ] && SSH_AUTH_SOCK="$JIM_SIGNING_AGENT_SOCK" ssh-add -l >/dev/null 2>&1; then
+  export SSH_AUTH_SOCK="$JIM_SIGNING_AGENT_SOCK"
+fi
+
+jim-unlock-signing() {
+  # (Re)start a persistent agent only if the fixed socket has no reachable agent.
+  # ssh-add -l exit codes: 0 = reachable with keys, 1 = reachable but empty,
+  # 2 = cannot connect. Only restart on "cannot connect" (or a missing socket);
+  # a reachable-but-empty agent is reused and just gets the key added below.
+  SSH_AUTH_SOCK="$JIM_SIGNING_AGENT_SOCK" ssh-add -l >/dev/null 2>&1
+  local rc=$?
+  if [ "$rc" -eq 2 ] || [ ! -S "$JIM_SIGNING_AGENT_SOCK" ]; then
+    rm -f "$JIM_SIGNING_AGENT_SOCK"
+    eval "$(ssh-agent -a "$JIM_SIGNING_AGENT_SOCK")" >/dev/null
+  fi
+  export SSH_AUTH_SOCK="$JIM_SIGNING_AGENT_SOCK"
+
+  # Load a signing key if the agent doesn't already hold one. Prompts for the
+  # passphrase once per container start; subsequent commits reuse the agent.
+  # Key discovery is name-agnostic so it works for any developer's key, not a
+  # hardcoded filename:
+  #   1. `ssh-add` with no arguments loads OpenSSH's standard default identities.
+  #   2. If none of those exist (a non-default key name), fall back to the first
+  #      private key file found in ~/.ssh (-type f skips the agent socket).
+  if ! ssh-add -l >/dev/null 2>&1; then
+    ssh-add 2>/dev/null
+    if ! ssh-add -l >/dev/null 2>&1; then
+      local key
+      key=$(find "$HOME/.ssh" -maxdepth 1 -type f ! -name '*.pub' -exec grep -lE 'BEGIN [A-Z ]*PRIVATE KEY' {} + 2>/dev/null | head -1)
+      if [ -z "$key" ] || ! ssh-add "$key"; then
+        echo "jim-unlock-signing: no loadable SSH private key found in ~/.ssh" >&2
+        return 1
+      fi
+    fi
+  fi
+
+  # Point git at the now-available agent (idempotent; configures global signing).
+  jim-setup-signing
 }
 
 # .NET local development
