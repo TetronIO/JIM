@@ -902,10 +902,7 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
    - Should we warn when a new mapping creates a multi-contributor situation?
    - Or just show the priority context panel and let admins manage as needed?
 
-6. **Cross-object-type attribute priority**
-   - Currently scoped per object type (Person, Group, etc.)
-   - Is there ever a need for global priority configuration?
-   - Probably not - keep scoped to object type for simplicity
+6. **Cross-object-type attribute priority** - DECIDED (Jun 2026): no. Priority remains scoped per object type (Person, Group, etc.); a global priority configuration adds complexity with no immediate benefit.
 
 7. **Multivalued attributes** - DECIDED for phase 1 (Jun 2026): MVAs fully supported with winner-takes-all-values; "Null is a value" on an MVA asserts the empty set. An additional per-value merge mode is deferred to iteration 2; see "Multivalued Attribute Handling: Options Explored" in the decision section. Residual questions for the follow-up design only: per-contribution `Exclusive` vs `Merge` mode, removal semantics ("each rule may remove only the values it contributed"?), dedup/conflict rules, and interaction with NullIsValue under merge mode.
 
