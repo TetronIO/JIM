@@ -776,6 +776,16 @@ body.jim-dark-mode .jim-instance-bar .jim-title-accent {
     white-space: nowrap;
 }
 
+/* Stat chips: the icon + count chips in the Connected Systems "STATS" column and
+   the Activity / Operations "Outcomes" columns. Single source of truth for their
+   horizontal padding so it stays consistent across every page instead of being
+   hand-set per chip (which is how the padding drifted out of sync). 12px matches
+   MudBlazor's px-3. Adjust here once to retune every stat chip. */
+.mud-chip.jim-stat-chip {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+}
+
 /* Navigation menu styling - top-level items */
 .jim-nav-menu>.jim-nav-top-level .mud-nav-link-text,
 .jim-nav-menu>.jim-nav-top-level>button>.mud-nav-link-text {
@@ -805,6 +815,10 @@ body.jim-dark-mode .jim-instance-bar .jim-title-accent {
     margin-right: 8px !important;
     margin-inline-start: 8px !important;
     margin-inline-end: 8px !important;
+    /* Vertical gap between pills so adjacent active/hover highlights don't butt
+       up against each other. Applies to top-level items and children alike. */
+    margin-top: 2px !important;
+    margin-bottom: 2px !important;
     border-radius: var(--mud-default-borderradius, 4px) !important;
     border-inline-end-width: 0 !important;
     border-right-width: 0 !important;

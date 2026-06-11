@@ -587,14 +587,14 @@
                                 <MudTooltip Text="@Helpers.GetOutcomeTypeDisplayName(outcomeType)" Arrow="true" Placement="Placement.Top">
                                     <MudChip T="string" Variant="Variant.Text"
                                              Color="Helpers.GetOutcomeTypeMudBlazorColor(outcomeType)"
-                                             Class="px-2">
+                                             Class="jim-stat-chip">
                                         @Helpers.GetOutcomeTypeDisplayName(outcomeType)@(count > 1 ? $" ×{count}" : "")
                                     </MudChip>
                                 </MudTooltip>
                             }
                             @if (context.ErrorType != null && context.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
                             {
-                                <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="px-2">
+                                <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="jim-stat-chip">
                                     @context.ErrorType.Value.ToString().SplitOnCapitalLetters()
                                 </MudChip>
                             }
@@ -602,7 +602,7 @@
                     }
                     else if (context.ErrorType != null && context.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
                     {
-                        <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="px-2">
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="jim-stat-chip">
                             @context.ErrorType.Value.ToString().SplitOnCapitalLetters()
                         </MudChip>
                     }

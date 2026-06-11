@@ -60,7 +60,7 @@
             <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                 <MudTooltip Text="Objects" Arrow="true" Placement="Placement.Top">
                     <MudChip T="string" Color="Color.Default" Variant="Variant.Text"
-                             Icon="@Icons.Material.Filled.Storage" Class="px-2">
+                             Icon="@Icons.Material.Filled.Storage" Class="jim-stat-chip">
                         @context.ObjectCount.ToString("N0")
                     </MudChip>
                 </MudTooltip>
@@ -68,7 +68,7 @@
                 {
                     <MudTooltip Text="@($"Connected Objects ({GetPercentage(context.ObjectCount, context.ConnectorsCount)}%)")" Arrow="true" Placement="Placement.Top">
                         <MudChip T="string" Color="Color.Success" Variant="Variant.Text"
-                                 Icon="@Icons.Material.Filled.Link" Class="px-2">
+                                 Icon="@Icons.Material.Filled.Link" Class="jim-stat-chip">
                             @context.ConnectorsCount.ToString("N0")
                         </MudChip>
                     </MudTooltip>
@@ -77,7 +77,7 @@
                 {
                     <MudTooltip Text="@($"Pending Exports ({GetPercentage(context.ObjectCount, context.PendingExportObjectsCount)}%)")" Arrow="true" Placement="Placement.Top">
                         <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
-                                 Icon="@Icons.Material.Filled.Upload" Class="px-2">
+                                 Icon="@Icons.Material.Filled.Upload" Class="jim-stat-chip">
                             @context.PendingExportObjectsCount.ToString("N0")
                         </MudChip>
                     </MudTooltip>
