@@ -365,6 +365,22 @@ MVAs are **fully supported from phase 1**; this section records the research (Ju
 
 **Iteration 2 sketch (not committed):** a per-contribution mode, e.g. `Exclusive` (default; winner-takes-all-values) vs `Merge` (rule contributes its values into a union), with removal rights scoped to each rule's own contributed values. JIM's per-row `ContributedBySystemId` already provides the per-value provenance this requires. To be explored and designed as a follow-up issue once iteration 1 is in production and real demand is validated.
 
+**Configuration Change Propagation**
+
+Decided (Jun 2026): a three-mode model, delivered incrementally. Changing attribute priority configuration (reordering, NullIsValue, rule enablement) does not in itself initiate synchronisation; resolution happens at sync time. The modes:
+
+| Mode | Behaviour | Delivery |
+|------|-----------|----------|
+| **1. Apply only** (default) | The change is saved and takes effect as objects are next synchronised. The admin acknowledges on save that MVOs will not reflect the new configuration until a full synchronisation of affected objects completes, and that an in-flight or imminent *delta* sync schedule will apply the new configuration only to recently-changed CSOs, leaving results out of kilter with the rest until a full sync runs. | **Phase 1** |
+| **2. Impact analysis (preview) before applying** | A read-only analysis of what would change across all affected objects if the new priority configuration were applied, reviewed before committing. Builds on Sync Preview / What-If Analysis (#288, on the `SyncOutcome` foundation from #363), and is the same capability pattern as scope-change preview (#204) and connected system deletion impact analysis (#134); these should be designed as one family. | Later iteration |
+| **3. Apply and re-synchronise** | After saving, trigger a full re-synchronisation of all affected objects. Requires suspending active synchronisation schedules for the duration, and has implications for the future Event-Based Synchronisation mode. | Later iteration; needs concept validation |
+
+Why "apply only" is an acceptable phase 1 default: it provides a natural safeguard (a mistaken change can be undone before any sync runs) and is the shortest development path. The known cons (delta-sync skew, delayed desired state with possible compliance impact) are mitigated in phase 1 by the save-time acknowledgement and a recommendation to run a full synchronisation; the mode is also genuinely preferable for admins iterating quickly during design/build phases.
+
+Phase 1 mitigation (cheap, recommended): persist a "configuration changed since last full synchronisation" indicator per affected object type, surfaced on the priority management UI and the Operations page, so the out-of-kilter window is visible rather than silent.
+
+Definition needed for modes 2 and 3: "affected objects" = MVOs of the object type joined to CSOs in scope of the sync rules whose mappings changed; pin down precisely in their design.
+
 **Rationale:**
 
 1. **Granular control** - Different attributes can have different priority orders, even from the same connected system
@@ -381,6 +397,7 @@ MVAs are **fully supported from phase 1**; this section records the research (Ju
 - **Default priority**: when a new import mapping is created targeting an attribute that already has contributors, auto-assign the next available priority (max existing + 1). Resolution must have a deterministic tie-break (e.g. mapping id) as a safety net, but duplicate priorities within one attribute's list should be prevented by validation
 - **Default null handling**: "Null is a value" = false (fallback behaviour, matching traditional ILM expectations)
 - **MVA semantics (phase 1)**: winner-takes-all-values; an additional per-value merge mode deferred to iteration 2 (see options above)
+- **Configuration change propagation**: apply-only with acknowledgement in phase 1; impact analysis and apply-and-resync as later iterations (see "Configuration Change Propagation" above)
 - **Disabled rules**: remain visible in the priority list (greyed out) but are never evaluated
 - **Equal precedence**: deliberately not offered (see Option D above)
 - **UI placement and navigation**: deliberately undecided; gated on the admin IA review (see UI section below)
@@ -840,10 +857,12 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 - [ ] Make the drift detection contributor check priority-aware: legitimate only when the contribution wins resolution (replaces the has-import-rule check in `DriftDetectionService`)
 - [ ] Replace the interim grace period recall freeze with proper next-contributor fallback
 - [ ] Anomaly guardrail: warn when a priority-1 `NullIsValue` source contributes null for an unusually high share of objects in a run
+- [ ] Track "configuration changed since last full synchronisation" per affected object type (apply-only propagation mode)
 
 #### Future Phase 3: UI Updates
 
 - [ ] Build the priority management UI per the Future Phase 0 IA review outcome (per-attribute schema pages, centralised view, or both)
+- [ ] Save-time acknowledgement messaging and "configuration changed since last full synchronisation" indicator (see "Configuration Change Propagation")
 - [ ] Add priority context panel to import sync rule mapping editor
 - [ ] Add "Advanced Options" section to import mapping editor with "Null is a value" checkbox
 - [ ] Add priority indicator column to sync rule list view
@@ -865,6 +884,9 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
   - [ ] Scoped exception rule (priority 1) wins for in-scope objects; direct changes in the lower-priority system are corrected via EnforceState export
   - [ ] Non-exception objects: higher-priority system's rule wins; losing system's direct changes corrected back
   - [ ] Object moves into/out of a scoped rule's coverage: authority transfers on next sync
+- [ ] Configuration change propagation:
+  - [ ] Priority reorder followed by delta sync: only changed CSOs re-resolve (documented apply-only behaviour)
+  - [ ] Priority reorder followed by full sync: all objects re-resolve to the new configuration
 
 #### Future Phase 5: Documentation
 
@@ -925,9 +947,7 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
     - Storage is per mapping, so a rule can rank differently per attribute
     - Is the default UX gesture "order this rule consistently across all its mappings" (likely matches admin intent: a rule represents an authority claim over a scoped population) with per-attribute divergence as an advanced option?
 
-13. **Re-evaluation after configuration changes**
-    - Reordering priorities, toggling rule enablement, or scope membership changes do not retroactively re-resolve MV values; resolution happens at sync time
-    - Define when re-evaluation occurs (next sync of any contributor? an explicit "re-evaluate" action after reordering?) and document the propagation lag
+13. **Re-evaluation after configuration changes** - DECIDED (Jun 2026): three-mode model; see "Configuration Change Propagation" in the decision section. Phase 1 ships apply-only with acknowledgement messaging and a changed-since-last-full-sync indicator; impact analysis (builds on #288/#204/#134) and apply-and-resync (schedule suspension, Event-Based Synchronisation implications) are later iterations needing their own design and concept validation. Residual: pin down the precise definition and computation of "affected objects".
 
 ---
 
