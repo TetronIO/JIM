@@ -67,6 +67,25 @@ public class ConnectedSystemSettingsValidationTests
     }
 
     [Test]
+    public void ValidateConnectedSystemSettings_FileConnectorWithBothObjectTypeSettings_ReturnsExclusiveError()
+    {
+        // Arrange: supplying both a column and a fixed object type is mutually exclusive (#792)
+        var connectedSystem = CreateFileConnectorConnectedSystem();
+        connectedSystem.SettingValues.Single(sv => sv.Setting.Name == "Object Type Column").StringValue = "objectClass";
+        connectedSystem.SettingValues.Single(sv => sv.Setting.Name == "Object Type").StringValue = "user";
+
+        // Act
+        var results = _jim.ConnectedSystems.ValidateConnectedSystemSettings(connectedSystem);
+
+        // Assert
+        Assert.That(results.Any(r => !r.IsValid &&
+                                     r.ErrorMessage != null &&
+                                     r.ErrorMessage.Contains("only one") &&
+                                     r.ErrorMessage.Contains("Object Type Column") &&
+                                     r.ErrorMessage.Contains("Object Type")), Is.True);
+    }
+
+    [Test]
     public void CopyConnectorSettingsToConnectorDefinition_CopiesRequiredGroup()
     {
         // Arrange
@@ -78,6 +97,20 @@ public class ConnectedSystemSettingsValidationTests
         // Assert
         var objectTypeColumn = connectorDefinition.Settings.Single(s => s.Name == "Object Type Column");
         Assert.That(objectTypeColumn.RequiredGroup, Is.Not.Null.And.Not.Empty);
+    }
+
+    [Test]
+    public void CopyConnectorSettingsToConnectorDefinition_CopiesRequiredGroupCardinality()
+    {
+        // Arrange
+        var connectorDefinition = new ConnectorDefinition { Name = ConnectorConstants.FileConnectorName };
+
+        // Act
+        _jim.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition(new FileConnector(), connectorDefinition);
+
+        // Assert
+        var objectTypeColumn = connectorDefinition.Settings.Single(s => s.Name == "Object Type Column");
+        Assert.That(objectTypeColumn.RequiredGroupCardinality, Is.EqualTo(ConnectorSettingRequiredGroupCardinality.ExactlyOne));
     }
 
     /// <summary>

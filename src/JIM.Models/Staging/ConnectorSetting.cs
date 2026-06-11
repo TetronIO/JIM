@@ -34,4 +34,13 @@ public class ConnectorSetting
     /// Enforced generically by JIM when validating Connected System settings; see ConnectorSettingGroupValidator.
     /// </summary>
     public string? RequiredGroup { get; set; }
+
+    /// <summary>
+    /// When the setting belongs to a <see cref="RequiredGroup"/>, controls how many group members may have a value.
+    /// Defaults to <see cref="ConnectorSettingRequiredGroupCardinality.AtLeastOne"/>; use
+    /// <see cref="ConnectorSettingRequiredGroupCardinality.ExactlyOne"/> for mutually exclusive settings where
+    /// supplying more than one is an error. All members of the same group should declare the same cardinality.
+    /// Ignored when <see cref="RequiredGroup"/> is not set.
+    /// </summary>
+    public ConnectorSettingRequiredGroupCardinality RequiredGroupCardinality { get; set; } = ConnectorSettingRequiredGroupCardinality.AtLeastOne;
 }

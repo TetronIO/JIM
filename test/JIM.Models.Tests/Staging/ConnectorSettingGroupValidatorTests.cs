@@ -105,6 +105,80 @@ public class ConnectorSettingGroupValidatorTests
     }
 
     [Test]
+    public void Validate_AtLeastOneGroupWithBothValuesSupplied_ReturnsNoResults()
+    {
+        // Arrange: default cardinality (AtLeastOne) permits more than one member to have a value
+        var settingValues = new List<ConnectedSystemSettingValue>
+        {
+            CreateSettingValue("Object Type Column", ObjectTypeGroup, stringValue: "objectClass"),
+            CreateSettingValue("Object Type", ObjectTypeGroup, stringValue: "user")
+        };
+
+        // Act
+        var results = ConnectorSettingGroupValidator.Validate(settingValues);
+
+        // Assert
+        Assert.That(results, Is.Empty);
+    }
+
+    [Test]
+    public void Validate_ExactlyOneGroupWithBothValuesSupplied_ReturnsInvalidResult()
+    {
+        // Arrange: mutually exclusive group rejects supplying more than one value (#792)
+        var settingValues = new List<ConnectedSystemSettingValue>
+        {
+            CreateSettingValue("Object Type Column", ObjectTypeGroup, stringValue: "objectClass", cardinality: ConnectorSettingRequiredGroupCardinality.ExactlyOne),
+            CreateSettingValue("Object Type", ObjectTypeGroup, stringValue: "user", cardinality: ConnectorSettingRequiredGroupCardinality.ExactlyOne)
+        };
+
+        // Act
+        var results = ConnectorSettingGroupValidator.Validate(settingValues);
+
+        // Assert
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].IsValid, Is.False);
+        Assert.That(results[0].ErrorMessage, Does.Contain("only one").IgnoreCase);
+        Assert.That(results[0].ErrorMessage, Does.Contain("Object Type Column"));
+        Assert.That(results[0].ErrorMessage, Does.Contain("Object Type"));
+    }
+
+    [Test]
+    public void Validate_ExactlyOneGroupWithOneValueSupplied_ReturnsNoResults()
+    {
+        // Arrange
+        var settingValues = new List<ConnectedSystemSettingValue>
+        {
+            CreateSettingValue("Object Type Column", ObjectTypeGroup, cardinality: ConnectorSettingRequiredGroupCardinality.ExactlyOne),
+            CreateSettingValue("Object Type", ObjectTypeGroup, stringValue: "user", cardinality: ConnectorSettingRequiredGroupCardinality.ExactlyOne)
+        };
+
+        // Act
+        var results = ConnectorSettingGroupValidator.Validate(settingValues);
+
+        // Assert
+        Assert.That(results, Is.Empty);
+    }
+
+    [Test]
+    public void Validate_ExactlyOneGroupWithNoValuesSupplied_ReturnsInvalidResultMentioningExactlyOne()
+    {
+        // Arrange
+        var settingValues = new List<ConnectedSystemSettingValue>
+        {
+            CreateSettingValue("Object Type Column", ObjectTypeGroup, cardinality: ConnectorSettingRequiredGroupCardinality.ExactlyOne),
+            CreateSettingValue("Object Type", ObjectTypeGroup, cardinality: ConnectorSettingRequiredGroupCardinality.ExactlyOne)
+        };
+
+        // Act
+        var results = ConnectorSettingGroupValidator.Validate(settingValues);
+
+        // Assert
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].IsValid, Is.False);
+        Assert.That(results[0].ErrorMessage, Does.Contain("exactly one").IgnoreCase);
+    }
+
+    [Test]
     public void Validate_MultipleGroups_ValidatesEachGroupIndependently()
     {
         // Arrange: group one is satisfied, group two is not
@@ -164,6 +238,40 @@ public class ConnectorSettingGroupValidatorTests
         Assert.That(result, Is.True);
     }
 
+    [Test]
+    public void IsGroupSatisfied_ExactlyOneGroupWithBothValues_ReturnsFalse()
+    {
+        // Arrange: a mutually exclusive group is not satisfied when more than one value is supplied
+        var settingValues = new List<ConnectedSystemSettingValue>
+        {
+            CreateSettingValue("Object Type Column", ObjectTypeGroup, stringValue: "objectClass", cardinality: ConnectorSettingRequiredGroupCardinality.ExactlyOne),
+            CreateSettingValue("Object Type", ObjectTypeGroup, stringValue: "user", cardinality: ConnectorSettingRequiredGroupCardinality.ExactlyOne)
+        };
+
+        // Act
+        var result = ConnectorSettingGroupValidator.IsGroupSatisfied(settingValues, ObjectTypeGroup);
+
+        // Assert
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public void IsGroupSatisfied_ExactlyOneGroupWithOneValue_ReturnsTrue()
+    {
+        // Arrange
+        var settingValues = new List<ConnectedSystemSettingValue>
+        {
+            CreateSettingValue("Object Type Column", ObjectTypeGroup, cardinality: ConnectorSettingRequiredGroupCardinality.ExactlyOne),
+            CreateSettingValue("Object Type", ObjectTypeGroup, stringValue: "user", cardinality: ConnectorSettingRequiredGroupCardinality.ExactlyOne)
+        };
+
+        // Act
+        var result = ConnectorSettingGroupValidator.IsGroupSatisfied(settingValues, ObjectTypeGroup);
+
+        // Assert
+        Assert.That(result, Is.True);
+    }
+
     #endregion
 
     #region HasUserSuppliedValue Tests
@@ -205,7 +313,8 @@ public class ConnectorSettingGroupValidatorTests
         string? requiredGroup,
         ConnectedSystemSettingType type = ConnectedSystemSettingType.String,
         string? stringValue = null,
-        int? intValue = null)
+        int? intValue = null,
+        ConnectorSettingRequiredGroupCardinality cardinality = ConnectorSettingRequiredGroupCardinality.AtLeastOne)
     {
         return new ConnectedSystemSettingValue
         {
@@ -213,7 +322,8 @@ public class ConnectorSettingGroupValidatorTests
             {
                 Name = name,
                 Type = type,
-                RequiredGroup = requiredGroup
+                RequiredGroup = requiredGroup,
+                RequiredGroupCardinality = cardinality
             },
             StringValue = stringValue,
             IntValue = intValue

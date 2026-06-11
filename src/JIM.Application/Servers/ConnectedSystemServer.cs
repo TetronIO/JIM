@@ -1013,7 +1013,8 @@ public class ConnectedSystemServer
                 Name = connectorSetting.Name,
                 Type = connectorSetting.Type,
                 Required = connectorSetting.Required,
-                RequiredGroup = connectorSetting.RequiredGroup
+                RequiredGroup = connectorSetting.RequiredGroup,
+                RequiredGroupCardinality = connectorSetting.RequiredGroupCardinality
             });
         }
     }

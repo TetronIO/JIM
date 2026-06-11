@@ -42,15 +42,19 @@
                         }
                         var groupSpacingClass = j >= categorySettings.Count ? "pa-4" : "pa-4 mb-5";
                         var groupSatisfied = ConnectorSettingGroupValidator.IsGroupSatisfied(ConnectedSystem.SettingValues, requiredGroup);
+                        var groupCardinality = ConnectorSettingGroupValidator.GetGroupCardinality(groupMembers);
+                        var groupCaption = groupCardinality == ConnectorSettingRequiredGroupCardinality.ExactlyOne
+                            ? "Provide a value for exactly one of the following settings:"
+                            : "Provide a value for at least one of the following settings:";
                         <MudPaper Outlined="true" Class="@groupSpacingClass">
                             <MudText Typo="Typo.h6">@requiredGroup</MudText>
                             @if (groupSatisfied)
                             {
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">Provide a value for at least one of the following settings:</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">@groupCaption</MudText>
                             }
                             else
                             {
-                                <MudText Typo="Typo.body2" Color="Color.Error" Class="mb-4">Provide a value for at least one of the following settings:</MudText>
+                                <MudText Typo="Typo.body2" Color="Color.Error" Class="mb-4">@groupCaption</MudText>
                             }
                             @for (var k = 0; k < groupMembers.Count; k++)
                             {
@@ -179,7 +183,8 @@
     }
 
     /// <summary>
-    /// Determines whether every RequiredGroup across the Connected System's settings has at least one value supplied.
+    /// Determines whether every RequiredGroup across the Connected System's settings is satisfied: at least one value
+    /// supplied for AtLeastOne groups, exactly one for ExactlyOne groups.
     /// Gates the save button alongside MudForm validity, as group constraints span multiple fields.
     /// </summary>
     private bool AreSettingGroupsSatisfied()
