@@ -233,29 +233,53 @@ Each MVO attribute has **one owner** (connected system). Only the owner can upda
 
 ---
 
+#### Option D: Equal Precedence
+
+Multiple systems contribute on an equal footing; last writer wins.
+
+**Cons:** Non-deterministic in practice; the traditional ILM workaround for dual-authority scenarios that this design exists to avoid. Real deployments evidence odd behaviours such as some objects not updating from the system that should own them. **Explicitly rejected; JIM will not offer it.** Scoped sync rules at distinct priorities express every dual-authority scenario equal precedence is used for, deterministically (see "Fine-Grained Authority via Scoped Sync Rules" below).
+
+---
+
 ### Decision: Option B - Per-Attribute Numerical Priority ✓
 
 > **Status**: DESIGN APPROVED - Implementation deferred
 
+**User stories (draft; needs consolidation):** as a synchronisation administrator:
+
+- I want to priority-order the list of sync rules that have import attribute flow to a Metaverse attribute, so that multi-source contribution is deterministic.
+- I want the engine to select the highest-priority rule that can contribute (enabled, joined, in scope) and use the result of that rule's attribute flow.
+- I want a rule to be able to assert null/no-value for the population it covers ("Null is a value"), so that authoritative absence propagates downstream instead of being back-filled.
+- I want one system to be authoritative for most objects and another system authoritative for a defined subset of objects (differently-scoped rules at different priorities), without resorting to equal-precedence semantics.
+- I want disabled sync rules to remain visible in the priority list (greyed out, never contributing) so the ordering stays stable while I stage configuration changes.
+- I want to see, for any MVO attribute value, which sync rule/system currently contributes it, so I can troubleshoot "where did this value come from?".
+
 **Core Design:**
 
-1. **Numerical priority per attribute contribution** - Each import sync rule mapping that targets an MVO attribute has a priority number (1 = highest priority, larger numbers = lower priority)
+1. **Numerical priority per attribute contribution** - Each import sync rule mapping that targets an MVO attribute has a priority number (1 = highest priority, larger numbers = lower priority). The priority list for an MVO attribute is therefore a list of **sync rules** (one entry per rule with a mapping flowing to that attribute). A connected system may appear multiple times in the list via differently-scoped rules; this is what enables fine-grained authority (see below).
 
-2. **Default behaviour (fallback chain)** - Evaluate contributing systems in priority order; use the first non-null value found
+2. **Default behaviour (fallback chain)** - Evaluate contributions in priority order; use the first rule that yields a value
 
-3. **Advanced option: "Null is a value"** - When enabled on a specific contribution, if that system is *connected to the MVO* but contributes null/absent, stop evaluation immediately (no fallback). This allows explicitly asserting "no value" from the authoritative source. If the system has no connector for the MVO at all (or its joined CSO is out of scope of the import rule), it is skipped and evaluation continues to the next priority regardless of this flag; see "Contribution States" in the Design section. The flag is incoherent without that distinction.
+3. **Advanced option: "Null is a value"** - When enabled on a specific contribution, if that rule's system is *connected to the MVO and in scope of the rule* but contributes null/absent, stop evaluation immediately (no fallback). This allows explicitly asserting "no value" from the authoritative source. If the rule has no opinion (disabled, no joined CSO, or CSO out of scope), it is skipped and evaluation continues to the next priority regardless of this flag; see "Contribution States" in the Design section. The flag is incoherent without that distinction.
+
+**The four factors of contribution.** Whether a priority list entry contributes to an MVO attribute is determined by:
+
+1. **Sync rule scope**: is a CSO in scope of an *enabled* sync rule that has inbound attribute flow to the MVO attribute in question?
+2. **Null handling**: is "Null is a value" set on this entry in the attribute priority list?
+3. **Connection**: is a CSO from that rule's connected system joined to the MVO being evaluated?
+4. **Priority**: what is the rule's position in the attribute priority list?
 
 **Example Configuration:**
 
 ```
-MVO Attribute: department
-+------------------------------------------------------------------+
-| Priority | Connected System | Null Handling                      |
-+----------+------------------+------------------------------------+
-|    1     | HR System        | [x] Null is a value (no fallback)  |
-|    2     | Corporate Dir    | [ ] Null is a value                |
-|    3     | Self-Service AD  | [ ] Null is a value                |
-+----------+------------------+------------------------------------+
+MVO Attribute: department (Person)
++--------------------------------------------------------------------------+
+| Priority | Sync Rule               | Connected System | Null Handling    |
++----------+-------------------------+------------------+------------------+
+|    1     | HR People Inbound       | HR System        | [x] Null=Value   |
+|    2     | CorpDir People Inbound  | Corporate Dir    | [ ] Null=Value   |
+|    3     | AD Self-Service Inbound | Self-Service AD  | [ ] Null=Value   |
++----------+-------------------------+------------------+------------------+
 ```
 
 **Behaviour with above configuration:**
@@ -264,7 +288,7 @@ MVO Attribute: department
 - If HR System provides null and "Null is a value" is unchecked -> check Corporate Dir (priority 2)
 - If Corporate Dir provides "IT Services" -> MVO gets "IT Services"
 - And so on down the chain...
-- If HR System has **no connector** for this MVO, it is skipped entirely (no contribution, "Null is a value" irrelevant) and Corporate Dir is evaluated
+- If HR System has **no opinion** for this MVO (rule disabled, no joined CSO, or CSO out of the rule's scope), it is skipped entirely ("Null is a value" irrelevant) and Corporate Dir is evaluated
 
 **Motivating scenarios for "Null is a value":**
 
@@ -277,16 +301,52 @@ The semantic gap it fills: a ranked precedence list cannot distinguish *"the aut
 
 > **Guardrail (implementation):** "Null is a value" amplifies blast radius: a misbehaving priority-1 import (truncated file, empty delta) becomes a mass attribute-clearing event rather than a harmless no-op. Consider an anomaly warning when a priority-1 source contributes null for an unusually high share of objects in a run, consistent with the synchronisation-integrity principles.
 
-**Worked example (HR system migration):**
+**Worked example 1 (HR system migration; null assertion + fallback):**
 
 An MVO object type has three connected systems: **AD** (target), **HR 1** (new HR system, priority 1, "Null is a value" on its mappings), **HR 2** (legacy HR system, priority 2). Both HR systems may project to the MV; most people exist in HR 2, and some have not yet been migrated to HR 1.
 
 - **Person in HR 1**: HR 1 is connected, so it is always authoritative. `department = null` on the HR 1 CSO is asserted into the MV and flows to AD as a clear; HR 2 can never contribute for this person.
-- **Person only in HR 2**: HR 1 is *not connected* for this MVO, so evaluation skips HR 1 entirely (regardless of "Null is a value") and HR 2 contributes full attribute flow.
+- **Person only in HR 2**: HR 1 has *no opinion* for this MVO, so evaluation skips HR 1 entirely (regardless of "Null is a value") and HR 2 contributes full attribute flow.
 
-Without the not-connected distinction, "Null is a value" on HR 1 would block HR 2 from ever contributing, making HR 2's inbound flow pointless. With it, one priority list serves both populations.
+Without the no-opinion distinction, "Null is a value" on HR 1 would block HR 2 from ever contributing, making HR 2's inbound flow pointless. With it, one priority list serves both populations.
 
-> **Migration note:** the day a person is added to HR 1, the new join flips HR 1 from not-connected to connected, and HR 1's blank fields will (correctly) clear values HR 2 had been contributing. This is the intended semantic but is operationally surprising; user documentation must call it out so migration runbooks populate HR 1 records before joining them.
+> **Migration note:** the day a person is added to HR 1, the new join flips HR 1 from no-opinion to connected, and HR 1's blank fields will (correctly) clear values HR 2 had been contributing. This is the intended semantic but is operationally surprising; user documentation must call it out so migration runbooks populate HR 1 records before joining them.
+
+**Fine-grained authority via scoped sync rules:**
+
+Because priority list entries are **sync rules** (not connected systems), and a system can have multiple import rules with different scopes, per-subset authority falls out of the model with no extra machinery:
+
+> One system is nominally authoritative for an attribute (e.g. `member` on groups), but another system is authoritative for that attribute **for a defined subset of objects** (e.g. groups named `SG-*` are managed directly in AD). Updates from AD for that subset flow to the Metaverse and must not be overwritten; updates to those groups in any other system are corrected by drift enforcement. For all other groups, the nominally authoritative system wins and direct AD changes are corrected.
+
+This is expressed by creating multiple inbound rules for the same system: some with no scope (apply to the whole connector space) and some with a narrower scope, then ordering them in the attribute priority list. Traditional ILM systems cannot express this: they flatten all flows for a system into a single contributor entry, leaving only "equal precedence" (with its non-determinism) for dual-authority scenarios.
+
+**Worked example 2 (dual-forest group authority transfer):**
+
+- An organisation has an **AD 1** forest where it authors groups, and an **AD 2** forest. JIM initially synchronises groups AD 1 -> AD 2.
+- It later decides to manage groups in **AD 2** instead and synchronise them back to AD 1, **except** for a subset of groups it wants to continue managing in AD 1.
+- Object matching: simple, on `sAMAccountName` for both systems. Export rules to AD 1 are created for the writeback (not shown; exports do not affect Metaverse attribute values and so do not appear in the attribute priority list).
+
+Configuration at the end of the timeline:
+
+| Connected System | Sync Rule                            | Projection Enabled? | Status       | Priority |
+|:-----------------|:-------------------------------------|:--------------------|:-------------|:---------|
+| AD 1             | AD 1 - Groups - Exceptions - Inbound | Yes                 | Active       | 1        |
+| AD 1             | AD 1 - Groups - Legacy - Inbound     | Yes                 | **Disabled** | 2        |
+| AD 2             | AD 2 - Groups - Inbound              | Yes                 | Active       | 3        |
+| AD 1             | AD 1 - Groups - Inbound              | Yes                 | Active       | 4        |
+
+> **Note:** `AD 1 - Groups - Legacy - Inbound` is disabled but still shown in the priority list. A disabled rule has no bearing on synchronisation decisions (it is never evaluated), but keeping it visible avoids destabilising the ordering of the other rules while configuration changes are staged.
+
+Expected outcomes:
+
+- New groups from AD 2 in scope of `AD 2 - Groups - Inbound` are projected to the Metaverse and provisioned to AD 1.
+- New groups from AD 1 in scope of `AD 1 - Groups - Legacy - Inbound` only are **not** projected; the rule is disabled.
+- New groups from AD 1 in scope of `AD 1 - Groups - Exceptions - Inbound` are projected to the Metaverse and provisioned to AD 2.
+- New groups from AD 1 in scope of `AD 1 - Groups - Inbound` are projected if no matching MVO exists, provisioned to AD 2, and thereafter managed in AD 2: subsequent AD 2 changes flow back to AD 1, and direct AD 1 changes are corrected as drift (priority 3 beats priority 4).
+- Changes to groups in scope of `AD 1 - Groups - Exceptions - Inbound` synchronise to the Metaverse and on to AD 2 (priority 1 wins).
+- Changes to groups in scope of `AD 1 - Groups - Inbound` (non-exception groups) lose resolution to `AD 2 - Groups - Inbound` and are corrected in AD 1 by export re-evaluation.
+
+> **Scope transition note:** scoping criteria evaluate against CSO attributes, so an object can move in or out of a rule's scope when its attributes change (e.g. a group renamed to match the exceptions pattern). Authority then transfers between systems on the object's next sync. This is the intended semantic, but it is powerful and quiet; user documentation must call it out.
 
 **Rationale:**
 
@@ -300,9 +360,12 @@ Without the not-connected distinction, "Null is a value" on HR 1 would block HR 
 
 **Design Decisions:**
 
-- **Default priority**: When a new import mapping is created, assign the next available priority number (lowest priority)
+- **Priority storage**: per sync rule mapping (rule + target attribute). The UI presents the priority list per MVO attribute with sync rules as the line items; per-attribute divergence in a rule's rank is therefore possible (see open question on ordering UX)
+- **Default priority**: when a new import mapping is created targeting an attribute that already has contributors, auto-assign the next available priority (max existing + 1). Resolution must have a deterministic tie-break (e.g. mapping id) as a safety net, but duplicate priorities within one attribute's list should be prevented by validation
 - **Default null handling**: "Null is a value" = false (fallback behaviour, matching traditional ILM expectations)
-- **UI placement**: Priority management should be accessible from both the sync rule page and a dedicated "Attribute Priority" view (see UI section below)
+- **Disabled rules**: remain visible in the priority list (greyed out) but are never evaluated
+- **Equal precedence**: deliberately not offered (see Option D above)
+- **UI placement and navigation**: deliberately undecided; gated on the admin IA review (see UI section below)
 
 ---
 
@@ -316,9 +379,10 @@ Without the not-connected distinction, "Null is a value" on HR 1 would block HR 
 | Drift detection trigger | On inbound sync, when CSO has export rules targeting it | ✓ Ready for implementation |
 | Drift detection control | `EnforceState` flag on **export** sync rules, **default: true**, hidden in Advanced Options UI | ✓ Ready for implementation |
 | **Attribute Priority** | | |
-| Priority model | Per-attribute numerical priority on import mappings | Design approved, implementation deferred |
-| Default behaviour | Fallback chain - use first non-null value in priority order | Design approved, implementation deferred |
+| Priority model | Per-attribute numerical priority on import mappings; sync rules are the priority list line items (multiple differently-scoped rules per system enable fine-grained authority) | Design approved, implementation deferred |
+| Default behaviour | Fallback chain - use the first contribution with an opinion and a value, in priority order | Design approved, implementation deferred |
 | Null handling | "Null is a value" flag per contribution (default: false) | Design approved, implementation deferred |
+| Equal precedence | Deliberately not offered; scoped rules at distinct priorities replace it | Design approved |
 
 ### Schema Changes
 
@@ -347,51 +411,52 @@ public class SyncRuleMapping
     // ... existing properties ...
 
     /// <summary>
-    /// Priority for this attribute contribution when multiple systems import
+    /// Priority for this attribute contribution when multiple sync rules import
     /// to the same MVO attribute. Lower numbers = higher priority (1 is highest).
     /// Only applicable to import sync rules.
     /// </summary>
-    public int Priority { get; set; } = int.MaxValue; // Default: lowest priority
+    public int Priority { get; set; } = int.MaxValue; // Sentinel until auto-assigned (max existing + 1)
 
     /// <summary>
-    /// When true, if this source is connected to the MVO but contributes
-    /// null/absent for this attribute, stop evaluation immediately without
-    /// falling back to lower-priority sources. Has no effect when the source
-    /// has no connector for the MVO. When false (default), null values are
-    /// skipped and evaluation continues to the next priority level.
+    /// When true, if this rule's system is connected to the MVO and in scope
+    /// but contributes null/absent for this attribute, stop evaluation
+    /// immediately without falling back to lower-priority contributions.
+    /// Has no effect when the rule has no opinion for the MVO (disabled rule,
+    /// no joined CSO, or CSO out of scope). When false (default), null values
+    /// are skipped and evaluation continues to the next priority level.
     /// </summary>
     public bool NullIsValue { get; set; } = false;
 }
 ```
 
-**Note:** The `Priority` value is scoped to the target MVO attribute. When a new import mapping is created targeting an MVO attribute that already has contributors, the system should assign the next available priority number (max existing priority + 1).
+**Note:** The `Priority` value is scoped to the target MVO attribute. When a new import mapping is created targeting an MVO attribute that already has contributors, the system should assign the next available priority number (max existing priority + 1). No other schema changes are required: `SyncRule.Enabled`, `SyncRule.ObjectScopingCriteriaGroups`, and per-rule mappings already provide the rule-granular building blocks for fine-grained authority.
 
 ### Sync Engine Changes
 
 #### Contribution States
 
-A system's contribution to an MVO attribute is **tri-state**; the distinction between the first two states is what makes "Null is a value" coherent:
+A rule's contribution to an MVO attribute is **tri-state**; the distinction between "no opinion" and "connected, no value" is what makes "Null is a value" coherent:
 
 | State | Meaning | Evaluation |
 |-------|---------|------------|
-| **Not connected** | No CSO from this system is joined to the MVO, or the joined CSO is out of scope of the import rule carrying the mapping | Always skip to the next priority, regardless of `NullIsValue` |
-| **Connected, no value** | A joined, in-scope CSO exists but the mapping yields nothing | If `NullIsValue`: stop and assert null. Otherwise fall through to the next priority |
-| **Connected, with value** | A joined, in-scope CSO exists and the mapping yields a value | This value wins |
+| **No opinion** | The rule is disabled, no CSO from the rule's system is joined to the MVO, or the joined CSO is out of the rule's scope | Always skip to the next priority, regardless of `NullIsValue` |
+| **Connected, no value** | The rule is enabled and a joined, in-scope CSO exists, but the mapping yields nothing | If `NullIsValue`: stop and assert null. Otherwise fall through to the next priority |
+| **Connected, with value** | The rule is enabled, a joined, in-scope CSO exists, and the mapping yields a value | This value wins |
 
-Scope matters, not just join existence: if a system's import rule has scoping criteria that exclude the joined CSO, the system must count as *not connected* for evaluation; otherwise an out-of-scope connector could assert nulls it has no rule entitling it to assert.
+Scope matters, not just join existence: if a rule's scoping criteria exclude the joined CSO, the rule has no opinion; otherwise an out-of-scope rule could assert nulls it has no entitlement to assert.
 
 #### Attribute Priority Resolution (Inbound Sync)
 
 ```csharp
 enum ContributionState
 {
-    NotConnected,       // no joined, in-scope CSO from this system for the MVO
-    ConnectedNoValue,   // joined, in-scope CSO exists; mapping yields nothing
-    ConnectedWithValue  // joined, in-scope CSO exists; mapping yields a value
+    NoOpinion,          // rule disabled, no joined CSO, or CSO out of rule scope
+    ConnectedNoValue,   // enabled rule with joined, in-scope CSO; mapping yields nothing
+    ConnectedWithValue  // enabled rule with joined, in-scope CSO; mapping yields a value
 }
 
 /// <summary>
-/// Resolves the winning value for an MVO attribute when multiple systems contribute.
+/// Resolves the winning value for an MVO attribute when multiple sync rules contribute.
 /// Called during inbound sync processing.
 /// </summary>
 AttributeResolution ResolveAttributeValue(MetaverseObject mvo, MetaverseAttribute attribute)
@@ -406,8 +471,8 @@ AttributeResolution ResolveAttributeValue(MetaverseObject mvo, MetaverseAttribut
 
         switch (state)
         {
-            case ContributionState.NotConnected:
-                // This system has no opinion on this MVO; always continue,
+            case ContributionState.NoOpinion:
+                // This rule has no opinion on this MVO; always continue,
                 // regardless of NullIsValue.
                 continue;
 
@@ -425,7 +490,16 @@ AttributeResolution ResolveAttributeValue(MetaverseObject mvo, MetaverseAttribut
 }
 ```
 
-> **Implementation notes:** the MVO stores only the *winning* value (`MetaverseObjectAttributeValue` with `ContributedBySystemId`); it does not retain the losing contributions. `EvaluateContribution` therefore implies reading the MVO's other joined CSOs at resolution time whenever fallback is needed. Note also that `AssertedNull` and `NoContributor` produce the same stored state (no attribute value row); see the open question on asserted-null observability.
+> **Implementation notes:** the MVO stores only the *winning* value (`MetaverseObjectAttributeValue` with `ContributedBySystemId`); it does not retain the losing contributions. `EvaluateContribution` therefore implies reading the MVO's other joined CSOs, and evaluating scoping criteria against them, at resolution time whenever fallback is needed. Note also that `AssertedNull` and `NoContributor` produce the same stored state (no attribute value row); see the open question on asserted-null observability.
+
+#### Interaction with Drift Detection (priority-aware contributor check)
+
+The shipped drift detection treats any system with an import mapping for an attribute as a legitimate contributor (`DriftDetectionService.HasImportRuleForAttribute`, also shown in the drift pseudocode above) and skips drift evaluation for it. Once attribute priority lands, **contributor legitimacy must become priority-aware**:
+
+- A CSO's inbound change to an attribute is legitimate only if its contribution **wins** resolution for that MVO attribute (enabled, in scope, connected, and highest priority among contributions with an opinion).
+- When a CSO's change *loses* resolution, the MV retains the winning value, and the losing system's local state is corrected by export re-evaluation where an export rule with `EnforceState` targets that system (see worked example 2: direct AD 1 changes to non-exception groups are corrected because AD 2's rule outranks AD 1's).
+
+This supersedes the earlier open question on drift interaction; the dual-forest scenario's expected outcomes require it.
 
 #### Drift Detection (Outbound Sync)
 
@@ -526,7 +600,7 @@ Navigation models the IA review should evaluate, none pre-selected:
 
 An earlier revision of this design pre-supposed "Metaverse -> Attribute Priority"; no Metaverse nav group exists.
 
-The centralised-view candidate provides a single view of all MVO attributes that have multiple contributors, allowing admins to manage priority across the entire system.
+Whichever navigation model wins, the priority list's line items are **sync rules** (priority, sync rule, connected system, enabled/disabled state, "Null is a value"); disabled rules appear greyed out and non-contributing but hold their position. The centralised-view candidate provides a single view of all MVO attributes that have multiple contributors, allowing admins to manage priority across the entire system.
 
 ```
 +-----------------------------------------------------------------------------+
@@ -739,9 +813,10 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 #### Future Phase 2: Attribute Priority Logic
 
 - [ ] Create `AttributePriorityService` in `src/JIM.Application/Services/`
-- [ ] Implement the tri-state contribution evaluation (not connected / connected-no-value / connected-with-value), respecting sync rule scope
+- [ ] Implement the tri-state contribution evaluation (no opinion / connected-no-value / connected-with-value), respecting rule enabled state and scoping criteria
 - [ ] Integrate into inbound sync processing (`SyncRuleMappingProcessor`)
-- [ ] Auto-assign priority on new import mapping creation
+- [ ] Auto-assign priority on new import mapping creation (max existing + 1); deterministic tie-break in resolution
+- [ ] Make the drift detection contributor check priority-aware: legitimate only when the contribution wins resolution (replaces the has-import-rule check in `DriftDetectionService`)
 - [ ] Replace the interim grace period recall freeze with proper next-contributor fallback
 - [ ] Anomaly guardrail: warn when a priority-1 `NullIsValue` source contributes null for an unusually high share of objects in a run
 
@@ -757,10 +832,15 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 - [ ] Unit tests for `AttributePriorityService`
 - [ ] Integration tests for multi-source priority resolution
 - [ ] Integration tests for NullIsValue behaviour, including the tri-state cases:
-  - [ ] Priority-1 system not connected: lower-priority system contributes fully despite NullIsValue on priority 1 (HR migration scenario)
-  - [ ] Priority-1 system connected with null and NullIsValue: null asserted, no fallback
-  - [ ] Priority-1 system joined but out of sync rule scope: treated as not connected
+  - [ ] Priority-1 rule has no opinion (not joined): lower-priority rule contributes fully despite NullIsValue on priority 1 (HR migration scenario)
+  - [ ] Priority-1 rule connected with null and NullIsValue: null asserted, no fallback
+  - [ ] Priority-1 rule's CSO joined but out of rule scope: treated as no opinion
+  - [ ] Priority-1 rule disabled: treated as no opinion
   - [ ] New join to priority-1 system mid-life: its blanks clear previously contributed values
+- [ ] Integration tests for fine-grained authority (worked example 2):
+  - [ ] Scoped exception rule (priority 1) wins for in-scope objects; direct changes in the lower-priority system are corrected via EnforceState export
+  - [ ] Non-exception objects: higher-priority system's rule wins; losing system's direct changes corrected back
+  - [ ] Object moves into/out of a scoped rule's coverage: authority transfers on next sync
 
 #### Future Phase 5: Documentation
 
@@ -807,10 +887,9 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
    - The design above is single-value semantics ("first non-null value wins")
    - MVAs store one `MetaverseObjectAttributeValue` row per value with a per-row `ContributedBySystemId`, which naturally supports multi-contributor union
    - Is priority for MVAs winner-takes-all-values, merge/union per contributor, or out of scope for the first iteration? And does "Null is a value" on an MVA assert the empty set?
+   - Note worked example 2 is about `member`, an MVA, so this question is on the critical path for the fine-grained authority scenario
 
-8. **Interaction with drift detection**
-   - `DriftDetectionService.HasImportRuleForAttribute` treats any system with an import mapping as a legitimate contributor whose inbound changes are not drift
-   - Once priority exists, a low-priority contributor's inbound change can lose resolution; should the losing value sitting in that target system then be treated as drift and corrected back?
+8. **Interaction with drift detection** - RESOLVED into the design (Jun 2026): contributor legitimacy becomes priority-aware; a losing contributor's direct changes are corrected via `EnforceState` export re-evaluation. See "Interaction with Drift Detection" in the Design section.
 
 9. **Admin IA and navigation**
    - See Future Phase 0: where does attribute priority (and the configuration concepts around it) belong in the admin information architecture?
@@ -824,6 +903,14 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 11. **Conditional mappings and null**
     - When a mapping's source is an expression, does an expression that evaluates to null count as "connected, no value" (and therefore trigger NullIsValue)?
     - Presumably yes, which also provides a mechanism for *conditionally* asserting null; confirm and document
+
+12. **Per-rule vs per-attribute ordering UX**
+    - Storage is per mapping, so a rule can rank differently per attribute
+    - Is the default UX gesture "order this rule consistently across all its mappings" (likely matches admin intent: a rule represents an authority claim over a scoped population) with per-attribute divergence as an advanced option?
+
+13. **Re-evaluation after configuration changes**
+    - Reordering priorities, toggling rule enablement, or scope membership changes do not retroactively re-resolve MV values; resolution happens at sync time
+    - Define when re-evaluation occurs (next sync of any contributor? an explicit "re-evaluate" action after reordering?) and document the propagation lag
 
 ---
 
