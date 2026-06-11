@@ -262,6 +262,8 @@ Multiple systems contribute on an equal footing; last writer wins.
 
 3. **Advanced option: "Null is a value"** - When enabled on a specific contribution, if that rule's system is *connected to the MVO and in scope of the rule* but contributes null/absent, stop evaluation immediately (no fallback). This allows explicitly asserting "no value" from the authoritative source. If the rule has no opinion (disabled, no joined CSO, or CSO out of scope), it is skipped and evaluation continues to the next priority regardless of this flag; see "Contribution States" in the Design section. The flag is incoherent without that distinction.
 
+4. **Multivalued attributes (first iteration): winner-takes-all-values** - The winning rule contributes the *entire* value set of an MVA; losing rules contribute nothing. "Connected, no value" for an MVA means the empty set, so "Null is a value" asserts an empty set (e.g. a group with no members). This matches ranked-precedence semantics in traditional ILM systems and keeps resolution one-sentence explainable. Per-value merge/union across contributors is deliberately deferred to a second iteration; see "MVA Merge: Iteration 2 Roadmap" below.
+
 **The four factors of contribution.** Whether a priority list entry contributes to an MVO attribute is determined by:
 
 1. **Sync rule scope**: is a CSO in scope of an *enabled* sync rule that has inbound attribute flow to the MVO attribute in question?
@@ -348,6 +350,22 @@ Expected outcomes:
 
 > **Scope transition note:** scoping criteria evaluate against CSO attributes, so an object can move in or out of a rule's scope when its attributes change (e.g. a group renamed to match the exceptions pattern). Authority then transfers between systems on the object's next sync. This is the intended semantic, but it is powerful and quiet; user documentation must call it out.
 
+Note that fine-grained authority is **per object** (which system owns this group's membership), so it works under winner-takes-all-values MVA semantics; it does not require per-value merge.
+
+**MVA Merge: Iteration 2 Roadmap**
+
+Market research (Jun 2026) on how comparable products handle multi-source MVAs:
+
+| Product family | MVA behaviour |
+|----------------|---------------|
+| Traditional ranked-precedence ILM systems | Winner contributes the entire value set. Cross-source merge only via "equal precedence" (fragile removal semantics, non-deterministic) or custom rules-extension code accumulating values from all sources |
+| Merge-by-default open-source identity platforms | Default per-value **merge** of all mapping outputs, made safe by substantial machinery: per-value provenance, "tolerant" attributes, a per-mapping authoritative value range (the value subset a mapping may remove), and strong/normal mapping tiers |
+| Commercial IGA platforms | Ordered source list, first source with data wins (fallback chain); cross-source MVA merge largely sidestepped (entitlements held per-account/per-source) |
+
+Demand for merge is real but narrow, clustering around mail alias attributes (e.g. proxy addresses contributed by multiple systems) and cross-forest group membership. Every merge implementation's hard part is **removal semantics**: who owns a value when it must be deleted.
+
+**Iteration 2 sketch (not committed):** a per-contribution mode, e.g. `Exclusive` (default; winner-takes-all-values) vs `Merge` (rule contributes its values into a union). JIM's per-row `ContributedBySystemId` already provides the per-value provenance merge requires, and "each rule is authoritative for removing the values it contributed" is a simplified form of the authoritative value range concept. To be explored and designed as a follow-up issue once iteration 1 is in production.
+
 **Rationale:**
 
 1. **Granular control** - Different attributes can have different priority orders, even from the same connected system
@@ -363,6 +381,7 @@ Expected outcomes:
 - **Priority storage**: per sync rule mapping (rule + target attribute). The UI presents the priority list per MVO attribute with sync rules as the line items; per-attribute divergence in a rule's rank is therefore possible (see open question on ordering UX)
 - **Default priority**: when a new import mapping is created targeting an attribute that already has contributors, auto-assign the next available priority (max existing + 1). Resolution must have a deterministic tie-break (e.g. mapping id) as a safety net, but duplicate priorities within one attribute's list should be prevented by validation
 - **Default null handling**: "Null is a value" = false (fallback behaviour, matching traditional ILM expectations)
+- **MVA semantics (first iteration)**: winner-takes-all-values; per-value merge deferred to iteration 2 (see roadmap above)
 - **Disabled rules**: remain visible in the priority list (greyed out) but are never evaluated
 - **Equal precedence**: deliberately not offered (see Option D above)
 - **UI placement and navigation**: deliberately undecided; gated on the admin IA review (see UI section below)
@@ -440,8 +459,8 @@ A rule's contribution to an MVO attribute is **tri-state**; the distinction betw
 | State | Meaning | Evaluation |
 |-------|---------|------------|
 | **No opinion** | The rule is disabled, no CSO from the rule's system is joined to the MVO, or the joined CSO is out of the rule's scope | Always skip to the next priority, regardless of `NullIsValue` |
-| **Connected, no value** | The rule is enabled and a joined, in-scope CSO exists, but the mapping yields nothing | If `NullIsValue`: stop and assert null. Otherwise fall through to the next priority |
-| **Connected, with value** | The rule is enabled, a joined, in-scope CSO exists, and the mapping yields a value | This value wins |
+| **Connected, no value** | The rule is enabled and a joined, in-scope CSO exists, but the mapping yields nothing (for an MVA: the empty set) | If `NullIsValue`: stop and assert null/empty set. Otherwise fall through to the next priority |
+| **Connected, with value** | The rule is enabled, a joined, in-scope CSO exists, and the mapping yields a value | This value wins (for an MVA: the entire value set) |
 
 Scope matters, not just join existence: if a rule's scoping criteria exclude the joined CSO, the rule has no opinion; otherwise an out-of-scope rule could assert nulls it has no entitlement to assert.
 
@@ -814,6 +833,7 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 
 - [ ] Create `AttributePriorityService` in `src/JIM.Application/Services/`
 - [ ] Implement the tri-state contribution evaluation (no opinion / connected-no-value / connected-with-value), respecting rule enabled state and scoping criteria
+- [ ] Implement winner-takes-all-values MVA resolution (winning rule replaces the full value set; per-row `ContributedBySystemId` makes the diff computable)
 - [ ] Integrate into inbound sync processing (`SyncRuleMappingProcessor`)
 - [ ] Auto-assign priority on new import mapping creation (max existing + 1); deterministic tie-break in resolution
 - [ ] Make the drift detection contributor check priority-aware: legitimate only when the contribution wins resolution (replaces the has-import-rule check in `DriftDetectionService`)
@@ -837,6 +857,9 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
   - [ ] Priority-1 rule's CSO joined but out of rule scope: treated as no opinion
   - [ ] Priority-1 rule disabled: treated as no opinion
   - [ ] New join to priority-1 system mid-life: its blanks clear previously contributed values
+- [ ] Integration tests for MVA winner-takes-all-values:
+  - [ ] Winning rule's full value set replaces previous contributor's values
+  - [ ] NullIsValue on an MVA asserts the empty set (e.g. group membership cleared)
 - [ ] Integration tests for fine-grained authority (worked example 2):
   - [ ] Scoped exception rule (priority 1) wins for in-scope objects; direct changes in the lower-priority system are corrected via EnforceState export
   - [ ] Non-exception objects: higher-priority system's rule wins; losing system's direct changes corrected back
@@ -883,11 +906,7 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
    - Is there ever a need for global priority configuration?
    - Probably not - keep scoped to object type for simplicity
 
-7. **Multivalued attributes**
-   - The design above is single-value semantics ("first non-null value wins")
-   - MVAs store one `MetaverseObjectAttributeValue` row per value with a per-row `ContributedBySystemId`, which naturally supports multi-contributor union
-   - Is priority for MVAs winner-takes-all-values, merge/union per contributor, or out of scope for the first iteration? And does "Null is a value" on an MVA assert the empty set?
-   - Note worked example 2 is about `member`, an MVA, so this question is on the critical path for the fine-grained authority scenario
+7. **Multivalued attributes** - DECIDED for the first iteration (Jun 2026): winner-takes-all-values; "Null is a value" on an MVA asserts the empty set. Per-value merge/union deferred to iteration 2; see "MVA Merge: Iteration 2 Roadmap" in the decision section. Residual questions for the follow-up design: per-contribution `Exclusive` vs `Merge` mode, removal semantics ("each rule may remove only the values it contributed"?), and interaction with NullIsValue under merge mode.
 
 8. **Interaction with drift detection** - RESOLVED into the design (Jun 2026): contributor legitimacy becomes priority-aware; a losing contributor's direct changes are corrected via `EnforceState` export re-evaluation. See "Interaction with Drift Detection" in the Design section.
 
