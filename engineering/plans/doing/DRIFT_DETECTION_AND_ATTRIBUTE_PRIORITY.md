@@ -517,6 +517,8 @@ The shipped drift detection treats any system with an import mapping for an attr
 - A CSO's inbound change to an attribute is legitimate only if its contribution **wins** resolution for that MVO attribute (enabled, in scope, connected, and highest priority among contributions with an opinion).
 - When a CSO's change *loses* resolution, the MV retains the winning value, and the losing system's local state is corrected by export re-evaluation where an export rule with `EnforceState` targets that system (see worked example 2: direct AD 1 changes to non-exception groups are corrected because AD 2's rule outranks AD 1's).
 
+> **Sync flow remains linear.** Inbound processing never writes to CSOs or to connected systems; a losing contribution simply never reaches the MVO (the import still updates the CSO, which mirrors the source system's actual state). Correction of the losing system is purely the standard outbound path: that system is *also* an export target, so when export evaluation finds its actual state differs from the expected state derived from the MVO, a corrective pending export is staged like any other export. If no export rule with `EnforceState` targets that system for the attribute, the losing system simply remains divergent; the Metaverse and downstream systems are protected either way.
+
 This supersedes the earlier open question on drift interaction; the dual-forest scenario's expected outcomes require it.
 
 #### Drift Detection (Outbound Sync)
