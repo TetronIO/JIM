@@ -111,6 +111,30 @@ public class LdapConnectorTests
     }
 
     [Test]
+    public void GetSettings_CertificateValidation_IsRequiredWhenSecureConnectionEnabled()
+    {
+        // Certificate Validation is only relevant when LDAPS is enabled (#828)
+        var settings = _connector.GetSettings();
+        var certificateValidation = settings.Single(s => s.Name == "Certificate Validation");
+
+        Assert.That(certificateValidation.RequiredWhenSetting, Is.EqualTo("Use Secure Connection (LDAPS)?"));
+        Assert.That(certificateValidation.RequiredWhenValue, Is.EqualTo("true"));
+        // a sensible default so the conditional requirement is pre-satisfied when LDAPS is switched on
+        Assert.That(certificateValidation.DefaultStringValue, Is.EqualTo("Full Validation"));
+    }
+
+    [Test]
+    public void GetSettings_DisableAttribute_IsRequiredWhenDeleteBehaviourIsDisable()
+    {
+        // Disable Attribute is only relevant when Delete Behaviour is 'Disable' (#828)
+        var settings = _connector.GetSettings();
+        var disableAttribute = settings.Single(s => s.Name == "Disable Attribute");
+
+        Assert.That(disableAttribute.RequiredWhenSetting, Is.EqualTo("Delete Behaviour"));
+        Assert.That(disableAttribute.RequiredWhenValue, Is.EqualTo("Disable"));
+    }
+
+    [Test]
     public void GetSettings_ContainsHostSetting()
     {
         var settings = _connector.GetSettings();

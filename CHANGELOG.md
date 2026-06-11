@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🖥️ Connected System settings that only apply in certain configurations are now hidden until they are relevant, and required once they are. In the LDAP Connector, Certificate Validation appears (and must be set) only when "Use Secure Connection (LDAPS)?" is enabled, and Disable Attribute appears (and must be set) only when Delete Behaviour is "Disable". Connectors declare these conditional settings in their metadata and JIM enforces them generically, both in the settings form and server-side for API callers.
 - 🔄 JIM now requests the `offline_access` scope during interactive authentication so the identity provider issues a refresh token. This enables reliable in-session token renewal and the new PowerShell token persistence. Existing SSO deployments should ensure `offline_access` is permitted on the interactive/public client; see the updated SSO setup guide.
 - 🔄 Factory reset now **preserves administrator users by default** (so you are not locked out) and always records a Reset activity attributed to whoever initiated it. The previous behaviour of also removing administrators is available via the new `-IncludeAdministrators` switch on `Reset-JIMSystem` (and `includeAdministrators` on `POST /api/v1/system/reset`), guarded against lockout when no initial administrator is configured.
 - 🔄 The reconnection overlay now shows live attempt progress (for example, "Attempt 2 of 5...") while JIM re-establishes a dropped connection.

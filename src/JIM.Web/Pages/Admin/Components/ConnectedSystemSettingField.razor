@@ -19,7 +19,7 @@ else if (SettingValue.Setting.Type == ConnectedSystemSettingType.String)
                   @bind-Value="SettingValue.StringValue"
                   @bind-Value:after="NotifyValueChangedAsync"
                   Immediate="@Immediate"
-                  Required="@SettingValue.Setting.Required"
+                  Required="@IsRequired"
                   RequiredError="@($"A {SettingValue.Setting.Name} is required")"
                   HelperText="@SettingValue.Setting.Description"
                   Variant="Variant.Outlined"
@@ -32,7 +32,7 @@ else if (SettingValue.Setting.Type == ConnectedSystemSettingType.StringEncrypted
                   @bind-Value="SettingValue.StringEncryptedValue"
                   @bind-Value:after="NotifyValueChangedAsync"
                   Immediate="@Immediate"
-                  Required="@SettingValue.Setting.Required"
+                  Required="@IsRequired"
                   RequiredError="@($"A {SettingValue.Setting.Name} is required")"
                   HelperText="@SettingValue.Setting.Description"
                   InputType="@(_passwordVisible ? InputType.Text : InputType.Password)"
@@ -50,7 +50,7 @@ else if (SettingValue.Setting.Type == ConnectedSystemSettingType.Integer)
                   @bind-Value="SettingValue.IntValue"
                   @bind-Value:after="NotifyValueChangedAsync"
                   Immediate="@Immediate"
-                  Required="@SettingValue.Setting.Required"
+                  Required="@IsRequired"
                   RequiredError="@($"A {SettingValue.Setting.Name} is required")"
                   HelperText="@SettingValue.Setting.Description"
                   InputType="InputType.Number"
@@ -94,7 +94,7 @@ else if (SettingValue.Setting.Type == ConnectedSystemSettingType.File)
     <MudTextField T="string"
                   Label="@SettingValue.Setting.Name"
                   @bind-Value="SettingValue.StringValue"
-                  Required="@SettingValue.Setting.Required"
+                  Required="@IsRequired"
                   RequiredError="@($"A {SettingValue.Setting.Name} is required")"
                   HelperText="@SettingValue.Setting.Description"
                   Variant="Variant.Outlined"
@@ -122,6 +122,13 @@ else
     /// </summary>
     [Parameter]
     public string CssClass { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Whether the field should be marked required. Computed by the parent via ConnectorSettingValidator so it reflects
+    /// both statically-required settings and those made required by a satisfied RequiredWhen condition.
+    /// </summary>
+    [Parameter]
+    public bool IsRequired { get; set; }
 
     /// <summary>
     /// Whether the Connected System is in export-only mode; affects the file browser dialog behaviour.

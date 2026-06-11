@@ -92,15 +92,8 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         logger.Verbose($"ValidateSettingValues() called for {Name}");
         var response = new List<ConnectorSettingValueValidationResult>();
 
-        // general required setting value validation
-        foreach (var requiredSettingValue in settingValues.Where(q => q.Setting.Required))
-        {
-            if ((requiredSettingValue.Setting.Type == ConnectedSystemSettingType.String ||
-                 requiredSettingValue.Setting.Type == ConnectedSystemSettingType.File ||
-                 requiredSettingValue.Setting.Type == ConnectedSystemSettingType.DropDown) &&
-                string.IsNullOrEmpty(requiredSettingValue.StringValue))
-                response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {requiredSettingValue.Setting.Name}", IsValid = false, SettingValue = requiredSettingValue });
-        }
+        // generic required, required-group and required-when validation is handled centrally by ConnectorSettingValidator
+        // (invoked by the application layer before this method); only File Connector-specific rules live here.
 
         // Get file path and mode settings
         var filePathSetting = settingValues.Single(q => q.Setting.Name == SettingFilePath);
@@ -109,17 +102,10 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         var filePath = filePathSetting.StringValue;
         var mode = modeSetting.StringValue ?? ModeImportOnly;
 
-        // File path is required
+        // File path is required, but the generic validator already reports a missing value; just short-circuit the
+        // mode-specific checks below, which cannot run without a path.
         if (string.IsNullOrEmpty(filePath))
-        {
-            response.Add(new ConnectorSettingValueValidationResult
-            {
-                IsValid = false,
-                ErrorMessage = "File Path must be configured.",
-                SettingValue = filePathSetting
-            });
             return response;
-        }
 
         // Validate based on mode
         switch (mode)
