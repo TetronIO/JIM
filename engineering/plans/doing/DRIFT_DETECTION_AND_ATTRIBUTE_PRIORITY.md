@@ -243,7 +243,7 @@ Each MVO attribute has **one owner** (connected system). Only the owner can upda
 
 2. **Default behaviour (fallback chain)** - Evaluate contributing systems in priority order; use the first non-null value found
 
-3. **Advanced option: "Null is a value"** - When enabled on a specific contribution, if that system contributes null/absent, stop evaluation immediately (no fallback). This allows explicitly asserting "no value" from the authoritative source.
+3. **Advanced option: "Null is a value"** - When enabled on a specific contribution, if that system is *connected to the MVO* but contributes null/absent, stop evaluation immediately (no fallback). This allows explicitly asserting "no value" from the authoritative source. If the system has no connector for the MVO at all (or its joined CSO is out of scope of the import rule), it is skipped and evaluation continues to the next priority regardless of this flag; see "Contribution States" in the Design section. The flag is incoherent without that distinction.
 
 **Example Configuration:**
 
@@ -264,6 +264,29 @@ MVO Attribute: department
 - If HR System provides null and "Null is a value" is unchecked -> check Corporate Dir (priority 2)
 - If Corporate Dir provides "IT Services" -> MVO gets "IT Services"
 - And so on down the chain...
+- If HR System has **no connector** for this MVO, it is skipped entirely (no contribution, "Null is a value" irrelevant) and Corporate Dir is evaluated
+
+**Motivating scenarios for "Null is a value":**
+
+The semantic gap it fills: a ranked precedence list cannot distinguish *"the authoritative source knows this object and says it has no value"* from *"the authoritative source doesn't know this object"*. Plain fall-through treats both as "no contribution, ask the next source".
+
+1. **Clears must propagate (stale value resurrection)**: a manager leaves and HR clears `manager`; a lower-priority directory still holds the old manager. With plain fall-through the metaverse keeps the old manager, and everything driven by it (manager-based approvals, dynamic groups) keeps operating against the wrong person. Same shape for `department`/cost centre cleared during a reorg. Traditional ILM solutions needed custom rules extensions and sentinel-value hacks to express this.
+2. **Fallback for one population, exclusivity for another, in one configuration**: a secondary system must stay in the priority list because it is the only source for objects the primary doesn't manage, but for primary-managed objects, blank-in-primary must mean blank. See the worked migration example below.
+3. **Data minimisation / compliance**: personal data removed at the authoritative source must propagate as a removal everywhere, not be re-sourced from a secondary copy and republished indefinitely.
+4. **Disconnect/leaver semantics**: combined with attribute recall, when the authoritative CSO obsoletes with "Null is a value", the attribute is asserted null instead of being reanimated by a secondary source.
+
+> **Guardrail (implementation):** "Null is a value" amplifies blast radius: a misbehaving priority-1 import (truncated file, empty delta) becomes a mass attribute-clearing event rather than a harmless no-op. Consider an anomaly warning when a priority-1 source contributes null for an unusually high share of objects in a run, consistent with the synchronisation-integrity principles.
+
+**Worked example (HR system migration):**
+
+An MVO object type has three connected systems: **AD** (target), **HR 1** (new HR system, priority 1, "Null is a value" on its mappings), **HR 2** (legacy HR system, priority 2). Both HR systems may project to the MV; most people exist in HR 2, and some have not yet been migrated to HR 1.
+
+- **Person in HR 1**: HR 1 is connected, so it is always authoritative. `department = null` on the HR 1 CSO is asserted into the MV and flows to AD as a clear; HR 2 can never contribute for this person.
+- **Person only in HR 2**: HR 1 is *not connected* for this MVO, so evaluation skips HR 1 entirely (regardless of "Null is a value") and HR 2 contributes full attribute flow.
+
+Without the not-connected distinction, "Null is a value" on HR 1 would block HR 2 from ever contributing, making HR 2's inbound flow pointless. With it, one priority list serves both populations.
+
+> **Migration note:** the day a person is added to HR 1, the new join flips HR 1 from not-connected to connected, and HR 1's blank fields will (correctly) clear values HR 2 had been contributing. This is the intended semantic but is operationally surprising; user documentation must call it out so migration runbooks populate HR 1 records before joining them.
 
 **Rationale:**
 
@@ -331,10 +354,11 @@ public class SyncRuleMapping
     public int Priority { get; set; } = int.MaxValue; // Default: lowest priority
 
     /// <summary>
-    /// When true, if this source contributes null/absent for this attribute,
-    /// stop evaluation immediately without falling back to lower-priority sources.
-    /// When false (default), null values are skipped and evaluation continues
-    /// to the next priority level.
+    /// When true, if this source is connected to the MVO but contributes
+    /// null/absent for this attribute, stop evaluation immediately without
+    /// falling back to lower-priority sources. Has no effect when the source
+    /// has no connector for the MVO. When false (default), null values are
+    /// skipped and evaluation continues to the next priority level.
     /// </summary>
     public bool NullIsValue { get; set; } = false;
 }
@@ -344,43 +368,64 @@ public class SyncRuleMapping
 
 ### Sync Engine Changes
 
+#### Contribution States
+
+A system's contribution to an MVO attribute is **tri-state**; the distinction between the first two states is what makes "Null is a value" coherent:
+
+| State | Meaning | Evaluation |
+|-------|---------|------------|
+| **Not connected** | No CSO from this system is joined to the MVO, or the joined CSO is out of scope of the import rule carrying the mapping | Always skip to the next priority, regardless of `NullIsValue` |
+| **Connected, no value** | A joined, in-scope CSO exists but the mapping yields nothing | If `NullIsValue`: stop and assert null. Otherwise fall through to the next priority |
+| **Connected, with value** | A joined, in-scope CSO exists and the mapping yields a value | This value wins |
+
+Scope matters, not just join existence: if a system's import rule has scoping criteria that exclude the joined CSO, the system must count as *not connected* for evaluation; otherwise an out-of-scope connector could assert nulls it has no rule entitling it to assert.
+
 #### Attribute Priority Resolution (Inbound Sync)
 
 ```csharp
+enum ContributionState
+{
+    NotConnected,       // no joined, in-scope CSO from this system for the MVO
+    ConnectedNoValue,   // joined, in-scope CSO exists; mapping yields nothing
+    ConnectedWithValue  // joined, in-scope CSO exists; mapping yields a value
+}
+
 /// <summary>
 /// Resolves the winning value for an MVO attribute when multiple systems contribute.
 /// Called during inbound sync processing.
 /// </summary>
-object? ResolveAttributeValue(string mvoAttributeName, MetaverseObjectType objectType)
+AttributeResolution ResolveAttributeValue(MetaverseObject mvo, MetaverseAttribute attribute)
 {
-    // Get all import mappings targeting this MVO attribute, ordered by priority
-    var contributions = GetImportMappingsForAttribute(mvoAttributeName, objectType)
-        .OrderBy(m => m.Priority)
-        .ToList();
+    // All import mappings targeting this MVO attribute, ordered by priority
+    var contributions = GetImportMappingsForAttribute(attribute, mvo.Type)
+        .OrderBy(m => m.Priority);
 
     foreach (var contribution in contributions)
     {
-        var value = GetContributedValue(contribution);
+        var (state, value) = EvaluateContribution(mvo, contribution);
 
-        if (value != null)
+        switch (state)
         {
-            // Non-null value found - use it
-            return value;
-        }
+            case ContributionState.NotConnected:
+                // This system has no opinion on this MVO; always continue,
+                // regardless of NullIsValue.
+                continue;
 
-        if (contribution.NullIsValue)
-        {
-            // Null contributed and "Null is a value" is enabled - stop here
-            return null;
-        }
+            case ContributionState.ConnectedWithValue:
+                return AttributeResolution.Value(value, contribution);
 
-        // Null contributed but fallback is allowed - continue to next priority
+            case ContributionState.ConnectedNoValue:
+                if (contribution.NullIsValue)
+                    return AttributeResolution.AssertedNull(contribution); // authoritative absence
+                continue; // fallback allowed
+        }
     }
 
-    // No value found from any contributor
-    return null;
+    return AttributeResolution.NoContributor();
 }
 ```
+
+> **Implementation notes:** the MVO stores only the *winning* value (`MetaverseObjectAttributeValue` with `ContributedBySystemId`); it does not retain the losing contributions. `EvaluateContribution` therefore implies reading the MVO's other joined CSOs at resolution time whenever fallback is needed. Note also that `AssertedNull` and `NoContributor` produce the same stored state (no attribute value row); see the open question on asserted-null observability.
 
 #### Drift Detection (Outbound Sync)
 
@@ -694,8 +739,11 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 #### Future Phase 2: Attribute Priority Logic
 
 - [ ] Create `AttributePriorityService` in `src/JIM.Application/Services/`
+- [ ] Implement the tri-state contribution evaluation (not connected / connected-no-value / connected-with-value), respecting sync rule scope
 - [ ] Integrate into inbound sync processing (`SyncRuleMappingProcessor`)
 - [ ] Auto-assign priority on new import mapping creation
+- [ ] Replace the interim grace period recall freeze with proper next-contributor fallback
+- [ ] Anomaly guardrail: warn when a priority-1 `NullIsValue` source contributes null for an unusually high share of objects in a run
 
 #### Future Phase 3: UI Updates
 
@@ -708,7 +756,11 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 
 - [ ] Unit tests for `AttributePriorityService`
 - [ ] Integration tests for multi-source priority resolution
-- [ ] Integration tests for NullIsValue behaviour
+- [ ] Integration tests for NullIsValue behaviour, including the tri-state cases:
+  - [ ] Priority-1 system not connected: lower-priority system contributes fully despite NullIsValue on priority 1 (HR migration scenario)
+  - [ ] Priority-1 system connected with null and NullIsValue: null asserted, no fallback
+  - [ ] Priority-1 system joined but out of sync rule scope: treated as not connected
+  - [ ] New join to priority-1 system mid-life: its blanks clear previously contributed values
 
 #### Future Phase 5: Documentation
 
@@ -754,7 +806,7 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 7. **Multivalued attributes**
    - The design above is single-value semantics ("first non-null value wins")
    - MVAs store one `MetaverseObjectAttributeValue` row per value with a per-row `ContributedBySystemId`, which naturally supports multi-contributor union
-   - Is priority for MVAs winner-takes-all-values, merge/union per contributor, or out of scope for the first iteration?
+   - Is priority for MVAs winner-takes-all-values, merge/union per contributor, or out of scope for the first iteration? And does "Null is a value" on an MVA assert the empty set?
 
 8. **Interaction with drift detection**
    - `DriftDetectionService.HasImportRuleForAttribute` treats any system with an import mapping as a legitimate contributor whose inbound changes are not drift
@@ -764,6 +816,14 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
    - See Future Phase 0: where does attribute priority (and the configuration concepts around it) belong in the admin information architecture?
    - Is the navigation model schema hierarchy drill-down, a centralised view, or both?
    - Do not extend the current IA, or default to a single centralised page, without the review
+
+10. **Asserted null observability**
+    - An asserted null and "no contributor" both materialise identically (no `MetaverseObjectAttributeValue` row)
+    - Does the UI need to explain "this attribute is blank because HR 1 asserts it" for admin troubleshooting, and if so does that require persisting which system asserted the null?
+
+11. **Conditional mappings and null**
+    - When a mapping's source is an expression, does an expression that evaluates to null count as "connected, no value" (and therefore trigger NullIsValue)?
+    - Presumably yes, which also provides a mechanism for *conditionally* asserting null; confirm and document
 
 ---
 
