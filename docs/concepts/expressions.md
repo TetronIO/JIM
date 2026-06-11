@@ -1,17 +1,21 @@
 # Expression Language Guide
 
-This guide covers JIM's expression language -- a simple, readable syntax for transforming and mapping identity attributes in synchronisation rules. No programming experience is required.
+When a synchronisation rule flows an attribute from one system to another, it often needs to do more than copy a value across unchanged. You might want to build an email address from a first and last name, force a username to lower case, decide whether an account should be enabled based on someone's employment status, or skip an object entirely unless it meets a condition. JIM's **expression language** is how you describe these transformations.
 
-## Overview
+An expression is a short, readable formula that JIM evaluates during synchronisation to produce the value for a target attribute. If you have ever written a formula in a spreadsheet cell, this will feel familiar: you reference attributes much as a spreadsheet references cells, combine them with operators and functions, and JIM works out the result for each object as it is synchronised. No programming experience is required.
 
-JIM includes a built-in expression engine that lets you write short formulas to control how identity data flows between systems. If you have ever written a formula in a spreadsheet, you will find this familiar.
+## Where Expressions Fit
 
-Expressions are used in:
+Expressions live inside **synchronisation rules**, in what is known as the **attribute flow**: the part of a rule that decides which value lands in each target attribute. Most flows are a straightforward direct mapping (copy `cs["mail"]` straight into `mv["Email"]`); you only reach for an expression when a plain copy is not enough.
+
+Within a synchronisation rule, expressions are used in:
 
 - **Export attribute mappings**<br /> Transform metaverse attributes before sending them to a connected system.
 - **Import attribute mappings**<br /> Transform connected system attributes before storing them in the metaverse.
 - **Conditional logic**<br /> Choose different values based on conditions (e.g. enable or disable an account based on employee status).
 - **Scoping filters**<br /> Determine which objects are in scope for a synchronisation rule.
+
+To add or edit these mappings in the admin UI, see [Synchronisation Rules](../configuration/synchronisation-rules.md). The rest of this guide focuses on the expressions themselves: the syntax, the built-in functions, and worked examples you can adapt.
 
 ## Quick Examples
 
@@ -46,7 +50,7 @@ cs["sAMAccountName"]
 cs["userAccountControl"]
 ```
 
-Attribute names must match the exact casing as defined in JIM -- for example, `mv["Department"]` and `mv["department"]` are treated as different names. If an expression returns nothing unexpectedly, double-check the attribute name casing matches what is shown in the JIM admin UI.
+Attribute names are matched case-insensitively, so `mv["Department"]`, `mv["department"]`, and `mv["DEPARTMENT"]` all refer to the same attribute. This applies to attribute *names* only; attribute *values* are compared case-sensitively by default, which is why text comparisons use `Eq()` and `Lower()` (see [String Comparison](#string-comparison)). Mirroring the casing shown in the JIM admin UI keeps expressions readable, but it is not required for them to work. For the wider picture of where JIM is case-sensitive and where it is forgiving, see [Case Sensitivity](case-sensitivity.md).
 
 ## Operators
 
@@ -373,7 +377,7 @@ Common errors:
 
 When an expression does not produce the result you expect:
 
-1. **Check attribute names carefully**<br /> Names must match the exact casing shown in the JIM admin UI, so `mv["department"]` and `mv["Department"]` are treated differently.
+1. **Check the attribute name spelling**<br /> Attribute names are matched case-insensitively, so `mv["department"]` and `mv["Department"]` are equivalent; casing is never the cause. Do check the name is spelled correctly and matches an attribute that exists in the JIM admin UI.
 2. **Use `Eq()` for text comparisons**<br /> Using `==` for text is a common mistake (see [String Comparison](#string-comparison)).
 3. **Check for missing values**<br /> If an attribute does not exist on the object, it returns nothing (null), which can affect the result. Use `Coalesce()` or `IsNullOrEmpty()` to handle this.
 4. **Test with sample data**<br /> Use the expression test feature in the synchronisation rule editor to try your expression with real attribute values before saving.

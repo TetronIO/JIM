@@ -99,6 +99,7 @@ nav:
       - Synchronisation Pipeline: concepts/synchronisation-pipeline.md
       - JML Lifecycle: concepts/jml-lifecycle.md
       - Expressions: concepts/expressions.md
+      - Case Sensitivity: concepts/case-sensitivity.md
   - Configuration:
       - configuration/index.md
       - Connected Systems: configuration/connected-systems.md
