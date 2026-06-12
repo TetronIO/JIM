@@ -106,14 +106,24 @@ Recommendations should be one of:
 Unless running in review-only mode:
 
 1. **Check branch is up to date**: Before merging, check whether the PR branch is behind `main` (`gh pr view <number> --json mergeStateStatus`). Branch protection requires the branch to be current. If the branch is behind:
-   - Comment `@dependabot rebase` on the PR
-   - Tell the user the rebase has been requested and that CI will re-run on the updated branch
+   - Comment `@dependabot rebase` on the PR and wait — do not use any other mechanism
+   - **Never use `update_pull_request_branch` (the API "Update branch" endpoint) or the GitHub "Update branch" button.** This creates a *merge commit* instead of a proper git rebase. Merge commits on Dependabot branches cause cascading conflicts when multiple PRs share the same files (e.g. `JIM.Web.csproj` is referenced by several grouped NuGet update PRs), and — critically — once an external merge commit is on the branch, Dependabot ignores all subsequent `@dependabot rebase` and `@dependabot recreate` commands, leaving the PR permanently stuck.
+   - `@dependabot rebase` is the only safe mechanism: it replays the Dependabot commit cleanly on top of current `main` without these side-effects.
+   - Accept the wait: multiple CI rounds are normal when merging a batch of PRs that share files. After each merge, comment `@dependabot rebase` on the remaining PRs and let CI run.
    - Once Dependabot rebases and CI passes, the merge can proceed (the user can re-run this skill or merge manually)
 2. Identify any merge ordering constraints (multiple PRs touching the same file)
 3. Merge approved PRs in the correct order using `gh pr merge <number> --merge`
 4. Include a merge comment noting what was verified (pinning, security advisory, etc.)
 5. If a PR has merge conflicts after earlier merges, comment `@dependabot rebase` and wait for the rebase before merging
-6. Report final status of all PRs
+6. **Recovery if a PR is `dirty`**: If a branch ended up `dirty` because an external merge commit was added (e.g. via `update_pull_request_branch`), Dependabot will not respond to any further commands. The only fix is a manual rebase from a local clone:
+   ```bash
+   git fetch origin
+   git checkout <dependabot-branch-name>
+   git rebase origin/main
+   git push --force-with-lease origin <dependabot-branch-name>
+   ```
+   This replays only the Dependabot version-bump commit on top of current `main`. CI will then run cleanly and the PR can be merged normally.
+7. Report final status of all PRs
 
 ## Reference: JIM's Supply Chain Security Requirements
 
