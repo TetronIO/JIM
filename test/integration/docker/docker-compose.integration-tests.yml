@@ -34,7 +34,7 @@ services:
   samba-ad-primary:
     image: ${SAMBA_IMAGE_PRIMARY:-ghcr.io/tetronio/jim-samba-ad:primary}
     build:
-      context: ./test/integration/docker/samba-ad-prebuilt
+      context: ./samba-ad-prebuilt
       dockerfile: Dockerfile
       args:
         SAMBA_DOMAIN: PANOPLY.LOCAL
@@ -83,7 +83,7 @@ services:
   samba-ad-source:
     image: ${SAMBA_IMAGE_SOURCE:-ghcr.io/tetronio/jim-samba-ad:source}
     build:
-      context: ./test/integration/docker/samba-ad-prebuilt
+      context: ./samba-ad-prebuilt
       dockerfile: Dockerfile
       args:
         SAMBA_DOMAIN: RESURGAM.LOCAL
@@ -131,7 +131,7 @@ services:
   samba-ad-target:
     image: ${SAMBA_IMAGE_TARGET:-ghcr.io/tetronio/jim-samba-ad:target}
     build:
-      context: ./test/integration/docker/samba-ad-prebuilt
+      context: ./samba-ad-prebuilt
       dockerfile: Dockerfile
       args:
         SAMBA_DOMAIN: GENTIAN.LOCAL
@@ -244,7 +244,7 @@ services:
   openldap-primary:
     image: ${OPENLDAP_IMAGE_PRIMARY:-ghcr.io/tetronio/jim-openldap:primary}
     build:
-      context: ./test/integration/docker/openldap
+      context: ./openldap
       dockerfile: Dockerfile
     container_name: openldap-primary
     environment:

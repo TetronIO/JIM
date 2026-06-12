@@ -165,19 +165,20 @@ updates:
   #
   # Scoped via `exclude-paths` to only `docker-compose.yml` (postgres digest
   # updates) and `docker-compose.override.yml` (Keycloak SSO version updates).
-  # The integration-tests, local, and production compose files are deliberately
-  # not tracked; integration-tests images are chosen for compatibility testing
-  # and should not be auto-bumped, and local/production contain no trackable
-  # pinned images. Remove a filename from exclude-paths if you want its images
+  # The local compose overlay is deliberately not tracked (it contains no
+  # trackable pinned images). The integration-tests compose
+  # (test/integration/docker/) and production compose (deploy/) live outside the
+  # scanned root directory and so are not seen by this non-recursive scan at all;
+  # this is intentional (integration-tests images are chosen for compatibility
+  # testing and should not be auto-bumped, and production contains no trackable
+  # pinned images). Remove a filename from exclude-paths if you want its images
   # monitored too.
   #
   # Polled daily for the same reason as the base images above.
   - package-ecosystem: "docker-compose"
     directory: "/"
     exclude-paths:
-      - "docker-compose.integration-tests.yml"
       - "docker-compose.local.yml"
-      - "docker-compose.production.yml"
     schedule:
       interval: "daily"
       time: "09:00"

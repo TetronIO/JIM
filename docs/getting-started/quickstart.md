@@ -34,13 +34,13 @@ This page covers all the ways to get JIM up and running. Choose the option that 
 The setup script downloads everything you need, walks you through configuration, and starts JIM:
 
 ```bash
-curl -fsSL https://tetron.io/jim/get | bash
+curl -fsSL https://junctional.io/get | bash
 ```
 
 Or download and inspect first:
 
 ```bash
-curl -fsSL -o setup.sh https://tetron.io/jim/get
+curl -fsSL -o setup.sh https://raw.githubusercontent.com/TetronIO/JIM/main/deploy/setup.sh
 less setup.sh    # review the script
 bash setup.sh
 ```

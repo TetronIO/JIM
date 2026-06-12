@@ -110,10 +110,10 @@ Write-Host "${BLUE}  Step 2: Starting Samba AD test infrastructure${NC}"
 Write-Host "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 Write-Host ""
 
-Write-Host "${GRAY}Running: docker compose -f docker-compose.integration-tests.yml up -d${NC}"
+Write-Host "${GRAY}Running: docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d${NC}"
 Write-Host ""
 
-$sambaResult = docker compose -f docker-compose.integration-tests.yml up -d 2>&1
+$sambaResult = docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d 2>&1
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "${RED}✗ Failed to start Samba AD${NC}"
@@ -194,7 +194,7 @@ Write-Host "  2. Run tests:       ${BLUE}pwsh test/integration/scenarios/Invoke-
 Write-Host ""
 Write-Host "${GRAY}Troubleshooting:${NC}"
 Write-Host "  • View logs:        ${BLUE}docker compose logs -f${NC}"
-Write-Host "  • Stop services:    ${BLUE}docker compose down && docker compose -f docker-compose.integration-tests.yml down${NC}"
+Write-Host "  • Stop services:    ${BLUE}docker compose down && docker compose -f test/integration/docker/docker-compose.integration-tests.yml down${NC}"
 Write-Host "  • Full reset:       ${BLUE}jim-reset${NC}"
 Write-Host ""
 

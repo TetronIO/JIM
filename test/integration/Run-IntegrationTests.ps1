@@ -2046,7 +2046,7 @@ if (-not $SkipReset) {
     docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down -v 2>&1 | Out-Null
     # Use --profile to stop containers from all scenarios (scenario2, scenario8, etc.)
     # Without specifying profiles, containers started with profiles won't be stopped
-    docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 --profile openldap down -v --remove-orphans 2>&1 | Out-Null
+    docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 --profile openldap down -v --remove-orphans 2>&1 | Out-Null
 
     # Force-remove any leftover integration test containers by name.
     # This handles containers that were created under a different Docker Compose project name
@@ -2253,7 +2253,7 @@ if ($DirectoryType -eq "OpenLDAP") {
     }
 
     Write-Step "Starting OpenLDAP (Primary)..."
-    $openldapResult = docker compose -f docker-compose.integration-tests.yml --profile openldap up -d 2>&1
+    $openldapResult = docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile openldap up -d 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Failure "Failed to start OpenLDAP"
         Write-Host "${GRAY}$openldapResult${NC}"
@@ -2263,7 +2263,7 @@ if ($DirectoryType -eq "OpenLDAP") {
 }
 else {
     Write-Step "Starting Samba AD (Primary)..."
-    $sambaResult = docker compose -f docker-compose.integration-tests.yml up -d 2>&1
+    $sambaResult = docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Failure "Failed to start Samba AD"
         Write-Host "${GRAY}$sambaResult${NC}"
@@ -2275,7 +2275,7 @@ else {
 # Start Scenario 2 containers if running Scenario 2
 if ($Scenario -like "*Scenario2*") {
     Write-Step "Starting Samba AD (Source and Target for Scenario 2)..."
-    $scenario2Result = docker compose -f docker-compose.integration-tests.yml --profile scenario2 up -d 2>&1
+    $scenario2Result = docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario2 up -d 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Failure "Failed to start Scenario 2 Samba AD containers"
         Write-Host "${GRAY}$scenario2Result${NC}"
@@ -2322,7 +2322,7 @@ if ($Scenario -like "*Scenario8*" -and $DirectoryType -ne "OpenLDAP") {
         Write-Host "  Samba source memory scaled to 8G for $Template template" -ForegroundColor Gray
     }
     Write-Step "Starting Samba AD (Source and Target for Scenario 8)..."
-    $scenario8Result = docker compose -f docker-compose.integration-tests.yml --profile scenario8 up -d 2>&1
+    $scenario8Result = docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario8 up -d 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Failure "Failed to start Scenario 8 Samba AD containers"
         Write-Host "${GRAY}$scenario8Result${NC}"
