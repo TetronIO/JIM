@@ -146,8 +146,8 @@ JIM is built in the open. [GitHub Discussions](https://github.com/TetronIO/JIM/d
 
 ## Licensing
 
-JIM uses a Source-Available model where it is free to use in non-production scenarios, but requires a commercial licence for use in production scenarios. [Full details can be found here](https://tetron.io/jim/#licensing).
+JIM uses a Source-Available model where it is free to use in non-production scenarios, but requires a commercial licence for use in production scenarios. [Full details can be found here](https://junctional.io/license).
 
 ## More Information
 
-Please visit [https://tetron.io/jim](https://tetron.io/jim) for more information.
+Please visit [https://junctional.io](https://junctional.io) for more information.
