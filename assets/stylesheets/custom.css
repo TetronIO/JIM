@@ -1,0 +1,459 @@
+/* Space Grotesk for marketing/publication-feel headings (hero title, header
+   site title). Body text remains IBM Plex Sans (set via mkdocs.yml).
+   Variable font: weight axis pulled at 600 + 700. */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&display=swap');
+
+/* JIM Brand Colour Overrides */
+
+/* Primary colour - JIM Purple #5A45A2 */
+:root {
+  --md-primary-fg-color: #5A45A2;
+  --md-primary-fg-color--light: #7B68B8;
+  --md-primary-fg-color--dark: #483790;
+  --md-accent-fg-color: #5A45A2;
+}
+
+/* ========================================
+   Light mode (Navy O6 Light palette)
+   ======================================== */
+
+[data-md-color-scheme="default"] {
+  /* Header and page background */
+  --md-primary-fg-color: #f3f3f3;            /* header background */
+  --md-primary-fg-color--light: #f3f3f3;
+  --md-primary-bg-color: #121b29;            /* header text (dark on grey) */
+  --md-default-bg-color: #ffffff;            /* page background */
+  --md-default-bg-color--light: #f3f3f3;
+
+  /* Footer */
+  --md-footer-bg-color: #f3f3f3;             /* match header */
+  --md-footer-bg-color--dark: #e8e8e8;       /* slightly darker for prev/next nav */
+  --md-footer-fg-color: #121b29;             /* dark text */
+  --md-footer-fg-color--light: #4a5568;      /* secondary text */
+  --md-footer-fg-color--lighter: #4a5568;
+
+  /* Search */
+  --md-primary-bg-color--light: #4a5568;     /* search placeholder text */
+
+  /* Links */
+  --md-typeset-a-color: #0076d3;             /* --jim-link-color */
+  --md-accent-fg-color: #0076d3;
+
+}
+
+/* Light mode — search bar styling */
+[data-md-color-scheme="default"] .md-search__input {
+  background-color: #ffffff;                 /* white input on grey header */
+  border: 1px solid rgba(30, 58, 95, 0.28);  /* --mud-palette-lines-default */
+}
+
+/* Light mode: header/footer border to separate from page */
+[data-md-color-scheme="default"] .md-header,
+[data-md-color-scheme="default"] .md-footer {
+  border-bottom: 1px solid rgba(30, 58, 95, 0.12);
+}
+
+/* Light mode: when tabs row is present, shift the separator to its bottom edge */
+[data-md-color-scheme="default"] .md-header:has(+ .md-tabs) {
+  border-bottom: none;
+}
+
+/* Light mode: tabs bar matches the header for a unified header block */
+[data-md-color-scheme="default"] .md-tabs {
+  background-color: #f3f3f3;
+  color: #121b29;
+  border-bottom: 1px solid rgba(30, 58, 95, 0.12);
+}
+
+/* Light mode: soften the scroll drop-shadow; the default reads too strongly on a pale header */
+[data-md-color-scheme="default"] .md-header--shadow {
+  box-shadow: 0 0 0.2rem rgba(0, 0, 0, 0.07), 0 0.2rem 0.4rem rgba(0, 0, 0, 0.1);
+}
+
+[data-md-color-scheme="default"] .md-footer {
+  border-bottom: none;
+  border-top: 1px solid rgba(30, 58, 95, 0.12);
+}
+
+[data-md-color-scheme="default"] .md-typeset a:hover,
+[data-md-color-scheme="default"] .md-nav__link:hover {
+  color: #005da8;                            /* --jim-link-hover-color */
+}
+
+[data-md-color-scheme="default"] .md-nav__link:focus,
+[data-md-color-scheme="default"] .md-nav__link:focus-visible,
+[data-md-color-scheme="default"] .md-nav__link:active {
+  color: #005da8;                            /* --jim-link-hover-color */
+}
+
+/* Light mode — nav active link */
+[data-md-color-scheme="default"] .md-nav__link--active,
+[data-md-color-scheme="default"] .md-nav__link:is([data-md-state="active"]) {
+  color: #0076d3;                            /* --jim-link-color */
+}
+
+/* ========================================
+   Dark mode (Navy O6 Dark palette)
+   ======================================== */
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #1d1a3d;            /* header background — purple-navy bridge to brand */
+  --md-primary-fg-color--light: #1d1a3d;
+  --md-primary-fg-color--dark: #1d1a3d;
+  --md-primary-bg-color: #e0e4ea;            /* header text (light on dark) */
+  --md-default-bg-color: #051526;            /* page background */
+  --md-default-bg-color--light: #0d1e30;
+  --md-accent-fg-color: #7B68B8;
+
+  /* Footer */
+  --md-footer-bg-color: #0d1e30;             /* surface colour */
+  --md-footer-bg-color--dark: #15293c;       /* slightly lighter for prev/next nav */
+  --md-footer-fg-color: #e0e4ea;             /* light text */
+  --md-footer-fg-color--light: #8a9eb4;      /* secondary text */
+  --md-footer-fg-color--lighter: #8a9eb4;
+
+  /* Search */
+  --md-primary-bg-color--light: #8a9eb4;     /* search placeholder text */
+
+  /* Links */
+  --md-typeset-a-color: #67b9ff;             /* --jim-link-color */
+
+}
+
+/* Dark mode — search bar styling */
+[data-md-color-scheme="slate"] .md-search__input {
+  background-color: #0d1e30;                 /* surface colour */
+  border: 1px solid #243a52;                  /* --mud-palette-lines-default */
+}
+
+/* Dark mode: tabs bar in deep plum, bridging header to purple hero */
+[data-md-color-scheme="slate"] .md-tabs {
+  background-color: #1d1a3d;
+}
+
+[data-md-color-scheme="slate"] .md-typeset a:hover,
+[data-md-color-scheme="slate"] .md-nav__link:hover {
+  color: #9ad0ff;                             /* --jim-link-hover-color */
+}
+
+[data-md-color-scheme="slate"] .md-nav__link:focus,
+[data-md-color-scheme="slate"] .md-nav__link:focus-visible,
+[data-md-color-scheme="slate"] .md-nav__link:active {
+  color: #9ad0ff;                             /* --jim-link-hover-color */
+}
+
+/* Dark mode — nav active link */
+[data-md-color-scheme="slate"] .md-nav__link--active,
+[data-md-color-scheme="slate"] .md-nav__link:is([data-md-state="active"]) {
+  color: #67b9ff;                             /* --jim-link-color */
+}
+
+/* ========================================
+   Quick Start navigation cards
+   ======================================== */
+
+.quickstart-cards {
+  margin-bottom: 2rem;
+}
+
+.quickstart-cards > ul > li {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.quickstart-cards > ul > li:hover {
+  border-color: var(--md-accent-fg-color);
+}
+
+/* Material grid cards: lighten the border on hover (default behaviour fades it
+   to transparent, which reads as "darker" in dark mode). 2D look — no shadow. */
+.md-typeset .grid.cards > :is(ul, ol) > li:hover,
+.md-typeset .grid > .card:hover {
+  border-color: var(--md-default-fg-color--lighter);
+  box-shadow: none;
+}
+
+/* ========================================
+   Theme-aware diagram switching
+   ======================================== */
+
+/* Light mode: show light diagrams, hide dark */
+[data-md-color-scheme="default"] .diagram-dark { display: none; }
+
+/* Dark mode: show dark diagrams, hide light */
+[data-md-color-scheme="slate"] .diagram-light { display: none; }
+
+/* ========================================
+   GLightbox theme-aware overlay
+   ======================================== */
+
+/* Light mode: give the image a white background so transparent SVGs look correct */
+[data-md-color-scheme="default"] .gslide-image img {
+  background-color: #ffffff;
+  border-radius: 4px;
+}
+
+/* Dark mode: give the image a dark background matching the page surface */
+[data-md-color-scheme="slate"] .gslide-image img {
+  background-color: #051526;
+  border-radius: 4px;
+}
+
+/* ========================================
+   Homepage hero (full-bleed) and layout
+   Scoped via .jim-hero / .jim-home from
+   docs/overrides/home.html
+   ======================================== */
+
+.jim-hero {
+  width: 100%;
+  padding: 1.75rem 1rem 3.5rem;
+  background: linear-gradient(135deg, #5A45A2 0%, #483790 60%, #2f2466 100%);
+  color: #ffffff;
+  text-align: center;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+.jim-hero__inner {
+  max-width: 56rem;
+  margin: 0 auto;
+}
+
+.jim-hero__logo {
+  width: 160px;
+  height: auto;
+  margin: 0 auto 1.75rem;
+  display: block;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.25));
+  transform-origin: 50% 50%;
+  animation: jim-logo-pulse 32s ease-in-out infinite;
+}
+
+/* Four "pick up, quarter-turn, set down" actions per cycle.
+   Each action takes ~3s, followed by a ~9s rest. The logo never
+   rotates backwards and never moves while at rest. After four
+   actions the cumulative rotation reaches 360° which equals 0°,
+   so the iteration boundary is visually seamless. */
+@keyframes jim-logo-pulse {
+  /* --- Quarter-turn 1 (0deg -> 90deg) --- */
+  0%   { transform: scale(1)    rotate(0); }
+  2%   { transform: scale(1.15) rotate(0); }       /* grow */
+  4%   { transform: scale(1.15) rotate(90deg); }   /* rotate while enlarged */
+  6%   { transform: scale(1)    rotate(90deg); }   /* shrink, hold rotation */
+  25%  { transform: scale(1)    rotate(90deg); }   /* rest */
+
+  /* --- Quarter-turn 2 (90deg -> 180deg) --- */
+  27%  { transform: scale(1.15) rotate(90deg); }
+  29%  { transform: scale(1.15) rotate(180deg); }
+  31%  { transform: scale(1)    rotate(180deg); }
+  50%  { transform: scale(1)    rotate(180deg); }  /* rest */
+
+  /* --- Quarter-turn 3 (180deg -> 270deg) --- */
+  52%  { transform: scale(1.15) rotate(180deg); }
+  54%  { transform: scale(1.15) rotate(270deg); }
+  56%  { transform: scale(1)    rotate(270deg); }
+  75%  { transform: scale(1)    rotate(270deg); }  /* rest */
+
+  /* --- Quarter-turn 4 (270deg -> 360deg) --- */
+  77%  { transform: scale(1.15) rotate(270deg); }
+  79%  { transform: scale(1.15) rotate(360deg); }
+  81%  { transform: scale(1)    rotate(360deg); }
+  100% { transform: scale(1)    rotate(360deg); }  /* rest; equals rotate(0) */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jim-hero__logo {
+    animation: none;
+  }
+}
+
+.jim-hero__title {
+  font-family: 'Space Grotesk', 'IBM Plex Sans', -apple-system, sans-serif;
+  font-size: 3rem;
+  font-weight: 700;
+  margin: 0 0 1rem;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  color: #ffffff;
+}
+
+/* Header site title (and animated current-page title) in the display sans
+   accent for a more "design-forward" feel. Nav, body and code remain IBM Plex. */
+.md-header__title .md-ellipsis {
+  font-family: 'Space Grotesk', 'IBM Plex Sans', -apple-system, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Page heading colour and weight.
+   Material's default H1 uses --md-default-fg-color--light (dimmer than body)
+   and weight 300, which makes the page title look greyer than the H2/H3
+   headings below it. Pin the H1 to the regular foreground colour and bump
+   weights across the board for a stronger hierarchy. */
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3,
+.md-typeset h4,
+.md-typeset h5,
+.md-typeset h6 {
+  color: var(--md-default-fg-color);
+}
+
+.md-typeset h1 { font-weight: 400; }
+.md-typeset h2 { font-weight: 500; }
+.md-typeset h3 { font-weight: 500; }
+.md-typeset h4 { font-weight: 500; }
+
+/* Bump table and admonition body text from Material's 0.64rem (80% of body)
+   to 0.72rem (90% of body) for slightly easier reading. */
+.md-typeset table:not([class]),
+.md-typeset .admonition,
+.md-typeset details {
+  font-size: 0.72rem;
+}
+
+.jim-hero__tagline {
+  font-size: 1.2rem;
+  line-height: 1.55;
+  margin: 0 auto 2.25rem;
+  max-width: 42rem;
+  opacity: 0.92;
+}
+
+.jim-hero__ctas {
+  display: flex;
+  gap: 0.85rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.jim-hero__cta {
+  display: inline-block;
+  padding: 0.75rem 1.75rem;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-decoration: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.jim-hero__cta--primary {
+  background: #ffffff;
+  color: #5A45A2;
+}
+
+.jim-hero__cta--primary:hover {
+  background: #f5f3fa;
+  color: #483790;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.jim-hero__cta--secondary {
+  background: transparent;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+}
+
+.jim-hero__cta--secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+/* Smaller hero on mobile/tablet */
+@media screen and (max-width: 76.1875em) {
+  .jim-hero {
+    padding: 1.25rem 1rem 2.25rem;
+  }
+  .jim-hero__logo {
+    width: 120px;
+    margin-bottom: 1.25rem;
+  }
+  .jim-hero__title {
+    font-size: 2rem;
+  }
+  .jim-hero__tagline {
+    font-size: 1rem;
+    margin-bottom: 1.75rem;
+  }
+}
+
+/* Widen the content grid on the homepage only.
+   Targets the page rendered with overrides/home.html via :has(). */
+body:has(.jim-home) .md-main__inner.md-grid,
+body:has(.jim-home) .md-content {
+  max-width: none;
+}
+
+body:has(.jim-home) .md-content__inner {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding-top: 2rem;
+  padding-left: 2rem;
+  padding-right: 2rem;
+}
+
+/* Hide the auto-generated edit button on the homepage; it looks odd under the hero */
+body:has(.jim-home) .md-content__button {
+  display: none;
+}
+
+/* Hide the auto-generated "Home" h1 (the hero already serves as the page title) */
+.jim-home > h1:first-of-type {
+  display: none;
+}
+
+/* ========================================
+   Homepage capability pills
+   ("What Makes JIM Different" section)
+   ======================================== */
+
+.jim-capabilities ul,
+.md-typeset .jim-capabilities ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 1.5rem 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.jim-capabilities li,
+.md-typeset .jim-capabilities ul li {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  background: var(--md-default-bg-color--light);
+  font-size: 0.9rem;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+/* Strip the <p> wrapper margin that python-markdown injects inside list items */
+.md-typeset .jim-capabilities ul li p {
+  margin: 0;
+}
+
+.jim-capabilities li .twemoji,
+.jim-capabilities li svg {
+  width: 1.1em;
+  height: 1.1em;
+  fill: #2e9e5a;       /* green check to reinforce the affirmative */
+  flex-shrink: 0;
+}
+
+/* Dark mode — soften the pill background and brighten the check */
+[data-md-color-scheme="slate"] .jim-capabilities li {
+  background: #0d1e30;
+  border-color: #243a52;
+}
+
+[data-md-color-scheme="slate"] .jim-capabilities li .twemoji,
+[data-md-color-scheme="slate"] .jim-capabilities li svg {
+  fill: #4ade80;
+}
