@@ -19,7 +19,7 @@ LABEL org.opencontainers.image.description="JIM (Junctional Identity Manager) - 
 LABEL org.opencontainers.image.version="${VERSION}"
 LABEL org.opencontainers.image.vendor="Tetron"
 LABEL org.opencontainers.image.source="https://github.com/TetronIO/JIM"
-LABEL org.opencontainers.image.licenses="See https://tetron.io/jim/#licensing"
+LABEL org.opencontainers.image.licenses="See https://junctional.io/license"
 WORKDIR /app
 EXPOSE 80
 EXPOSE 443

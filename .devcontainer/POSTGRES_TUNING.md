@@ -7,15 +7,15 @@ PostgreSQL is automatically tuned during devcontainer setup for optimal performa
 `.devcontainer/postgres-tune.sh` detects your system specs and generates two **gitignored** overlay files:
 
 - **`docker-compose.local.yml`** — overrides `shm_size` and `command` for the full Docker stack
-- **`db.local.yml`** — overrides `shm_size` and `command` for the standalone database (`jim-db`)
+- **`.devcontainer/db.local.yml`** — overrides `shm_size` and `command` for the standalone database (`jim-db`)
 
 The `jim-*` shell aliases automatically include these files when present. Docker Compose merges files in order — later files win — so the local overlays override the conservative defaults in the tracked files without modifying them.
 
 ```
 Tracked (in git):                    Gitignored (per-machine):
   docker-compose.yml                   docker-compose.local.yml
-  docker-compose.override.yml          db.local.yml
-  db.yml
+  docker-compose.override.yml          .devcontainer/db.local.yml
+  .devcontainer/db.yml
 ```
 
 ## Re-Tuning After Resource Changes
@@ -116,6 +116,6 @@ docker compose exec jim.database psql -U jim -d jim -c "
 
 **Local files not being picked up?** Check they exist:
 ```bash
-ls -la docker-compose.local.yml db.local.yml
+ls -la docker-compose.local.yml .devcontainer/db.local.yml
 ```
 If missing, regenerate: `jim-postgres-tune`

@@ -232,11 +232,11 @@ For developers running tests locally in a DevContainer or development environmen
 
 ```mermaid
 flowchart TD
-    A["<b>1. STAND UP</b><br/># Start external systems<br/>docker compose -f docker-compose.integration-tests.yml up -d"]
+    A["<b>1. STAND UP</b><br/># Start external systems<br/>docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d"]
     B["<b>2. POPULATE</b><br/># Populate test data<br/>./Populate-SambaAD.ps1 -Template Small<br/>./Generate-TestCSV.ps1 -Template Small"]
     C["<b>3. CONFIGURE JIM</b><br/># Configure via API<br/>./Setup-Scenario1.ps1 -ApiKey $key"]
     D["<b>4. EXECUTE TESTS</b><br/># Run scenario steps<br/>./Invoke-Scenario1... -Step All -Template Small"]
-    E["<b>5. RESET (for next run)</b><br/># Reset BOTH external systems AND JIM database<br/>docker compose -f docker-compose.integration-tests.yml down -v<br/>docker compose -f docker-compose.yml down -v<br/><br/># Then stand up fresh for next test run<br/>docker compose -f docker-compose.yml up -d<br/>docker compose -f docker-compose.integration-tests.yml up -d"]
+    E["<b>5. RESET (for next run)</b><br/># Reset BOTH external systems AND JIM database<br/>docker compose -f test/integration/docker/docker-compose.integration-tests.yml down -v<br/>docker compose -f docker-compose.yml down -v<br/><br/># Then stand up fresh for next test run<br/>docker compose -f docker-compose.yml up -d<br/>docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d"]
     A --> B --> C --> D --> E
 ```
 
@@ -244,12 +244,12 @@ flowchart TD
 
 | Step | Command | Purpose |
 |------|---------|---------|
-| Stand up external systems | `docker compose -f docker-compose.integration-tests.yml up -d` | Start Samba AD, databases |
+| Stand up external systems | `docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d` | Start Samba AD, databases |
 | Stand up JIM | `jim-stack` or `docker compose up -d` | Start JIM services |
 | Populate test data | `./Populate-SambaAD.ps1 -Template Small` | Create users/groups in external systems |
 | Configure JIM | `./Setup-Scenario1.ps1` | Create Connected Systems, Sync Rules |
 | Run tests | `./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step All` | Execute test scenario |
-| Reset external systems | `docker compose -f docker-compose.integration-tests.yml down -v` | Remove external system data |
+| Reset external systems | `docker compose -f test/integration/docker/docker-compose.integration-tests.yml down -v` | Remove external system data |
 | Reset JIM | `docker compose -f docker-compose.yml down -v` | Remove JIM database (metaverse, config) |
 
 ### CI/CD Pipeline
@@ -350,7 +350,7 @@ Each scenario script supports a `-Step` parameter that controls which test case 
 
 ### Docker Compose Project Separation
 
-The integration test stack uses a **separate Docker Compose project name** (`jim-integration`) from the main JIM stack (project `jim`). This is configured via the top-level `name: jim-integration` property in `docker-compose.integration-tests.yml`.
+The integration test stack uses a **separate Docker Compose project name** (`jim-integration`) from the main JIM stack (project `jim`). This is configured via the top-level `name: jim-integration` property in `test/integration/docker/docker-compose.integration-tests.yml`.
 
 **Why?** Without separate project names, Docker Compose treats all containers from the same directory as belonging to one project. When you run `jim-build` (main stack), Compose sees the Samba AD containers from integration tests as "orphans" and emits warnings. Separate project names cleanly isolate the two stacks while still sharing the `jim-network` Docker network.
 
@@ -358,7 +358,7 @@ Both stacks communicate via the shared `jim-network` (defined as `external: true
 
 ### Container Stack
 
-All external systems run as Docker containers defined in `docker-compose.integration-tests.yml`:
+All external systems run as Docker containers defined in `test/integration/docker/docker-compose.integration-tests.yml`:
 
 ```mermaid
 flowchart TB
@@ -1172,7 +1172,7 @@ The batched approach is what makes Exhaustive fit inside its wall-clock budget; 
 
 3. **Review Compose Configuration**:
    ```bash
-   cat docker-compose.integration-tests.yml
+   cat test/integration/docker/docker-compose.integration-tests.yml
    ```
 
 ### JIM Configuration via PowerShell Module
@@ -1337,7 +1337,7 @@ The issue was that ASP.NET Core's authentication pipeline only runs the DefaultS
 
 ```powershell
 # Stand up Phase 1 systems
-docker compose -f docker-compose.integration-tests.yml up -d
+docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d
 
 # Wait for systems to be ready (AD takes ~2 minutes to initialise)
 Start-Sleep -Seconds 120
@@ -1350,7 +1350,7 @@ Start-Sleep -Seconds 120
 ./test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1 -Template Small
 
 # Tear down when complete
-docker compose -f docker-compose.integration-tests.yml down -v
+docker compose -f test/integration/docker/docker-compose.integration-tests.yml down -v
 ```
 
 ### Running Specific Scenario
@@ -1361,7 +1361,7 @@ Scenario 2 requires two AD instances, so use the `scenario2` profile:
 
 ```powershell
 # Stand up Scenario 2 systems (Source and Target AD)
-docker compose -f docker-compose.integration-tests.yml --profile scenario2 up -d
+docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario2 up -d
 
 # Wait for systems
 Start-Sleep -Seconds 180
@@ -1374,7 +1374,7 @@ Start-Sleep -Seconds 180
 ./test/integration/scenarios/Invoke-Scenario2-CrossDomainSync.ps1 -Template Medium
 
 # Tear down
-docker compose -f docker-compose.integration-tests.yml --profile scenario2 down -v
+docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario2 down -v
 ```
 
 ### Running All Phase 1 Scenarios
@@ -1398,7 +1398,7 @@ Phase 2 requires the Database Connector (#170) to be complete:
 
 ```powershell
 # Stand up Phase 2 systems
-docker compose -f docker-compose.integration-tests.yml --profile phase2 up -d
+docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile phase2 up -d
 
 # Wait for databases (Oracle can take 5-10 minutes)
 ./test/integration/Wait-SystemsReady.ps1 -Phase 2
@@ -1412,7 +1412,7 @@ docker compose -f docker-compose.integration-tests.yml --profile phase2 up -d
 ./test/integration/Invoke-IntegrationTests.ps1 -Template Medium -Phase 2
 
 # Tear down
-docker compose -f docker-compose.integration-tests.yml --profile phase2 down -v
+docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile phase2 down -v
 ```
 
 ---
@@ -1980,7 +1980,6 @@ The map size cannot be reliably increased on a running instance; it requires a c
 
 ```
 JIM/
-├── docker-compose.integration-tests.yml                    # External system containers
 ├── engineering/
 │   └── INTEGRATION_TESTING.md                              # This document
 └── test/
@@ -2032,6 +2031,7 @@ JIM/
         │   ├── data/                                             # Per-scenario data + manifests (incl. Scenario 11 matrix)
         │   └── data/                                              # Scenario-specific CSV overlays (Scenarios 4, 5)
         ├── docker/
+        │   ├── docker-compose.integration-tests.yml             # External system containers
         │   ├── samba-ad-prebuilt/                                # Custom prebuilt Samba AD base image
         │   │   ├── Dockerfile
         │   │   ├── Build-SambaImages.ps1                         # Image build script

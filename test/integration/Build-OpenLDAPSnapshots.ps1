@@ -292,7 +292,7 @@ if ($needsBaseRebuild) {
 
 $scenariosToProcess = if ($Scenario -eq "All") { @("General", "Scenario8") } else { @($Scenario) }
 
-# OpenLDAP environment variables (matching docker-compose.integration-tests.yml)
+# OpenLDAP environment variables (matching test/integration/docker/docker-compose.integration-tests.yml)
 $openLDAPEnv = @{
     LDAP_ROOT                   = "dc=yellowstone,dc=local"
     LDAP_ADMIN_USERNAME         = "admin"

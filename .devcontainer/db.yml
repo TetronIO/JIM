@@ -1,3 +1,10 @@
+# Pin the Compose project name so it stays 'jim' regardless of this file's
+# location. Previously inherited from the repository-root directory basename;
+# now that the file lives under .devcontainer/, the explicit name preserves the
+# project namespace (shared with the full stack in docker-compose.yml) and
+# avoids spurious orphan-container warnings.
+name: jim
+
 services:
   jim.database:
     container_name: JIM.Database

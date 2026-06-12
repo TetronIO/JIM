@@ -369,8 +369,8 @@ This only affects native Linux hosts. Docker Desktop on macOS/Windows and GitHub
 
 **For local development (jim-db):**
 ```bash
-docker compose -f db.yml up -d
-docker compose -f db.yml logs
+docker compose -f .devcontainer/db.yml up -d
+docker compose -f .devcontainer/db.yml logs
 ```
 
 **For full Docker stack (jim-stack):**
@@ -383,7 +383,7 @@ If you see memory allocation errors, PostgreSQL may be over-provisioned for the 
 ```bash
 # Re-tune and clean restart
 jim-postgres-tune
-docker compose -f db.yml down -v
+docker compose -f .devcontainer/db.yml down -v
 jim-db
 ```
 
@@ -391,7 +391,7 @@ jim-db
 
 ```bash
 # Ensure database is running
-docker compose -f db.yml ps
+docker compose -f .devcontainer/db.yml ps
 
 # Apply migrations manually
 dotnet ef database update --project src/JIM.PostgresData
@@ -419,7 +419,7 @@ dotnet build JIM.sln
 
 ```bash
 # Stop and remove database
-docker compose -f db.yml down -v
+docker compose -f .devcontainer/db.yml down -v
 
 # Re-run setup
 bash .devcontainer/setup.sh

@@ -325,4 +325,4 @@ if (-not $Push) {
 
 Write-Host ""
 Write-Host "To use these images with integration tests:" -ForegroundColor Yellow
-Write-Host "  docker compose -f docker-compose.integration-tests.yml up -d" -ForegroundColor Gray
+Write-Host "  docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d" -ForegroundColor Gray

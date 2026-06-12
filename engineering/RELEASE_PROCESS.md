@@ -405,7 +405,7 @@ JIM_VERSION=0.3.0
 docker compose -f docker-compose.yml -f docker-compose.production.yml --profile with-db up -d
 ```
 
-The `docker-compose.production.yml` file is included in the repository root and attached to each GitHub release. It nullifies the `build:` contexts so Docker Compose pulls pre-built images from GHCR instead of attempting to build from source.
+The `docker-compose.production.yml` file lives in the repository's `deploy/` directory and is attached to each GitHub release (as a flat-named asset). It nullifies the `build:` contexts so Docker Compose pulls pre-built images from GHCR instead of attempting to build from source.
 
 ### Image Signing
 

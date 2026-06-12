@@ -560,8 +560,8 @@ JIM/
 ## 12. Links
 
 - **Repository**: https://github.com/TetronIO/JIM
-- **Website**: https://tetron.io/jim
-- **Licensing**: https://tetron.io/jim/#licensing
+- **Website**: https://junctional.io
+- **Licensing**: https://junctional.io/license
 
 ---
 

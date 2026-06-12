@@ -500,7 +500,7 @@ jobs:
             ./artifacts/checksums.sha256 \
             ./artifacts/sbom/*.spdx.json \
             ./docker-compose.yml \
-            ./docker-compose.production.yml \
+            ./deploy/docker-compose.production.yml \
             ./.env.example
 
   # Job 6: Notify the junctional.io marketing site to rebuild.

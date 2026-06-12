@@ -1464,7 +1464,7 @@ Invoke-JIMApiRequest -Method Delete -Endpoint "api/v1/connected-systems/$id"
 ## Resources
 
 - **Repository**: https://github.com/TetronIO/JIM
-- **Licensing**: https://tetron.io/jim/#licensing
+- **Licensing**: https://junctional.io/license
 - **Documentation**: `/home/user/JIM/README.md`
 - **.NET Docs**: https://learn.microsoft.com/dotnet/
 - **EF Core**: https://learn.microsoft.com/ef/core/
