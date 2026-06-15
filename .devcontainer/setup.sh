@@ -90,10 +90,10 @@ print_step "Installing .NET Entity Framework Core tools..."
 # This handles cases where the tool cache becomes corrupted after container rebuilds
 rm -rf ~/.dotnet/tools/dotnet-ef ~/.dotnet/tools/.store/dotnet-ef 2>/dev/null || true
 # Use explicit version to avoid "Settings file not found" errors with latest package
-if dotnet tool install --global dotnet-ef --version 10.0.8; then
-    print_success "dotnet-ef 10.0.8 installed globally"
+if dotnet tool install --global dotnet-ef --version 10.0.9; then
+    print_success "dotnet-ef 10.0.9 installed globally"
 else
-    print_warning "dotnet-ef installation failed - you may need to install manually: dotnet tool install --global dotnet-ef --version 10.0.8"
+    print_warning "dotnet-ef installation failed - you may need to install manually: dotnet tool install --global dotnet-ef --version 10.0.9"
 fi
 
 # Add .NET tools to PATH
@@ -214,7 +214,7 @@ print_step "Installing Playwright MCP browser (Chromium)..."
 # .mcp.json (its --executable-path, or its pinned @playwright/mcp version). Installing via the package's own
 # bundled playwright-core guarantees the revision matches. Idempotent (skips the download when already
 # present) and non-fatal (never blocks container creation).
-PLAYWRIGHT_MCP_VERSION="0.0.75"
+PLAYWRIGHT_MCP_VERSION="0.0.76"
 if npm install -g "@playwright/mcp@${PLAYWRIGHT_MCP_VERSION}" --silent 2>/dev/null \
     && PLAYWRIGHT_CORE_CLI="$(find "$(npm root -g)/@playwright/mcp" -path '*/playwright-core/cli.js' 2>/dev/null | head -1)" \
     && [ -n "$PLAYWRIGHT_CORE_CLI" ] \
