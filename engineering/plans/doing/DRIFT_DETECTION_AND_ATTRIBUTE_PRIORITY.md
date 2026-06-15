@@ -394,7 +394,7 @@ Definition needed for modes 2 and 3: "affected objects" = MVOs of the object typ
 **Design Decisions:**
 
 - **Priority storage**: per sync rule mapping (rule + target attribute). The UI presents the priority list per MVO attribute with sync rules as the line items; per-attribute divergence in a rule's rank is therefore possible (see open question on ordering UX)
-- **Default priority**: when a new import mapping is created targeting an attribute that already has contributors, auto-assign the next available priority (max existing + 1). Resolution must have a deterministic tie-break (e.g. mapping id) as a safety net, but duplicate priorities within one attribute's list should be prevented by validation
+- **Default priority (safe addition)**: when a new import mapping is created targeting an attribute that already has contributors, auto-assign the next-lowest priority (max existing priority for that attribute + 1). This is deliberately a safe, non-disruptive default: the newly added IAF never wins resolution until an admin explicitly reorders the attribute's priority list. Resolution must have a deterministic tie-break (e.g. mapping id) as a safety net, but duplicate priorities within one attribute's list should be prevented by validation
 - **Default null handling**: "Null is a value" = false (fallback behaviour, matching traditional ILM expectations)
 - **MVA semantics (phase 1)**: winner-takes-all-values; an additional per-value merge mode deferred to iteration 2 (see options above)
 - **Configuration change propagation**: apply-only with acknowledgement in phase 1; impact analysis and apply-and-resync as later iterations (see "Configuration Change Propagation" above)
@@ -915,14 +915,9 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 
 ### Attribute Priority
 
-4. **Priority assignment for bulk import rule creation**
-   - When creating a sync rule with many attribute mappings, how should priorities be assigned?
-   - Option: All mappings from same rule get same base priority, then order by attribute name?
-   - Option: Interactive priority assignment during rule creation wizard?
+4. **Priority assignment for new/bulk import mappings** - DECIDED (Jun 2026): a new import mapping targeting an attribute that already has contributors is auto-assigned the next-lowest priority (max existing priority for that attribute + 1). This makes adding an IAF a safe, non-disruptive action: the new flow never wins resolution until an admin explicitly reorders the attribute's priority list. Bulk rule creation: each new mapping likewise lands at the bottom of its attribute's list.
 
-5. **Priority conflict warnings**
-   - Should we warn when a new mapping creates a multi-contributor situation?
-   - Or just show the priority context panel and let admins manage as needed?
+5. **Priority conflict warnings** - DECIDED (Jun 2026): no active warnings in the first iteration. Adding a 2nd+ IAF for an attribute silently lands at the bottom of the priority list (per #4); it is the admin's responsibility to reorder if the new contributor should win. The passive priority context panel shows where a mapping sits but does not warn. A later iteration adds active warnings and a guided flow prompting the admin to configure priority when adding a second or subsequent IAF for an attribute.
 
 6. **Cross-object-type attribute priority** - DECIDED (Jun 2026): no. Priority remains scoped per object type (Person, Group, etc.); a global priority configuration adds complexity with no immediate benefit.
 
@@ -943,9 +938,7 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
     - When a mapping's source is an expression, does an expression that evaluates to null count as "connected, no value" (and therefore trigger NullIsValue)?
     - Presumably yes, which also provides a mechanism for *conditionally* asserting null; confirm and document
 
-12. **Per-rule vs per-attribute ordering UX**
-    - Storage is per mapping, so a rule can rank differently per attribute
-    - Is the default UX gesture "order this rule consistently across all its mappings" (likely matches admin intent: a rule represents an authority claim over a scoped population) with per-attribute divergence as an advanced option?
+12. **Ordering granularity (per-attribute vs per-rule)** - CLARIFIED (Jun 2026): priority is inherently per attribute. The priority list is scoped to one MVO attribute and orders the sync rules contributing to that attribute. Because storage is per mapping (rule + attribute), a single rule can legitimately rank differently for different attributes (e.g. HR Inbound is priority 1 for `department` but priority 2 for `jobTitle`); this divergence is the whole point of per-attribute priority (vs the ruled-out system-level Option A) and is fully allowed. A convenience "set this rule's rank consistently across all attributes it contributes" bulk gesture is deferred to a later iteration as polish (and is only well-defined on the attributes two rules share); not needed for the first iteration.
 
 13. **Re-evaluation after configuration changes** - DECIDED (Jun 2026): three-mode model; see "Configuration Change Propagation" in the decision section. Phase 1 ships apply-only with acknowledgement messaging and a changed-since-last-full-sync indicator; impact analysis (builds on #288/#204/#134) and apply-and-resync (schedule suspension, Event-Based Synchronisation implications) are later iterations needing their own design and concept validation. Residual: pin down the precise definition and computation of "affected objects".
 
