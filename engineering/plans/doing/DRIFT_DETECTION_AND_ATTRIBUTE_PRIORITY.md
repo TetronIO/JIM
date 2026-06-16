@@ -400,6 +400,7 @@ Definition needed for modes 2 and 3: "affected objects" = MVOs of the object typ
 - **Configuration change propagation**: apply-only with acknowledgement in phase 1; impact analysis and apply-and-resync as later iterations (see "Configuration Change Propagation" above)
 - **Disabled rules**: remain visible in the priority list (greyed out) but are never evaluated
 - **Equal precedence**: deliberately not offered (see Option D above)
+- **Asserted-null observability**: required (decided Jun 2026), but delivered without new MVO state. An asserted null still stores no value row (identical to "no contributor"); the engine never needs the distinction (blank is blank for export, and resolution re-derives each sync). Observability is delivered via (a) explain-on-demand, a single-object resolution trace reusing the #288 preview engine, and (b) "asserted null" / "no contributor" as `SyncOutcome` node types in the RPEI outcome graph (#363). No tombstone row on `MetaverseObjectAttributeValue`; a side-table is added only if a concrete need for persisted MVO-level assertion state emerges.
 - **UI placement and navigation**: deliberately undecided; gated on the admin IA review (see UI section below)
 
 ---
@@ -864,6 +865,7 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 - [ ] Replace the interim grace period recall freeze with proper next-contributor fallback
 - [ ] Anomaly guardrail: warn when a priority-1 `NullIsValue` source contributes null for an unusually high share of objects in a run
 - [ ] Track "configuration changed since last full synchronisation" per affected object type (apply-only propagation mode)
+- [ ] Emit "asserted null" and "no contributor" as `SyncOutcome` node types in the RPEI outcome graph (#363) for observability; expose a single-object resolution trace ("explain this attribute") via the #288 preview engine
 
 #### Future Phase 3: UI Updates
 
@@ -936,9 +938,7 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
    - Is the navigation model schema hierarchy drill-down, a centralised view, or both?
    - Do not extend the current IA, or default to a single centralised page, without the review
 
-10. **Asserted null observability**
-    - An asserted null and "no contributor" both materialise identically (no `MetaverseObjectAttributeValue` row)
-    - Does the UI need to explain "this attribute is blank because HR 1 asserts it" for admin troubleshooting, and if so does that require persisting which system asserted the null?
+10. **Asserted null observability** - DECIDED (Jun 2026): yes, the UI must explain "this attribute is blank because HR 1 asserts it", but delivered without new MVO state. The engine never needs the asserted-null/no-contributor distinction (blank is blank for export; resolution re-derives each sync), so it stays out of the value store and hot read paths. Delivered via (a) explain-on-demand (single-object resolution trace reusing the #288 preview engine; answers "why is this blank now?") and (b) "asserted null"/"no contributor" `SyncOutcome` node types in the RPEI outcome graph (#363; answers "what happened at the last sync"). No tombstone row on `MetaverseObjectAttributeValue`; add a side-table only if a concrete need for persisted MVO-level assertion state later emerges.
 
 11. **Conditional mappings and null**
     - When a mapping's source is an expression, does an expression that evaluates to null count as "connected, no value" (and therefore trigger NullIsValue)?
