@@ -1,7 +1,7 @@
 # Drift Detection and Attribute Priority Design Document
 
 - **Status:** Doing (Drift detection complete; attribute priority deferred)
-- **Last Updated**: 2026-06-10
+- **Last Updated**: 2026-06-18
 
 ## Overview
 
@@ -401,7 +401,9 @@ Definition needed for modes 2 and 3: "affected objects" = MVOs of the object typ
 - **Disabled rules**: remain visible in the priority list (greyed out) but are never evaluated
 - **Equal precedence**: deliberately not offered (see Option D above)
 - **Expression null = assert no value (decided Jun 2026)**: an import expression that evaluates to null is a positive assertion of "no value", not "no opinion" (avoiding the counter-intuitive traditional-ILM `Null()`-is-no-opinion behaviour). It produces the `ConnectedNoValue` state, feeding the same tri-state resolver as a direct mapping with no source value (clear if winning/only contributor or `NullIsValue` set; otherwise fall through). Implementation notes: (1) today the inbound path clears unconditionally on expression null (`SyncRuleMappingProcessor.cs:161-170`), correct only for single-contributor; under priority it must emit `ConnectedNoValue` and let the resolver decide. (2) Expression *evaluation failure* must never be treated as null; it must surface as an RPEI error. The current generic `catch (Exception)` that only logs and continues (`:212-216`) is a pre-existing silent-failure gap, now split out as **prerequisite bug #842** (fix now with tests). (3) Empty/whitespace handling is now a per-connected-system "Treat whitespace as null" setting, **#843** (default on), applied at the import value boundary so `""`/whitespace and null behave identically when enabled; this supersedes the earlier "internalise normalisation" idea. (4) String-concatenation expressions yield malformed non-null values on missing input (e.g. `"CN=," + ...`), not null, so they bypass the clear path; document and steer admins to `Coalesce`/`IIF`/guards (public expression docs, **#844**). Empty arrays already clear all MVA values (`:689-696`), consistent with the empty-set assertion.
-- **Asserted-null observability**: required (decided Jun 2026), but delivered without new MVO state. An asserted null still stores no value row (identical to "no contributor"); the engine never needs the distinction (blank is blank for export, and resolution re-derives each sync). Observability is delivered via (a) explain-on-demand, a single-object resolution trace reusing the #288 preview engine, and (b) "asserted null" / "no contributor" as `SyncOutcome` node types in the RPEI outcome graph (#363). No tombstone row on `MetaverseObjectAttributeValue`; a side-table is added only if a concrete need for persisted MVO-level assertion state emerges.
+- **Contribution provenance (decided Jun 2026): record the winning sync rule, not just the system.** Every contributed MVO attribute value records *which sync rule* won resolution. `MetaverseObjectAttributeValue` gains `ContributedBySyncRuleId` (the precise winning rule; with the target attribute it also identifies the winning mapping) alongside the existing `ContributedBySystemId`, which is retained (denormalised, so it survives deletion of the rule, and keeps winner-share analytics a single-column aggregate). This closes a core traditional-ILM diagnosis gap: knowing only the contributing connected system is insufficient when one system backs many sync rules, because you cannot tell which rule set the value. Forward-compatible with the iteration-2 merge mode, which needs per-value provenance regardless.
+- **Asserted-null observability (decided Jun 2026): persisted on the value row via a `NullValue` flag.** This supersedes the earlier "no new MVO state / re-derive on demand" decision. The concrete requirement is that an admin viewing an MVO sees each attribute's value *and* its contributing rule/system, including blanks that were *positively asserted*; that cannot be served from nothing stored, and re-deriving every blank on every page load conflates "current truth" with "live recompute". An asserted null is therefore stored as a `MetaverseObjectAttributeValue` row with all value columns null and a new `NullValue` boolean set true, stamped with the same `ContributedBySyncRuleId`/`ContributedBySystemId` provenance as any other value. The three persisted outcomes are now distinct at rest: **value** (value column(s) set, `NullValue=false`), **asserted null** (value columns null, `NullValue=true`, provenance set), and **no contributor** (no row). `NullValue` follows the existing `*Value` property naming on the entity and keeps everything in one table (no provenance side-table; deliberately rejected as over-engineering for one use case). RPEI `SyncOutcome` nodes (#363) and explain-on-demand (#288 engine) remain the *history* and *why* surfaces; the row is the *current state* surface.
+  - **Integrity guardrail (synchronisation integrity):** a `NullValue=true` row carries no exportable value. Every consumer of `MetaverseObjectAttributeValue` (export evaluation, MVA value enumeration, API serialisation, value counts, `ToString`) MUST treat it as "no value present" so an asserted null never leaks downstream as a phantom value or a literal blank export. This is an invariant and needs explicit test coverage.
 - **UI placement and navigation**: deliberately undecided; gated on the admin IA review (see UI section below)
 
 ---
@@ -466,7 +468,105 @@ public class SyncRuleMapping
 }
 ```
 
-**Note:** The `Priority` value is scoped to the target MVO attribute. When a new import mapping is created targeting an MVO attribute that already has contributors, the system should assign the next available priority number (max existing priority + 1). No other schema changes are required: `SyncRule.Enabled`, `SyncRule.ObjectScopingCriteriaGroups`, and per-rule mappings already provide the rule-granular building blocks for fine-grained authority.
+**Note:** The `Priority` value is scoped to the target MVO attribute. When a new import mapping is created targeting an MVO attribute that already has contributors, the system should assign the next available priority number (max existing priority + 1). `SyncRule.Enabled`, `SyncRule.ObjectScopingCriteriaGroups`, and per-rule mappings already provide the rule-granular building blocks for fine-grained authority.
+
+#### Attribute Value Provenance and Asserted Null (Metaverse Object Attribute Values)
+
+```csharp
+public class MetaverseObjectAttributeValue
+{
+    // ... existing value columns (StringValue, IntValue, ReferenceValue, etc.) ...
+
+    /// <summary>
+    /// The sync rule whose mapping won resolution and contributed this value.
+    /// With AttributeId, identifies the winning mapping. Null when the value is
+    /// managed internally (not contributed by a sync rule).
+    /// </summary>
+    public int? ContributedBySyncRuleId { get; set; }
+    public SyncRule? ContributedBySyncRule { get; set; }
+
+    /// <summary>
+    /// Existing. The connected system that contributed this value. Retained
+    /// alongside ContributedBySyncRuleId: denormalised so it survives deletion
+    /// of the contributing rule, and keeps winner-share analytics a single-column
+    /// aggregate.
+    /// </summary>
+    public int? ContributedBySystemId { get; set; }
+
+    /// <summary>
+    /// When true, this row is an asserted null: a connected, in-scope contributor
+    /// positively asserted "no value" for this attribute (NullIsValue set, or an
+    /// import expression evaluating to null). All value columns are null. Distinct
+    /// from the absence of any row, which means "no contributor". A NullValue row
+    /// carries no exportable value and MUST be treated as "no value present" by
+    /// every value consumer.
+    /// </summary>
+    public bool NullValue { get; set; }
+}
+```
+
+Storage of the three resolution outcomes:
+
+| Outcome | Stored as |
+|---------|-----------|
+| **Value contributed** | Row with value column(s) set, `NullValue=false`, provenance stamped |
+| **Asserted null** | Row with all value columns null, `NullValue=true`, provenance stamped |
+| **No contributor** | No row |
+
+For a multivalued attribute under winner-takes-all-values, an asserted empty set is a single `NullValue=true` marker row (no value rows), distinguishing "asserted empty" from "never resolved" (no row at all).
+
+### Data Model for Null Tracking
+
+Null is tracked across three planes; the configuration and value planes are persisted, the observability plane is run-history plus on-demand recompute.
+
+```mermaid
+erDiagram
+    SyncRule ||--o{ SyncRuleMapping : "has mappings"
+    SyncRule }o--|| ConnectedSystem : "ConnectedSystemId"
+    SyncRule ||--o{ ObjectScopingCriteriaGroup : "scope (+ Enabled flag)"
+    SyncRuleMapping }o--|| MetaverseAttribute : "TargetMetaverseAttributeId"
+
+    MetaverseObject ||--o{ MetaverseObjectAttributeValue : "has values"
+    MetaverseObjectAttributeValue }o--|| MetaverseAttribute : "AttributeId"
+    MetaverseObjectAttributeValue }o--o| SyncRule : "ContributedBySyncRuleId"
+    MetaverseObjectAttributeValue }o--o| ConnectedSystem : "ContributedBySystemId"
+    ConnectedSystemObject }o--o| MetaverseObject : "joined to"
+    ConnectedSystemObject }o--|| ConnectedSystem : "belongs to"
+
+    MetaverseObject ||--o{ SyncOutcome : "RPEI graph (per-run, #363)"
+
+    SyncRuleMapping {
+        int Id
+        int SyncRuleId
+        int TargetMetaverseAttributeId
+        int Priority "NEW: 1=highest, default int.MaxValue"
+        bool NullIsValue "NEW: default false"
+    }
+    MetaverseObjectAttributeValue {
+        Guid Id
+        int AttributeId
+        string_etc Value "null on an asserted-null row"
+        bool NullValue "NEW: true == asserted null"
+        int ContributedBySyncRuleId "NEW: winning rule"
+        int ContributedBySystemId "winning system (retained)"
+    }
+    ConnectedSystem {
+        int Id
+        bool TreatWhitespaceAsNull "NEW #843: built-in property, default true"
+    }
+    SyncOutcome {
+        int Id
+        enum OutcomeType "incl. AssertedNull / NoContributor (NEW)"
+    }
+```
+
+| Plane | Persisted? | Where null lives | Answers |
+|-------|-----------|------------------|---------|
+| **1. Configuration** | Yes, durable | `SyncRuleMapping.NullIsValue` (+ `Priority`), per (rule, target MV attribute). `ConnectedSystem.TreatWhitespaceAsNull` (#843) governs what counts as null at the import boundary. | "Which contributions treat null as an assertion, and in what order?" |
+| **2. Value (metaverse state)** | Yes | `MetaverseObjectAttributeValue`. A value row has `NullValue=false` and provenance; an asserted null has `NullValue=true`, value columns null, and provenance; no-contributor has no row. | "What is the current value (or asserted null), and which rule/system contributed it?" |
+| **3. Observability (history + on-demand)** | Run history only | RPEI `SyncOutcome` nodes (`AssertedNull`/`NoContributor`, #363) record what happened at a sync. "Explain this attribute" re-runs the resolver live (#288 engine), never stored. | "*Why* is this blank, and what happened at the last sync?" |
+
+The integrity invariant binds plane 2: a `NullValue=true` row is "no value present" to every consumer, so it never exports as a phantom value.
 
 ### Sync Engine Changes
 
@@ -476,8 +576,8 @@ A rule's contribution to an MVO attribute is **tri-state**; the distinction betw
 
 | State | Meaning | Evaluation |
 |-------|---------|------------|
-| **No opinion** | The rule is disabled, no CSO from the rule's system is joined to the MVO, or the joined CSO is out of the rule's scope | Always skip to the next priority, regardless of `NullIsValue` |
-| **Connected, no value** | The rule is enabled and a joined, in-scope CSO exists, but the mapping yields nothing (for an MVA: the empty set) | If `NullIsValue`: stop and assert null/empty set. Otherwise fall through to the next priority |
+| **Rule not applicable** (`RuleNotApplicable`) | The rule is disabled, no CSO from the rule's system is joined to the MVO, or the joined CSO is out of the rule's scope | Always skip to the next priority, regardless of `NullIsValue` |
+| **Connected, no value** (`ConnectedNoValue`) | The rule is enabled and a joined, in-scope CSO exists, but the mapping yields nothing (for an MVA: the empty set) | If `NullIsValue`: stop and assert null/empty set (persist a `NullValue` row). Otherwise fall through to the next priority |
 | **Connected, with value** | The rule is enabled, a joined, in-scope CSO exists, and the mapping yields a value | This value wins (for an MVA: the entire value set) |
 
 Scope matters, not just join existence: if a rule's scoping criteria exclude the joined CSO, the rule has no opinion; otherwise an out-of-scope rule could assert nulls it has no entitlement to assert.
@@ -487,7 +587,7 @@ Scope matters, not just join existence: if a rule's scoping criteria exclude the
 ```csharp
 enum ContributionState
 {
-    NoOpinion,          // rule disabled, no joined CSO, or CSO out of rule scope
+    RuleNotApplicable,  // rule disabled, no joined CSO, or CSO out of rule scope
     ConnectedNoValue,   // enabled rule with joined, in-scope CSO; mapping yields nothing
     ConnectedWithValue  // enabled rule with joined, in-scope CSO; mapping yields a value
 }
@@ -508,8 +608,8 @@ AttributeResolution ResolveAttributeValue(MetaverseObject mvo, MetaverseAttribut
 
         switch (state)
         {
-            case ContributionState.NoOpinion:
-                // This rule has no opinion on this MVO; always continue,
+            case ContributionState.RuleNotApplicable:
+                // This rule does not apply to this MVO; always continue,
                 // regardless of NullIsValue.
                 continue;
 
@@ -518,7 +618,7 @@ AttributeResolution ResolveAttributeValue(MetaverseObject mvo, MetaverseAttribut
 
             case ContributionState.ConnectedNoValue:
                 if (contribution.NullIsValue)
-                    return AttributeResolution.AssertedNull(contribution); // authoritative absence
+                    return AttributeResolution.AssertedNull(contribution); // authoritative absence; persists a NullValue row
                 continue; // fallback allowed
         }
     }
@@ -527,7 +627,7 @@ AttributeResolution ResolveAttributeValue(MetaverseObject mvo, MetaverseAttribut
 }
 ```
 
-> **Implementation notes:** the MVO stores only the *winning* value (`MetaverseObjectAttributeValue` with `ContributedBySystemId`); it does not retain the losing contributions. `EvaluateContribution` therefore implies reading the MVO's other joined CSOs, and evaluating scoping criteria against them, at resolution time whenever fallback is needed. Note also that `AssertedNull` and `NoContributor` produce the same stored state (no attribute value row); see the open question on asserted-null observability.
+> **Implementation notes:** the MVO stores only the *winning* contribution (`MetaverseObjectAttributeValue` stamped with `ContributedBySyncRuleId` and `ContributedBySystemId`); it does not retain the losing contributions. `EvaluateContribution` therefore implies reading the MVO's other joined CSOs, and evaluating scoping criteria against them, at resolution time whenever fallback is needed. `AssertedNull` persists a row with `NullValue=true` and provenance, whereas `NoContributor` persists no row; the two are distinct at rest (see "Asserted-null observability" in the decision section).
 
 #### Interaction with Drift Detection (priority-aware contributor check)
 
@@ -851,6 +951,8 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 - [x] Thread `contributingSystemId` through all 14 attribute creation paths in `SyncRuleMappingProcessor`
 - [ ] Add `Priority` property to `SyncRuleMapping` model (default: int.MaxValue)
 - [ ] Add `NullIsValue` property to `SyncRuleMapping` model (default: false)
+- [ ] Add `ContributedBySyncRuleId` FK to `MetaverseObjectAttributeValue` (winning rule provenance); thread it through the same attribute creation paths that set `ContributedBySystemId`
+- [ ] Add `NullValue` boolean to `MetaverseObjectAttributeValue` (default: false; asserted-null marker)
 - [ ] Create database migration
 - [ ] Update API DTOs
 - [ ] Add API endpoint to get/set attribute priority order
@@ -866,6 +968,8 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 - [ ] Replace the interim grace period recall freeze with proper next-contributor fallback
 - [ ] Anomaly guardrail: warn when a priority-1 `NullIsValue` source contributes null for an unusually high share of objects in a run
 - [ ] Track "configuration changed since last full synchronisation" per affected object type (apply-only propagation mode)
+- [ ] Persist asserted nulls as `MetaverseObjectAttributeValue` rows with `NullValue=true` and `ContributedBySyncRuleId`/`ContributedBySystemId` provenance; ensure every value consumer (export evaluation, MVA enumeration, API serialisation, counts, `ToString`) treats a `NullValue` row as "no value present" (integrity invariant)
+- [ ] Stamp `ContributedBySyncRuleId` on every winning contribution (alongside the existing `ContributedBySystemId`) so the MVO attribute view can show the contributing rule, not just the system
 - [ ] Emit "asserted null" and "no contributor" as `SyncOutcome` node types in the RPEI outcome graph (#363) for observability; expose a single-object resolution trace ("explain this attribute") via the #288 preview engine
 - [ ] Unify expression-null and direct-absent into a single `ConnectedNoValue` signal feeding the resolver (replace the current unconditional clear at `SyncRuleMappingProcessor.cs:161-170`). Related spin-off issues: expression evaluation failures surfacing as RPEI errors are prerequisite bug #842; whitespace-as-null is connected-system setting #843
 
@@ -940,7 +1044,7 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
    - Is the navigation model schema hierarchy drill-down, a centralised view, or both?
    - Do not extend the current IA, or default to a single centralised page, without the review
 
-10. **Asserted null observability** - DECIDED (Jun 2026): yes, the UI must explain "this attribute is blank because HR 1 asserts it", but delivered without new MVO state. The engine never needs the asserted-null/no-contributor distinction (blank is blank for export; resolution re-derives each sync), so it stays out of the value store and hot read paths. Delivered via (a) explain-on-demand (single-object resolution trace reusing the #288 preview engine; answers "why is this blank now?") and (b) "asserted null"/"no contributor" `SyncOutcome` node types in the RPEI outcome graph (#363; answers "what happened at the last sync"). No tombstone row on `MetaverseObjectAttributeValue`; add a side-table only if a concrete need for persisted MVO-level assertion state later emerges.
+10. **Asserted null observability** - DECIDED (Jun 2026, revised): yes, and **persisted on the MVO value row**, reversing the earlier "no new MVO state" position. The concrete need that triggers persistence: an admin viewing an MVO must see each attribute's value *and* contributing rule/system, including blanks that were positively asserted; re-deriving every blank on each page load conflates current truth with live recompute, and is inconsistent with storing provenance for present values. An asserted null is a `MetaverseObjectAttributeValue` row with all value columns null and `NullValue=true`, stamped with `ContributedBySyncRuleId`/`ContributedBySystemId`; "no contributor" remains the absence of a row. Single-table (no provenance side-table). RPEI `SyncOutcome` nodes (#363) and explain-on-demand (#288 engine) remain the history and "why" surfaces. Integrity invariant: a `NullValue` row carries no exportable value and must be treated as "no value present" by every value consumer. See "Asserted-null observability" and "Contribution provenance" in the decision section.
 
 11. **Conditional mappings and null** - DECIDED (Jun 2026): yes. An import expression evaluating to null produces `ConnectedNoValue` (a positive "no value" assertion, not "no opinion"), so it triggers NullIsValue semantics and provides a mechanism for conditionally asserting null. See "Expression null = assert no value" in the decision section. Spin-off work: unify expression-null with direct-absent into `ConnectedNoValue` (this issue); expression evaluation failures surface as RPEI errors, never null (prerequisite bug #842); whitespace handled by a connected-system "Treat whitespace as null" setting (#843); document authoring hazards in public expression docs (#844).
 
