@@ -1,0 +1,17 @@
+/* The first sub-tab ("Object Types") is the schema discovery & selection home; keep it visually
+   distinct in the primary colour so it reads differently from the per-type configuration tabs. */
+.schema-tabs ::deep .mud-tabs-tabbar .mud-tab:first-child {
+    color: var(--mud-palette-primary);
+    font-weight: 600;
+}
+
+/* Object type discovery cards. Subtle affordance on the outlined paper, with selected cards
+   tinted in the primary colour so the current selection stands out as the grid is filtered. */
+.schema-type-card {
+    transition: border-color .15s ease, background-color .15s ease;
+}
+
+.schema-type-card-selected {
+    border-color: var(--mud-palette-primary);
+    background-color: var(--mud-palette-primary-hover);
+}
