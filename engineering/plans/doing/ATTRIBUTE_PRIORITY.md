@@ -510,11 +510,11 @@ Surface 1 mock - Import sync rule mapping editor (read-only precedence context)
 | Source: [department v]              Target (MV): [department v]             |
 |                                                                             |
 | +-------------------------------------------------------------------------+ |
-| | [i] 'department' already has 2 contributors. This mapping will be added  | |
-| |     at the lowest priority (3 of 3) and will not win until promoted on   | |
-| |     the object type page.                                                | |
-| |   1. HR System           (HR People Import)        [x] Null=Value        | |
-| |   2. Self-Service AD      (AD Self-Service Import)                       | |
+| | [i] 'department' already has 2 contributors. This mapping will be added | |
+| |     at the lowest priority (3 of 3) and will not win until promoted on  | |
+| |     the object type page.                                               | |
+| |   1. HR System           (HR People Import)        [x] Null=Value       | |
+| |   2. Self-Service AD      (AD Self-Service Import)                      | |
 | |   3. Corporate Directory  (this mapping, once saved)                    | |
 | |   [Manage precedence on the object type page ->]                        | |
 | +-------------------------------------------------------------------------+ |
@@ -570,11 +570,11 @@ Schema > Object Types > Person
 ```
 Surface 3 mock - the Data Flow page
 Schema > Data Flow
-+----------------------------------------------------------------------------------------+
-| Data Flow                                                                              |
-+----------------------------------------------------------------------------------------+
-| Direction [All | Import | Export v]   Connected System [All v]   MV Object Type [All v] |
-| CS Object Type [All v]   CS Attr [All v]   MV Attr [All v]   Search [____________]      |
++------------------------------------------------------------------------------------------+
+| Data Flow                                                                                |
++------------------------------------------------------------------------------------------+
+| Direction [All | Import | Export v]   Connected System [All v]   MV Object Type [All v]  |
+| CS Object Type [All v]   CS Attr [All v]   MV Attr [All v]   Search [____________]       |
 +----------+---------+------------+-------------------+--------------------+-----+---------+
 | Direction| MV Type | MV Attr    | CS / CS Attr      | Sync Rule          | Pri | Null    |
 +----------+---------+------------+-------------------+--------------------+-----+---------+
@@ -584,9 +584,9 @@ Schema > Data Flow
 | Import   | Person  | manager    | HR / managerId    | HR People Import   |  1  | [ ]     |
 | Export   | Group   | member     | AD / member       | AD Group Export    |  -  | (Enf.)  |
 +----------+---------+------------+-------------------+--------------------+-----+---------+
-| Rows link to the sync rule mapping; Import rows also link to the attribute's priority  |
-| on the object type page. Pri / Null apply to Import rows only; (Enf.) = EnforceState.   |
-+----------------------------------------------------------------------------------------+
+| Rows link to the sync rule mapping; Import rows also link to the attribute's priority    |
+| on the object type page. Pri / Null apply to Import rows only; (Enf.) = EnforceState.    |
++------------------------------------------------------------------------------------------+
 ```
 
 **Surface 3 UX:**
