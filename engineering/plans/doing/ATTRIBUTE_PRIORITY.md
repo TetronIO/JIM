@@ -1,8 +1,8 @@
 # Attribute Priority Design Document
 
 - **Status:** Doing (design approved; implementation deferred)
+- **Issue:** [#91](https://github.com/TetronIO/JIM/issues/91)
 - **Last Updated**: 2026-06-19
-- **Related Issue:** #91 (MV attribute priority)
 
 ## Overview
 
@@ -713,6 +713,12 @@ Legend: [*] = contributes to N attributes that have multiple contributors
 - [ ] Configuration change propagation:
   - [ ] Priority reorder followed by delta sync: only changed CSOs re-resolve (documented apply-only behaviour)
   - [ ] Priority reorder followed by full sync: all objects re-resolve to the new configuration
+- [ ] Grace period / attribute recall and next-contributor fallback (replacing the interim recall-freeze; the motivating failure was a disconnected source nulling inputs to an expression-built attribute such as an LDAP DN, producing an invalid value like `CN=,OU=,...` and a failed export):
+  - [ ] Single source, grace period active: attribute frozen (not recalled) until the grace period expires, then the Delete export fires
+  - [ ] Multiple sources, grace period active: primary source disconnects, the next-priority source's value flows in, exports succeed with the fallback value
+  - [ ] Multiple sources, `NullIsValue` on the primary: primary disconnects and the attribute goes to null even though a secondary source has a value (explicit null assertion wins over fallback)
+  - [ ] Grace period expires with no remaining contributor: attribute recalled, Delete export fires
+  - [ ] Expression-based attributes (e.g. LDAP DN): the fallback value produces a valid expression output (non-empty RDN components)
 
 #### Phase 5: Documentation
 
@@ -753,6 +759,12 @@ Legend: [*] = contributes to N attributes that have multiple contributors
 - Issue #844: Document expression null/whitespace authoring hazards in public expression docs
 - Issue #846: Holistic "Guardrails" capability (mass-change protection; the `NullIsValue` mass-clear concern is deferred here, out of attribute-priority scope)
 - Issue #618: Email Notifications (intended delivery channel for Guardrail alerts)
+- Issue #193: Function and expression support for sync rule mappings (shipped; the DynamicExpresso evaluator whose null result feeds `ConnectedNoValue`)
+- Issue #363: RPEI Outcome Graph (shipped); `SyncOutcome` model hosting the "asserted null" / "no contributor" outcomes
+- Issue #288: Sync Preview / What-If Analysis; foundation for impact analysis and the deferred "explain this attribute" trace
+- Issue #204: Sync rule scope management (scope-change preview; same configuration-change-preview family)
+- Issue #134: Connected system deletion attribute impact analysis (same preview family)
+- Issue #827: Unified configuration-change preview framework
 - [DRIFT_DETECTION.md](../done/DRIFT_DETECTION.md) - Outbound-sync drift detection (shipped); its contributor check becomes priority-aware once this lands
 - [OUTBOUND_SYNC_DESIGN.md](../done/OUTBOUND_SYNC_DESIGN.md) - Related export evaluation design
 - [SCENARIO_8_CROSS_DOMAIN_ENTITLEMENT_SYNC.md](../done/SCENARIO_8_CROSS_DOMAIN_ENTITLEMENT_SYNC.md) - Integration test scenarios
