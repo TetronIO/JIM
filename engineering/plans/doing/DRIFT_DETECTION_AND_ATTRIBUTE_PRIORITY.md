@@ -799,34 +799,34 @@ Schema > Object Types > Person
 - **Multi-contributor indicator** - the Contributors count flags which attributes need attention; single-contributor attributes need no priority.
 - **Disabled rules** - shown greyed but holding position, never contributing.
 
-**Surface 3: the "Data Flow" page (new Schema list page).** A new list page under Admin > Schema named **"Data Flow"** giving a single, system-wide view of **all attribute data flows, inbound and outbound** (decided Jun 2026): every import flow (single or multi-contributor) and every export flow, with MVO object type, connected system, source/target attributes, direction, and the owning sync rule (truncated, with tooltip/expander for long names). Filterable across all dimensions: direction (import / export / all), connected system, CS object type, MVO object type, CS attribute, MVO attribute, free-text. This makes it a data-flow / lineage map ("what writes `department` to AD?", "what contributes `manager` in the metaverse?"), not just a precedence audit. **No inline management in the first implementation** (decided): it is pure discovery; rows link to the relevant surface, import rows to Surface 2 (the attribute's precedence) and to the contributing sync rule mapping, export rows to the export sync rule mapping. Priority and "Null is a value" appear only on import rows (they are import concerns); export rows show direction-appropriate detail (e.g. the export mapping and its drift `EnforceState`). Because it spans both directions, this surface is effectively a general flows explorer that attribute priority plugs into, and is the natural first migrant to a future Policy area.
+**Surface 3: the "Data Flow" page (new Schema list page).** A new list page under Admin > Schema named **"Data Flow"** giving a single, system-wide view of **all attribute data flows in both directions** (decided Jun 2026): every Import flow (single or multi-contributor) and every Export flow (terms are the `SyncRuleDirection` enum: `Import` / `Export`, not "Inbound"/"Outbound"), with MVO object type, connected system, source/target attributes, direction, and the owning sync rule (truncated, with tooltip/expander for long names). Filterable across all dimensions: direction (`SyncRuleDirection`: Import / Export / All), connected system, CS object type, MVO object type, CS attribute, MVO attribute, free-text. This makes it a data-flow / lineage map ("what writes `department` to AD?", "what contributes `manager` in the metaverse?"), not just a precedence audit. **No inline management in the first implementation** (decided): it is pure discovery; rows link to the relevant surface, import rows to Surface 2 (the attribute's precedence) and to the contributing sync rule mapping, export rows to the export sync rule mapping. Priority and "Null is a value" appear only on import rows (they are import concerns); export rows show direction-appropriate detail (e.g. the export mapping and its drift `EnforceState`). Because it spans both directions, this surface is effectively a general flows explorer that attribute priority plugs into, and is the natural first migrant to a future Policy area.
 
 ```
 Surface 3 mock - the Data Flow page
 Schema > Data Flow
-+--------------------------------------------------------------------------------------+
-| Data Flow                                                                            |
-+--------------------------------------------------------------------------------------+
-| Direction [All v]  Connected System [All v]  MV Object Type [All v]                  |
-| CS Object Type [All v]  CS Attr [All v]  MV Attr [All v]  Search [____________]      |
-+-----+---------+------------+---------------------+--------------------+-----+---------+
-| Dir | MV Type | MV Attr    | CS / CS Attr        | Sync Rule          | Pri | Null    |
-+-----+---------+------------+---------------------+--------------------+-----+---------+
-| IN  | Person  | department | HR / dept           | HR People Inbound  |  1  | [x]     |
-| IN  | Person  | department | CorpDir / dept      | CorpDir People In. |  2  | [ ]     |
-| OUT | Person  | department | AD / department     | AD People Export   |  -  | (Enf.)  |
-| IN  | Person  | manager    | HR / managerId      | HR People Inbound  |  1  | [ ]     |
-| OUT | Group   | member     | AD / member         | AD Group Export    |  -  | (Enf.)  |
-+-----+---------+------------+---------------------+--------------------+-----+---------+
-| Rows link to the sync rule mapping; IN rows also link to the attribute's priority    |
-| on the object type page. Pri / Null apply to IN rows only; (Enf.) = EnforceState.    |
-+--------------------------------------------------------------------------------------+
++----------------------------------------------------------------------------------------+
+| Data Flow                                                                              |
++----------------------------------------------------------------------------------------+
+| Direction [All | Import | Export v]   Connected System [All v]   MV Object Type [All v] |
+| CS Object Type [All v]   CS Attr [All v]   MV Attr [All v]   Search [____________]      |
++----------+---------+------------+-------------------+--------------------+-----+---------+
+| Direction| MV Type | MV Attr    | CS / CS Attr      | Sync Rule          | Pri | Null    |
++----------+---------+------------+-------------------+--------------------+-----+---------+
+| Import   | Person  | department | HR / dept         | HR People Import   |  1  | [x]     |
+| Import   | Person  | department | CorpDir / dept    | CorpDir People Imp |  2  | [ ]     |
+| Export   | Person  | department | AD / department   | AD People Export   |  -  | (Enf.)  |
+| Import   | Person  | manager    | HR / managerId    | HR People Import   |  1  | [ ]     |
+| Export   | Group   | member     | AD / member       | AD Group Export    |  -  | (Enf.)  |
++----------+---------+------------+-------------------+--------------------+-----+---------+
+| Rows link to the sync rule mapping; Import rows also link to the attribute's priority  |
+| on the object type page. Pri / Null apply to Import rows only; (Enf.) = EnforceState.   |
++----------------------------------------------------------------------------------------+
 ```
 
 **Surface 3 UX:**
-- **Direction filter** - import / export / all, plus filters on every dimension and free-text search.
-- **Read-only discovery** - no reorder/NullIsValue editing here; rows link out to the owning mapping (and Surface 2 for import precedence).
-- **Direction-appropriate columns** - Pri and Null on import rows; export rows surface the export mapping and its `EnforceState`.
+- **Direction filter** - Import / Export / All (uses `SyncRuleDirection`), plus filters on every dimension and free-text search.
+- **Read-only discovery** - no reorder/NullIsValue editing here; rows link out to the owning mapping (and Surface 2 for Import precedence).
+- **Direction-appropriate columns** - Pri and Null on Import rows; Export rows surface the export mapping and its `EnforceState`.
 
 ##### 2b. Cross-cutting design
 
