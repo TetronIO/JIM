@@ -1,177 +1,46 @@
-# Drift Detection and Attribute Priority Design Document
+# Attribute Priority Design Document
 
-- **Status:** Doing (Drift detection complete; attribute priority deferred)
+- **Status:** Doing (design approved; implementation deferred)
 - **Last Updated**: 2026-06-19
+- **Related Issue:** #91 (MV attribute priority)
 
 ## Overview
 
-This document defines designs for two related but distinct challenges:
+This document defines the design for **Attribute Priority** (inbound sync): how JIM determines which source "wins" when multiple systems contribute to the same MVO attribute.
 
-1. **Drift Detection & Remediation** (Outbound Sync): How JIM detects and corrects unauthorised changes made directly in target systems
-2. **Attribute Priority** (Inbound Sync): How JIM determines which source "wins" when multiple systems contribute to the same MVO attribute
-
-**Relationship:** Drift detection needs to know whether a system is a legitimate contributor to an attribute (has import rules) or just a recipient (only has export rules). If a system is a contributor, changes from that system are not "drift" - they're legitimate updates subject to attribute priority resolution.
+> **Related design:** [DRIFT_DETECTION.md](../done/DRIFT_DETECTION.md) (shipped) covers the outbound-sync concern of detecting and correcting unauthorised changes in target systems. The two were originally specified together because drift detection needs to know whether a system is a legitimate contributor to an attribute (has import rules) or just a recipient (only has export rules). Drift detection shipped first using a coarse contributor check (`HasImportRuleForAttribute`); attribute priority refines that check into a priority-aware version (see "Interaction with Drift Detection" below).
 
 ---
 
 ## Table of Contents
 
 1. [Problem Statement](#problem-statement)
-2. [Drift Detection](#drift-detection)
-3. [Attribute Priority](#attribute-priority)
-4. [Design](#design)
-5. [Implementation Plan](#implementation-plan)
-6. [Open Questions](#open-questions)
+2. [Attribute Priority](#attribute-priority)
+3. [Design](#design)
+4. [Implementation Plan](#implementation-plan)
+5. [Open Questions](#open-questions)
 
 ---
 
 ## Problem Statement
 
-### The Drift Scenario
+When multiple connected systems import values for the same MVO attribute, we need a deterministic way to decide which value wins.
 
-In a typical unidirectional sync (Source AD -> Target AD):
+**Example scenario:**
+- HR System imports `department` with value "Engineering"
+- Corporate Directory imports `department` with value "IT Services"
+- Which value should the MVO have?
 
-1. Source AD is **authoritative** for group membership
-2. Target AD **receives** group membership via JIM exports
-3. An administrator makes an **unauthorised change** directly in Target AD (adds/removes a member)
-4. JIM should **detect** this drift and **correct** it back to the authoritative state
+Without explicit priority, the result depends on sync execution order - unpredictable and error-prone.
 
-### Current Behaviour
-
-When Target AD sync runs today (full or delta):
-
-1. Import stage imports CSO values (the drifted state)
-2. Sync stage processes the CSO, updates MVO if import rules exist
-3. **No re-evaluation** of what Target should look like
-4. Drift persists until next Source change triggers export evaluation
-
-### Desired Behaviour
-
-1. Import stage imports the drifted state ✓ (works today)
-2. Sync stage processes the CSO ✓ (works today)
-3. **NEW**: Re-evaluate export rules to compare expected vs actual state
-4. **NEW**: Stage pending exports to correct any drift
-
-> **Note**: This behaviour applies to both full sync and delta sync operations. The trigger is the inbound sync processing of a CSO, regardless of whether it came from a full import or delta import.
-
----
-
-## Drift Detection
-
-### Design Options Considered
-
-#### Option 1: Always Re-evaluate Export Rules on Inbound Sync
-
-When inbound sync processes a CSO from a system that has export rules targeting it, automatically re-evaluate those export rules.
-
-**Flow:**
-```
-Target import -> imports drifted group membership
-Target sync   -> processes CSO
-              -> For each export rule targeting this object type:
-                  -> Calculate expected state from MVO + sync rules
-                  -> Compare expected vs actual
-                  -> Stage corrective pending exports if different
-```
-
-**Pros:**
-- Automatic - no user intervention needed
-- Efficient - only evaluates CSOs that actually changed (delta) or all CSOs (full)
-- Fits naturally into existing sync flow
-
-**Cons:**
-- Always runs - no opt-out if drift is intentional
-- Could cause issues with legitimate bidirectional sync scenarios
-
----
-
-#### Option 2: "Enforce State" Flag on Export Rules
-
-Add a boolean flag to export sync rules: `EnforceState` (default: **true**).
-
-When enabled, inbound sync from that connected system triggers re-evaluation of export rules to detect and remediate drift.
-
-**Pros:**
-- Explicit user control - can disable for specific rules
-- Default ON enforces desired state (correct product vision for new product)
-- Can selectively enforce some attributes but not others
-- Clear user intent in configuration
-
-**Cons:**
-- Another configuration option (though reasonable complexity)
-- User needs to understand when to disable it
-
----
-
-#### Option 3: Authoritative Direction on Sync Rules
-
-Mark the sync rule pair with an authoritative direction: `Source->Target` (unidirectional) or `Bidirectional`.
-
-**Pros:**
-- Clear conceptual model at the rule level
-- Single configuration point per rule pair
-
-**Cons:**
-- Coarse-grained - applies to whole rule, not per-attribute
-- Doesn't fit well if some attributes flow both ways
-
----
-
-#### Option 4: Dedicated "Drift Detection" Run Profile Step
-
-New run profile step type that explicitly checks for and corrects drift.
-
-**Pros:**
-- Explicit, scheduled operation
-- Clear operational intent
-
-**Cons:**
-- Not automatic - drift persists until next run
-- Separate operation to manage
-- Doesn't leverage delta-import efficiency
-
----
-
-### Decision: Option 2 - EnforceState Flag ✓
-
-> **Status**: APPROVED
-
-**Rationale:**
-
-1. **Product Vision**: JIM is a new product with no backward compatibility concerns. The default should be "enforce desired state" because that's what most users expect from authoritative source synchronisation.
-
-2. **Opt-Out Available**: For advanced scenarios where drift is intentional (e.g., emergency access), users can disable enforcement on specific rules.
-
-3. **Efficient**: For delta sync, only processes CSOs that actually changed. For full sync, processes all CSOs in scope (comprehensive drift detection).
-
-4. **Fits Existing Architecture**: Hooks naturally into the sync processing loop (both full and delta).
-
-**Design Decisions:**
-
-- **Applies to export sync rules only** - Import rules define what flows into the metaverse; the concept of "enforcing state" doesn't apply to imports. Drift detection is inherently about ensuring targets match what authoritative sources dictate.
-- **Default: `EnforceState = true`** - The common case is that administrators want drift corrected automatically.
-- **UI: Hidden in "Advanced" section** - This is an edge-case control for unusual scenarios (e.g., emergency access patterns). Most users should never need to see or change it. The setting should be placed in an expandable "Advanced Options" panel or similar UX pattern that is collapsed by default.
-
----
-
-### Behaviour Matrix
-
-With `EnforceState` flag:
-
-| Trigger | EnforceState = true (default) | EnforceState = false |
-|---------|------------------------------|---------------------|
-| Target import + sync (drift detected) | Export rules re-evaluated -> pending exports staged | CSO values updated, no export evaluation |
-| Source import + sync (Source change) | Export rules evaluated -> pending exports staged | Export rules evaluated -> pending exports staged |
-
-> **Note**: This behaviour applies identically to both full sync and delta sync. The difference is scope: delta sync processes only changed CSOs, while full sync processes all CSOs in scope.
-
-**Key insight**: With `EnforceState = false`, drift is still eventually corrected when Source changes that object. The flag controls whether correction is **immediate** (on Target sync) or **deferred** (on next Source sync).
+**Traditional ILM limitation:**
+Many identity management systems use fallback logic where if the top-priority source doesn't provide a value, the system automatically falls back to the next source. This is problematic when you want to **assert null** - i.e., explicitly say "this attribute should have no value" from the authoritative source, without falling back to a secondary source.
 
 ---
 
 ## Attribute Priority
 
-> **Scope**: Attribute priority is an **inbound sync** concern - it determines which source system's value wins when multiple systems contribute to the same MVO attribute. This is distinct from drift detection, which is an **outbound sync** concern.
+> **Scope**: Attribute priority is an **inbound sync** concern - it determines which source system's value wins when multiple systems contribute to the same MVO attribute. This is distinct from drift detection, which is an **outbound sync** concern (see [DRIFT_DETECTION.md](../done/DRIFT_DETECTION.md)).
 
 ### Current State
 
@@ -414,33 +283,12 @@ Definition needed for modes 2 and 3: "affected objects" = MVOs of the object typ
 
 | Aspect | Approach | Status |
 |--------|----------|--------|
-| **Drift Detection** | | |
-| Drift detection trigger | On inbound sync, when CSO has export rules targeting it | ✓ Ready for implementation |
-| Drift detection control | `EnforceState` flag on **export** sync rules, **default: true**, hidden in Advanced Options UI | ✓ Ready for implementation |
-| **Attribute Priority** | | |
 | Priority model | Per-attribute numerical priority on import mappings; sync rules are the priority list line items (multiple differently-scoped rules per system enable fine-grained authority) | Design approved, implementation deferred |
 | Default behaviour | Fallback chain - use the first contribution with an opinion and a value, in priority order | Design approved, implementation deferred |
 | Null handling | "Null is a value" flag per contribution (default: false) | Design approved, implementation deferred |
 | Equal precedence | Deliberately not offered; scoped rules at distinct priorities replace it | Design approved |
 
 ### Schema Changes
-
-#### Drift Detection (Export Sync Rules)
-
-```csharp
-public class SyncRule
-{
-    // ... existing properties ...
-
-    /// <summary>
-    /// When true (default), inbound changes from the target system will trigger
-    /// re-evaluation of this export rule to detect and remediate drift.
-    /// Set to false to allow drift (e.g., for emergency access scenarios).
-    /// Only applicable to export sync rules.
-    /// </summary>
-    public bool EnforceState { get; set; } = true;
-}
-```
 
 #### Attribute Priority (Import Sync Rule Mappings)
 
@@ -633,7 +481,7 @@ AttributeResolution ResolveAttributeValue(MetaverseObject mvo, MetaverseAttribut
 
 #### Interaction with Drift Detection (priority-aware contributor check)
 
-The shipped drift detection treats any system with an import mapping for an attribute as a legitimate contributor (`DriftDetectionService.HasImportRuleForAttribute`, also shown in the drift pseudocode above) and skips drift evaluation for it. Once attribute priority lands, **contributor legitimacy must become priority-aware**:
+The shipped drift detection treats any system with an import mapping for an attribute as a legitimate contributor (`DriftDetectionService.HasImportRuleForAttribute`; see [DRIFT_DETECTION.md](../done/DRIFT_DETECTION.md)) and skips drift evaluation for it. Once attribute priority lands, **contributor legitimacy must become priority-aware**:
 
 - A CSO's inbound change to an attribute is legitimate only if its contribution **wins** resolution for that MVO attribute (enabled, in scope, connected, and highest priority among contributions with an opinion).
 - When a CSO's change *loses* resolution, the MV retains the winning value, and the losing system's local state is corrected by export re-evaluation where an export rule with `EnforceState` targets that system (see worked example 2: direct AD 1 changes to non-exception groups are corrected because AD 2's rule outranks AD 1's).
@@ -642,94 +490,15 @@ The shipped drift detection treats any system with an import mapping for an attr
 
 This supersedes the earlier open question on drift interaction; the dual-forest scenario's expected outcomes require it.
 
-#### Drift Detection (Outbound Sync)
-
-> **Note**: This logic applies to both `SyncFullSyncTaskProcessor` and `SyncDeltaSyncTaskProcessor` via the shared `SyncTaskProcessorBase`. The `HasImportRuleForAttribute` contributor check shown is the **shipped** (non-priority-aware) version; it becomes priority-aware once attribute priority lands (see "Interaction with Drift Detection" above, and the Phase 2 task).
-
-```csharp
-// In SyncTaskProcessorBase, after processing inbound CSO changes:
-
-async Task ProcessCsoChangesAsync(ConnectedSystemObject cso, MetaverseObject mvo)
-{
-    // 1. Process inbound attribute flows with priority resolution
-    await ProcessInboundAttributeFlowsAsync(cso, mvo);
-
-    // 2. Evaluate drift and enforce state if applicable
-    await EvaluateAndEnforceDriftAsync(cso, mvo);
-}
-
-async Task EvaluateAndEnforceDriftAsync(ConnectedSystemObject cso, MetaverseObject mvo)
-{
-    // Get export rules targeting this CSO's connected system and object type
-    var exportRules = await GetExportRulesForCsoAsync(cso);
-
-    foreach (var exportRule in exportRules.Where(r => r.EnforceState))
-    {
-        foreach (var attrFlow in exportRule.AttributeFlows)
-        {
-            // Check if this system has any import rules for this attribute
-            // (i.e., is it a legitimate contributor?)
-            if (HasImportRuleForAttribute(cso.ConnectedSystem, attrFlow.TargetAttribute, mvo.ObjectType))
-            {
-                // System is a contributor for this attribute - don't treat as drift
-                continue;
-            }
-
-            // Calculate expected value based on MVO + export rule
-            var expectedValue = CalculateExpectedValue(mvo, attrFlow);
-            var actualValue = cso.GetAttributeValue(attrFlow.TargetAttribute);
-
-            if (!ValuesEqual(expectedValue, actualValue))
-            {
-                // Drift detected - stage corrective pending export
-                await StagePendingExportChangeAsync(cso, attrFlow.TargetAttribute, expectedValue);
-            }
-        }
-    }
-}
-
-bool HasImportRuleForAttribute(ConnectedSystem system, string attributeName, MetaverseObjectType objectType)
-{
-    // Simple check: does this system have any import mapping for this attribute?
-    return GetImportMappingsForAttribute(attributeName, objectType)
-        .Any(m => m.SyncRule.ConnectedSystemId == system.Id);
-}
-```
-
 ### UI Changes
 
-#### 1. Export Sync Rule Configuration (Drift Detection)
+#### 1. Attribute Priority Management
 
-The `EnforceState` setting should be hidden in an **Advanced Options** section that is collapsed by default. Most users will never need to modify this setting.
-
-**UX Pattern:** Expandable panel or accordion section labelled "Advanced Options" at the bottom of the export sync rule configuration page.
-
-```
-> Advanced Options
-  +-----------------------------------------------------------------+
-  | [x] Enforce desired state (remediate drift)                     |
-  |                                                                 |
-  |   When enabled, changes made directly in the target system      |
-  |   that conflict with the authoritative source will be           |
-  |   automatically corrected during sync operations.               |
-  |                                                                 |
-  |   Disable this only for special scenarios where you             |
-  |   intentionally want to allow direct changes in the target      |
-  |   system (e.g., emergency access patterns).                     |
-  +-----------------------------------------------------------------+
-```
-
-**Rationale for hiding:** This is an edge-case control. Exposing it prominently would confuse users and invite accidental misconfiguration. The default (`true`) is correct for the vast majority of use cases.
-
----
-
-#### 2. Attribute Priority Management
-
-Attribute priority is delivered across **three surfaces**, placed under the existing **Schema** concept for now, with a **"Both"** navigation model (per-attribute drill-down as the management home, plus a centralised discovery list). Q7 decided Jun 2026; see Open Question 9.
+Attribute priority is delivered across **three surfaces**, placed under the existing **Schema** concept for now, with a **"Both"** navigation model (per-attribute drill-down as the management home, plus a centralised discovery list). Decided Jun 2026; see Open Question 6.
 
 **Schema now, Policy as the future home (decided Jun 2026).** Attribute priority is conceptually a *resolution policy*, and a Policy concept is anticipated for later governance capabilities (expanded RBAC, lifecycle workflows for internal MVO management). The decision is deliberately *not* to stand up a Policy area now to host this one feature: a single-resident concept reads as unfinished, and anchoring the Policy IA on this small, early feature risks distorting the larger, not-yet-designed RBAC/workflow features that should actually shape it. Crucially, concept ownership and surface location diverge here: the *management home* (Surface 2) is intrinsically schema-shaped (you set an attribute's precedence while looking at the attribute) and stays on the object type detail page whatever concept owns the feature. Only the cross-cutting *discovery* surface (Surface 3) is a candidate to migrate to a Policy area later; it is a thin list page, cheap to re-home (one route, one nav link). So: build in Schema now; record Policy as the intended future home for cross-cutting governance; design Surface 3 to be relocatable. When Policy is stood up for real (with RBAC/workflows giving it genuine mass), attribute priority's discovery surface is its natural first migrant.
 
-##### 2a. The three surfaces
+##### 1a. The three surfaces
 
 **Surface 1: Import sync rule mapping editor (point-of-creation surfacing only).** When a mapping targets a multi-contributor attribute, show a **read-only** contributor list so the admin can see where this attribute's precedence stands, with a link to Surface 2 to manage it. **No reordering on this surface in the first release** (decided Jun 2026): a new mapping has not been persisted yet, so letting the admin reorder a list that mixes persisted siblings with an unsaved new entry, and renumbering sibling `SyncRuleMapping.Priority` rows transactionally from inside an unsaved mapping form, is disproportionately fiddly for the benefit. New mappings therefore always land at the safe-addition default (lowest priority) and are promoted on Surface 2. "Null is a value" is still set here, because it is a property of *this* mapping (persisted with it), not a cross-mapping reorder. A later iteration could add initial-position-at-creation to close the unpaused-schedule window; deferred.
 
@@ -825,7 +594,7 @@ Schema > Data Flow
 - **Read-only discovery** - no reorder/NullIsValue editing here; rows link out to the owning mapping (and Surface 2 for Import precedence).
 - **Direction-appropriate columns** - Pri and Null on Import rows; Export rows surface the export mapping and its `EnforceState`.
 
-##### 2b. Cross-cutting design
+##### 1b. Cross-cutting design
 
 **One management home (architecture principle).** The reorder + "Null is a value" management gesture is owned by **Surface 2**. Surface 1 shows a read-only view and links to Surface 2; Surface 3 links to Surface 2. This avoids multiple authoritative places to change precedence, removing both inconsistency risk and "which surface wins?" confusion.
 
@@ -833,7 +602,7 @@ Schema > Data Flow
 
 **Bulk-prioritise a connected system (later-phase feature).** "Make connected system X authoritative for everything it contributes" = move X's import flows to priority 1 for every attribute it contributes to. High blast radius (mass authority shift across many attributes and objects), so it is a prime consumer of the configuration-change preview framework (#827) and must offer impact analysis before applying. Deferred to a later phase; would live most naturally on the Data Flow page.
 
-##### 2c. Supporting indicator: sync rule list
+##### 1c. Supporting indicator: sync rule list
 
 Not one of the three primary surfaces, but a cheap signpost: in the sync rule list/summary view, indicate if any of a rule's mappings contribute to attributes that have multiple contributors, linking through to Surface 2.
 
@@ -853,7 +622,7 @@ Legend: [*] = contributes to N attributes that have multiple contributors
 
 ---
 
-#### 3. UI Implementation Notes
+#### 2. UI Implementation Notes
 
 **MudBlazor Components to Use:**
 - `MudExpansionPanel` - For Advanced Options sections and attribute groups
@@ -875,82 +644,15 @@ Legend: [*] = contributes to N attributes that have multiple contributors
 
 ## Implementation Plan
 
-> **Status**: Drift detection implemented (Phases 1-4). Documentation (Phase 5) is pending.
-
-### Drift Detection Implementation (Current Phase)
-
-#### Phase 1: Schema and Model Changes ✅
-
-- [x] **1.1** Add `EnforceState` property to `SyncRule` model (default: true)
-  - Added to [SyncRule.cs](../../src/JIM.Models/Logic/SyncRule.cs)
-  - Added to [SyncRuleHeader.cs](../../src/JIM.Models/Logic/DTOs/SyncRuleHeader.cs)
-- [x] **1.2** Create database migration
-  - Created [20260117121840_AddEnforceStateToSyncRule.cs](../../src/JIM.PostgresData/Migrations/20260117121840_AddEnforceStateToSyncRule.cs)
-- [x] **1.3** Update API DTOs for sync rule configuration
-  - Updated [SyncRuleRequestDtos.cs](../../src/JIM.Web/Models/Api/SyncRuleRequestDtos.cs)
-  - Updated [SynchronisationController.cs](../../src/JIM.Web/Controllers/Api/SynchronisationController.cs)
-
-#### Phase 2: Drift Detection Logic ✅
-
-- [x] **2.1** Create `DriftDetectionService` in `src/JIM.Application/Services/`
-  - Created [DriftDetectionService.cs](../../src/JIM.Application/Services/DriftDetectionService.cs)
-  - `EvaluateDriftAsync(cso, mvo, exportRules, importMappingCache)`
-  - `HasImportRuleForAttribute(connectedSystemId, mvoAttributeId, cache)`
-  - `BuildImportMappingCache(syncRules)` static helper
-
-- [x] **2.2** Integrate into `SyncTaskProcessorBase` (shared by full and delta sync)
-  - Added `BuildDriftDetectionCache()` method
-  - Added `EvaluateDriftAndEnforceStateAsync()` method
-  - Integrated into `ProcessMetaverseObjectChangesAsync()`
-  - Updated [SyncFullSyncTaskProcessor.cs](../../src/JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs)
-  - Updated [SyncDeltaSyncTaskProcessor.cs](../../src/JIM.Worker/Processors/SyncDeltaSyncTaskProcessor.cs)
-
-- [x] **2.3** Add performance optimisations
-  - Cache import mapping lookups per sync run (`_importMappingCache`)
-  - Cache export rules with EnforceState=true per sync run (`_driftDetectionExportRules`)
-  - Uses existing batched pending export creation infrastructure
-
-#### Phase 3: UI Updates ✅
-
-- [x] **3.1** Add "Advanced Options" expandable section to export sync rule configuration page
-  - Updated [SyncRuleDetail.razor](../../src/JIM.Web/Pages/Admin/SyncRuleDetail.razor)
-- [x] **3.2** Add `EnforceState` checkbox inside "Advanced Options" section with appropriate help text
-  - Displayed only for Export direction rules
-  - Includes tooltip and explanatory alert text
-
-#### Phase 4: Testing ✅
-
-- [x] **4.1** Unit tests for `DriftDetectionService`
-  - Created [DriftDetectionTests.cs](../../test/JIM.Worker.Tests/OutboundSync/DriftDetectionTests.cs)
-  - 12 unit tests covering:
-    - Drift detected when non-contributor system changes attribute
-    - No drift flagged when contributor system changes attribute
-    - EnforceState=false skips drift detection
-    - BuildImportMappingCache tests
-    - HasImportRuleForAttribute tests
-
-- [ ] **4.2** Integration tests
-  - Update Scenario 8 DetectDrift test to validate drift correction (pending)
-
-#### Phase 5: Documentation (Pending)
-
-- [ ] **5.1** Update DEVELOPER_GUIDE.md with drift detection concepts
-- [ ] **5.2** Add user documentation for EnforceState setting
-- [ ] **5.3** Add troubleshooting guide for drift-related issues
-
----
-
-### Attribute Priority Implementation (Deferred)
-
 > **Status**: Design approved, implementation deferred to a future phase.
 
 > **First-release scope (decided Jun 2026).** The build stages below describe the full feature. To keep the first release lean, the following are deferred to a fast-follow: Surface 1 reordering (read-only precedence context only; initial-ordering-at-creation deferred), the persisted "configuration changed since last full synchronisation" indicator (the apply-only save-time acknowledgement still ships), and explain-on-demand (gated on #288 Sync Preview). **Retained** in the first release: core priority resolution + tri-state + `NullIsValue`; the safe-addition default; Surface 2 (management home) and Surface 3 (Data Flow); `NullValue` asserted-null persistence; and `ContributedBySyncRuleId` provenance. The priority-1 mass-null anomaly guardrail is **not** in attribute-priority scope at all; it is deferred to a holistic **Guardrails** capability (a cross-cutting set of mass-change protective controls spanning clears, updates, deletes, and exports), tracked as #846.
 
-#### Future Phase 0: Admin IA Review (prerequisite) ✅
+#### Phase 0: Admin IA Review (prerequisite) ✅
 
-- [x] Decided (Jun 2026): place in the **Schema** concept now; **"Both"** navigation model; three surfaces (mapping editor, MVO object type detail page management home, Schema "Data Flow" discovery page). Reorder owned by Surface 2 ("one management home"). **Policy** recorded as the future home for cross-cutting governance (RBAC, lifecycle workflows); not stood up for this one feature, with only Surface 3 a candidate to migrate later. See UI section 2a and Open Question 9.
+- [x] Decided (Jun 2026): place in the **Schema** concept now; **"Both"** navigation model; three surfaces (mapping editor, MVO object type detail page management home, Schema "Data Flow" discovery page). Reorder owned by Surface 2 ("one management home"). **Policy** recorded as the future home for cross-cutting governance (RBAC, lifecycle workflows); not stood up for this one feature, with only Surface 3 a candidate to migrate later. See UI section 1a and Open Question 6.
 
-#### Future Phase 1: Schema and Model Changes
+#### Phase 1: Schema and Model Changes
 
 - [x] Add `ContributedBySystemId` scalar FK to `MetaverseObjectAttributeValue` (prerequisite; Feb 2026, commit `41116255`)
 - [x] Thread `contributingSystemId` through all 14 attribute creation paths in `SyncRuleMappingProcessor`
@@ -962,7 +664,7 @@ Legend: [*] = contributes to N attributes that have multiple contributors
 - [ ] Update API DTOs
 - [ ] Add API endpoint to get/set attribute priority order
 
-#### Future Phase 2: Attribute Priority Logic
+#### Phase 2: Attribute Priority Logic
 
 - [ ] Create `AttributePriorityService` in `src/JIM.Application/Services/`
 - [ ] Implement the tri-state contribution evaluation (`RuleNotApplicable` / `ConnectedNoValue` / `ConnectedWithValue`), respecting rule enabled state and scoping criteria
@@ -980,7 +682,7 @@ Legend: [*] = contributes to N attributes that have multiple contributors
 - [ ] (Deferred beyond first release; gated on #288) Expose a single-object resolution trace ("explain this attribute") via the #288 Sync Preview engine
 - [ ] Unify expression-null and direct-absent into a single `ConnectedNoValue` signal feeding the resolver (replace the current unconditional clear at `SyncRuleMappingProcessor.cs:161-170`). Related spin-off issues: expression evaluation failures surfacing as RPEI errors are prerequisite bug #842; whitespace-as-null is connected-system setting #843
 
-#### Future Phase 3: UI Updates
+#### Phase 3: UI Updates
 
 - [ ] Build the ordered contributor-list Blazor component (priority, sync rule, connected system, enabled/disabled greyed state, "Null is a value", drag handle) used by Surface 2; Surface 1 renders the same list read-only
 - [ ] Add a single transactional "get/set attribute priority order" API for a (MVO object type, MVO attribute) pair that renumbers all affected `SyncRuleMapping.Priority` rows; Surface 2 calls it
@@ -989,9 +691,9 @@ Legend: [*] = contributes to N attributes that have multiple contributors
 - [ ] **Surface 3 (discovery):** new Schema "Data Flow" list page showing all inbound and outbound flows, with a direction filter plus filters (connected system, CS object type, MVO object type, CS attribute, MVO attribute, free-text); pure discovery (no inline management), rows linking to the relevant sync rule mapping (and Surface 2 for import precedence); priority / "Null is a value" columns on import rows only, export rows show the export mapping and its `EnforceState`; relocatable to a future Policy area
 - [ ] Add "Advanced Options" section to the mapping editor with the "Null is a value" checkbox
 - [ ] Save-time acknowledgement messaging on priority changes (see "Configuration Change Propagation"). The persisted "configuration changed since last full synchronisation" indicator is deferred beyond the first release
-- [ ] Add a priority indicator column to the sync rule list view (Surface 2c)
+- [ ] Add a priority indicator column to the sync rule list view (Surface 1c)
 
-#### Future Phase 4: Testing
+#### Phase 4: Testing
 
 - [ ] Unit tests for `AttributePriorityService`
 - [ ] Integration tests for multi-source priority resolution
@@ -1012,7 +714,7 @@ Legend: [*] = contributes to N attributes that have multiple contributors
   - [ ] Priority reorder followed by delta sync: only changed CSOs re-resolve (documented apply-only behaviour)
   - [ ] Priority reorder followed by full sync: all objects re-resolve to the new configuration
 
-#### Future Phase 5: Documentation
+#### Phase 5: Documentation
 
 - [ ] Add user documentation for the attribute priority surfaces (object type detail page management home and the Data Flow page)
 - [ ] Add user documentation for NullIsValue setting
@@ -1021,43 +723,25 @@ Legend: [*] = contributes to N attributes that have multiple contributors
 
 ## Open Questions
 
-### Drift Detection
+1. **Priority assignment for new/bulk import mappings** - DECIDED (Jun 2026): a new import mapping targeting an attribute that already has contributors is auto-assigned the next-lowest priority (max existing priority for that attribute + 1). This makes adding an IAF a safe, non-disruptive action: the new flow never wins resolution until an admin explicitly reorders the attribute's priority list. Bulk rule creation: each new mapping likewise lands at the bottom of its attribute's list.
 
-1. **What happens when EnforceState = true but the export fails?**
-   - Should drift persist until next successful export?
-   - Should we track "drift detected but not yet corrected" state?
+2. **Priority conflict warnings** - DECIDED (Jun 2026): no active warnings in the first iteration. Adding a 2nd+ IAF for an attribute silently lands at the bottom of the priority list (per #1); it is the admin's responsibility to reorder if the new contributor should win. The passive priority context panel shows where a mapping sits but does not warn. A later iteration adds active warnings and a guided flow prompting the admin to configure priority when adding a second or subsequent IAF for an attribute.
 
-2. **How do we handle the transition period during initial sync?**
-   - When Target objects exist before JIM manages them
-   - First sync might detect massive "drift" that's actually initial state
-   - Need "initial reconciliation" mode vs "ongoing enforcement" mode?
+3. **Cross-object-type attribute priority** - DECIDED (Jun 2026): no. Priority remains scoped per object type (Person, Group, etc.); a global priority configuration adds complexity with no immediate benefit.
 
-3. **Notification/alerting for drift?**
-   - Should JIM alert admins when drift is detected (before correcting)?
-   - Useful for security monitoring
-   - Could be Activity-based or separate alerting system
+4. **Multivalued attributes** - DECIDED for phase 1 (Jun 2026): MVAs fully supported with winner-takes-all-values; "Null is a value" on an MVA asserts the empty set. An additional per-value merge mode is deferred to iteration 2; see "Multivalued Attribute Handling: Options Explored" in the decision section. Residual questions for the follow-up design only: per-contribution `Exclusive` vs `Merge` mode, removal semantics ("each rule may remove only the values it contributed"?), dedup/conflict rules, and interaction with NullIsValue under merge mode.
 
-### Attribute Priority
+5. **Interaction with drift detection** - RESOLVED into the design (Jun 2026): contributor legitimacy becomes priority-aware; a losing contributor's direct changes are corrected via `EnforceState` export re-evaluation. See "Interaction with Drift Detection" in the Design section.
 
-4. **Priority assignment for new/bulk import mappings** - DECIDED (Jun 2026): a new import mapping targeting an attribute that already has contributors is auto-assigned the next-lowest priority (max existing priority for that attribute + 1). This makes adding an IAF a safe, non-disruptive action: the new flow never wins resolution until an admin explicitly reorders the attribute's priority list. Bulk rule creation: each new mapping likewise lands at the bottom of its attribute's list.
+6. **Admin IA and navigation** - DECIDED (Jun 2026): place in the **Schema** concept now (not a flat admin-index addition), with the **"Both"** navigation model. Three surfaces: (1) import sync rule mapping editor (point-of-creation surfacing; read-only precedence context + link to Surface 2 in the first release, initial-ordering-at-creation deferred); (2) MVO object type detail page attribute table as the management home (expandable `ChildRowContent` controls row with drag-reorder and "Null is a value"); (3) a new Schema "Data Flow" discovery list page (filterable, read/audit-first, links to Surface 2). Reorder management is owned canonically by Surface 2 ("one management home"); a shared Blazor control and a single transactional "set attribute priority order" API back Surfaces 1 and 2. A **Policy** concept is recorded as the likely future home for cross-cutting governance (precedence, RBAC, lifecycle workflows) but is deliberately not stood up for one feature; only Surface 3 would migrate there when Policy gains real mass (Surface 2 stays schema-shaped). See UI section 1a. Surface 3 decided (Jun 2026): a unified inbound + outbound data-flow view (direction filter), with no inline management in the first implementation (rows link to the relevant sync rule / attribute mapping only).
 
-5. **Priority conflict warnings** - DECIDED (Jun 2026): no active warnings in the first iteration. Adding a 2nd+ IAF for an attribute silently lands at the bottom of the priority list (per #4); it is the admin's responsibility to reorder if the new contributor should win. The passive priority context panel shows where a mapping sits but does not warn. A later iteration adds active warnings and a guided flow prompting the admin to configure priority when adding a second or subsequent IAF for an attribute.
+7. **Asserted null observability** - DECIDED (Jun 2026, revised): yes, and **persisted on the MVO value row**, reversing the earlier "no new MVO state" position. The concrete need that triggers persistence: an admin viewing an MVO must see each attribute's value *and* contributing rule/system, including blanks that were positively asserted; re-deriving every blank on each page load conflates current truth with live recompute, and is inconsistent with storing provenance for present values. An asserted null is a `MetaverseObjectAttributeValue` row with all value columns null and `NullValue=true`, stamped with `ContributedBySyncRuleId`/`ContributedBySystemId`; "no contributor" remains the absence of a row. Single-table (no provenance side-table). RPEI `SyncOutcome` nodes (#363) and explain-on-demand (#288 engine) remain the history and "why" surfaces. Integrity invariant: a `NullValue` row carries no exportable value and must be treated as "no value present" by every value consumer. See "Asserted-null observability" and "Contribution provenance" in the decision section.
 
-6. **Cross-object-type attribute priority** - DECIDED (Jun 2026): no. Priority remains scoped per object type (Person, Group, etc.); a global priority configuration adds complexity with no immediate benefit.
+8. **Conditional mappings and null** - DECIDED (Jun 2026): yes. An import expression evaluating to null produces `ConnectedNoValue` (a positive "no value" assertion, not "no opinion"), so it triggers NullIsValue semantics and provides a mechanism for conditionally asserting null. See "Expression null = assert no value" in the decision section. Spin-off work: unify expression-null with direct-absent into `ConnectedNoValue` (this issue); expression evaluation failures surface as RPEI errors, never null (prerequisite bug #842); whitespace handled by a connected-system "Treat whitespace as null" setting (#843); document authoring hazards in public expression docs (#844).
 
-7. **Multivalued attributes** - DECIDED for phase 1 (Jun 2026): MVAs fully supported with winner-takes-all-values; "Null is a value" on an MVA asserts the empty set. An additional per-value merge mode is deferred to iteration 2; see "Multivalued Attribute Handling: Options Explored" in the decision section. Residual questions for the follow-up design only: per-contribution `Exclusive` vs `Merge` mode, removal semantics ("each rule may remove only the values it contributed"?), dedup/conflict rules, and interaction with NullIsValue under merge mode.
+9. **Ordering granularity (per-attribute vs per-rule)** - CLARIFIED (Jun 2026): priority is inherently per attribute. The priority list is scoped to one MVO attribute and orders the sync rules contributing to that attribute. Because storage is per mapping (rule + attribute), a single rule can legitimately rank differently for different attributes (e.g. HR Inbound is priority 1 for `department` but priority 2 for `jobTitle`); this divergence is the whole point of per-attribute priority (vs the ruled-out system-level Option A) and is fully allowed. A convenience "set this rule's rank consistently across all attributes it contributes" bulk gesture is deferred to a later iteration as polish (and is only well-defined on the attributes two rules share); not needed for the first iteration.
 
-8. **Interaction with drift detection** - RESOLVED into the design (Jun 2026): contributor legitimacy becomes priority-aware; a losing contributor's direct changes are corrected via `EnforceState` export re-evaluation. See "Interaction with Drift Detection" in the Design section.
-
-9. **Admin IA and navigation** - DECIDED (Jun 2026): place in the **Schema** concept now (not a flat admin-index addition), with the **"Both"** navigation model. Three surfaces: (1) import sync rule mapping editor (point-of-creation surfacing; read-only precedence context + link to Surface 2 in the first release, initial-ordering-at-creation deferred); (2) MVO object type detail page attribute table as the management home (expandable `ChildRowContent` controls row with drag-reorder and "Null is a value"); (3) a new Schema "Data Flow" discovery list page (filterable, read/audit-first, links to Surface 2). Reorder management is owned canonically by Surface 2 ("one management home"); a shared Blazor control and a single transactional "set attribute priority order" API back Surfaces 1 and 2. A **Policy** concept is recorded as the likely future home for cross-cutting governance (precedence, RBAC, lifecycle workflows) but is deliberately not stood up for one feature; only Surface 3 would migrate there when Policy gains real mass (Surface 2 stays schema-shaped). See UI section 2a. Surface 3 decided (Jun 2026): a unified inbound + outbound data-flow view (direction filter), with no inline management in the first implementation (rows link to the relevant sync rule / attribute mapping only).
-
-10. **Asserted null observability** - DECIDED (Jun 2026, revised): yes, and **persisted on the MVO value row**, reversing the earlier "no new MVO state" position. The concrete need that triggers persistence: an admin viewing an MVO must see each attribute's value *and* contributing rule/system, including blanks that were positively asserted; re-deriving every blank on each page load conflates current truth with live recompute, and is inconsistent with storing provenance for present values. An asserted null is a `MetaverseObjectAttributeValue` row with all value columns null and `NullValue=true`, stamped with `ContributedBySyncRuleId`/`ContributedBySystemId`; "no contributor" remains the absence of a row. Single-table (no provenance side-table). RPEI `SyncOutcome` nodes (#363) and explain-on-demand (#288 engine) remain the history and "why" surfaces. Integrity invariant: a `NullValue` row carries no exportable value and must be treated as "no value present" by every value consumer. See "Asserted-null observability" and "Contribution provenance" in the decision section.
-
-11. **Conditional mappings and null** - DECIDED (Jun 2026): yes. An import expression evaluating to null produces `ConnectedNoValue` (a positive "no value" assertion, not "no opinion"), so it triggers NullIsValue semantics and provides a mechanism for conditionally asserting null. See "Expression null = assert no value" in the decision section. Spin-off work: unify expression-null with direct-absent into `ConnectedNoValue` (this issue); expression evaluation failures surface as RPEI errors, never null (prerequisite bug #842); whitespace handled by a connected-system "Treat whitespace as null" setting (#843); document authoring hazards in public expression docs (#844).
-
-12. **Ordering granularity (per-attribute vs per-rule)** - CLARIFIED (Jun 2026): priority is inherently per attribute. The priority list is scoped to one MVO attribute and orders the sync rules contributing to that attribute. Because storage is per mapping (rule + attribute), a single rule can legitimately rank differently for different attributes (e.g. HR Inbound is priority 1 for `department` but priority 2 for `jobTitle`); this divergence is the whole point of per-attribute priority (vs the ruled-out system-level Option A) and is fully allowed. A convenience "set this rule's rank consistently across all attributes it contributes" bulk gesture is deferred to a later iteration as polish (and is only well-defined on the attributes two rules share); not needed for the first iteration.
-
-13. **Re-evaluation after configuration changes** - DECIDED (Jun 2026): three-mode model; see "Configuration Change Propagation" in the decision section. Phase 1 ships apply-only with acknowledgement messaging and a changed-since-last-full-sync indicator; impact analysis (builds on #288/#204/#134) and apply-and-resync (schedule suspension, Event-Based Synchronisation implications) are later iterations needing their own design and concept validation. Residual: pin down the precise definition and computation of "affected objects".
+10. **Re-evaluation after configuration changes** - DECIDED (Jun 2026): three-mode model; see "Configuration Change Propagation" in the decision section. Phase 1 ships apply-only with acknowledgement messaging and a changed-since-last-full-sync indicator; impact analysis (builds on #288/#204/#134) and apply-and-resync (schedule suspension, Event-Based Synchronisation implications) are later iterations needing their own design and concept validation. Residual: pin down the precise definition and computation of "affected objects".
 
 ---
 
@@ -1069,6 +753,6 @@ Legend: [*] = contributes to N attributes that have multiple contributors
 - Issue #844: Document expression null/whitespace authoring hazards in public expression docs
 - Issue #846: Holistic "Guardrails" capability (mass-change protection; the `NullIsValue` mass-clear concern is deferred here, out of attribute-priority scope)
 - Issue #618: Email Notifications (intended delivery channel for Guardrail alerts)
-- Issue #173: Scenario 8 drift detection tests
+- [DRIFT_DETECTION.md](../done/DRIFT_DETECTION.md) - Outbound-sync drift detection (shipped); its contributor check becomes priority-aware once this lands
 - [OUTBOUND_SYNC_DESIGN.md](../done/OUTBOUND_SYNC_DESIGN.md) - Related export evaluation design
 - [SCENARIO_8_CROSS_DOMAIN_ENTITLEMENT_SYNC.md](../done/SCENARIO_8_CROSS_DOMAIN_ENTITLEMENT_SYNC.md) - Integration test scenarios
