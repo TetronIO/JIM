@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using DynamicExpresso.Exceptions;
 using JIM.Application.Expressions;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
@@ -8,6 +9,7 @@ using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using Serilog;
 
@@ -1365,6 +1367,17 @@ public class ExportEvaluationServer
     }
 
     /// <summary>
+    /// Builds a <see cref="SyncExpressionEvaluationException"/> carrying the failing export expression and
+    /// the target connected system attribute name, so the worker can record an ExpressionEvaluationError
+    /// RPEI for the Metaverse Object being evaluated.
+    /// </summary>
+    private static SyncExpressionEvaluationException BuildExportExpressionEvaluationException(
+        SyncRuleMapping mapping, SyncRuleMappingSource source, Exception innerException)
+    {
+        return new SyncExpressionEvaluationException(source.Expression, mapping.TargetConnectedSystemAttribute?.Name, innerException);
+    }
+
+    /// <summary>
     /// Creates PendingExportAttributeValueChange objects based on export rule mappings.
     /// Maps MVO attributes → CSO attributes.
     /// For export rules:
@@ -1451,85 +1464,92 @@ public class ExportEvaluationServer
                     // because expression results may depend on the changed attributes
                     // TODO: Consider optimising by tracking which MVO attributes the expression depends on
 
+                    // Build expression context with MVO attributes (lazy initialization - only build once)
+                    mvAttributeDictionary ??= BuildAttributeDictionary(mvo);
+                    var context = new ExpressionContext(mvAttributeDictionary, null);
+
+                    // Only the evaluation itself is guarded. A thrown export expression must be surfaced as
+                    // an errored object, never swallowed and never conflated with a deliberate null result.
+                    // Known failure modes are rethrown as SyncExpressionEvaluationException for the worker to
+                    // record as an ExpressionEvaluationError RPEI; anything else propagates to UnhandledError.
+                    object? result;
                     try
                     {
-                        // Build expression context with MVO attributes (lazy initialization - only build once)
-                        mvAttributeDictionary ??= BuildAttributeDictionary(mvo);
-                        var context = new ExpressionContext(mvAttributeDictionary, null);
-
-                        // Evaluate the expression
-                        var result = ExpressionEvaluator.Evaluate(source.Expression, context);
-
-                        if (result == null)
-                        {
-                            // Null is expected when the referenced attribute doesn't exist on this MVO
-                            Log.Debug("CreateAttributeValueChanges: Expression '{Expression}' for MVO {MvoId} returned null. " +
-                                "Available attributes: [{Attributes}]",
-                                source.Expression, mvo.Id, string.Join(", ", mvAttributeDictionary.Keys));
-                        }
-
-                        if (result != null)
-                        {
-                            var change = new PendingExportAttributeValueChange
-                            {
-                                Id = Guid.NewGuid(),
-                                Attribute = mapping.TargetConnectedSystemAttribute,
-                                AttributeId = mapping.TargetConnectedSystemAttribute.Id,
-                                ChangeType = PendingExportAttributeChangeType.Update
-                            };
-
-                            // Set the value based on the result type
-                            switch (result)
-                            {
-                                case string strValue:
-                                    change.StringValue = strValue;
-                                    break;
-                                case int intValue:
-                                    change.IntValue = intValue;
-                                    break;
-                                case long longValue:
-                                    change.LongValue = longValue;
-                                    break;
-                                case DateTime dtValue:
-                                    change.DateTimeValue = dtValue;
-                                    break;
-                                case bool boolValue:
-                                    change.BoolValue = boolValue;
-                                    break;
-                                case Guid guidValue:
-                                    change.GuidValue = guidValue;
-                                    break;
-                                case byte[] byteValue:
-                                    change.ByteValue = byteValue;
-                                    break;
-                                default:
-                                    // Fall back to string representation
-                                    change.StringValue = result.ToString();
-                                    break;
-                            }
-
-                            // No-net-change detection for expression-based mappings
-                            if (canDetectNoNetChange)
-                            {
-                                var cacheKey = (existingCso!.Id, change.AttributeId);
-                                var existingCsoValues = csoAttributeCache![cacheKey];
-
-                                if (IsCsoAttributeAlreadyCurrent(change, existingCsoValues))
-                                {
-                                    Log.Debug("CreateAttributeValueChanges: Skipping attribute {AttrId} for CSO {CsoId} - CSO already has current value (expression)",
-                                        change.AttributeId, existingCso.Id);
-                                    csoAlreadyCurrentCount++;
-                                    continue;
-                                }
-                            }
-
-                            changes.Add(change);
-                        }
+                        result = ExpressionEvaluator.Evaluate(source.Expression, context);
                     }
-                    catch (Exception ex)
+                    catch (DynamicExpressoException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
+                    catch (ArgumentException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
+                    catch (FormatException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
+                    catch (OverflowException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
+                    catch (InvalidOperationException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
+                    catch (ArithmeticException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
+                    catch (InvalidCastException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
+                    catch (KeyNotFoundException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
+
+                    if (result == null)
                     {
-                        Log.Error(ex, "CreateAttributeValueChanges: Failed to evaluate expression '{Expression}' for attribute {AttributeName}",
-                            source.Expression, mapping.TargetConnectedSystemAttribute.Name);
+                        // Null is expected when the referenced attribute doesn't exist on this MVO
+                        Log.Debug("CreateAttributeValueChanges: Expression '{Expression}' for MVO {MvoId} returned null. " +
+                            "Available attributes: [{Attributes}]",
+                            source.Expression, mvo.Id, string.Join(", ", mvAttributeDictionary.Keys));
+                    }
+
+                    if (result != null)
+                    {
+                        var change = new PendingExportAttributeValueChange
+                        {
+                            Id = Guid.NewGuid(),
+                            Attribute = mapping.TargetConnectedSystemAttribute,
+                            AttributeId = mapping.TargetConnectedSystemAttribute.Id,
+                            ChangeType = PendingExportAttributeChangeType.Update
+                        };
+
+                        // Set the value based on the result type
+                        switch (result)
+                        {
+                            case string strValue:
+                                change.StringValue = strValue;
+                                break;
+                            case int intValue:
+                                change.IntValue = intValue;
+                                break;
+                            case long longValue:
+                                change.LongValue = longValue;
+                                break;
+                            case DateTime dtValue:
+                                change.DateTimeValue = dtValue;
+                                break;
+                            case bool boolValue:
+                                change.BoolValue = boolValue;
+                                break;
+                            case Guid guidValue:
+                                change.GuidValue = guidValue;
+                                break;
+                            case byte[] byteValue:
+                                change.ByteValue = byteValue;
+                                break;
+                            default:
+                                // Fall back to string representation
+                                change.StringValue = result.ToString();
+                                break;
+                        }
+
+                        // No-net-change detection for expression-based mappings
+                        if (canDetectNoNetChange)
+                        {
+                            var cacheKey = (existingCso!.Id, change.AttributeId);
+                            var existingCsoValues = csoAttributeCache![cacheKey];
+
+                            if (IsCsoAttributeAlreadyCurrent(change, existingCsoValues))
+                            {
+                                Log.Debug("CreateAttributeValueChanges: Skipping attribute {AttrId} for CSO {CsoId} - CSO already has current value (expression)",
+                                    change.AttributeId, existingCso.Id);
+                                csoAlreadyCurrentCount++;
+                                continue;
+                            }
+                        }
+
+                        changes.Add(change);
                     }
 
                     continue;
