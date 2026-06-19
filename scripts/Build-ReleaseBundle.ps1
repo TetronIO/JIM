@@ -161,7 +161,7 @@ try {
     $composeFiles = @(
         "docker-compose.yml"
         "docker-compose.override.yml"
-        "docker-compose.production.yml"
+        "deploy/docker-compose.production.yml"
         ".env.example"
     )
 
@@ -366,7 +366,7 @@ Quick Start:
 
 For detailed instructions, see docs/INSTALL.md
 
-License: See https://tetron.io/jim/#licensing
+License: See https://junctional.io/license
 "@
     $readme | Set-Content "$bundlePath/README.txt"
     Write-Host "  Created: README.txt" -ForegroundColor Gray

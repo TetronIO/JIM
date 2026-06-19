@@ -1053,7 +1053,11 @@ internal class SeedingServer
                     DropDownValues = latestSetting.DropDownValues,
                     Name = latestSetting.Name,
                     Type = latestSetting.Type,
-                    Required = latestSetting.Required
+                    Required = latestSetting.Required,
+                    RequiredGroup = latestSetting.RequiredGroup,
+                    RequiredGroupCardinality = latestSetting.RequiredGroupCardinality,
+                    RequiredWhenSetting = latestSetting.RequiredWhenSetting,
+                    RequiredWhenValue = latestSetting.RequiredWhenValue
                 });
                 hasChanges = true;
                 Log.Information($"SyncConnectorDefinitionAsync: Added new setting '{latestSetting.Name}' for '{connector.Name}'");
@@ -1065,6 +1069,10 @@ internal class SeedingServer
                     existingSetting.Description != latestSetting.Description ||
                     existingSetting.Type != latestSetting.Type ||
                     existingSetting.Required != latestSetting.Required ||
+                    existingSetting.RequiredGroup != latestSetting.RequiredGroup ||
+                    existingSetting.RequiredGroupCardinality != latestSetting.RequiredGroupCardinality ||
+                    existingSetting.RequiredWhenSetting != latestSetting.RequiredWhenSetting ||
+                    existingSetting.RequiredWhenValue != latestSetting.RequiredWhenValue ||
                     existingSetting.DefaultCheckboxValue != latestSetting.DefaultCheckboxValue ||
                     existingSetting.DefaultStringValue != latestSetting.DefaultStringValue ||
                     existingSetting.DefaultIntValue != latestSetting.DefaultIntValue)
@@ -1073,6 +1081,10 @@ internal class SeedingServer
                     existingSetting.Description = latestSetting.Description;
                     existingSetting.Type = latestSetting.Type;
                     existingSetting.Required = latestSetting.Required;
+                    existingSetting.RequiredGroup = latestSetting.RequiredGroup;
+                    existingSetting.RequiredGroupCardinality = latestSetting.RequiredGroupCardinality;
+                    existingSetting.RequiredWhenSetting = latestSetting.RequiredWhenSetting;
+                    existingSetting.RequiredWhenValue = latestSetting.RequiredWhenValue;
                     existingSetting.DefaultCheckboxValue = latestSetting.DefaultCheckboxValue;
                     existingSetting.DefaultStringValue = latestSetting.DefaultStringValue;
                     existingSetting.DefaultIntValue = latestSetting.DefaultIntValue;

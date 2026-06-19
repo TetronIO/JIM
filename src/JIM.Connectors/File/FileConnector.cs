@@ -47,6 +47,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     private const string SettingDelimiter = "Delimiter";
     private const string SettingStopOnFirstError = "Stop On First Error";
     private const string SettingMultiValueDelimiter = "Multi-Value Delimiter";
+    private const string ObjectTypeRequiredGroup = "Object Type";
     // Mode values
     private const string ModeImportOnly = "Import Only";
     private const string ModeExportOnly = "Export Only";
@@ -69,9 +70,9 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
                 DefaultStringValue = ModeImportOnly
             },
 
-            // Object type settings
-            new() { Name = SettingObjectTypeColumn, Required = false, Description = "Optionally specify the column that contains the object type.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.String },
-            new() { Name = SettingObjectType, Required = false, Description = "Optional: Specify an object type for when the file only contains one type of object, e.g. user.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.String },
+            // Object type settings: individually optional, but JIM needs exactly one of them to determine object types, so they share a mutually exclusive required group
+            new() { Name = SettingObjectTypeColumn, Required = false, RequiredGroup = ObjectTypeRequiredGroup, RequiredGroupCardinality = ConnectorSettingRequiredGroupCardinality.ExactlyOne, Description = "The column that contains the object type. Use when the file contains more than one type of object.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.String },
+            new() { Name = SettingObjectType, Required = false, RequiredGroup = ObjectTypeRequiredGroup, RequiredGroupCardinality = ConnectorSettingRequiredGroupCardinality.ExactlyOne, Description = "A fixed object type for when the file only contains one type of object, e.g. user.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.String },
 
             // Import-specific settings
             new() { Name = SettingStopOnFirstError, Required = false, Description = "Stop processing the file when the first error is encountered. Useful for debugging data quality issues without generating large numbers of errors.", Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.CheckBox },
@@ -91,15 +92,8 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         logger.Verbose($"ValidateSettingValues() called for {Name}");
         var response = new List<ConnectorSettingValueValidationResult>();
 
-        // general required setting value validation
-        foreach (var requiredSettingValue in settingValues.Where(q => q.Setting.Required))
-        {
-            if ((requiredSettingValue.Setting.Type == ConnectedSystemSettingType.String ||
-                 requiredSettingValue.Setting.Type == ConnectedSystemSettingType.File ||
-                 requiredSettingValue.Setting.Type == ConnectedSystemSettingType.DropDown) &&
-                string.IsNullOrEmpty(requiredSettingValue.StringValue))
-                response.Add(new ConnectorSettingValueValidationResult { ErrorMessage = $"Please supply a value for {requiredSettingValue.Setting.Name}", IsValid = false, SettingValue = requiredSettingValue });
-        }
+        // generic required, required-group and required-when validation is handled centrally by ConnectorSettingValidator
+        // (invoked by the application layer before this method); only File Connector-specific rules live here.
 
         // Get file path and mode settings
         var filePathSetting = settingValues.Single(q => q.Setting.Name == SettingFilePath);
@@ -108,17 +102,10 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         var filePath = filePathSetting.StringValue;
         var mode = modeSetting.StringValue ?? ModeImportOnly;
 
-        // File path is required
+        // File path is required, but the generic validator already reports a missing value; just short-circuit the
+        // mode-specific checks below, which cannot run without a path.
         if (string.IsNullOrEmpty(filePath))
-        {
-            response.Add(new ConnectorSettingValueValidationResult
-            {
-                IsValid = false,
-                ErrorMessage = "File Path must be configured.",
-                SettingValue = filePathSetting
-            });
             return response;
-        }
 
         // Validate based on mode
         switch (mode)

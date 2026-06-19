@@ -67,7 +67,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $jimCompose = Join-Path $repoRoot "docker-compose.yml"
 $jimComposeOverride = Join-Path $repoRoot "docker-compose.override.yml"
-$integrationCompose = Join-Path $repoRoot "docker-compose.integration-tests.yml"
+$integrationCompose = Join-Path $repoRoot "test/integration/docker/docker-compose.integration-tests.yml"
 
 Write-Host ""
 Write-Host "=============================================" -ForegroundColor Cyan

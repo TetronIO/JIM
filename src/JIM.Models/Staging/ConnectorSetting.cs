@@ -26,4 +26,37 @@ public class ConnectorSetting
     public List<string>? DropDownValues { get; set; }
 
     public bool Required { get; set; }
+
+    /// <summary>
+    /// When set, at least one setting in the same named group must have a value supplied by the administrator.
+    /// Use for either/or requirements, where individual settings are optional but the group as a whole is required.
+    /// Grouped settings should share the same Category and be declared consecutively so the UI can render them together.
+    /// Enforced generically by JIM when validating Connected System settings; see ConnectorSettingGroupValidator.
+    /// </summary>
+    public string? RequiredGroup { get; set; }
+
+    /// <summary>
+    /// When the setting belongs to a <see cref="RequiredGroup"/>, controls how many group members may have a value.
+    /// Defaults to <see cref="ConnectorSettingRequiredGroupCardinality.AtLeastOne"/>; use
+    /// <see cref="ConnectorSettingRequiredGroupCardinality.ExactlyOne"/> for mutually exclusive settings where
+    /// supplying more than one is an error. All members of the same group should declare the same cardinality.
+    /// Ignored when <see cref="RequiredGroup"/> is not set.
+    /// </summary>
+    public ConnectorSettingRequiredGroupCardinality RequiredGroupCardinality { get; set; } = ConnectorSettingRequiredGroupCardinality.AtLeastOne;
+
+    /// <summary>
+    /// The Name of another setting that controls whether this setting is relevant. When set, this setting is only
+    /// relevant (shown and required) while the controlling setting's current value equals <see cref="RequiredWhenValue"/>;
+    /// otherwise it is hidden in the UI and ignored by validation. Use for conditionally-relevant settings, e.g. a
+    /// setting that only applies when a "use secure connection" checkbox is enabled. Must be paired with
+    /// <see cref="RequiredWhenValue"/>. Enforced generically; see ConnectorSettingValidator.
+    /// </summary>
+    public string? RequiredWhenSetting { get; set; }
+
+    /// <summary>
+    /// The value the <see cref="RequiredWhenSetting"/> must currently hold for this setting to be relevant.
+    /// Compared as a string: for a checkbox controlling setting use "true"/"false"; for a drop-down use the option text;
+    /// for an integer use its decimal string. Ignored when <see cref="RequiredWhenSetting"/> is not set.
+    /// </summary>
+    public string? RequiredWhenValue { get; set; }
 }

@@ -22,3 +22,7 @@ The **Joiner/Mover/Leaver** lifecycle is the core automation model for identity 
 ## 🧮 Expressions
 
 JIM includes a built-in **expression language** for transforming and mapping identity attributes. Expressions let you build email addresses, control account states, handle missing values, and much more -- all without writing code. See the [Expression Language Guide](expressions.md) for syntax, functions, and examples.
+
+## 🔡 Case Sensitivity
+
+JIM compares identity data exactly (case-sensitive) by default, while keeping configuration names and search forgiving (case-insensitive). The [Case Sensitivity](case-sensitivity.md) page explains where each rule applies, and how to relax matching and scoping per rule where a data source is inconsistent.

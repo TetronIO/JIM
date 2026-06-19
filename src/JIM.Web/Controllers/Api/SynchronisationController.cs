@@ -906,6 +906,19 @@ public class SynchronisationController(
                         settingValue.CheckboxValue = update.CheckboxValue.Value;
                 }
             }
+
+            // the caller is writing settings, so validate before persisting and reject with structured per-setting
+            // errors if invalid, mirroring the web form (which also blocks saving an invalid configuration). updates
+            // that do not touch settings are not gated on pre-existing setting validity.
+            var validationResults = _application.ConnectedSystems.ValidateConnectedSystemSettings(connectedSystem);
+            var invalidResults = validationResults.Where(r => !r.IsValid).ToList();
+            if (invalidResults.Count > 0)
+            {
+                _logger.LogInformation("Rejected settings update for connected system {Id}: {Count} validation error(s)", connectedSystem.Id, invalidResults.Count);
+                return BadRequest(ApiErrorResponse.ValidationError(
+                    "One or more connected system settings are invalid.",
+                    BuildSettingValidationErrors(invalidResults)));
+            }
         }
 
         try
@@ -928,6 +941,28 @@ public class SynchronisationController(
             _logger.LogWarning(ex, "Failed to update connected system: {Message}", ex.Message);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
+    }
+
+    /// <summary>
+    /// Groups connected system setting validation failures into the API's field-keyed validation error shape.
+    /// Failures tied to a specific setting are keyed by that setting's name; group-level failures (which have no
+    /// single owning setting) are collected under the generic "settings" key.
+    /// </summary>
+    private static Dictionary<string, string[]> BuildSettingValidationErrors(IEnumerable<ConnectorSettingValueValidationResult> invalidResults)
+    {
+        var errors = new Dictionary<string, List<string>>();
+        foreach (var result in invalidResults)
+        {
+            var key = result.SettingValue?.Setting?.Name ?? "settings";
+            var message = result.ErrorMessage ?? "Invalid setting value.";
+            if (!errors.TryGetValue(key, out var messages))
+            {
+                messages = new List<string>();
+                errors[key] = messages;
+            }
+            messages.Add(message);
+        }
+        return errors.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToArray());
     }
 
     /// <summary>

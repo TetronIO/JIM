@@ -1012,7 +1012,11 @@ public class ConnectedSystemServer
                 DropDownValues = connectorSetting.DropDownValues,
                 Name = connectorSetting.Name,
                 Type = connectorSetting.Type,
-                Required = connectorSetting.Required
+                Required = connectorSetting.Required,
+                RequiredGroup = connectorSetting.RequiredGroup,
+                RequiredGroupCardinality = connectorSetting.RequiredGroupCardinality,
+                RequiredWhenSetting = connectorSetting.RequiredWhenSetting,
+                RequiredWhenValue = connectorSetting.RequiredWhenValue
             });
         }
     }
@@ -1025,19 +1029,22 @@ public class ConnectedSystemServer
     {
         ValidateConnectedSystemParameter(connectedSystem);
 
+        // generic validation that applies to all connectors: required, required-group (either/or) and required-when
+        // constraints declared in setting metadata
+        var results = ConnectorSettingValidator.Validate(connectedSystem.SettingValues);
+
         // work out what connector we need to instantiate, so that we can use its internal validation method
         // 100% expecting this to be something we need to centralise/improve later as we develop the connector definition system
         // especially when we need to support uploaded connectors, not just built-in ones
 
         if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
-            return CreateConfiguredLdapConnector().ValidateSettingValues(connectedSystem.SettingValues, Log.Logger);
+            results.AddRange(CreateConfiguredLdapConnector().ValidateSettingValues(connectedSystem.SettingValues, Log.Logger));
+        else if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.FileConnectorName)
+            results.AddRange(new FileConnector().ValidateSettingValues(connectedSystem.SettingValues, Log.Logger));
+        else
+            throw new NotImplementedException("Support for that connector definition has not been implemented yet."); // todo: support custom connectors.
 
-        if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.FileConnectorName)
-            return new FileConnector().ValidateSettingValues(connectedSystem.SettingValues, Log.Logger);
-
-        // todo: support custom connectors.
-
-        throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
+        return results;
     }
 
     private static void ValidateConnectedSystemParameter(ConnectedSystem connectedSystem)

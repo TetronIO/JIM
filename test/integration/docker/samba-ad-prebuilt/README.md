@@ -73,15 +73,15 @@ The `docker-compose.integration-tests.yml` automatically uses these images:
 
 ```bash
 # Uses pre-built images (default, fast)
-docker compose -f docker-compose.integration-tests.yml up -d
+docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d
 
 # Build images locally if not available
-docker compose -f docker-compose.integration-tests.yml up -d --build
+docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d --build
 
 # Fall back to standard base image (slow, but no pre-build required)
 SAMBA_IMAGE_PRIMARY=diegogslomp/samba-ad-dc \
 SAMBA_START_PERIOD=180s \
-docker compose -f docker-compose.integration-tests.yml up -d
+docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d
 ```
 
 ## Image Structure

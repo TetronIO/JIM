@@ -188,6 +188,20 @@ function Invoke-JIMApiRequest {
             try {
                 $errorObj = $errorMessage | ConvertFrom-Json
                 $errorMessage = $errorObj.message ?? $errorObj.Message ?? $errorMessage
+
+                # surface per-field validation errors (e.g. invalid connected system settings) so the caller sees
+                # which fields failed and why, not just the summary message
+                $validationErrors = $errorObj.validationErrors ?? $errorObj.ValidationErrors
+                if ($validationErrors) {
+                    $details = foreach ($field in $validationErrors.PSObject.Properties) {
+                        foreach ($fieldMessage in $field.Value) {
+                            "  - $($field.Name): $fieldMessage"
+                        }
+                    }
+                    if ($details) {
+                        $errorMessage = "$errorMessage`n$($details -join "`n")"
+                    }
+                }
             }
             catch {
                 # Keep original error message if JSON parsing fails

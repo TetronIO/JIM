@@ -5,10 +5,10 @@
 # Downloads and configures JIM for production deployment.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/TetronIO/JIM/main/setup.sh | bash
+#   curl -fsSL https://junctional.io/get | bash
 #
 # Or download and inspect first:
-#   curl -fsSL -o setup.sh https://raw.githubusercontent.com/TetronIO/JIM/main/setup.sh
+#   curl -fsSL -o setup.sh https://raw.githubusercontent.com/TetronIO/JIM/main/deploy/setup.sh
 #   bash setup.sh
 #
 # Non-interactive mode (for automation):

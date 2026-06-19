@@ -106,13 +106,13 @@ flowchart TD
 The setup script downloads compose files, walks you through configuration, and starts JIM:
 
 ```bash
-curl -fsSL https://tetron.io/jim/get | bash
+curl -fsSL https://junctional.io/get | bash
 ```
 
 Or download and inspect first:
 
 ```bash
-curl -fsSL -o setup.sh https://tetron.io/jim/get
+curl -fsSL -o setup.sh https://raw.githubusercontent.com/TetronIO/JIM/main/deploy/setup.sh
 less setup.sh
 bash setup.sh
 ```

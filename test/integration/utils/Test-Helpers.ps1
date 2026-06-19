@@ -769,7 +769,7 @@ function Clear-ConnectorFilesVolume {
 
     .DESCRIPTION
         `docker compose down -v` cannot delete jim-connector-files-volume while
-        samba-ad-primary / openldap-primary (started from docker-compose.integration-tests.yml
+        samba-ad-primary / openldap-primary (started from test/integration/docker/docker-compose.integration-tests.yml
         and kept alive across scenarios in -Scenario All mode) hold it open. Without an
         in-place wipe the volume silently persists between runs and accumulates stale files.
 

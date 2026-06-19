@@ -56,8 +56,8 @@
 - `jim-prd` - Create a new PRD from template (prompts for feature name)
 
 **Docker (Manual Commands):**
-- `docker compose -f db.yml up -d` - Start database (same as jim-db)
-- `docker compose -f db.yml down` - Stop database
+- `docker compose -f .devcontainer/db.yml up -d` - Start database (same as jim-db)
+- `docker compose -f .devcontainer/db.yml down` - Stop database
 - `docker compose logs [service]` - View service logs
 
 **IMPORTANT - Rebuilding Containers After Code Changes:**

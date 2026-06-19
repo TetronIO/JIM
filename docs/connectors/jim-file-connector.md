@@ -24,15 +24,15 @@ The JIM File Connector enables bi-directional synchronisation of identity data w
 |---------|-------------|---------|---------|
 | File Path | Path to the CSV file inside the container. Used for import, export, or both depending on mode. | *(required)* | `/connector-files/Users.csv` |
 | Mode | Operational mode: Import Only, Export Only, or Bidirectional. | `Import Only` | `Bidirectional` |
-| Object Type Column | Column in the file that contains the object type. Use when the file contains multiple object types. | *(optional)* | `Type` |
-| Object Type | Fixed object type name. Use when the file contains a single type of object. | *(optional)* | `User` |
+| Object Type Column | Column in the file that contains the object type. Use when the file contains multiple object types. | *(one of these two is required)* | `Type` |
+| Object Type | Fixed object type name. Use when the file contains a single type of object. | *(one of these two is required)* | `User` |
 | Delimiter | Field delimiter character. | `,` | `\t` (tab) |
 | Multi-Value Delimiter | Character used to separate multiple values within a single field. | `\|` | `;` |
 | Culture | Culture code for parsing locale-sensitive values. Uses invariant culture if not specified. | *(invariant)* | `en-gb` |
 | Stop On First Error | Stop processing when the first error is encountered. Useful for debugging. | `false` | `true` |
 
 !!! note "Object type configuration"
-    You must specify either **Object Type Column** or **Object Type** (but not both). If the file contains multiple object types in different rows, use Object Type Column to point to the column that identifies each row's type. If every row represents the same type, use Object Type to set a fixed value.
+    You must specify exactly one of **Object Type Column** or **Object Type**; JIM rejects the settings if you supply neither or both. If the file contains multiple object types in different rows, use Object Type Column to point to the column that identifies each row's type. If every row represents the same type, use Object Type to set a fixed value.
 
 ## File access
 

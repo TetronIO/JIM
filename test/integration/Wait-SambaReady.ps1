@@ -57,7 +57,7 @@ $containerStatus = docker ps --filter "name=samba-ad-primary" --format "{{.Statu
 
 if (-not $containerStatus) {
     Write-Host "${RED}✗ Samba AD container is not running${NC}"
-    Write-Host "${YELLOW}  Start it with: docker compose -f docker-compose.integration-tests.yml up -d${NC}"
+    Write-Host "${YELLOW}  Start it with: docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d${NC}"
     exit 1
 }
 
@@ -157,7 +157,7 @@ else {
     Write-Host ""
     Write-Host "${YELLOW}Troubleshooting:${NC}"
     Write-Host "  1. Check container logs: docker logs samba-ad-primary"
-    Write-Host "  2. Restart container: docker compose -f docker-compose.integration-tests.yml restart"
+    Write-Host "  2. Restart container: docker compose -f test/integration/docker/docker-compose.integration-tests.yml restart"
     Write-Host "  3. Check container is healthy: docker ps"
     Write-Host ""
 

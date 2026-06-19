@@ -30,7 +30,7 @@ The metaverse is the authoritative identity repository:
 
 ### 3. Modularity & Extensibility
 - **Connectors**: Implement `IConnector` and related interfaces for new systems
-- **Expressions**: C#-like expression language for attribute mappings, conditional logic, and scoping filters (see [Expression Language Guide](EXPRESSIONS_GUIDE.md))
+- **Expressions**: C#-like expression language for attribute mappings, conditional logic, and scoping filters (see [Expression Language Guide](../docs/concepts/expressions.md))
 - **Object Types**: Define custom identity types beyond built-in User/Group
 - **Attributes**: Extensible attribute schema via MetaverseAttribute
 
@@ -1464,7 +1464,7 @@ Invoke-JIMApiRequest -Method Delete -Endpoint "api/v1/connected-systems/$id"
 ## Resources
 
 - **Repository**: https://github.com/TetronIO/JIM
-- **Licensing**: https://tetron.io/jim/#licensing
+- **Licensing**: https://junctional.io/license
 - **Documentation**: `/home/user/JIM/README.md`
 - **.NET Docs**: https://learn.microsoft.com/dotnet/
 - **EF Core**: https://learn.microsoft.com/ef/core/

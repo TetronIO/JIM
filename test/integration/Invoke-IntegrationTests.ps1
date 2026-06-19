@@ -72,7 +72,7 @@ $ErrorActionPreference = "Stop"
 # Resolve paths using $PSScriptRoot (this script is in test/integration)
 $scriptRoot = $PSScriptRoot
 $repoRoot = (Resolve-Path "$scriptRoot/../..").Path
-$integrationCompose = Join-Path $repoRoot "docker-compose.integration-tests.yml"
+$integrationCompose = Join-Path $repoRoot "test/integration/docker/docker-compose.integration-tests.yml"
 $jimCompose = Join-Path $repoRoot "docker-compose.yml"
 $jimComposeOverride = Join-Path $repoRoot "docker-compose.override.yml"
 
