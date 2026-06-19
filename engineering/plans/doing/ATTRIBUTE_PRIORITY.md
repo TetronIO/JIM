@@ -648,6 +648,18 @@ Legend: [*] = contributes to N attributes that have multiple contributors
 
 > **First-release scope (decided Jun 2026).** The build stages below describe the full feature. To keep the first release lean, the following are deferred to a fast-follow: Surface 1 reordering (read-only precedence context only; initial-ordering-at-creation deferred), the persisted "configuration changed since last full synchronisation" indicator (the apply-only save-time acknowledgement still ships), and explain-on-demand (gated on #288 Sync Preview). **Retained** in the first release: core priority resolution + tri-state + `NullIsValue`; the safe-addition default; Surface 2 (management home) and Surface 3 (Data Flow); `NullValue` asserted-null persistence; and `ContributedBySyncRuleId` provenance. The priority-1 mass-null anomaly guardrail is **not** in attribute-priority scope at all; it is deferred to a holistic **Guardrails** capability (a cross-cutting set of mass-change protective controls spanning clears, updates, deletes, and exports), tracked as #846.
 
+### Prerequisites and linked issues (tracked as sub-issues of #91)
+
+These were spun out while sanity-checking the expression-null semantics (Open Question 8) and are GitHub sub-issues of #91 so they cannot get lost:
+
+| Issue | Type | Relationship | Ordering |
+|-------|------|--------------|----------|
+| **#842** | Bug | Inbound sync silently swallows expression *evaluation failures*. **Hard prerequisite:** before expression-null becomes a destructive "assert no value", a thrown expression must be cleanly separated from a deliberate null (errored via RPEI, value untouched). | **Land before** the Phase 2 expression-null/`ConnectedNoValue` work; safe to do now, independently. |
+| **#843** | Feature | Connected-system "Treat whitespace as null" setting. Companion: whitespace-as-null and expression/direct-null both feed the same `ConnectedNoValue` contribution state, and #843 supersedes the old "normalise whitespace internally" note. | Coupled to the Phase 2 `ConnectedNoValue` work; align the two. |
+| **#844** | Docs | Document expression null/whitespace authoring hazards (null asserts no value; null-safe functions propagate null; string-concat yields malformed non-null values). | Points 2-3 documentable now; point 1's priority/`NullIsValue` interaction lands with this feature (Phase 5). |
+
+Not a sub-issue: **#846** (holistic Guardrails) is deliberately *out of scope* (see the first-release scope note) and tracked separately, not nested under #91.
+
 #### Phase 0: Admin IA Review (prerequisite) ✅
 
 - [x] Decided (Jun 2026): place in the **Schema** concept now; **"Both"** navigation model; three surfaces (mapping editor, MVO object type detail page management home, Schema "Data Flow" discovery page). Reorder owned by Surface 2 ("one management home"). **Policy** recorded as the future home for cross-cutting governance (RBAC, lifecycle workflows); not stood up for this one feature, with only Surface 3 a candidate to migrate later. See UI section 1a and Open Question 6.
