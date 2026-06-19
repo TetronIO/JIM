@@ -404,7 +404,7 @@ Definition needed for modes 2 and 3: "affected objects" = MVOs of the object typ
 - **Contribution provenance (decided Jun 2026): record the winning sync rule, not just the system.** Every contributed MVO attribute value records *which sync rule* won resolution. `MetaverseObjectAttributeValue` gains `ContributedBySyncRuleId` (the precise winning rule; with the target attribute it also identifies the winning mapping) alongside the existing `ContributedBySystemId`, which is retained (denormalised, so it survives deletion of the rule, and keeps winner-share analytics a single-column aggregate). This closes a core traditional-ILM diagnosis gap: knowing only the contributing connected system is insufficient when one system backs many sync rules, because you cannot tell which rule set the value. Forward-compatible with the iteration-2 merge mode, which needs per-value provenance regardless.
 - **Asserted-null observability (decided Jun 2026): persisted on the value row via a `NullValue` flag.** This supersedes the earlier "no new MVO state / re-derive on demand" decision. The concrete requirement is that an admin viewing an MVO sees each attribute's value *and* its contributing rule/system, including blanks that were *positively asserted*; that cannot be served from nothing stored, and re-deriving every blank on every page load conflates "current truth" with "live recompute". An asserted null is therefore stored as a `MetaverseObjectAttributeValue` row with all value columns null and a new `NullValue` boolean set true, stamped with the same `ContributedBySyncRuleId`/`ContributedBySystemId` provenance as any other value. The three persisted outcomes are now distinct at rest: **value** (value column(s) set, `NullValue=false`), **asserted null** (value columns null, `NullValue=true`, provenance set), and **no contributor** (no row). `NullValue` follows the existing `*Value` property naming on the entity and keeps everything in one table (no provenance side-table; deliberately rejected as over-engineering for one use case). RPEI `SyncOutcome` nodes (#363) and explain-on-demand (#288 engine) remain the *history* and *why* surfaces; the row is the *current state* surface.
   - **Integrity invariant, honoured by query-filtering rather than per-consumer checks:** a `NullValue=true` row carries no value, and the engine must see the same row set it sees today. The cleanest and safest way to guarantee this is to **filter `NullValue=true` rows out of engine-side read paths at the query boundary**, not to rely on every consumer remembering a check. The read surfaces that must exclude them: (1) **the inbound diff that builds `removedAttributes`/`changedAttributes`** (the critical one; if a newly written `NullValue` row were read back as "still has a value", no removal delta is emitted and the stale value is never cleared from the target, a silent divergence); (2) drift detection / full-sync expected-state computation; (3) MVA value enumeration, value counts, existence checks, and API/UI value serialisation. The scalar export value-setting path is self-correcting because null value columns already express as a clear (`ExportEvaluationServer.cs:1643-1668`), but filtering keeps it uniform. Two paths deliberately *do* include `NullValue` rows: the observability/MVO-view reads (their whole purpose), and the resolution write path that manages row lifecycle (replacing value to asserted-null to absent transitions and preventing duplicate markers). Needs explicit test coverage, especially the inbound-diff case.
-- **UI placement and navigation (decided Jun 2026)**: place in the **Schema** concept now, with a **"Both"** navigation model, across three surfaces: (1) the import sync rule mapping editor (point-of-creation surfacing + initial ordering), (2) the MVO object type detail page attribute table (the management home; expandable `ChildRowContent` controls row), and (3) a new Schema "Attribute Flows" discovery list page. Reorder/NullIsValue management is owned canonically by Surface 2; Surfaces 1 and 3 surface and link to it. A **Policy** concept is recorded as the future home for cross-cutting governance (precedence, RBAC, lifecycle workflows) but deliberately not stood up for this one feature; only Surface 3 would migrate there later (Surface 2 is intrinsically schema-shaped). See UI section 2a
+- **UI placement and navigation (decided Jun 2026)**: place in the **Schema** concept now, with a **"Both"** navigation model, across three surfaces: (1) the import sync rule mapping editor (point-of-creation surfacing + initial ordering), (2) the MVO object type detail page attribute table (the management home; expandable `ChildRowContent` controls row), and (3) a new Schema "Data Flow" discovery list page (all inbound and outbound flows). Reorder/NullIsValue management is owned canonically by Surface 2; Surfaces 1 and 3 surface and link to it. A **Policy** concept is recorded as the future home for cross-cutting governance (precedence, RBAC, lifecycle workflows) but deliberately not stood up for this one feature; only Surface 3 would migrate there later (Surface 2 is intrinsically schema-shaped). See UI section 2a
 
 ---
 
@@ -731,115 +731,127 @@ Attribute priority is delivered across **three surfaces**, placed under the exis
 
 ##### 2a. The three surfaces
 
-**Surface 1: Import sync rule mapping editor (point-of-creation surfacing + initial ordering).** Detailed in 2b below. When a mapping targets a multi-contributor attribute, show the contributor list and let the admin set the new mapping's initial priority *at creation*, not merely view it. Rationale: the safe-addition default (new mapping lands lowest) is correct when you don't want it to win yet, but when you *do* intend the new contributor to be authoritative and synchronisation schedules are not paused, a sync in the gap before you reach the management surface would resolve with the new mapping at the bottom. Setting position at creation closes that window. This is a *constrained* gesture (place the new entry); the full reorder and "Null is a value" management lives on Surface 2, to which it links.
-
-**Surface 2: MVO object type detail page attribute table (the management home).** Extend the existing attribute table at `/admin/schema/object-types/{id}`; no separate per-attribute detail page is introduced. Attributes with multiple contributors show an indicator; a per-row expander opens an inline controls row (MudBlazor `MudTable` `ChildRowContent`, confirmed available; it renders a full-width row beneath the parent) hosting the ordered contributor list with drag-reorder and "Null is a value" toggles. The type detail page is already scoped to one object type, matching priority's per-object-type scope exactly. The multi-contributor badge is one cheap aggregate over `SyncRuleMapping` grouped by target attribute. Optional later analytics (winning-share per system/rule from `ContributedBySystemId`/`ContributedBySyncRuleId`) load independently so they never gate the config control's responsiveness; that stat reflects which contribution *won*, not which *could* contribute (losing contributions are not stored).
-
-**Surface 3: Attribute flows discovery page (new Schema list page).** A new list page under Admin > Schema (working title "Attribute Flows"; avoid the internal "IAF" label in UI) giving a single, system-wide view of **all attribute data flows, inbound and outbound** (decided Jun 2026): every import flow (single or multi-contributor) and every export flow, with MVO object type, connected system, source/target attributes, direction, and the owning sync rule (truncated, with tooltip/expander for long names). Filterable across all dimensions: direction (import / export / all), connected system, CS object type, MVO object type, CS attribute, MVO attribute, free-text. This makes it a data-flow / lineage map ("what writes `department` to AD?", "what contributes `manager` in the metaverse?"), not just a precedence audit; the ASCII mock below illustrates the import view. **No inline management in the first implementation** (decided): it is pure discovery; rows link to the relevant surface, import rows to Surface 2 (the attribute's precedence) and to the contributing sync rule mapping, export rows to the export sync rule mapping. Priority and "Null is a value" appear only on import rows (they are import concerns); export rows show direction-appropriate detail (e.g. the export mapping and its drift `EnforceState`). Because it spans both directions, this surface is effectively a general flows explorer that attribute priority plugs into, and is the natural first migrant to a future Policy area.
-
-**One management home (architecture principle).** The full reorder + "Null is a value" gesture is owned by **Surface 2**. Surface 1 offers only initial placement at creation; Surface 3 links to Surface 2. This avoids multiple authoritative places to change precedence, removing both inconsistency risk and "which surface wins?" confusion.
-
-**Shared component and shared write path.** The ordered contributor-list control (priority, sync rule, connected system, enabled/disabled greyed state, "Null is a value", drag handle) is a single reusable Blazor component embedded by Surfaces 1 and 2. All reorder saves go through one "get/set attribute priority order" API for a (MVO object type, MVO attribute) pair, which renumbers all affected `SyncRuleMapping.Priority` rows transactionally: reordering inherently renumbers siblings across *other* sync rules, so a per-surface ad-hoc write would risk duplicate priorities. Creation-in-position on Surface 1 is one transactional save (create the mapping, then apply the new order) and carries the same apply-only save-time acknowledgement as other priority changes (see "Configuration Change Propagation"), because placing a new contributor at priority 1 on an unpaused system shifts authority on the next sync.
-
-**Bulk-prioritise a connected system (later-phase feature).** "Make connected system X authoritative for everything it contributes" = move X's import flows to priority 1 for every attribute it contributes to. High blast radius (mass authority shift across many attributes and objects), so it is a prime consumer of the configuration-change preview framework (#827) and must offer impact analysis before applying. Deferred to a later phase; would live most naturally on Surface 3.
+**Surface 1: Import sync rule mapping editor (point-of-creation surfacing + initial ordering).** When a mapping targets a multi-contributor attribute, show the contributor list and let the admin set the new mapping's initial priority *at creation*, not merely view it. Rationale: the safe-addition default (new mapping lands lowest) is correct when you don't want it to win yet, but when you *do* intend the new contributor to be authoritative and synchronisation schedules are not paused, a sync in the gap before you reach the management surface would resolve with the new mapping at the bottom. Setting position at creation closes that window. This is a *constrained* gesture (place the new entry); the full reorder and "Null is a value" management lives on Surface 2, to which it links.
 
 ```
+Surface 1 mock - Import sync rule mapping editor
 +-----------------------------------------------------------------------------+
-| Attribute Priority                                                          |
+| Import Attribute Mapping (CorpDir People Inbound)                           |
 +-----------------------------------------------------------------------------+
-|                                                                             |
-| Object Type: [Person v]                                                     |
-|                                                                             |
-| +-------------------------------------------------------------------------+ |
-| | Attributes with Multiple Contributors                                   | |
-| +-------------------------------------------------------------------------+ |
-| |                                                                         | |
-| | v department (3 contributors)                                           | |
-| |   +-------------------------------------------------------------------+ | |
-| |   | # | Pri | Connected System    | Sync Rule        | Null Handling  | | |
-| |   +---+-----+---------------------+------------------+----------------+ | |
-| |   | = |  1  | HR System           | HR Import        | [x] Null=Value | | |
-| |   | = |  2  | Corporate Directory | CorpDir Import   | [ ] Null=Value | | |
-| |   | = |  3  | Self-Service AD     | SelfServ Import  | [ ] Null=Value | | |
-| |   +-------------------------------------------------------------------+ | |
-| |                                                                         | |
-| | > telephoneNumber (2 contributors)                                      | |
-| | > manager (2 contributors)                                              | |
-| | > displayName (2 contributors)                                          | |
-| |                                                                         | |
-| | ----------------------------------------------------------------------- | |
-| | Attributes with Single Contributor (no priority needed)                 | |
-| | employeeId (HR System), mail (Exchange), ...                            | |
-| |                                                                         | |
-| +-------------------------------------------------------------------------+ |
-|                                                                             |
-|                                                        [Save Changes]       |
-+-----------------------------------------------------------------------------+
-```
-
-**UX Features:**
-- **Drag-and-drop reordering** (= handle) - Drag rows to change priority order
-- **Expandable sections** - Click attribute name to expand/collapse contributor list
-- **Inline editing** - Toggle "Null is a value" checkbox directly in the table
-- **Visual grouping** - Separate "multiple contributors" (needs attention) from "single contributor" (no priority needed)
-- **Object type filter** - Dropdown to switch between Person, Group, etc.
-
-##### 2b. Import Sync Rule Mapping Editor
-
-When editing an import sync rule mapping, show priority context if the target MVO attribute has multiple contributors.
-
-```
-+-----------------------------------------------------------------------------+
-| Attribute Mapping                                                           |
-+-----------------------------------------------------------------------------+
-|                                                                             |
-| Source Attribute: [department v]                                            |
-| Target Attribute: [department v]                                            |
+| Source: [department v]              Target (MV): [department v]             |
 |                                                                             |
 | +-------------------------------------------------------------------------+ |
-| | [!] This attribute has 3 contributors. Current priority: 2 of 3         | |
-| |                                                                         | |
-| |   1. HR System (HR Import rule)                                         | |
-| |   2. Corporate Directory <- this mapping                                | |
-| |   3. Self-Service AD (SelfServ Import rule)                             | |
-| |                                                                         | |
-| |   [Manage Priority ->]                                                  | |
+| | [!] 'department' has 3 contributors. Set this mapping's starting        | |
+| |     priority now (refine later on the object type page):                | |
+| |   +-----+---------------------+--------------------+------------+        | |
+| |   | Pri | Connected System    | Sync Rule          | Null=Value |        | |
+| |   +-----+---------------------+--------------------+------------+        | |
+| |   |  1  | HR System           | HR People Inbound  |    [x]     |        | |
+| |   |= 2  | Corporate Directory | (this mapping)     |    [ ]     | <--    | |
+| |   |  3  | Self-Service AD     | AD Self-Service In |    [ ]     |        | |
+| |   +-----+---------------------+--------------------+------------+        | |
+| |   Drag (=) to set initial position.   [Manage on object type page ->]   | |
 | +-------------------------------------------------------------------------+ |
 |                                                                             |
 | > Advanced Options                                                          |
-|   +-----------------------------------------------------------------------+ |
-|   | [ ] Null is a value (no fallback)                                     | |
-|   |                                                                       | |
-|   |   When enabled, if this source contributes null/empty for this        | |
-|   |   attribute, the MVO attribute will be set to null without            | |
-|   |   checking lower-priority contributors.                               | |
-|   +-----------------------------------------------------------------------+ |
+|   [ ] Null is a value (assert no value; no fallback to lower priority)      |
 |                                                                             |
 |                                                    [Cancel]  [Save]         |
 +-----------------------------------------------------------------------------+
 ```
 
-**UX Features:**
-- **Priority context panel** - Shows where this mapping sits in the priority chain (only shown if multiple contributors exist)
-- **Link to central management** - "Manage Priority ->" button navigates to the Attribute Priority page, filtered to this attribute
-- **Advanced options accordion** - "Null is a value" checkbox hidden by default since it's an edge case
+**Surface 1 UX:**
+- **Initial-position control** - the new mapping is draggable within the contributor list so it can be created at the intended priority (the only reorder gesture on this surface).
+- **Link to the management home** - "Manage on object type page ->" navigates to Surface 2 for full reordering.
+- **Advanced options accordion** - "Null is a value" hidden by default; it is an edge case.
 
-##### 2c. Sync Rule Summary View
+**Surface 2: MVO object type detail page attribute table (the management home).** Extend the existing attribute table at `/admin/schema/object-types/{id}`; no separate per-attribute detail page is introduced. Attributes with multiple contributors show an indicator; a per-row expander opens an inline controls row (MudBlazor `MudTable` `ChildRowContent`, confirmed available; it renders a full-width row beneath the parent) hosting the ordered contributor list with drag-reorder and "Null is a value" toggles. The type detail page is already scoped to one object type, matching priority's per-object-type scope exactly (so there is no object-type selector; the type is fixed by the page). The multi-contributor badge is one cheap aggregate over `SyncRuleMapping` grouped by target attribute. Optional later analytics (winning-share per system/rule from `ContributedBySystemId`/`ContributedBySyncRuleId`) load independently so they never gate the config control's responsiveness; that stat reflects which contribution *won*, not which *could* contribute (losing contributions are not stored).
 
-In the sync rule list/summary view, indicate if any mappings have priority considerations:
+```
+Surface 2 mock - object type detail page attribute table (department row expanded)
+Schema > Object Types > Person
++-----------------------------------------------------------------------------+
+| Person - Attributes                                              [+ Add]    |
++------------------+--------+-----------+-------------------------------------+
+| Attribute        | Type   | Plurality | Contributors                        |
++------------------+--------+-----------+-------------------------------------+
+| accountName      | Text   | Single    | 1                                   |
+| v department     | Text   | Single    | 3   (expanded)                      |
+|   +---------------------------------------------------------------------+   |
+|   | # | Pri | Connected System    | Sync Rule          | Null=Value     |   |
+|   +---+-----+---------------------+--------------------+----------------+   |
+|   | = |  1  | HR System           | HR People Inbound  |     [x]        |   |
+|   | = |  2  | Corporate Directory | CorpDir People In. |     [ ]        |   |
+|   | = |  3  | Self-Service AD     | AD Self-Service In |     [ ]        |   |
+|   +---------------------------------------------------------------------+   |
+|   | Disabled rules show greyed but hold position.       [Save order]    |   |
+|   +---------------------------------------------------------------------+   |
+| > manager        | Ref    | Single    | 2                                   |
+| > member         | Ref    | Multi     | 2                                   |
+| employeeId       | Text   | Single    | 1                                   |
++------------------+--------+-----------+-------------------------------------+
+```
+
+**Surface 2 UX:**
+- **Expandable controls row** - `MudTable` `ChildRowContent`; click the attribute to slide open the contributor list beneath it.
+- **Drag-and-drop reordering** (= handle) - reorder contributions; renumbering is automatic.
+- **Inline "Null is a value"** - toggle directly in the row.
+- **Multi-contributor indicator** - the Contributors count flags which attributes need attention; single-contributor attributes need no priority.
+- **Disabled rules** - shown greyed but holding position, never contributing.
+
+**Surface 3: the "Data Flow" page (new Schema list page).** A new list page under Admin > Schema named **"Data Flow"** giving a single, system-wide view of **all attribute data flows, inbound and outbound** (decided Jun 2026): every import flow (single or multi-contributor) and every export flow, with MVO object type, connected system, source/target attributes, direction, and the owning sync rule (truncated, with tooltip/expander for long names). Filterable across all dimensions: direction (import / export / all), connected system, CS object type, MVO object type, CS attribute, MVO attribute, free-text. This makes it a data-flow / lineage map ("what writes `department` to AD?", "what contributes `manager` in the metaverse?"), not just a precedence audit. **No inline management in the first implementation** (decided): it is pure discovery; rows link to the relevant surface, import rows to Surface 2 (the attribute's precedence) and to the contributing sync rule mapping, export rows to the export sync rule mapping. Priority and "Null is a value" appear only on import rows (they are import concerns); export rows show direction-appropriate detail (e.g. the export mapping and its drift `EnforceState`). Because it spans both directions, this surface is effectively a general flows explorer that attribute priority plugs into, and is the natural first migrant to a future Policy area.
+
+```
+Surface 3 mock - the Data Flow page
+Schema > Data Flow
++--------------------------------------------------------------------------------------+
+| Data Flow                                                                            |
++--------------------------------------------------------------------------------------+
+| Direction [All v]  Connected System [All v]  MV Object Type [All v]                  |
+| CS Object Type [All v]  CS Attr [All v]  MV Attr [All v]  Search [____________]      |
++-----+---------+------------+---------------------+--------------------+-----+---------+
+| Dir | MV Type | MV Attr    | CS / CS Attr        | Sync Rule          | Pri | Null    |
++-----+---------+------------+---------------------+--------------------+-----+---------+
+| IN  | Person  | department | HR / dept           | HR People Inbound  |  1  | [x]     |
+| IN  | Person  | department | CorpDir / dept      | CorpDir People In. |  2  | [ ]     |
+| OUT | Person  | department | AD / department     | AD People Export   |  -  | (Enf.)  |
+| IN  | Person  | manager    | HR / managerId      | HR People Inbound  |  1  | [ ]     |
+| OUT | Group   | member     | AD / member         | AD Group Export    |  -  | (Enf.)  |
++-----+---------+------------+---------------------+--------------------+-----+---------+
+| Rows link to the sync rule mapping; IN rows also link to the attribute's priority    |
+| on the object type page. Pri / Null apply to IN rows only; (Enf.) = EnforceState.    |
++--------------------------------------------------------------------------------------+
+```
+
+**Surface 3 UX:**
+- **Direction filter** - import / export / all, plus filters on every dimension and free-text search.
+- **Read-only discovery** - no reorder/NullIsValue editing here; rows link out to the owning mapping (and Surface 2 for import precedence).
+- **Direction-appropriate columns** - Pri and Null on import rows; export rows surface the export mapping and its `EnforceState`.
+
+##### 2b. Cross-cutting design
+
+**One management home (architecture principle).** The full reorder + "Null is a value" gesture is owned by **Surface 2**. Surface 1 offers only initial placement at creation; Surface 3 links to Surface 2. This avoids multiple authoritative places to change precedence, removing both inconsistency risk and "which surface wins?" confusion.
+
+**Shared component and shared write path.** The ordered contributor-list control (priority, sync rule, connected system, enabled/disabled greyed state, "Null is a value", drag handle) is a single reusable Blazor component embedded by Surfaces 1 and 2. All reorder saves go through one "get/set attribute priority order" API for a (MVO object type, MVO attribute) pair, which renumbers all affected `SyncRuleMapping.Priority` rows transactionally: reordering inherently renumbers siblings across *other* sync rules, so a per-surface ad-hoc write would risk duplicate priorities. Creation-in-position on Surface 1 is one transactional save (create the mapping, then apply the new order) and carries the same apply-only save-time acknowledgement as other priority changes (see "Configuration Change Propagation"), because placing a new contributor at priority 1 on an unpaused system shifts authority on the next sync.
+
+**Bulk-prioritise a connected system (later-phase feature).** "Make connected system X authoritative for everything it contributes" = move X's import flows to priority 1 for every attribute it contributes to. High blast radius (mass authority shift across many attributes and objects), so it is a prime consumer of the configuration-change preview framework (#827) and must offer impact analysis before applying. Deferred to a later phase; would live most naturally on the Data Flow page.
+
+##### 2c. Supporting indicator: sync rule list
+
+Not one of the three primary surfaces, but a cheap signpost: in the sync rule list/summary view, indicate if any of a rule's mappings contribute to attributes that have multiple contributors, linking through to Surface 2.
 
 ```
 +-----------------------------------------------------------------------------+
 | Sync Rules                                                                  |
-+-----------------------------------------------------------------------------+
++-------------------------+-----------+-------------+----------+--------------+
 | Name                    | Direction | Object Type | Mappings | Priority     |
 +-------------------------+-----------+-------------+----------+--------------+
-| HR Import               | Import    | Person      | 12       | [*] 3 attrs  |
-| Corporate Dir Import    | Import    | Person      | 8        | [*] 2 attrs  |
-| AD Export               | Export    | Person      | 10       | -            |
+| HR People Inbound       | Import    | Person      | 12       | [*] 3 attrs  |
+| CorpDir People Inbound  | Import    | Person      | 8        | [*] 2 attrs  |
+| AD People Export        | Export    | Person      | 10       | -            |
 +-------------------------+-----------+-------------+----------+--------------+
 
-Legend: [*] = This rule contributes to N attributes that have multiple contributors
+Legend: [*] = contributes to N attributes that have multiple contributors
 ```
 
 ---
@@ -851,7 +863,7 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 - `MudTable` with `@ref` for drag-and-drop - For priority reordering (or MudDropZone)
 - `MudCheckBox` - For Null is a value toggle
 - `MudAlert` - For the priority context info panel
-- `MudSelect` - For object type filter
+- `MudSelect` - For the Data Flow page filters (direction, connected system, object types, attributes)
 
 **State Management:**
 - Priority changes should be tracked as pending until "Save Changes" is clicked
@@ -937,7 +949,7 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 
 #### Future Phase 0: Admin IA Review (prerequisite) ✅
 
-- [x] Decided (Jun 2026): place in the **Schema** concept now; **"Both"** navigation model; three surfaces (mapping editor, MVO object type detail page management home, Schema "Attribute Flows" discovery page). Reorder owned by Surface 2 ("one management home"). **Policy** recorded as the future home for cross-cutting governance (RBAC, lifecycle workflows); not stood up for this one feature, with only Surface 3 a candidate to migrate later. See UI section 2a and Open Question 9.
+- [x] Decided (Jun 2026): place in the **Schema** concept now; **"Both"** navigation model; three surfaces (mapping editor, MVO object type detail page management home, Schema "Data Flow" discovery page). Reorder owned by Surface 2 ("one management home"). **Policy** recorded as the future home for cross-cutting governance (RBAC, lifecycle workflows); not stood up for this one feature, with only Surface 3 a candidate to migrate later. See UI section 2a and Open Question 9.
 
 #### Future Phase 1: Schema and Model Changes
 
@@ -974,7 +986,7 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 - [ ] Add a single transactional "get/set attribute priority order" API for a (MVO object type, MVO attribute) pair that renumbers all affected `SyncRuleMapping.Priority` rows; both surfaces call it
 - [ ] **Surface 2 (management home):** extend the MVO object type detail page attribute table with a multi-contributor indicator and a `MudTable` `ChildRowContent` expander hosting the shared control
 - [ ] **Surface 1 (mapping editor):** show contributor context and allow setting the new mapping's initial priority at creation (constrained gesture), with a link to Surface 2; one transactional save (create mapping + apply order)
-- [ ] **Surface 3 (discovery):** new Schema "Attribute Flows" list page showing all inbound and outbound flows, with a direction filter plus filters (connected system, CS object type, MVO object type, CS attribute, MVO attribute, free-text); pure discovery (no inline management), rows linking to the relevant sync rule mapping (and Surface 2 for import precedence); priority / "Null is a value" columns on import rows only, export rows show the export mapping and its `EnforceState`; relocatable to a future Policy area
+- [ ] **Surface 3 (discovery):** new Schema "Data Flow" list page showing all inbound and outbound flows, with a direction filter plus filters (connected system, CS object type, MVO object type, CS attribute, MVO attribute, free-text); pure discovery (no inline management), rows linking to the relevant sync rule mapping (and Surface 2 for import precedence); priority / "Null is a value" columns on import rows only, export rows show the export mapping and its `EnforceState`; relocatable to a future Policy area
 - [ ] Add "Advanced Options" section to the mapping editor with the "Null is a value" checkbox
 - [ ] Save-time acknowledgement messaging and "configuration changed since last full synchronisation" indicator (see "Configuration Change Propagation"); applies to creation-in-position on Surface 1 too
 - [ ] Add a priority indicator column to the sync rule list view (Surface 2c)
@@ -1002,7 +1014,7 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 
 #### Future Phase 5: Documentation
 
-- [ ] Add user documentation for Attribute Priority page
+- [ ] Add user documentation for the attribute priority surfaces (object type detail page management home and the Data Flow page)
 - [ ] Add user documentation for NullIsValue setting
 
 ---
@@ -1037,7 +1049,7 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 
 8. **Interaction with drift detection** - RESOLVED into the design (Jun 2026): contributor legitimacy becomes priority-aware; a losing contributor's direct changes are corrected via `EnforceState` export re-evaluation. See "Interaction with Drift Detection" in the Design section.
 
-9. **Admin IA and navigation** - DECIDED (Jun 2026): place in the **Schema** concept now (not a flat admin-index addition), with the **"Both"** navigation model. Three surfaces: (1) import sync rule mapping editor (point-of-creation surfacing + initial ordering, with link to Surface 2); (2) MVO object type detail page attribute table as the management home (expandable `ChildRowContent` controls row with drag-reorder and "Null is a value"); (3) a new Schema "Attribute Flows" discovery list page (filterable, read/audit-first, links to Surface 2). Reorder management is owned canonically by Surface 2 ("one management home"); a shared Blazor control and a single transactional "set attribute priority order" API back Surfaces 1 and 2. A **Policy** concept is recorded as the likely future home for cross-cutting governance (precedence, RBAC, lifecycle workflows) but is deliberately not stood up for one feature; only Surface 3 would migrate there when Policy gains real mass (Surface 2 stays schema-shaped). See UI section 2a. Surface 3 decided (Jun 2026): a unified inbound + outbound data-flow view (direction filter), with no inline management in the first implementation (rows link to the relevant sync rule / attribute mapping only).
+9. **Admin IA and navigation** - DECIDED (Jun 2026): place in the **Schema** concept now (not a flat admin-index addition), with the **"Both"** navigation model. Three surfaces: (1) import sync rule mapping editor (point-of-creation surfacing + initial ordering, with link to Surface 2); (2) MVO object type detail page attribute table as the management home (expandable `ChildRowContent` controls row with drag-reorder and "Null is a value"); (3) a new Schema "Data Flow" discovery list page (filterable, read/audit-first, links to Surface 2). Reorder management is owned canonically by Surface 2 ("one management home"); a shared Blazor control and a single transactional "set attribute priority order" API back Surfaces 1 and 2. A **Policy** concept is recorded as the likely future home for cross-cutting governance (precedence, RBAC, lifecycle workflows) but is deliberately not stood up for one feature; only Surface 3 would migrate there when Policy gains real mass (Surface 2 stays schema-shaped). See UI section 2a. Surface 3 decided (Jun 2026): a unified inbound + outbound data-flow view (direction filter), with no inline management in the first implementation (rows link to the relevant sync rule / attribute mapping only).
 
 10. **Asserted null observability** - DECIDED (Jun 2026, revised): yes, and **persisted on the MVO value row**, reversing the earlier "no new MVO state" position. The concrete need that triggers persistence: an admin viewing an MVO must see each attribute's value *and* contributing rule/system, including blanks that were positively asserted; re-deriving every blank on each page load conflates current truth with live recompute, and is inconsistent with storing provenance for present values. An asserted null is a `MetaverseObjectAttributeValue` row with all value columns null and `NullValue=true`, stamped with `ContributedBySyncRuleId`/`ContributedBySystemId`; "no contributor" remains the absence of a row. Single-table (no provenance side-table). RPEI `SyncOutcome` nodes (#363) and explain-on-demand (#288 engine) remain the history and "why" surfaces. Integrity invariant: a `NullValue` row carries no exportable value and must be treated as "no value present" by every value consumer. See "Asserted-null observability" and "Contribution provenance" in the decision section.
 
