@@ -267,6 +267,8 @@
                     <MudGrid Spacing="2" Class="mt-2">
                         @foreach (var objectType in discoveryObjectTypes)
                         {
+                            var selectedAttributeCount = objectType.Attributes.Count(a => a.Selected);
+                            var totalAttributeCount = objectType.Attributes.Count;
                             <MudItem xs="12" sm="6" md="4">
                                 <MudPaper Outlined="true" Class="@(objectType.Selected ? "schema-type-card schema-type-card-selected" : "schema-type-card")">
                                     @* The whole card is the toggle target; the switch is presentational (read-only, no
@@ -279,7 +281,9 @@
                                                    ReadOnly="true"
                                                    Style="pointer-events: none;" />
                                         <span class="flex-grow-1 text-truncate">@objectType.Name</span>
-                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@objectType.Attributes.Count attrs</MudText>
+                                        <MudTooltip Text="@($"{selectedAttributeCount} of {totalAttributeCount} attributes selected")" Arrow="true" Placement="Placement.Top">
+                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@selectedAttributeCount / @totalAttributeCount</MudText>
+                                        </MudTooltip>
                                     </div>
                                 </MudPaper>
                             </MudItem>
