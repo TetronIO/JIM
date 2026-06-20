@@ -268,12 +268,16 @@
                         @foreach (var objectType in discoveryObjectTypes)
                         {
                             <MudItem xs="12" sm="6" md="4">
-                                <MudPaper Outlined="true" Class="@(objectType.Selected ? "pa-2 px-3 schema-type-card schema-type-card-selected" : "pa-2 px-3 schema-type-card")">
-                                    <div class="d-flex align-center" style="gap: 10px;">
+                                <MudPaper Outlined="true" Class="@(objectType.Selected ? "schema-type-card schema-type-card-selected" : "schema-type-card")">
+                                    @* The whole card is the toggle target; the switch is presentational (read-only, no
+                                       pointer events) so deselecting can be confirmed before anything actually changes. *@
+                                    <div class="d-flex align-center pa-2 px-3" style="gap: 10px; cursor: pointer;"
+                                         @onclick="@(() => HandleObjectTypeGridToggleAsync(objectType, !objectType.Selected))">
                                         <MudSwitch T="bool"
                                                    Value="@objectType.Selected"
                                                    Color="Color.Primary"
-                                                   ValueChanged="@((bool val) => HandleObjectTypeGridToggleAsync(objectType, val))" />
+                                                   ReadOnly="true"
+                                                   Style="pointer-events: none;" />
                                         <span class="flex-grow-1 text-truncate">@objectType.Name</span>
                                         <MudText Typo="Typo.body2" Class="mud-text-secondary">@objectType.Attributes.Count attrs</MudText>
                                     </div>
@@ -806,7 +810,8 @@
     /// <summary>
     /// Handles toggling an object type's selection from the discovery grid. Selecting is immediate; deselecting is
     /// confirmed first, because removing a type discards its attribute selection and configuration, which can
-    /// represent significant effort. Cancelling re-renders so the switch snaps back to its selected state.
+    /// represent significant effort. The grid switch is read-only/presentational, so nothing changes until this
+    /// runs: cancelling simply leaves the type selected.
     /// </summary>
     private async Task HandleObjectTypeGridToggleAsync(ConnectedSystemObjectType connectedSystemObjectType, bool isSelected)
     {
@@ -817,10 +822,7 @@
         }
 
         if (!await ConfirmObjectTypeRemovalAsync(connectedSystemObjectType))
-        {
-            StateHasChanged();
             return;
-        }
 
         HandleSelectedObjectTypeClick(connectedSystemObjectType, false);
     }

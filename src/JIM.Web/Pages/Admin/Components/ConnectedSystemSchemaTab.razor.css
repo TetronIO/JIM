@@ -1,15 +1,16 @@
-/* Keep inactive sub-tab labels as legible as the top-level page tabs; the MudBlazor default dims
-   inactive tabs too much to read comfortably against the dark background. The active tab keeps its
-   own primary highlight. */
+/* Keep inactive sub-tab labels as legible as the top-level page tabs; the MudBlazor default leaves
+   them dim/low-contrast against the dark surface. The active tab keeps its own primary highlight
+   (it is excluded here). !important is needed to beat the themed tab rules. */
 .schema-tabs ::deep .mud-tabs-tabbar .mud-tab:not(.mud-tab-active) {
-    color: var(--mud-palette-text-primary);
+    color: var(--mud-palette-text-primary) !important;
+    opacity: 1 !important;
 }
 
-/* The first sub-tab ("Object Types") is the schema discovery & selection home; keep it visually
-   distinct in the primary colour so it reads differently from the per-type configuration tabs.
-   Declared after the rule above so it wins for the first tab at equal specificity. */
-.schema-tabs ::deep .mud-tabs-tabbar .mud-tab:first-child {
-    color: var(--mud-palette-primary);
+/* The first sub-tab ("Object Types") is the schema discovery & selection home; when it is not the
+   active tab keep it in the primary colour so it reads differently from the per-type tabs. Higher
+   specificity (extra pseudo-class) than the rule above, so it wins for the first tab. */
+.schema-tabs ::deep .mud-tabs-tabbar .mud-tab:first-child:not(.mud-tab-active) {
+    color: var(--mud-palette-primary) !important;
     font-weight: 600;
 }
 
