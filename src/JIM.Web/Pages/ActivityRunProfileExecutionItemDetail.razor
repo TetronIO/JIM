@@ -946,7 +946,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                                                             @context.Status.ToString().SplitOnCapitalLetters()
                                                         </MudChip>
                                                     </MudTd>
-                                                    <MudTd DataLabel="Value">@GetPendingExportAttributeValue(context)</MudTd>
+                                                    <MudTd DataLabel="Value"><TextValueDisplay Value="@GetPendingExportAttributeValue(context)" /></MudTd>
                                                 </RowTemplate>
                                                 <NoRecordsContent>
                                                     <MudText Class="pa-4">No attribute changes recorded.</MudText>

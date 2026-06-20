@@ -40,7 +40,7 @@
                         @context.Status.ToString().SplitOnCapitalLetters()
                     </MudChip>
                 </MudTd>
-                <MudTd DataLabel="Value">@GetValueText(context)</MudTd>
+                <MudTd DataLabel="Value"><TextValueDisplay Value="@GetValueText(context)" /></MudTd>
             </RowTemplate>
             <PagerContent>
                 <MudTablePager />

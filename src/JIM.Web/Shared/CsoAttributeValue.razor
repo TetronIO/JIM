@@ -47,6 +47,10 @@ else if (Value.Attribute.Type == AttributeDataType.Binary && Value.ByteValue != 
 {
     <span class="mud-text-secondary">[Binary: @Value.ByteValue.Length bytes]</span>
 }
+else if (Value.Attribute.Type == AttributeDataType.Text)
+{
+    <TextValueDisplay Value="@Value.StringValue" />
+}
 else
 {
     @Value.ToStringNoName()

@@ -16,6 +16,8 @@ These components exist so a convention has a single source of truth. Prefer the 
 |-----------|---------|-----|
 | `<TableDensityToggle @bind-Dense="_dense" />` | The compact/normal row toggle in a table's `ToolBarContent` | "Row density" below |
 | `<EmptyValue />` | A table cell or inline value that is null/empty | "Empty values" below |
+| `<WhitespaceValue Value="@x" />` | A value that is present but consists only of whitespace (the `<EmptyValue />` sibling) | "Empty values" below |
+| `<TextValueDisplay Value="@x" />` | Any text attribute-value display: dispatches to `<EmptyValue />` / `<WhitespaceValue />` / the value | "Empty values" below |
 
 ## Row density (compact-row toggle)
 
@@ -57,6 +59,8 @@ For a table cell (or inline value) that is null/empty, render `<EmptyValue />` (
 
 - Only use it where the value can genuinely be empty (a nullable string, an optional date, etc.). Do **not** add a hyphen branch to columns that are always populated; that is dead code.
 - `<EmptyValue />` renders inline. If a cell needs the placeholder centred to match the column's populated rows, wrap it: `<div class="d-flex justify-center align-center" style="height: 100%; width: 100%;"><EmptyValue /></div>`.
+
+**Whitespace vs. empty (text attribute values).** A value can be *present but whitespace-only* (when a connected system imports whitespace and the mapping's "treat whitespace as no value" processing is off). Rendering it raw looks identical to no value, which is misleading. For any text **attribute-value** display, prefer `<TextValueDisplay Value="@x" />`: it renders `<EmptyValue />` for null/empty, `<WhitespaceValue />` (a low-lighted "(whitespace)" affordance with a tooltip visualising the characters) for whitespace-only, and the value itself otherwise. It is safe to pass a value that has already been formatted to a non-whitespace string for a non-text type (it simply renders unchanged), so string-returning value helpers can be wrapped directly: `<TextValueDisplay Value="@GetValueText(context)" />`. Use the bare `<EmptyValue />` for non-attribute fields (descriptions, names, etc.) where whitespace is not a meaningful distinction.
 
 ## Tooltips
 - ALWAYS use `Arrow="true" Placement="Placement.Top"` on all `<MudTooltip>` components

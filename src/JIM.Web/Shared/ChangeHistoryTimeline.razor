@@ -109,11 +109,11 @@ else
                                                         else
                                                                     {
                                                                         <MudText Class="mud-text-secondary" Style="display: inline;">
-                                                                            @change.OldValue</MudText>
+                                                                            <TextValueDisplay Value="@change.OldValue" /></MudText>
                                                                             <MudText Class="mud-text-secondary" Style="display: inline;"> →
                                                                             </MudText>
                                                                             <MudText Style="display: inline;">
-                                                                                @change.NewValue</MudText>
+                                                                                <TextValueDisplay Value="@change.NewValue" /></MudText>
                                                                             }
                                                                         }
                                                     else
@@ -121,12 +121,12 @@ else
                                                                             @* Set/Add values get bold emphasis, Removed values get de-emphasised *@
                                                                             @if (change.DisplayChangeType == "Removed" || change.DisplayChangeType == "Remove")
                                                                             {
-                                                                                <MudText Class="mud-text-secondary">@GetDisplayValue(change)
+                                                                                <MudText Class="mud-text-secondary"><TextValueDisplay Value="@GetDisplayValue(change)" />
                                                                                 </MudText>
                                                                             }
                                                                             else
                                                                             {
-                                                                                <MudText>@GetDisplayValue(change)
+                                                                                <MudText><TextValueDisplay Value="@GetDisplayValue(change)" />
                                                                                 </MudText>
                                                                             }
                                                                         }
@@ -414,11 +414,11 @@ else
                                                                 @* Simple scalar Add/Remove - bold for Set/Add, de-emphasised for Removed/Remove *@
                                                                 @if (context.DisplayChangeType == "Removed" || context.DisplayChangeType == "Remove")
                                                                 {
-                                                                    <MudText Class="mud-text-secondary">@context.DisplayValue</MudText>
+                                                                    <MudText Class="mud-text-secondary"><TextValueDisplay Value="@context.DisplayValue" /></MudText>
                                                                 }
                                                                 else
                                                                 {
-                                                                    <MudText>@context.DisplayValue</MudText>
+                                                                    <MudText><TextValueDisplay Value="@context.DisplayValue" /></MudText>
                                                                 }
                                                             }
                                                         </MudTd>

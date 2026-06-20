@@ -763,6 +763,34 @@ else if (_syncRule != null)
                                 </MudSelectItem>
                             }
                         </MudSelect>
+
+                        @* ─── Inbound value processing (#843) ─── *@
+                        @if (_attributeFlowMapping.TargetMetaverseAttribute?.Type == AttributeDataType.Text)
+                        {
+                            <MudText Typo="Typo.subtitle2" Class="mt-5">Value processing</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+                                Transforms applied to the imported text value before it flows to the Metaverse. By default, whitespace-only and empty values are treated as no value (they do not flow, and clear any existing value).
+                            </MudText>
+                            <MudCheckBox T="bool" Dense="true"
+                                Value="HasProcessingFlag(InboundValueProcessing.TreatWhitespaceAsNoValue)"
+                                ValueChanged="@((bool v) => SetProcessingFlag(InboundValueProcessing.TreatWhitespaceAsNoValue, v))"
+                                Label="Treat whitespace as no value" />
+                            <MudCheckBox T="bool" Dense="true"
+                                Value="HasProcessingFlag(InboundValueProcessing.TrimWhitespace)"
+                                ValueChanged="@((bool v) => SetProcessingFlag(InboundValueProcessing.TrimWhitespace, v))"
+                                Label="Trim leading and trailing whitespace" />
+                            <MudCheckBox T="bool" Dense="true"
+                                Value="HasProcessingFlag(InboundValueProcessing.CollapseInternalWhitespace)"
+                                ValueChanged="@((bool v) => SetProcessingFlag(InboundValueProcessing.CollapseInternalWhitespace, v))"
+                                Label="Collapse internal whitespace" />
+                            <MudSelect T="InboundCaseNormalisation" @bind-Value="_attributeFlowMapping.CaseNormalisation"
+                                Label="Case normalisation" Variant="Variant.Outlined" Class="mt-3">
+                                <MudSelectItem Value="InboundCaseNormalisation.None">None</MudSelectItem>
+                                <MudSelectItem Value="InboundCaseNormalisation.Upper">Upper case</MudSelectItem>
+                                <MudSelectItem Value="InboundCaseNormalisation.Lower">Lower case</MudSelectItem>
+                                <MudSelectItem Value="InboundCaseNormalisation.Title">Title case</MudSelectItem>
+                            </MudSelect>
+                        }
                     }
                     else if (_syncRule.Direction == SyncRuleDirection.Export)
                     {
@@ -1333,6 +1361,28 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/sync-rules/")
         _attributeFlowMappingSource.ConnectedSystemAttribute = null;
         _attributeFlowMappingSource.MetaverseAttribute = null;
         _attributeFlowMappingSource.Expression = null;
+    }
+
+    /// <summary>
+    /// Whether the inbound value-processing flag is set on the mapping being edited (#843).
+    /// </summary>
+    private bool HasProcessingFlag(InboundValueProcessing flag)
+    {
+        return _attributeFlowMapping != null && _attributeFlowMapping.InboundValueProcessing.HasFlag(flag);
+    }
+
+    /// <summary>
+    /// Sets or clears an inbound value-processing flag on the mapping being edited (#843).
+    /// </summary>
+    private void SetProcessingFlag(InboundValueProcessing flag, bool enabled)
+    {
+        if (_attributeFlowMapping == null)
+            return;
+
+        if (enabled)
+            _attributeFlowMapping.InboundValueProcessing |= flag;
+        else
+            _attributeFlowMapping.InboundValueProcessing &= ~flag;
     }
 
     private bool DisableAddAttributeFlowMappingButton()

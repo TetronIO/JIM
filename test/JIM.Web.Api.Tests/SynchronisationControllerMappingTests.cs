@@ -385,4 +385,111 @@ public class SynchronisationControllerMappingTests
     }
 
     #endregion
+
+    #region Inbound value processing (#843)
+
+    [Test]
+    public void SyncRuleMappingDto_FromEntity_CarriesInboundValueProcessing()
+    {
+        var entity = new SyncRuleMapping
+        {
+            Id = 11,
+            TargetMetaverseAttribute = new MetaverseAttribute { Id = 5, Name = "displayName" },
+            TargetMetaverseAttributeId = 5,
+            InboundValueProcessing = InboundValueProcessing.TreatWhitespaceAsNoValue | InboundValueProcessing.TrimWhitespace,
+            CaseNormalisation = InboundCaseNormalisation.Lower
+        };
+
+        var dto = SyncRuleMappingDto.FromEntity(entity);
+
+        Assert.That(dto.InboundValueProcessing, Is.EqualTo(InboundValueProcessing.TreatWhitespaceAsNoValue | InboundValueProcessing.TrimWhitespace));
+        Assert.That(dto.CaseNormalisation, Is.EqualTo(InboundCaseNormalisation.Lower));
+    }
+
+    [Test]
+    public async Task CreateSyncRuleMappingAsync_ImportMapping_SetsValueProcessingFromRequest()
+    {
+        const int syncRuleId = 1;
+        const int objectTypeId = 7;
+        var syncRule = new SyncRule { Id = syncRuleId, Name = "Import Rule", Direction = SyncRuleDirection.Import, ConnectedSystemObjectTypeId = objectTypeId };
+        var mvAttr = new MetaverseAttribute { Id = 5, Name = "displayName", Type = AttributeDataType.Text };
+        var csAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 20,
+            Name = "cn",
+            Type = AttributeDataType.Text,
+            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = objectTypeId }
+        };
+
+        SyncRuleMapping? captured = null;
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(syncRuleId)).ReturnsAsync(syncRule);
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(5, It.IsAny<bool>())).ReturnsAsync(mvAttr);
+        _mockConnectedSystemRepo.Setup(r => r.GetAttributeAsync(20)).ReturnsAsync(csAttr);
+        _mockConnectedSystemRepo.Setup(r => r.CreateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>()))
+            .Callback<SyncRuleMapping>(m => captured = m)
+            .Returns(Task.CompletedTask);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingAsync(It.IsAny<int>()))
+            .ReturnsAsync(() => captured);
+
+        var request = new CreateSyncRuleMappingRequest
+        {
+            TargetMetaverseAttributeId = 5,
+            InboundValueProcessing = InboundValueProcessing.TreatWhitespaceAsNoValue | InboundValueProcessing.TrimWhitespace,
+            CaseNormalisation = InboundCaseNormalisation.Lower,
+            Sources = new List<CreateSyncRuleMappingSourceRequest>
+            {
+                new() { Order = 0, ConnectedSystemAttributeId = 20 }
+            }
+        };
+
+        await _controller.CreateSyncRuleMappingAsync(syncRuleId, request);
+
+        Assert.That(captured, Is.Not.Null, "Mapping should have been created.");
+        Assert.That(captured!.InboundValueProcessing, Is.EqualTo(InboundValueProcessing.TreatWhitespaceAsNoValue | InboundValueProcessing.TrimWhitespace));
+        Assert.That(captured.CaseNormalisation, Is.EqualTo(InboundCaseNormalisation.Lower));
+    }
+
+    [Test]
+    public async Task CreateSyncRuleMappingAsync_ImportMapping_DefaultsToTreatWhitespaceAsNoValue()
+    {
+        const int syncRuleId = 1;
+        const int objectTypeId = 7;
+        var syncRule = new SyncRule { Id = syncRuleId, Name = "Import Rule", Direction = SyncRuleDirection.Import, ConnectedSystemObjectTypeId = objectTypeId };
+        var mvAttr = new MetaverseAttribute { Id = 5, Name = "displayName", Type = AttributeDataType.Text };
+        var csAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 20,
+            Name = "cn",
+            Type = AttributeDataType.Text,
+            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = objectTypeId }
+        };
+
+        SyncRuleMapping? captured = null;
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(syncRuleId)).ReturnsAsync(syncRule);
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(5, It.IsAny<bool>())).ReturnsAsync(mvAttr);
+        _mockConnectedSystemRepo.Setup(r => r.GetAttributeAsync(20)).ReturnsAsync(csAttr);
+        _mockConnectedSystemRepo.Setup(r => r.CreateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>()))
+            .Callback<SyncRuleMapping>(m => captured = m)
+            .Returns(Task.CompletedTask);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingAsync(It.IsAny<int>()))
+            .ReturnsAsync(() => captured);
+
+        // No value-processing fields supplied: the entity default (TreatWhitespaceAsNoValue) must stand.
+        var request = new CreateSyncRuleMappingRequest
+        {
+            TargetMetaverseAttributeId = 5,
+            Sources = new List<CreateSyncRuleMappingSourceRequest>
+            {
+                new() { Order = 0, ConnectedSystemAttributeId = 20 }
+            }
+        };
+
+        await _controller.CreateSyncRuleMappingAsync(syncRuleId, request);
+
+        Assert.That(captured, Is.Not.Null);
+        Assert.That(captured!.InboundValueProcessing, Is.EqualTo(InboundValueProcessing.TreatWhitespaceAsNoValue));
+        Assert.That(captured.CaseNormalisation, Is.EqualTo(InboundCaseNormalisation.None));
+    }
+
+    #endregion
 }

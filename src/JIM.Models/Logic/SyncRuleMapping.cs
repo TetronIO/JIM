@@ -85,6 +85,21 @@ public class SyncRuleMapping : IAuditable
     public int? TargetConnectedSystemAttributeId { get; set; }
 
     /// <summary>
+    /// Inbound (import) text value-processing transforms applied to the value as it flows to the target
+    /// Metaverse attribute. Defaults to <see cref="InboundValueProcessing.TreatWhitespaceAsNoValue"/>
+    /// (JIM's opinionated default). Only applies to import mappings targeting text attributes; ignored for
+    /// export mappings and non-text attribute types. See <see cref="CaseNormalisation"/> for the case option.
+    /// </summary>
+    public InboundValueProcessing InboundValueProcessing { get; set; } = InboundValueProcessing.TreatWhitespaceAsNoValue;
+
+    /// <summary>
+    /// Inbound (import) case normalisation applied to the text value as it flows to the target Metaverse
+    /// attribute. Defaults to <see cref="InboundCaseNormalisation.None"/>. Only applies to import mappings
+    /// targeting text attributes.
+    /// </summary>
+    public InboundCaseNormalisation CaseNormalisation { get; set; } = InboundCaseNormalisation.None;
+
+    /// <summary>
     /// Helper method to provide a description for the user on what type of source configuration this is.
     /// </summary>
     public SyncRuleMappingSourcesType GetSourceType()
