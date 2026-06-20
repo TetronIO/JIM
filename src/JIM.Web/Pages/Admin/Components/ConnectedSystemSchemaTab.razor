@@ -301,14 +301,15 @@
                 <MudTabPanel Text="@objectType.Name">
                     <div class="d-flex justify-space-between align-center flex-wrap" style="gap: 8px;">
                         <MudText Typo="Typo.h5"><span>Object Type:</span> <span class="mud-primary-text">@objectType.Name</span></MudText>
-                        <MudButton Variant="Variant.Outlined"
-                                   Color="Color.Error"
-                                   Size="Size.Small"
-                                   DropShadow="false"
-                                   StartIcon="@Icons.Material.Filled.RemoveCircleOutline"
-                                   OnClick="@(() => HandleRemoveObjectTypeAsync(objectType))">
-                            Remove from managed types
-                        </MudButton>
+                        <MudTooltip Text="Remove this object type from those JIM manages" Arrow="true" Placement="Placement.Top">
+                            <MudIconButton Icon="@Icons.Material.Filled.RemoveCircleOutline"
+                                           Variant="Variant.Filled"
+                                           Color="Color.Error"
+                                           Size="Size.Small"
+                                           DropShadow="false"
+                                           OnClick="@(() => HandleRemoveObjectTypeAsync(objectType))"
+                                           aria-label="Remove this object type from those JIM manages" />
+                        </MudTooltip>
                     </div>
                     @if (_selectedObjectType != null)
                     {
