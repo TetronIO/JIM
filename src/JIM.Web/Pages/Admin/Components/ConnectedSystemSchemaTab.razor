@@ -299,18 +299,7 @@
             @foreach (var objectType in selectedObjectTypes)
             {
                 <MudTabPanel Text="@objectType.Name">
-                    <div class="d-flex justify-space-between align-center flex-wrap" style="gap: 8px;">
-                        <MudText Typo="Typo.h5"><span>Object Type:</span> <span class="mud-primary-text">@objectType.Name</span></MudText>
-                        <MudTooltip Text="Remove this object type from those JIM manages" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Filled.RemoveCircleOutline"
-                                           Variant="Variant.Filled"
-                                           Color="Color.Error"
-                                           Size="Size.Small"
-                                           DropShadow="false"
-                                           OnClick="@(() => HandleRemoveObjectTypeAsync(objectType))"
-                                           aria-label="Remove this object type from those JIM manages" />
-                        </MudTooltip>
-                    </div>
+                    <MudText Typo="Typo.h5"><span>Object Type:</span> <span class="mud-primary-text">@objectType.Name</span></MudText>
                     @if (_selectedObjectType != null)
                     {
         @if (ConnectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId)
@@ -830,20 +819,6 @@
             return;
 
         HandleSelectedObjectTypeClick(connectedSystemObjectType, false);
-    }
-
-    /// <summary>
-    /// Removes an object type from those JIM manages, after confirmation (removal discards that type's attribute
-    /// selection and configuration). Returns the admin to the "Object Types" discovery tab afterwards.
-    /// </summary>
-    private async Task HandleRemoveObjectTypeAsync(ConnectedSystemObjectType connectedSystemObjectType)
-    {
-        if (!await ConfirmObjectTypeRemovalAsync(connectedSystemObjectType))
-            return;
-
-        HandleSelectedObjectTypeClick(connectedSystemObjectType, false);
-        _selectedObjectType = null;
-        _activeSchemaTabIndex = 0;
     }
 
     /// <summary>
