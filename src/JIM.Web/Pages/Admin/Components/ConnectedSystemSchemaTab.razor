@@ -219,7 +219,7 @@
             @* ─── Object type discovery & selection ─── *@
             <MudTabPanel Icon="@Icons.Material.Filled.Tune" Text="Object Types">
                 <MudText Typo="Typo.subtitle1" Class="mb-1">Choose which object types JIM should manage</MudText>
-                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+                <MudText Typo="Typo.body1" Class="mud-text-secondary mb-4">
                     Each type you select gets its own tab above, where you choose the attributes to import or export. To maximise system performance, select only the types you actually need.
                 </MudText>
 
@@ -273,7 +273,7 @@
                                         <MudSwitch T="bool"
                                                    Value="@objectType.Selected"
                                                    Color="Color.Primary"
-                                                   ValueChanged="@((bool val) => HandleSelectedObjectTypeClick(objectType, val))" />
+                                                   ValueChanged="@((bool val) => HandleObjectTypeGridToggleAsync(objectType, val))" />
                                         <span class="flex-grow-1 text-truncate">@objectType.Name</span>
                                         <MudText Typo="Typo.body2" Class="mud-text-secondary">@objectType.Attributes.Count attrs</MudText>
                                     </div>
@@ -281,7 +281,7 @@
                             </MudItem>
                         }
                     </MudGrid>
-                    <MudText Typo="Typo.caption" Class="mt-4 mud-text-secondary d-block" Align="Align.Center">
+                    <MudText Typo="Typo.body1" Class="mt-4 mud-text-secondary d-block" Align="Align.Center">
                         Showing @discoveryObjectTypes.Count of @ConnectedSystem.ObjectTypes.Count object types
                     </MudText>
                 }
@@ -804,10 +804,46 @@
     }
 
     /// <summary>
+    /// Handles toggling an object type's selection from the discovery grid. Selecting is immediate; deselecting is
+    /// confirmed first, because removing a type discards its attribute selection and configuration, which can
+    /// represent significant effort. Cancelling re-renders so the switch snaps back to its selected state.
+    /// </summary>
+    private async Task HandleObjectTypeGridToggleAsync(ConnectedSystemObjectType connectedSystemObjectType, bool isSelected)
+    {
+        if (isSelected)
+        {
+            HandleSelectedObjectTypeClick(connectedSystemObjectType, true);
+            return;
+        }
+
+        if (!await ConfirmObjectTypeRemovalAsync(connectedSystemObjectType))
+        {
+            StateHasChanged();
+            return;
+        }
+
+        HandleSelectedObjectTypeClick(connectedSystemObjectType, false);
+    }
+
+    /// <summary>
     /// Removes an object type from those JIM manages, after confirmation (removal discards that type's attribute
     /// selection and configuration). Returns the admin to the "Object Types" discovery tab afterwards.
     /// </summary>
     private async Task HandleRemoveObjectTypeAsync(ConnectedSystemObjectType connectedSystemObjectType)
+    {
+        if (!await ConfirmObjectTypeRemovalAsync(connectedSystemObjectType))
+            return;
+
+        HandleSelectedObjectTypeClick(connectedSystemObjectType, false);
+        _selectedObjectType = null;
+        _activeSchemaTabIndex = 0;
+    }
+
+    /// <summary>
+    /// Asks the admin to confirm removing an object type from those JIM manages, spelling out that the type's
+    /// attribute selection and configuration will be discarded. Returns true only if they confirm.
+    /// </summary>
+    private async Task<bool> ConfirmObjectTypeRemovalAsync(ConnectedSystemObjectType connectedSystemObjectType)
     {
         var confirmed = await DialogService.ShowMessageBoxAsync(
             "Remove object type?",
@@ -815,12 +851,7 @@
             yesText: "Remove",
             cancelText: "Cancel");
 
-        if (confirmed != true)
-            return;
-
-        HandleSelectedObjectTypeClick(connectedSystemObjectType, false);
-        _selectedObjectType = null;
-        _activeSchemaTabIndex = 0;
+        return confirmed == true;
     }
 
     private void HandleMakeExternalId(ConnectedSystemObjectTypeAttribute selectedAttribute)
