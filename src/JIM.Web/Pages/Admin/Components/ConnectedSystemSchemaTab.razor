@@ -847,12 +847,17 @@
     /// </summary>
     private async Task<bool> ConfirmObjectTypeRemovalAsync(ConnectedSystemObjectType connectedSystemObjectType)
     {
-        var confirmed = await DialogService.ShowMessageBoxAsync(
-            "Remove object type?",
-            $"Remove \"{connectedSystemObjectType.Name}\" from the object types JIM manages? This clears its attribute selection and configuration for this connected system. You can add it again later, but you will need to reconfigure it.",
-            yesText: "Remove",
-            cancelText: "Cancel");
+        // HTML-encode the name: it is interpolated into a MarkupString, which bypasses Razor's auto-encoding.
+        var encodedName = System.Net.WebUtility.HtmlEncode(connectedSystemObjectType.Name);
+        var options = new MessageBoxOptions
+        {
+            Title = "Remove object type?",
+            MarkupMessage = (MarkupString)$"Remove <code class=\"jim-code-inline\">{encodedName}</code> from the object types JIM manages? This clears its attribute selection and configuration for this connected system. You can add it again later, but you will need to reconfigure it.",
+            YesText = "Remove",
+            CancelText = "Cancel"
+        };
 
+        var confirmed = await DialogService.ShowMessageBoxAsync(options);
         return confirmed == true;
     }
 

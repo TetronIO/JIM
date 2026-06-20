@@ -1,17 +1,12 @@
 /* Keep inactive sub-tab labels as legible as the top-level page tabs; the MudBlazor default leaves
    them dim/low-contrast against the dark surface. The active tab keeps its own primary highlight
-   (it is excluded here). !important is needed to beat the themed tab rules. */
+   (it is excluded here). !important is needed to beat the themed tab rules.
+   Note: do NOT use :first-child to single out the "Object Types" tab. MudBlazor wraps each tab
+   individually, so every .mud-tab is the first child of its own wrapper and :first-child matches
+   them all. The Object Types tab is distinguished by its icon instead. */
 .schema-tabs ::deep .mud-tabs-tabbar .mud-tab:not(.mud-tab-active) {
     color: var(--mud-palette-text-primary) !important;
     opacity: 1 !important;
-}
-
-/* The first sub-tab ("Object Types") is the schema discovery & selection home; when it is not the
-   active tab keep it in the primary colour so it reads differently from the per-type tabs. Higher
-   specificity (extra pseudo-class) than the rule above, so it wins for the first tab. */
-.schema-tabs ::deep .mud-tabs-tabbar .mud-tab:first-child:not(.mud-tab-active) {
-    color: var(--mud-palette-primary) !important;
-    font-weight: 600;
 }
 
 /* Object type discovery cards. Subtle affordance on the outlined paper, with selected cards
