@@ -1057,6 +1057,21 @@ html[lang] .mud-alert-filled-normal {
     opacity: 0.8 !important;
 }
 
+/* Give outlined form fields a subtly distinct fill from the panel they sit in, so they read as
+   input areas rather than blending into the surface. We sit the field colour halfway between the
+   panel surface and the page background: this darkens fields in dark themes and lightens them in
+   light themes automatically, following each theme's own palette. (A fixed dark overlay flattered
+   dark mode but turned light-mode fields an ugly heavy grey, because the panel is lighter than the
+   page in both modes, so a constant darken only reads as "inset" on dark surfaces.) Painted on the
+   input container itself (which sits behind the text), with a matching radius, rather than the
+   absolutely-positioned outline element which renders over the text. A theme can override the
+   result via --jim-input-bg; otherwise it derives from the theme's palette. Filled inputs already
+   have their own background. */
+.mud-input.mud-input-outlined {
+    background-color: var(--jim-input-bg, color-mix(in srgb, var(--mud-palette-surface) 50%, var(--mud-palette-background)));
+    border-radius: var(--mud-default-borderradius);
+}
+
 /* Switch/checkbox label text */
 .mud-switch .mud-switch-label,
 .mud-checkbox .mud-checkbox-label {
