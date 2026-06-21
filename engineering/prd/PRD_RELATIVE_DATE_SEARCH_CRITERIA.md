@@ -31,7 +31,7 @@ There is also an **inconsistency** that compounds the problem: literal date comp
 
 ## Non-Goals
 
-- **Arbitrary date arithmetic / expression language.** No "now minus 2 months plus 3 days", no cron-style expressions, no calendar-aware business-day maths. The relative anchor is a single signed offset of one unit (count + unit + direction). Compound offsets are out of scope.
+- **Arbitrary date arithmetic / expression language.** No "now minus 2 months plus 3 days", no cron-style expressions, no calendar-aware business-day maths. The relative anchor is a single signed offset of one unit (count + unit + direction). Compound / nested offsets are out of scope. (Note: some traditional ILM criteria engines technically allow nesting duration functions to build compound offsets; we deliberately exclude that to keep the editor and validation surface simple, and revisit only on a concrete request.)
 - **Relative anchors for non-date types.** This feature is `DateTime`-attribute only. Relative numeric ranges ("salary within 10% of X") are not in scope.
 - **Business-hours / per-user time-zone semantics.** The feature computes boundaries from the host's UTC clock. It does not introduce business-day arithmetic or a per-user display time zone for relative resolution in v1. (Whole-day rounding for day-and-coarser units *is* in scope; see Resolved Decisions.)
 - **Changing the comparison-operator set.** No new `SearchComparisonType` values; relative dates reuse the existing `LessThan` / `GreaterThan` / etc. operators. A relative criterion changes how the *comparison value* is produced, not how the comparison is performed.
@@ -108,6 +108,7 @@ See the **UI Mocks** section below for the concrete layouts these requirements d
 
 ### Non-Functional Requirements
 
+- **Resolved on demand, never materialised.** Relative criteria resolve at the point of use: scope criteria at each sync run, searches at query time. The resolved boundary must never be cached or persisted onto the criterion. A consequence to set expectations for: a relative scope criterion's effective freshness equals the rule's **sync schedule** (a nightly rule re-evaluates "expires within 7 days" nightly, not continuously); searches are always fresh because they resolve per execution. If JIM ever introduces a materialised-membership ("set") concept, relative criteria must carry a recomputation trigger rather than a stored boundary, to avoid the stale-membership window that scheduled-recalculation designs suffer.
 - Relative resolution must add no measurable per-object overhead in the scoping hot path: the boundary is computed once per evaluation pass, not once per object.
 - Object-search date predicates must be index-friendly: the resolved boundary is a constant in the SQL, so the existing `DateTimeValue` index on attribute values is usable; no per-row function evaluation.
 - All UTC, consistent with JIM's DateTime policy (store/compare UTC; `DateTime.UtcNow`, never `DateTime.Now`).
@@ -354,7 +355,7 @@ Sync rule scoping relative dates are part of phase 3, not parallelised ahead of 
 
 These were open during drafting and have been settled. The functional requirements above are written as firm requirements reflecting them.
 
-1. **Whole-day rounding (with an Hours exception).** Relative boundaries for `Days`/`Weeks`/`Months`/`Years` truncate to midnight UTC, so a saved criterion does not drift by time of day. The `Hours` unit resolves to the exact instant. See requirement 3a.
+1. **Whole-day rounding (with an Hours exception).** Relative boundaries for `Days`/`Weeks`/`Months`/`Years` truncate to midnight UTC, so a saved criterion does not drift by time of day. The `Hours` unit resolves to the exact instant. See requirement 3a. This is a deliberate divergence from traditional ILM criteria engines, which resolve relative dates to the exact instant (`now` to the second); the `Hours` unit recovers that instant-level precision where it is genuinely needed.
 2. **Hours included.** The unit set is `Hours`, `Days`, `Weeks`, `Months`, `Years`. See requirement 2.
 3. **Close the broader predefined-search gaps, tracked as sub-tasks.** Typed comparison support and full `All`/`Any`/nesting group semantics are in scope for this feature and tracked as the two sub-issues listed under Dependencies, rather than deferred to a separate unscheduled effort.
 4. **Explicit value-mode enum.** Value mode is an explicit `enum ValueMode { Absolute, Relative }` field, not inferred from whether relative fields are populated, so the exclusive-mode validation (requirement 13) is unambiguous.
@@ -388,6 +389,19 @@ These were open during drafting and have been settled. The functional requiremen
 - Scoping doc: [`engineering/SYNC_RULE_SCOPING.md`](../SYNC_RULE_SCOPING.md)
 - Sub-task: predefined-search typed comparison support: [#849](https://github.com/TetronIO/JIM/issues/849)
 - Sub-task: predefined-search `All`/`Any` + nested group semantics: [#850](https://github.com/TetronIO/JIM/issues/850)
+
+### Prior art and alignment
+
+Relative date criteria are well-trodden ground in traditional ILM platforms, whose set/criteria filter engines (a subset of XPath 2.0) express relative dates as **`now ± an ISO-8601 duration`** compared with the ordinary relational operators, for example "objects whose expiry is at or before now + 7 days" or "objects modified at or after now − 10 days". Two aspects of that prior art directly validate decisions in this PRD:
+
+- **Operators are not date-specific.** The legacy engines reuse the standard relational/equality operators (`<`, `<=`, `>`, `>=`, `=`, `!=`) against a computed `now ± offset`, and restrict date attributes to those operators (no `contains` / `starts-with` on dates). This matches our "change the comparison value, not the operator" model (requirement 3) and our operator-applicability validation (requirement 15).
+- **Day/time vs year/month split for calendar correctness.** Those engines separate day-time durations (days, hours, etc.) from year-month durations (months, years) precisely because months and years require calendar arithmetic. This is the same reason we mandate `AddMonths` / `AddYears` rather than fixed multipliers (requirement 3). Our (count + unit + direction) tuple is a UI-friendly encoding of the same split: Hours/Days/Weeks resolve via day-time arithmetic, Months/Years via calendar arithmetic.
+
+Deliberate divergences from that prior art, recorded so they are conscious choices rather than omissions:
+
+1. **Whole-day rounding** (Resolved Decision 1): the legacy engines resolve to the exact instant; we truncate day-and-coarser units to midnight UTC for predictable membership, with the `Hours` unit recovering instant precision.
+2. **No compound / nested offsets** (Non-Goals): the legacy engines can nest duration functions to build `now − 1 year − 3 days`; we support a single unit per criterion.
+3. **On-demand evaluation rather than scheduled recalculation** (Non-Functional Requirements): legacy "temporal sets" recalculate membership on a background schedule and can be stale between runs; JIM resolves relative criteria at the point of use (sync run / query), so they are fresh when used, at the cost of freshness being tied to the sync schedule for scope criteria.
 
 ### Alignment note (issue #85 vs current code, June 2026)
 
