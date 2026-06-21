@@ -74,32 +74,37 @@ There is also an **inconsistency** that compounds the problem: literal date comp
 The Web API is a first-class delivery surface for this feature, not an afterthought: everything an administrator can do in the portal must be doable via the API, and the OpenAPI/Scalar reference must document it.
 
 12. The scoping-criteria DTOs and request models (`SyncRuleScopingCriteriaDto`, `CreateScopingCriterionRequest`) must carry the value-mode and the three relative fields (count, unit, direction) alongside the existing `DateTimeValue`. Field names and JSON shape to be settled in the implementation plan; the relative fields must be documented in the XML comments that drive the Scalar reference.
-13. The predefined-search API must gain **first-class criteria management** endpoints, which do not exist today (the only predefined-search write endpoint currently toggles `isEnabled`). At minimum: list/create/update/delete predefined-search **criteria groups** and **criteria**, mirroring the existing sync-rule scoping-criteria endpoint shape (`.../scoping-criteria`, `.../scoping-criteria/{groupId}/criteria`). These endpoints carry the typed values (from #849), group semantics (from #850), and the relative-date fields.
-14. All criteria write endpoints must validate and reject with `400 Bad Request` and a structured error: a Relative value on a non-`DateTime` attribute; a Relative value missing a unit or direction; a negative offset count (direction encodes sign, so the count is non-negative); an operator not applicable to the attribute's data type; and a criterion that sets both a literal `DateTimeValue` and Relative fields (mode is exclusive).
-15. Round-trip persistence must be lossless across both the scoping and predefined-search criteria APIs: a criterion POSTed/PATCHed with Relative fields and fetched back must return identical mode, count, unit, direction, comparison type, and (for text) case-sensitivity.
-16. ID-based identifier rules apply (per `src/CLAUDE.md`): GET exposes ID and, where applicable, name/URI overloads; PATCH/PUT/DELETE are ID-only.
+13. The predefined-search API must gain **first-class criteria management** endpoints, which do not exist today (the only predefined-search write endpoint currently toggles `isEnabled`). Full CRUD: create/list/**update**/delete predefined-search **criteria groups** (group type All/Any, position) and **criteria** (attribute, operator, typed/relative value). The route shape mirrors the existing sync-rule scoping endpoints (`.../criteria-groups`, `.../criteria-groups/{groupId}/criteria`, with `PUT`/`PATCH` on the `{groupId}` and `{criterionId}` paths). These endpoints carry the typed values (from #849), group semantics (from #850), and the relative-date fields.
+14. **Criterion in-place update on both surfaces.** A single criterion must be editable in place via `PATCH .../criteria/{criterionId}` (resolved value or relative fields, operator, attribute, case-sensitivity), preserving the criterion's ID and position. This is **new for sync rule scoping too**: the scoping API today exposes only POST and DELETE for criteria (`CreateScopingCriterion`, `DeleteScopingCriterion`), with no update path, so this feature **retrofits** an `UpdateScopingCriterion` (`PATCH .../scoping-criteria/{groupId}/criteria/{criterionId}`) endpoint alongside the new predefined-search equivalent. Editing a relative value (e.g. 7 days to 14 days) must not require delete-and-recreate.
+15. All criteria write endpoints must validate and reject with `400 Bad Request` and a structured error: a Relative value on a non-`DateTime` attribute; a Relative value missing a unit or direction; a negative offset count (direction encodes sign, so the count is non-negative); an operator not applicable to the attribute's data type; and a criterion that sets both a literal `DateTimeValue` and Relative fields (mode is exclusive).
+16. Round-trip persistence must be lossless across both the scoping and predefined-search criteria APIs: a criterion POSTed/PATCHed with Relative fields and fetched back must return identical mode, count, unit, direction, comparison type, and (for text) case-sensitivity.
+17. ID-based identifier rules apply (per `src/CLAUDE.md`): GET exposes ID and, where applicable, name/URI overloads; PATCH/PUT/DELETE are ID-only.
 
 #### PowerShell module (first-class support)
 
-The `JIM` PowerShell module is a first-class delivery surface: a script author must be able to build and inspect relative-date criteria and predefined-search criteria entirely from the module, with `ValidateSet` constraints, comment-based help, and examples consistent with the existing cmdlets.
+The `JIM` PowerShell module is a first-class delivery surface: a script author must be able to build, edit, and inspect relative-date criteria and predefined-search criteria entirely from the module, with `ValidateSet` constraints, comment-based help, and examples consistent with the existing cmdlets.
 
-17. `New-JIMScopingCriterion` must gain relative-date parameters: `-ValueMode` (`Absolute`/`Relative`), `-RelativeCount` (non-negative int), `-RelativeUnit` (`ValidateSet` of `Hours`,`Days`,`Weeks`,`Months`,`Years`), and `-RelativeDirection` (`ValidateSet` of `Ago`,`FromNow`). The relative parameters live in their own parameter set so they cannot be combined with `-DateTimeValue`. Comment-based help and at least one `.EXAMPLE` per direction must be added.
-18. The module must gain **first-class predefined-search criteria cmdlets**, which do not exist today (the `Search/` area currently has only `Get-JIMPredefinedSearch` and `Set-JIMPredefinedSearch`). At minimum: `New-JIMPredefinedSearchCriteriaGroup`, `New-JIMPredefinedSearchCriterion`, `Get-JIMPredefinedSearchCriteria`, `Remove-JIMPredefinedSearchCriterion`/`Group`, following the same verb-noun, parameter-set, attribute-by-id-or-name, and `SupportsShouldProcess` conventions as the existing `ScopingCriteria/` cmdlets. `New-JIMPredefinedSearchCriterion` carries the full typed-value and relative-date parameter surface.
-19. `ComparisonType` `ValidateSet`s in the cmdlets stay in lockstep with `SearchComparisonType`; relative parameters are validated client-side before the call so an obviously-invalid combination fails fast with a clear PowerShell error rather than a raw `400`.
+18. `New-JIMScopingCriterion` must gain relative-date parameters: `-ValueMode` (`Absolute`/`Relative`), `-RelativeCount` (non-negative int), `-RelativeUnit` (`ValidateSet` of `Hours`,`Days`,`Weeks`,`Months`,`Years`), and `-RelativeDirection` (`ValidateSet` of `Ago`,`FromNow`). The relative parameters live in their own parameter set so they cannot be combined with `-DateTimeValue`. Comment-based help and at least one `.EXAMPLE` per direction must be added.
+19. A new `Set-JIMScopingCriterion` cmdlet must be added (backed by the retrofitted criterion `PATCH` from requirement 14), so a scoping criterion (including its relative value) can be edited in place. It carries the same typed-value and relative-date parameter surface as `New-JIMScopingCriterion`, with only the explicitly-bound fields sent (the partial-update idiom already used by `Set-JIMPredefinedSearch` and `Set-JIMScopingCriteriaGroup`).
+20. The module must gain **first-class predefined-search criteria cmdlets**, which do not exist today (the `Search/` area currently has only `Get-JIMPredefinedSearch` and `Set-JIMPredefinedSearch`, the latter limited to `isEnabled`). Full set, following the same conventions as the existing `ScopingCriteria/` cmdlets (verb-noun, parameter sets, attribute-by-id-or-name, `SupportsShouldProcess`):
+    - `New-/Get-/Set-/Remove-JIMPredefinedSearchCriteriaGroup` (the `Set-` covers the group-update parity gap that scoping already has via `Set-JIMScopingCriteriaGroup`).
+    - `New-/Set-/Remove-JIMPredefinedSearchCriterion`, where `New-` and `Set-` carry the full typed-value and relative-date parameter surface.
+21. `ComparisonType` `ValidateSet`s in the cmdlets stay in lockstep with `SearchComparisonType`; relative parameters are validated client-side before the call so an obviously-invalid combination fails fast with a clear PowerShell error rather than a raw `400`.
 
 #### UI
 
 See the **UI Mocks** section below for the concrete layouts these requirements describe.
 
-20. The scope-criteria editor (`SyncRuleDetailScopingCriteriaGroup.razor`) must, when the selected attribute is `DateTime`, let the administrator choose Absolute or Relative. Absolute shows the existing `MudDatePicker`. Relative shows a numeric count input, a unit selector (Hours/Days/Weeks/Months/Years), and a direction selector (Ago/From now).
-21. The predefined-search criteria editor must offer the same Absolute/Relative date control. The current `PredefinedSearchDetail.razor` is read-only for criteria; the edit affordance it needs is delivered as part of #849 (see Dependencies).
-22. The relative control must render a plain-language preview of what it means, e.g. "Matches dates more than 7 days from now", so the administrator can confirm intent before saving.
-23. The criterion summary chip (currently rendered via `SyncRuleScopingCriteria.ToString()`) must render relative criteria in plain language (e.g. "30 days ago", not a resolved literal date), so a saved relative criterion reads as relative wherever it is displayed.
-24. Existing literal-date criteria must continue to display and edit exactly as today when their mode is Absolute.
+22. The scope-criteria editor (`SyncRuleDetailScopingCriteriaGroup.razor`) must, when the selected attribute is `DateTime`, let the administrator choose Absolute or Relative. Absolute shows the existing `MudDatePicker`. Relative shows a numeric count input, a unit selector (Hours/Days/Weeks/Months/Years), and a direction selector (Ago/From now).
+23. The predefined-search criteria editor must offer the same Absolute/Relative date control. The current `PredefinedSearchDetail.razor` is read-only for criteria; the edit affordance it needs is delivered as part of #849 (see Dependencies).
+24. Both editors must support editing an existing criterion in place (not only add/remove), backed by the criterion `PATCH` from requirement 14, so a relative value can be adjusted without deleting and recreating the criterion.
+25. The relative control must render a plain-language preview of what it means, e.g. "Matches dates more than 7 days from now", so the administrator can confirm intent before saving.
+26. The criterion summary chip (currently rendered via `SyncRuleScopingCriteria.ToString()`) must render relative criteria in plain language (e.g. "30 days ago", not a resolved literal date), so a saved relative criterion reads as relative wherever it is displayed.
+27. Existing literal-date criteria must continue to display and edit exactly as today when their mode is Absolute.
 
 #### Persistence
 
-25. The new fields (value mode, relative count, relative unit, relative direction) must be added to the `SyncRuleScopingCriteria` table and the predefined-search criteria table via an **append-only** EF Core migration. Existing rows default to Absolute mode with null relative fields, preserving current behaviour. Migrations must never be flattened or edited per the repository's migration policy.
+28. The new fields (value mode, relative count, relative unit, relative direction) must be added to the `SyncRuleScopingCriteria` table and the predefined-search criteria table via an **append-only** EF Core migration. Existing rows default to Absolute mode with null relative fields, preserving current behaviour. Migrations must never be flattened or edited per the repository's migration policy.
 
 ### Non-Functional Requirements
 
@@ -300,6 +305,13 @@ New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId $group.Id `
     -ValueMode Relative -RelativeCount 30 -RelativeUnit Days -RelativeDirection Ago
 ```
 
+### PowerShell: edit a relative value in place (no delete-and-recreate)
+
+```powershell
+# Widen the scope window from 7 to 14 days; the criterion keeps its ID and position.
+Set-JIMScopingCriterion -SyncRuleId 5 -GroupId 10 -CriterionId 42 -RelativeCount 14
+```
+
 ## Constraints
 
 - Must respect JIM's append-only EF migration policy; new columns only, no schema rewrite.
@@ -316,8 +328,8 @@ New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId $group.Id `
 | Models | `JIM.Models/Logic/SyncRuleScopingCriteria.cs` and `JIM.Models/Search/PredefinedSearchCriteria.cs` gain mode + relative fields; new enums (relative unit, direction, value mode) in `JIM.Models/Search/`. A shared relative-date resolution helper. |
 | Application | `ScopingEvaluationServer` resolves Relative criteria before comparison; shared resolution helper invoked here and by the search path. |
 | Data | `MetaverseRepository.GetMetaverseObjectsOfTypeAsync` implements typed `DateTime` predicates (literal + resolved-relative) and the group semantics those date criteria require, replacing the current `NotSupportedException`. |
-| API | `JIM.Web/Models/Api` scoping and predefined-search DTOs/request models carry the new fields; validation in `SynchronisationController`; **new first-class predefined-search criteria-group and criteria endpoints** (create/list/update/delete) on the predefined-search controller, which has no criteria-write endpoints today; OpenAPI/Scalar XML docs for all of the above. |
-| PowerShell | `New-JIMScopingCriterion` gains relative-date parameters in a new parameter set; **new `Search/` cmdlets** (`New-/Get-/Remove-JIMPredefinedSearchCriteriaGroup`, `New-/Get-/Remove-JIMPredefinedSearchCriterion`) carrying typed-value + relative-date parameters with `ValidateSet`s and comment-based help, mirroring the existing `ScopingCriteria/` cmdlets. |
+| API | `JIM.Web/Models/Api` scoping and predefined-search DTOs/request models carry the new fields; validation in `SynchronisationController`; **new first-class predefined-search criteria-group and criteria endpoints** (full CRUD) on the predefined-search controller, which has no criteria-write endpoints today; **retrofit `UpdateScopingCriterion` (`PATCH .../criteria/{criterionId}`)** which scoping lacks today; OpenAPI/Scalar XML docs for all of the above. |
+| PowerShell | `New-JIMScopingCriterion` gains relative-date parameters in a new parameter set; **new `Set-JIMScopingCriterion`** for in-place edit; **new `Search/` cmdlets** (`New-/Get-/Set-/Remove-JIMPredefinedSearchCriteriaGroup`, `New-/Set-/Remove-JIMPredefinedSearchCriterion`) carrying typed-value + relative-date parameters with `ValidateSet`s and comment-based help, mirroring the existing `ScopingCriteria/` cmdlets. |
 | UI | `SyncRuleDetailScopingCriteriaGroup.razor` Absolute/Relative date control with live preview; relative-aware criterion chip text; predefined-search criteria editor (new edit affordance, #849) reuses the same control. See UI Mocks. |
 | Docs | `engineering/SYNC_RULE_SCOPING.md` gains relative-date examples; user/API docs for searches; PowerShell cmdlet help. |
 | Tests | New unit tests for relative resolution (calendar arithmetic, hours-vs-day rounding, direction, null handling) and the search predicate path; API tests for the new predefined-search criteria endpoints and validation; integration coverage for a relative scope filter shifting over time. |
@@ -357,8 +369,9 @@ These were open during drafting and have been settled. The functional requiremen
 - [ ] Object/predefined searches support `Equals`/`NotEquals`/`LessThan`/`LessThanOrEquals`/`GreaterThan`/`GreaterThanOrEquals` on `DateTime` attributes (literal and relative); the previous `NotSupportedException` path for date ordering operators is gone.
 - [ ] Existing literal-date scope filters and any existing searches behave identically to before (backward compatible); existing scoping tests pass unmodified.
 - [ ] The API carries the new fields, round-trips them losslessly, and returns `400` for: relative-on-non-date, missing unit/direction, negative count, operator-not-applicable, both-modes-set.
-- [ ] The predefined-search API exposes first-class criteria-group and criteria endpoints (create/list/update/delete), documented in the Scalar reference; these did not exist before this feature.
-- [ ] The PowerShell module supports the full feature first-class: `New-JIMScopingCriterion` gains relative-date parameters, and new `New-/Get-/Remove-JIMPredefinedSearchCriteria(Group)` cmdlets exist with `ValidateSet`s, comment-based help, and worked examples.
+- [ ] The predefined-search API exposes first-class criteria-group and criteria endpoints (full CRUD), documented in the Scalar reference; these did not exist before this feature.
+- [ ] A single criterion is editable in place via `PATCH .../criteria/{criterionId}` on both surfaces (preserving ID and position); the scoping criterion-update endpoint, absent today, is retrofitted.
+- [ ] The PowerShell module supports the full feature first-class: `New-/Set-JIMScopingCriterion` (relative-date parameters; in-place edit) and new `New-/Get-/Set-/Remove-JIMPredefinedSearchCriteria(Group)` / `...Criterion` cmdlets exist with `ValidateSet`s, comment-based help, and worked examples.
 - [ ] The criteria editor UI exposes the Absolute/Relative choice with a live plain-language preview; Absolute uses the existing date picker; saved relative criteria render as plain language (e.g. "30 days ago") in the criterion chips.
 - [ ] New EF migration is append-only; existing rows default to Absolute with null relative fields.
 - [ ] Unit tests cover relative resolution (each unit, each direction, month/year edge cases, null attribute), and the search predicate path; integration coverage demonstrates a relative scope filter's set shifting with time.
