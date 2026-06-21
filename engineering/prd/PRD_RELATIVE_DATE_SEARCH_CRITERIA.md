@@ -198,11 +198,11 @@ These are low-fidelity layouts, not pixel specs. They show the controls and thei
 |                                                            |
 |   Count            Unit                Direction           |
 |  [   7   ]        [ Days        ▼ ]   [ From now    ▼ ]    |
-|                    Hours                Ago                |
-|                    Days                 From now           |
-|                    Weeks                                   |
-|                    Months                                  |
-|                    Years                                   |
+|                     Hours               Ago                |
+|                     Days                From now           |
+|                     Weeks                                  |
+|                     Months                                 |
+|                     Years                                  |
 |                                                            |
 |  ┌──────────────────────────────────────────────────┐      |
 |  │ ℹ  Matches when AccountExpiry is on or before     │      |
