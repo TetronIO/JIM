@@ -69,22 +69,37 @@ There is also an **inconsistency** that compounds the problem: literal date comp
 10. The query translator (`MetaverseRepository.GetMetaverseObjectsOfTypeAsync`) must translate a date criterion into an EF predicate over the relevant attribute-value column (`DateTimeValue`), replacing the current `NotSupportedException` for ordering operators on date attributes. Relative criteria resolve their boundary to a literal `DateTime` **before** the predicate is built (so the database sees a constant, and the existing `IX_MetaverseObjectAttributeValues_DateTimeValue` index is usable).
 11. The predefined-search query translator must implement full group semantics: `All` = AND, `Any` = OR, and nested groups, for **all** criteria types (not only the new date criteria). This closes the pre-existing `All`/`Any`/nesting TODOs in `MetaverseRepository`, which are currently unimplemented stubs. The existing text-criteria behaviour must continue to work and gain correct group composition. This broader query-engine work is tracked as a sub-task of #85 (see Dependencies) and is a prerequisite for date search returning correct results inside mixed groups.
 
-#### API
+#### REST API (first-class support)
 
-12. The REST DTOs and request models that carry scoping criteria (`SyncRuleScopingCriteriaDto`, `CreateScopingCriterionRequest`, and the predefined-search criteria equivalents) must carry the value-mode and the three relative fields (count, unit, direction) alongside the existing `DateTimeValue`. Field names and JSON shape to be settled in the implementation plan.
-13. The API must validate, and reject with `400 Bad Request` and a structured error: a Relative value on a non-`DateTime` attribute; a Relative value missing a unit or direction; a negative offset count (direction encodes sign, so the count is non-negative); and a criterion that sets both a literal `DateTimeValue` and Relative fields (mode is exclusive).
-14. Round-trip persistence must be lossless: a criterion POSTed/PATCHed with Relative fields and fetched back must return identical mode, count, unit, direction, and comparison type.
+The Web API is a first-class delivery surface for this feature, not an afterthought: everything an administrator can do in the portal must be doable via the API, and the OpenAPI/Scalar reference must document it.
+
+12. The scoping-criteria DTOs and request models (`SyncRuleScopingCriteriaDto`, `CreateScopingCriterionRequest`) must carry the value-mode and the three relative fields (count, unit, direction) alongside the existing `DateTimeValue`. Field names and JSON shape to be settled in the implementation plan; the relative fields must be documented in the XML comments that drive the Scalar reference.
+13. The predefined-search API must gain **first-class criteria management** endpoints, which do not exist today (the only predefined-search write endpoint currently toggles `isEnabled`). At minimum: list/create/update/delete predefined-search **criteria groups** and **criteria**, mirroring the existing sync-rule scoping-criteria endpoint shape (`.../scoping-criteria`, `.../scoping-criteria/{groupId}/criteria`). These endpoints carry the typed values (from #849), group semantics (from #850), and the relative-date fields.
+14. All criteria write endpoints must validate and reject with `400 Bad Request` and a structured error: a Relative value on a non-`DateTime` attribute; a Relative value missing a unit or direction; a negative offset count (direction encodes sign, so the count is non-negative); an operator not applicable to the attribute's data type; and a criterion that sets both a literal `DateTimeValue` and Relative fields (mode is exclusive).
+15. Round-trip persistence must be lossless across both the scoping and predefined-search criteria APIs: a criterion POSTed/PATCHed with Relative fields and fetched back must return identical mode, count, unit, direction, comparison type, and (for text) case-sensitivity.
+16. ID-based identifier rules apply (per `src/CLAUDE.md`): GET exposes ID and, where applicable, name/URI overloads; PATCH/PUT/DELETE are ID-only.
+
+#### PowerShell module (first-class support)
+
+The `JIM` PowerShell module is a first-class delivery surface: a script author must be able to build and inspect relative-date criteria and predefined-search criteria entirely from the module, with `ValidateSet` constraints, comment-based help, and examples consistent with the existing cmdlets.
+
+17. `New-JIMScopingCriterion` must gain relative-date parameters: `-ValueMode` (`Absolute`/`Relative`), `-RelativeCount` (non-negative int), `-RelativeUnit` (`ValidateSet` of `Hours`,`Days`,`Weeks`,`Months`,`Years`), and `-RelativeDirection` (`ValidateSet` of `Ago`,`FromNow`). The relative parameters live in their own parameter set so they cannot be combined with `-DateTimeValue`. Comment-based help and at least one `.EXAMPLE` per direction must be added.
+18. The module must gain **first-class predefined-search criteria cmdlets**, which do not exist today (the `Search/` area currently has only `Get-JIMPredefinedSearch` and `Set-JIMPredefinedSearch`). At minimum: `New-JIMPredefinedSearchCriteriaGroup`, `New-JIMPredefinedSearchCriterion`, `Get-JIMPredefinedSearchCriteria`, `Remove-JIMPredefinedSearchCriterion`/`Group`, following the same verb-noun, parameter-set, attribute-by-id-or-name, and `SupportsShouldProcess` conventions as the existing `ScopingCriteria/` cmdlets. `New-JIMPredefinedSearchCriterion` carries the full typed-value and relative-date parameter surface.
+19. `ComparisonType` `ValidateSet`s in the cmdlets stay in lockstep with `SearchComparisonType`; relative parameters are validated client-side before the call so an obviously-invalid combination fails fast with a clear PowerShell error rather than a raw `400`.
 
 #### UI
 
-15. The scope-criteria editor (`SyncRuleDetailScopingCriteriaGroup.razor`) must, when the selected attribute is `DateTime`, let the administrator choose Absolute or Relative. Absolute shows the existing `MudDatePicker`. Relative shows a numeric count input, a unit selector (Days/Weeks/Months/Years), and a direction selector (Ago/From now).
-16. The predefined-search criteria editor must offer the same Absolute/Relative date control. (Note: the current `PredefinedSearchDetail.razor` is read-only for criteria; the edit affordance it needs is a dependency, see Open Questions.)
-17. The relative control must render a plain-language preview of what it means, e.g. "Matches dates more than 7 days from now", so the administrator can confirm intent before saving.
-18. Existing literal-date criteria must continue to display and edit exactly as today when their mode is Absolute.
+See the **UI Mocks** section below for the concrete layouts these requirements describe.
+
+20. The scope-criteria editor (`SyncRuleDetailScopingCriteriaGroup.razor`) must, when the selected attribute is `DateTime`, let the administrator choose Absolute or Relative. Absolute shows the existing `MudDatePicker`. Relative shows a numeric count input, a unit selector (Hours/Days/Weeks/Months/Years), and a direction selector (Ago/From now).
+21. The predefined-search criteria editor must offer the same Absolute/Relative date control. The current `PredefinedSearchDetail.razor` is read-only for criteria; the edit affordance it needs is delivered as part of #849 (see Dependencies).
+22. The relative control must render a plain-language preview of what it means, e.g. "Matches dates more than 7 days from now", so the administrator can confirm intent before saving.
+23. The criterion summary chip (currently rendered via `SyncRuleScopingCriteria.ToString()`) must render relative criteria in plain language (e.g. "30 days ago", not a resolved literal date), so a saved relative criterion reads as relative wherever it is displayed.
+24. Existing literal-date criteria must continue to display and edit exactly as today when their mode is Absolute.
 
 #### Persistence
 
-19. The new fields (value mode, relative count, relative unit, relative direction) must be added to the `SyncRuleScopingCriteria` table and the predefined-search criteria table via an **append-only** EF Core migration. Existing rows default to Absolute mode with null relative fields, preserving current behaviour. Migrations must never be flattened or edited per the repository's migration policy.
+25. The new fields (value mode, relative count, relative unit, relative direction) must be added to the `SyncRuleScopingCriteria` table and the predefined-search criteria table via an **append-only** EF Core migration. Existing rows default to Absolute mode with null relative fields, preserving current behaviour. Migrations must never be flattened or edited per the repository's migration policy.
 
 ### Non-Functional Requirements
 
@@ -139,6 +154,152 @@ There is also an **inconsistency** that compounds the problem: literal date comp
 **When** the request is processed
 **Then** the API returns `400 Bad Request`; value mode is exclusive.
 
+## UI Mocks
+
+These are low-fidelity layouts, not pixel specs. They show the controls and their relationships; final styling follows the existing MudBlazor conventions (outlined variants, `mt-5` spacing, etc.). The editor reused for both sync rule scoping and predefined searches is the same "Add Criteria" dialog shape that exists today; the new part is the **Value mode** toggle and the **Relative** sub-form that appear only for `DateTime` attributes.
+
+### Mock 1: "Add Criteria" dialog, DateTime attribute, Absolute mode (unchanged from today)
+
+```
++------------------------------------------------------------+
+|  ⚖  Add Criteria                                           |
++------------------------------------------------------------+
+|                                                            |
+|  Metaverse Attribute            [ AccountExpiry      ▼ ]   |
+|                                                            |
+|  Comparison Type                [ Less Than Or Equals ▼]   |
+|                                                            |
+|  Value mode      ( • Absolute )  ( ○ Relative )            |
+|                                                            |
+|  Date Value                     [ 2026-09-01        📅 ]   |
+|                                                            |
++------------------------------------------------------------+
+|                                   [ Cancel ]  [ Add Criteria ]
++------------------------------------------------------------+
+```
+
+### Mock 2: same dialog, Relative mode selected (the new sub-form)
+
+```
++------------------------------------------------------------+
+|  ⚖  Add Criteria                                           |
++------------------------------------------------------------+
+|                                                            |
+|  Metaverse Attribute            [ AccountExpiry      ▼ ]   |
+|                                                            |
+|  Comparison Type                [ Less Than Or Equals ▼]   |
+|                                                            |
+|  Value mode      ( ○ Absolute )  ( • Relative )            |
+|                                                            |
+|   Count            Unit                Direction           |
+|  [   7   ]        [ Days        ▼ ]   [ From now    ▼ ]    |
+|                    Hours                Ago                 |
+|                    Days                 From now           |
+|                    Weeks                                   |
+|                    Months                                  |
+|                    Years                                   |
+|                                                            |
+|  ┌──────────────────────────────────────────────────┐     |
+|  │ ℹ  Matches when AccountExpiry is on or before     │     |
+|  │    7 days from now (re-evaluated each run).        │     |
+|  └──────────────────────────────────────────────────┘     |
+|                                                            |
++------------------------------------------------------------+
+|                                   [ Cancel ]  [ Add Criteria ]
++------------------------------------------------------------+
+```
+
+Notes:
+- **Value mode** is a `MudRadioGroup` (or segmented toggle). It renders only when the chosen attribute is `DateTime`; for all other types the dialog is exactly as today.
+- The three Relative inputs are a `MudNumericField` (Count, min 0) + two `MudSelect`s (Unit, Direction). The **Hours** unit is present per the resolved decision.
+- The blue info box is the live plain-language **preview** (requirement 22). It updates as the operator, count, unit, and direction change, and states explicitly that the value is re-evaluated each run, so an administrator understands it is not a frozen date.
+
+### Mock 3: saved criterion chips (list view), showing a relative criterion in plain language
+
+```
+CRITERIA GROUP. LOGIC TYPE: ALL
+
+ (MV) AccountExpiry   [ Less Than Or Equals ]   [ 7 days from now ]   🗑
+ (MV) Department      [ Equals ]                [ Text: Finance   ]   🗑
+
+           [ + Add Criteria Group ]   [ + Add Criteria ]
+```
+
+The relative chip reads "7 days from now", not a resolved literal date (requirement 23). The literal `Department` criterion is unchanged.
+
+### Mock 4: predefined-search criteria editor (new edit affordance, delivered in #849)
+
+`PredefinedSearchDetail.razor` is read-only today. #849 adds an editor that reuses the same "Add Criteria" dialog shape as Mocks 1 and 2, so an administrator builds object-search date filters (literal or relative) with an identical experience to sync rule scoping.
+
+```
+Predefined Search: "Joiners (last 30 days)"          [ Edit ] [ Run ]
+------------------------------------------------------------------
+ Object type: User
+
+ CRITERIA GROUP. LOGIC TYPE: ALL
+   (MV) HireDate    [ Greater Than Or Equals ]  [ 30 days ago ]   🗑
+
+            [ + Add Criteria Group ]   [ + Add Criteria ]
+------------------------------------------------------------------
+ Results (live):  142 users
+```
+
+## API and PowerShell Examples
+
+These illustrate the first-class API and module surfaces (requirements 12 to 19). Exact field names and routes are settled in the implementation plan; shapes mirror the existing scoping-criteria endpoint and the existing `New-JIMScopingCriterion` cmdlet.
+
+### REST: add a relative scope criterion ("expires within 7 days")
+
+```
+POST /api/v1/synchronisation/sync-rules/5/scoping-criteria/10/criteria
+Content-Type: application/json
+
+{
+  "metaverseAttributeName": "AccountExpiry",
+  "comparisonType": "LessThanOrEquals",
+  "valueMode": "Relative",
+  "relativeCount": 7,
+  "relativeUnit": "Days",
+  "relativeDirection": "FromNow"
+}
+```
+
+### REST: add a relative criterion to a predefined search (new endpoint, #849/#850)
+
+```
+POST /api/v1/predefined-searches/3/criteria-groups/8/criteria
+Content-Type: application/json
+
+{
+  "metaverseAttributeName": "HireDate",
+  "comparisonType": "GreaterThanOrEquals",
+  "valueMode": "Relative",
+  "relativeCount": 30,
+  "relativeUnit": "Days",
+  "relativeDirection": "Ago"
+}
+```
+
+### PowerShell: relative scope criterion
+
+```powershell
+New-JIMScopingCriterion -SyncRuleId 5 -GroupId 10 `
+    -MetaverseAttributeName 'AccountExpiry' `
+    -ComparisonType LessThanOrEquals `
+    -ValueMode Relative -RelativeCount 7 -RelativeUnit Days -RelativeDirection FromNow
+```
+
+### PowerShell: relative predefined-search criterion (new cmdlets, #849/#850)
+
+```powershell
+$group = New-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId 3 -GroupType All -PassThru
+
+New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId $group.Id `
+    -MetaverseAttributeName 'HireDate' `
+    -ComparisonType GreaterThanOrEquals `
+    -ValueMode Relative -RelativeCount 30 -RelativeUnit Days -RelativeDirection Ago
+```
+
 ## Constraints
 
 - Must respect JIM's append-only EF migration policy; new columns only, no schema rewrite.
@@ -155,10 +316,11 @@ There is also an **inconsistency** that compounds the problem: literal date comp
 | Models | `JIM.Models/Logic/SyncRuleScopingCriteria.cs` and `JIM.Models/Search/PredefinedSearchCriteria.cs` gain mode + relative fields; new enums (relative unit, direction, value mode) in `JIM.Models/Search/`. A shared relative-date resolution helper. |
 | Application | `ScopingEvaluationServer` resolves Relative criteria before comparison; shared resolution helper invoked here and by the search path. |
 | Data | `MetaverseRepository.GetMetaverseObjectsOfTypeAsync` implements typed `DateTime` predicates (literal + resolved-relative) and the group semantics those date criteria require, replacing the current `NotSupportedException`. |
-| API | `JIM.Web/Models/Api` scoping and predefined-search DTOs/request models carry the new fields; validation in the controllers (`SynchronisationController` and the predefined-search controller). |
-| UI | `SyncRuleDetailScopingCriteriaGroup.razor` Absolute/Relative date control with preview; predefined-search criteria editor gains the same control (and an edit affordance if none exists). |
-| Docs | `engineering/SYNC_RULE_SCOPING.md` gains relative-date examples; user docs for searches. |
-| Tests | New unit tests for relative resolution (calendar arithmetic, direction, null handling) and the search predicate path; integration coverage for a relative scope filter shifting over time. |
+| API | `JIM.Web/Models/Api` scoping and predefined-search DTOs/request models carry the new fields; validation in `SynchronisationController`; **new first-class predefined-search criteria-group and criteria endpoints** (create/list/update/delete) on the predefined-search controller, which has no criteria-write endpoints today; OpenAPI/Scalar XML docs for all of the above. |
+| PowerShell | `New-JIMScopingCriterion` gains relative-date parameters in a new parameter set; **new `Search/` cmdlets** (`New-/Get-/Remove-JIMPredefinedSearchCriteriaGroup`, `New-/Get-/Remove-JIMPredefinedSearchCriterion`) carrying typed-value + relative-date parameters with `ValidateSet`s and comment-based help, mirroring the existing `ScopingCriteria/` cmdlets. |
+| UI | `SyncRuleDetailScopingCriteriaGroup.razor` Absolute/Relative date control with live preview; relative-aware criterion chip text; predefined-search criteria editor (new edit affordance, #849) reuses the same control. See UI Mocks. |
+| Docs | `engineering/SYNC_RULE_SCOPING.md` gains relative-date examples; user/API docs for searches; PowerShell cmdlet help. |
+| Tests | New unit tests for relative resolution (calendar arithmetic, hours-vs-day rounding, direction, null handling) and the search predicate path; API tests for the new predefined-search criteria endpoints and validation; integration coverage for a relative scope filter shifting over time. |
 
 ## Dependencies
 
@@ -166,9 +328,15 @@ This feature is decomposed into the following sub-tasks of #85. The two predefin
 
 - **Sub-task: Predefined-search typed comparison support** (sub-issue, see Additional Context). `PredefinedSearchCriteria` carries only `StringValue` today and the query translator throws `NotSupportedException` for ordering operators. This sub-task adds typed value carriers (including `DateTime`) and implements the ordering predicates. Prerequisite for the object-search half of this feature.
 - **Sub-task: Predefined-search group semantics (`All`/`Any` + nesting)** (sub-issue, see Additional Context). Closes the pre-existing unimplemented group-logic TODOs in `MetaverseRepository` (requirement 11). Prerequisite for any multi-criteria predefined search returning correct results.
-- **Predefined-search criteria editing UI.** `PredefinedSearchDetail.razor` currently displays criteria read-only; the object-search half needs an edit affordance for the criteria, including the Absolute/Relative date control (requirement 16).
+- **Predefined-search criteria editing UI.** `PredefinedSearchDetail.razor` currently displays criteria read-only; the object-search half needs an edit affordance for the criteria, including the Absolute/Relative date control (requirement 21). Delivered within #849.
 
-The implementation plan should sequence delivery as: predefined-search typed comparison + group semantics first (the enabling gaps), then relative dates layered onto both scoping and search. Sync-rule scoping relative dates can proceed in parallel since the literal path there already works.
+The implementation is **strictly sequential** (a single implementer is delivering all of it here, so phases land one after another, each building and testing green before the next starts):
+
+1. **#849 (predefined-search typed comparison support)** first: typed value carriers + ordering predicates, so date search has a literal foundation.
+2. **#850 (predefined-search `All`/`Any` + nesting group semantics)** next: correct multi-criteria composition on top of #849.
+3. **Relative date/time criteria** last, layered onto the now-working literal paths for *both* sync rule scoping and object search, including the shared resolution helper, API, PowerShell, and UI.
+
+Sync rule scoping relative dates are part of phase 3, not parallelised ahead of it; keeping a single linear order avoids merge churn and lets each phase's tests gate the next.
 
 ## Resolved Decisions
 
@@ -188,8 +356,10 @@ These were open during drafting and have been settled. The functional requiremen
 - [ ] Predefined-search group semantics (`All`/`Any` + nesting) are implemented for all criteria types (closing the prior TODO stubs), delivered via the tracked sub-issue.
 - [ ] Object/predefined searches support `Equals`/`NotEquals`/`LessThan`/`LessThanOrEquals`/`GreaterThan`/`GreaterThanOrEquals` on `DateTime` attributes (literal and relative); the previous `NotSupportedException` path for date ordering operators is gone.
 - [ ] Existing literal-date scope filters and any existing searches behave identically to before (backward compatible); existing scoping tests pass unmodified.
-- [ ] The API carries the new fields, round-trips them losslessly, and returns `400` for: relative-on-non-date, missing unit/direction, negative count, both-modes-set.
-- [ ] The criteria editor UI exposes the Absolute/Relative choice with a plain-language preview; Absolute uses the existing date picker.
+- [ ] The API carries the new fields, round-trips them losslessly, and returns `400` for: relative-on-non-date, missing unit/direction, negative count, operator-not-applicable, both-modes-set.
+- [ ] The predefined-search API exposes first-class criteria-group and criteria endpoints (create/list/update/delete), documented in the Scalar reference; these did not exist before this feature.
+- [ ] The PowerShell module supports the full feature first-class: `New-JIMScopingCriterion` gains relative-date parameters, and new `New-/Get-/Remove-JIMPredefinedSearchCriteria(Group)` cmdlets exist with `ValidateSet`s, comment-based help, and worked examples.
+- [ ] The criteria editor UI exposes the Absolute/Relative choice with a live plain-language preview; Absolute uses the existing date picker; saved relative criteria render as plain language (e.g. "30 days ago") in the criterion chips.
 - [ ] New EF migration is append-only; existing rows default to Absolute with null relative fields.
 - [ ] Unit tests cover relative resolution (each unit, each direction, month/year edge cases, null attribute), and the search predicate path; integration coverage demonstrates a relative scope filter's set shifting with time.
 - [ ] `engineering/SYNC_RULE_SCOPING.md` documents relative-date criteria with at least two worked examples.
@@ -208,4 +378,4 @@ These were open during drafting and have been settled. The functional requiremen
 
 ### Alignment note (issue #85 vs current code, June 2026)
 
-The issue states "at the moment you can perform greater than and less than date searches". As of this PRD that is true **only for sync rule scoping**; **object/predefined searches support no date comparison at all** (`PredefinedSearchCriteria` is `StringValue`-only and the query translator throws `NotSupportedException` for ordering operators). The feature is therefore larger on the search side than the issue implies: literal date search must be built before relative date search can sit on it. The sync-rule-scoping side is genuinely incremental. This is reflected in the Dependencies and Open Questions above; the implementation plan should consider delivering scoping first, search second.
+The issue states "at the moment you can perform greater than and less than date searches". As of this PRD that is true **only for sync rule scoping**; **object/predefined searches support no date comparison at all** (`PredefinedSearchCriteria` is `StringValue`-only and the query translator throws `NotSupportedException` for ordering operators). The feature is therefore larger on the search side than the issue implies: literal date search (and the predefined-search group-logic gap) must be built before relative date search can sit on it. The sync-rule-scoping side is genuinely incremental. This is reflected in the Dependencies and Resolved Decisions above; delivery is strictly sequential, enabling sub-tasks #849 then #850 first, then relative date/time criteria across scoping and search.
