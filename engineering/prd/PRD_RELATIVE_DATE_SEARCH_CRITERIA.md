@@ -180,7 +180,7 @@ These are low-fidelity layouts, not pixel specs. They show the controls and thei
 |  Date Value                     [ 2026-09-01        📅 ]   |
 |                                                            |
 +------------------------------------------------------------+
-|                                   [ Cancel ]  [ Add Criteria ]
+|                              [ Cancel ]  [ Add Criteria ]  |
 +------------------------------------------------------------+
 ```
 
@@ -199,19 +199,19 @@ These are low-fidelity layouts, not pixel specs. They show the controls and thei
 |                                                            |
 |   Count            Unit                Direction           |
 |  [   7   ]        [ Days        ▼ ]   [ From now    ▼ ]    |
-|                    Hours                Ago                 |
-|                    Days                 From now           |
-|                    Weeks                                   |
-|                    Months                                  |
-|                    Years                                   |
+|                     Hours               Ago                |
+|                     Days                From now           |
+|                     Weeks                                  |
+|                     Months                                 |
+|                     Years                                  |
 |                                                            |
-|  ┌──────────────────────────────────────────────────┐     |
-|  │ ℹ  Matches when AccountExpiry is on or before     │     |
-|  │    7 days from now (re-evaluated each run).        │     |
-|  └──────────────────────────────────────────────────┘     |
+|  ┌──────────────────────────────────────────────────┐      |
+|  │ ℹ  Matches when AccountExpiry is on or before     │      |
+|  │    7 days from now (re-evaluated each run).      │      |
+|  └──────────────────────────────────────────────────┘      |
 |                                                            |
 +------------------------------------------------------------+
-|                                   [ Cancel ]  [ Add Criteria ]
+|                               [ Cancel ]  [ Add Criteria ] |
 +------------------------------------------------------------+
 ```
 
