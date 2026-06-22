@@ -1,0 +1,162 @@
+@using JIM.Models.Core
+@using JIM.Models.Logic
+@using JIM.Models.Search
+@using JIM.Models.Staging
+@using JIM.Web.Pages.Admin
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@if (SyncRule.Id > 0 && SyncRule.MetaverseObjectType != null && SyncRule.ConnectedSystemObjectType != null)
+{
+    <MudPaper Class="pa-4" Outlined="true">
+        @if (SyncRule.Direction == SyncRuleDirection.Export)
+        {
+            <MudText>
+                By default, all Metaverse objects of type '@SyncRule.MetaverseObjectType.Name' will be in scope of this
+                Synchronisation Rule, though to have it apply to a subset of those objects, use a filter. i.e. you might
+                only want this rule to apply to Staff, not Contractors.
+            </MudText>
+        }
+        else
+        {
+            <MudText>
+                By default, all Connected System objects of type '@SyncRule.ConnectedSystemObjectType.Name' will be in scope
+                of this Synchronisation Rule. Use a filter to import only specific objects, e.g. only Active users, not Disabled.
+            </MudText>
+        }
+
+        <MudRadioGroup @bind-Value="_syncRuleScopingFiltered" Class="mt-5">
+            <MudRadio Value="false">All Objects</MudRadio>
+            <MudRadio Value="true">Filtered</MudRadio>
+        </MudRadioGroup>
+
+        @if (_syncRuleScopingFiltered)
+        {
+            @if (SyncRule.Direction == SyncRuleDirection.Import)
+            {
+                <MudSelect T="InboundOutOfScopeAction" @bind-Value="SyncRule.InboundOutOfScopeAction" @bind-Value:after="NotifyChangedAsync"
+                           Label="When objects fall out of scope" Variant="Variant.Outlined" Class="mt-5">
+                    <MudSelectItem Value="InboundOutOfScopeAction.Disconnect">
+                        Disconnect from Metaverse
+                    </MudSelectItem>
+                    <MudSelectItem Value="InboundOutOfScopeAction.RemainJoined">
+                        Remain joined (stop attribute flow)
+                    </MudSelectItem>
+                </MudSelect>
+                <MudAlert Severity="Severity.Info" Class="mt-3" Variant="Variant.Outlined" Dense="true">
+                    @if (SyncRule.InboundOutOfScopeAction == InboundOutOfScopeAction.Disconnect)
+                    {
+                        <text>Objects that fall out of scope will be disconnected from their Metaverse object. Whether
+                        attributes contributed by this connected system are also recalled depends on the Connected System
+                        object type's "Remove contributed attributes on obsoletion" setting, the Metaverse object type's
+                        deletion grace period, and whether the Metaverse object is slated for immediate deletion. If this
+                        was the last connector, the Metaverse object type's deletion rule may also fire.</text>
+                    }
+                    else
+                    {
+                        <text>Objects that fall out of scope will remain joined but attribute flow will stop. Use this for
+                        "once managed, always managed" scenarios.</text>
+                    }
+                </MudAlert>
+            }
+
+            @if (SyncRule.ObjectScopingCriteriaGroups.Count == 0)
+            {
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled"
+                    OnClick="HandleOpenAddScopingCriteriaGroupDialog" Class="mt-5" DropShadow="false">Add Criteria Group</MudButton>
+            }
+
+            <MudDialog @bind-Visible="_addScopingCriteriaGroupDialogVisible" Options="_dialogOptions">
+                <TitleContent>
+                    <MudText Typo="Typo.h6">
+                        <MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="mr-3" /> Add Criteria Group
+                    </MudText>
+                </TitleContent>
+                <DialogContent>
+                    <MudSelect T="string" Label="Please choose a group type" Required="true" Variant="Variant.Outlined"
+                        @bind-Value="_criteriaGroupTypeText">
+                        @foreach (var type in Enum.GetValues(typeof(SearchGroupType)))
+                        {
+                            <MudSelectItem Value="@type.ToString()" />
+                        }
+                    </MudSelect>
+                </DialogContent>
+                <DialogActions>
+                    <MudButton DropShadow="false" Variant="Variant.Filled" Color="Color.Default"
+                        OnClick="@(() => _addScopingCriteriaGroupDialogVisible = false)" Class="me-2">Cancel</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleAddCriteriaGroupButtonClick"
+                        Disabled="DisableAddScopingCriteriaGroupFormButton()" DropShadow="false">Add Group
+                    </MudButton>
+                </DialogActions>
+            </MudDialog>
+        }
+    </MudPaper>
+
+    @foreach (var rootCriteriaGroup in SyncRule.ObjectScopingCriteriaGroups)
+    {
+        <SyncRuleDetailScopingCriteriaGroup SyncRule="SyncRule" SyncRuleScopingCriteriaGroup="rootCriteriaGroup"
+            SyncRuleChanged="NotifyChangedAsync" SyncRuleScopingCriteriaGroupChanged="NotifyChangedAsync" />
+    }
+}
+
+@code {
+    [Parameter]
+    public SyncRule SyncRule { get; set; } = null!;
+
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private bool _syncRuleScopingFiltered;
+    private bool _addScopingCriteriaGroupDialogVisible;
+    private string? _criteriaGroupTypeText;
+    private SyncRuleScopingCriteriaGroup? _syncRuleScopingCriteriaGroup;
+    private readonly DialogOptions _dialogOptions = new() { FullWidth = true };
+
+    protected override void OnInitialized()
+    {
+        // initialise scoping filter state based on existing criteria
+        _syncRuleScopingFiltered = SyncRule.ObjectScopingCriteriaGroups.Count > 0;
+    }
+
+    private async Task NotifyChangedAsync()
+    {
+        await OnChanged.InvokeAsync();
+    }
+
+    private void HandleOpenAddScopingCriteriaGroupDialog()
+    {
+        _syncRuleScopingCriteriaGroup = new SyncRuleScopingCriteriaGroup();
+        _addScopingCriteriaGroupDialogVisible = true;
+    }
+
+    private bool DisableAddScopingCriteriaGroupFormButton()
+    {
+        return string.IsNullOrEmpty(_criteriaGroupTypeText);
+    }
+
+    private async Task HandleAddCriteriaGroupButtonClick()
+    {
+        if (_syncRuleScopingCriteriaGroup == null || _criteriaGroupTypeText == null)
+            return;
+
+        _syncRuleScopingCriteriaGroup.Type = (SearchGroupType)Enum.Parse(typeof(SearchGroupType), _criteriaGroupTypeText);
+
+        if (_syncRuleScopingCriteriaGroup.ParentGroup == null)
+        {
+            // root-level criteria group
+            SyncRule.ObjectScopingCriteriaGroups.Add(_syncRuleScopingCriteriaGroup);
+        }
+        else
+        {
+            // add the criteria group to the parent's children, i.e. make sure the relationship is established on both the parent
+            // and the new criteria group
+            _syncRuleScopingCriteriaGroup.ParentGroup.ChildGroups.Add(_syncRuleScopingCriteriaGroup);
+        }
+
+        // all done, reset
+        _addScopingCriteriaGroupDialogVisible = false;
+        _syncRuleScopingCriteriaGroup = null;
+        await OnChanged.InvokeAsync();
+    }
+}

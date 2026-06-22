@@ -1,0 +1,691 @@
+@using JIM.Models.Core
+@using JIM.Models.Logic
+@using JIM.Models.Staging
+@using JIM.Models.Utility
+@using JIM.Utilities
+@inject IDialogService DialogService
+@inject IJSRuntime JS
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+<MudPaper Class="pa-4" Outlined="true">
+    <div class="d-flex align-center justify-space-between">
+        <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled"
+            OnClick="HandleOpenAddAttributeFlowRuleDialog" Color="Color.Default"
+            Disabled="DisableAddAttributeFlowButton()" DropShadow="false">Add Attribute Flow</MudButton>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudTooltip Text="Table view" Arrow="true" Placement="Placement.Top">
+                <MudIconButton Icon="@Icons.Material.Filled.TableRows"
+                               Color="@(_attributeFlowTableView ? Color.Primary : Color.Default)"
+                               OnClick="@(() => ToggleAttributeFlowViewAsync(true))" />
+            </MudTooltip>
+            <MudTooltip Text="Card view" Arrow="true" Placement="Placement.Top">
+                <MudIconButton Icon="@Icons.Material.Filled.GridView"
+                               Color="@(!_attributeFlowTableView ? Color.Primary : Color.Default)"
+                               OnClick="@(() => ToggleAttributeFlowViewAsync(false))" />
+            </MudTooltip>
+        </MudStack>
+    </div>
+
+    @if (_attributeFlowTableView && SyncRule.AttributeFlowRules.Count > 0)
+    {
+        <MudStack Row="true" Spacing="6" Class="mt-3 mb-1 flex-wrap" AlignItems="AlignItems.Start">
+            <div>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Mapping Type:</MudText>
+                <MudChipSet T="SyncRuleMappingSourcesType"
+                            SelectionMode="SelectionMode.MultiSelection"
+                            SelectedValues="_selectedMappingTypes"
+                            SelectedValuesChanged="OnMappingTypeFilterChanged">
+                    @foreach (var type in GetAvailableMappingTypes())
+                    {
+                        <MudChip Value="@type.Key"
+                                 Color="@(_selectedMappingTypes.Contains(type.Key) ? Color.Default : Helpers.GetMappingTypeChipColour(type.Key))"
+                                 Variant="@(_selectedMappingTypes.Contains(type.Key) ? Variant.Outlined : Variant.Text)"
+                                 SelectedColor="@Helpers.GetMappingTypeChipColour(type.Key)">
+                            @type.Key.ToString().SplitOnCapitalLetters()
+                            <MudText Typo="Typo.caption" Class="ml-1">(@type.Value)</MudText>
+                        </MudChip>
+                    }
+                </MudChipSet>
+            </div>
+
+            <div>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Data Type:</MudText>
+                <MudChipSet T="AttributeDataType"
+                            SelectionMode="SelectionMode.MultiSelection"
+                            SelectedValues="_selectedDataTypes"
+                            SelectedValuesChanged="OnFlowDataTypeFilterChanged">
+                    @foreach (var type in GetAvailableFlowDataTypes())
+                    {
+                        <MudChip Value="@type.Key"
+                                 Color="@(_selectedDataTypes.Contains(type.Key) ? Color.Default : Helpers.GetAttributeTypeChipColour(type.Key))"
+                                 Variant="@(_selectedDataTypes.Contains(type.Key) ? Variant.Outlined : Variant.Text)"
+                                 SelectedColor="@Helpers.GetAttributeTypeChipColour(type.Key)">
+                            @type.Key.ToString().SplitOnCapitalLetters()
+                            <MudText Typo="Typo.caption" Class="ml-1">(@type.Value)</MudText>
+                        </MudChip>
+                    }
+                </MudChipSet>
+            </div>
+
+            <div>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Plurality:</MudText>
+                <MudChipSet T="AttributePlurality"
+                            SelectionMode="SelectionMode.MultiSelection"
+                            SelectedValues="_selectedPluralities"
+                            SelectedValuesChanged="OnFlowPluralityFilterChanged">
+                    @foreach (var plurality in GetAvailableFlowPluralities())
+                    {
+                        <MudChip Value="@plurality.Key"
+                                 Color="@(_selectedPluralities.Contains(plurality.Key) ? Color.Default : Helpers.GetAttributePluralityChipColour(plurality.Key))"
+                                 Variant="@(_selectedPluralities.Contains(plurality.Key) ? Variant.Outlined : Variant.Text)"
+                                 SelectedColor="@Helpers.GetAttributePluralityChipColour(plurality.Key)">
+                            @(plurality.Key == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
+                            <MudText Typo="Typo.caption" Class="ml-1">(@plurality.Value)</MudText>
+                        </MudChip>
+                    }
+                </MudChipSet>
+            </div>
+        </MudStack>
+    }
+
+    @if (_attributeFlowTableView)
+    {
+        <MudTable Items="@SyncRule.AttributeFlowRules" Hover="true" Outlined="true" Elevation="0"
+                  Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-2"
+                  Filter="new Func<SyncRuleMapping, bool>(FilterAttributeFlowRules)">
+            <HeaderContent>
+                <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleMapping, object>(x => x.GetSourceType().ToString())"><MudText Typo="Typo.button">Type</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleMapping, object>(x => GetSortableSourceName(x))"><MudText Typo="Typo.button">Source</MudText></MudTableSortLabel></MudTh>
+                <MudTh></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleMapping, object>(x => GetSortableTargetName(x))"><MudText Typo="Typo.button">Target</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleMapping, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleMapping, object>(x => x.LastUpdated ?? DateTime.MinValue)"><MudText Typo="Typo.button">Updated</MudText></MudTableSortLabel></MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Type">
+                    <MudChip T="string" Variant="Variant.Text" Color="@Helpers.GetMappingTypeChipColour(context.GetSourceType())">
+                        @context.GetSourceType().ToString().SplitOnCapitalLetters()
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Source">
+                    @foreach (var source in context.Sources.OrderBy(q => q.Order))
+                    {
+                        if (SyncRule.Direction == SyncRuleDirection.Import && source.ConnectedSystemAttribute != null)
+                        {
+                            <MudTooltip Text="@($"Connected System: {source.ConnectedSystemAttribute.Type.ToString().SplitOnCapitalLetters()}, {(source.ConnectedSystemAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Size="Size.Medium">
+                                    <AvatarContent>
+                                        <MudAvatar Color="Color.Secondary">CS</MudAvatar>
+                                    </AvatarContent>
+                                    <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
+                                </MudChip>
+                            </MudTooltip>
+                        }
+                        else if (SyncRule.Direction == SyncRuleDirection.Export && source.MetaverseAttribute != null)
+                        {
+                            <MudTooltip Text="@($"Metaverse: {source.MetaverseAttribute.Type.ToString().SplitOnCapitalLetters()}, {(source.MetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Size="Size.Medium">
+                                    <AvatarContent>
+                                        <MudAvatar Color="Color.Primary">MV</MudAvatar>
+                                    </AvatarContent>
+                                    <ChildContent>@source.MetaverseAttribute.Name</ChildContent>
+                                </MudChip>
+                            </MudTooltip>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(source.Expression))
+                        {
+                            <MudTooltip Text="@source.Expression" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Size="Size.Medium" Class="jim-expr-chip">
+                                    <AvatarContent>
+                                        <MudAvatar Color="Color.Secondary">Ex</MudAvatar>
+                                    </AvatarContent>
+                                    <ChildContent><span class="jim-expr-syntax">@((MarkupString)Helpers.HighlightExpression(source.Expression!))</span></ChildContent>
+                                </MudChip>
+                            </MudTooltip>
+                        }
+                    }
+                </MudTd>
+                <MudTd><MudText Class="mud-text-secondary">→</MudText></MudTd>
+                <MudTd DataLabel="Target">
+                    @if (SyncRule.Direction == SyncRuleDirection.Import && context.TargetMetaverseAttribute != null)
+                    {
+                        <MudTooltip Text="@($"Metaverse: {context.TargetMetaverseAttribute.Type.ToString().SplitOnCapitalLetters()}, {(context.TargetMetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string" Size="Size.Medium">
+                                <AvatarContent>
+                                    <MudAvatar Color="Color.Primary">MV</MudAvatar>
+                                </AvatarContent>
+                                <ChildContent>@context.TargetMetaverseAttribute.Name</ChildContent>
+                            </MudChip>
+                        </MudTooltip>
+                    }
+                    else if (SyncRule.Direction == SyncRuleDirection.Export && context.TargetConnectedSystemAttribute != null)
+                    {
+                        <MudTooltip Text="@($"Connected System: {context.TargetConnectedSystemAttribute.Type.ToString().SplitOnCapitalLetters()}, {(context.TargetConnectedSystemAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string" Size="Size.Medium">
+                                <AvatarContent>
+                                    <MudAvatar Color="Color.Secondary">CS</MudAvatar>
+                                </AvatarContent>
+                                <ChildContent>@context.TargetConnectedSystemAttribute.Name</ChildContent>
+                            </MudChip>
+                        </MudTooltip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Created">
+                    <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                        <MudText Typo="Typo.body2">@context.Created.ToLocalTime().ToRelativeTime()</MudText>
+                    </MudTooltip>
+                </MudTd>
+                <MudTd DataLabel="Updated">
+                    @if (context.LastUpdated.HasValue)
+                    {
+                        var lastUpdated = context.LastUpdated.Value;
+                        <MudTooltip Text="@lastUpdated.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                            <MudText Typo="Typo.body2">@lastUpdated.ToLocalTime().ToRelativeTime()</MudText>
+                        </MudTooltip>
+                    }
+                    else
+                    {
+                        <EmptyValue />
+                    }
+                </MudTd>
+                <MudTd>
+                    <div class="d-flex justify-end gap-2">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Color="Color.Primary"
+                            Size="Size.Small" aria-label="edit"
+                            OnClick="@(() => HandleEditAttributeFlowRule(context))" />
+                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error"
+                            Size="Size.Small" aria-label="delete"
+                            OnClick="@(() => HandleAttributeFlowRuleDeleteClickAsync(context))" />
+                    </div>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                No attribute flow rules defined yet.
+            </NoRecordsContent>
+        </MudTable>
+    }
+    else
+    {
+        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="3" Class="mt-5">
+            @foreach (var attributeFlowRule in SyncRule.AttributeFlowRules)
+            {
+                <MudPaper Class="pa-3" Elevation="0" Outlined="true" Style="min-width: 200px;">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Class="mb-2">
+                        <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span>
+                            @attributeFlowRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText>
+                        <div class="d-flex gap-2" style="flex-shrink: 0;">
+                            <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Color="Color.Primary"
+                                Size="Size.Small" aria-label="edit"
+                                OnClick="@(() => HandleEditAttributeFlowRule(attributeFlowRule))" />
+                            <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error"
+                                Size="Size.Small" aria-label="delete"
+                                OnClick="@(() => HandleAttributeFlowRuleDeleteClickAsync(attributeFlowRule))" />
+                        </div>
+                    </MudStack>
+
+                    @if (SyncRule.Direction == SyncRuleDirection.Import)
+                    {
+                        <div class="d-flex align-center flex-wrap">
+                            <MudChip T="string" Size="Size.Medium">
+                                <AvatarContent>
+                                    <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
+                                        <MudAvatar Color="Color.Primary">MV</MudAvatar>
+                                    </MudTooltip>
+                                </AvatarContent>
+                                <ChildContent>@attributeFlowRule.TargetMetaverseAttribute?.Name</ChildContent>
+                            </MudChip>
+
+                            <MudText Class="mud-text-secondary mx-1">→</MudText>
+
+                            @foreach (var source in attributeFlowRule.Sources.OrderBy(q => q.Order))
+                            {
+                                if (source.ConnectedSystemAttribute != null)
+                                {
+                                    <MudChip T="string" Size="Size.Medium">
+                                        <AvatarContent>
+                                            <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
+                                                <MudAvatar Color="Color.Secondary">CS</MudAvatar>
+                                            </MudTooltip>
+                                        </AvatarContent>
+                                        <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
+                                    </MudChip>
+                                }
+                                else if (!string.IsNullOrWhiteSpace(source.Expression))
+                                {
+                                    <MudChip T="string" Size="Size.Medium">
+                                        <AvatarContent>
+                                            <MudTooltip Text="Expression" Arrow="true" Placement="Placement.Top">
+                                                <MudAvatar Color="Color.Secondary">Ex</MudAvatar>
+                                            </MudTooltip>
+                                        </AvatarContent>
+                                        <ChildContent><span class="jim-expr-syntax">@((MarkupString)Helpers.HighlightExpression(source.Expression!))</span></ChildContent>
+                                    </MudChip>
+                                }
+
+                                <!-- some thought needs to be given to how we handle specifying constant values -->
+                            }
+                        </div>
+                    }
+                    else if (SyncRule.Direction == SyncRuleDirection.Export)
+                    {
+                        <div class="d-flex align-center flex-wrap">
+                            @foreach (var source in attributeFlowRule.Sources.OrderBy(q => q.Order))
+                            {
+                                if (source.MetaverseAttribute != null)
+                                {
+                                    <MudChip T="string" Size="Size.Medium">
+                                        <AvatarContent>
+                                            <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
+                                                <MudAvatar Color="Color.Primary">MV</MudAvatar>
+                                            </MudTooltip>
+                                        </AvatarContent>
+                                        <ChildContent>@source.MetaverseAttribute.Name</ChildContent>
+                                    </MudChip>
+                                }
+                                else if (!string.IsNullOrWhiteSpace(source.Expression))
+                                {
+                                    <MudChip T="string" Size="Size.Medium">
+                                        <AvatarContent>
+                                            <MudTooltip Text="Expression" Arrow="true" Placement="Placement.Top">
+                                                <MudAvatar Color="Color.Secondary">Ex</MudAvatar>
+                                            </MudTooltip>
+                                        </AvatarContent>
+                                        <ChildContent><span class="jim-expr-syntax">@((MarkupString)Helpers.HighlightExpression(source.Expression!))</span></ChildContent>
+                                    </MudChip>
+                                }
+
+                                <!-- some thought needs to be given to how we handle specifying constant values -->
+                            }
+
+                            <MudText Class="mud-text-secondary mx-1">→</MudText>
+
+                            <MudChip T="string" Size="Size.Medium">
+                                <AvatarContent>
+                                    <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
+                                        <MudAvatar Color="Color.Secondary">CS</MudAvatar>
+                                    </MudTooltip>
+                                </AvatarContent>
+                                <ChildContent>@attributeFlowRule.TargetConnectedSystemAttribute?.Name</ChildContent>
+                            </MudChip>
+                        </div>
+                    }
+                </MudPaper>
+            }
+        </MudStack>
+    }
+</MudPaper>
+
+<MudDialog @bind-Visible="_addAttributeFlowRuleDialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Map" Class="mr-3" /> @(_isEditingAttributeFlow ? "Edit Attribute Flow" : "Add Attribute Flow")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudSelect T="string" Label="Source Type" Placeholder="Please select the type of source for this attribute flow"
+            Required="true" Value="_attributeFlowMappingSourceType" ValueChanged="HandleSourceTypeChanged" Variant="Variant.Outlined">
+            <MudSelectItem Value="@("Attribute")">Attribute</MudSelectItem>
+            <MudSelectItem Value="@("Expression")">Expression</MudSelectItem>
+        </MudSelect>
+
+        @if (_attributeFlowMapping != null && _attributeFlowMappingSource != null && SyncRule.MetaverseObjectType !=
+                null)
+        {
+            @switch (_attributeFlowMappingSourceType)
+            {
+                case "Attribute":
+                    {
+                        if (SyncRule.Direction == SyncRuleDirection.Import)
+                        {
+                            <MudSelect T="ConnectedSystemObjectTypeAttribute"
+                                @bind-Value="_attributeFlowMappingSource.ConnectedSystemAttribute" Label="Connected System Attribute"
+                                Placeholder="Please select the source Connected System attribute" Required="true" Class="mt-5"
+                                Variant="Variant.Outlined">
+                                @foreach (var connectedSystemAttribute in SyncRule.ConnectedSystemObjectType!.Attributes)
+                                {
+                                    <MudSelectItem Value="@connectedSystemAttribute">@connectedSystemAttribute.Name <span
+                                            style="@($"color:{Colors.Gray.Darken1};")">(@connectedSystemAttribute.Type :
+                                            @connectedSystemAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span>
+                                    </MudSelectItem>
+                                }
+                            </MudSelect>
+                        }
+                        else if (SyncRule.Direction == SyncRuleDirection.Export)
+                        {
+                            <MudSelect T="MetaverseAttribute" @bind-Value="_attributeFlowMappingSource.MetaverseAttribute"
+                                Label="Metaverse Attribute" Placeholder="Please select the source Metaverse attribute" Required="true"
+                                Class="mt-5" Variant="Variant.Outlined" ToStringFunc="@(a => a?.Name ?? string.Empty)">
+                                @foreach (var metaverseAttribute in SyncRule.MetaverseObjectType.Attributes)
+                                {
+                                    <MudSelectItem Value="@metaverseAttribute">@metaverseAttribute.Name <span
+                                            style="@($"color:{Colors.Gray.Darken1};")">(@metaverseAttribute.Type :
+                                            @metaverseAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span></MudSelectItem>
+                                }
+                            </MudSelect>
+                        }
+                        break;
+                    }
+                case "Expression":
+                    <MudTextField T="string" @bind-Value="_attributeFlowMappingSource.Expression"
+                        Label="Expression" Placeholder="e.g. IIF(mv[&quot;Active&quot;] == true, Upper(cs[&quot;Name&quot;]), null)"
+                        Required="true" Class="mt-5" Variant="Variant.Outlined"
+                        Lines="3" />
+                    break;
+            }
+
+            // user must have chosen the source attribute or entered an expression before being shown the target attribute controls
+            if (_attributeFlowMappingSource.ConnectedSystemAttribute != null ||
+            _attributeFlowMappingSource.MetaverseAttribute != null ||
+            !string.IsNullOrWhiteSpace(_attributeFlowMappingSource.Expression))
+            {
+                <MudText Class="mt-5">Will flow to:</MudText>
+                if (SyncRule.Direction == SyncRuleDirection.Import)
+                {
+                    <MudSelect T="MetaverseAttribute" @bind-Value="_attributeFlowMapping.TargetMetaverseAttribute"
+                        Label="Metaverse Attribute" Placeholder="Please select the target Metaverse attribute" Required="true"
+                        Class="mt-5" Variant="Variant.Outlined" ToStringFunc="@(a => a?.Name ?? string.Empty)">
+                        @foreach (var metaverseAttribute in SyncRule.MetaverseObjectType.Attributes.Where(q =>
+                                    !SyncRule.AttributeFlowRules.Any(afr => afr != _attributeFlowMapping &&
+                                    afr.TargetMetaverseAttribute != null &&
+                                    afr.TargetMetaverseAttribute.Id == q.Id)))
+                        {
+                            <MudSelectItem Disabled="IsAttributeFlowTargetDisabled(metaverseAttribute)" Value="@metaverseAttribute">
+                                @metaverseAttribute.Name <span style="@($"color:{Colors.Gray.Darken1};")">(@metaverseAttribute.Type :
+                                    @metaverseAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span>
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+                }
+                else if (SyncRule.Direction == SyncRuleDirection.Export)
+                {
+                    <MudSelect T="ConnectedSystemObjectTypeAttribute"
+                        @bind-Value="_attributeFlowMapping.TargetConnectedSystemAttribute" Label="Connected System Attribute"
+                        Placeholder="Please select the target Connected System attribute" Required="true" Class="mt-5"
+                        Variant="Variant.Outlined">
+                        @foreach (var connectedSystemAttribute in SyncRule.ConnectedSystemObjectType!.Attributes.Where(q =>
+                                    !SyncRule.AttributeFlowRules.Any(afr => afr != _attributeFlowMapping &&
+                                    afr.TargetConnectedSystemAttribute != null &&
+                                    afr.TargetConnectedSystemAttribute.Id == q.Id)))
+                        {
+                            <MudSelectItem Disabled="IsAttributeFlowTargetDisabled(connectedSystemAttribute)"
+                                Value="@connectedSystemAttribute">
+                                @connectedSystemAttribute.Name <span
+                                    style="@($"color:{Colors.Gray.Darken1};")">(@connectedSystemAttribute.Type :
+                                    @connectedSystemAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span>
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+                }
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton DropShadow="false" Variant="Variant.Filled" Color="Color.Default"
+            OnClick="@(() => _addAttributeFlowRuleDialogVisible = false)" Class="me-2">Cancel</MudButton>
+        <MudButton Disabled="DisableAddAttributeFlowMappingButton()" DropShadow="false" Variant="Variant.Filled"
+            Color="Color.Primary" OnClick="HandleAddAttributeFlowMappingButtonClick">@(_isEditingAttributeFlow ? "Update Attribute Flow" : "Add Attribute Flow")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter]
+    public SyncRule SyncRule { get; set; } = null!;
+
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private bool _addAttributeFlowRuleDialogVisible;
+    private readonly DialogOptions _dialogOptions = new() { FullWidth = true };
+    private SyncRuleMapping? _attributeFlowMapping;
+    private IReadOnlyCollection<SyncRuleMappingSourcesType> _selectedMappingTypes = new List<SyncRuleMappingSourcesType>();
+    private IReadOnlyCollection<AttributeDataType> _selectedDataTypes = new List<AttributeDataType>();
+    private IReadOnlyCollection<AttributePlurality> _selectedPluralities = new List<AttributePlurality>();
+    private SyncRuleMappingSource? _attributeFlowMappingSource;
+    private string? _attributeFlowMappingSourceType;
+    private bool _attributeFlowTableView = true;
+    private bool _isEditingAttributeFlow;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var storedView = await JS.InvokeAsync<string?>("localStorage.getItem", "attributeFlowView");
+        _attributeFlowTableView = storedView != "cards";
+    }
+
+    private async Task ToggleAttributeFlowViewAsync(bool tableView)
+    {
+        _attributeFlowTableView = tableView;
+        await JS.InvokeVoidAsync("localStorage.setItem", "attributeFlowView", tableView ? "table" : "cards");
+    }
+
+    private bool DisableAddAttributeFlowButton()
+    {
+        if (SyncRule.MetaverseObjectType == null)
+            return true;
+
+        if (SyncRule.ConnectedSystemObjectType == null)
+            return true;
+
+        return false;
+    }
+
+    private void HandleOpenAddAttributeFlowRuleDialog()
+    {
+        _attributeFlowMapping = new SyncRuleMapping();
+        _attributeFlowMappingSource = new SyncRuleMappingSource();
+        _attributeFlowMapping.Sources.Add(_attributeFlowMappingSource);
+        _attributeFlowMappingSourceType = null;
+        _isEditingAttributeFlow = false;
+        _addAttributeFlowRuleDialogVisible = true;
+    }
+
+    private void HandleEditAttributeFlowRule(SyncRuleMapping mapping)
+    {
+        _attributeFlowMapping = mapping;
+        _attributeFlowMappingSource = mapping.Sources.FirstOrDefault();
+
+        var sourceType = mapping.GetSourceType();
+        _attributeFlowMappingSourceType = sourceType switch
+        {
+            SyncRuleMappingSourcesType.ExpressionMapping => "Expression",
+            SyncRuleMappingSourcesType.AttributeMapping => "Attribute",
+            SyncRuleMappingSourcesType.AdvancedMapping => "Advanced",
+            _ => null
+        };
+
+        _isEditingAttributeFlow = true;
+        _addAttributeFlowRuleDialogVisible = true;
+    }
+
+    private void HandleSourceTypeChanged(string newSourceType)
+    {
+        _attributeFlowMappingSourceType = newSourceType;
+        if (_attributeFlowMappingSource == null) return;
+
+        // Clear previous source data when switching types
+        _attributeFlowMappingSource.ConnectedSystemAttribute = null;
+        _attributeFlowMappingSource.MetaverseAttribute = null;
+        _attributeFlowMappingSource.Expression = null;
+    }
+
+    private bool DisableAddAttributeFlowMappingButton()
+    {
+        if (_attributeFlowMapping == null || _attributeFlowMappingSource == null || _attributeFlowMappingSourceType == null)
+            return true;
+
+        // Validate source is configured
+        if (_attributeFlowMappingSourceType == "Attribute" &&
+            _attributeFlowMappingSource.ConnectedSystemAttribute == null &&
+            _attributeFlowMappingSource.MetaverseAttribute == null)
+            return true;
+
+        if (_attributeFlowMappingSourceType == "Expression" &&
+            string.IsNullOrWhiteSpace(_attributeFlowMappingSource.Expression))
+            return true;
+
+        // Validate target is configured
+        if (SyncRule.Direction == SyncRuleDirection.Import && _attributeFlowMapping.TargetMetaverseAttribute == null)
+            return true;
+        if (SyncRule.Direction == SyncRuleDirection.Export && _attributeFlowMapping.TargetConnectedSystemAttribute == null)
+            return true;
+
+        return false;
+    }
+
+    // import rules: the user can choose an invalid target attribute, depending on the makeup of the source attribute
+    private bool IsAttributeFlowTargetDisabled(MetaverseAttribute targetMetaverseAttribute)
+    {
+        // Expression mappings can target any attribute (type compatibility is the user's responsibility)
+        if (_attributeFlowMappingSourceType == "Expression")
+            return false;
+
+        if (_attributeFlowMappingSource?.ConnectedSystemAttribute == null)
+            return true;
+
+        if (targetMetaverseAttribute.Type != _attributeFlowMappingSource.ConnectedSystemAttribute.Type)
+            return true;
+
+        // Multi-valued to single-valued is permitted (#435) — the runtime selects the first value
+        // and generates a warning RPEI so the administrator can verify correctness.
+
+        return false;
+    }
+
+    // export rules: the user can choose an invalid target attribute, depending on the makeup of the source attribute
+    private bool IsAttributeFlowTargetDisabled(ConnectedSystemObjectTypeAttribute targetConnectedSystemObjectTypeAttribute)
+    {
+        // read-only attributes cannot be targeted by export attribute flows
+        if (targetConnectedSystemObjectTypeAttribute.Writability == AttributeWritability.ReadOnly)
+            return true;
+
+        // Expression mappings can target any writable attribute (type compatibility is the user's responsibility)
+        if (_attributeFlowMappingSourceType == "Expression")
+            return false;
+
+        if (_attributeFlowMappingSource?.MetaverseAttribute == null)
+            return true;
+
+        if (targetConnectedSystemObjectTypeAttribute.Type != _attributeFlowMappingSource.MetaverseAttribute.Type)
+            return true;
+
+        // Multi-valued to single-valued is permitted (#435) — the runtime selects the first value
+        // and generates a warning RPEI so the administrator can verify correctness.
+
+        return false;
+    }
+
+    private async Task HandleAddAttributeFlowMappingButtonClick()
+    {
+        if (_attributeFlowMapping == null)
+            return;
+
+        // Only add to the list if this is a new mapping (not editing an existing one)
+        if (!_isEditingAttributeFlow)
+            SyncRule.AttributeFlowRules.Add(_attributeFlowMapping);
+
+        // close the dialog and reset state
+        _addAttributeFlowRuleDialogVisible = false;
+        _attributeFlowMapping = null;
+        _attributeFlowMappingSource = null;
+        _isEditingAttributeFlow = false;
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task HandleAttributeFlowRuleDeleteClickAsync(SyncRuleMapping attributeFlowRule)
+    {
+        var confirmationResult = await DialogService.ShowMessageBoxAsync("Warning", "Are you sure you want to remove this Attribute Mapping?", yesText: "Remove!", cancelText: "Cancel");
+        if (confirmationResult.HasValue && confirmationResult.Value)
+        {
+            SyncRule.AttributeFlowRules.Remove(attributeFlowRule);
+            await OnChanged.InvokeAsync();
+        }
+    }
+
+    private bool FilterAttributeFlowRules(SyncRuleMapping mapping)
+    {
+        if (_selectedMappingTypes.Count > 0 && !_selectedMappingTypes.Contains(mapping.GetSourceType()))
+            return false;
+
+        AttributeDataType? dataType = SyncRule.Direction == SyncRuleDirection.Import
+            ? mapping.TargetMetaverseAttribute?.Type
+            : mapping.TargetConnectedSystemAttribute?.Type;
+
+        AttributePlurality? plurality = SyncRule.Direction == SyncRuleDirection.Import
+            ? mapping.TargetMetaverseAttribute?.AttributePlurality
+            : mapping.TargetConnectedSystemAttribute?.AttributePlurality;
+
+        if (_selectedDataTypes.Count > 0 && (dataType == null || !_selectedDataTypes.Contains(dataType.Value)))
+            return false;
+
+        if (_selectedPluralities.Count > 0 && (plurality == null || !_selectedPluralities.Contains(plurality.Value)))
+            return false;
+
+        return true;
+    }
+
+    private string GetSortableSourceName(SyncRuleMapping mapping)
+    {
+        var firstSource = mapping.Sources.OrderBy(s => s.Order).FirstOrDefault();
+        if (firstSource == null) return string.Empty;
+
+        if (SyncRule.Direction == SyncRuleDirection.Import && firstSource.ConnectedSystemAttribute != null)
+            return firstSource.ConnectedSystemAttribute.Name;
+        if (SyncRule.Direction == SyncRuleDirection.Export && firstSource.MetaverseAttribute != null)
+            return firstSource.MetaverseAttribute.Name;
+        if (!string.IsNullOrWhiteSpace(firstSource.Expression))
+            return firstSource.Expression;
+
+        return string.Empty;
+    }
+
+    private string GetSortableTargetName(SyncRuleMapping mapping)
+    {
+        if (SyncRule.Direction == SyncRuleDirection.Import)
+            return mapping.TargetMetaverseAttribute?.Name ?? string.Empty;
+
+        return mapping.TargetConnectedSystemAttribute?.Name ?? string.Empty;
+    }
+
+    private IEnumerable<KeyValuePair<SyncRuleMappingSourcesType, int>> GetAvailableMappingTypes()
+    {
+        return SyncRule.AttributeFlowRules
+            .GroupBy(m => m.GetSourceType())
+            .Select(g => new KeyValuePair<SyncRuleMappingSourcesType, int>(g.Key, g.Count()))
+            .OrderBy(x => x.Key.ToString());
+    }
+
+    private IEnumerable<KeyValuePair<AttributeDataType, int>> GetAvailableFlowDataTypes()
+    {
+        return SyncRule.AttributeFlowRules
+            .Select(m => SyncRule.Direction == SyncRuleDirection.Import
+                ? m.TargetMetaverseAttribute?.Type
+                : m.TargetConnectedSystemAttribute?.Type)
+            .Where(t => t.HasValue)
+            .GroupBy(t => t!.Value)
+            .Select(g => new KeyValuePair<AttributeDataType, int>(g.Key, g.Count()))
+            .OrderBy(x => x.Key.ToString());
+    }
+
+    private IEnumerable<KeyValuePair<AttributePlurality, int>> GetAvailableFlowPluralities()
+    {
+        return SyncRule.AttributeFlowRules
+            .Select(m => SyncRule.Direction == SyncRuleDirection.Import
+                ? m.TargetMetaverseAttribute?.AttributePlurality
+                : m.TargetConnectedSystemAttribute?.AttributePlurality)
+            .Where(p => p.HasValue)
+            .GroupBy(p => p!.Value)
+            .Select(g => new KeyValuePair<AttributePlurality, int>(g.Key, g.Count()))
+            .OrderBy(x => x.Key);
+    }
+
+    private void OnMappingTypeFilterChanged(IReadOnlyCollection<SyncRuleMappingSourcesType> selected)
+        => _selectedMappingTypes = selected;
+
+    private void OnFlowDataTypeFilterChanged(IReadOnlyCollection<AttributeDataType> selected)
+        => _selectedDataTypes = selected;
+
+    private void OnFlowPluralityFilterChanged(IReadOnlyCollection<AttributePlurality> selected)
+        => _selectedPluralities = selected;
+}
