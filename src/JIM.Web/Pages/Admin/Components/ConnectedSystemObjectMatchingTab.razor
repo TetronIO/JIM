@@ -14,11 +14,11 @@
         <MudText Typo="Typo.body1">
             @if (ConnectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem)
             {
-                <text>Matching Rules are defined here per object type and shared across all Sync Rules.</text>
+                <text>Matching Rules are defined here per object type and shared across all Synchronisation Rules.</text>
             }
             else
             {
-                <text>Matching Rules are configured on each individual Sync Rule.</text>
+                <text>Matching Rules are configured on each individual Synchronisation Rule.</text>
             }
         </MudText>
     </div>
@@ -34,9 +34,9 @@
 
 @if (ConnectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.SyncRule)
 {
-    @* Advanced Mode - matching rules are on Sync Rules *@
+    @* Advanced Mode - matching rules are on Synchronisation Rules *@
     <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">
-        In Advanced Mode, matching rules are configured on each individual Sync Rule. This allows different
+        In Advanced Mode, matching rules are configured on each individual Synchronisation Rule. This allows different
         matching logic for different scenarios.
     </MudAlert>
     <MudButton StartIcon="@Icons.Material.Filled.OpenInNew"
@@ -95,23 +95,23 @@ else
         @if (_switchingToAdvancedMode)
         {
             <MudText>
-                Switching to <strong>Advanced Mode</strong> will allow you to configure different matching rules for each Sync Rule.
+                Switching to <strong>Advanced Mode</strong> will allow you to configure different matching rules for each Synchronisation Rule.
             </MudText>
             <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">
-                The current matching rules will be copied to all existing import Sync Rules for this Connected System, giving you a starting point to customise.
+                The current matching rules will be copied to all existing import Synchronisation Rules for this Connected System, giving you a starting point to customise.
             </MudAlert>
         }
         else
         {
             <MudText>
-                Switching to <strong>Simple Mode</strong> will configure matching rules here, shared across all Sync Rules.
+                Switching to <strong>Simple Mode</strong> will configure matching rules here, shared across all Synchronisation Rules.
             </MudText>
             <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-4">
-                <strong>Migration:</strong> Matching rules from Sync Rules will be analysed and migrated to the object type level:
+                <strong>Migration:</strong> Matching rules from Synchronisation Rules will be analysed and migrated to the object type level:
                 <ul class="mt-2 mb-0">
-                    <li>If all Sync Rules have the same matching rules, they will be used directly.</li>
-                    <li>If Sync Rules have different matching rules, the most common configuration will be selected.</li>
-                    <li>Matching rules will be cleared from all Sync Rules after migration.</li>
+                    <li>If all Synchronisation Rules have the same matching rules, they will be used directly.</li>
+                    <li>If Synchronisation Rules have different matching rules, the most common configuration will be selected.</li>
+                    <li>Matching rules will be cleared from all Synchronisation Rules after migration.</li>
                 </ul>
             </MudAlert>
         }
@@ -339,7 +339,7 @@ else
 
             if (_switchingToAdvancedMode)
             {
-                Snackbar.Add($"Switched to Advanced Mode. Matching rules copied to {result.SyncRulesUpdated} Sync Rule(s).", Severity.Success);
+                Snackbar.Add($"Switched to Advanced Mode. Matching rules copied to {result.SyncRulesUpdated} Synchronisation Rule(s).", Severity.Success);
             }
             else
             {
