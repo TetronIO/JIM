@@ -232,7 +232,7 @@ else if (!_loading)
         _breadcrumbs = new List<BreadcrumbItem>
         {
             new("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new("Admin", href: "/admin/operations"),
+            new("Admin", href: "/admin"),
             new("API Keys", href: "/admin/apikeys"),
             new(_apiKey?.Name ?? "Not Found", href: null, disabled: true)
         };
