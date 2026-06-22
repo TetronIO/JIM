@@ -342,7 +342,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
             gracePeriod: TimeSpan.FromDays(30),  // 30 day grace period - handled by housekeeping
             triggerConnectedSystemIds: new List<int> { sourceSystem.Id });
 
-        // Create Sync Rules
+        // Create Synchronisation Rules
         await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
         var targetExportRule = await CreateExportSyncRuleAsync(targetSystem.Id, targetType, mvType, "AD Export");
 
@@ -415,7 +415,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
             gracePeriod: TimeSpan.Zero,  // Zero grace period - delete synchronously
             triggerConnectedSystemIds: new List<int> { sourceSystem.Id });
 
-        // Create Sync Rules
+        // Create Synchronisation Rules
         await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
         var targetExportRule = await CreateExportSyncRuleAsync(targetSystem.Id, targetType, mvType, "AD Export");
 
@@ -497,7 +497,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
 
         await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
 
-        // Create a second (non-authoritative) system and Sync Rule BEFORE any processor runs
+        // Create a second (non-authoritative) system and Synchronisation Rule BEFORE any processor runs
         // to avoid EF Core in-memory change tracker conflicts
         var targetSystem = await CreateConnectedSystemAsync("Target AD System");
         var targetType = await CreateCsoTypeAsync(targetSystem.Id, "User");
@@ -598,11 +598,11 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         mvType.Attributes.Add(trainingCompletedAttr);
         mvType.Attributes.Add(trainingExpiresAttr);
 
-        // Create import Sync Rules for HR and Training (both contribute attributes)
+        // Create import Synchronisation Rules for HR and Training (both contribute attributes)
         await CreateImportSyncRuleAsync(hrSystem.Id, hrUserType, mvType, "HR Import");
         await CreateImportSyncRuleAsync(trainingSystem.Id, trainingUserType, mvType, "Training Import");
 
-        // Create export Sync Rule for AD
+        // Create export Synchronisation Rule for AD
         await CreateExportSyncRuleAsync(adSystem.Id, adUserType, mvType, "AD Export");
 
         // Create HR CSO and run Full Sync to project to MVO
@@ -815,7 +815,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
     }
 
     /// <summary>
-    /// Creates an export Sync Rule.
+    /// Creates an export Synchronisation Rule.
     /// </summary>
     protected async Task<SyncRule> CreateExportSyncRuleAsync(
         int connectedSystemId,

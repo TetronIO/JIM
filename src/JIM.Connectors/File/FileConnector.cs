@@ -188,7 +188,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             if (objectType == null || string.IsNullOrEmpty(objectType.StringValue))
                 throw new InvalidSettingValuesException($"For Export Only mode without an existing file, {SettingObjectType} must be specified to define the object type for the schema.");
 
-            // Return a schema with just the object type, no attributes (will be defined by Sync Rules)
+            // Return a schema with just the object type, no attributes (will be defined by Synchronisation Rules)
             var exportSchema = new ConnectorSchema();
             exportSchema.ObjectTypes.Add(new ConnectorSchemaObjectType(objectType.StringValue));
             logger.Information("GetSchemaAsync: Created empty schema for Export Only mode with object type: {ObjectType}", objectType.StringValue);

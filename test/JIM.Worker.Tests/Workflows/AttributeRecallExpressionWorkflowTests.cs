@@ -46,7 +46,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         hrType.RemoveContributedAttributesOnObsoletion = false;
 
         // Create Training source system (supplemental — contributes non-critical attributes)
-        // Uses SyncRule matching mode because the join rule is defined on the Sync Rule
+        // Uses SyncRule matching mode because the join rule is defined on the Synchronisation Rule
         var trainingSystem = await CreateConnectedSystemAsync("Training Source");
         trainingSystem.ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule;
         var trainingDescriptionAttr = new ConnectedSystemObjectTypeAttribute
@@ -133,7 +133,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         await DbContext.SaveChangesAsync();
         mvType.Attributes.Add(mvDescriptionAttr);
 
-        // Create HR import Sync Rule (HR Source → MV: DisplayName, EmployeeId)
+        // Create HR import Synchronisation Rule (HR Source → MV: DisplayName, EmployeeId)
         var hrImportRule = await CreateImportSyncRuleAsync(hrSystem.Id, hrType, mvType, "HR Import");
         var hrDisplayNameAttr = hrType.Attributes.Single(a => a.Name == "DisplayName");
         var hrEmployeeIdAttr = hrType.Attributes.Single(a => a.Name == "EmployeeId");
@@ -163,7 +163,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         });
         await DbContext.SaveChangesAsync();
 
-        // Create Training import Sync Rule (Training Source → MV: Description)
+        // Create Training import Synchronisation Rule (Training Source → MV: Description)
         // Uses join (not projection) — joins to existing MVO via EmployeeId matching
         var trainingImportRule = await CreateImportSyncRuleAsync(
             trainingSystem.Id, trainingType, mvType, "Training Import", enableProjection: false);
@@ -201,7 +201,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         });
         await DbContext.SaveChangesAsync();
 
-        // Create export Sync Rule (MV → AD Target)
+        // Create export Synchronisation Rule (MV → AD Target)
         var exportRule = new SyncRule
         {
             ConnectedSystemId = targetSystem.Id,
@@ -504,7 +504,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
         var mvEmployeeIdAttr = mvType.Attributes.First(a => a.Name == "EmployeeId");
 
-        // Create HR import Sync Rule (HR Source → MV: DisplayName, EmployeeId)
+        // Create HR import Synchronisation Rule (HR Source → MV: DisplayName, EmployeeId)
         var hrImportRule = await CreateImportSyncRuleAsync(hrSystem.Id, hrType, mvType, "HR Import");
         var hrDisplayNameAttr = hrType.Attributes.Single(a => a.Name == "DisplayName");
         var hrEmployeeIdAttr = hrType.Attributes.Single(a => a.Name == "EmployeeId");
@@ -534,7 +534,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         });
         await DbContext.SaveChangesAsync();
 
-        // Create export Sync Rule (MV → AD Target) with expression-based DN
+        // Create export Synchronisation Rule (MV → AD Target) with expression-based DN
         var exportRule = new SyncRule
         {
             ConnectedSystemId = targetSystem.Id,
@@ -701,7 +701,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
         var mvEmployeeIdAttr = mvType.Attributes.First(a => a.Name == "EmployeeId");
 
-        // Create HR import Sync Rule with projection and join
+        // Create HR import Synchronisation Rule with projection and join
         var hrImportRule = await CreateImportSyncRuleAsync(hrSystem.Id, hrType, mvType, "HR Import");
         var hrDisplayNameAttr = hrType.Attributes.Single(a => a.Name == "DisplayName");
         var hrEmployeeIdAttr = hrType.Attributes.Single(a => a.Name == "EmployeeId");
@@ -750,7 +750,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         });
         await DbContext.SaveChangesAsync();
 
-        // Create export Sync Rule with expression-based DN
+        // Create export Synchronisation Rule with expression-based DN
         var exportRule = new SyncRule
         {
             ConnectedSystemId = targetSystem.Id,

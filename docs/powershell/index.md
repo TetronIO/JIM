@@ -115,7 +115,7 @@ Get-JIMConnectedSystem | ForEach-Object {
     Start-JIMRunProfile -ConnectedSystemId $_.id -RunProfileName "Full Import" -Wait
 }
 
-# Find all Sync Rules for a specific Connected System
+# Find all Synchronisation Rules for a specific Connected System
 Get-JIMSyncRule -ConnectedSystemName "HR System"
 
 # Bulk-disable expired API keys

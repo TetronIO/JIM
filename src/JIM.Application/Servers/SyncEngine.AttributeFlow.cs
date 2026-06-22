@@ -14,12 +14,12 @@ namespace JIM.Application.Servers;
 
 /// <summary>
 /// Attribute Flow logic for the sync engine.
-/// Contains all Sync Rule mapping processing — formerly SyncRuleMappingProcessor.
+/// Contains all Synchronisation Rule mapping processing — formerly SyncRuleMappingProcessor.
 /// </summary>
 public partial class SyncEngine
 {
     /// <summary>
-    /// Processes a Sync Rule mapping to flow attribute values from CSO to MVO.
+    /// Processes a Synchronisation Rule mapping to flow attribute values from CSO to MVO.
     /// </summary>
     internal static void ProcessMapping(
         ConnectedSystemObject cso,
@@ -40,7 +40,7 @@ public partial class SyncEngine
 
         if (syncRuleMapping.TargetMetaverseAttribute == null)
         {
-            Log.Error("ProcessMapping: Sync Rule mapping has no TargetMetaverseAttribute set!");
+            Log.Error("ProcessMapping: Synchronisation Rule mapping has no TargetMetaverseAttribute set!");
             return;
         }
 
@@ -149,7 +149,7 @@ public partial class SyncEngine
     }
 
     /// <summary>
-    /// Processes an expression-based Sync Rule mapping source.
+    /// Processes an expression-based Synchronisation Rule mapping source.
     /// </summary>
     private static void ProcessExpressionMapping(
         ConnectedSystemObject cso,

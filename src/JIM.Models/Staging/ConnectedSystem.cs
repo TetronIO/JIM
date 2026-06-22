@@ -67,8 +67,8 @@ public class ConnectedSystem : IAuditable
 
     /// <summary>
     /// Determines where Object Matching Rules are configured for this Connected System.
-    /// ConnectedSystem (default): Rules are defined per object type and shared across Sync Rules.
-    /// SyncRule: Rules are defined per Sync Rule for advanced scenarios.
+    /// ConnectedSystem (default): Rules are defined per object type and shared across Synchronisation Rules.
+    /// SyncRule: Rules are defined per Synchronisation Rule for advanced scenarios.
     /// </summary>
     public ObjectMatchingRuleMode ObjectMatchingRuleMode { get; set; } = ObjectMatchingRuleMode.ConnectedSystem;
 

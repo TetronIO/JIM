@@ -134,7 +134,7 @@ public abstract class SyncTaskProcessorBase
     // Tracks CSOs with unresolved cross-page reference attributes.
     // During page processing, if ProcessDeferredReferenceAttributes finds references where
     // ReferenceValue.MetaverseObject is null (the referenced CSO is on a different page and hasn't
-    // been joined/projected yet), the CSO ID and applicable Sync Rule IDs are recorded here.
+    // been joined/projected yet), the CSO ID and applicable Synchronisation Rule IDs are recorded here.
     // After all pages, these CSOs are reloaded from the DB (where all MVOs now exist)
     // and reference attributes are re-processed in ResolveCrossPageReferencesAsync.
     protected readonly List<(Guid CsoId, List<int> SyncRuleIds)> _unresolvedCrossPageReferences = [];
@@ -168,7 +168,7 @@ public abstract class SyncTaskProcessorBase
     // After PersistPendingMetaverseObjectsAsync assigns real IDs, these are re-keyed into _mvoIdToRpei.
     private readonly List<(MetaverseObject Mvo, ActivityRunProfileExecutionItem Rpei)> _deferredMvoRpeiMappings = [];
 
-    // Expression evaluator for expression-based Sync Rule mappings
+    // Expression evaluator for expression-based Synchronisation Rule mappings
     protected readonly IExpressionEvaluator _expressionEvaluator = new DynamicExpressoEvaluator();
 
     /// <summary>
@@ -425,8 +425,8 @@ public abstract class SyncTaskProcessorBase
         if (connectedSystemObject.IsUnchangedSinceLastSync)
             return;
 
-        // Skip if no Sync Rules defined AND not in simple mode — nothing to join/project/flow.
-        // In simple mode, matching rules on the object type can drive joining even without Sync Rules.
+        // Skip if no Synchronisation Rules defined AND not in simple mode — nothing to join/project/flow.
+        // In simple mode, matching rules on the object type can drive joining even without Synchronisation Rules.
         if (activeSyncRules.Count == 0 && _connectedSystem.ObjectMatchingRuleMode != ObjectMatchingRuleMode.ConnectedSystem)
             return;
 
@@ -585,7 +585,7 @@ public abstract class SyncTaskProcessorBase
 
     /// <summary>
     /// Check if a CSO has been obsoleted and delete it, applying any joined Metaverse Object changes as necessary.
-    /// Respects the InboundOutOfScopeAction setting on import Sync Rules to determine whether to disconnect.
+    /// Respects the InboundOutOfScopeAction setting on import Synchronisation Rules to determine whether to disconnect.
     /// Deleting a Metaverse Object can have downstream impacts on other Connected System Objects.
     /// CSO deletions are batched for performance - call FlushObsoleteCsoOperationsAsync() at page boundaries.
     /// When a joined CSO is obsoleted with Disconnect action, two RPEIs are produced:
@@ -814,9 +814,9 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Determines the InboundOutOfScopeAction to use for a CSO by finding the applicable import Sync Rule.
-    /// If multiple import Sync Rules exist for this CSO type, the first one's setting is used.
-    /// Uses pre-loaded Sync Rules to avoid database round trips.
+    /// Determines the InboundOutOfScopeAction to use for a CSO by finding the applicable import Synchronisation Rule.
+    /// If multiple import Synchronisation Rules exist for this CSO type, the first one's setting is used.
+    /// Uses pre-loaded Synchronisation Rules to avoid database round trips.
     /// </summary>
     protected InboundOutOfScopeAction DetermineInboundOutOfScopeAction(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
         => _syncEngine.DetermineOutOfScopeAction(connectedSystemObject, activeSyncRules);
@@ -921,8 +921,8 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Checks if the not-Obsolete CSO is joined to a Metaverse Object and updates it per any Sync Rules,
-    /// or checks to see if a Metaverse Object needs creating (projecting the CSO) according to any Sync Rules.
+    /// Checks if the not-Obsolete CSO is joined to a Metaverse Object and updates it per any Synchronisation Rules,
+    /// or checks to see if a Metaverse Object needs creating (projecting the CSO) according to any Synchronisation Rules.
     /// Changes to Metaverse Objects can have downstream impacts on other Connected System Objects.
     /// </summary>
     /// <returns>A result indicating what MVO changes occurred (projection, join, Attribute Flow).</returns>
@@ -932,8 +932,8 @@ public abstract class SyncTaskProcessorBase
         if (connectedSystemObject.Status == ConnectedSystemObjectStatus.Obsolete)
             return MetaverseObjectChangeResult.NoChanges();
 
-        // Skip if no Sync Rules AND not in simple mode — nothing to join/project/flow.
-        // In simple mode, matching rules on the object type can drive joining even without Sync Rules.
+        // Skip if no Synchronisation Rules AND not in simple mode — nothing to join/project/flow.
+        // In simple mode, matching rules on the object type can drive joining even without Synchronisation Rules.
         if (activeSyncRules.Count == 0 && _connectedSystem.ObjectMatchingRuleMode != ObjectMatchingRuleMode.ConnectedSystem)
             return MetaverseObjectChangeResult.NoChanges();
 
@@ -941,12 +941,12 @@ public abstract class SyncTaskProcessorBase
         var wasJoined = false;
         var wasProjected = false;
 
-        // Get import Sync Rules for this CSO type
+        // Get import Synchronisation Rules for this CSO type
         var importSyncRules = activeSyncRules
             .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId)
             .ToList();
 
-        // Check if CSO is in scope for any import Sync Rule before attempting join/projection
+        // Check if CSO is in scope for any import Synchronisation Rule before attempting join/projection
         List<SyncRule> inScopeImportRules;
         using (Diagnostics.Sync.StartSpan("GetInScopeImportRules"))
         {
@@ -955,8 +955,8 @@ public abstract class SyncTaskProcessorBase
 
         if (inScopeImportRules.Count == 0 && importSyncRules.Any(sr => sr.ObjectScopingCriteriaGroups.Count > 0))
         {
-            // CSO is out of scope for all import Sync Rules that have scoping criteria
-            Log.Debug("ProcessMetaverseObjectChangesAsync: CSO {CsoId} is out of scope for all import Sync Rules", connectedSystemObject.Id);
+            // CSO is out of scope for all import Synchronisation Rules that have scoping criteria
+            Log.Debug("ProcessMetaverseObjectChangesAsync: CSO {CsoId} is out of scope for all import Synchronisation Rules", connectedSystemObject.Id);
 
             // Handle out of scope based on InboundOutOfScopeAction
             using (Diagnostics.Sync.StartSpan("HandleCsoOutOfScope"))
@@ -971,9 +971,9 @@ public abstract class SyncTaskProcessorBase
         if (connectedSystemObject.MetaverseObject == null)
         {
             // CSO is not joined to a Metaverse Object.
-            // inspect Sync Rules to determine if we have any join or projection requirements.
+            // inspect Synchronisation Rules to determine if we have any join or projection requirements.
             // try to join first, then project. the aim is to ensure we don't end up with duplicate Identities in the Metaverse.
-            // Only use in-scope Sync Rules for join/projection
+            // Only use in-scope Synchronisation Rules for join/projection
             var scopedSyncRules = inScopeImportRules.Count > 0 ? inScopeImportRules : activeSyncRules;
 
             using (Diagnostics.Sync.StartSpan("AttemptJoin"))
@@ -986,7 +986,7 @@ public abstract class SyncTaskProcessorBase
             {
                 // try and project the CSO to the Metaverse.
                 // this may cause onward sync operations, so may take time.
-                // Only use in-scope Sync Rules for projection
+                // Only use in-scope Synchronisation Rules for projection
                 using (Diagnostics.Sync.StartSpan("AttemptProjection"))
                 {
                     wasProjected = AttemptProjection(scopedSyncRules, connectedSystemObject);
@@ -999,12 +999,12 @@ public abstract class SyncTaskProcessorBase
         // are we joined yet?
         if (connectedSystemObject.MetaverseObject != null)
         {
-            // Get the inbound Sync Rules for this CSO type
+            // Get the inbound Synchronisation Rules for this CSO type
             var inboundSyncRules = activeSyncRules
                 .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId)
                 .ToList();
 
-            // process Sync Rules to see if we need to flow any attribute updates from the CSO to the MVO.
+            // process Synchronisation Rules to see if we need to flow any attribute updates from the CSO to the MVO.
             // IMPORTANT: Skip reference attributes in the first pass. Reference attributes (e.g., group members)
             // may point to CSOs that haven't been processed yet (processed later in this page).
             // Reference attributes will be processed in a second pass after all CSOs have MVOs.
@@ -1677,7 +1677,7 @@ public abstract class SyncTaskProcessorBase
     /// After all pages, all MVOs exist in the database. This method reloads the CSOs with
     /// unresolved references and re-processes their reference attributes.
     /// </summary>
-    /// <param name="activeSyncRules">The active Sync Rules for this Connected System (already loaded by the caller).</param>
+    /// <param name="activeSyncRules">The active Synchronisation Rules for this Connected System (already loaded by the caller).</param>
     protected async Task ResolveCrossPageReferencesAsync(List<SyncRule> activeSyncRules)
     {
         if (_unresolvedCrossPageReferences.Count == 0)
@@ -1740,7 +1740,7 @@ public abstract class SyncTaskProcessorBase
         Log.Debug("ResolveCrossPageReferences: Cleared change tracker and {RpeiCount} in-memory RPEIs from activity",
             rpeiCountBeforeClear);
 
-        // Build Sync Rule lookup (keyed by ID) for O(1) access
+        // Build Synchronisation Rule lookup (keyed by ID) for O(1) access
         var requiredSyncRuleIds = _unresolvedCrossPageReferences
             .SelectMany(x => x.SyncRuleIds)
             .Distinct()
@@ -1795,7 +1795,7 @@ public abstract class SyncTaskProcessorBase
 
                 var mvo = cso.MetaverseObject;
 
-                // Resolve the Sync Rules for this CSO
+                // Resolve the Synchronisation Rules for this CSO
                 var applicableSyncRules = syncRuleIds
                     .Where(id => syncRulesById.ContainsKey(id))
                     .Select(id => syncRulesById[id])
@@ -2631,9 +2631,9 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Attempts to find a Metaverse Object that matches the CSO using Object Matching Rules on any applicable Sync Rules for this system and object type.
+    /// Attempts to find a Metaverse Object that matches the CSO using Object Matching Rules on any applicable Synchronisation Rules for this system and object type.
     /// </summary>
-    /// <param name="activeSyncRules">The active Sync Rules that contain all possible join rules to be evaluated.</param>
+    /// <param name="activeSyncRules">The active Synchronisation Rules that contain all possible join rules to be evaluated.</param>
     /// <param name="connectedSystemObject">The Connected System Object to try and find a matching Metaverse Object for.</param>
     /// <returns>True if a join was established, false if no matching MVO was found.</returns>
     /// <exception cref="SyncJoinException">Thrown when a join cannot be established due to ambiguous match or existing join.</exception>
@@ -2643,7 +2643,7 @@ public abstract class SyncTaskProcessorBase
         var isSimpleMode = _connectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem;
         var attemptedMatching = false;
 
-        // Enumerate import Sync Rules for this CSO type to attempt matching.
+        // Enumerate import Synchronisation Rules for this CSO type to attempt matching.
         foreach (var importSyncRule in activeSyncRules.Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId))
         {
             attemptedMatching = true;
@@ -2656,7 +2656,7 @@ public abstract class SyncTaskProcessorBase
             if (matchingRules.Count == 0)
                 continue;
 
-            // For advanced mode, set MetaverseObjectType on each rule from the Sync Rule
+            // For advanced mode, set MetaverseObjectType on each rule from the Synchronisation Rule
             if (!isSimpleMode)
             {
                 foreach (var rule in matchingRules)
@@ -2670,8 +2670,8 @@ public abstract class SyncTaskProcessorBase
             return await EstablishJoinAsync(connectedSystemObject, mvo);
         }
 
-        // Simple mode fallback: if no import Sync Rules were evaluated, try matching directly from object type rules.
-        // This enables simple mode joining without requiring empty import Sync Rules.
+        // Simple mode fallback: if no import Synchronisation Rules were evaluated, try matching directly from object type rules.
+        // This enables simple mode joining without requiring empty import Synchronisation Rules.
         if (!attemptedMatching && isSimpleMode)
         {
             var matchingRules = GetSimpleModeMatchingRules(connectedSystemObject.TypeId);
@@ -2768,13 +2768,13 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Attempts to create a Metaverse Object from the Connected System Object using the first Sync Rule for the object type that has Projection enabled.
+    /// Attempts to create a Metaverse Object from the Connected System Object using the first Synchronisation Rule for the object type that has Projection enabled.
     /// </summary>
-    /// <param name="activeSyncRules">The active Sync Rules that contain projection and Attribute Flow information.</param>
+    /// <param name="activeSyncRules">The active Synchronisation Rules that contain projection and Attribute Flow information.</param>
     /// <param name="connectedSystemObject">The Connected System Object to attempt to project to the Metaverse.</param>
     /// <returns>True if projection occurred, false otherwise.</returns>
-    /// <exception cref="InvalidDataException">Will be thrown if not all required properties are populated on the Sync Rule.</exception>
-    /// <exception cref="NotImplementedException">Will be thrown if a Sync Rule attempts to use a Function as a source.</exception>
+    /// <exception cref="InvalidDataException">Will be thrown if not all required properties are populated on the Synchronisation Rule.</exception>
+    /// <exception cref="NotImplementedException">Will be thrown if a Synchronisation Rule attempts to use a Function as a source.</exception>
     protected bool AttemptProjection(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
         var decision = _syncEngine.EvaluateProjection(connectedSystemObject, activeSyncRules);
@@ -2795,7 +2795,7 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Assigns values to a Metaverse Object, from a Connected System Object using a Sync Rule.
+    /// Assigns values to a Metaverse Object, from a Connected System Object using a Synchronisation Rule.
     /// Merges changed attributes and removals into an existing Pending Export evaluation entry for the given MVO,
     /// or adds a new entry if none exists. This prevents silently dropping reference attribute changes when
     /// scalar changes have already been queued for the same MVO.
@@ -3021,11 +3021,11 @@ public abstract class SyncTaskProcessorBase
     /// Does not perform any delta processing. This is for MVO create scenarios where there are not MVO attribute values already.
     /// </summary>
     /// <param name="connectedSystemObject">The source Connected System Object to map values from.</param>
-    /// <param name="syncRule">The Sync Rule to use to determine which attributes, and how should be assigned to the Metaverse Object.</param>
+    /// <param name="syncRule">The Synchronisation Rule to use to determine which attributes, and how should be assigned to the Metaverse Object.</param>
     /// <param name="skipReferenceAttributes">If true, skip reference attributes (they will be processed in a second pass after all MVOs exist).</param>
     /// <param name="onlyReferenceAttributes">If true, process ONLY reference attributes (for deferred second pass). Takes precedence over skipReferenceAttributes.</param>
-    /// <exception cref="InvalidDataException">Can be thrown if a Sync Rule Mapping Source is not properly formed.</exception>
-    /// <exception cref="NotImplementedException">Will be thrown whilst Functions have not been implemented, but are being used in the Sync Rule.</exception>
+    /// <exception cref="InvalidDataException">Can be thrown if a Synchronisation Rule Mapping Source is not properly formed.</exception>
+    /// <exception cref="NotImplementedException">Will be thrown whilst Functions have not been implemented, but are being used in the Synchronisation Rule.</exception>
     protected List<AttributeFlowWarning> ProcessInboundAttributeFlow(ConnectedSystemObject connectedSystemObject, SyncRule syncRule, bool skipReferenceAttributes = false, bool onlyReferenceAttributes = false, bool isFinalReferencePass = false)
     {
         if (_objectTypes == null)
@@ -3044,8 +3044,8 @@ public abstract class SyncTaskProcessorBase
         => _syncEngine.ApplyPendingAttributeChanges(mvo);
 
     /// <summary>
-    /// Gets the list of import Sync Rules for which the CSO is in scope.
-    /// If a Sync Rule has no scoping criteria, the CSO is considered in scope.
+    /// Gets the list of import Synchronisation Rules for which the CSO is in scope.
+    /// If a Synchronisation Rule has no scoping criteria, the CSO is considered in scope.
     /// </summary>
     protected async Task<List<SyncRule>> GetInScopeImportRulesAsync(ConnectedSystemObject connectedSystemObject, List<SyncRule> importSyncRules)
     {
@@ -3084,7 +3084,7 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Handles a CSO that has fallen out of scope for all import Sync Rules.
+    /// Handles a CSO that has fallen out of scope for all import Synchronisation Rules.
     /// If the CSO is currently joined to an MVO, applies the InboundOutOfScopeAction.
     /// </summary>
     /// <returns>A result indicating what happened (DisconnectedOutOfScope, OutOfScopeRetainJoin, or NoChanges).</returns>
@@ -3099,7 +3099,7 @@ public abstract class SyncTaskProcessorBase
             return MetaverseObjectChangeResult.NoChanges();
         }
 
-        // Find the first Sync Rule's InboundOutOfScopeAction (or default to Disconnect)
+        // Find the first Synchronisation Rule's InboundOutOfScopeAction (or default to Disconnect)
         var inboundOutOfScopeAction = importSyncRules
             .Where(sr => sr.ObjectScopingCriteriaGroups.Count > 0)
             .Select(sr => sr.InboundOutOfScopeAction)
@@ -3197,18 +3197,18 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Builds the drift detection cache from Sync Rules.
+    /// Builds the drift detection cache from Synchronisation Rules.
     /// This cache is used to efficiently determine if a Connected System is a legitimate
     /// contributor for an attribute (has import rules) vs. just a recipient (only export rules).
-    /// Call this once at the start of sync, after loading Sync Rules.
+    /// Call this once at the start of sync, after loading Synchronisation Rules.
     /// </summary>
-    /// <param name="allSyncRules">All Sync Rules from ALL Connected Systems (needed to build complete import mapping cache).</param>
-    /// <param name="currentSystemSyncRules">Sync Rules for the current Connected System being synced.</param>
+    /// <param name="allSyncRules">All Synchronisation Rules from ALL Connected Systems (needed to build complete import mapping cache).</param>
+    /// <param name="currentSystemSyncRules">Synchronisation Rules for the current Connected System being synced.</param>
     protected void BuildDriftDetectionCache(List<SyncRule> allSyncRules, List<SyncRule> currentSystemSyncRules)
     {
         using var span = Diagnostics.Sync.StartSpan("BuildDriftDetectionCache");
 
-        // Build import mapping cache from ALL Sync Rules across ALL Connected Systems.
+        // Build import mapping cache from ALL Synchronisation Rules across ALL Connected Systems.
         // This is critical for drift detection: we need to know which systems contribute to which MVO attributes
         // so we can skip drift detection when the CSO's system is a legitimate contributor.
         // Without all import rules, export-only systems would have an empty cache and incorrectly detect

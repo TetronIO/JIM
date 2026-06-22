@@ -21,10 +21,10 @@ Retrieves one or more Synchronisation Rules. When called without parameters, ret
 ### Syntax
 
 ```powershell
-# List all Sync Rules (default)
+# List all Synchronisation Rules (default)
 Get-JIMSyncRule [-Name <string>]
 
-# By Sync Rule ID
+# By Synchronisation Rule ID
 Get-JIMSyncRule -Id <int>
 
 # By Connected System ID
@@ -280,7 +280,7 @@ Retrieves Attribute Flow mappings for a Synchronisation Rule. Returns all mappin
 ### Syntax
 
 ```powershell
-# All mappings for a Sync Rule
+# All mappings for a Synchronisation Rule
 Get-JIMSyncRuleMapping -SyncRuleId <int>
 
 # Specific mapping
@@ -451,7 +451,7 @@ Retrieves scoping criteria groups and their nested criteria for a Synchronisatio
 ### Syntax
 
 ```powershell
-# All groups for a Sync Rule
+# All groups for a Synchronisation Rule
 Get-JIMScopingCriteria -SyncRuleId <int>
 
 # Specific group
@@ -975,7 +975,7 @@ Retrieves matching rules for a specific Synchronisation Rule.
 #### Syntax
 
 ```powershell
-# All matching rules for a Sync Rule
+# All matching rules for a Synchronisation Rule
 Get-JIMSyncRuleMatchingRule -SyncRuleId <int>
 
 # Specific matching rule

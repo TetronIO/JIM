@@ -121,7 +121,7 @@ The application currently sends all writes through a single connection per phase
 |                     Sync Processor                                 |
 |                                                                    |
 |  Shared (read-only after init):                                   |
-|    Sync Rules, object types, export eval cache,                   |
+|    Synchronisation Rules, object types, export eval cache,                   |
 |    Pending Exports dict, drift cache                              |
 |                                                                    |
 |  for each page of CSOs from DB:                                   |

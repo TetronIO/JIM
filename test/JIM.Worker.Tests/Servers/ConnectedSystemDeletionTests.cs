@@ -196,7 +196,7 @@ public class ConnectedSystemDeletionTests
         var result = await _jim.ConnectedSystems.GetDeletionPreviewAsync(1);
 
         // Assert
-        Assert.That(result!.Warnings, Has.Some.Contains("Sync Rule"));
+        Assert.That(result!.Warnings, Has.Some.Contains("Synchronisation Rule"));
     }
 
     [Test]

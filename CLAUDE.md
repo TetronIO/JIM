@@ -78,7 +78,7 @@ If the answer is "no" or "this will not work", say so in the first sentence. The
 Universal rules (apply across code, scripts, docs, comments, UI text):
 - **British English (en-GB) for ALL text** - "authorisation", "synchronisation", "behaviour", "colour"
 - **Never use em dashes (`—`)** - use semicolons, commas, colons, or parentheses instead
-- **Proper-case JIM domain entity names** - "Synchronisation Rule" (or "Sync Rule"), "Connected System", "Metaverse Object", "Run Profile", "Attribute Flow", "Object Matching Rule", "Pending Export" etc. are proper nouns; Title Case them even mid-sentence in UI text and docs, never "synchronisation rule"
+- **Proper-case JIM domain entity names** - "Synchronisation Rule", "Connected System", "Metaverse Object", "Run Profile", "Attribute Flow", "Object Matching Rule", "Pending Export" etc. are proper nouns; Title Case them even mid-sentence in UI text and docs, never "synchronisation rule". Always write "Synchronisation Rule" in full; never the "Sync Rule" shorthand (the `SyncRule` code identifier is unaffected)
 - All new source files carry the Tetron copyright header (`.editorconfig` enforces it for `.cs`)
 
 > **Full conventions** (DateTime quirks, raw SQL parameters, exception handling, copyright header table per file type, retrieval-method taxonomy, Razor/MudBlazor UI rules)**:** `src/CLAUDE.md`

@@ -97,7 +97,7 @@ Total: 40 tests.
 
 **Two Patterns**:
 
-1. **`WorkflowTestBase`** (`test/JIM.Worker.Tests/Workflows/`): Abstract base class with in-memory database and helper methods for creating test data (Connected Systems, CSOs, Sync Rules, Run Profiles). Best for focused tests on specific processor logic.
+1. **`WorkflowTestBase`** (`test/JIM.Worker.Tests/Workflows/`): Abstract base class with in-memory database and helper methods for creating test data (Connected Systems, CSOs, Synchronisation Rules, Run Profiles). Best for focused tests on specific processor logic.
 
 2. **`WorkflowTestHarness`** (`test/JIM.Workflow.Tests/Harness/`): Higher-level harness that orchestrates complete sync cycles (import → sync → export → confirming import) with state snapshots between steps. Uses `MockCallConnector` to simulate external systems. Best for end-to-end scenario tests.
 

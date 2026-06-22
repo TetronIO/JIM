@@ -51,7 +51,7 @@ public class NugatoryWorkOptimisationTests : WorkflowTestBase
             MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
             gracePeriod: TimeSpan.Zero);
 
-        // Create import Sync Rule WITH Attribute Flow mappings so attributes get contributed
+        // Create import Synchronisation Rule WITH Attribute Flow mappings so attributes get contributed
         var importRule = await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
         var csoDisplayNameAttr = sourceType.Attributes.First(a => a.Name == "DisplayName");
         var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
@@ -150,7 +150,7 @@ public class NugatoryWorkOptimisationTests : WorkflowTestBase
             gracePeriod: TimeSpan.Zero,
             triggerConnectedSystemIds: new List<int> { sourceSystem.Id });
 
-        // Create import Sync Rule with Attribute Flow mappings
+        // Create import Synchronisation Rule with Attribute Flow mappings
         var importRule = await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
         var csoDisplayNameAttr = sourceType.Attributes.First(a => a.Name == "DisplayName");
         var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
@@ -167,7 +167,7 @@ public class NugatoryWorkOptimisationTests : WorkflowTestBase
             }}
         });
 
-        // Create export Sync Rule for target
+        // Create export Synchronisation Rule for target
         await CreateExportSyncRuleAsync(targetSystem.Id, targetType, mvType, "AD Export");
         await CreateMatchingRuleAsync(targetType, mvType, "EmployeeId");
 
@@ -246,7 +246,7 @@ public class NugatoryWorkOptimisationTests : WorkflowTestBase
             MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
             gracePeriod: TimeSpan.FromDays(30));
 
-        // Create import Sync Rule with Attribute Flow mappings
+        // Create import Synchronisation Rule with Attribute Flow mappings
         var importRule = await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
         var csoDisplayNameAttr = sourceType.Attributes.First(a => a.Name == "DisplayName");
         var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
@@ -321,7 +321,7 @@ public class NugatoryWorkOptimisationTests : WorkflowTestBase
             MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
             gracePeriod: TimeSpan.Zero);
 
-        // Create import Sync Rule with Attribute Flow mappings
+        // Create import Synchronisation Rule with Attribute Flow mappings
         var importRule = await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
         var csoDisplayNameAttr = sourceType.Attributes.First(a => a.Name == "DisplayName");
         var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
@@ -413,7 +413,7 @@ public class NugatoryWorkOptimisationTests : WorkflowTestBase
             MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
             gracePeriod: TimeSpan.Zero);
 
-        // Create import Sync Rule with Attribute Flow mappings AND scoping criteria
+        // Create import Synchronisation Rule with Attribute Flow mappings AND scoping criteria
         var importRule = await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
         var csoDisplayNameAttr = sourceType.Attributes.First(a => a.Name == "DisplayName");
         var csoEmployeeIdAttr = sourceType.Attributes.First(a => a.Name == "EmployeeId");
@@ -566,7 +566,7 @@ public class NugatoryWorkOptimisationTests : WorkflowTestBase
     }
 
     /// <summary>
-    /// Creates an export Sync Rule.
+    /// Creates an export Synchronisation Rule.
     /// </summary>
     private async Task<SyncRule> CreateExportSyncRuleAsync(
         int connectedSystemId,

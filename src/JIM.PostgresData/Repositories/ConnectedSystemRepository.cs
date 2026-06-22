@@ -476,7 +476,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// tracked database state: existing entities (matched by Id) have their scalar values updated; new
     /// entities (Id == 0, or an Id no longer present) are inserted. Removal of object types/attributes that
     /// are absent from the supplied collection is intentionally NOT performed here, because deleting schema
-    /// entries that may be referenced by Sync Rules requires reference-aware handling (see issue #782).
+    /// entries that may be referenced by Synchronisation Rules requires reference-aware handling (see issue #782).
     /// Does not call SaveChanges; the caller persists.
     /// </summary>
     private async Task ReconcileObjectTypesAsync(ConnectedSystem connectedSystem)
@@ -1190,7 +1190,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // - LastUpdated > watermark: Captures existing CSOs that have been modified
         // Order by Id for consistent pagination.
         // AsTracking: CSOs are modified during sync processing, and the included Attribute entities
-        // must identity-fix with already-tracked instances from the Connected System/Sync Rule queries.
+        // must identity-fix with already-tracked instances from the Connected System/Synchronisation Rule queries.
         var csoQuery = Repository.Database.ConnectedSystemObjects
             .AsTracking()
             .Include(cso => cso.Type)
@@ -2425,7 +2425,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Determines if a Connected System Object Type attribute is being referenced by any Sync Rule Attribute Flow, or any attribute values.
+    /// Determines if a Connected System Object Type attribute is being referenced by any Synchronisation Rule Attribute Flow, or any attribute values.
     /// This is to enable checks to see if things like attribute types can be edited.
     /// </summary>
     public async Task<bool> IsObjectTypeAttributeBeingReferencedAsync(ConnectedSystemObjectTypeAttribute connectedSystemObjectTypeAttribute)
@@ -2433,7 +2433,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (connectedSystemObjectTypeAttribute.Id == 0)
             return false;
 
-        // check for Sync Rule references (Attribute Flow or object matching)
+        // check for Synchronisation Rule references (Attribute Flow or object matching)
         if (await Repository.Database.SyncRuleMappingSources.AnyAsync(q =>
                 q.ConnectedSystemAttribute != null &&
                 q.ConnectedSystemAttribute.Id == connectedSystemObjectTypeAttribute.Id))
@@ -3842,7 +3842,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
     #endregion
 
-    #region Sync Rules
+    #region Synchronisation Rules
     public async Task<List<SyncRule>> GetSyncRulesAsync(bool withChangeTracking = false)
     {
         IQueryable<SyncRule> allQuery = Repository.Database.SyncRules
@@ -3902,10 +3902,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Retrieves all the Sync Rules for a given Connected System.
+    /// Retrieves all the Synchronisation Rules for a given Connected System.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
-    /// <param name="includeDisabledSyncRules">Controls whether to return Sync Rules that are disabled</param>
+    /// <param name="includeDisabledSyncRules">Controls whether to return Synchronisation Rules that are disabled</param>
     /// <param name="withChangeTracking">When true, enables EF Core change tracking for write operations.</param>
     public async Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules, bool withChangeTracking = false)
     {
@@ -4267,9 +4267,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
     #endregion
 
-    #region Sync Rule Mappings
+    #region Synchronisation Rule Mappings
     /// <summary>
-    /// Gets all mappings for a Sync Rule.
+    /// Gets all mappings for a Synchronisation Rule.
     /// </summary>
     public async Task<List<SyncRuleMapping>> GetSyncRuleMappingsAsync(int syncRuleId)
     {
@@ -4287,7 +4287,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Gets a specific Sync Rule mapping by ID.
+    /// Gets a specific Synchronisation Rule mapping by ID.
     /// </summary>
     public async Task<SyncRuleMapping?> GetSyncRuleMappingAsync(int id)
     {
@@ -4304,7 +4304,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Creates a new Sync Rule mapping.
+    /// Creates a new Synchronisation Rule mapping.
     /// </summary>
     public async Task CreateSyncRuleMappingAsync(SyncRuleMapping mapping)
     {
@@ -4313,7 +4313,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Updates an existing Sync Rule mapping.
+    /// Updates an existing Synchronisation Rule mapping.
     /// </summary>
     public async Task UpdateSyncRuleMappingAsync(SyncRuleMapping mapping)
     {
@@ -4322,7 +4322,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Deletes a Sync Rule mapping.
+    /// Deletes a Synchronisation Rule mapping.
     /// </summary>
     public async Task DeleteSyncRuleMappingAsync(SyncRuleMapping mapping)
     {
@@ -4481,7 +4481,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // 2. Sever audit and history foreign keys that reference rows deleted below. These rows are retained for
         //    audit; only the now-dead foreign key is nulled. They must be nulled before their targets are deleted.
 
-        // 2a. Activities referencing this system, its Run Profiles, or its Sync Rules.
+        // 2a. Activities referencing this system, its Run Profiles, or its Synchronisation Rules.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"UPDATE ""Activities"" SET ""ConnectedSystemRunProfileId"" = NULL
               WHERE ""ConnectedSystemRunProfileId"" IN (SELECT ""Id"" FROM ""ConnectedSystemRunProfiles"" WHERE ""ConnectedSystemId"" = {0})",
@@ -4494,7 +4494,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             @"UPDATE ""Activities"" SET ""ConnectedSystemId"" = NULL WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
-        // 2b. Metaverse Object changes referencing this system's Sync Rules.
+        // 2b. Metaverse Object changes referencing this system's Synchronisation Rules.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"UPDATE ""MetaverseObjectChanges"" SET ""SyncRuleId"" = NULL
               WHERE ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
@@ -4573,16 +4573,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
               WHERE ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
             connectedSystemId);
 
-        // 10. Delete Object Matching Rules for this system before the Sync Rules and Object Types they reference
+        // 10. Delete Object Matching Rules for this system before the Synchronisation Rules and Object Types they reference
         //     (those foreign keys do not cascade). Their Sources are removed automatically via ON DELETE CASCADE.
-        //     An OMR belongs to this system when it is scoped to one of its object types or one of its Sync Rules.
+        //     An OMR belongs to this system when it is scoped to one of its object types or one of its Synchronisation Rules.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ObjectMatchingRules""
               WHERE ""ConnectedSystemObjectTypeId"" IN (SELECT ""Id"" FROM ""ConnectedSystemObjectTypes"" WHERE ""ConnectedSystemId"" = {0})
                  OR ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
             connectedSystemId);
 
-        // 11. Delete Sync Rules
+        // 11. Delete Synchronisation Rules
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);

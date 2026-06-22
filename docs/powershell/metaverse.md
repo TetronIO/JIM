@@ -481,7 +481,7 @@ Get-JIMMetaverseObject -ObjectTypeName "Person" -Page 3 -PageSize 50
 
 ### Get-JIMMetaverseObjectChangeHistory
 
-Retrieves the change history for a Metaverse Object. Each record carries the initiator, Sync Rule, and Run Profile context, plus the per-attribute value changes, ordered by change time descending (most recent first).
+Retrieves the change history for a Metaverse Object. Each record carries the initiator, Synchronisation Rule, and Run Profile context, plus the per-attribute value changes, ordered by change time descending (most recent first).
 
 #### Syntax
 
@@ -504,7 +504,7 @@ Get-JIMMetaverseObjectChangeHistory -Id <guid> -All [-PageSize <int>]
 
 #### Output
 
-Returns one `PSCustomObject` per change record, including the initiator, Sync Rule, Run Profile context, and per-attribute value changes.
+Returns one `PSCustomObject` per change record, including the initiator, Synchronisation Rule, Run Profile context, and per-attribute value changes.
 
 #### Examples
 

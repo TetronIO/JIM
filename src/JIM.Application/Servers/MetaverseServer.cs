@@ -220,7 +220,7 @@ public class MetaverseServer
     /// <param name="attribute">The attribute to delete.</param>
     /// <param name="initiatedBy">The user who initiated the deletion.</param>
     /// <exception cref="MetaverseAttributeInUseException">
-    /// Thrown if the attribute is referenced by Sync Rules or has stored values on Metaverse Objects.
+    /// Thrown if the attribute is referenced by Synchronisation Rules or has stored values on Metaverse Objects.
     /// </exception>
     public async Task DeleteMetaverseAttributeAsync(MetaverseAttribute attribute, MetaverseObject? initiatedBy)
     {
@@ -302,7 +302,7 @@ public class MetaverseServer
     /// <param name="attribute">The attribute to delete.</param>
     /// <param name="initiatedByApiKey">The API key that initiated the deletion.</param>
     /// <exception cref="MetaverseAttributeInUseException">
-    /// Thrown if the attribute is referenced by Sync Rules or has stored values on Metaverse Objects.
+    /// Thrown if the attribute is referenced by Synchronisation Rules or has stored values on Metaverse Objects.
     /// </exception>
     public async Task DeleteMetaverseAttributeAsync(MetaverseAttribute attribute, ApiKey initiatedByApiKey)
     {
@@ -359,13 +359,13 @@ public class MetaverseServer
 
     private async Task ValidateAttributeDeletionAsync(MetaverseAttribute attribute)
     {
-        // Check Sync Rule references first (higher priority: removing references is prerequisite)
+        // Check Synchronisation Rule references first (higher priority: removing references is prerequisite)
         var syncRuleRefs = await Application.Repository.Metaverse.GetSyncRulesReferencingAttributeAsync(attribute.Id);
         if (syncRuleRefs.Count > 0)
         {
             var ruleNames = string.Join(", ", syncRuleRefs.Select(r => r.Name));
             throw new MetaverseAttributeInUseException(
-                $"Cannot delete attribute '{attribute.Name}': it is referenced by {syncRuleRefs.Count} Sync Rule(s) ({ruleNames}). Remove the references first.",
+                $"Cannot delete attribute '{attribute.Name}': it is referenced by {syncRuleRefs.Count} Synchronisation Rule(s) ({ruleNames}). Remove the references first.",
                 syncRuleRefs);
         }
 

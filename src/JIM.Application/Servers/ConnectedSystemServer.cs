@@ -456,9 +456,9 @@ public class ConnectedSystemServer
     /// <summary>
     /// Switches the Object Matching Rule mode for a Connected System.
     /// When switching to Advanced Mode (SyncRule), copies matching rules from
-    /// Connected System Object Types to all import Sync Rules.
-    /// When switching to Simple Mode (ConnectedSystem), analyses Sync Rule matching rules,
-    /// selects the most common configuration per object type, and clears Sync Rule rules.
+    /// Connected System Object Types to all import Synchronisation Rules.
+    /// When switching to Simple Mode (ConnectedSystem), analyses Synchronisation Rule matching rules,
+    /// selects the most common configuration per object type, and clears Synchronisation Rule rules.
     /// </summary>
     /// <param name="connectedSystem">The Connected System to update</param>
     /// <param name="newMode">The new Object Matching Rule mode</param>
@@ -486,12 +486,12 @@ public class ConnectedSystemServer
 
         if (newMode == ObjectMatchingRuleMode.SyncRule)
         {
-            // Switching to Advanced Mode - copy matching rules to import Sync Rules
+            // Switching to Advanced Mode - copy matching rules to import Synchronisation Rules
             result = await SwitchToAdvancedModeAsync(connectedSystem, initiatedBy);
         }
         else
         {
-            // Switching to Simple Mode - migrate rules from Sync Rules to object types
+            // Switching to Simple Mode - migrate rules from Synchronisation Rules to object types
             result = await SwitchToSimpleModeAsync(connectedSystem, initiatedBy);
         }
 
@@ -529,12 +529,12 @@ public class ConnectedSystemServer
 
         foreach (var syncRule in importSyncRules)
         {
-            // Find matching rules for the Sync Rule's object type
+            // Find matching rules for the Synchronisation Rule's object type
             var objectType = connectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == syncRule.ConnectedSystemObjectTypeId);
             if (objectType == null || objectType.ObjectMatchingRules.Count == 0)
                 continue;
 
-            // Only copy if Sync Rule doesn't already have matching rules
+            // Only copy if Synchronisation Rule doesn't already have matching rules
             if (syncRule.ObjectMatchingRules.Count > 0)
                 continue;
 
@@ -560,7 +560,7 @@ public class ConnectedSystemServer
             syncRulesUpdated++;
         }
 
-        Log.Information("SwitchToAdvancedModeAsync: Copied matching rules to {Count} Sync Rule(s)", syncRulesUpdated);
+        Log.Information("SwitchToAdvancedModeAsync: Copied matching rules to {Count} Synchronisation Rule(s)", syncRulesUpdated);
         return ObjectMatchingModeSwitchResult.ToAdvancedMode(syncRulesUpdated);
     }
 
@@ -574,7 +574,7 @@ public class ConnectedSystemServer
         var syncRules = await GetSyncRulesAsync(connectedSystem.Id, includeDisabledSyncRules: true);
         var importSyncRules = syncRules.Where(sr => sr.Direction == SyncRuleDirection.Import).ToList();
 
-        // Group Sync Rules by object type
+        // Group Synchronisation Rules by object type
         var syncRulesByObjectType = importSyncRules
             .GroupBy(sr => sr.ConnectedSystemObjectTypeId)
             .ToList();
@@ -595,14 +595,14 @@ public class ConnectedSystemServer
                 SyncRulesWithMatchingRules = objectTypeGroup.Count(sr => sr.ObjectMatchingRules.Count > 0)
             };
 
-            // Get Sync Rules that have matching rules defined
+            // Get Synchronisation Rules that have matching rules defined
             var syncRulesWithRules = objectTypeGroup
                 .Where(sr => sr.ObjectMatchingRules.Count > 0)
                 .ToList();
 
             if (syncRulesWithRules.Count > 0)
             {
-                // Create a signature for each Sync Rule's matching rules configuration
+                // Create a signature for each Synchronisation Rule's matching rules configuration
                 var ruleConfigurations = syncRulesWithRules
                     .Select(sr => GetMatchingRulesSignature(sr.ObjectMatchingRules))
                     .ToList();
@@ -616,7 +616,7 @@ public class ConnectedSystemServer
                     .First()
                     .Key;
 
-                // Get the Sync Rule with the most common configuration
+                // Get the Synchronisation Rule with the most common configuration
                 var sourceSyncRule = syncRulesWithRules
                     .First(sr => GetMatchingRulesSignature(sr.ObjectMatchingRules) == mostCommonSignature);
 
@@ -647,13 +647,13 @@ public class ConnectedSystemServer
                     objectTypesUpdated++;
 
                     Log.Information("SwitchToSimpleModeAsync: Set {Count} matching rule(s) on object type {ObjectType} " +
-                        "(selected from {SyncRuleCount} Sync Rules with {UniqueConfigs} unique configuration(s))",
+                        "(selected from {SyncRuleCount} Synchronisation Rules with {UniqueConfigs} unique configuration(s))",
                         migration.MatchingRulesSet, objectType.Name, migration.SyncRulesWithMatchingRules,
                         migration.UniqueSyncRuleConfigurations);
                 }
             }
 
-            // Clear matching rules from all Sync Rules for this object type
+            // Clear matching rules from all Synchronisation Rules for this object type
             // (will be done automatically by CreateOrUpdateSyncRuleAsync due to Simple Mode validation)
             foreach (var syncRule in objectTypeGroup.Where(sr => sr.ObjectMatchingRules.Count > 0))
             {
@@ -747,7 +747,7 @@ public class ConnectedSystemServer
             preview.Warnings.Add("A synchronisation operation is currently running. Deletion will be queued to run after it completes.");
 
         if (preview.SyncRuleCount > 0)
-            preview.Warnings.Add($"{preview.SyncRuleCount} Sync Rule(s) will be permanently deleted.");
+            preview.Warnings.Add($"{preview.SyncRuleCount} Synchronisation Rule(s) will be permanently deleted.");
 
         if (preview.JoinedMvoCount > 0)
             preview.Warnings.Add($"{preview.JoinedMvoCount} Metaverse Object(s) are joined to CSOs in this system. They will be disconnected.");
@@ -1112,8 +1112,8 @@ public class ConnectedSystemServer
         else
             throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
 
-        // Merge the new schema with the existing one, preserving IDs for attributes that are referenced by Sync Rules
-        // This prevents FK constraint violations when attributes are used in Sync Rule mappings
+        // Merge the new schema with the existing one, preserving IDs for attributes that are referenced by Synchronisation Rules
+        // This prevents FK constraint violations when attributes are used in Synchronisation Rule mappings
         schema.ObjectTypes = schema.ObjectTypes.OrderBy(q => q.Name).ToList();
 
         // Keep track of existing object types for merging and change tracking
@@ -3693,18 +3693,18 @@ public class ConnectedSystemServer
     }
     #endregion
 
-    #region Sync Rule Mappings
+    #region Synchronisation Rule Mappings
     /// <summary>
-    /// Gets all mappings for a Sync Rule.
+    /// Gets all mappings for a Synchronisation Rule.
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     public async Task<List<SyncRuleMapping>> GetSyncRuleMappingsAsync(int syncRuleId)
     {
         return await Application.Repository.ConnectedSystems.GetSyncRuleMappingsAsync(syncRuleId);
     }
 
     /// <summary>
-    /// Gets a specific Sync Rule mapping by ID.
+    /// Gets a specific Synchronisation Rule mapping by ID.
     /// </summary>
     /// <param name="id">The unique identifier of the mapping.</param>
     public async Task<SyncRuleMapping?> GetSyncRuleMappingAsync(int id)
@@ -3726,7 +3726,7 @@ public class ConnectedSystemServer
             if (!string.IsNullOrWhiteSpace(source.Expression))
                 continue;
 
-            // Determine source and target attribute details based on Sync Rule direction
+            // Determine source and target attribute details based on Synchronisation Rule direction
             string? sourceAttrName;
             AttributeDataType sourceType;
             AttributePlurality sourcePlurality;
@@ -3799,7 +3799,7 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Creates a new Sync Rule mapping.
+    /// Creates a new Synchronisation Rule mapping.
     /// </summary>
     /// <param name="mapping">The mapping to create.</param>
     /// <param name="initiatedBy">The user who initiated the creation.</param>
@@ -3811,7 +3811,7 @@ public class ConnectedSystemServer
         ValidateMappingTypeCompatibility(mapping);
         ValidateMappingWritability(mapping);
 
-        Log.Debug("CreateSyncRuleMappingAsync() called for Sync Rule {SyncRuleId}", mapping.SyncRule?.Id);
+        Log.Debug("CreateSyncRuleMappingAsync() called for Synchronisation Rule {SyncRuleId}", mapping.SyncRule?.Id);
 
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
         var activity = new Activity
@@ -3831,7 +3831,7 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Creates a new Sync Rule mapping (initiated by API key).
+    /// Creates a new Synchronisation Rule mapping (initiated by API key).
     /// </summary>
     public async Task CreateSyncRuleMappingAsync(SyncRuleMapping mapping, ApiKey initiatedByApiKey)
     {
@@ -3841,7 +3841,7 @@ public class ConnectedSystemServer
         ValidateMappingTypeCompatibility(mapping);
         ValidateMappingWritability(mapping);
 
-        Log.Debug("CreateSyncRuleMappingAsync() called for Sync Rule {SyncRuleId} (API key initiated)", mapping.SyncRule?.Id);
+        Log.Debug("CreateSyncRuleMappingAsync() called for Synchronisation Rule {SyncRuleId} (API key initiated)", mapping.SyncRule?.Id);
 
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
         var activity = new Activity
@@ -3861,7 +3861,7 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Updates an existing Sync Rule mapping.
+    /// Updates an existing Synchronisation Rule mapping.
     /// </summary>
     /// <param name="mapping">The mapping to update.</param>
     /// <param name="initiatedBy">The user who initiated the update.</param>
@@ -3892,7 +3892,7 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Deletes a Sync Rule mapping.
+    /// Deletes a Synchronisation Rule mapping.
     /// </summary>
     /// <param name="mapping">The mapping to delete.</param>
     /// <param name="initiatedBy">The user who initiated the deletion.</param>
@@ -3919,7 +3919,7 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Deletes a Sync Rule Mapping (initiated by API key).
+    /// Deletes a Synchronisation Rule Mapping (initiated by API key).
     /// </summary>
     /// <param name="mapping">The mapping to delete.</param>
     /// <param name="initiatedByApiKey">The API key that initiated the deletion.</param>
@@ -4118,7 +4118,7 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Captures the foreign-key id of every navigation property on a new Sync Rule that points to an
+    /// Captures the foreign-key id of every navigation property on a new Synchronisation Rule that points to an
     /// already-persisted entity (the Connected System, the object types, and the attributes referenced by its
     /// matching rules, Attribute Flow mappings and scoping criteria), then nulls those navigation properties.
     /// The web and API callers build the rule from entities loaded in an earlier, now-disposed scope: the FK
@@ -4483,17 +4483,17 @@ public class ConnectedSystemServer
     }
     #endregion
 
-    #region Sync Rules
+    #region Synchronisation Rules
     public async Task<List<SyncRule>> GetSyncRulesAsync()
     {
         return await Application.Repository.ConnectedSystems.GetSyncRulesAsync();
     }
 
     /// <summary>
-    /// Retrieves all the Sync Rules for a given Connected System.
+    /// Retrieves all the Synchronisation Rules for a given Connected System.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
-    /// <param name="includeDisabledSyncRules">Controls whether to return Sync Rules that are disabled</param>
+    /// <param name="includeDisabledSyncRules">Controls whether to return Synchronisation Rules that are disabled</param>
     public async Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules)
     {
         return await Application.Repository.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, includeDisabledSyncRules);
@@ -4511,7 +4511,7 @@ public class ConnectedSystemServer
 
     public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null)
     {
-        // validate the Sync Rule
+        // validate the Synchronisation Rule
         if (syncRule == null)
             throw new NullReferenceException(nameof(syncRule));
 
@@ -4527,7 +4527,7 @@ public class ConnectedSystemServer
             syncRule.ProvisionToConnectedSystem = null;
             // Note: ObjectScopingCriteriaGroups IS valid for import rules - evaluates CSO attributes
 
-            // In Simple Mode, matching rules are defined on the Connected System, not Sync Rules
+            // In Simple Mode, matching rules are defined on the Connected System, not Synchronisation Rules
             // Clear any matching rules that may have been provided
             if (syncRule.ConnectedSystemId > 0)
             {
@@ -4539,7 +4539,7 @@ public class ConnectedSystemServer
                 {
                     if (syncRule.ObjectMatchingRules.Count > 0)
                     {
-                        Log.Warning("CreateOrUpdateSyncRuleAsync: Clearing {Count} matching rules from Sync Rule {Id} " +
+                        Log.Warning("CreateOrUpdateSyncRuleAsync: Clearing {Count} matching rules from Synchronisation Rule {Id} " +
                             "because Connected System {CsId} is in Simple Mode",
                             syncRule.ObjectMatchingRules.Count, syncRule.Id, syncRule.ConnectedSystemId);
                         syncRule.ObjectMatchingRules.Clear();
@@ -4570,7 +4570,7 @@ public class ConnectedSystemServer
 
         if (syncRule.Id == 0)
         {
-            // new Sync Rule - create
+            // new Synchronisation Rule - create
             activity.TargetOperationType = ActivityTargetOperationType.Create;
             AuditHelper.SetCreated(syncRule, initiatedBy);
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
@@ -4580,7 +4580,7 @@ public class ConnectedSystemServer
         }
         else
         {
-            // existing Sync Rule - update
+            // existing Synchronisation Rule - update
             activity.TargetOperationType = ActivityTargetOperationType.Update;
             AuditHelper.SetUpdated(syncRule, initiatedBy);
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
@@ -4592,7 +4592,7 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Creates or updates a Sync Rule (initiated by API key).
+    /// Creates or updates a Synchronisation Rule (initiated by API key).
     /// </summary>
     public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, Activity? parentActivity = null)
     {
@@ -4618,7 +4618,7 @@ public class ConnectedSystemServer
                 {
                     if (syncRule.ObjectMatchingRules.Count > 0)
                     {
-                        Log.Warning("CreateOrUpdateSyncRuleAsync: Clearing {Count} matching rules from Sync Rule {Id} " +
+                        Log.Warning("CreateOrUpdateSyncRuleAsync: Clearing {Count} matching rules from Synchronisation Rule {Id} " +
                             "because Connected System {CsId} is in Simple Mode",
                             syncRule.ObjectMatchingRules.Count, syncRule.Id, syncRule.ConnectedSystemId);
                         syncRule.ObjectMatchingRules.Clear();
@@ -4685,7 +4685,7 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Deletes a Sync Rule (initiated by API key).
+    /// Deletes a Synchronisation Rule (initiated by API key).
     /// </summary>
     public async Task DeleteSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey)
     {
@@ -4709,11 +4709,11 @@ public class ConnectedSystemServer
     #region Object Matching Rules
     /// <summary>
     /// Gets the target context for an ObjectMatchingRule activity.
-    /// Returns Connected System name for Mode A (rules on ConnectedSystemObjectType) or Sync Rule name for Mode B.
+    /// Returns Connected System name for Mode A (rules on ConnectedSystemObjectType) or Synchronisation Rule name for Mode B.
     /// </summary>
     private async Task<string?> GetObjectMatchingRuleContextAsync(ObjectMatchingRule rule)
     {
-        // Mode B: Rule is on a SyncRule - show the Sync Rule name
+        // Mode B: Rule is on a SyncRule - show the Synchronisation Rule name
         if (rule.SyncRule != null)
             return rule.SyncRule.Name;
 

@@ -93,7 +93,7 @@ public class ObjectMatchingRuleDto
     public string? MetaverseObjectTypeName { get; set; }
 
     /// <summary>
-    /// The Sync Rule this rule belongs to (advanced mode only).
+    /// The Synchronisation Rule this rule belongs to (advanced mode only).
     /// </summary>
     public int? SyncRuleId { get; set; }
 

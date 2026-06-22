@@ -102,7 +102,7 @@ public enum MetaverseObjectOrigin
 }
 
 /// <summary>
-/// Action to take when an MVO falls out of an export Sync Rule's scope.
+/// Action to take when an MVO falls out of an export Synchronisation Rule's scope.
 /// </summary>
 public enum OutboundDeprovisionAction
 {
@@ -121,7 +121,7 @@ public enum OutboundDeprovisionAction
 }
 
 /// <summary>
-/// Action to take when a CSO falls out of an import Sync Rule's scope.
+/// Action to take when a CSO falls out of an import Synchronisation Rule's scope.
 /// </summary>
 public enum InboundOutOfScopeAction
 {

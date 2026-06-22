@@ -119,7 +119,7 @@ Full plan: `docs/plans/EXPORT_PERFORMANCE_OPTIMISATION.md`
 - ~~Background MVO deletion job (#120)~~ - Housekeeping deletes orphaned MVOs after grace period expires
 - ~~MVO Deletion Rules (#203)~~ - Pending deletions UI, API endpoints, background housekeeping job
 - ~~PowerShell Module (#176)~~ - 35 cmdlets with full CRUD operations and name-based parameters
-- ~~API Coverage (#183)~~ - Activity, Run Profiles, Connected Systems, Sync Rules, MVO query, Data Generation
+- ~~API Coverage (#183)~~ - Activity, Run Profiles, Connected Systems, Synchronisation Rules, MVO query, Data Generation
 - ~~Release Process (#188)~~ - GitHub Actions workflow, air-gapped bundles, PSGallery publishing
 - ~~API Key Authentication (#175)~~ - X-API-Key header auth for CI/CD and automation
 - ~~Server-side file browser (#177)~~ - File path selection for connector settings
@@ -180,7 +180,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - Full Synchronisation Run Profile ✓
 - Join rules - match CSO to existing MVO ✓
 - Projection - create new MVO from CSO when no match ✓
-- Attribute Flow - CSO attributes flow to MVO via Sync Rules ✓
+- Attribute Flow - CSO attributes flow to MVO via Synchronisation Rules ✓
 - Attribute Flow for new joins ✓
 - Attribute Flow for existing joins (updates) ✓
 - Multi-valued Attribute Flow ✓
@@ -200,7 +200,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - Create Pending Export for MVO attribute changes ✓
 - Create Pending Export for new MVO (provisioning) ✓
 - Create Pending Export for MVO deletion (deprovisioning) ✓
-- Evaluate export Sync Rules to determine target CSO changes ✓
+- Evaluate export Synchronisation Rules to determine target CSO changes ✓
 
 #### 3.2 Pending Export Management
 - Pending Export data model ✓
@@ -249,7 +249,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - Connector configuration ✓
 - Schema inspection ✓
 - Run Profile management ✓
-- Sync Rule configuration ✓
+- Synchronisation Rule configuration ✓
 - Metaverse Object Type management ✓
 - Metaverse Object list and detail ✓
 - Activity history ✓
@@ -301,7 +301,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 
 #### 8.2 Priority 2 - Full Automation
 - Connected System CRUD - Full API management ✓
-- Sync Rule CRUD - Full API management ✓
+- Synchronisation Rule CRUD - Full API management ✓
 - Run Profile CRUD - Full API management ✓
 - Pending Export Read - Monitor Pending Exports via API ✓
 

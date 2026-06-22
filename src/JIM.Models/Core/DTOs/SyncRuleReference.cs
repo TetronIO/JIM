@@ -4,8 +4,8 @@
 namespace JIM.Models.Core.DTOs;
 
 /// <summary>
-/// Lightweight reference to a Sync Rule, used in validation error responses
-/// to identify which Sync Rules reference a given metaverse attribute.
+/// Lightweight reference to a Synchronisation Rule, used in validation error responses
+/// to identify which Synchronisation Rules reference a given metaverse attribute.
 /// </summary>
 public class SyncRuleReference
 {

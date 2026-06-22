@@ -53,7 +53,7 @@ public class ActivityRunProfileExecutionStats
     public int TotalDisconnections { get; set; }
 
     /// <summary>
-    /// Count of CSOs disconnected from MVOs because they fell out of scope of import Sync Rule scoping criteria.
+    /// Count of CSOs disconnected from MVOs because they fell out of scope of import Synchronisation Rule scoping criteria.
     /// </summary>
     public int TotalDisconnectedOutOfScope { get; set; }
 

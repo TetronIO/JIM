@@ -309,10 +309,10 @@ public abstract class WorkflowTestBase
 
     #endregion
 
-    #region Helper Methods - Sync Rules
+    #region Helper Methods - Synchronisation Rules
 
     /// <summary>
-    /// Creates an import Sync Rule that maps CSOs to MVOs.
+    /// Creates an import Synchronisation Rule that maps CSOs to MVOs.
     /// </summary>
     protected async Task<SyncRule> CreateImportSyncRuleAsync(
         int connectedSystemId,

@@ -259,11 +259,11 @@ public static class Helpers
             ObjectChangeType.Joined =>
                 "The Connected System Object (CSO) was matched to an existing Metaverse Object (MVO) using the configured join rules.",
             ObjectChangeType.AttributeFlow =>
-                "Attribute values were flowed from the Connected System Object to the Metaverse Object according to the Sync Rule mappings.",
+                "Attribute values were flowed from the Connected System Object to the Metaverse Object according to the Synchronisation Rule mappings.",
             ObjectChangeType.Disconnected =>
                 "The Connected System Object (CSO) was disconnected from its Metaverse Object (MVO). Attribute Flow has stopped.",
             ObjectChangeType.DisconnectedOutOfScope =>
-                "The object fell out of scope of the import Sync Rule scoping criteria and was disconnected from the metaverse.",
+                "The object fell out of scope of the import Synchronisation Rule scoping criteria and was disconnected from the metaverse.",
             ObjectChangeType.OutOfScopeRetainJoin =>
                 "The object fell out of scope but the join was retained. Attribute Flow has stopped, but the link is preserved for future re-scoping.",
             ObjectChangeType.DriftCorrection =>

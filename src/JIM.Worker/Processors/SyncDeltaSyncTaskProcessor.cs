@@ -79,14 +79,14 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         _activity.ObjectsProcessed = 0;
         await _syncRepo.UpdateActivityAsync(_activity);
 
-        // Get all the active Sync Rules for this system
+        // Get all the active Synchronisation Rules for this system
         List<SyncRule> activeSyncRules;
         using (Diagnostics.Sync.StartSpan("LoadSyncRules"))
         {
             activeSyncRules = await _syncRepo.GetSyncRulesAsync(_connectedSystem.Id, false, withChangeTracking: true);
         }
 
-        // Load ALL Sync Rules from ALL systems for drift detection import mapping cache.
+        // Load ALL Synchronisation Rules from ALL systems for drift detection import mapping cache.
         // This is needed because drift detection must know which systems contribute to which MVO attributes
         // to avoid false positives on export-only systems.
         List<SyncRule> allSyncRules;

@@ -58,17 +58,17 @@ ConnectedSystem
 - No cascading sync operations during delete
 - Admin can choose whether to queue MVO cleanup job
 
-### Q2: How do we handle Sync Rules?
+### Q2: How do we handle Synchronisation Rules?
 
 **Options:**
 
 | Option | Description |
 |--------|-------------|
-| A. Block deletion if Sync Rules exist | Require admin to delete Sync Rules first |
-| B. Cascade delete Sync Rules | Automatically delete all Sync Rules for this system |
-| C. Disable Sync Rules | Mark Sync Rules as disabled rather than deleting |
+| A. Block deletion if Synchronisation Rules exist | Require admin to delete Synchronisation Rules first |
+| B. Cascade delete Synchronisation Rules | Automatically delete all Synchronisation Rules for this system |
+| C. Disable Synchronisation Rules | Mark Synchronisation Rules as disabled rather than deleting |
 
-**Decision**: Option B - Cascade delete Sync Rules. They're useless without the system anyway. Show count in confirmation dialog.
+**Decision**: Option B - Cascade delete Synchronisation Rules. They're useless without the system anyway. Show count in confirmation dialog.
 
 ### Q3: How do we handle Activities?
 
@@ -332,7 +332,7 @@ User clicks "Delete System"
 |  +-- Preview Impact ----------------------------------------+   |
 |  |  Objects to delete:                                      |   |
 |  |  - 12,847 Connected System Objects                       |   |
-|  |  - 3 Sync Rules                                          |   |
+|  |  - 3 Synchronisation Rules                                          |   |
 |  |  - 2 Run Profiles                                        |   |
 |  |  - 15 Pending Exports                                    |   |
 |  |                                                          |   |
@@ -422,7 +422,7 @@ public async Task<DeletionResult> RequestDeleteConnectedSystemAsync(
     //    b. CSO attribute values, changes, then CSOs
     //    c. Partitions, containers
     //    d. Run Profiles
-    //    e. Sync Rules (cascade handles mappings)
+    //    e. Synchronisation Rules (cascade handles mappings)
     //    f. Object types (cascade handles attributes)
     //    g. Setting values
     //    h. Null Activity FKs
@@ -474,7 +474,7 @@ Query params:
 - Add "Delete System" button to Connected System detail page
 - Confirmation dialog showing:
   - CSO count
-  - Sync Rule count
+  - Synchronisation Rule count
   - Warning about joined MVOs
   - Checkbox for MVO deletion rule evaluation
 - Progress indicator for sync operations
@@ -528,7 +528,7 @@ WHERE "ConnectedSystemObjectId" IN (
 );
 DELETE FROM "ConnectedSystemObjects" WHERE "ConnectedSystemId" = @id;
 
--- 5. Delete Sync Rules (cascades to mappings, sources, scoping)
+-- 5. Delete Synchronisation Rules (cascades to mappings, sources, scoping)
 DELETE FROM "SyncRules" WHERE "ConnectedSystemId" = @id;
 
 -- 6. Delete containers and partitions
@@ -565,7 +565,7 @@ DELETE FROM "ConnectedSystems" WHERE "Id" = @id;
    - Delete system with no CSOs
    - Delete system with CSOs (no MVO joins)
    - Delete system with joined CSOs
-   - Delete system with Sync Rules
+   - Delete system with Synchronisation Rules
    - Delete system with running tasks (should block and report clear error)
    - Verify "Deleting" status is set atomically
    - Verify status is rolled back if deletion fails
@@ -586,7 +586,7 @@ DELETE FROM "ConnectedSystems" WHERE "Id" = @id;
 2. **Type name to confirm** - Require typing the system name for safety (like GitHub repo deletion)
 3. **Pending Exports shown in preview** - Warn about Pending Exports but don't block deletion
 4. **Q1: Handle MVO deletion** - Option D (Disconnect first, delete second) - preserves referential integrity and allows MVO rules to be evaluated in background
-5. **Q2: Handle Sync Rules** - Option B (Cascade delete) - Sync Rules are useless without the system; show count in confirmation
+5. **Q2: Handle Synchronisation Rules** - Option B (Cascade delete) - Synchronisation Rules are useless without the system; show count in confirmation
 6. **Q3: Handle Activities** - Option B (Null FK) - preserve immutable audit logs; activity serialization deferred to post-MVP enhancement ([#136](https://github.com/TetronIO/JIM/issues/136))
 7. **Q4: Deletion mode** - Option C (Auto-detect) - synchronous for <1000 CSOs, async background job for >=1000 CSOs
 8. **Q5: Concurrency safety** - Option E (Queue-based approach) - set "Deleting" status, block new ops, queue deletion after any running sync completes
@@ -662,7 +662,7 @@ public class MvoImpactDetail
 
 This analysis is expensive:
 - Must iterate all CSOs and their contributed attributes
-- Must check Sync Rule recall settings and priority
+- Must check Synchronisation Rule recall settings and priority
 - Must evaluate export rules for each MVO change
 - For 100k CSOs × 50 attributes = 5M evaluations
 
@@ -671,7 +671,7 @@ This analysis is expensive:
 2. Sample-based: Analyse first N MVOs, extrapolate
 3. Attribute-focused: Show top 10 most-impacted attributes with counts
 4. Background job: Queue analysis, show results when ready
-5. Caching: Cache Sync Rule/priority lookups
+5. Caching: Cache Synchronisation Rule/priority lookups
 
 ### UI Mockup
 
@@ -681,7 +681,7 @@ This analysis is expensive:
 |                                                                |
 |  +-- Basic Impact ----------------------------------------+    |
 |  |  - 12,847 CSOs will be deleted                         |    |
-|  |  - 3 Sync Rules will be deleted                        |    |
+|  |  - 3 Synchronisation Rules will be deleted                        |    |
 |  |  - 4,300 MVOs may be affected                          |    |
 |  +--------------------------------------------------------+    |
 |                                                                |

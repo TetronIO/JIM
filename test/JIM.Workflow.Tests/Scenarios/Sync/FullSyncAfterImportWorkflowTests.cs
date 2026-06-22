@@ -262,7 +262,7 @@ public class FullSyncAfterImportWorkflowTests
             .WithStringAttribute("cn")
             .WithStringAttribute("Type"));
 
-        // Get attributes for Sync Rules
+        // Get attributes for Synchronisation Rules
         var sourceUserType = _harness.GetObjectType("Source", "User");
         var sourceUserCn = sourceUserType.Attributes.First(a => a.Name == "cn");
         var mvPersonCn = await _harness.DbContext.MetaverseAttributes
@@ -270,7 +270,7 @@ public class FullSyncAfterImportWorkflowTests
         var mvType = await _harness.DbContext.MetaverseAttributes
             .FirstAsync(a => a.Name == "Type" && a.MetaverseObjectTypes.Any(t => t.Name == "Person"));
 
-        // Create Source import Sync Rule
+        // Create Source import Synchronisation Rule
         await _harness.CreateSyncRuleAsync(
             "Source User Import",
             "Source",
@@ -326,7 +326,7 @@ public class FullSyncAfterImportWorkflowTests
             .WithStringAttribute("cn")
             .WithReferenceAttribute("member", isMultiValued: true));
 
-        // Get attributes for Sync Rules
+        // Get attributes for Synchronisation Rules
         var sourceUserType = _harness.GetObjectType("Source", "User");
         var sourceGroupType = _harness.GetObjectType("Source", "Group");
         var targetUserType = _harness.GetObjectType("Target", "User");
@@ -349,7 +349,7 @@ public class FullSyncAfterImportWorkflowTests
         var mvType = await _harness.DbContext.MetaverseAttributes
             .FirstAsync(a => a.Name == "Type" && a.MetaverseObjectTypes.Any(t => t.Name == "Person"));
 
-        // Create Source import Sync Rules
+        // Create Source import Synchronisation Rules
         await _harness.CreateSyncRuleAsync(
             "Source User Import",
             "Source",
@@ -372,7 +372,7 @@ public class FullSyncAfterImportWorkflowTests
                 .WithAttributeFlow(mvGroupCn, sourceGroupCn)
                 .WithAttributeFlow(mvGroupMember, sourceGroupMember));
 
-        // Create Target export Sync Rules
+        // Create Target export Synchronisation Rules
         await _harness.CreateSyncRuleAsync(
             "Target User Export",
             "Target",

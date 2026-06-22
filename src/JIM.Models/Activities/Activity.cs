@@ -10,7 +10,7 @@ namespace JIM.Models.Activities;
 /// This enables areas of JIM to filter the activities view to the relevant objects, i.e. to view all sync runs being
 /// run or about to be run, then the relevant page can filter for
 /// those activities, and the same for say Metaverse Object updates to see when a group membership was updated, or a
-/// user created, or Sync Rules changed, etc.
+/// user created, or Synchronisation Rules changed, etc.
 /// </summary>
 public class Activity
 {
@@ -103,7 +103,7 @@ public class Activity
     /// Additional context for the target, providing hierarchical information such as the parent entity name.
     /// For example, for a ConnectedSystemRunProfile activity, this would contain the Connected System name.
     /// For a SyncRule activity, this would contain the Connected System name.
-    /// For an ObjectMatchingRule activity, this would contain the Sync Rule name.
+    /// For an ObjectMatchingRule activity, this would contain the Synchronisation Rule name.
     /// This is a point-in-time copy, not kept in sync with the referenced entity.
     /// </summary>
     public string? TargetContext { get; set; }
@@ -165,7 +165,7 @@ public class Activity
     /// <summary>Count of CSOs disconnected from MVOs.</summary>
     public int TotalDisconnected { get; set; }
 
-    /// <summary>Count of CSOs disconnected because they fell out of scope of import Sync Rule scoping criteria.</summary>
+    /// <summary>Count of CSOs disconnected because they fell out of scope of import Synchronisation Rule scoping criteria.</summary>
     public int TotalDisconnectedOutOfScope { get; set; }
 
     /// <summary>Count of CSOs that fell out of scope but remained joined (InboundOutOfScopeAction = RemainJoined).</summary>
@@ -310,7 +310,7 @@ public class Activity
 
     // -----------------------------------------------------------------------------------------------------------------
     // object changes (created/update/delete)
-    // this would apply to all object types, i.e. Metaverse Object, Sync Rules, Connected Systems, etc.
+    // this would apply to all object types, i.e. Metaverse Object, Synchronisation Rules, Connected Systems, etc.
     // todo:
     // - json blob that contains object changes (might regret this later, but it seems quicker to get going this way)
     // - some kind of access control for sensitive attribute values being logged, i.e. should someone reviewing the

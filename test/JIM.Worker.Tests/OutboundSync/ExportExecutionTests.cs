@@ -102,7 +102,7 @@ public class ExportExecutionTests
         MetaverseObjectsData = TestUtilities.GetMetaverseObjectData();
         MockDbSetMetaverseObjects = MetaverseObjectsData.BuildMockDbSet();
 
-        // Set up the Sync Rule stub mocks
+        // Set up the Synchronisation Rule stub mocks
         SyncRulesData = TestUtilities.GetSyncRuleData();
         MockDbSetSyncRules = SyncRulesData.BuildMockDbSet();
 

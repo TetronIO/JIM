@@ -80,7 +80,7 @@ public class ExportEvaluationNoChangeTests
         MetaverseObjectsData = TestUtilities.GetMetaverseObjectData();
         MockDbSetMetaverseObjects = MetaverseObjectsData.BuildMockDbSet();
 
-        // Set up the Sync Rule stub mocks
+        // Set up the Synchronisation Rule stub mocks
         SyncRulesData = TestUtilities.GetSyncRuleData();
         MockDbSetSyncRules = SyncRulesData.BuildMockDbSet();
 
@@ -624,7 +624,7 @@ public class ExportEvaluationNoChangeTests
     /// (snapshots from before removal), but the code detects they are in the removedAttributes
     /// set and creates changes with null values to clear them from the target system.
     /// Removals can occur due to attribute recall, source no longer returning a value, or CSO
-    /// falling out of Sync Rule scope.
+    /// falling out of Synchronisation Rule scope.
     /// </summary>
     [Test]
     public void CreateAttributeValueChanges_RecalledSingleValuedAttributes_ProducesNullClearingChangesAsync()
@@ -641,8 +641,8 @@ public class ExportEvaluationNoChangeTests
         var targetDisplayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
         var targetEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.EmployeeId.ToString());
 
-        // Set up export Sync Rule with Attribute Flow mappings
-        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        // Set up export Synchronisation Rule with Attribute Flow mappings
+        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportSyncRule.ConnectedSystemId = targetSystem.Id;
         exportSyncRule.ConnectedSystem = targetSystem;
         exportSyncRule.AttributeFlowRules.Clear();
@@ -788,8 +788,8 @@ public class ExportEvaluationNoChangeTests
         var targetDisplayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
         var targetEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.EmployeeId.ToString());
 
-        // Set up export Sync Rule on the TARGET system
-        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        // Set up export Synchronisation Rule on the TARGET system
+        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportSyncRule.ConnectedSystemId = targetSystem.Id;
         exportSyncRule.ConnectedSystem = targetSystem;
         exportSyncRule.MetaverseObjectTypeId = mvUserType.Id;
@@ -944,8 +944,8 @@ public class ExportEvaluationNoChangeTests
         // Use Manager target attribute as a stand-in for member export
         var targetManagerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
 
-        // Set up export Sync Rule with multi-valued reference mapping
-        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        // Set up export Synchronisation Rule with multi-valued reference mapping
+        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportSyncRule.ConnectedSystemId = targetSystem.Id;
         exportSyncRule.ConnectedSystem = targetSystem;
         exportSyncRule.AttributeFlowRules.Clear();
@@ -1039,7 +1039,7 @@ public class ExportEvaluationNoChangeTests
         var memberMvAttr = mvGroupType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.Member);
         var targetManagerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
 
-        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportSyncRule.ConnectedSystemId = targetSystem.Id;
         exportSyncRule.ConnectedSystem = targetSystem;
         exportSyncRule.AttributeFlowRules.Clear();
@@ -1124,7 +1124,7 @@ public class ExportEvaluationNoChangeTests
 
         var targetDisplayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
 
-        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportSyncRule.ConnectedSystemId = targetSystem.Id;
         exportSyncRule.ConnectedSystem = targetSystem;
         exportSyncRule.AttributeFlowRules.Clear();

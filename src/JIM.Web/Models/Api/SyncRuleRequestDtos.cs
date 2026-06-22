@@ -8,12 +8,12 @@ using JIM.Models.Logic;
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// Request DTO for creating a new Sync Rule.
+/// Request DTO for creating a new Synchronisation Rule.
 /// </summary>
 public class CreateSyncRuleRequest
 {
     /// <summary>
-    /// The name for the Sync Rule.
+    /// The name for the Synchronisation Rule.
     /// </summary>
     [Required]
     [StringLength(200, MinimumLength = 1)]
@@ -38,7 +38,7 @@ public class CreateSyncRuleRequest
     public int MetaverseObjectTypeId { get; set; }
 
     /// <summary>
-    /// The direction of the Sync Rule (Import or Export).
+    /// The direction of the Synchronisation Rule (Import or Export).
     /// </summary>
     [Required]
     public SyncRuleDirection Direction { get; set; }
@@ -54,7 +54,7 @@ public class CreateSyncRuleRequest
     public bool? ProvisionToConnectedSystem { get; set; }
 
     /// <summary>
-    /// Whether the Sync Rule is enabled.
+    /// Whether the Synchronisation Rule is enabled.
     /// </summary>
     public bool Enabled { get; set; } = true;
 
@@ -67,18 +67,18 @@ public class CreateSyncRuleRequest
 }
 
 /// <summary>
-/// Request DTO for updating an existing Sync Rule.
+/// Request DTO for updating an existing Synchronisation Rule.
 /// </summary>
 public class UpdateSyncRuleRequest
 {
     /// <summary>
-    /// The updated name for the Sync Rule.
+    /// The updated name for the Synchronisation Rule.
     /// </summary>
     [StringLength(200, MinimumLength = 1)]
     public string? Name { get; set; }
 
     /// <summary>
-    /// Whether the Sync Rule is enabled.
+    /// Whether the Synchronisation Rule is enabled.
     /// </summary>
     public bool? Enabled { get; set; }
 

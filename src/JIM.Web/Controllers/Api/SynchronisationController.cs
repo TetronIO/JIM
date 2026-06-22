@@ -1540,7 +1540,7 @@ public class SynchronisationController(
 
     #endregion
 
-    #region Sync Rules
+    #region Synchronisation Rules
 
     /// <summary>
     /// List Synchronisation Rules
@@ -1574,10 +1574,10 @@ public class SynchronisationController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetSyncRuleAsync(int id)
     {
-        _logger.LogTrace("Requested Sync Rule: {Id}", id);
+        _logger.LogTrace("Requested Synchronisation Rule: {Id}", id);
         var rule = await _application.ConnectedSystems.GetSyncRuleAsync(id);
         if (rule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {id} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {id} not found."));
 
         return Ok(SyncRuleHeader.FromEntity(rule));
     }
@@ -1599,18 +1599,18 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateSyncRuleAsync([FromBody] CreateSyncRuleRequest request)
     {
-        _logger.LogInformation("Creating Sync Rule: {Name}", LogSanitiser.Sanitise(request.Name));
+        _logger.LogInformation("Creating Synchronisation Rule: {Name}", LogSanitiser.Sanitise(request.Name));
 
         // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
-            _logger.LogWarning("Could not identify user from JWT claims for Sync Rule creation");
+            _logger.LogWarning("Could not identify user from JWT claims for Synchronisation Rule creation");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
         // Verify Connected System exists (Core retrieval — only used as a FK reference on the new
-        // Sync Rule; object types are fetched separately below).
+        // Synchronisation Rule; object types are fetched separately below).
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(request.ConnectedSystemId);
         if (connectedSystem == null)
             return BadRequest(ApiErrorResponse.BadRequest($"Connected System with ID {request.ConnectedSystemId} not found."));
@@ -1626,7 +1626,7 @@ public class SynchronisationController(
         if (mvObjectType == null)
             return BadRequest(ApiErrorResponse.BadRequest($"Metaverse Object Type with ID {request.MetaverseObjectTypeId} not found."));
 
-        // Create the Sync Rule
+        // Create the Synchronisation Rule
         var syncRule = new SyncRule
         {
             Name = request.Name,
@@ -1653,12 +1653,12 @@ public class SynchronisationController(
         {
             var validationErrors = syncRule.Validate();
             var errorMessage = string.Join("; ", validationErrors.Select(v => v.Message));
-            return BadRequest(ApiErrorResponse.BadRequest($"Sync Rule validation failed: {errorMessage}"));
+            return BadRequest(ApiErrorResponse.BadRequest($"Synchronisation Rule validation failed: {errorMessage}"));
         }
 
-        _logger.LogInformation("Created Sync Rule: {Id} ({Name})", syncRule.Id, LogSanitiser.Sanitise(syncRule.Name));
+        _logger.LogInformation("Created Synchronisation Rule: {Id} ({Name})", syncRule.Id, LogSanitiser.Sanitise(syncRule.Name));
 
-        // Retrieve the created Sync Rule
+        // Retrieve the created Synchronisation Rule
         var created = await _application.ConnectedSystems.GetSyncRuleAsync(syncRule.Id);
         return CreatedAtRoute("GetSyncRule", new { id = syncRule.Id }, SyncRuleHeader.FromEntity(created!));
     }
@@ -1680,20 +1680,20 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> UpdateSyncRuleAsync(int id, [FromBody] UpdateSyncRuleRequest request)
     {
-        _logger.LogInformation("Updating Sync Rule: {Id}", id);
+        _logger.LogInformation("Updating Synchronisation Rule: {Id}", id);
 
         // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
-            _logger.LogWarning("Could not identify user from JWT claims for Sync Rule update");
+            _logger.LogWarning("Could not identify user from JWT claims for Synchronisation Rule update");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Get the existing Sync Rule
+        // Get the existing Synchronisation Rule
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(id);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {id} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {id} not found."));
 
         // Apply updates
         if (!string.IsNullOrEmpty(request.Name))
@@ -1727,12 +1727,12 @@ public class SynchronisationController(
         {
             var validationErrors = syncRule.Validate();
             var errorMessage = string.Join("; ", validationErrors.Select(v => v.Message));
-            return BadRequest(ApiErrorResponse.BadRequest($"Sync Rule validation failed: {errorMessage}"));
+            return BadRequest(ApiErrorResponse.BadRequest($"Synchronisation Rule validation failed: {errorMessage}"));
         }
 
-        _logger.LogInformation("Updated Sync Rule: {Id} ({Name})", syncRule.Id, LogSanitiser.Sanitise(syncRule.Name));
+        _logger.LogInformation("Updated Synchronisation Rule: {Id} ({Name})", syncRule.Id, LogSanitiser.Sanitise(syncRule.Name));
 
-        // Retrieve the updated Sync Rule
+        // Retrieve the updated Synchronisation Rule
         var updated = await _application.ConnectedSystems.GetSyncRuleAsync(id);
         return Ok(SyncRuleHeader.FromEntity(updated!));
     }
@@ -1751,20 +1751,20 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> DeleteSyncRuleAsync(int id)
     {
-        _logger.LogInformation("Deleting Sync Rule: {Id}", id);
+        _logger.LogInformation("Deleting Synchronisation Rule: {Id}", id);
 
         // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
-            _logger.LogWarning("Could not identify user from JWT claims for Sync Rule deletion");
+            _logger.LogWarning("Could not identify user from JWT claims for Synchronisation Rule deletion");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Get the Sync Rule
+        // Get the Synchronisation Rule
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(id);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {id} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {id} not found."));
 
         var apiKey = await GetCurrentApiKeyAsync();
         if (apiKey != null)
@@ -1772,14 +1772,14 @@ public class SynchronisationController(
         else
             await _application.ConnectedSystems.DeleteSyncRuleAsync(syncRule, initiatedBy);
 
-        _logger.LogInformation("Deleted Sync Rule: {Id}", id);
+        _logger.LogInformation("Deleted Synchronisation Rule: {Id}", id);
 
         return NoContent();
     }
 
     #endregion
 
-    #region Sync Rule Mappings
+    #region Synchronisation Rule Mappings
 
     /// <summary>
     /// List Attribute Flow Mappings for a Synchronisation Rule
@@ -1792,11 +1792,11 @@ public class SynchronisationController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetSyncRuleMappingsAsync(int syncRuleId)
     {
-        _logger.LogTrace("Requested mappings for Sync Rule: {Id}", syncRuleId);
+        _logger.LogTrace("Requested mappings for Synchronisation Rule: {Id}", syncRuleId);
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var mappings = await _application.ConnectedSystems.GetSyncRuleMappingsAsync(syncRuleId);
         var dtos = mappings.Select(SyncRuleMappingDto.FromEntity);
@@ -1815,15 +1815,15 @@ public class SynchronisationController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetSyncRuleMappingAsync(int syncRuleId, int mappingId)
     {
-        _logger.LogTrace("Requested mapping {MappingId} for Sync Rule: {SyncRuleId}", mappingId, syncRuleId);
+        _logger.LogTrace("Requested mapping {MappingId} for Synchronisation Rule: {SyncRuleId}", mappingId, syncRuleId);
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var mapping = await _application.ConnectedSystems.GetSyncRuleMappingAsync(mappingId);
         if (mapping == null || mapping.SyncRule?.Id != syncRuleId)
-            return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} not found in Sync Rule {syncRuleId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} not found in Synchronisation Rule {syncRuleId}."));
 
         return Ok(SyncRuleMappingDto.FromEntity(mapping));
     }
@@ -1848,7 +1848,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateSyncRuleMappingAsync(int syncRuleId, [FromBody] CreateSyncRuleMappingRequest request)
     {
-        _logger.LogInformation("Creating mapping for Sync Rule: {SyncRuleId}", syncRuleId);
+        _logger.LogInformation("Creating mapping for Synchronisation Rule: {SyncRuleId}", syncRuleId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -1859,7 +1859,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         // Create the mapping using FK ID and nav property (nav property needed for validation;
         // cleared before save by ClearMappingNavigationProperties)
@@ -1891,9 +1891,9 @@ public class SynchronisationController(
             if (csAttr == null)
                 return NotFound(ApiErrorResponse.NotFound($"Connected System attribute with ID {request.TargetConnectedSystemAttributeId} not found."));
 
-            // Verify attribute belongs to the Sync Rule's object type
+            // Verify attribute belongs to the Synchronisation Rule's object type
             if (csAttr.ConnectedSystemObjectType.Id != syncRule.ConnectedSystemObjectTypeId)
-                return BadRequest(ApiErrorResponse.BadRequest($"Attribute {csAttr.Name} does not belong to the Sync Rule's object type."));
+                return BadRequest(ApiErrorResponse.BadRequest($"Attribute {csAttr.Name} does not belong to the Synchronisation Rule's object type."));
 
             mapping.TargetConnectedSystemAttributeId = csAttr.Id;
             mapping.TargetConnectedSystemAttribute = csAttr;
@@ -1927,9 +1927,9 @@ public class SynchronisationController(
                 if (csAttr == null)
                     return NotFound(ApiErrorResponse.NotFound($"Connected System attribute with ID {sourceRequest.ConnectedSystemAttributeId} not found."));
 
-                // Verify attribute belongs to the Sync Rule's object type
+                // Verify attribute belongs to the Synchronisation Rule's object type
                 if (csAttr.ConnectedSystemObjectType.Id != syncRule.ConnectedSystemObjectTypeId)
-                    return BadRequest(ApiErrorResponse.BadRequest($"Attribute {csAttr.Name} does not belong to the Sync Rule's object type."));
+                    return BadRequest(ApiErrorResponse.BadRequest($"Attribute {csAttr.Name} does not belong to the Synchronisation Rule's object type."));
 
                 source.ConnectedSystemAttributeId = csAttr.Id;
                 source.ConnectedSystemAttribute = csAttr;
@@ -1964,7 +1964,7 @@ public class SynchronisationController(
             else
                 await _application.ConnectedSystems.CreateSyncRuleMappingAsync(mapping, initiatedBy);
 
-            _logger.LogInformation("Created mapping {MappingId} for Sync Rule {SyncRuleId}", mapping.Id, syncRuleId);
+            _logger.LogInformation("Created mapping {MappingId} for Synchronisation Rule {SyncRuleId}", mapping.Id, syncRuleId);
 
             // Retrieve the created mapping to get all populated fields
             var created = await _application.ConnectedSystems.GetSyncRuleMappingAsync(mapping.Id);
@@ -1972,7 +1972,7 @@ public class SynchronisationController(
         }
         catch (ArgumentException ex)
         {
-            _logger.LogWarning(ex, "Failed to create Sync Rule mapping: {Message}", ex.Message);
+            _logger.LogWarning(ex, "Failed to create Synchronisation Rule mapping: {Message}", ex.Message);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
     }
@@ -1992,7 +1992,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> DeleteSyncRuleMappingAsync(int syncRuleId, int mappingId)
     {
-        _logger.LogInformation("Deleting mapping {MappingId} for Sync Rule {SyncRuleId}", mappingId, syncRuleId);
+        _logger.LogInformation("Deleting mapping {MappingId} for Synchronisation Rule {SyncRuleId}", mappingId, syncRuleId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -2003,11 +2003,11 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var mapping = await _application.ConnectedSystems.GetSyncRuleMappingAsync(mappingId);
         if (mapping == null || mapping.SyncRule?.Id != syncRuleId)
-            return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} not found in Sync Rule {syncRuleId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} not found in Synchronisation Rule {syncRuleId}."));
 
         // Get the current API key for Activity attribution if authenticated via API key
         var apiKey = await GetCurrentApiKeyAsync();
@@ -2016,14 +2016,14 @@ public class SynchronisationController(
         else
             await _application.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping, initiatedBy);
 
-        _logger.LogInformation("Deleted mapping {MappingId} from Sync Rule {SyncRuleId}", mappingId, syncRuleId);
+        _logger.LogInformation("Deleted mapping {MappingId} from Synchronisation Rule {SyncRuleId}", mappingId, syncRuleId);
 
         return NoContent();
     }
 
     #endregion
 
-    #region Sync Rule Scoping Criteria
+    #region Synchronisation Rule Scoping Criteria
 
     /// <summary>
     /// List Scoping Criteria groups for a Synchronisation Rule
@@ -2039,11 +2039,11 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetScopingCriteriaGroupsAsync(int syncRuleId)
     {
-        _logger.LogTrace("Requested scoping criteria for Sync Rule: {Id}", syncRuleId);
+        _logger.LogTrace("Requested scoping criteria for Synchronisation Rule: {Id}", syncRuleId);
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var dtos = syncRule.ObjectScopingCriteriaGroups
             .Where(g => g.ParentGroup == null) // Only return root groups (children are nested)
@@ -2063,15 +2063,15 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetScopingCriteriaGroupAsync(int syncRuleId, int groupId)
     {
-        _logger.LogTrace("Requested scoping criteria group {GroupId} for Sync Rule: {SyncRuleId}", groupId, syncRuleId);
+        _logger.LogTrace("Requested scoping criteria group {GroupId} for Synchronisation Rule: {SyncRuleId}", groupId, syncRuleId);
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var group = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, groupId);
         if (group == null)
-            return NotFound(ApiErrorResponse.NotFound($"Scoping criteria group with ID {groupId} not found in Sync Rule {syncRuleId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Scoping criteria group with ID {groupId} not found in Synchronisation Rule {syncRuleId}."));
 
         return Ok(SyncRuleScopingCriteriaGroupDto.FromEntity(group));
     }
@@ -2095,7 +2095,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateScopingCriteriaGroupAsync(int syncRuleId, [FromBody] CreateScopingCriteriaGroupRequest request)
     {
-        _logger.LogInformation("Creating scoping criteria group for Sync Rule: {SyncRuleId}", syncRuleId);
+        _logger.LogInformation("Creating scoping criteria group for Synchronisation Rule: {SyncRuleId}", syncRuleId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -2103,7 +2103,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         if (!Enum.TryParse<SearchGroupType>(request.Type, true, out var groupType))
             return BadRequest(ApiErrorResponse.BadRequest($"Invalid group type '{request.Type}'. Valid values: All, Any."));
@@ -2123,7 +2123,7 @@ public class SynchronisationController(
                 await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey);
             else
                 await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
-            _logger.LogInformation("Created scoping criteria group {GroupId} for Sync Rule {SyncRuleId}", group.Id, syncRuleId);
+            _logger.LogInformation("Created scoping criteria group {GroupId} for Synchronisation Rule {SyncRuleId}", group.Id, syncRuleId);
             return CreatedAtRoute("GetScopingCriteriaGroup", new { syncRuleId, groupId = group.Id }, SyncRuleScopingCriteriaGroupDto.FromEntity(group));
         }
         catch (ArgumentException ex)
@@ -2147,7 +2147,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateChildScopingCriteriaGroupAsync(int syncRuleId, int parentGroupId, [FromBody] CreateScopingCriteriaGroupRequest request)
     {
-        _logger.LogInformation("Creating child scoping criteria group under {ParentId} for Sync Rule: {SyncRuleId}", parentGroupId, syncRuleId);
+        _logger.LogInformation("Creating child scoping criteria group under {ParentId} for Synchronisation Rule: {SyncRuleId}", parentGroupId, syncRuleId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -2155,7 +2155,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var parentGroup = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, parentGroupId);
         if (parentGroup == null)
@@ -2204,7 +2204,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> UpdateScopingCriteriaGroupAsync(int syncRuleId, int groupId, [FromBody] UpdateScopingCriteriaGroupRequest request)
     {
-        _logger.LogInformation("Updating scoping criteria group {GroupId} for Sync Rule: {SyncRuleId}", groupId, syncRuleId);
+        _logger.LogInformation("Updating scoping criteria group {GroupId} for Synchronisation Rule: {SyncRuleId}", groupId, syncRuleId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -2212,7 +2212,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var group = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, groupId);
         if (group == null)
@@ -2257,7 +2257,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> DeleteScopingCriteriaGroupAsync(int syncRuleId, int groupId)
     {
-        _logger.LogInformation("Deleting scoping criteria group {GroupId} for Sync Rule: {SyncRuleId}", groupId, syncRuleId);
+        _logger.LogInformation("Deleting scoping criteria group {GroupId} for Synchronisation Rule: {SyncRuleId}", groupId, syncRuleId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -2265,7 +2265,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var group = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, groupId);
         if (group == null)
@@ -2311,7 +2311,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateScopingCriterionAsync(int syncRuleId, int groupId, [FromBody] CreateScopingCriterionRequest request)
     {
-        _logger.LogInformation("Creating criterion in group {GroupId} for Sync Rule: {SyncRuleId}", groupId, syncRuleId);
+        _logger.LogInformation("Creating criterion in group {GroupId} for Synchronisation Rule: {SyncRuleId}", groupId, syncRuleId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -2319,7 +2319,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var group = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, groupId);
         if (group == null)
@@ -2341,23 +2341,23 @@ public class SynchronisationController(
             CaseSensitive = request.CaseSensitive
         };
 
-        // Set the appropriate attribute based on Sync Rule direction
+        // Set the appropriate attribute based on Synchronisation Rule direction
         if (syncRule.Direction == SyncRuleDirection.Export)
         {
             // Export rules evaluate Metaverse attributes. Resolve the attribute from the
-            // Sync Rule's already-tracked MetaverseObjectType.Attributes graph rather than
+            // Synchronisation Rule's already-tracked MetaverseObjectType.Attributes graph rather than
             // a separate Metaverse repository call: that would return a second untracked
             // instance with the same Id and throw "another instance with the same key value
             // is already being tracked" on SaveChanges. This mirrors the inbound path
             // immediately below.
             if (!request.MetaverseAttributeId.HasValue)
-                return BadRequest(ApiErrorResponse.BadRequest("MetaverseAttributeId is required for export Sync Rules."));
+                return BadRequest(ApiErrorResponse.BadRequest("MetaverseAttributeId is required for export Synchronisation Rules."));
 
             var mvAttribute = syncRule.MetaverseObjectType?.Attributes
                 .FirstOrDefault(a => a.Id == request.MetaverseAttributeId);
 
             if (mvAttribute == null)
-                return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {request.MetaverseAttributeId} not found on this Sync Rule's Metaverse Object Type."));
+                return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {request.MetaverseAttributeId} not found on this Synchronisation Rule's Metaverse Object Type."));
 
             criterion.MetaverseAttribute = mvAttribute;
         }
@@ -2365,14 +2365,14 @@ public class SynchronisationController(
         {
             // Import rules evaluate Connected System attributes
             if (!request.ConnectedSystemAttributeId.HasValue)
-                return BadRequest(ApiErrorResponse.BadRequest("ConnectedSystemAttributeId is required for import Sync Rules."));
+                return BadRequest(ApiErrorResponse.BadRequest("ConnectedSystemAttributeId is required for import Synchronisation Rules."));
 
-            // Get the CS attribute from the Sync Rule's Connected System Object Type
+            // Get the CS attribute from the Synchronisation Rule's Connected System Object Type
             var csAttribute = syncRule.ConnectedSystemObjectType?.Attributes
                 .FirstOrDefault(a => a.Id == request.ConnectedSystemAttributeId);
 
             if (csAttribute == null)
-                return NotFound(ApiErrorResponse.NotFound($"Connected System attribute with ID {request.ConnectedSystemAttributeId} not found in Sync Rule's object type."));
+                return NotFound(ApiErrorResponse.NotFound($"Connected System attribute with ID {request.ConnectedSystemAttributeId} not found in Synchronisation Rule's object type."));
 
             criterion.ConnectedSystemAttribute = csAttribute;
         }
@@ -2417,7 +2417,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var group = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, groupId);
         if (group == null)
@@ -2826,7 +2826,7 @@ public class SynchronisationController(
 
     #endregion
 
-    #region Sync Rule Object Matching Rules (Advanced Mode)
+    #region Synchronisation Rule Object Matching Rules (Advanced Mode)
 
     /// <summary>
     /// List Object Matching Rules for a Synchronisation Rule
@@ -2840,11 +2840,11 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetSyncRuleObjectMatchingRulesAsync(int syncRuleId)
     {
-        _logger.LogInformation("Getting Object Matching Rules for Sync Rule {SyncRuleId}", syncRuleId);
+        _logger.LogInformation("Getting Object Matching Rules for Synchronisation Rule {SyncRuleId}", syncRuleId);
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var rules = syncRule.ObjectMatchingRules
             .OrderBy(r => r.Order)
@@ -2867,15 +2867,15 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetSyncRuleObjectMatchingRuleAsync(int syncRuleId, int ruleId)
     {
-        _logger.LogInformation("Getting Object Matching Rule {RuleId} for Sync Rule {SyncRuleId}", ruleId, syncRuleId);
+        _logger.LogInformation("Getting Object Matching Rule {RuleId} for Synchronisation Rule {SyncRuleId}", ruleId, syncRuleId);
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var rule = syncRule.ObjectMatchingRules.FirstOrDefault(r => r.Id == ruleId);
         if (rule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found on Sync Rule {syncRuleId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found on Synchronisation Rule {syncRuleId}."));
 
         return Ok(ObjectMatchingRuleDto.FromEntity(rule));
     }
@@ -2897,7 +2897,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateSyncRuleObjectMatchingRuleAsync(int syncRuleId, [FromBody] CreateSyncRuleObjectMatchingRuleRequest request)
     {
-        _logger.LogInformation("Creating Object Matching Rule for Sync Rule {SyncRuleId}", syncRuleId);
+        _logger.LogInformation("Creating Object Matching Rule for Synchronisation Rule {SyncRuleId}", syncRuleId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -2908,7 +2908,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         // Validate target MV attribute exists
         var mvAttributes = await _application.Metaverse.GetMetaverseAttributesAsync();
@@ -2931,7 +2931,7 @@ public class SynchronisationController(
             CaseSensitive = request.CaseSensitive
         };
 
-        // Add sources - for advanced mode, sources reference CS attributes from the Sync Rule's object type
+        // Add sources - for advanced mode, sources reference CS attributes from the Synchronisation Rule's object type
         var objectType = syncRule.ConnectedSystemObjectType;
         foreach (var sourceRequest in request.Sources)
         {
@@ -2972,7 +2972,7 @@ public class SynchronisationController(
             else
                 await _application.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, initiatedBy);
 
-            _logger.LogInformation("Created Object Matching Rule {RuleId} for Sync Rule {SyncRuleId}", rule.Id, syncRuleId);
+            _logger.LogInformation("Created Object Matching Rule {RuleId} for Synchronisation Rule {SyncRuleId}", rule.Id, syncRuleId);
 
             return CreatedAtRoute("GetSyncRuleObjectMatchingRule",
                 new { syncRuleId, ruleId = rule.Id },
@@ -3003,7 +3003,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> UpdateSyncRuleObjectMatchingRuleAsync(int syncRuleId, int ruleId, [FromBody] UpdateObjectMatchingRuleRequest request)
     {
-        _logger.LogInformation("Updating Object Matching Rule {RuleId} for Sync Rule {SyncRuleId}", ruleId, syncRuleId);
+        _logger.LogInformation("Updating Object Matching Rule {RuleId} for Synchronisation Rule {SyncRuleId}", ruleId, syncRuleId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -3014,15 +3014,15 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var rule = await _application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
         if (rule == null)
             return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found."));
 
-        // Verify the rule belongs to this Sync Rule
+        // Verify the rule belongs to this Synchronisation Rule
         if (rule.SyncRuleId != syncRuleId)
-            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found on Sync Rule {syncRuleId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found on Synchronisation Rule {syncRuleId}."));
 
         // Update order if specified
         if (request.Order.HasValue)
@@ -3093,7 +3093,7 @@ public class SynchronisationController(
             else
                 await _application.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, initiatedBy);
 
-            _logger.LogInformation("Updated Object Matching Rule {RuleId} for Sync Rule {SyncRuleId}", ruleId, syncRuleId);
+            _logger.LogInformation("Updated Object Matching Rule {RuleId} for Synchronisation Rule {SyncRuleId}", ruleId, syncRuleId);
 
             return Ok(ObjectMatchingRuleDto.FromEntity(rule));
         }
@@ -3119,7 +3119,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> DeleteSyncRuleObjectMatchingRuleAsync(int syncRuleId, int ruleId)
     {
-        _logger.LogInformation("Deleting Object Matching Rule {RuleId} from Sync Rule {SyncRuleId}", ruleId, syncRuleId);
+        _logger.LogInformation("Deleting Object Matching Rule {RuleId} from Synchronisation Rule {SyncRuleId}", ruleId, syncRuleId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -3130,15 +3130,15 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var rule = await _application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
         if (rule == null)
             return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found."));
 
-        // Verify the rule belongs to this Sync Rule
+        // Verify the rule belongs to this Synchronisation Rule
         if (rule.SyncRuleId != syncRuleId)
-            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found on Sync Rule {syncRuleId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found on Synchronisation Rule {syncRuleId}."));
 
         var apiKey = await GetCurrentApiKeyAsync();
         if (apiKey != null)
@@ -3146,7 +3146,7 @@ public class SynchronisationController(
         else
             await _application.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule, initiatedBy);
 
-        _logger.LogInformation("Deleted Object Matching Rule {RuleId} from Sync Rule {SyncRuleId}", ruleId, syncRuleId);
+        _logger.LogInformation("Deleted Object Matching Rule {RuleId} from Synchronisation Rule {SyncRuleId}", ruleId, syncRuleId);
 
         return NoContent();
     }

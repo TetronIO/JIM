@@ -53,7 +53,7 @@ public class MetaverseObjectChange
     public string? InitiatedByName { get; set; }
 
     /// <summary>
-    /// What mechanism triggered this change (Sync Rule, workflow, direct user action, etc.).
+    /// What mechanism triggered this change (Synchronisation Rule, workflow, direct user action, etc.).
     /// </summary>
     public MetaverseObjectChangeInitiatorType ChangeInitiatorType { get; set; }
 
@@ -63,15 +63,15 @@ public class MetaverseObjectChange
     public ObjectChangeType ChangeType { get; set; }
 
     /// <summary>
-    /// The Sync Rule that caused this change (for sync-initiated changes).
-    /// Nullable FK - if Sync Rule is deleted, this becomes null.
+    /// The Synchronisation Rule that caused this change (for sync-initiated changes).
+    /// Nullable FK - if Synchronisation Rule is deleted, this becomes null.
     /// </summary>
     public SyncRule? SyncRule { get; set; }
     public int? SyncRuleId { get; set; }
 
     /// <summary>
-    /// Snapshot of Sync Rule name at time of change.
-    /// Preserved even if Sync Rule is deleted for audit trail.
+    /// Snapshot of Synchronisation Rule name at time of change.
+    /// Preserved even if Synchronisation Rule is deleted for audit trail.
     /// </summary>
     public string? SyncRuleName { get; set; }
 

@@ -196,7 +196,7 @@
 
     private async Task HandleConnectedSystemSelectedAsync(string connectedSystemId)
     {
-        // convert to int and assign to the Sync Rule
+        // convert to int and assign to the Synchronisation Rule
         var connectedSystemIdInt = int.Parse(connectedSystemId);
         using var jim = JimFactory.Create();
         var connectedSystem = await jim.ConnectedSystems.GetConnectedSystemAsync(connectedSystemIdInt);

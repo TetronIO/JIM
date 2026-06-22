@@ -496,7 +496,7 @@
 
                     case ActivityTargetType.SyncRule:
                         <div>
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Sync Rule</MudText><br/>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Synchronisation Rule</MudText><br/>
                             @if (_selectedActivity.SyncRuleId.HasValue)
                             {
                                 <MudLink Typo="Typo.body1" Href="@($"/admin/sync-rules/{_selectedActivity.SyncRuleId}")">@_selectedActivity.TargetName</MudLink>
@@ -554,7 +554,7 @@
                         @if (!string.IsNullOrEmpty(_selectedActivity.TargetContext))
                         {
                             <div class="mb-4">
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Sync Rule</MudText><br/>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Synchronisation Rule</MudText><br/>
                                 <MudText Typo="Typo.body1">@_selectedActivity.TargetContext</MudText>
                             </div>
                         }

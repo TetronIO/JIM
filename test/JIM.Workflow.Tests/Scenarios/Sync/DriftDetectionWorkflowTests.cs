@@ -236,7 +236,7 @@ public class DriftDetectionWorkflowTests
     /// - After confirming imports, AD CSOs have values from MVO
     /// - Running full sync on AD should NOT flag these values as drift because HR is the contributor
     ///
-    /// This test specifically covers the bug where BuildDriftDetectionCache only loaded Sync Rules
+    /// This test specifically covers the bug where BuildDriftDetectionCache only loaded Synchronisation Rules
     /// for the current system, causing the import mapping cache to be empty for export-only systems,
     /// leading to false positive drift detection.
     /// </summary>
@@ -271,7 +271,7 @@ public class DriftDetectionWorkflowTests
             "Should have no Pending Exports before full sync");
 
         // Step 2: Run FULL SYNC on AD (export-only target system)
-        // This tests the fix: BuildDriftDetectionCache must load ALL Sync Rules from ALL systems
+        // This tests the fix: BuildDriftDetectionCache must load ALL Synchronisation Rules from ALL systems
         // to correctly identify HR as a contributor to the MVO attributes.
         // Without the fix, the import mapping cache would be empty for AD (no import rules),
         // causing drift detection to incorrectly flag ALL objects as drift.
@@ -760,7 +760,7 @@ public class DriftDetectionWorkflowTests
         var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
         var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
 
-        // Create import Sync Rule (HR → MV) - HR is the contributor
+        // Create import Synchronisation Rule (HR → MV) - HR is the contributor
         await _harness.CreateSyncRuleAsync(
             "HR Import",
             "HR",
@@ -772,7 +772,7 @@ public class DriftDetectionWorkflowTests
                 .WithAttributeFlow(mvDisplayName, hrDisplayName)
                 .WithExpressionFlow("\"PersonEntity\"", mvType));
 
-        // Create export Sync Rule (MV → AD) - AD is the target (non-contributor)
+        // Create export Synchronisation Rule (MV → AD) - AD is the target (non-contributor)
         await _harness.CreateSyncRuleAsync(
             "AD Export",
             "AD",
@@ -901,7 +901,7 @@ public class DriftDetectionWorkflowTests
         var mvEndDate = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Employee End Date");
         var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
 
-        // Create import Sync Rule (HR → MV)
+        // Create import Synchronisation Rule (HR → MV)
         await _harness.CreateSyncRuleAsync(
             "HR Import",
             "HR",
@@ -914,7 +914,7 @@ public class DriftDetectionWorkflowTests
                 .WithAttributeFlow(mvEndDate, hrEndDate)
                 .WithExpressionFlow("\"PersonEntity\"", mvType));
 
-        // Create export Sync Rule (MV → AD) with expression-based mapping
+        // Create export Synchronisation Rule (MV → AD) with expression-based mapping
         // ToFileTime converts DateTime to Windows FILETIME (long) — same as real accountExpires flow
         await _harness.CreateSyncRuleAsync(
             "AD Export",
@@ -1077,7 +1077,7 @@ public class DriftDetectionWorkflowTests
             .WithStringAttribute("cn")
             .WithReferenceAttribute("member", isMultiValued: true));
 
-        // Get attributes for Sync Rules
+        // Get attributes for Synchronisation Rules
         var sourceUserType = _harness.GetObjectType("Source", "User");
         var sourceGroupType = _harness.GetObjectType("Source", "Group");
         var targetUserType = _harness.GetObjectType("Target", "User");
@@ -1100,7 +1100,7 @@ public class DriftDetectionWorkflowTests
         var mvGroupMember = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "member");
         var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type" && a.MetaverseObjectTypes.Any(t => t.Name == "Person"));
 
-        // Create Source import Sync Rules (Source is the contributor)
+        // Create Source import Synchronisation Rules (Source is the contributor)
         await _harness.CreateSyncRuleAsync(
             "Source User Import",
             "Source",
@@ -1123,7 +1123,7 @@ public class DriftDetectionWorkflowTests
                 .WithAttributeFlow(mvGroupCn, sourceGroupCn)
                 .WithAttributeFlow(mvGroupMember, sourceGroupMember));
 
-        // Create Target export Sync Rules (Target is export-only, non-contributor)
+        // Create Target export Synchronisation Rules (Target is export-only, non-contributor)
         await _harness.CreateSyncRuleAsync(
             "Target User Export",
             "Target",
@@ -1498,7 +1498,7 @@ public class DriftDetectionWorkflowTests
         var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
             .WithStringAttribute("displayName"));
 
-        // Get attributes for Sync Rule
+        // Get attributes for Synchronisation Rule
         var testUserType = _harness.GetObjectType("TestSystem", "User");
         var csoDisplayName = testUserType.Attributes.First(a => a.Name == "displayName");
         var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
@@ -1588,7 +1588,7 @@ public class DriftDetectionWorkflowTests
         var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
             .WithStringAttribute("cn"));
 
-        // Get attributes for Sync Rules
+        // Get attributes for Synchronisation Rules
         var sourceUserType = _harness.GetObjectType("Source", "User");
         var targetUserType = _harness.GetObjectType("Target", "User");
 

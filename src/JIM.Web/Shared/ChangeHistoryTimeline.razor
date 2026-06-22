@@ -510,7 +510,7 @@ else
         /// </summary>
         public string ChangeMechanismType { get; set; } = string.Empty;
         /// <summary>
-        /// The Sync Rule that caused this change (if applicable).
+        /// The Synchronisation Rule that caused this change (if applicable).
         /// </summary>
         public int? SyncRuleId { get; set; }
         public string? SyncRuleName { get; set; }
@@ -995,7 +995,7 @@ else
         {
             int seq = 0;
 
-            // Determine if this is a sync-initiated change (by mechanism type or Sync Rule context)
+            // Determine if this is a sync-initiated change (by mechanism type or Synchronisation Rule context)
             bool isSyncChange = changeGroup.ChangeMechanismType == "SynchronisationRule" ||
     changeGroup.SyncRuleId != null ||
     !string.IsNullOrEmpty(changeGroup.SyncRuleName);
@@ -1051,7 +1051,7 @@ else
     {
         return builder =>
         {
-            // Check if this is a sync-initiated change (by mechanism type or Sync Rule context)
+            // Check if this is a sync-initiated change (by mechanism type or Synchronisation Rule context)
             bool isSyncChange = changeGroup.ChangeMechanismType == "SynchronisationRule" ||
     changeGroup.SyncRuleId != null ||
     !string.IsNullOrEmpty(changeGroup.SyncRuleName);
@@ -1072,7 +1072,7 @@ else
         {
             int seq = 0;
 
-            // Check if this is a sync-initiated change (by mechanism type or Sync Rule context)
+            // Check if this is a sync-initiated change (by mechanism type or Synchronisation Rule context)
             bool isSyncChange = changeGroup.ChangeMechanismType == "SynchronisationRule" ||
     changeGroup.SyncRuleId != null ||
     !string.IsNullOrEmpty(changeGroup.SyncRuleName);
@@ -1228,7 +1228,7 @@ else
 
     /// <summary>
     /// Generates the text for the modal mechanism (how) display.
-    /// For sync changes, shows the Sync Rule as a link if available.
+    /// For sync changes, shows the Synchronisation Rule as a link if available.
     /// For import changes, shows "Import" with Connected System link.
     /// </summary>
     private RenderFragment GetModalMechanismText(ChangeGroup changeGroup)
@@ -1243,7 +1243,7 @@ else
             // Check if we have Connected System info (for both CSO and MVO Run Profile changes)
             bool hasConnectedSystemInfo = changeGroup.ConnectedSystemId != null;
 
-            // Check if this is an MVO sync change with Sync Rule info
+            // Check if this is an MVO sync change with Synchronisation Rule info
             bool hasSyncRuleInfo = changeGroup.SyncRuleId != null || !string.IsNullOrEmpty(changeGroup.SyncRuleName);
 
             // Check if this is a sync-type change
@@ -1274,7 +1274,7 @@ else
                     builder.CloseComponent();
                 }
 
-                // For MVO sync changes, also show Sync Rule info if available
+                // For MVO sync changes, also show Synchronisation Rule info if available
                 if (hasSyncRuleInfo)
                 {
                     builder.OpenComponent<MudText>(seq++);
@@ -1287,12 +1287,12 @@ else
                         builder.OpenComponent<MudLink>(seq++);
                         builder.AddAttribute(seq++, "Href", $"/admin/sync-rules/{changeGroup.SyncRuleId}");
                         builder.AddAttribute(seq++, "Style", "margin-left: 4px;");
-                        builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.SyncRuleName ?? "Sync Rule")));
+                        builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.SyncRuleName ?? "Synchronisation Rule")));
                         builder.CloseComponent();
                     }
                     else
                     {
-                        // Sync Rule was deleted, show name with "(deleted)" indicator
+                        // Synchronisation Rule was deleted, show name with "(deleted)" indicator
                         builder.OpenComponent<MudText>(seq++);
                         builder.AddAttribute(seq++, "Style", "display: inline; margin-left: 4px;");
                         builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, $"{changeGroup.SyncRuleName} (deleted)")));
@@ -1302,7 +1302,7 @@ else
             }
             else if (isSyncMechanism)
             {
-                // Sync change without Sync Rule or Connected System info - show Run Profile name or "Synchronisation"
+                // Sync change without Synchronisation Rule or Connected System info - show Run Profile name or "Synchronisation"
                 var runProfileDisplayName = !string.IsNullOrEmpty(changeGroup.RunProfileName) ? changeGroup.RunProfileName :
         "Synchronisation";
                 builder.OpenComponent<MudText>(seq++);

@@ -1,4 +1,4 @@
-# Sync Rule Scoping
+# Synchronisation Rule Scoping
 
 | | |
 |---|---|
@@ -6,11 +6,11 @@
 | **Last Updated** | 2026-04-23 |
 | **Status** | Active |
 
-This document describes the behaviour of Sync Rule scoping in JIM, the administrator-facing scenarios it supports, and how each scenario is realised in code.
+This document describes the behaviour of Synchronisation Rule scoping in JIM, the administrator-facing scenarios it supports, and how each scenario is realised in code.
 
 ## Business scenarios supported today
 
-Scoping rules on a Sync Rule determine which Connected System Objects (CSOs) or Metaverse Objects (MVOs) the rule applies to. Transitions in and out of scope drive the following business scenarios:
+Scoping rules on a Synchronisation Rule determine which Connected System Objects (CSOs) or Metaverse Objects (MVOs) the rule applies to. Transitions in and out of scope drive the following business scenarios:
 
 - **Onboarding**: a new CSO from an authoritative system (for example HR) enters scope of an import rule, causing the identity to be projected into the metaverse and subsequently provisioned into downstream systems by matching export rules.
 - **Ongoing attribute updates**: CSOs and MVOs that remain in scope have their attribute changes flowed through the normal precedence logic.

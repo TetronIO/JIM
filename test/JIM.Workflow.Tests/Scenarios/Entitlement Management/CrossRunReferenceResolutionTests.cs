@@ -201,7 +201,7 @@ public class CrossRunReferenceResolutionTests
         await _harness.CreateMetaverseObjectTypeAsync("Group", t => t
             .WithStringAttribute("cn"));
 
-        // Sync Rules are not needed to test import-only reference resolution
+        // Synchronisation Rules are not needed to test import-only reference resolution
     }
 
     private List<ConnectedSystemImportObject> GenerateUserImportObjects()

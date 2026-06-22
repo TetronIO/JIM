@@ -13,10 +13,10 @@ namespace JIM.Worker.Processors;
 public static class SyncRuleMappingProcessor
 {
     /// <summary>
-    /// Processes a Sync Rule mapping to flow attribute values from CSO to MVO.
+    /// Processes a Synchronisation Rule mapping to flow attribute values from CSO to MVO.
     /// </summary>
     /// <param name="connectedSystemObject">The source CSO.</param>
-    /// <param name="syncRuleMapping">The Sync Rule mapping defining the Attribute Flow.</param>
+    /// <param name="syncRuleMapping">The Synchronisation Rule mapping defining the Attribute Flow.</param>
     /// <param name="connectedSystemObjectTypes">Object types for attribute lookup.</param>
     /// <param name="expressionEvaluator">Optional expression evaluator for expression-based mappings.</param>
     /// <param name="skipReferenceAttributes">If true, skip reference attribute processing (deferred to second pass).</param>
@@ -42,7 +42,7 @@ public static class SyncRuleMappingProcessor
 
         if (syncRuleMapping.TargetMetaverseAttribute == null)
         {
-            Log.Error("Process: Sync Rule mapping has no TargetMetaverseAttribute set!");
+            Log.Error("Process: Synchronisation Rule mapping has no TargetMetaverseAttribute set!");
             return;
         }
 
@@ -56,7 +56,7 @@ public static class SyncRuleMappingProcessor
         {
             // goal:
             // generate or select a source value to assign to a target MVO attribute.
-            // inbound Sync Rule mappings can have one or more sources and will compound if numerous. those sources can be of different types, i.e:
+            // inbound Synchronisation Rule mappings can have one or more sources and will compound if numerous. those sources can be of different types, i.e:
             // - direct Attribute Flow
             // - generated from functions
             // - generated from expressions
@@ -66,7 +66,7 @@ public static class SyncRuleMappingProcessor
 
             if (source.ConnectedSystemAttributeId.HasValue)
             {
-                // process the specific CSO attribute defined in this Sync Rule mapping source
+                // process the specific CSO attribute defined in this Synchronisation Rule mapping source
                 var csotAttribute = csoType.Attributes.SingleOrDefault(a => a.Id == source.ConnectedSystemAttributeId.Value);
                 if (csotAttribute != null)
                 {
@@ -254,7 +254,7 @@ public static class SyncRuleMappingProcessor
             !csoAttributeValues.Any(csoav => csoav.StringValue != null && csoav.StringValue.Equals(mvoav.StringValue)));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
-        // find values on the CSO of type string that aren't on the MVO according to the Sync Rule mapping.
+        // find values on the CSO of type string that aren't on the MVO according to the Synchronisation Rule mapping.
         var csoNewAttributeValues = connectedSystemObject.AttributeValues.Where(csoav =>
             csoav.AttributeId == sourceAttributeId &&
             !mvo.AttributeValues.Any(mvoav =>
@@ -299,7 +299,7 @@ public static class SyncRuleMappingProcessor
             !csoAttributeValues.Any(csoav => csoav.IntValue != null && csoav.IntValue.Equals(mvoav.IntValue)));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
-        // find values on the CSO of type int that aren't on the MVO according to the Sync Rule mapping.
+        // find values on the CSO of type int that aren't on the MVO according to the Synchronisation Rule mapping.
         var csoNewAttributeValues = connectedSystemObject.AttributeValues.Where(csoav =>
             csoav.AttributeId == sourceAttributeId &&
             !mvo.AttributeValues.Any(mvoav =>
@@ -384,7 +384,7 @@ public static class SyncRuleMappingProcessor
                 csoav.ByteValue != null && Utilities.Utilities.AreByteArraysTheSame(csoav.ByteValue, mvoav.ByteValue)));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
-        // find values on the CSO of type byte that aren't on the MVO according to the Sync Rule mapping.
+        // find values on the CSO of type byte that aren't on the MVO according to the Synchronisation Rule mapping.
         var csoNewAttributeValues = connectedSystemObject.AttributeValues.Where(csoav =>
             csoav.AttributeId == sourceAttributeId &&
             !mvo.AttributeValues.Any(mvoav =>
@@ -499,7 +499,7 @@ public static class SyncRuleMappingProcessor
                 connectedSystemObject.Id);
         }
 
-        // Find values on the CSO of type reference that aren't on the MVO according to the Sync Rule mapping.
+        // Find values on the CSO of type reference that aren't on the MVO according to the Synchronisation Rule mapping.
         // Build a set of existing MVO reference IDs for O(1) lookup (avoids O(N*M) nested iteration).
         var existingMvoRefIds = new HashSet<Guid>(
             mvo.AttributeValues
@@ -561,7 +561,7 @@ public static class SyncRuleMappingProcessor
             !csoAttributeValues.Any(csoav => csoav.GuidValue.HasValue && csoav.GuidValue.Equals(mvoav.GuidValue)));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
-        // find values on the CSO of type guid that aren't on the MVO according to the Sync Rule mapping.
+        // find values on the CSO of type guid that aren't on the MVO according to the Synchronisation Rule mapping.
         var csoNewAttributeValues = connectedSystemObject.AttributeValues.Where(csoav =>
             csoav.AttributeId == sourceAttributeId &&
             !mvo.AttributeValues.Any(mvoav =>

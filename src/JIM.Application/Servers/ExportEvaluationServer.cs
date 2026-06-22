@@ -38,13 +38,13 @@ public class ExportEvaluationServer
     /// Also loads target CSO attribute values for no-net-change detection during export evaluation.
     /// </summary>
     /// <param name="sourceConnectedSystemId">The source system ID (to exclude from export evaluation via Q3).</param>
-    /// <param name="preloadedSyncRules">Optional pre-loaded Sync Rules to avoid redundant database query.</param>
+    /// <param name="preloadedSyncRules">Optional pre-loaded Synchronisation Rules to avoid redundant database query.</param>
     /// <returns>A cache object to pass to evaluation methods.</returns>
     public async Task<ExportEvaluationCache> BuildExportEvaluationCacheAsync(
         int sourceConnectedSystemId,
         List<SyncRule>? preloadedSyncRules = null)
     {
-        // Use pre-loaded Sync Rules if available, otherwise load from database
+        // Use pre-loaded Synchronisation Rules if available, otherwise load from database
         var allSyncRules = preloadedSyncRules
             ?? await SyncRepo.GetAllSyncRulesAsync();
 
@@ -459,7 +459,7 @@ public class ExportEvaluationServer
     }
 
     /// <summary>
-    /// Handles deprovisioning based on the Sync Rule's OutboundDeprovisionAction setting.
+    /// Handles deprovisioning based on the Synchronisation Rule's OutboundDeprovisionAction setting.
     /// </summary>
     private async Task<PendingExport?> HandleOutboundDeprovisioningAsync(
         MetaverseObject mvo,
@@ -662,7 +662,7 @@ public class ExportEvaluationServer
     }
 
     /// <summary>
-    /// Gets all enabled export Sync Rules for a given MVO object type.
+    /// Gets all enabled export Synchronisation Rules for a given MVO object type.
     /// </summary>
     private async Task<List<SyncRule>> GetExportRulesForObjectTypeAsync(int metaverseObjectTypeId)
     {
@@ -1643,7 +1643,7 @@ public class ExportEvaluationServer
                     // For single-valued attributes, check if this value was removed from the MVO.
                     // Removals occur when an attribute value is no longer contributed by any source
                     // (e.g. attribute recall on CSO obsoletion, source no longer returning the value,
-                    // CSO falling out of Sync Rule scope). The changedAttributes list contains the
+                    // CSO falling out of Synchronisation Rule scope). The changedAttributes list contains the
                     // original values (pre-removal) — we must create a null-clearing export so the
                     // target system clears the attribute, rather than copying the stale old value.
                     var isSingleValuedRemoval = !isMultiValued && removedAttributes?.Contains(mvoValue) == true;
@@ -2050,7 +2050,7 @@ public class ExportEvaluationServer
         }
         else
         {
-            // Advanced mode: rules from the Sync Rule
+            // Advanced mode: rules from the Synchronisation Rule
             matchingRules = exportRule.ObjectMatchingRules?.ToList() ?? new List<ObjectMatchingRule>();
         }
 

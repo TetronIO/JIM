@@ -31,7 +31,7 @@ This document explores the design considerations for outbound synchronisation - 
 
 Outbound sync is the process of:
 1. Detecting that a Metaverse Object (MVO) has changed
-2. Evaluating export Sync Rules to determine what Connected System Objects (CSOs) need updating
+2. Evaluating export Synchronisation Rules to determine what Connected System Objects (CSOs) need updating
 3. Creating Pending Export records describing the required changes
 4. Executing those exports via the appropriate connector
 
@@ -41,7 +41,7 @@ All core outbound sync functionality has been implemented:
 
 - `PendingExport` model with `ChangeType` (Create, Update, Delete)
 - `PendingExportAttributeValueChange` for attribute-level changes with per-attribute confirmation tracking
-- Export Sync Rule direction (`SyncRuleDirection.Export`)
+- Export Synchronisation Rule direction (`SyncRuleDirection.Export`)
 - `ExportEvaluationServer`: evaluates export rules and creates Pending Exports immediately when MVO changes (Q1)
 - `ExportExecutionServer`: executes Pending Exports via connectors with batching, retry, and parallel support
 - `PendingExportReconciliationService`: confirms exports via confirming import with per-attribute granularity
@@ -116,7 +116,7 @@ B) **Add explicit `ProvisionedByJim` flag to CSO**
 - Add configurable `CsoDeletionBehaviour` enum: `ProvisionedOnly`, `AllJoined`, `DisconnectOnly`
 - Allow per-sync-rule configuration of deletion behaviour
 - Consider "disable before delete" pattern for AD accounts
-- Consider scope fallout behaviour (what happens when object falls out of Sync Rule scope)
+- Consider scope fallout behaviour (what happens when object falls out of Synchronisation Rule scope)
 
 ---
 
@@ -132,7 +132,7 @@ This is an edge case that only occurs when a Connected System has **both import 
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  Sync Rules for AD:                                             │
+│  Synchronisation Rules for AD:                                             │
 │                                                                 │
 │  Import Rule: ad.title -> mvo.title                             │
 │  Export Rule: mvo.title -> ad.title                             │
@@ -207,7 +207,7 @@ A) **All joined CSOs** - Every CSO linked to the MVO gets a delete export
 B) **Only provisioned CSOs** - Only CSOs with `JoinType = Provisioned`
    - Safer, only deletes what JIM created
 
-C) **Configurable per Sync Rule** - Export rule specifies whether deletions propagate
+C) **Configurable per Synchronisation Rule** - Export rule specifies whether deletions propagate
    - Maximum flexibility but more complex
 
 **✅ DECISION: Option B** - Only provisioned CSOs for MVP, with Option C as future enhancement (Issue #126).
@@ -234,11 +234,11 @@ C) **Both** - Preview during development, approval for production changes
 **Implementation:**
 
 The user selects the run mode when executing a sync:
-- **Preview Only** - Evaluates Sync Rules and shows what changes would be made, but does not persist any Pending Exports or execute changes
-- **Preview + Sync** - Evaluates Sync Rules, shows the preview, then persists Pending Exports and executes them
+- **Preview Only** - Evaluates Synchronisation Rules and shows what changes would be made, but does not persist any Pending Exports or execute changes
+- **Preview + Sync** - Evaluates Synchronisation Rules, shows the preview, then persists Pending Exports and executes them
 
 This gives admins full control:
-- Use Preview Only when testing new Sync Rules or troubleshooting
+- Use Preview Only when testing new Synchronisation Rules or troubleshooting
 - Use Preview + Sync for normal operations with visibility into what's happening
 
 ---
@@ -868,7 +868,7 @@ When provisioning a new AD account, we need to generate:
 - userPrincipalName
 
 **Options:**
-- Expression-based generation in Sync Rules
+- Expression-based generation in Synchronisation Rules
 - Function library for common patterns
 - Template system
 
@@ -908,8 +908,8 @@ Large reorganisation affecting many objects:
 
 Areas where JIM could improve on legacy ILM tools:
 
-### 1. Simplified Sync Rule Configuration
-Legacy ILM tools often require complex XML and code for Sync Rules. JIM could offer:
+### 1. Simplified Synchronisation Rule Configuration
+Legacy ILM tools often require complex XML and code for Synchronisation Rules. JIM could offer:
 - Visual rule builder
 - Common patterns as templates
 - Plain-language rule descriptions
@@ -945,7 +945,7 @@ If an export causes issues:
 
 ### 7. Dependency Visualisation
 Show relationships between:
-- Sync Rules
+- Synchronisation Rules
 - Object types
 - Connected Systems
 - Which rules affect which attributes
@@ -997,12 +997,12 @@ Based on the design decisions above, this is the implementation plan for outboun
 
 - [x] **2.2 Create `ScopingCriteriaEvaluator.cs`** (utility in `src/JIM.Worker/Processors/`)
   - Implemented as `ScopingEvaluationServer.cs` in `src/JIM.Application/Servers/`
-  - Evaluate if MVO matches Sync Rule scoping criteria groups
+  - Evaluate if MVO matches Synchronisation Rule scoping criteria groups
   - Handle AND/OR logic for criteria groups
 
 - [x] **2.3 Create `OutboundSyncRuleMappingProcessor.cs`** (new processor)
   - Implemented within `ExportEvaluationServer.cs` - maps MVO attributes -> CSO attributes
-  - Maps MVO attributes -> CSO attributes based on Sync Rule mappings
+  - Maps MVO attributes -> CSO attributes based on Synchronisation Rule mappings
 
 - [x] **2.4 Hook into `SyncFullSyncTaskProcessor.cs`**
   - Implemented in `SyncTaskProcessorBase.cs` calling `EvaluateExportRulesWithNoNetChangeDetectionAsync()`
@@ -1107,7 +1107,7 @@ Phase 4         Phase 5                              Phase 6
 1. ~~**Should Pending Exports require approval by default, or be auto-executed?**~~
    - **Resolved**: Auto-execute is the implemented approach. Pending Exports are created and executed automatically via Export Run Profiles. Approval workflows remain a future enhancement (see [Innovation Opportunities](#innovation-opportunities)).
 
-2. ~~**How granular should export Sync Rules be?**~~
+2. ~~**How granular should export Synchronisation Rules be?**~~
    - **Resolved**: Per-attribute granularity is implemented. Each `SyncRuleMapping` maps individual attributes, and `PendingExportAttributeValueChange` tracks per-attribute confirmation status.
 
 3. **Should we support "disable before delete" pattern?**
@@ -1116,7 +1116,7 @@ Phase 4         Phase 5                              Phase 6
 
 4. **How do we handle provisioning to systems that require specific ID formats?**
    - AD needs DN, SAM, UPN
-   - **Partially resolved**: Expression-based mappings in Sync Rules support DN generation (e.g., `"CN=" + EscapeDN(mv["Display Name"]) + ",OU=Users,DC=domain,DC=local"`). Other ID formats handled similarly via expressions.
+   - **Partially resolved**: Expression-based mappings in Synchronisation Rules support DN generation (e.g., `"CN=" + EscapeDN(mv["Display Name"]) + ",OU=Users,DC=domain,DC=local"`). Other ID formats handled similarly via expressions.
 
 5. ~~**Should export sync run as part of Full Sync, or as a separate Run Profile?**~~
    - **Resolved**: Export is a separate Run Profile (`ConnectedSystemRunType.Export = 5`). Export evaluation happens during inbound sync (Q1), but export execution is a separate Run Profile step.

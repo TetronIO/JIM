@@ -64,7 +64,7 @@ Complete the implementation of change object tracking and lifecycle management f
 
 #### 1. MVO Change Object Creation
 Currently `MetaverseObjectChange` is never instantiated. We need to create these during:
-- **Sync operations** - When Sync Rules modify MVO attributes
+- **Sync operations** - When Synchronisation Rules modify MVO attributes
 - **Direct MVO updates** - When admins edit MVOs via UI/API
 - **MVO deletion** - Capture final state before deletion
 - **CSO deletion causing disconnection** - When a CSO is deleted and triggers MVO disconnection (so the RPEI can link to the affected MVO)
@@ -129,7 +129,7 @@ Reusable component for both CSO and MVO detail pages:
 ├── Paginated timeline entries
 │   ├── Timestamp
 │   ├── Change type badge
-│   ├── Initiator (user/Sync Rule/API key)
+│   ├── Initiator (user/Synchronisation Rule/API key)
 │   ├── Expandable attribute changes
 │   │   ├── Attribute name
 │   │   ├── Old value -> New value
@@ -554,7 +554,7 @@ Type the system name to confirm: [________]
 This will permanently delete:
 • The Connected System configuration
 • All 5,432 CSOs
-• All Sync Rules referencing this system
+• All Synchronisation Rules referencing this system
 • All Pending Exports for this system
 
 [✓] Also delete CSO change history (8,234 records)

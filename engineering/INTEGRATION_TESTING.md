@@ -75,7 +75,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario7-ClearConnectedSystemObjects" # Clear connector space testing
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync"  # Group sync between domains
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario9-PartitionScopedImports"  # Partition-scoped import Run Profiles
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario10-SyncRuleScoping"          # Sync Rule scoping behaviour (inbound + outbound)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario10-SyncRuleScoping"          # Synchronisation Rule scoping behaviour (inbound + outbound)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix"    # Scoping criteria evaluation matrix (Default tier)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix" -Quick      # Quick tier (~12 cells, < 90s)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix" -Exhaustive # Exhaustive tier (~152 cells, < 10 min)
@@ -148,7 +148,7 @@ This single script handles everything:
 | `Scenario7-ClearConnectedSystemObjects` | Clear connector space testing | samba-ad-primary / openldap-primary | ✅ |
 | `Scenario8-CrossDomainEntitlementSync` | Group sync between APAC and EMEA domains | samba-ad-source, samba-ad-target / openldap-primary | ✅ |
 | `Scenario9-PartitionScopedImports` | Partition-scoped import Run Profiles | samba-ad-primary / openldap-primary | ✅ |
-| `Scenario10-SyncRuleScoping` | Sync Rule scoping behaviour: inbound enter/in-scope-update/exit (Disconnect, RemainJoined); outbound enter/exit (Disconnect, Delete); cross-system inline cascade; criteria persistence | file (HR CSV), samba-ad-primary / openldap-primary | ✅ |
+| `Scenario10-SyncRuleScoping` | Synchronisation Rule scoping behaviour: inbound enter/in-scope-update/exit (Disconnect, RemainJoined); outbound enter/exit (Disconnect, Delete); cross-system inline cascade; criteria persistence | file (HR CSV), samba-ad-primary / openldap-primary | ✅ |
 | `Scenario11-ScopingCriteriaMatrix` | Scoping criteria evaluation matrix: full operator x value-type x group-structure coverage via batched per-cell CSO and MV types. Three tiers: Quick (~12 cells, < 90s), Default (~41 cells, < 5 min), Exhaustive (~152 cells, < 10 min). Round-trip persistence and API negative-cell probes run first. | file (bespoke deterministic seed) | n/a |
 
 **Available Templates (`-Template` parameter):**
@@ -247,7 +247,7 @@ flowchart TD
 | Stand up external systems | `docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d` | Start Samba AD, databases |
 | Stand up JIM | `jim-stack` or `docker compose up -d` | Start JIM services |
 | Populate test data | `./Populate-SambaAD.ps1 -Template Small` | Create users/groups in external systems |
-| Configure JIM | `./Setup-Scenario1.ps1` | Create Connected Systems, Sync Rules |
+| Configure JIM | `./Setup-Scenario1.ps1` | Create Connected Systems, Synchronisation Rules |
 | Run tests | `./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step All` | Execute test scenario |
 | Reset external systems | `docker compose -f test/integration/docker/docker-compose.integration-tests.yml down -v` | Remove external system data |
 | Reset JIM | `docker compose -f docker-compose.yml down -v` | Remove JIM database (metaverse, config) |
@@ -285,7 +285,7 @@ Integration tests create real data in JIM:
 
 - **Metaverse Objects** - Identity records from imports
 - **Connected System Objects** - Links to external systems
-- **Sync Rules** - Attribute Flow configurations
+- **Synchronisation Rules** - Attribute Flow configurations
 - **Run Profiles** - Execution schedules
 - **Activity History** - Sync operation logs
 
@@ -389,7 +389,7 @@ flowchart TB
 flowchart TD
     A["<b>1. Stand Up Systems</b><br/>docker&nbsp;compose&nbsp;up&nbsp;(selected&nbsp;services&nbsp;based&nbsp;on&nbsp;phase/scenario)"]
     B["<b>2. Populate Test Data</b><br/>PowerShell scripts generate realistic data:<br/>-&nbsp;Populate-SambaAD.ps1&nbsp;-Template&nbsp;Medium<br/>-&nbsp;Generate-TestCSV.ps1&nbsp;-Template&nbsp;Medium<br/>-&nbsp;Populate-SqlServer.ps1&nbsp;-Template&nbsp;Medium&nbsp;(Phase&nbsp;2)"]
-    C["<b>3. Configure JIM</b><br/>PowerShell module creates Connected Systems, Sync Rules, Run Profiles:<br/>-&nbsp;Connect-JIM&nbsp;-ApiKey&nbsp;$env:JIM_API_KEY<br/>-&nbsp;New-JIMConnectedSystem&nbsp;(HR&nbsp;CSV,&nbsp;Samba&nbsp;AD)<br/>-&nbsp;New-JIMSyncRule&nbsp;(attribute&nbsp;flows)<br/>-&nbsp;New-JIMRunProfile&nbsp;(import,&nbsp;sync,&nbsp;export&nbsp;steps)"]
+    C["<b>3. Configure JIM</b><br/>PowerShell module creates Connected Systems, Synchronisation Rules, Run Profiles:<br/>-&nbsp;Connect-JIM&nbsp;-ApiKey&nbsp;$env:JIM_API_KEY<br/>-&nbsp;New-JIMConnectedSystem&nbsp;(HR&nbsp;CSV,&nbsp;Samba&nbsp;AD)<br/>-&nbsp;New-JIMSyncRule&nbsp;(attribute&nbsp;flows)<br/>-&nbsp;New-JIMRunProfile&nbsp;(import,&nbsp;sync,&nbsp;export&nbsp;steps)"]
     D["<b>4. Execute Scenarios</b><br/>Run scenario scripts:<br/>-&nbsp;Invoke-Scenario1-HRToIdentityDirectory.ps1<br/>-&nbsp;Invoke-Scenario2-CrossDomainSync.ps1<br/>-&nbsp;Invoke-Scenario3-GALSYNC.ps1<br/>-&nbsp;Invoke-Scenario7-ClearConnectedSystemObjects.ps1<br/>-&nbsp;..."]
     E["<b>5. Validate Results</b><br/>Assertions check expected outcomes:<br/>-&nbsp;User&nbsp;provisioned&nbsp;correctly?<br/>-&nbsp;Attributes&nbsp;flowed&nbsp;as&nbsp;configured?<br/>-&nbsp;Performance&nbsp;within&nbsp;thresholds?"]
     F["<b>6. Tear Down</b><br/>docker&nbsp;compose&nbsp;down&nbsp;-v&nbsp;(complete&nbsp;cleanup)"]
@@ -846,7 +846,7 @@ These scenarios test group management capabilities - a core ILM function where t
 | Step | Test Case | Description |
 |------|-----------|-------------|
 | 1 | **ImportGroups** | Existing AD groups imported into JIM metaverse with current membership |
-| 2 | **ConvertAuthority** | Groups marked as JIM-authoritative (export Sync Rule enabled) |
+| 2 | **ConvertAuthority** | Groups marked as JIM-authoritative (export Synchronisation Rule enabled) |
 | 3 | **UpdateViaJIM** | Membership changed via JIM API -> changes exported to AD |
 | 4 | **DetectDrift** | Admin manually modifies group in AD -> JIM detects drift |
 | 5 | **ReassertState** | JIM overwrites AD changes, reasserting JIM-managed membership |
@@ -938,9 +938,9 @@ These scenarios test group management capabilities - a core ILM function where t
 
 ---
 
-#### Scenario 10: Sync Rule Scoping Behaviour
+#### Scenario 10: Synchronisation Rule Scoping Behaviour
 
-**Purpose**: Validate the full Sync Rule scoping transition matrix end-to-end — what JIM does when an object enters scope, stays in scope while attributes change, and leaves scope, on both the inbound (Import rule) and outbound (Export rule) sides; plus the cross-system inline cascade and round-trip persistence of common criteria operators.
+**Purpose**: Validate the full Synchronisation Rule scoping transition matrix end-to-end — what JIM does when an object enters scope, stays in scope while attributes change, and leaves scope, on both the inbound (Import rule) and outbound (Export rule) sides; plus the cross-system inline cascade and round-trip persistence of common criteria operators.
 
 **Systems**:
 - Source: CSV (HR system, File connector)
@@ -1015,7 +1015,7 @@ The dedicated scoping evaluation matrix scenario is Scenario 11 (below).
 1. The seed CSV is fanned out so each cell has its own copy of the 15-row seed, tagged with a unique `ObjectType` column value.
 2. The file connector's column-based object-type discovery creates one CSO type per cell.
 3. The scenario creates one MV object type per cell so per-cell projection sets can be read back by type.
-4. The scenario creates one inbound Sync Rule per cell with its scoping criteria attached.
+4. The scenario creates one inbound Synchronisation Rule per cell with its scoping criteria attached.
 5. **One** Full Import run evaluates every rule against the seed (the worker's `EvaluateProjection` runs once per CSO; because each rule's source CSO type is unique to that cell, the `FirstOrDefault` contest is uncontested).
 6. Per-cell assertions query MVOs by their dedicated MV type Id and compare the `EmployeeId` set to the manifest's expected list.
 
@@ -1051,13 +1051,13 @@ The batched approach is what makes Exhaustive fit inside its wall-clock budget; 
 | 2 | **Negative-cell probes** | Three or more semantically-invalid `(operator, value-type)` combinations (e.g. `Contains` on Boolean, `GreaterThan` on Guid). Observed API status recorded; informational only - the current evaluator silently returns false rather than 400-ing, which is a known SHOULD. Skip with `-IncludeNegativeCells:$false`. |
 | 3 | **Matrix cells** | Every cell in the selected tier runs as its own pass/fail assertion. Per-cell expected `EmployeeId` set is pre-computed in the manifest using the same null-handling and case-folding logic as `ScopingEvaluationServer`. |
 
-**Teardown**: A single `Reset-JIMSystem -Force` at scenario end wipes every sandbox object type, attribute, Sync Rule, and projected MVO so the host is left re-runnable.
+**Teardown**: A single `Reset-JIMSystem -Force` at scenario end wipes every sandbox object type, attribute, Synchronisation Rule, and projected MVO so the host is left re-runnable.
 
 ---
 
 ### Phase 2 (Road-mapped) - Database Scenarios
 
-> The scenario numbers below (Multi-Source Aggregation, Database Source/Target, Performance Baselines) were originally drafted as 9, 10, and 11; those numbers are now taken by implemented Phase 1 scenarios (Partition-Scoped Imports, Sync Rule Scoping, Scoping Criteria Matrix). The renumbered planned scenarios start at 12.
+> The scenario numbers below (Multi-Source Aggregation, Database Source/Target, Performance Baselines) were originally drafted as 9, 10, and 11; those numbers are now taken by implemented Phase 1 scenarios (Partition-Scoped Imports, Synchronisation Rule Scoping, Scoping Criteria Matrix). The renumbered planned scenarios start at 12.
 
 #### Scenario 12: Multi-Source Aggregation
 
@@ -1177,7 +1177,7 @@ The batched approach is what makes Exhaustive fit inside its wall-clock budget; 
 
 ### JIM Configuration via PowerShell Module
 
-Integration tests require JIM to be configured with Connected Systems, Sync Rules, and Run Profiles. This is automated using the **JIM PowerShell Module** ([#176](https://github.com/TetronIO/JIM/issues/176)) with **API Key Authentication** ([#175](https://github.com/TetronIO/JIM/issues/175)).
+Integration tests require JIM to be configured with Connected Systems, Synchronisation Rules, and Run Profiles. This is automated using the **JIM PowerShell Module** ([#176](https://github.com/TetronIO/JIM/issues/176)) with **API Key Authentication** ([#175](https://github.com/TetronIO/JIM/issues/175)).
 
 #### Why PowerShell Module?
 
@@ -1232,7 +1232,7 @@ $adSystem = New-JIMConnectedSystem -Name "Panoply AD" `
         UserContainer = "OU=Users,OU=Corp,DC=panoply,DC=local"
     }
 
-# Create Inbound Sync Rule (HR -> Metaverse)
+# Create Inbound Synchronisation Rule (HR -> Metaverse)
 New-JIMSyncRule -Name "HR Users Inbound" `
     -ConnectedSystemId $hrSystem.Id `
     -Direction Inbound `
@@ -1250,7 +1250,7 @@ New-JIMSyncRule -Name "HR Users Inbound" `
         @{ Source = "title"; Target = "title"; Type = "Direct" }
     )
 
-# Create Outbound Sync Rule (Metaverse -> AD)
+# Create Outbound Synchronisation Rule (Metaverse -> AD)
 New-JIMSyncRule -Name "AD Users Outbound" `
     -ConnectedSystemId $adSystem.Id `
     -Direction Outbound `
@@ -1319,7 +1319,7 @@ The issue was that ASP.NET Core's authentication pipeline only runs the DefaultS
 - ✅ `Get-JIMConnectorDefinition` - List and retrieve connector definitions
 - ✅ `Get-JIMConnectedSystem` / `New-JIMConnectedSystem` / `Set-JIMConnectedSystem` - Manage Connected Systems
 - ✅ `Get-JIMRunProfile` / `New-JIMRunProfile` / `Start-JIMRunProfile` - Manage and execute Run Profiles
-- ✅ `Get-JIMSyncRule` / `New-JIMSyncRule` - Manage Sync Rules
+- ✅ `Get-JIMSyncRule` / `New-JIMSyncRule` - Manage Synchronisation Rules
 
 **Fixes Applied:**
 - ✅ Fixed pagination handling for empty arrays (Get-JIMConnectedSystem, Get-JIMSyncRule)
@@ -1327,7 +1327,7 @@ The issue was that ASP.NET Core's authentication pipeline only runs the DefaultS
 - ✅ Fixed JSON serialization of hashtable keys (Set-JIMConnectedSystem)
 
 **Remaining Work:**
-- Sync Rules require object type IDs from imported connector schema (needs schema import cmdlet)
+- Synchronisation Rules require object type IDs from imported connector schema (needs schema import cmdlet)
 
 ---
 
@@ -1603,7 +1603,7 @@ foreach ($attr in $ldapUserType.attributes) {
 }
 ```
 
-Select only the attributes needed for your Sync Rules:
+Select only the attributes needed for your Synchronisation Rules:
 ```powershell
 # ✅ Do this - select only required attributes
 $requiredLdapAttributes = @(
@@ -1718,7 +1718,7 @@ The following sync operations are instrumented:
 | `ResolveReferences` | Resolving object references |
 | `PersistConnectedSystemObjects` | Database persistence |
 | `FullSync` | Full synchronisation cycle |
-| `LoadSyncRules` | Loading Sync Rules |
+| `LoadSyncRules` | Loading Synchronisation Rules |
 | `LoadObjectTypes` | Loading object types |
 | `ProcessConnectedSystemObjects` | Processing CSOs during sync |
 | `Export` | Export to Connected System |
@@ -1948,12 +1948,12 @@ The map size cannot be reliably increased on a running instance; it requires a c
 **User not provisioned**:
 1. Check JIM logs: `docker logs jim.web`
 2. Verify Connected System configured correctly
-3. Verify Sync Rule Attribute Flows
+3. Verify Synchronisation Rule Attribute Flows
 4. Check Run Profile executed successfully
 5. Review Activity history in JIM UI
 
 **Attribute Flow incorrect**:
-1. Review Sync Rule configuration
+1. Review Synchronisation Rule configuration
 2. Check attribute precedence rules
 3. Verify source attribute populated
 4. Check for transformation functions
@@ -2026,7 +2026,7 @@ JIM/
         │   ├── Invoke-Scenario7-ClearConnectedSystemObjects.ps1  # Clear connector space testing
         │   ├── Invoke-Scenario8-CrossDomainEntitlementSync.ps1   # Group sync between domains
         │   ├── Invoke-Scenario9-PartitionScopedImports.ps1       # Partition-scoped import Run Profiles
-        │   ├── Invoke-Scenario10-SyncRuleScoping.ps1             # Sync Rule scoping behaviour
+        │   ├── Invoke-Scenario10-SyncRuleScoping.ps1             # Synchronisation Rule scoping behaviour
         │   ├── Invoke-Scenario11-ScopingCriteriaMatrix.ps1       # Scoping criteria evaluation matrix
         │   ├── data/                                             # Per-scenario data + manifests (incl. Scenario 11 matrix)
         │   └── data/                                              # Scenario-specific CSV overlays (Scenarios 4, 5)
@@ -2091,7 +2091,7 @@ JIM/
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Infrastructure | ✅ Complete | Samba AD, CSV file mounting, volume orchestration |
-| API Endpoints | ✅ Complete | Schema management, Sync Rules, mappings, Run Profiles |
+| API Endpoints | ✅ Complete | Schema management, Synchronisation Rules, mappings, Run Profiles |
 | PowerShell Module | ✅ Complete | Cmdlets cover every scenario currently in use (1, 2, 4, 5, 6, 7, 8, 9, 10) |
 | Scenario 1 | ✅ Complete | 8 lifecycle tests (Joiner, Mover, Mover-Rename, Mover-Move, Disable, Enable, Leaver, Reconnection) plus ImportOnly/SyncOnly diagnostic steps |
 | Scenario 2 | ✅ Complete | All 4 tests (Provision, ForwardSync, ReverseSync, Conflict) |
@@ -2102,7 +2102,7 @@ JIM/
 | Scenario 7 | ✅ Complete | Clear Connected System Objects (DeleteHistory, KeepHistory, EdgeCases) |
 | Scenario 8 | ✅ Complete | All 6 tests (InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup) plus ImportToMV diagnostic step |
 | Scenario 9 | ✅ Complete | Partition-scoped import Run Profiles |
-| Scenario 10 | ✅ Complete | Sync Rule scoping behaviour: 9 sub-tests covering the full inbound + outbound scope transition matrix, cross-system inline cascade, and criteria persistence (#656) |
+| Scenario 10 | ✅ Complete | Synchronisation Rule scoping behaviour: 9 sub-tests covering the full inbound + outbound scope transition matrix, cross-system inline cascade, and criteria persistence (#656) |
 | Scenario 11 | ✅ Complete | Scoping criteria evaluation matrix: three tiers (Quick / Default / Exhaustive) covering operator x value-type x group-structure end-to-end via batched per-cell CSO types, plus round-trip persistence and API negative-cell probes |
 | Entitlement (JIM-to-AD) | ⏸️ Deferred | Requires Internal MVO design |
 | Entitlement (Convert Authority) | ⏸️ Deferred | Requires Internal MVO design |

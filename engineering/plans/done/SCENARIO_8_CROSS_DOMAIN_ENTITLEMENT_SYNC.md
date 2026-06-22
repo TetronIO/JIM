@@ -15,7 +15,7 @@
 
 - **Phase 1: Test Data Infrastructure** - Implemented
   - `Populate-SambaAD-Scenario8.ps1` - Populates users and groups in Source AD
-  - `Setup-Scenario8.ps1` - Configures JIM with Connected Systems, Sync Rules, and attribute mappings
+  - `Setup-Scenario8.ps1` - Configures JIM with Connected Systems, Synchronisation Rules, and attribute mappings
   - `Invoke-Scenario8-CrossDomainEntitlementSync.ps1` - Test scenario runner
   - `Test-GroupHelpers.ps1` - Group helper functions for test data generation
   - OU structure creation for both Source (Corp) and Target (CorpManaged)
@@ -25,7 +25,7 @@
   - Source LDAP Connected System (Panoply APAC)
   - Target LDAP Connected System (Panoply EMEA)
   - User and Group object type selection with required attributes
-  - Import/Export Sync Rules for both users and groups
+  - Import/Export Synchronisation Rules for both users and groups
   - Attribute Flow mappings including DN expressions
   - Matching rules (sAMAccountName -> Account Name)
   - Run Profiles (Full Import, Full Sync, Export)
@@ -409,7 +409,7 @@ This tests the single-valued DN reference attribute sync, which uses the same re
 **Preconditions**:
 - Users populated in Source AD and synced to Target AD (done by Scenario 8 setup)
 - Groups populated in Source AD with membership
-- JIM configured with user and group Sync Rules
+- JIM configured with user and group Synchronisation Rules
 
 **Actions**:
 1. Trigger Full Import on Source AD
@@ -570,8 +570,8 @@ function Get-Scenario8GroupScale {
 5. Select "group" object type for both systems
 6. Select required group attributes (see attribute list above)
 7. Set `objectGUID` as External ID for groups
-8. Create Import Sync Rule: "APAC AD Import Groups"
-9. Create Export Sync Rule: "EMEA AD Export Groups"
+8. Create Import Synchronisation Rule: "APAC AD Import Groups"
+9. Create Export Synchronisation Rule: "EMEA AD Export Groups"
 10. Configure Attribute Flow mappings
 11. Configure DN expression for target placement
 12. Create/update Run Profiles to include group object type
@@ -659,7 +659,7 @@ If attributes are missing, the setup script should create them.
 Scenario 8 is fully self-contained and will:
 1. Create OUs in both Source and Target AD (`OU=Corp`, `OU=CorpManaged`)
 2. Populate users in Source AD
-3. Configure JIM with Connected Systems, Sync Rules for both users and groups
+3. Configure JIM with Connected Systems, Synchronisation Rules for both users and groups
 4. Sync users between domains (prerequisite for group member resolution)
 5. Then sync groups with membership
 

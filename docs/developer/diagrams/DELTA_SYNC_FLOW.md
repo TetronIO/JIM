@@ -27,7 +27,7 @@ flowchart TD
     EarlyWatermark --> EarlyDone([Return - no work needed])
 
     HasChanges -->|Yes| CountPE[Count Pending Exports<br/>Total = modified CSOs + PEs]
-    CountPE --> LoadCaches[Load Sync Rules, object types<br/>Drift detection cache<br/>Pending Exports dictionary<br/>Export evaluation cache]
+    CountPE --> LoadCaches[Load Synchronisation Rules, object types<br/>Drift detection cache<br/>Pending Exports dictionary<br/>Export evaluation cache]
 
     LoadCaches --> PageLoop{More CSO<br/>pages?}
 

@@ -136,7 +136,7 @@ public class ActivityHeader
     public int TotalDisconnected { get; set; }
 
     /// <summary>
-    /// Count of CSOs disconnected because they fell out of scope of import Sync Rule scoping criteria.
+    /// Count of CSOs disconnected because they fell out of scope of import Synchronisation Rule scoping criteria.
     /// </summary>
     public int TotalDisconnectedOutOfScope { get; set; }
 
@@ -383,7 +383,7 @@ public class ActivityDetailDto
     public int? ConnectedSystemRunProfileId { get; set; }
 
     /// <summary>
-    /// The Sync Rule ID if applicable.
+    /// The Synchronisation Rule ID if applicable.
     /// </summary>
     public int? SyncRuleId { get; set; }
 
@@ -512,7 +512,7 @@ public class ActivityRunProfileExecutionStatsDto
     public int TotalDisconnections { get; set; }
 
     /// <summary>
-    /// Number of CSOs disconnected from MVOs because they fell out of scope of import Sync Rule scoping criteria.
+    /// Number of CSOs disconnected from MVOs because they fell out of scope of import Synchronisation Rule scoping criteria.
     /// </summary>
     public int TotalDisconnectedOutOfScope { get; set; }
 

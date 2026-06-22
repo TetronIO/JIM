@@ -355,11 +355,11 @@ public interface IMetaverseRepository
     public Task<int> GetAttributeValueObjectCountByTypeAsync(int attributeId, int metaverseObjectTypeId);
 
     /// <summary>
-    /// Gets the Sync Rules that reference the specified metaverse attribute via
-    /// Sync Rule mappings, mapping sources, Object Matching Rules, or scoping criteria.
+    /// Gets the Synchronisation Rules that reference the specified metaverse attribute via
+    /// Synchronisation Rule mappings, mapping sources, Object Matching Rules, or scoping criteria.
     /// </summary>
     /// <param name="attributeId">The unique identifier of the attribute.</param>
-    /// <returns>A list of Sync Rule references (ID and Name) that use this attribute.</returns>
+    /// <returns>A list of Synchronisation Rule references (ID and Name) that use this attribute.</returns>
     public Task<List<SyncRuleReference>> GetSyncRulesReferencingAttributeAsync(int attributeId);
     #endregion
 }

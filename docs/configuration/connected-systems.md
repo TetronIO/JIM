@@ -86,7 +86,7 @@ Changes destined for the Connected System that have been computed by synchronisa
 
 **Removing a Connected System:**
 
-1. Run a deletion preview to understand the impact (which Metaverse Objects become disconnected, which Sync Rules become invalid)
+1. Run a deletion preview to understand the impact (which Metaverse Objects become disconnected, which Synchronisation Rules become invalid)
 2. Delete the Connected System. The operation is asynchronous and runs as a background activity.
 
 ## Manage Connected Systems

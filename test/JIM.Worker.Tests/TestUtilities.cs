@@ -1033,7 +1033,7 @@ public static class TestUtilities
     }
 
     /// <summary>
-    /// Returns stub test user and group, inbound and outbound Sync Rules for individual unit tests to customise for specific scenarios.
+    /// Returns stub test user and group, inbound and outbound Synchronisation Rules for individual unit tests to customise for specific scenarios.
     /// </summary>
     public static List<SyncRule> GetSyncRuleData()
     {
@@ -1051,7 +1051,7 @@ public static class TestUtilities
             {
                 Id = 1,
                 ConnectedSystemId = 1,
-                Name = "Dummy User Import Sync Rule 1",
+                Name = "Dummy User Import Synchronisation Rule 1",
                 Direction = SyncRuleDirection.Import,
                 Enabled = true,
                 ConnectedSystemObjectTypeId = csUserType.Id,
@@ -1063,7 +1063,7 @@ public static class TestUtilities
             {
                 Id = 2,
                 ConnectedSystemId = 1,
-                Name = "Dummy User Export Sync Rule 1",
+                Name = "Dummy User Export Synchronisation Rule 1",
                 Direction = SyncRuleDirection.Export,
                 Enabled = true,
                 ConnectedSystemObjectTypeId = csUserType.Id,
@@ -1075,7 +1075,7 @@ public static class TestUtilities
             {
                 Id = 3,
                 ConnectedSystemId = 1,
-                Name = "Dummy Group Import Sync Rule 1",
+                Name = "Dummy Group Import Synchronisation Rule 1",
                 Direction = SyncRuleDirection.Import,
                 Enabled = true,
                 ConnectedSystemObjectTypeId = csGroupType.Id,
@@ -1087,7 +1087,7 @@ public static class TestUtilities
             {
                 Id = 4,
                 ConnectedSystemId = 1,
-                Name = "Dummy Group Export Sync Rule 1",
+                Name = "Dummy Group Export Synchronisation Rule 1",
                 Direction = SyncRuleDirection.Export,
                 Enabled = true,
                 ConnectedSystemObjectTypeId = csGroupType.Id,
@@ -1158,7 +1158,7 @@ public static class TestUtilities
 
     /// <summary>
     /// Creates and seeds an InMemoryData.SyncRepository with the standard test data.
-    /// Seeds Connected Systems, object types, Sync Rules, and configures settings.
+    /// Seeds Connected Systems, object types, Synchronisation Rules, and configures settings.
     /// Optionally seeds CSOs, MVOs, Pending Exports, and activities.
     /// </summary>
     public static SyncRepository CreateSyncRepository(
@@ -1180,7 +1180,7 @@ public static class TestUtilities
         foreach (var ot in GetConnectedSystemObjectTypeData())
             syncRepo.SeedObjectType(ot);
 
-        // Seed Sync Rules — use provided instances so test-level modifications are visible to the processor
+        // Seed Synchronisation Rules — use provided instances so test-level modifications are visible to the processor
         var rulesToSeed = syncRules ?? GetSyncRuleData();
         foreach (var sr in rulesToSeed)
             syncRepo.SeedSyncRule(sr);

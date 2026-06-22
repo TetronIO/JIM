@@ -97,12 +97,12 @@ public enum PendingExportStatus
 public enum SyncRunMode
 {
     /// <summary>
-    /// Evaluates Sync Rules and shows what changes would be made, but does not persist
+    /// Evaluates Synchronisation Rules and shows what changes would be made, but does not persist
     /// any Pending Exports or execute changes.
     /// </summary>
     PreviewOnly = 0,
     /// <summary>
-    /// Evaluates Sync Rules, shows the preview, then persists Pending Exports and executes them.
+    /// Evaluates Synchronisation Rules, shows the preview, then persists Pending Exports and executes them.
     /// </summary>
     PreviewAndSync = 1
 }

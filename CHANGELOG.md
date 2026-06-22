@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- 🖥️ The Synchronisation Rule editor is now organised into tabs (Details, Matching, Scope, Attribute Flow, Danger Zone) instead of stacking everything on one page, each deep-linkable via `?t=<tab>` so a specific section can be bookmarked or shared. The Attribute Flow controls and table now sit in their own panel rather than floating on the page background. A single "Create/Update Sync Rule" save bar stays visible beneath every tab; you can fill in any tab in any order and the whole rule still saves in one action (a new rule is created complete, not in stages).
+- 🖥️ The Synchronisation Rule editor is now organised into tabs (Details, Matching, Scope, Attribute Flow, Danger Zone) instead of stacking everything on one page, each deep-linkable via `?t=<tab>` so a specific section can be bookmarked or shared. The Attribute Flow controls and table now sit in their own panel rather than floating on the page background. A single "Create/Update Synchronisation Rule" save bar stays visible beneath every tab; you can fill in any tab in any order and the whole rule still saves in one action (a new rule is created complete, not in stages).
 - 🖥️ The Connected System Schema tab is now organised into sub-tabs instead of one long page. An "Object Types" tab presents a searchable, filterable grid for choosing which object types JIM should manage (each showing its attribute count, with an All / Selected filter), and every selected type gets its own tab where you configure its attributes. Removing a type from management now asks for confirmation first, so a fully configured type cannot be dropped by accident. This stays usable when a system exposes dozens or hundreds of object types (for example, a full LDAP schema), where the previous checkbox grid grew unwieldy.
 - 🖥️ Connected System settings that only apply in certain configurations are now hidden until they are relevant, and required once they are. In the LDAP Connector, Certificate Validation appears (and must be set) only when "Use Secure Connection (LDAPS)?" is enabled, and Disable Attribute appears (and must be set) only when Delete Behaviour is "Disable". Connectors declare these conditional settings in their metadata and JIM enforces them generically, both in the settings form and server-side for API callers.
 - 🔄 The REST API now rejects an invalid Connected System settings update (`PUT /synchronisation/connected-systems/{id}` with `settingValues`) with HTTP 400 and a per-setting list of what failed and why, instead of silently saving the change and only flipping a `settingValuesValid` flag. The PowerShell module surfaces these field-level messages, so `Set-JIMConnectedSystem` now tells you exactly which settings are wrong (for example, supplying both mutually exclusive object-type settings, or omitting a setting that another setting's value makes required). Updates that do not touch settings are unaffected.
@@ -31,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Creating a Synchronisation Rule from scratch in the portal no longer fails, and the page now switches into edit mode once the rule is created (the heading, breadcrumb and Update button update, and the just-saved values stop being reported as missing) instead of still showing "New" with spurious validation errors. The save previously tried to insert the rule with unset foreign keys (raising a database foreign-key violation), and for a rule that already had matching rules, Attribute Flow or scoping criteria it would also have attempted to duplicate the referenced attributes, so a brand-new rule could not be saved at all. The create path now reduces every reference to an already-existing entity (Connected System, object types, and the attributes used by matching, Attribute Flow and scoping) to its foreign key before inserting; scoping criteria gained explicit attribute foreign-key properties to make this uniform. Covered by new database-backed regression tests.
 - 🐛 The Synchronisation Rule expression tester now resolves attribute names case-insensitively, exactly as live synchronisation does, so an expression that works during a sync run no longer reports "no result" in the tester purely because an attribute name's casing differs.
 - 🐛 Connected System settings now enforce either/or requirements at save time instead of failing later. The File Connector requires exactly one of "Object Type Column" or "Object Type"; previously you could save settings with neither (only discovering the problem when a schema refresh errored out) or with both (in which case JIM silently ignored the column and used the fixed type). The settings form now groups the two fields together, shows live feedback until exactly one is supplied, and disables saving otherwise; the same rule is also enforced server-side for API callers. Connectors can now declare these setting groups in their metadata, as either "at least one of" or mutually exclusive "exactly one of", and JIM validates and renders them generically.
-- 🐛 Deleting a Connected System no longer fails with a database error. The bulk-deletion SQL referenced sync-rule-mapping columns removed in an earlier schema change (`column ... does not exist`), and did not remove the system's Object Matching Rules before the Sync Rules and object types they reference (foreign key violation). Both are fixed, and the deletion is covered by new database-backed tests.
+- 🐛 Deleting a Connected System no longer fails with a database error. The bulk-deletion SQL referenced sync-rule-mapping columns removed in an earlier schema change (`column ... does not exist`), and did not remove the system's Object Matching Rules before the Synchronisation Rules and object types they reference (foreign key violation). Both are fixed, and the deletion is covered by new database-backed tests.
 - 🐛 Deleting a Connected System that has been synchronised no longer fails with a foreign-key database error, and the deletion is now atomic: it either completes fully or rolls back, rather than leaving the system behind with its objects already removed. Run Profiles, partitions, activities, metaverse change history, and metaverse attribute values contributed by the system are now removed or detached in the correct order. Metaverse attribute values contributed by the deleted system are retained with their contributor link cleared (attribute recall remains a synchronisation-time behaviour).
 
 ### Removed
@@ -49,14 +49,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ✨ Create custom Metaverse Object Types via the API and the new `New-JIMMetaverseObjectType` cmdlet, to model identity types beyond Users and Groups.
 - ✨ Scoping criteria now support long-integer and case-sensitive comparisons via the API and `New-JIMScopingCriterion`.
-- ✨ Sync Rules can now set their out-of-scope and deprovisioning actions and drift detection via the API and `Set-JIMSyncRule`.
+- ✨ Synchronisation Rules can now set their out-of-scope and deprovisioning actions and drift detection via the API and `Set-JIMSyncRule`.
 - ✨ New factory reset (`Reset-JIMSystem` / `POST /api/v1/system/reset`) wipes all customer data and configuration in one transaction while preserving the schema, built-ins, and infrastructure access.
 
 ### Fixed
 
 - 🐛 Refreshing a Connected System's schema now persists the discovered object types and attributes, so the selection interface appears immediately instead of reading back empty.
 - 🐛 Outbound deprovisioning no longer fails with a duplicate-key error when the target object still has a Pending Export from a prior run.
-- 🐛 Adding scoping criteria to an existing Sync Rule via the API no longer fails to save.
+- 🐛 Adding scoping criteria to an existing Synchronisation Rule via the API no longer fails to save.
 
 ### Changed
 
@@ -198,7 +198,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- 🖥️ Fixed oversized text on avatar chips in Sync Rule list and detail pages
+- 🖥️ Fixed oversized text on avatar chips in Synchronisation Rule list and detail pages
 - 🖥️ Multi-valued attribute value counts on Metaverse Object detail pages now display with thousand separators for readability
 
 ## [0.9.0] - 2026-04-07
@@ -231,7 +231,7 @@ JIM now supports deployments of 100,000+ objects, validated by Scale100K integra
 
 #### Data Integrity Validation (#465)
 
-- 🔒 Metaverse attribute operations now validate data integrity before executing: deleting attributes with stored values, deleting attributes referenced by Sync Rules, and removing object type mappings with existing data all return structured validation errors instead of silently corrupting state
+- 🔒 Metaverse attribute operations now validate data integrity before executing: deleting attributes with stored values, deleting attributes referenced by Synchronisation Rules, and removing object type mappings with existing data all return structured validation errors instead of silently corrupting state
 
 #### PowerShell Module Enhancements
 
@@ -533,10 +533,10 @@ JIM now supports deployments of 100,000+ objects, validated by Scale100K integra
 ## [0.5.0] - 2026-03-08
 
 ### Added
-- ✨ Self-contained Object Matching Rules — Sync Rules now carry their own matching logic for import and export, enabling fully portable rule definitions (#386)
-- ✨ CRUD API endpoints for Sync Rule Object Matching Rules (`GET`, `POST`, `PUT`, `DELETE` `/api/v1/synchronisation/sync-rules/{id}/matching-rules`)
+- ✨ Self-contained Object Matching Rules — Synchronisation Rules now carry their own matching logic for import and export, enabling fully portable rule definitions (#386)
+- ✨ CRUD API endpoints for Synchronisation Rule Object Matching Rules (`GET`, `POST`, `PUT`, `DELETE` `/api/v1/synchronisation/sync-rules/{id}/matching-rules`)
 - ✨ Matching mode switching API — toggle between simple and advanced object matching per Connected System
-- 🖥️ Sortable Object Mapping and Capabilities columns on the Sync Rules page
+- 🖥️ Sortable Object Mapping and Capabilities columns on the Synchronisation Rules page
 
 ### Fixed
 - 🐛 Setup script now correctly detects Docker Desktop alongside Docker Engine
@@ -551,8 +551,8 @@ JIM now supports deployments of 100,000+ objects, validated by Scale100K integra
 - 📖 Comprehensive [Deployment Guide](https://docs.junctional.io/administration/deployment/) covering prerequisites, topology options, TLS, reverse proxy, upgrades, and monitoring
 - 🖥️ Sortable columns on the Attribute Flow table
 - 🖥️ Filter controls on the Attribute Flow table
-- ✨ Edit Attribute Flow mappings inline on the Sync Rule detail page
-- 🖥️ Sync Rule detail page redesign with expression highlighting, table/card views, and improved layout
+- ✨ Edit Attribute Flow mappings inline on the Synchronisation Rule detail page
+- 🖥️ Synchronisation Rule detail page redesign with expression highlighting, table/card views, and improved layout
 - 🖥️ Synchronisation Rules quick link on the homepage dashboard
 - 🖥️ Filter controls on the Connected System Objects list page
 - 🖥️ Full-width layout option for table-heavy pages
@@ -737,8 +737,8 @@ JIM now supports deployments of 100,000+ objects, validated by Scale100K integra
 - Hierarchy management: `Import-JIMConnectedSystemHierarchy`
 - Partition and container management: `Get-JIMConnectedSystemPartition`, `Set-JIMConnectedSystemPartition`, `Set-JIMConnectedSystemContainer`
 - Connector definitions: `Get-JIMConnectorDefinition`
-- Sync Rules: `Get-JIMSyncRule`, `New-JIMSyncRule`, `Set-JIMSyncRule`, `Remove-JIMSyncRule`
-- Sync Rule Mappings with expression support: `Get-JIMSyncRuleMapping`, `New-JIMSyncRuleMapping`, `Remove-JIMSyncRuleMapping`
+- Synchronisation Rules: `Get-JIMSyncRule`, `New-JIMSyncRule`, `Set-JIMSyncRule`, `Remove-JIMSyncRule`
+- Synchronisation Rule Mappings with expression support: `Get-JIMSyncRuleMapping`, `New-JIMSyncRuleMapping`, `Remove-JIMSyncRuleMapping`
 - Object Matching Rules: `Get-JIMMatchingRule`, `New-JIMMatchingRule`, `Set-JIMMatchingRule`, `Remove-JIMMatchingRule`
 - Scoping Criteria: `Get-JIMScopingCriteria`, `New-JIMScopingCriteriaGroup`, `Set-JIMScopingCriteriaGroup`, `Remove-JIMScopingCriteriaGroup`, `New-JIMScopingCriterion`, `Remove-JIMScopingCriterion`
 - Run Profiles: `Get-JIMRunProfile`, `New-JIMRunProfile`, `Set-JIMRunProfile`, `Remove-JIMRunProfile`, `Start-JIMRunProfile`
@@ -756,7 +756,7 @@ JIM now supports deployments of 100,000+ objects, validated by Scale100K integra
 
 #### API Endpoints
 - CRUD endpoints for Connected Systems (`POST`, `PUT` `/api/v1/synchronisation/connected-systems`)
-- CRUD endpoints for Sync Rules (`POST`, `PUT`, `DELETE` `/api/v1/synchronisation/sync-rules`)
+- CRUD endpoints for Synchronisation Rules (`POST`, `PUT`, `DELETE` `/api/v1/synchronisation/sync-rules`)
 - CRUD endpoints for Run Profiles (`POST`, `PUT`, `DELETE` `/api/v1/synchronisation/connected-systems/{id}/run-profiles`)
 
 #### Infrastructure

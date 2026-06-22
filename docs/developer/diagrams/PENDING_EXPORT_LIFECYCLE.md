@@ -60,10 +60,10 @@ flowchart LR
     subgraph "1. Sync (Full or Delta)"
         SyncStart[MVO attribute changes<br/>during inbound flow] --> CheckRecall{Pure recall?<br/>All changes are<br/>attribute removals}
         CheckRecall -->|Yes| SkipRecall[Skip export evaluation<br/>Prevents expression mapping<br/>errors against incomplete data<br/>No PE created]
-        CheckRecall -->|No| EvalExport[EvaluateExportRules:<br/>Find export Sync Rules<br/>for MVO type]
+        CheckRecall -->|No| EvalExport[EvaluateExportRules:<br/>Find export Synchronisation Rules<br/>for MVO type]
         EvalExport --> InScope{MVO in scope<br/>for export rule?}
         InScope -->|No| EvalDeprov[Evaluate deprovisioning:<br/>Create Delete PE if CSO exists]
-        InScope -->|Yes| MapAttrs[Map MVO attributes<br/>to CSO attributes<br/>via export Sync Rule mappings]
+        InScope -->|Yes| MapAttrs[Map MVO attributes<br/>to CSO attributes<br/>via export Synchronisation Rule mappings]
         MapAttrs --> NetChange{No-net-change<br/>detection}
         NetChange -->|CSO already current| Skip[Skip - no PE created<br/>Target already has correct values]
         NetChange -->|Changes needed| CheckExisting{Existing CSO<br/>in target system?}

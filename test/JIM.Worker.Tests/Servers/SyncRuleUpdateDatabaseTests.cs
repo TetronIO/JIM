@@ -161,7 +161,7 @@ public class SyncRuleUpdateDatabaseTests
 
         await using var verify = NewContext();
         var persisted = await verify.SyncRules.SingleAsync(r => r.Id == ruleId);
-        Assert.That(persisted.Enabled, Is.False, "Disabling an existing Sync Rule must persist.");
+        Assert.That(persisted.Enabled, Is.False, "Disabling an existing Synchronisation Rule must persist.");
     }
 
     [Test]

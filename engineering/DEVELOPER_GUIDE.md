@@ -597,7 +597,7 @@ Workflow tests sit between unit tests and integration tests - they test multi-st
 [Test]
 public async Task ProvisioningWorkflow_CompleteCycle_SucceedsAsync()
 {
-    // Setup systems and Sync Rules
+    // Setup systems and Synchronisation Rules
     await SetUpProvisioningScenarioAsync(objectCount: 100);
 
     // Execute import
@@ -1391,7 +1391,7 @@ Invoke-JIMApiRequest -Method Delete -Endpoint "api/v1/connected-systems/$id"
 2. Create seeding data in `SeedingServer`
 3. Define required attributes
 4. Add UI pages for management
-5. Update Sync Rules to support new type
+5. Update Synchronisation Rules to support new type
 
 ### Adding a New API Endpoint
 1. Add method to appropriate controller in `src/JIM.Web/Controllers/Api/`

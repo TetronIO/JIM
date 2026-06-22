@@ -55,8 +55,8 @@ public class SchemaRefreshResult
     public Dictionary<string, List<string>> RemovedAttributes { get; set; } = new();
 
     /// <summary>
-    /// Attributes that could not be removed because they are referenced by Sync Rules.
-    /// Key is the attribute name, value is the list of Sync Rule names that reference it.
+    /// Attributes that could not be removed because they are referenced by Synchronisation Rules.
+    /// Key is the attribute name, value is the list of Synchronisation Rule names that reference it.
     /// </summary>
     public Dictionary<string, List<string>> AttributesInUse { get; set; } = new();
 

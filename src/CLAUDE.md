@@ -49,7 +49,8 @@ This rule overrides any instinct to "minimise change" or "stay tightly scoped" w
   - In bullet points: colons to separate a label from its description (e.g. "Attribute Writeback: Keep HR systems current" not "Attribute Writeback — Keep HR systems current")
   - In parenthetical asides: commas or parentheses
 - **JIM domain entity names are proper nouns - Title Case them in user-facing text, documentation, and comments:**
-  - "Synchronisation Rule" (or "Sync Rule"), "Connected System", "Connected System Object", "Metaverse Object", "Metaverse Object Type", "Connected System Object Type", "Run Profile", "Attribute Flow", "Object Matching Rule", "Pending Export", "Activity" and similar named entities are capitalised **even mid-sentence**
+  - "Synchronisation Rule", "Connected System", "Connected System Object", "Metaverse Object", "Metaverse Object Type", "Connected System Object Type", "Run Profile", "Attribute Flow", "Object Matching Rule", "Pending Export", "Activity" and similar named entities are capitalised **even mid-sentence**
+  - **Never abbreviate "Synchronisation Rule" to "Sync Rule"** in user-facing text, documentation, or comments; always write it in full. (The `SyncRule` code identifier / type name is unaffected; this rule is about prose and UI text only.)
   - Applies to UI labels, headings, `MudText` prose, snackbar/dialog/validation messages, and Markdown docs. Example: "shared by every Synchronisation Rule that targets this system", not "...every synchronisation rule..."
   - Lowercase only when referring to a generic concept rather than the named entity (e.g. "object matching" as an activity), or in code identifiers and variable names
 

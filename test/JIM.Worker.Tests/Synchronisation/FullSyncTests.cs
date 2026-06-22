@@ -124,7 +124,7 @@ public class FullSyncTests
                 }
             });
         
-        // set up the Sync Rule stub mocks. they will be customised to specific use-cases in individual tests.
+        // set up the Synchronisation Rule stub mocks. they will be customised to specific use-cases in individual tests.
         SyncRulesData = TestUtilities.GetSyncRuleData();
         MockDbSetSyncRules = SyncRulesData.BuildMockDbSet();
 
@@ -178,7 +178,7 @@ public class FullSyncTests
 
         // instantiate the SyncRepository and Jim using the mocked db context.
         // Pass SyncRulesData so that test-level modifications (e.g. adding matching rules) are
-        // visible to the processor, which now reads Sync Rules from SyncRepo rather than the mock DbSet.
+        // visible to the processor, which now reads Synchronisation Rules from SyncRepo rather than the mock DbSet.
         SyncRepo = TestUtilities.CreateSyncRepository(
             csos: ConnectedSystemObjectsData,
             mvos: MetaverseObjectsData,
@@ -482,12 +482,12 @@ public class FullSyncTests
     }
 
     /// <summary>
-    /// Tests that a CSO can successfully join to a Metaverse Object using matching rules on a Sync Rule using a text data type attribute. 
+    /// Tests that a CSO can successfully join to a Metaverse Object using matching rules on a Synchronisation Rule using a text data type attribute. 
     /// </summary>
     [Test]
     public async Task CsoJoinToMvoViaTextAttributeTestAsync()
     {
-        // get a stub import Sync Rule
+        // get a stub import Synchronisation Rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
         
         // add test-specific matching rules to it
@@ -517,7 +517,7 @@ public class FullSyncTests
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
         
-        // test that a CSO is successfully match to an MVO using the Sync Rule.
+        // test that a CSO is successfully match to an MVO using the Synchronisation Rule.
         // we expect the cso with employee id 123 to have joined to the mvo with employee id 123.
         Assert.That(ConnectedSystemObjectsData[0].MetaverseObject, Is.Not.Null, "Expected CSO to have joined to an MVO by Employee ID.");
         Assert.That(ConnectedSystemObjectsData[0].MetaverseObject.Id, Is.EqualTo(MetaverseObjectsData[0].Id), "Expected first CSO to have joined to the first MVO.");
@@ -530,12 +530,12 @@ public class FullSyncTests
     }
     
     /// <summary>
-    /// Tests that a CSO can successfully join to a Metaverse Object using matching rules on a Sync Rule using a number data type attribute. 
+    /// Tests that a CSO can successfully join to a Metaverse Object using matching rules on a Synchronisation Rule using a number data type attribute. 
     /// </summary>
     [Test]
     public async Task CsoJoinToMvoViaNumberAttributeTestAsync()
     {
-        // get a stub import Sync Rule
+        // get a stub import Synchronisation Rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
         
         // add test-specific matching rules to it
@@ -565,7 +565,7 @@ public class FullSyncTests
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
         
-        // test that a CSO is successfully match to an MVO using the Sync Rule.
+        // test that a CSO is successfully match to an MVO using the Synchronisation Rule.
         // we expect the cso with employee id 123 to have joined to the mvo with employee id 123.
         Assert.That(ConnectedSystemObjectsData[0].MetaverseObject, Is.Not.Null, "Expected CSO to have joined to an MVO by Employee ID.");
         Assert.That(ConnectedSystemObjectsData[0].MetaverseObject.Id, Is.EqualTo(MetaverseObjectsData[0].Id), "Expected first CSO to have joined to the first MVO.");
@@ -578,12 +578,12 @@ public class FullSyncTests
     }
     
     /// <summary>
-    /// Tests that a CSO can successfully join to a Metaverse Object using matching rules on a Sync Rule using a guid data type attribute. 
+    /// Tests that a CSO can successfully join to a Metaverse Object using matching rules on a Synchronisation Rule using a guid data type attribute. 
     /// </summary>
     [Test]
     public async Task CsoJoinToMvoViaGuidAttributeTestAsync()
     {
-        // get a stub import Sync Rule
+        // get a stub import Synchronisation Rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
         
         // add test-specific matching rules to it
@@ -613,7 +613,7 @@ public class FullSyncTests
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
         
-        // test that a CSO is successfully match to an MVO using the Sync Rule.
+        // test that a CSO is successfully match to an MVO using the Synchronisation Rule.
         // we expect the cso with HR_ID A98D00CB-FB7F-48BE-A093-DF79E193836E to have joined to the mvo with HrId A98D00CB-FB7F-48BE-A093-DF79E193836E.
         Assert.That(ConnectedSystemObjectsData[0].MetaverseObject, Is.Not.Null, "Expected CSO to have joined to an MVO by HR ID.");
         Assert.That(ConnectedSystemObjectsData[0].MetaverseObject.Id, Is.EqualTo(MetaverseObjectsData[0].Id), "Expected first CSO to have joined to the first MVO.");
@@ -626,15 +626,15 @@ public class FullSyncTests
     }
     
     /// <summary>
-    /// Tests that a CSO successfully projects to create a new Metaverse Object when projection is enabled on the Sync Rule.
+    /// Tests that a CSO successfully projects to create a new Metaverse Object when projection is enabled on the Synchronisation Rule.
     /// </summary>
     [Test]
     public async Task CsoProjectToMvoTestAsync()
     {
-        // get a stub import Sync Rule
+        // get a stub import Synchronisation Rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
-        // enable projection on the Sync Rule
+        // enable projection on the Synchronisation Rule
         importSyncRule.ProjectToMetaverse = true;
 
         // start the test
@@ -653,7 +653,7 @@ public class FullSyncTests
         // verify the MVO was created with the correct type
         var projectedMvo = ConnectedSystemObjectsData[0].MetaverseObject;
         Assert.That(projectedMvo.Type, Is.Not.Null, "Expected projected MVO to have a type.");
-        Assert.That(projectedMvo.Type.Id, Is.EqualTo(importSyncRule.MetaverseObjectType.Id), "Expected projected MVO type to match the Sync Rule's MVO type.");
+        Assert.That(projectedMvo.Type.Id, Is.EqualTo(importSyncRule.MetaverseObjectType.Id), "Expected projected MVO type to match the Synchronisation Rule's MVO type.");
 
         // verify the MVO has a reference back to the CSO
         Assert.That(projectedMvo.ConnectedSystemObjects, Is.Not.Null, "Expected projected MVO to have a non-null CSO list.");
@@ -745,10 +745,10 @@ public class FullSyncTests
     [Test]
     public async Task MvoPendingAttributeValueAddsAllDataTypesTestAsync()
     {
-        // get a stub import Sync Rule
+        // get a stub import Synchronisation Rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
-        // enable projection on the Sync Rule
+        // enable projection on the Synchronisation Rule
         importSyncRule.ProjectToMetaverse = true;
 
         // add Attribute Flow Rules for all data types
@@ -901,7 +901,7 @@ public class FullSyncTests
     [Test]
     public async Task MvoPendingAttributeValueRemovesTestAsync()
     {
-        // get a stub import Sync Rule
+        // get a stub import Synchronisation Rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
         // add Object Matching Rule to join CSO to existing MVO
@@ -976,7 +976,7 @@ public class FullSyncTests
     [Test]
     public async Task CsoObsoleteDeletionForNonJoinedCsoTestAsync()
     {
-        // get a stub import Sync Rule
+        // get a stub import Synchronisation Rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
         // mark first CSO as obsolete (simulating it was not present in the import)
@@ -1049,7 +1049,7 @@ public class FullSyncTests
     [Test]
     public async Task CsoTransitionFromNonJoinedToJoinedTestAsync()
     {
-        // get a stub import Sync Rule
+        // get a stub import Synchronisation Rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
         // add Object Matching Rule
@@ -1099,7 +1099,7 @@ public class FullSyncTests
     [Test]
     public async Task MultipleCsosCannotJoinToSameMvoTestAsync()
     {
-        // get a stub import Sync Rule
+        // get a stub import Synchronisation Rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
         // add Object Matching Rule that will match both CSOs to the same MVO
@@ -1171,7 +1171,7 @@ public class FullSyncTests
         // because they are different instances created by separate calls to GetConnectedSystemObjectTypeData())
         cso.Type.RemoveContributedAttributesOnObsoletion = true;
 
-        // get a stub import Sync Rule
+        // get a stub import Synchronisation Rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
         var mvo = MetaverseObjectsData[0];
 
@@ -1265,8 +1265,8 @@ public class FullSyncTests
         var targetDisplayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
         var targetEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.EmployeeId.ToString());
 
-        // Set up export Sync Rule on the TARGET system with Attribute Flow mappings
-        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        // Set up export Synchronisation Rule on the TARGET system with Attribute Flow mappings
+        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportSyncRule.ConnectedSystemId = targetSystem.Id;
         exportSyncRule.ConnectedSystem = targetSystem;
         exportSyncRule.AttributeFlowRules.Add(new SyncRuleMapping
@@ -1370,7 +1370,7 @@ public class FullSyncTests
         mvo.ConnectedSystemObjects.Add(targetCso);
         SyncRepo.SeedConnectedSystemObject(targetCso);
 
-        // Rebuild the mock DbSets so the new CSO and updated Sync Rules are visible to queries
+        // Rebuild the mock DbSets so the new CSO and updated Synchronisation Rules are visible to queries
         MockDbSetConnectedSystemObjects = ConnectedSystemObjectsData.BuildMockDbSet();
         MockDbSetSyncRules = SyncRulesData.BuildMockDbSet();
 
@@ -1431,7 +1431,7 @@ public class FullSyncTests
         // because they are different instances created by separate calls to GetConnectedSystemObjectTypeData())
         cso.Type.RemoveContributedAttributesOnObsoletion = false;
 
-        // get a stub import Sync Rule
+        // get a stub import Synchronisation Rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
         var mvo = MetaverseObjectsData[0];
         cso.MetaverseObject = mvo;
@@ -1504,7 +1504,7 @@ public class FullSyncTests
     [Test]
     public async Task JoinTakesPrecedenceOverProjectionTestAsync()
     {
-        // get a stub import Sync Rule
+        // get a stub import Synchronisation Rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
         // enable both projection AND Object Matching Rules
@@ -1554,7 +1554,7 @@ public class FullSyncTests
     [Test]
     public async Task ProjectionDisabledPreventsProjectionTestAsync()
     {
-        // get a stub import Sync Rule
+        // get a stub import Synchronisation Rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
         // explicitly disable projection
@@ -1579,7 +1579,7 @@ public class FullSyncTests
     [Test]
     public async Task ProjectionNullPreventsProjectionTestAsync()
     {
-        // get a stub import Sync Rule
+        // get a stub import Synchronisation Rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
         // ensure projection is null (not set)
@@ -1599,15 +1599,15 @@ public class FullSyncTests
     }
 
     /// <summary>
-    /// Tests that projection does not occur when the Sync Rule is disabled.
+    /// Tests that projection does not occur when the Synchronisation Rule is disabled.
     /// </summary>
     [Test]
     public async Task DisabledSyncRulePreventsProjectionTestAsync()
     {
-        // get a stub import Sync Rule
+        // get a stub import Synchronisation Rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
-        // enable projection but disable the Sync Rule
+        // enable projection but disable the Synchronisation Rule
         importSyncRule.ProjectToMetaverse = true;
         importSyncRule.Enabled = false;
 
@@ -1619,22 +1619,22 @@ public class FullSyncTests
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
-        // verify CSO did not project (Sync Rule is disabled)
-        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject, Is.Null, "Expected CSO to not have projected when Sync Rule is disabled.");
+        // verify CSO did not project (Synchronisation Rule is disabled)
+        Assert.That(ConnectedSystemObjectsData[0].MetaverseObject, Is.Null, "Expected CSO to not have projected when Synchronisation Rule is disabled.");
         Assert.That(ConnectedSystemObjectsData[0].JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.NotJoined), "Expected JoinType to remain NotJoined.");
     }
 
     /// <summary>
-    /// Tests that when multiple Sync Rules have projection enabled for the same object type, the first one wins.
+    /// Tests that when multiple Synchronisation Rules have projection enabled for the same object type, the first one wins.
     /// </summary>
     [Test]
     public async Task FirstSyncRuleToProjectWinsTestAsync()
     {
-        // get the two user import Sync Rules and make them both have projection enabled
+        // get the two user import Synchronisation Rules and make them both have projection enabled
         var importSyncRule1 = SyncRulesData.Single(q => q.Id == 1);
         importSyncRule1.ProjectToMetaverse = true;
 
-        // create a second import Sync Rule for the same CSO type but with a different MVO type
+        // create a second import Synchronisation Rule for the same CSO type but with a different MVO type
         var mvGroupType = MetaverseObjectTypesData.Single(q => q.Name == "Group");
         var csUserType = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER");
 
@@ -1642,7 +1642,7 @@ public class FullSyncTests
         {
             Id = 100,
             ConnectedSystemId = 1,
-            Name = "Second User Import Sync Rule",
+            Name = "Second User Import Synchronisation Rule",
             Direction = SyncRuleDirection.Import,
             Enabled = true,
             ConnectedSystemObjectTypeId = csUserType.Id,
@@ -1661,13 +1661,13 @@ public class FullSyncTests
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
-        // verify the CSO projected and used the first Sync Rule's MVO type (User, not Group)
+        // verify the CSO projected and used the first Synchronisation Rule's MVO type (User, not Group)
         Assert.That(ConnectedSystemObjectsData[0].MetaverseObject, Is.Not.Null, "Expected CSO to have projected.");
         Assert.That(ConnectedSystemObjectsData[0].JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Projected), "Expected JoinType to be Projected.");
         Assert.That(ConnectedSystemObjectsData[0].MetaverseObject.Type.Id, Is.EqualTo(importSyncRule1.MetaverseObjectType.Id),
-            "Expected projected MVO to use the first Sync Rule's MVO type (User), not the second (Group).");
+            "Expected projected MVO to use the first Synchronisation Rule's MVO type (User), not the second (Group).");
         Assert.That(ConnectedSystemObjectsData[0].MetaverseObject.Type.Name, Is.EqualTo("User"),
-            "Expected projected MVO type to be 'User' from the first Sync Rule.");
+            "Expected projected MVO type to be 'User' from the first Synchronisation Rule.");
     }
 
     /// <summary>
@@ -1677,7 +1677,7 @@ public class FullSyncTests
     [Test]
     public async Task MvoAttributeUpdatedOnExistingJoinTestAsync()
     {
-        // get a stub import Sync Rule
+        // get a stub import Synchronisation Rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
         // add Object Matching Rule to join CSO to existing MVO
@@ -1764,7 +1764,7 @@ public class FullSyncTests
     [Test]
     public async Task MvoAttributeFlowOnNewJoinTestAsync()
     {
-        // get a stub import Sync Rule
+        // get a stub import Synchronisation Rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
         // add Object Matching Rule to join CSO to existing MVO
@@ -1854,7 +1854,7 @@ public class FullSyncTests
     [Test]
     public async Task NoPendingChangesWhenValuesMatchTestAsync()
     {
-        // get a stub import Sync Rule
+        // get a stub import Synchronisation Rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
         // add Object Matching Rule to join CSO to existing MVO
@@ -1934,7 +1934,7 @@ public class FullSyncTests
     [Test]
     public async Task MvoNumberAttributeUpdatedOnExistingJoinTestAsync()
     {
-        // get a stub import Sync Rule
+        // get a stub import Synchronisation Rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
         // add Object Matching Rule to join CSO to existing MVO
@@ -2015,7 +2015,7 @@ public class FullSyncTests
     [Test]
     public async Task MvoGuidAttributeUpdatedOnExistingJoinTestAsync()
     {
-        // get a stub import Sync Rule
+        // get a stub import Synchronisation Rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
         // add Object Matching Rule to join CSO to existing MVO
@@ -2096,7 +2096,7 @@ public class FullSyncTests
     [Test]
     public async Task MvoNumberAttributeRemovedWhenCsoAttributeDeletedTestAsync()
     {
-        // get a stub import Sync Rule
+        // get a stub import Synchronisation Rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
 
         // add Object Matching Rule to join CSO to existing MVO
@@ -2219,7 +2219,7 @@ public class FullSyncTests
         mvoType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
         mvoType.DeletionGracePeriod = null;  // null = TimeSpan.Zero = immediate deletion
 
-        // configure Sync Rule to disconnect on obsoletion (required for deletion rule processing)
+        // configure Synchronisation Rule to disconnect on obsoletion (required for deletion rule processing)
         var importSyncRule = SyncRulesData.Single(sr => sr.Id == 1);
         importSyncRule.InboundOutOfScopeAction = InboundOutOfScopeAction.Disconnect;
 
@@ -2264,7 +2264,7 @@ public class FullSyncTests
         mvoType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
         mvoType.DeletionGracePeriod = TimeSpan.FromDays(30);
 
-        // configure Sync Rule to disconnect on obsoletion (required for deletion rule processing)
+        // configure Synchronisation Rule to disconnect on obsoletion (required for deletion rule processing)
         var importSyncRule = SyncRulesData.Single(sr => sr.Id == 1);
         importSyncRule.InboundOutOfScopeAction = InboundOutOfScopeAction.Disconnect;
 
@@ -2387,7 +2387,7 @@ public class FullSyncTests
         cso.JoinType = ConnectedSystemObjectJoinType.NotJoined;
         cso.Status = ConnectedSystemObjectStatus.Normal;
 
-        // set up Sync Rule with Object Matching Rule to cause a join
+        // set up Synchronisation Rule with Object Matching Rule to cause a join
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
         importSyncRule.Direction = SyncRuleDirection.Import;
         importSyncRule.Enabled = true;
@@ -2816,7 +2816,7 @@ public class FullSyncTests
         Jim?.Dispose();
         Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
 
-        // Set up Sync Rule: enable projection + add Manager reference Attribute Flow mapping
+        // Set up Synchronisation Rule: enable projection + add Manager reference Attribute Flow mapping
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
         importSyncRule.ProjectToMetaverse = true;
 
@@ -3010,7 +3010,7 @@ public class FullSyncTests
         Jim?.Dispose();
         Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
 
-        // Set up Sync Rule: enable projection + add Manager reference Attribute Flow mapping
+        // Set up Synchronisation Rule: enable projection + add Manager reference Attribute Flow mapping
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
         importSyncRule.ProjectToMetaverse = true;
 
@@ -3143,7 +3143,7 @@ public class FullSyncTests
         if (cso2EmployeeId != null)
             cso2EmployeeId.StringValue = matchValue;
 
-        // Configure import Sync Rule with Object Matching Rule on EmployeeId
+        // Configure import Synchronisation Rule with Object Matching Rule on EmployeeId
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
         importSyncRule.Direction = SyncRuleDirection.Import;
         importSyncRule.Enabled = true;
@@ -3247,7 +3247,7 @@ public class FullSyncTests
         if (cso2EmployeeId != null)
             cso2EmployeeId.StringValue = matchValue;
 
-        // Configure import Sync Rule with matching rule
+        // Configure import Synchronisation Rule with matching rule
         var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
         importSyncRule.Direction = SyncRuleDirection.Import;
         importSyncRule.Enabled = true;
@@ -3326,8 +3326,8 @@ public class FullSyncTests
         mvUserType.DeletionGracePeriod = null; // null = immediate deletion
         mvUserType.DeletionTriggerConnectedSystemIds = new List<int> { sourceSystem.Id };
 
-        // Set up export Sync Rule on the TARGET system with Attribute Flow mappings
-        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        // Set up export Synchronisation Rule on the TARGET system with Attribute Flow mappings
+        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportSyncRule.ConnectedSystemId = targetSystem.Id;
         exportSyncRule.ConnectedSystem = targetSystem;
         exportSyncRule.AttributeFlowRules.Add(new SyncRuleMapping
@@ -3425,7 +3425,7 @@ public class FullSyncTests
         mvo.ConnectedSystemObjects.Add(targetCso);
         SyncRepo.SeedConnectedSystemObject(targetCso);
 
-        // Rebuild the mock DbSets so the new CSO and updated Sync Rules are visible to queries
+        // Rebuild the mock DbSets so the new CSO and updated Synchronisation Rules are visible to queries
         MockDbSetConnectedSystemObjects = ConnectedSystemObjectsData.BuildMockDbSet();
         MockDbSetSyncRules = SyncRulesData.BuildMockDbSet();
         ConnectedSystemObjectAttributeValuesData.AddRange(targetCso.AttributeValues);

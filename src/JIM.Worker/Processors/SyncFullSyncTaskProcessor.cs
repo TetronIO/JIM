@@ -47,7 +47,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // what needs to happen:
         // - confirm Pending Exports
         // - establish new joins to existing Metaverse Objects
-        // - project CSO to the MV if there are no join matches and if a Sync Rule for this CS has Projection enabled.
+        // - project CSO to the MV if there are no join matches and if a Synchronisation Rule for this CS has Projection enabled.
         // - work out if we CAN update any Metaverse Objects (where there's Attribute Flow) and whether we SHOULD (where there's Attribute Flow priority).
         // - update the Metaverse Objects accordingly.
         // - work out if this requires other Connected System to be updated by way of creating new Pending Export Objects.
@@ -62,14 +62,14 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         _activity.ObjectsProcessed = 0;
         await _syncRepo.UpdateActivityAsync(_activity);
 
-        // get all the active Sync Rules for this system
+        // get all the active Synchronisation Rules for this system
         List<SyncRule> activeSyncRules;
         using (Diagnostics.Sync.StartSpan("LoadSyncRules"))
         {
             activeSyncRules = await _syncRepo.GetSyncRulesAsync(_connectedSystem.Id, false, withChangeTracking: true);
         }
 
-        // Load ALL Sync Rules from ALL systems for drift detection import mapping cache.
+        // Load ALL Synchronisation Rules from ALL systems for drift detection import mapping cache.
         // This is needed because drift detection must know which systems contribute to which MVO attributes
         // to avoid false positives on export-only systems.
         List<SyncRule> allSyncRules;

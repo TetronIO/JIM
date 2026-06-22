@@ -81,7 +81,7 @@ JIM is a self-hosted, on-premises identity management platform that synchronises
 ### Data Flow Operations
 
 1. **Import** - Pull data from Connected Systems into connector space (CSOs)
-2. **Sync** - Apply Sync Rules to project CSO data to/from MVOs
+2. **Sync** - Apply Synchronisation Rules to project CSO data to/from MVOs
 3. **Export** - Push pending changes from connector space to Connected Systems
 
 ### Software Components
@@ -217,9 +217,9 @@ Connectors also declare capability flags via `IConnectorCapabilities`:
 
 ---
 
-## 5. Sync Rules
+## 5. Synchronisation Rules
 
-Sync Rules define the relationship between Connected Systems and the metaverse.
+Synchronisation Rules define the relationship between Connected Systems and the metaverse.
 
 ### Rule Components
 
@@ -426,7 +426,7 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 ### Previous Enhancements
 
 - ✅ **Disconnection Causality Tracking** (#392) - Causality tree traces MVO attribute changes and deletion fate during disconnection and recall
-- ✅ **Self-Contained Object Matching Rules** (#386) - Sync Rules carry their own matching logic for import and export, enabling portable rule definitions
+- ✅ **Self-Contained Object Matching Rules** (#386) - Synchronisation Rules carry their own matching logic for import and export, enabling portable rule definitions
 - ✅ **One-Command Deployment** - Interactive installer auto-detects latest release, configures SSO and database, and starts JIM in minutes
 - ✅ **Sync Outcome Graph** (#363) - Full causal tracing of every change during synchronisation with configurable tracking levels (None/Standard/Detailed)
 - ✅ **CSO Large MVA Pagination** (#320) - Paginated attribute values with server-side search for objects with 10K+ multi-valued attributes
@@ -446,7 +446,7 @@ Development follows sequenced milestones (see [GitHub Milestones](https://github
 | Milestone | Focus |
 |-----------|-------|
 | **v0.9-STABILISATION** | Configuration controls, identity fusing, lifecycle state management (JML triggers), sync engine refinement, architectural foundation for extensibility |
-| **v1.0-ILM-COMPLETE** | First production-ready release: robust Sync Rules, lifecycle automation, scheduling, error handling, operational monitoring |
+| **v1.0-ILM-COMPLETE** | First production-ready release: robust Synchronisation Rules, lifecycle automation, scheduling, error handling, operational monitoring |
 | **v1.x-CONNECTORS** | Expanding connector coverage: broader LDAP support, SQL databases, SCIM endpoints, HR systems, connector framework improvements |
 | **v2.0-IGA-FOUNDATION** | Direct in-JIM management of MVOs (no longer dependent on Source-of-Record systems): Entitlement Management (group management + governance — reviews/attestation, delegated admin, dynamic & time-based memberships, self-service, approvals, etc.), Identity Lifecycle Management (user management, self-service for locally-managed attributes, lifecycle workflows), and fine-grained RBAC for custom permission models |
 
@@ -495,7 +495,7 @@ When discussing new features:
 
 1. Review Section 2 (Architecture) for the metaverse pattern
 2. Check Section 4 (Connectors) for integration capabilities
-3. Reference Section 5 (Sync Rules) for data flow mechanics
+3. Reference Section 5 (Synchronisation Rules) for data flow mechanics
 
 ### For API/Integration Questions
 
@@ -553,7 +553,7 @@ JIM/
 | **Projection** | Creating a new MVO when no match found |
 | **Provisioning** | Creating accounts in target systems |
 | **Run Profile** | Configured operation (Full Import, Full Sync, Export) |
-| **Sync Rule** | Complete mapping configuration between systems and metaverse |
+| **Synchronisation Rule** | Complete mapping configuration between systems and metaverse |
 
 ---
 

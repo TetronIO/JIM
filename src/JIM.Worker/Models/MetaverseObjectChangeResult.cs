@@ -112,7 +112,7 @@ public readonly struct MetaverseObjectChangeResult
 
     /// <summary>
     /// Creates a result indicating a CSO was disconnected because it fell out of scope
-    /// of import Sync Rule scoping criteria.
+    /// of import Synchronisation Rule scoping criteria.
     /// </summary>
     /// <param name="attributeFlowCount">Optional count of attribute removals that occurred during disconnection.</param>
     /// <param name="mvoDeletionFate">The fate of the MVO after the disconnection.</param>

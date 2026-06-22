@@ -31,19 +31,19 @@ public interface ISyncEngine
     /// Called when the CSO did not join an existing MVO.
     /// </summary>
     /// <param name="cso">The CSO to evaluate for projection.</param>
-    /// <param name="activeSyncRules">Active Sync Rules for the Connected System.</param>
+    /// <param name="activeSyncRules">Active Synchronisation Rules for the Connected System.</param>
     /// <returns>A decision indicating whether to project and the MVO type to use.</returns>
     ProjectionDecision EvaluateProjection(
         ConnectedSystemObject cso,
         IReadOnlyList<SyncRule> activeSyncRules);
 
     /// <summary>
-    /// Flows inbound attribute values from a CSO to its joined MVO using a Sync Rule's Attribute Flow mappings.
+    /// Flows inbound attribute values from a CSO to its joined MVO using a Synchronisation Rule's Attribute Flow mappings.
     /// Mutates the MVO's PendingAttributeValueAdditions and PendingAttributeValueRemovals collections.
     /// Returns any warnings generated during Attribute Flow (e.g. multi-valued to single-valued truncation).
     /// </summary>
     /// <param name="cso">The source CSO (must have MetaverseObject set).</param>
-    /// <param name="syncRule">The Sync Rule defining Attribute Flow mappings.</param>
+    /// <param name="syncRule">The Synchronisation Rule defining Attribute Flow mappings.</param>
     /// <param name="objectTypes">CSO object types for attribute lookup.</param>
     /// <param name="expressionEvaluator">Expression evaluator for expression-based mappings.</param>
     /// <param name="skipReferenceAttributes">If true, skip reference attributes (deferred to second pass).</param>
@@ -93,11 +93,11 @@ public interface ISyncEngine
     void ApplyPendingAttributeChanges(MetaverseObject mvo);
 
     /// <summary>
-    /// Determines the InboundOutOfScopeAction for a CSO based on applicable import Sync Rules.
+    /// Determines the InboundOutOfScopeAction for a CSO based on applicable import Synchronisation Rules.
     /// </summary>
     /// <param name="cso">The CSO to evaluate.</param>
-    /// <param name="activeSyncRules">Active Sync Rules for the Connected System.</param>
-    /// <returns>The out-of-scope action from the first matching import Sync Rule, or Disconnect as default.</returns>
+    /// <param name="activeSyncRules">Active Synchronisation Rules for the Connected System.</param>
+    /// <returns>The out-of-scope action from the first matching import Synchronisation Rule, or Disconnect as default.</returns>
     InboundOutOfScopeAction DetermineOutOfScopeAction(
         ConnectedSystemObject cso,
         IReadOnlyList<SyncRule> activeSyncRules);

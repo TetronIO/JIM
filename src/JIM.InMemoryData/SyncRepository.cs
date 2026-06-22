@@ -84,7 +84,7 @@ public class SyncRepository : ISyncRepository
     /// <summary>All Connected Systems, keyed by Connected System ID.</summary>
     public IReadOnlyDictionary<int, ConnectedSystem> ConnectedSystems => _connectedSystems;
 
-    /// <summary>All Sync Rules, keyed by Sync Rule ID.</summary>
+    /// <summary>All Synchronisation Rules, keyed by Synchronisation Rule ID.</summary>
     public IReadOnlyDictionary<int, SyncRule> SyncRules => _syncRules;
 
     /// <summary>All Connected System Object Types, keyed by object type ID.</summary>
@@ -1161,7 +1161,7 @@ public class SyncRepository : ISyncRepository
 
     #endregion
 
-    #region Sync Rules and Configuration
+    #region Synchronisation Rules and Configuration
 
     public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabled, bool withChangeTracking = false)
     {

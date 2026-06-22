@@ -9,7 +9,7 @@ namespace JIM.Worker.Tests.Synchronisation;
 
 /// <summary>
 /// Tests for the out-of-scope change types (DisconnectedOutOfScope and OutOfScopeRetainJoin)
-/// used when CSOs fall out of scope of import Sync Rule scoping criteria.
+/// used when CSOs fall out of scope of import Synchronisation Rule scoping criteria.
 /// </summary>
 [TestFixture]
 public class OutOfScopeChangeTypeTests

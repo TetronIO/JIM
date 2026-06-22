@@ -625,7 +625,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// <remarks>
     /// Returns a paginated list of change records for the specified Metaverse Object,
     /// ordered by change time descending (most recent first). Each row carries the
-    /// initiator, Sync Rule, and Run Profile context, plus the per-attribute value changes.
+    /// initiator, Synchronisation Rule, and Run Profile context, plus the per-attribute value changes.
     /// </remarks>
     /// <param name="id">The unique identifier (GUID) of the Metaverse Object.</param>
     /// <param name="pagination">Pagination parameters (page, pageSize). Page size is clamped to [1, 100].</param>

@@ -470,16 +470,16 @@ public interface ISyncRepository
 
     #endregion
 
-    #region Sync Rules and Configuration
+    #region Synchronisation Rules and Configuration
 
     /// <summary>
-    /// Gets Sync Rules for a Connected System.
+    /// Gets Synchronisation Rules for a Connected System.
     /// When <paramref name="includeDisabled"/> is false, only active rules are returned.
     /// </summary>
     Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabled, bool withChangeTracking = false);
 
     /// <summary>
-    /// Gets all Sync Rules across all Connected Systems.
+    /// Gets all Synchronisation Rules across all Connected Systems.
     /// Used to build the drift detection cache which needs rules from all systems.
     /// </summary>
     Task<List<SyncRule>> GetAllSyncRulesAsync(bool withChangeTracking = false);

@@ -1104,7 +1104,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
 
         // Resolve the MVO type for headings and deletion rule display
         {
-            // Try to get the MVO type from the CSO's linked MetaverseObject, or from Sync Rules
+            // Try to get the MVO type from the CSO's linked MetaverseObject, or from Synchronisation Rules
             int? mvoTypeId = null;
             int? csoTypeId = null;
 
@@ -1141,7 +1141,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                 }
             }
 
-            // Fourth try: if we don't have MVO type yet but have CSO type, look up via Sync Rules
+            // Fourth try: if we don't have MVO type yet but have CSO type, look up via Synchronisation Rules
             if (!mvoTypeId.HasValue && csoTypeId.HasValue)
             {
                 var syncRules = await jim.ConnectedSystems.GetSyncRulesAsync();

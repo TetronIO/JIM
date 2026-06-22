@@ -75,8 +75,8 @@ public class CreateObjectMatchingRuleRequest
 }
 
 /// <summary>
-/// Request DTO for creating an Object Matching Rule on a Sync Rule (advanced mode).
-/// The MetaverseObjectType is derived from the Sync Rule, not specified explicitly.
+/// Request DTO for creating an Object Matching Rule on a Synchronisation Rule (advanced mode).
+/// The MetaverseObjectType is derived from the Synchronisation Rule, not specified explicitly.
 /// </summary>
 public class CreateSyncRuleObjectMatchingRuleRequest
 {

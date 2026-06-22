@@ -280,7 +280,7 @@ public class Worker : BackgroundService
                                     }
                                     {
                                         // Load with change tracking so EF Core identity-fixes overlapping entities
-                                        // across the multiple queries used during sync (object types, Sync Rules, etc.)
+                                        // across the multiple queries used during sync (object types, Synchronisation Rules, etc.)
                                         var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(syncWorkerTask.ConnectedSystemId, withChangeTracking: true);
                                         if (connectedSystem != null)
                                         {

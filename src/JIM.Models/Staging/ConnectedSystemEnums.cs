@@ -30,12 +30,12 @@ public enum ObjectMatchingRuleMode
 {
     /// <summary>
     /// Default: Object Matching Rules are defined at the Connected System Object Type level.
-    /// These rules are shared across all Sync Rules for that object type.
+    /// These rules are shared across all Synchronisation Rules for that object type.
     /// </summary>
     ConnectedSystem = 0,
     /// <summary>
-    /// Advanced: Object Matching Rules are defined per Sync Rule.
-    /// Allows different matching logic for different Sync Rules.
+    /// Advanced: Object Matching Rules are defined per Synchronisation Rule.
+    /// Allows different matching logic for different Synchronisation Rules.
     /// </summary>
     SyncRule = 1
 }
@@ -51,7 +51,7 @@ public enum ConnectedSystemObjectJoinType
     /// </summary>
     Projected = 1,
     /// <summary>
-    /// A Sync Rule required a Metaverse Object to be provisioned to the Connected System, resulting in a Connected System Object being created.
+    /// A Synchronisation Rule required a Metaverse Object to be provisioned to the Connected System, resulting in a Connected System Object being created.
     /// </summary>
     Provisioned = 2,
     /// <summary>

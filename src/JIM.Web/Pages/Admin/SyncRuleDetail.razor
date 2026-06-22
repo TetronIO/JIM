@@ -67,7 +67,7 @@ else if (_syncRule != null)
                         mappings will be lost.
                     </MudText>
                     <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Delete" OnClick="HandleDeleteSyncRuleAsync"
-                        DropShadow="false" Color="Color.Error">Delete Sync Rule</MudButton>
+                        DropShadow="false" Color="Color.Error">Delete Synchronisation Rule</MudButton>
                 </MudPaper>
             </MudTabPanel>
         }
@@ -94,7 +94,7 @@ else if (_syncRule != null)
         }
 
         <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleCreateOrUpdateSyncRuleAsync"
-            Disabled="!_syncRule.IsValid()" DropShadow="false">@(_syncRule.Id == 0 ? "Create" : "Update") Sync Rule
+            Disabled="!_syncRule.IsValid()" DropShadow="false">@(_syncRule.Id == 0 ? "Create" : "Update") Synchronisation Rule
         </MudButton>
     </div>
     }
@@ -158,11 +158,11 @@ else if (_syncRule != null)
 
         if (Id != null)
         {
-            // edit an existing Sync Rule - loaded change-tracked so edits persist on save
+            // edit an existing Synchronisation Rule - loaded change-tracked so edits persist on save
             _syncRule = await _jim.ConnectedSystems.GetSyncRuleAsync(Id.Value);
             if (_syncRule == null)
             {
-                // Sync Rule not found, redirect to index page
+                // Synchronisation Rule not found, redirect to index page
                 _isLoading = false;
                 NavManager.NavigateTo("../");
                 return;
@@ -173,7 +173,7 @@ else if (_syncRule != null)
         }
         else
         {
-            // create a new Sync Rule
+            // create a new Synchronisation Rule
             _syncRule = new SyncRule();
             _syncRuleNameOrCreate = "New";
             _breadcrumbs.Add(new BreadcrumbItem("New", href: null, disabled: true));
@@ -184,7 +184,7 @@ else if (_syncRule != null)
 
     private void OnChildChanged()
     {
-        // a tab mutated the shared Sync Rule; re-render so the save bar's validation and
+        // a tab mutated the shared Synchronisation Rule; re-render so the save bar's validation and
         // enabled state stay in sync with the latest edits.
         StateHasChanged();
     }

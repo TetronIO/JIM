@@ -9,7 +9,7 @@ namespace JIM.Models.Core.DTOs;
 
 /// <summary>
 /// Flat projection of a Metaverse Object change record for display and API consumption.
-/// Includes denormalised initiator, Sync Rule, and Run Profile context so consumers can
+/// Includes denormalised initiator, Synchronisation Rule, and Run Profile context so consumers can
 /// render a row without further joins, and a list of attribute-level changes.
 /// </summary>
 public class MvoChangeHistoryDto

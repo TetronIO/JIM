@@ -37,7 +37,7 @@ public class SyncRule : IAuditable, IValidated
     public string? CreatedByName { get; set; }
 
     /// <summary>
-    /// When the Sync Rule was last modified by an admin. Not the last time it was evaluated during a sync run.
+    /// When the Synchronisation Rule was last modified by an admin. Not the last time it was evaluated during a sync run.
     /// </summary>
     public DateTime? LastUpdated { get; set; }
 
@@ -57,19 +57,19 @@ public class SyncRule : IAuditable, IValidated
     public string? LastUpdatedByName { get; set; }
         
     /// <summary>
-    /// The Connected System this Sync Rule applies to. A Sync Rule applies to a single Connected System only.
+    /// The Connected System this Synchronisation Rule applies to. A Synchronisation Rule applies to a single Connected System only.
     /// </summary>
     public ConnectedSystem ConnectedSystem { get; set; } = null!;
     public int ConnectedSystemId { get; set; }
         
     /// <summary>
-    /// What type of object should this Sync Rule apply to in the Connected System?
+    /// What type of object should this Synchronisation Rule apply to in the Connected System?
     /// </summary>
     public ConnectedSystemObjectType ConnectedSystemObjectType { get; set; } = null!;
     public int ConnectedSystemObjectTypeId { get; set; }
         
     /// <summary>
-    /// What type of object in the Metaverse, should this Sync Rule apply to?
+    /// What type of object in the Metaverse, should this Synchronisation Rule apply to?
     /// </summary>
     public MetaverseObjectType MetaverseObjectType { get; set; } = null!;
     public int MetaverseObjectTypeId { get; set; }
@@ -80,20 +80,20 @@ public class SyncRule : IAuditable, IValidated
     public SyncRuleDirection Direction { get; set; }
         
     /// <summary>
-    /// Should this Sync Rule also cause an object to be created in the Connected System, or just update attributes for existing objects?
+    /// Should this Synchronisation Rule also cause an object to be created in the Connected System, or just update attributes for existing objects?
     /// This is normally set to true when the Connected System is a 'downstream' system that JIM is responsible for managing objects in.
     /// Though it can be set to false if it's a source system (i.e. HR), or if that system has its own Joiner processes.
     /// </summary>
     public bool? ProvisionToConnectedSystem { get; set; }
 
     /// <summary>
-    /// Should this Sync Rule also cause an object imported from a Connected System to be projected (created in) the Metaverse? 
+    /// Should this Synchronisation Rule also cause an object imported from a Connected System to be projected (created in) the Metaverse? 
     /// This is normally set to true for a source system (i.e. HR).
     /// </summary>              
     public bool? ProjectToMetaverse { get; set; }
 
     /// <summary>
-    /// A Sync Rule can be disabled, meaning it will not be evaluated when Run Profiles are executed.
+    /// A Synchronisation Rule can be disabled, meaning it will not be evaluated when Run Profiles are executed.
     /// This can be especially useful for admins when they need to be able to easily stop synchronising specific objects for a given system, without changing the sync schedule(s).
     /// </summary>
     public bool Enabled { get; set; } = true;
@@ -120,7 +120,7 @@ public class SyncRule : IAuditable, IValidated
 
     /// <summary>
     /// Contains all the logic that controls what attributes on a Metaverse Object should flow to what Connected System Object attribute,
-    /// or visa-versa, depending on the Sync Rule direction.
+    /// or visa-versa, depending on the Synchronisation Rule direction.
     /// </summary>
     public List<SyncRuleMapping> AttributeFlowRules { get; set; } = new();
 
@@ -137,7 +137,7 @@ public class SyncRule : IAuditable, IValidated
     public List<Activity> Activities { get; set; } = null!;
 
     /// <summary>
-    /// Contains the scoping criteria that determines which objects are in scope for this Sync Rule.
+    /// Contains the scoping criteria that determines which objects are in scope for this Synchronisation Rule.
     /// For Export rules: evaluates Metaverse Object attributes to determine which MVOs should be exported.
     /// For Import rules: evaluates Connected System Object attributes to determine which CSOs should be projected/joined.
     /// No rules mean all objects of the applicable type are in scope.
@@ -146,7 +146,7 @@ public class SyncRule : IAuditable, IValidated
 
     public override string ToString()
     {
-        return $"Sync Rule: {Name} ({Id})";
+        return $"Synchronisation Rule: {Name} ({Id})";
     }
 
     public bool IsValid()
@@ -173,7 +173,7 @@ public class SyncRule : IAuditable, IValidated
         if (Direction == SyncRuleDirection.NotSet)
             response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, "Direction must be set"));
 
-        // Only warn about missing matching rules if this Sync Rule manages its own matching rules (Advanced Mode)
+        // Only warn about missing matching rules if this Synchronisation Rule manages its own matching rules (Advanced Mode)
         // In Simple Mode (ObjectMatchingRuleMode.ConnectedSystem), matching rules are defined on the Connected System
         if (Direction == SyncRuleDirection.Import &&
             ObjectMatchingRules.Count == 0 &&

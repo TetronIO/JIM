@@ -50,14 +50,14 @@ public enum ObjectChangeType
     Disconnected,
 
     /// <summary>
-    /// CSO disconnected from MVO because it fell out of scope of import Sync Rule scoping criteria.
+    /// CSO disconnected from MVO because it fell out of scope of import Synchronisation Rule scoping criteria.
     /// This provides clear audit trail showing WHY the disconnection occurred, enabling the UI
     /// to explain consequences (attribute removal, MVO deletion rules, etc).
     /// </summary>
     DisconnectedOutOfScope,
 
     /// <summary>
-    /// CSO fell out of scope of import Sync Rule scoping criteria but remained joined
+    /// CSO fell out of scope of import Synchronisation Rule scoping criteria but remained joined
     /// because InboundOutOfScopeAction was set to RemainJoined. Attribute Flow has stopped
     /// but the join is preserved ("once managed, always managed" pattern).
     /// </summary>

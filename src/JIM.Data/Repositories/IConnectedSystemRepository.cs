@@ -489,10 +489,10 @@ public interface IConnectedSystemRepository
     public Task<List<SyncRule>> GetSyncRulesAsync(bool withChangeTracking = false);
 
     /// <summary>
-    /// Retrieves all the Sync Rules for a given Connected System.
+    /// Retrieves all the Synchronisation Rules for a given Connected System.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
-    /// <param name="includeDisabledSyncRules">Controls whether to return Sync Rules that are disabled</param>
+    /// <param name="includeDisabledSyncRules">Controls whether to return Synchronisation Rules that are disabled</param>
     public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules, bool withChangeTracking = false);
 
     public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync();
@@ -542,33 +542,33 @@ public interface IConnectedSystemRepository
     /// <returns>List of all changes for that CSO ordered by ChangeTime descending.</returns>
     Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangeHistoryAsync(Guid changeId);
 
-    #region Sync Rule Mappings
+    #region Synchronisation Rule Mappings
     /// <summary>
-    /// Gets all mappings for a Sync Rule.
+    /// Gets all mappings for a Synchronisation Rule.
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     Task<List<SyncRuleMapping>> GetSyncRuleMappingsAsync(int syncRuleId);
 
     /// <summary>
-    /// Gets a specific Sync Rule mapping by ID.
+    /// Gets a specific Synchronisation Rule mapping by ID.
     /// </summary>
     /// <param name="id">The unique identifier of the mapping.</param>
     Task<SyncRuleMapping?> GetSyncRuleMappingAsync(int id);
 
     /// <summary>
-    /// Creates a new Sync Rule mapping.
+    /// Creates a new Synchronisation Rule mapping.
     /// </summary>
     /// <param name="mapping">The mapping to create.</param>
     Task CreateSyncRuleMappingAsync(SyncRuleMapping mapping);
 
     /// <summary>
-    /// Updates an existing Sync Rule mapping.
+    /// Updates an existing Synchronisation Rule mapping.
     /// </summary>
     /// <param name="mapping">The mapping to update.</param>
     Task UpdateSyncRuleMappingAsync(SyncRuleMapping mapping);
 
     /// <summary>
-    /// Deletes a Sync Rule mapping.
+    /// Deletes a Synchronisation Rule mapping.
     /// </summary>
     /// <param name="mapping">The mapping to delete.</param>
     Task DeleteSyncRuleMappingAsync(SyncRuleMapping mapping);
@@ -837,7 +837,7 @@ public interface IConnectedSystemRepository
     /// <summary>
     /// Deletes all Connected System Objects and their dependencies for a Connected System.
     /// This is used by both ClearConnectedSystemObjects and DeleteConnectedSystem.
-    /// Does NOT delete the Connected System itself or its configuration (Sync Rules, Run Profiles, etc.).
+    /// Does NOT delete the Connected System itself or its configuration (Synchronisation Rules, Run Profiles, etc.).
     /// </summary>
     /// <param name="connectedSystemId">The ID of the Connected System.</param>
     /// <param name="deleteChangeHistory">If true, deletes ConnectedSystemObjectChanges. If false, nulls the CSO FK.</param>
@@ -853,7 +853,7 @@ public interface IConnectedSystemRepository
     Task DeleteConnectedSystemAsync(int connectedSystemId, bool deleteChangeHistory = false);
 
     /// <summary>
-    /// Gets the count of Sync Rules for a Connected System.
+    /// Gets the count of Synchronisation Rules for a Connected System.
     /// </summary>
     Task<int> GetSyncRuleCountAsync(int connectedSystemId);
 

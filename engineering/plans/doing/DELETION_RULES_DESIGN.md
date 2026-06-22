@@ -53,7 +53,7 @@ When `DeletionRule = WhenAuthoritativeSourceDisconnected`, you must specify whic
 | One system `[1]` | MVO is deleted when that specific system disconnects |
 | Multiple systems `[1, 2]` | MVO is deleted when **ANY** of the specified systems disconnect |
 
-**Note**: Only "contributing systems" (systems with inbound Sync Rules for this object type) can be selected as authoritative sources.
+**Note**: Only "contributing systems" (systems with inbound Synchronisation Rules for this object type) can be selected as authoritative sources.
 
 #### Example: HR → AD Synchronisation
 
@@ -161,7 +161,7 @@ MVOs expose computed properties for UI display:
 
 ## Deprovisioning Behaviour
 
-When an MVO is deleted, downstream CSOs need to be handled. This is controlled by the export Sync Rule's `OutboundDeprovisionAction`:
+When an MVO is deleted, downstream CSOs need to be handled. This is controlled by the export Synchronisation Rule's `OutboundDeprovisionAction`:
 
 | Action | Behaviour |
 |--------|-----------|
@@ -192,7 +192,7 @@ When an MVO is deleted, downstream CSOs need to be handled. This is controlled b
    - Dropdown for selecting deletion rule (Manual, When Last Connector Disconnected, When Authoritative Source Disconnected)
    - Grace period input field
    - Checkboxes for selecting authoritative sources (only visible when `WhenAuthoritativeSourceDisconnected` is selected)
-   - Only "contributing systems" (systems with inbound Sync Rules for this object type) appear as selectable authoritative sources
+   - Only "contributing systems" (systems with inbound Synchronisation Rules for this object type) appear as selectable authoritative sources
 5. **Admin UI - List view** - `SchemaObjectTypeList.razor` shows deletion rule column with coloured chips and tooltips
 
 ## Phase 1 Implementation Status: Implemented ✅

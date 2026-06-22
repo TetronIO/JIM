@@ -94,7 +94,7 @@
                 else
                 {
                     <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
-                        No contributing systems found. Create inbound Sync Rules for this object type to enable authoritative source selection.
+                        No contributing systems found. Create inbound Synchronisation Rules for this object type to enable authoritative source selection.
                     </MudAlert>
                 }
             </div>
@@ -272,7 +272,7 @@
             new(_metaverseObjectType.Name, href: null, disabled: true)
         };
 
-        // Load contributing systems (systems with inbound Sync Rules for this object type)
+        // Load contributing systems (systems with inbound Synchronisation Rules for this object type)
         await LoadContributingSystemsAsync();
 
         // Initialise deletion rules state

@@ -23,7 +23,7 @@ namespace JIM.Worker.Tests.Servers;
 /// Regression guard: the SyncRuleMapping schema consolidated onto a single <c>SyncRuleId</c> foreign key, but the
 /// deletion SQL still referenced the removed <c>AttributeFlowSynchronisationRuleId</c> /
 /// <c>ObjectMatchingSynchronisationRuleId</c> columns, throwing PostgreSQL 42703 (undefined column) for every
-/// connected-system deletion (the offending statement is parsed regardless of whether any Sync Rules exist).
+/// connected-system deletion (the offending statement is parsed regardless of whether any Synchronisation Rules exist).
 /// </remarks>
 [TestFixture]
 [Category("RequiresPostgres")]
@@ -137,9 +137,9 @@ public class ConnectedSystemDeletionDatabaseTests
 
         await using var verify = NewContext();
         Assert.That(await verify.ConnectedSystems.AnyAsync(), Is.False, "Connected System should be removed.");
-        Assert.That(await verify.SyncRules.AnyAsync(), Is.False, "Sync Rules should be removed.");
-        Assert.That(await verify.SyncRuleMappings.AnyAsync(), Is.False, "Sync Rule mappings should be removed.");
-        Assert.That(await verify.SyncRuleMappingSources.AnyAsync(), Is.False, "Sync Rule mapping sources should be removed.");
+        Assert.That(await verify.SyncRules.AnyAsync(), Is.False, "Synchronisation Rules should be removed.");
+        Assert.That(await verify.SyncRuleMappings.AnyAsync(), Is.False, "Synchronisation Rule mappings should be removed.");
+        Assert.That(await verify.SyncRuleMappingSources.AnyAsync(), Is.False, "Synchronisation Rule mapping sources should be removed.");
     }
 
     [Test]
@@ -163,7 +163,7 @@ public class ConnectedSystemDeletionDatabaseTests
                 Enabled = true
             };
 
-            // An Object Matching Rule referencing both the system's object type and its Sync Rule, with a
+            // An Object Matching Rule referencing both the system's object type and its Synchronisation Rule, with a
             // source and a source parameter value (the OMR source graph cascades from the rule).
             var omr = new ObjectMatchingRule
             {
@@ -193,7 +193,7 @@ public class ConnectedSystemDeletionDatabaseTests
 
         await using var verify = NewContext();
         Assert.That(await verify.ConnectedSystems.AnyAsync(), Is.False, "Connected System should be removed.");
-        Assert.That(await verify.SyncRules.AnyAsync(), Is.False, "Sync Rules should be removed.");
+        Assert.That(await verify.SyncRules.AnyAsync(), Is.False, "Synchronisation Rules should be removed.");
         Assert.That(await verify.ObjectMatchingRules.AnyAsync(), Is.False, "Object Matching Rules should be removed.");
         Assert.That(await verify.ObjectMatchingRuleSources.AnyAsync(), Is.False, "Object Matching Rule sources should be removed.");
     }
@@ -214,7 +214,7 @@ public class ConnectedSystemDeletionDatabaseTests
 
     /// <summary>
     /// Seeds a complete connected-system dependency graph: partition, container, Run Profile, object type and
-    /// attribute, Sync Rule (+ mapping + source), a CSO (+ attribute value), a Metaverse Object with one attribute
+    /// attribute, Synchronisation Rule (+ mapping + source), a CSO (+ attribute value), a Metaverse Object with one attribute
     /// value contributed by the system and one unresolved reference to a CSO, a Metaverse Object change, a
     /// connected-system object change (+ attribute + value) and an activity. Every inbound foreign key the deletion
     /// must null or reorder is populated, so the fixture exercises the full delete path an empty or sync-rules-only
@@ -225,7 +225,7 @@ public class ConnectedSystemDeletionDatabaseTests
     {
         await using var seed = NewContext();
 
-        // --- Phase 1: Connected System, schema, partition, container, Sync Rule graph ---
+        // --- Phase 1: Connected System, schema, partition, container, Synchronisation Rule graph ---
         var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
         var system = new ConnectedSystem { Name = "Full Graph System", ConnectorDefinition = connectorDefinition };
         var csType = new ConnectedSystemObjectType { Name = "USER", ConnectedSystem = system, Selected = true };
@@ -321,7 +321,7 @@ public class ConnectedSystemDeletionDatabaseTests
         seed.AddRange(runProfile, cso, mvo, mvoChange, csoChange);
         await seed.SaveChangesAsync();
 
-        // --- Phase 3: activity referencing the now-persisted Run Profile and Sync Rule (scalar FKs) ---
+        // --- Phase 3: activity referencing the now-persisted Run Profile and Synchronisation Rule (scalar FKs) ---
         var activity = new Activity
         {
             TargetType = ActivityTargetType.ConnectedSystem,
@@ -366,7 +366,7 @@ public class ConnectedSystemDeletionDatabaseTests
 
         // Connected-system graph fully removed.
         Assert.That(await verify.ConnectedSystems.AnyAsync(), Is.False, "Connected System should be removed.");
-        Assert.That(await verify.SyncRules.AnyAsync(), Is.False, "Sync Rules should be removed.");
+        Assert.That(await verify.SyncRules.AnyAsync(), Is.False, "Synchronisation Rules should be removed.");
         Assert.That(await verify.ConnectedSystemRunProfiles.AnyAsync(), Is.False, "Run Profiles should be removed.");
         Assert.That(await verify.ConnectedSystemPartitions.AnyAsync(), Is.False, "Partitions should be removed.");
         Assert.That(await verify.ConnectedSystemObjects.AnyAsync(), Is.False, "CSOs should be removed.");
@@ -385,7 +385,7 @@ public class ConnectedSystemDeletionDatabaseTests
         Assert.That(unresolvedMvav.UnresolvedReferenceValueId, Is.Null, "Unresolved reference to a deleted CSO should be nulled.");
 
         var mvoChange = await verify.MetaverseObjectChanges.SingleAsync(c => c.Id == ids.MvoChangeId);
-        Assert.That(mvoChange.SyncRuleId, Is.Null, "Metaverse Object change should keep the record but null the deleted Sync Rule FK.");
+        Assert.That(mvoChange.SyncRuleId, Is.Null, "Metaverse Object change should keep the record but null the deleted Synchronisation Rule FK.");
     }
 
     [Test]
@@ -402,7 +402,7 @@ public class ConnectedSystemDeletionDatabaseTests
         await using var verify = NewContext();
 
         Assert.That(await verify.ConnectedSystems.AnyAsync(), Is.False, "Connected System should be removed.");
-        Assert.That(await verify.SyncRules.AnyAsync(), Is.False, "Sync Rules should be removed.");
+        Assert.That(await verify.SyncRules.AnyAsync(), Is.False, "Synchronisation Rules should be removed.");
         Assert.That(await verify.ConnectedSystemObjects.AnyAsync(), Is.False, "CSOs should be removed.");
         Assert.That(await verify.ConnectedSystemObjectTypes.AnyAsync(), Is.False, "Object types should be removed.");
 

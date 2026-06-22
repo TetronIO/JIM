@@ -121,7 +121,7 @@ public class SyncRuleMappingProcessorReferenceTests
         };
         groupCso.AttributeValues.Add(memberAttributeValue);
 
-        // Create Sync Rule mapping: CSO member -> MVO Static Members
+        // Create Synchronisation Rule mapping: CSO member -> MVO Static Members
         var syncRuleMapping = new SyncRuleMapping
         {
             Id = 1,

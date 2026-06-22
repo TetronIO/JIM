@@ -298,7 +298,7 @@ public class DriftDetectionService
     /// Builds a lookup dictionary of import mappings by (ConnectedSystemId, MvoAttributeId).
     /// Call this once at the start of a sync run for efficient drift detection.
     /// </summary>
-    /// <param name="syncRules">All Sync Rules to process.</param>
+    /// <param name="syncRules">All Synchronisation Rules to process.</param>
     /// <returns>Dictionary keyed by (ConnectedSystemId, MvoAttributeId).</returns>
     public static Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>> BuildImportMappingCache(
         List<SyncRule> syncRules)
@@ -335,7 +335,7 @@ public class DriftDetectionService
     /// For multi-valued attributes, returns a HashSet containing all values.
     /// </summary>
     /// <param name="mvo">The Metaverse Object to get the expected value from.</param>
-    /// <param name="source">The Sync Rule mapping source defining the attribute or expression.</param>
+    /// <param name="source">The Synchronisation Rule mapping source defining the attribute or expression.</param>
     /// <param name="mvAttributeDictionary">Pre-built dictionary of MVO attribute values for expression evaluation.</param>
     /// <param name="targetCsoAttribute">The target CSO attribute - used to determine plurality for consistent comparison.</param>
     private object? GetExpectedValue(MetaverseObject mvo, SyncRuleMappingSource source, Dictionary<string, object?> mvAttributeDictionary, ConnectedSystemObjectTypeAttribute targetCsoAttribute)

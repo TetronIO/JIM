@@ -297,7 +297,7 @@ public class SyncCancellationTests : WorkflowTestBase
     }
 
     /// <summary>
-    /// Adds an Attribute Flow mapping to a Sync Rule.
+    /// Adds an Attribute Flow mapping to a Synchronisation Rule.
     /// Follows the same pattern as NugatoryWorkOptimisationTests.
     /// </summary>
     private Task AddAttributeFlowAsync(

@@ -31,7 +31,7 @@ Two LDAP (Active Directory) Connected Systems in a cross-domain entitlement sync
 - **Source CS** ("Panoply APAC") - Authoritative source of users and groups
 - **Target CS** ("Panoply EMEA") - Receives users and groups from Source
 
-### Sync Rules (6 total)
+### Synchronisation Rules (6 total)
 
 | Rule                    | Direction | Purpose                                                |
 |-------------------------|-----------|--------------------------------------------------------|

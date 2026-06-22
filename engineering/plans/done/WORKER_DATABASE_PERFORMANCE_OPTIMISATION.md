@@ -388,24 +388,24 @@ If the above phases don't yield sufficient improvement, or if we decide to push 
 
 ### B. MVO Join-Attribute Lookup Cache
 
-**Concept**: Extend the `IMemoryCache` infrastructure from Phase 1 to cache MVO join-attribute values; the attributes referenced in Object Matching Rules across all Sync Rules. During sync, `FindMetaverseObjectUsingMatchingRuleAsync` is called per CSO to find a matching MVO. If the join-rule-referenced attribute values are cached (e.g., `mvo-match:{objectTypeId}:{attributeId}:{value}` → MVO GUID), sync matching becomes a pure in-memory lookup followed by a single PK load, eliminating the N+1 matching queries entirely.
+**Concept**: Extend the `IMemoryCache` infrastructure from Phase 1 to cache MVO join-attribute values; the attributes referenced in Object Matching Rules across all Synchronisation Rules. During sync, `FindMetaverseObjectUsingMatchingRuleAsync` is called per CSO to find a matching MVO. If the join-rule-referenced attribute values are cached (e.g., `mvo-match:{objectTypeId}:{attributeId}:{value}` → MVO GUID), sync matching becomes a pure in-memory lookup followed by a single PK load, eliminating the N+1 matching queries entirely.
 
 **Advantages**:
 - Reuses the proven `IMemoryCache` infrastructure and patterns from Phase 1 (cache warming, miss-population, eviction)
-- Join rules typically reference a small, well-defined set of attributes (1-2 per Sync Rule; e.g., `employeeId`, `sAMAccountName`, `objectGUID`), keeping the cache footprint small
+- Join rules typically reference a small, well-defined set of attributes (1-2 per Synchronisation Rule; e.g., `employeeId`, `sAMAccountName`, `objectGUID`), keeping the cache footprint small
 - MVO join attributes are identity anchors that rarely change, making the cache highly effective
-- Cache warming can read Sync Rule configurations to determine exactly which attributes to index
+- Cache warming can read Synchronisation Rule configurations to determine exactly which attributes to index
 
 **Trade-offs**:
 - MVO attribute values can change during sync (unlike CSO external IDs which are essentially immutable). Cache invalidation must cover attribute value updates, not just creates/deletes
-- The set of "which attributes are join-rule attributes" must be resolved at warmup time by reading Sync Rule configurations. If Sync Rules change (admin adds/modifies a join rule), the cache needs re-warming; but this is rare and a Worker restart suffices
+- The set of "which attributes are join-rule attributes" must be resolved at warmup time by reading Synchronisation Rule configurations. If Synchronisation Rules change (admin adds/modifies a join rule), the cache needs re-warming; but this is rare and a Worker restart suffices
 - More complex than the lightweight query optimisation in Phase 2, but potentially higher impact
 
 **When to consider**: If Phase 2's lightweight query optimisation doesn't sufficiently reduce sync matching times, particularly for large environments with 50k+ MVOs where even optimised per-object queries accumulate significant total time.
 
 ### C. Persistent In-Memory Model for the Worker Service
 
-**Concept**: Adopt an in-memory processing model for the Worker service. When the Worker starts, establish and maintain a persistent in-memory cache of everything needed for Run Profile execution -- CSOs, MVOs, attribute values, Sync Rules, object types, etc. The cache stays warm across Run Profile executions, so the Worker is always ready to execute without per-run database loading. Database writes are batched and the cache is kept in sync with persisted changes.
+**Concept**: Adopt an in-memory processing model for the Worker service. When the Worker starts, establish and maintain a persistent in-memory cache of everything needed for Run Profile execution -- CSOs, MVOs, attribute values, Synchronisation Rules, object types, etc. The cache stays warm across Run Profile executions, so the Worker is always ready to execute without per-run database loading. Database writes are batched and the cache is kept in sync with persisted changes.
 
 This is a fundamentally different approach to the surgical per-query optimisations above. Rather than optimising individual database calls, it shifts the Worker to an in-memory processing model where the database becomes a persistence layer rather than the primary data source during execution. The architectural options for this will need exploring and analysing for suitability.
 

@@ -17,7 +17,7 @@ Since v0.7.1, sync decisions are split across three layers:
 
 ```mermaid
 flowchart TD
-    Start([Start Sync]) --> Prepare[Prepare: count CSOs + Pending Exports<br/>If TargetPartitionId set, scope to that partition<br/>Load Sync Rules, object types via ISyncRepository<br/>Build drift detection cache<br/>Build export evaluation cache<br/>Pre-load Pending Exports into dictionary]
+    Start([Start Sync]) --> Prepare[Prepare: count CSOs + Pending Exports<br/>If TargetPartitionId set, scope to that partition<br/>Load Synchronisation Rules, object types via ISyncRepository<br/>Build drift detection cache<br/>Build export evaluation cache<br/>Pre-load Pending Exports into dictionary]
     Prepare --> PageLoop{More CSO<br/>pages?}
 
     PageLoop -->|Yes| LoadPage[Load page of CSOs<br/>without attributes for performance]
@@ -104,11 +104,11 @@ flowchart TD
     InScope -->|Yes| CheckMvo{CSO joined<br/>to MVO?}
 
     %% --- Join/Project path ---
-    CheckMvo -->|No| AttemptJoin[Attempt Join<br/>For each import Sync Rule:<br/>Find matching MVO by join criteria]
+    CheckMvo -->|No| AttemptJoin[Attempt Join<br/>For each import Synchronisation Rule:<br/>Find matching MVO by join criteria]
     AttemptJoin --> JoinResult{Match<br/>found?}
 
-    JoinResult -->|No match| AttemptProject{ISyncEngine.EvaluateProjection<br/>Sync Rule has<br/>ProjectToMetaverse = true?}
-    AttemptProject -->|Yes| Project[Create new MVO<br/>Set type from Sync Rule<br/>Link CSO to new MVO]
+    JoinResult -->|No match| AttemptProject{ISyncEngine.EvaluateProjection<br/>Synchronisation Rule has<br/>ProjectToMetaverse = true?}
+    AttemptProject -->|Yes| Project[Create new MVO<br/>Set type from Synchronisation Rule<br/>Link CSO to new MVO]
     AttemptProject -->|No| Done
 
     JoinResult -->|Single match| EstablishJoin[Establish join<br/>CSO.MetaverseObject = MVO<br/>Set JoinType + DateJoined]
@@ -118,7 +118,7 @@ flowchart TD
     %% --- Attribute Flow path ---
     EstablishJoin --> AttrFlow
     Project --> AttrFlow
-    CheckMvo -->|Yes| AttrFlow[ISyncEngine.FlowInboundAttributes<br/>Pass 1: scalar attributes only<br/>For each Sync Rule mapping:<br/>- Direct: CSO attr --> MVO attr<br/>- Expression: evaluate --> MVO attr<br/>- ContributedBySystemId set on all new values<br/>Skip reference attributes]
+    CheckMvo -->|Yes| AttrFlow[ISyncEngine.FlowInboundAttributes<br/>Pass 1: scalar attributes only<br/>For each Synchronisation Rule mapping:<br/>- Direct: CSO attr --> MVO attr<br/>- Expression: evaluate --> MVO attr<br/>- ContributedBySystemId set on all new values<br/>Skip reference attributes]
 
     AttrFlow --> QueueRef[Queue CSO for deferred<br/>reference attribute processing<br/>Pass 2 at end of page]
     QueueRef --> ApplyChanges[ISyncEngine.ApplyPendingAttributeChanges<br/>Apply pending attribute<br/>additions and removals to MVO]

@@ -200,7 +200,7 @@ public class WorkflowTestHarness : IDisposable
     }
 
     /// <summary>
-    /// Creates a Sync Rule.
+    /// Creates a Synchronisation Rule.
     /// </summary>
     public async Task<SyncRule> CreateSyncRuleAsync(
         string name,
@@ -322,7 +322,7 @@ public class WorkflowTestHarness : IDisposable
 
     /// <summary>
     /// Executes export evaluation for all MVOs that need exporting.
-    /// This creates PendingExports based on export Sync Rules.
+    /// This creates PendingExports based on export Synchronisation Rules.
     /// </summary>
     public async Task ExecuteExportEvaluationAsync(string sourceSystemName)
     {

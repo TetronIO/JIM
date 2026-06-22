@@ -12,7 +12,7 @@ The current implementation uses `CSO.LastUpdated` compared against `ConnectedSys
 
 **Limitations:**
 - Requires a prior successful sync to establish the watermark
-- First sync after adding new Sync Rules must process everything (watermark predates the rules)
+- First sync after adding new Synchronisation Rules must process everything (watermark predates the rules)
 - If a sync fails partway through, the watermark isn't updated, so the next sync re-processes everything
 - Doesn't detect external database modifications (direct SQL changes to attribute values)
 

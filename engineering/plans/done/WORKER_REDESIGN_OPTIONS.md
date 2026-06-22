@@ -156,7 +156,7 @@ The original estimate of ~3,970 LOC assumed the entire `SyncTaskProcessorBase` (
 The boundary between engine and orchestrator is: **"deciding what changes should happen to in-memory objects"** vs **"persisting those changes and wiring activity/outcome tracking"**.
 
 **Engine decides (no I/O, no async, plain objects in, decisions out):**
-- Scope evaluation: is this CSO in scope for each import Sync Rule?
+- Scope evaluation: is this CSO in scope for each import Synchronisation Rule?
 - Join evaluation: given candidates and existing join count, should this CSO join an MVO?
 - Projection: should a new MVO be created for this CSO?
 - Inbound Attribute Flow: what MVO attribute values change?
@@ -390,7 +390,7 @@ Keep the current architecture but surgically extract the sync processing logic i
 
 1. **Extract `ISyncEngine`** (JIM.Application) - Pure domain logic, no I/O dependencies; **NOT STARTED**
    - Interface defined in JIM.Application; implementation lives alongside existing Servers
-   - Takes in-memory objects (CSO batch, Sync Rules, MVO candidates)
+   - Takes in-memory objects (CSO batch, Synchronisation Rules, MVO candidates)
    - Returns decisions/commands (JoinDecision, ProjectDecision, FlowDecision, ExportDecision)
    - Fully unit testable with plain objects - no mocking needed
    - The ~3,970 lines of SyncTaskProcessorBase + SyncRuleMappingProcessor become the engine
@@ -413,7 +413,7 @@ Keep the current architecture but surgically extract the sync processing logic i
    Two data-access paths, optimised for different purposes; with no code duplication between them:
 
    - **Shared EF Core repositories** (`ConnectedSystemRepository`, `MetaverseRepository`, etc.); used by the Web UI, API, and for generic reads/writes. Over time, individual methods can be swapped from EF LINQ to raw SQL where EF quirks cause issues; benefiting all callers.
-   - **`PostgresData.SyncRepository`**: used exclusively by the Worker. Exposes the full `ISyncRepository` interface (~80 methods). Generic reads (counts, single-record lookups, Sync Rules, settings) delegate to the shared EF repos. Hot-path bulk/batch operations (~15-20 methods) should own their implementations directly using Npgsql COPY binary imports and raw SQL.
+   - **`PostgresData.SyncRepository`**: used exclusively by the Worker. Exposes the full `ISyncRepository` interface (~80 methods). Generic reads (counts, single-record lookups, Synchronisation Rules, settings) delegate to the shared EF repos. Hot-path bulk/batch operations (~15-20 methods) should own their implementations directly using Npgsql COPY binary imports and raw SQL.
    - **Current state (Phase 8 complete):** `SyncRepository` owns all Worker-only bulk SQL directly via partial classes. 12 public methods + 11 private helpers moved from `ActivitiesRepository` and `ConnectedSystemRepository`. Dual-called methods (CSO CRUD, PE update/delete, mark-executing) remain as delegates to shared EF repos. Dead wrappers removed from `ActivityServer` and `ConnectedSystemServer`. Shared helpers (`NullableParam`, `ChunkList`, `MaxParametersPerStatement`) deduplicated into `BulkSqlHelpers.cs`.
    - **Key principle:** `SyncRepository` does NOT duplicate methods from the shared repositories. Only Worker-only methods were moved; dual-called methods stay as delegates.
 
@@ -680,7 +680,7 @@ Decompose the worker into independent, horizontally scalable processing units co
 
 3. **Shared state via Redis (optional cache layer)**
    - MVO lookup cache in Redis for sync workers (avoid each worker loading full MVO set)
-   - Sync Rule cache in Redis (loaded once, shared across workers)
+   - Synchronisation Rule cache in Redis (loaded once, shared across workers)
    - Database remains source of truth; Redis is a performance optimisation only
    - Falls back to direct DB queries if Redis unavailable
    - *CSO caching was considered but deferred*; unlike MVOs (single bounded set, read-heavy for join matching), CSOs scale per Connected System (N systems x objects each), are primarily accessed during import as full-scan diffs where caching doesn't help, and their main cacheable use case (export target lookup) is not the bottleneck since connector I/O dominates export time. Revisit if export DB lookups prove costly at scale

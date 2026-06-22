@@ -165,7 +165,7 @@ av.StringValue == attributeValue
 
 1. Add case sensitivity section to Developer Guide
 2. Update API documentation
-3. Add notes to Sync Rule configuration UI
+3. Add notes to Synchronisation Rule configuration UI
 4. Document PostgreSQL collation options for edge cases
 
 ## PostgreSQL Collation (Edge Case Support)
@@ -253,7 +253,7 @@ New-JIMScopingCriteria -SyncRuleId $ruleId `
 1. Sync scenario where source changes case of attribute value
 2. Matching rule join with case-insensitive matching
 3. Scoping filter with case-insensitive evaluation
-4. Mixed case sensitivity across multiple Sync Rules
+4. Mixed case sensitivity across multiple Synchronisation Rules
 
 ## Success Criteria
 

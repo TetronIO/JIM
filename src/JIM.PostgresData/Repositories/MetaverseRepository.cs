@@ -291,12 +291,12 @@ public class MetaverseRepository : IMetaverseRepository
 
     public async Task<List<SyncRuleReference>> GetSyncRulesReferencingAttributeAsync(int attributeId)
     {
-        // Sync Rule mappings where this attribute is the target (import rules)
+        // Synchronisation Rule mappings where this attribute is the target (import rules)
         var fromMappings = Repository.Database.SyncRuleMappings
             .Where(m => m.TargetMetaverseAttributeId == attributeId && m.SyncRule != null)
             .Select(m => new SyncRuleReference { Id = m.SyncRule!.Id, Name = m.SyncRule.Name });
 
-        // Sync Rule mapping sources where this attribute is the source (export rules)
+        // Synchronisation Rule mapping sources where this attribute is the source (export rules)
         // SyncRuleMappingSource has no navigation to SyncRuleMapping, so join through the parent
         var fromMappingSources = Repository.Database.SyncRuleMappings
             .Where(m => m.Sources.Any(s => s.MetaverseAttributeId == attributeId) && m.SyncRule != null)
@@ -314,7 +314,7 @@ public class MetaverseRepository : IMetaverseRepository
                        || g.ChildGroups.Any(cg => cg.Criteria.Any(c => c.MetaverseAttribute != null && c.MetaverseAttribute.Id == attributeId))))
             .Select(sr => new SyncRuleReference { Id = sr.Id, Name = sr.Name });
 
-        // Union all sources and deduplicate by Sync Rule ID
+        // Union all sources and deduplicate by Synchronisation Rule ID
         var allReferences = await fromMappings
             .Union(fromMappingSources)
             .Union(fromMatchingRules)
@@ -1443,10 +1443,10 @@ public class MetaverseRepository : IMetaverseRepository
     /// </summary>
     /// <param name="connectedSystemObject">The source object to try and find a matching Metaverse Object for.</param>
     /// <param name="metaverseObjectType">The type of Metaverse Object to search for.</param>
-    /// <param name="syncRuleMapping">The Sync Rule Mapping contains the logic needed to construct a Metaverse Object query.</param>
+    /// <param name="syncRuleMapping">The Synchronisation Rule Mapping contains the logic needed to construct a Metaverse Object query.</param>
     /// <returns>A Metaverse Object if a single result is found, otherwise null.</returns>
     /// <exception cref="NotImplementedException">Will be thrown if more than one source is specified (advanced matching). This is not yet supported.</exception>
-    /// <exception cref="ArgumentNullException">Will be thrown if the Sync Rule mapping source Connected System attribute is null.</exception>
+    /// <exception cref="ArgumentNullException">Will be thrown if the Synchronisation Rule mapping source Connected System attribute is null.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Will be thrown if an unsupported attribute type is specified.</exception>
     /// <exception cref="MultipleMatchesException">Will be thrown if there's more than one Metaverse Object that matches the matching rule criteria.</exception>
     public async Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(ConnectedSystemObject connectedSystemObject, MetaverseObjectType metaverseObjectType, ObjectMatchingRule objectMatchingRule)

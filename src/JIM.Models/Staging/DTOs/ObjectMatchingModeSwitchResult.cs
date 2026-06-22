@@ -19,7 +19,7 @@ public class ObjectMatchingModeSwitchResult
     public ObjectMatchingRuleMode NewMode { get; set; }
 
     /// <summary>
-    /// Number of Sync Rules that were updated during the switch.
+    /// Number of Synchronisation Rules that were updated during the switch.
     /// </summary>
     public int SyncRulesUpdated { get; set; }
 
@@ -67,7 +67,7 @@ public class ObjectMatchingModeSwitchResult
         foreach (var migration in migrations.Where(m => m.RulesDiverged))
         {
             result.Warnings.Add($"Object type '{migration.ObjectTypeName}' had {migration.UniqueSyncRuleConfigurations} " +
-                $"different matching rule configurations across {migration.SyncRuleCount} Sync Rules. " +
+                $"different matching rule configurations across {migration.SyncRuleCount} Synchronisation Rules. " +
                 $"The most common configuration was used.");
         }
 
@@ -109,22 +109,22 @@ public class ObjectTypeMatchingRuleMigration
     public string ObjectTypeName { get; set; } = string.Empty;
 
     /// <summary>
-    /// Number of import Sync Rules for this object type.
+    /// Number of import Synchronisation Rules for this object type.
     /// </summary>
     public int SyncRuleCount { get; set; }
 
     /// <summary>
-    /// Number of Sync Rules that had matching rules defined.
+    /// Number of Synchronisation Rules that had matching rules defined.
     /// </summary>
     public int SyncRulesWithMatchingRules { get; set; }
 
     /// <summary>
-    /// Number of unique matching rule configurations found across Sync Rules.
+    /// Number of unique matching rule configurations found across Synchronisation Rules.
     /// </summary>
     public int UniqueSyncRuleConfigurations { get; set; }
 
     /// <summary>
-    /// Whether the matching rules diverged across Sync Rules (required best-guess selection).
+    /// Whether the matching rules diverged across Synchronisation Rules (required best-guess selection).
     /// </summary>
     public bool RulesDiverged => UniqueSyncRuleConfigurations > 1;
 
@@ -134,7 +134,7 @@ public class ObjectTypeMatchingRuleMigration
     public int MatchingRulesSet { get; set; }
 
     /// <summary>
-    /// Number of Sync Rules that had their matching rules cleared.
+    /// Number of Synchronisation Rules that had their matching rules cleared.
     /// </summary>
     public int SyncRulesCleared { get; set; }
 }

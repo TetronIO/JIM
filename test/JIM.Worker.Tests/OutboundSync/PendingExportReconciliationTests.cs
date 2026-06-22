@@ -1277,7 +1277,7 @@ public class PendingExportReconciliationTests
         var accountExpiresAttr = TargetUserType.Attributes.Single(a => a.Name == "accountExpires");
 
         // This represents the "never expires" value that the LDAP connector substitutes
-        // when a Sync Rule returns null for accountExpires
+        // when a Synchronisation Rule returns null for accountExpires
         var attrChange = new PendingExportAttributeValueChange
         {
             Id = Guid.NewGuid(),
@@ -1320,7 +1320,7 @@ public class PendingExportReconciliationTests
     /// substituted value, allowing reconciliation to confirm successfully.
     ///
     /// This simulates what happens when:
-    /// 1. Sync Rule evaluates ToFileTime(mv["Employee End Date"]) and returns null
+    /// 1. Synchronisation Rule evaluates ToFileTime(mv["Employee End Date"]) and returns null
     /// 2. Drift detection creates a Pending Export with no value (clearing the attribute)
     /// 3. LDAP connector substitutes the "never expires" default (9223372036854775807)
     /// 4. LDAP connector updates the PendingExportAttributeValueChange.LongValue

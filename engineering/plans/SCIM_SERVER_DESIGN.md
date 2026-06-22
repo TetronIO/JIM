@@ -131,7 +131,7 @@ Connected System: "HR Source"
 │       ├── members[].value (multi-valued reference)
 │       └── externalId (string)
 │
-└── Sync Rules:
+└── Synchronisation Rules:
     ├── "SCIM User -> MV Person" (Import)
     └── "SCIM Group -> MV Group" (Import)
 ```
@@ -200,7 +200,7 @@ public class ScimServerConnector : IConnector, IConnectorCapabilities, IConnecto
 /scim/v2/{systemId}/...
 ```
 
-Where `{systemId}` is the GUID of the Connected System. This allows multiple SCIM sources, each with their own authentication and Sync Rules.
+Where `{systemId}` is the GUID of the Connected System. This allows multiple SCIM sources, each with their own authentication and Synchronisation Rules.
 
 ### Required SCIM Endpoints
 
@@ -539,12 +539,12 @@ public async Task<IActionResult> DeleteUser(Guid systemId, string userId)
 | `department` | `department` | |
 | `manager.value` | `manager` | Reference to another user |
 
-### Sync Rule Example
+### Synchronisation Rule Example
 
-Admin configures Sync Rules to map SCIM attributes to MVO:
+Admin configures Synchronisation Rules to map SCIM attributes to MVO:
 
 ```
-Sync Rule: "SCIM User to MV Person"
+Synchronisation Rule: "SCIM User to MV Person"
 ├── Source: Connected System "HR Source", Object Type "User"
 ├── Target: Metaverse Object Type "Person"
 ├── Direction: Import
@@ -822,7 +822,7 @@ SCIM manager reference points to user that doesn't exist yet.
 
 Client sends custom SCIM schema extensions.
 
-**Solution**: Store in CSO as custom attributes. Admin can map via Sync Rules.
+**Solution**: Store in CSO as custom attributes. Admin can map via Synchronisation Rules.
 
 ### 4. Large Payloads
 
@@ -876,7 +876,7 @@ PATCH operation has 5 operations, 2 fail.
 
 ### Integration Tests
 - Full request flow: SCIM request -> CSO -> MVO -> Pending Export
-- Sync Rule application
+- Synchronisation Rule application
 - Error handling
 
 ### Compliance Tests

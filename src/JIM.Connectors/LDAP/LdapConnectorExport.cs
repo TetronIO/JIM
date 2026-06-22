@@ -41,7 +41,7 @@ internal class LdapConnectorExport
     /// primaryGroupID, userAccountControl, accountExpires, badPasswordTime, badPwdCount,
     /// codePage, countryCode, lastLogoff, lastLogon, logonCount, pwdLastSet
     ///
-    /// We only include attributes that JIM might legitimately try to clear via Sync Rules.
+    /// We only include attributes that JIM might legitimately try to clear via Synchronisation Rules.
     /// System-managed attributes (objectSid, sAMAccountType, etc.) are not included as
     /// JIM would never attempt to modify them.
     /// </summary>

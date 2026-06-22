@@ -11,14 +11,14 @@ public class SyncRuleScopingCriteria
     public int Id { get; set; }
 
     /// <summary>
-    /// The Metaverse Attribute to evaluate for outbound (export) Sync Rules.
+    /// The Metaverse Attribute to evaluate for outbound (export) Synchronisation Rules.
     /// One of MetaverseAttribute or ConnectedSystemAttribute must be set.
     /// </summary>
     public MetaverseAttribute? MetaverseAttribute { get; set; }
     public int? MetaverseAttributeId { get; set; }
 
     /// <summary>
-    /// The Connected System Object Type Attribute to evaluate for inbound (import) Sync Rules.
+    /// The Connected System Object Type Attribute to evaluate for inbound (import) Synchronisation Rules.
     /// One of MetaverseAttribute or ConnectedSystemAttribute must be set.
     /// </summary>
     public ConnectedSystemObjectTypeAttribute? ConnectedSystemAttribute { get; set; }

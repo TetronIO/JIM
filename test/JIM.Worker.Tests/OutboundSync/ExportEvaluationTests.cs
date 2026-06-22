@@ -98,7 +98,7 @@ public class ExportEvaluationTests
         MetaverseObjectsData = TestUtilities.GetMetaverseObjectData();
         MockDbSetMetaverseObjects = MetaverseObjectsData.BuildMockDbSet();
 
-        // Set up the Sync Rule stub mocks
+        // Set up the Synchronisation Rule stub mocks
         SyncRulesData = TestUtilities.GetSyncRuleData();
         MockDbSetSyncRules = SyncRulesData.BuildMockDbSet();
 
@@ -169,7 +169,7 @@ public class ExportEvaluationTests
         var sourceSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Source System");
 
         // Set up export rule pointing back to source system (which should be skipped)
-        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportRule.ConnectedSystemId = sourceSystem.Id;
         exportRule.ConnectedSystem = sourceSystem;
 
@@ -427,7 +427,7 @@ public class ExportEvaluationTests
         var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
         var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
 
-        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportRule.OutboundDeprovisionAction = OutboundDeprovisionAction.Delete;
 
         // Scope criterion that the MVO cannot satisfy (its EmployeeId is "E123").
@@ -597,7 +597,7 @@ public class ExportEvaluationTests
         var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
         var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
 
-        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
 
         // Add scoping criteria: EmployeeId equals "E123"
         exportRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
@@ -632,7 +632,7 @@ public class ExportEvaluationTests
         var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
         var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
 
-        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
 
         // Add scoping criteria: EmployeeId equals "DIFFERENT_VALUE"
         exportRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
@@ -664,7 +664,7 @@ public class ExportEvaluationTests
     {
         // Arrange
         var mvo = MetaverseObjectsData[0];
-        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
 
         // Ensure no scoping criteria
         exportRule.ObjectScopingCriteriaGroups.Clear();
@@ -696,7 +696,7 @@ public class ExportEvaluationTests
         var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
 
         // Configure export rule for provisioning
-        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportRule.Enabled = true;
         exportRule.Direction = SyncRuleDirection.Export;
         exportRule.MetaverseObjectTypeId = mvUserType.Id;
@@ -773,7 +773,7 @@ public class ExportEvaluationTests
         SyncRepo.SeedConnectedSystemObject(existingCso);
 
         // Configure export rule
-        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportRule.Enabled = true;
         exportRule.Direction = SyncRuleDirection.Export;
         exportRule.MetaverseObjectTypeId = mvUserType.Id;
@@ -848,7 +848,7 @@ public class ExportEvaluationTests
         var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
 
         // Configure export rule with provisioning DISABLED
-        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportRule.Enabled = true;
         exportRule.Direction = SyncRuleDirection.Export;
         exportRule.MetaverseObjectTypeId = mvUserType.Id;
@@ -912,7 +912,7 @@ public class ExportEvaluationTests
         SyncRepo.SeedConnectedSystemObject(pendingProvisioningCso);
 
         // Configure export rule
-        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportRule.Enabled = true;
         exportRule.Direction = SyncRuleDirection.Export;
         exportRule.MetaverseObjectTypeId = mvUserType.Id;
@@ -985,7 +985,7 @@ public class ExportEvaluationTests
         targetUserType.Attributes.Add(dnAttr);
 
         // Configure export rule with expression-based mapping
-        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportRule.Enabled = true;
         exportRule.Direction = SyncRuleDirection.Export;
         exportRule.MetaverseObjectTypeId = mvUserType.Id;
@@ -1087,7 +1087,7 @@ public class ExportEvaluationTests
         var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
 
         // Configure export rule with scoping criteria that MVO no longer matches
-        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportRule.Enabled = true;
         exportRule.Direction = SyncRuleDirection.Export;
         exportRule.MetaverseObjectTypeId = mvUserType.Id;
@@ -1166,7 +1166,7 @@ public class ExportEvaluationTests
         var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
 
         // Configure export rule with Delete action
-        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportRule.Enabled = true;
         exportRule.Direction = SyncRuleDirection.Export;
         exportRule.MetaverseObjectTypeId = mvUserType.Id;
@@ -1237,7 +1237,7 @@ public class ExportEvaluationTests
         var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
 
         // Configure export rule with scoping criteria that MVO DOES match
-        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportRule.Enabled = true;
         exportRule.Direction = SyncRuleDirection.Export;
         exportRule.MetaverseObjectTypeId = mvUserType.Id;
@@ -1313,7 +1313,7 @@ public class ExportEvaluationTests
         var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
 
         // Configure export rule with Disconnect action
-        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportRule.Enabled = true;
         exportRule.Direction = SyncRuleDirection.Export;
         exportRule.MetaverseObjectTypeId = mvUserType.Id;
@@ -1411,7 +1411,7 @@ public class ExportEvaluationTests
         targetUserType.Attributes.Add(targetEmployeeIdAttr);
 
         // Configure export rule with multiple mappings
-        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportRule.Enabled = true;
         exportRule.Direction = SyncRuleDirection.Export;
         exportRule.MetaverseObjectTypeId = mvUserType.Id;
@@ -1573,7 +1573,7 @@ public class ExportEvaluationTests
         SyncRepo.SeedConnectedSystemObject(existingCso);
 
         // Configure export rule with multiple mappings
-        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportRule.Enabled = true;
         exportRule.Direction = SyncRuleDirection.Export;
         exportRule.MetaverseObjectTypeId = mvUserType.Id;
@@ -1691,7 +1691,7 @@ public class ExportEvaluationTests
         };
         targetUserType.Attributes.Add(targetDisplayNameAttr);
 
-        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportRule.Enabled = true;
         exportRule.Direction = SyncRuleDirection.Export;
         exportRule.MetaverseObjectTypeId = mvUserType.Id;

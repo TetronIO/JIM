@@ -13,8 +13,8 @@ namespace JIM.Models.Logic;
 /// (to find existing CSOs for provisioning).
 ///
 /// Rules can belong to EITHER:
-/// - A ConnectedSystemObjectType (Mode A - default): Used for all Sync Rules of that object type
-/// - A SyncRule (Mode B - advanced): Used only for that specific Sync Rule
+/// - A ConnectedSystemObjectType (Mode A - default): Used for all Synchronisation Rules of that object type
+/// - A SyncRule (Mode B - advanced): Used only for that specific Synchronisation Rule
 ///
 /// Multiple rules can be defined with different Order values for cascading/fallback matching.
 /// </summary>
@@ -68,7 +68,7 @@ public class ObjectMatchingRule : IAuditable
     public string? LastUpdatedByName { get; set; }
 
     /// <summary>
-    /// Optional backlink to a SyncRule when this rule is defined at the Sync Rule level (Mode B).
+    /// Optional backlink to a SyncRule when this rule is defined at the Synchronisation Rule level (Mode B).
     /// Mutually exclusive with ConnectedSystemObjectType.
     /// </summary>
     public int? SyncRuleId { get; set; }
@@ -84,8 +84,8 @@ public class ObjectMatchingRule : IAuditable
     /// <summary>
     /// The Metaverse Object Type to search when evaluating this rule.
     /// Required for simple mode rules (<see cref="Staging.ObjectMatchingRuleMode.ConnectedSystem"/>)
-    /// where no Sync Rule provides the MVO type. Null for advanced mode rules where the
-    /// Sync Rule's <see cref="SyncRule.MetaverseObjectTypeId"/> is used instead.
+    /// where no Synchronisation Rule provides the MVO type. Null for advanced mode rules where the
+    /// Synchronisation Rule's <see cref="SyncRule.MetaverseObjectTypeId"/> is used instead.
     /// </summary>
     public int? MetaverseObjectTypeId { get; set; }
     public MetaverseObjectType? MetaverseObjectType { get; set; }
@@ -121,11 +121,11 @@ public class ObjectMatchingRule : IAuditable
         if (hasSyncRule == hasObjectType)
             return false; // Must have exactly one, not both or neither
 
-        // Simple mode rules must have MetaverseObjectTypeId set (no Sync Rule to provide MVO type)
+        // Simple mode rules must have MetaverseObjectTypeId set (no Synchronisation Rule to provide MVO type)
         if (hasObjectType && MetaverseObjectTypeId == null && MetaverseObjectType == null)
             return false;
 
-        // Advanced mode rules must NOT have MetaverseObjectTypeId (Sync Rule provides MVO type)
+        // Advanced mode rules must NOT have MetaverseObjectTypeId (Synchronisation Rule provides MVO type)
         if (hasSyncRule && (MetaverseObjectTypeId != null || MetaverseObjectType != null))
             return false;
 

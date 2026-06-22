@@ -8,7 +8,7 @@ Background research into shorter identifier formats that could replace GUIDs for
 
 JIM uses two primary key types:
 
-- **`int`** (~70% of entities); object types, attributes, Connected Systems, partitions, containers, Run Profiles, Sync Rules, etc.
+- **`int`** (~70% of entities); object types, attributes, Connected Systems, partitions, containers, Run Profiles, Synchronisation Rules, etc.
 - **`Guid`** (~30%, 28 entities); MetaverseObject, ConnectedSystemObject, Activity, Schedule, PendingExport, ApiKey, and related entities
 
 GUIDs also appear in 100+ foreign key / audit fields and 28+ API routes with `{id:guid}` constraints.
