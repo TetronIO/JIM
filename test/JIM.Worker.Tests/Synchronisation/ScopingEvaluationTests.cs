@@ -13,7 +13,7 @@ namespace JIM.Worker.Tests.Synchronisation;
 
 /// <summary>
 /// Tests for the ScopingEvaluationServer which handles scoping criteria evaluation
-/// for both export (MVO) and import (CSO) sync rules.
+/// for both export (MVO) and import (CSO) Sync Rules.
 /// </summary>
 [TestFixture]
 public class ScopingEvaluationTests

@@ -64,7 +64,7 @@
 
             @if (SyncRule.ConnectedSystem != null)
             {
-                <MudSelect T="string" Label="Direction" Placeholder="Please select an attribute flow direction..."
+                <MudSelect T="string" Label="Direction" Placeholder="Please select an Attribute Flow direction..."
                            Required="true" ValueChanged="HandleSyncRuleDirectionSelection" Variant="Variant.Outlined" Class="mt-5">
                     @foreach (SyncRuleDirection direction in Enum.GetValues(typeof(SyncRuleDirection)))
                     {
@@ -139,7 +139,7 @@
         <MudSwitch Class="mt-5" @bind-Value="@SyncRule.ProvisionToConnectedSystem" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary"
                    Label="@($"Provision {(SyncRule.ConnectedSystemObjectType?.Name ?? "objects").Pluralise()} to the Connected System?")" />
         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">By default, Metaverse objects scoped to
-            this synchronisation rule will not be created (provisioned) in the Connected Systems. Enabling this
+            this Synchronisation Rule will not be created (provisioned) in the Connected Systems. Enabling this
             option will cause the Metaverse object to be created in the Connected System. You would typically enable
             this option for a destination system, i.e. when trying to implement a HR to Active Directory flow.</MudText>
     }
@@ -165,7 +165,7 @@
                                Label="Enforce State (Auto-correct drift)" />
                     <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">Enables drift detection and automatic
                         correction. When a target system attribute differs from what this export rule dictates, JIM creates a
-                        corrective pending export to restore the authoritative value. Disable only where you need to allow
+                        corrective Pending Export to restore the authoritative value. Disable only where you need to allow
                         temporary manual overrides in the target system (e.g. emergency access scenarios).</MudText>
                 </div>
             </ChildContent>
@@ -196,7 +196,7 @@
 
     private async Task HandleConnectedSystemSelectedAsync(string connectedSystemId)
     {
-        // convert to int and assign to the sync rule
+        // convert to int and assign to the Sync Rule
         var connectedSystemIdInt = int.Parse(connectedSystemId);
         using var jim = JimFactory.Create();
         var connectedSystem = await jim.ConnectedSystems.GetConnectedSystemAsync(connectedSystemIdInt);

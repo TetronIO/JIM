@@ -200,5 +200,5 @@ mkdir -p ~/.ssh && chmod 700 ~/.ssh
 **Sync Statistics Not What Expected:**
 - Check log for summary statistics at end of import/sync/export (look for "SUMMARY - Total objects")
 - Verify Run Profile is selecting correct partition/container
-- Verify sync rules are correctly scoped to object types
+- Verify Sync Rules are correctly scoped to object types
 - Check for DuplicateObject errors - indicates deduplication is working

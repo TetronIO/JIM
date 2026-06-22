@@ -21,7 +21,7 @@ public interface IChangeHistoryRepository
     Task<int> DeleteExpiredActivitiesAsync(DateTime olderThan, int maxRecords);
 
     /// <summary>
-    /// Gets the count of CSO change records for a specific connected system.
+    /// Gets the count of CSO change records for a specific Connected System.
     /// </summary>
     Task<int> GetCsoChangeCountAsync(int connectedSystemId);
 

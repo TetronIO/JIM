@@ -4,7 +4,7 @@ title: Activities
 
 # Activities
 
-An **activity** is a tracked operation in JIM. Every significant action creates an activity record with status, timing, and summary statistics: run profile executions, schema imports, data generation, certificate management, and configuration changes all produce activities.
+An **activity** is a tracked operation in JIM. Every significant action creates an activity record with status, timing, and summary statistics: Run Profile executions, schema imports, data generation, certificate management, and configuration changes all produce activities.
 
 Activities are the primary mechanism for monitoring synchronisation progress and troubleshooting issues. Run profile activities additionally include detailed per-object execution items, so you can drill from a high-level "5 errors" counter down to the specific objects that failed.
 
@@ -23,11 +23,11 @@ Most monitoring code only cares about whether the activity has reached a termina
 
 ## Initiated by
 
-Every activity records who or what triggered it: a user (with their metaverse object reference), an API key, or the system itself (for example, a schedule). This is the audit trail.
+Every activity records who or what triggered it: a user (with their Metaverse Object reference), an API key, or the system itself (for example, a schedule). This is the audit trail.
 
 ## Summary statistics
 
-Activities for run profile executions carry counters relevant to the operation type:
+Activities for Run Profile executions carry counters relevant to the operation type:
 
 - **Imports**<br /> `Total Added`, `Total Updated`, `Total Deleted`.
 - **Synchronisation**<br /> `Total Projected`, `Total Joined`, `Total Attribute Flows`, `Total Disconnected`, `Total Provisioned`.
@@ -38,7 +38,7 @@ The exact field set depends on the operation; the [interactive API reference](..
 
 ## Execution items
 
-For run profile activities, JIM stores a per-object record of what happened (with any error details) for the most recent run. These let you go from a high-level error counter to the specific Connected System Objects that failed and the reason for each failure. Execution items are the right place to look when diagnosing why a particular identity didn't sync as expected.
+For Run Profile activities, JIM stores a per-object record of what happened (with any error details) for the most recent run. These let you go from a high-level error counter to the specific Connected System Objects that failed and the reason for each failure. Execution items are the right place to look when diagnosing why a particular identity didn't sync as expected.
 
 ## Parent and child activities
 
@@ -46,9 +46,9 @@ A schedule execution typically appears as a parent activity with one child activ
 
 ## Common workflows
 
-**Monitoring a run profile execution:**
+**Monitoring a Run Profile execution:**
 
-1. Trigger the run profile; capture the returned activity ID
+1. Trigger the Run Profile; capture the returned activity ID
 2. Poll the activity to watch its status and progress counters until it reaches a terminal status
 3. If it finished with errors, retrieve the execution items to inspect the per-object failures
 

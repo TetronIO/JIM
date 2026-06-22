@@ -73,7 +73,7 @@ public interface ISyncServer
     Task<MetaverseObject?> FindMatchingMetaverseObjectAsync(ConnectedSystemObject cso, List<ObjectMatchingRule> matchingRules);
 
     /// <summary>
-    /// Finds a matching CSO for export provisioning using object matching rules.
+    /// Finds a matching CSO for export provisioning using Object Matching Rules.
     /// </summary>
     Task<ConnectedSystemObject?> FindMatchingConnectedSystemObjectAsync(
         MetaverseObject metaverseObject,
@@ -86,7 +86,7 @@ public interface ISyncServer
     #region Connected System Operations
 
     /// <summary>
-    /// Refreshes the auto-selected containers for a connected system using the connector triad.
+    /// Refreshes the auto-selected containers for a Connected System using the connector triad.
     /// </summary>
     Task RefreshAndAutoSelectContainersWithTriadAsync(
         ConnectedSystem connectedSystem,
@@ -98,7 +98,7 @@ public interface ISyncServer
         Activity? parentActivity = null);
 
     /// <summary>
-    /// Updates a connected system with the latest triad data from the connector.
+    /// Updates a Connected System with the latest triad data from the connector.
     /// </summary>
     Task UpdateConnectedSystemWithTriadAsync(
         ConnectedSystem connectedSystem,
@@ -198,8 +198,8 @@ public interface ISyncServer
 
     /// <summary>
     /// Evaluates drift for a CSO that has been imported/synced against its joined MVO.
-    /// Checks all export rules with EnforceState = true that target this CSO's connected system.
-    /// Returns corrective pending exports (not yet persisted) when drift is detected.
+    /// Checks all export rules with EnforceState = true that target this CSO's Connected System.
+    /// Returns corrective Pending Exports (not yet persisted) when drift is detected.
     /// </summary>
     DriftDetectionResult EvaluateDrift(
         ConnectedSystemObject cso,
@@ -227,7 +227,7 @@ public interface ISyncServer
     Task RefreshExportEvaluationCacheForPageAsync(ExportEvaluationCache cache, IEnumerable<Guid> mvoIds);
 
     /// <summary>
-    /// Evaluates all export rules for an MVO that has changed, creating pending exports
+    /// Evaluates all export rules for an MVO that has changed, creating Pending Exports
     /// with no-net-change detection.
     /// </summary>
     Task<ExportEvaluationResult> EvaluateExportRulesWithNoNetChangeDetectionAsync(
@@ -258,7 +258,7 @@ public interface ISyncServer
     #region Export Execution
 
     /// <summary>
-    /// Executes all pending exports for a connected system via the connector.
+    /// Executes all Pending Exports for a Connected System via the connector.
     /// </summary>
     Task<ExportExecutionResult> ExecuteExportsAsync(
         ConnectedSystem connectedSystem,
@@ -266,7 +266,7 @@ public interface ISyncServer
         SyncRunMode runMode = SyncRunMode.PreviewAndSync);
 
     /// <summary>
-    /// Executes all pending exports with full options including progress reporting,
+    /// Executes all Pending Exports with full options including progress reporting,
     /// cancellation, and parallel batch support.
     /// </summary>
     Task<ExportExecutionResult> ExecuteExportsAsync(

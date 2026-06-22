@@ -334,8 +334,8 @@ internal class LdapConnectorImport
     }
 
     /// <summary>
-    /// Returns the partitions to import from. If the run profile specifies a partition, only that
-    /// partition is returned. Otherwise, all selected partitions on the connected system are returned.
+    /// Returns the partitions to import from. If the Run Profile specifies a partition, only that
+    /// partition is returned. Otherwise, all selected partitions on the Connected System are returned.
     /// </summary>
     private IEnumerable<ConnectedSystemPartition> GetTargetPartitions()
     {
@@ -346,7 +346,7 @@ internal class LdapConnectorImport
             return [_connectedSystemRunProfile.Partition];
         }
 
-        _logger.Debug("GetTargetPartitions: No partition specified on run profile, importing from all selected partitions");
+        _logger.Debug("GetTargetPartitions: No partition specified on Run Profile, importing from all selected partitions");
         return _connectedSystem.Partitions!.Where(p => p.Selected);
     }
 
@@ -1311,7 +1311,7 @@ internal class LdapConnectorImport
                     continue;
 
                 // Filter by partition scope — only process entries whose DN falls within
-                // the connected system's selected partitions. OpenLDAP's shared cn=accesslog
+                // the Connected System's selected partitions. OpenLDAP's shared cn=accesslog
                 // records changes from ALL databases (suffixes), so we must exclude entries
                 // from other suffixes to avoid importing objects from the wrong partition.
                 if (partitionSuffixes.Count > 0 &&
@@ -1547,7 +1547,7 @@ internal class LdapConnectorImport
                 return importObjects;
             }
 
-            // start to build the object that will represent the object in the connected system. we will pass this back to JIM
+            // start to build the object that will represent the object in the Connected System. we will pass this back to JIM
             var importObject = new ConnectedSystemImportObject
             {
                 ChangeType = changeType

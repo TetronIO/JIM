@@ -244,7 +244,7 @@ public class ActivityRepository : IActivityRepository
 
     /// <summary>
     /// Retrieves a page's worth of worker task activities - operations executed by the worker service
-    /// such as run profile executions, data generation, and connected system operations.
+    /// such as Run Profile executions, data generation, and Connected System operations.
     /// </summary>
     public async Task<PagedResultSet<Activity>> GetWorkerTaskActivitiesAsync(
         int page,
@@ -383,7 +383,7 @@ public class ActivityRepository : IActivityRepository
     /// </summary>
     private IQueryable<Activity> BuildWorkerTaskQuery()
     {
-        // Worker task activity types - run profile executions and connected system operations
+        // Worker task activity types - Run Profile executions and Connected System operations
         // Note: ExampleDataTemplate and HistoryRetentionCleanup are intentionally excluded
         var workerTaskTargetTypes = new[]
         {

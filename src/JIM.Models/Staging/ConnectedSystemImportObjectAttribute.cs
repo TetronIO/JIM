@@ -13,7 +13,7 @@ public class ConnectedSystemImportObjectAttribute
     public List<string> StringValues { get; set; } = new();
 
     /// <summary>
-    /// References from connected systems are handled as strings. 
+    /// References from Connected Systems are handled as strings. 
     /// JIM will then resolve them into hard references to other Connected System Objects as part of an Import operation.
     /// </summary>
     public List<string> ReferenceValues { get; set; } = new();

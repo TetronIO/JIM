@@ -92,7 +92,7 @@
             </MudTd>
         </RowTemplate>
         <NoRecordsContent>
-            There are no run profiles. Create your first.
+            There are no Run Profiles. Create your first.
         </NoRecordsContent>
     </MudTable>
 
@@ -106,11 +106,11 @@
         <DialogContent>
             <MudForm @bind-IsValid="@IsNewRunProfileFormValid">
                 <MudTextField T="string" @bind-Value="_newRunProfile.Name" Label="Name" Variant="Variant.Outlined"
-                              Class="mt-3" Required="true" RequiredError="A name for the run profile is required" />
+                              Class="mt-3" Required="true" RequiredError="A name for the Run Profile is required" />
 
                 <MudSelect T="ConnectedSystemRunType" @bind-Value="_newRunProfile.RunType" Label="Run Type"
                            Variant="Variant.Outlined" AnchorOrigin="Origin.BottomLeft" Class="mt-5" Required="true"
-                           RequiredError="A run profile type is required"
+                           RequiredError="A Run Profile type is required"
                            Validation="@(new Func<ConnectedSystemRunType, string?>(ValidateRunType))" Immediate="true">
                     <MudSelectItem Value="ConnectedSystemRunType.NotSet" Disabled="true">Select run type</MudSelectItem>
                     @foreach (ConnectedSystemRunType runType in Enum.GetValues(typeof(ConnectedSystemRunType)))
@@ -189,7 +189,7 @@
         <DialogContent>
             <MudForm @bind-IsValid="@_isEditRunProfileFormValid">
                 <MudTextField T="string" @bind-Value="_editRunProfile.Name" Label="Name" Variant="Variant.Outlined"
-                              Class="mt-3" Required="true" RequiredError="A name for the run profile is required" />
+                              Class="mt-3" Required="true" RequiredError="A name for the Run Profile is required" />
 
                 <MudTextField T="string" Value="@_editRunProfile.RunType.ToString().SplitOnCapitalLetters()" Label="Run Type"
                               Variant="Variant.Outlined" Class="mt-5" Disabled="true"
@@ -300,13 +300,13 @@
             runProfile.Partition = selectedPartition;
             ConnectedSystem.RunProfiles.Add(runProfile);
 
-            Snackbar.Add("New run profile added.", Severity.Success);
+            Snackbar.Add("New Run Profile added.", Severity.Success);
             _newRunProfileDialogVisible = false;
             _newRunProfile = new ConnectedSystemRunProfile { RunType = ConnectedSystemRunType.NotSet };
         }
         catch
         {
-            Snackbar.Add("Failed to create run profile. Please try again.", Severity.Error);
+            Snackbar.Add("Failed to create Run Profile. Please try again.", Severity.Error);
         }
     }
 
@@ -352,7 +352,7 @@
         }
         catch
         {
-            Snackbar.Add("Failed to update run profile. Please try again.", Severity.Error);
+            Snackbar.Add("Failed to update Run Profile. Please try again.", Severity.Error);
         }
     }
 
@@ -363,7 +363,7 @@
 
         var confirmationResult = await DialogService.ShowMessageBoxAsync(
             "Delete Run Profile",
-            $"Are you sure you want to delete the run profile '{connectedSystemRunProfile.Name}'? This action cannot be undone.",
+            $"Are you sure you want to delete the Run Profile '{connectedSystemRunProfile.Name}'? This action cannot be undone.",
             yesText: "Delete",
             cancelText: "Cancel");
 

@@ -73,7 +73,7 @@ public interface IConnectedSystemRepository
     /// Used for reference resolution to eliminate N+1 individual lookups.
     /// Uses case-insensitive matching for string comparison.
     /// </summary>
-    /// <param name="connectedSystemId">The connected system to search within.</param>
+    /// <param name="connectedSystemId">The Connected System to search within.</param>
     /// <param name="attributeId">The external ID attribute to match against.</param>
     /// <param name="attributeValues">The string values to search for.</param>
     /// <returns>A dictionary keyed by lowercase attribute value for O(1) lookup.</returns>
@@ -84,7 +84,7 @@ public interface IConnectedSystemRepository
     /// Used for reference resolution where referenced objects can be of any type (e.g. LDAP group members).
     /// Uses case-insensitive matching for string comparison.
     /// </summary>
-    /// <param name="connectedSystemId">The connected system to search within.</param>
+    /// <param name="connectedSystemId">The Connected System to search within.</param>
     /// <param name="secondaryExternalIdValues">The secondary external ID values to search for (e.g. LDAP DNs).</param>
     /// <returns>A dictionary keyed by lowercase attribute value for O(1) lookup.</returns>
     public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(int connectedSystemId, IEnumerable<string> secondaryExternalIdValues);
@@ -95,12 +95,12 @@ public interface IConnectedSystemRepository
     public Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue);
 
     /// <summary>
-    /// Bulk-loads all CSO external ID mappings for a connected system.
+    /// Bulk-loads all CSO external ID mappings for a Connected System.
     /// Returns a dictionary mapping cache keys to CSO GUIDs for populating the lookup index.
     /// Each entry maps "connectedSystemId:attributeId:lowerExternalIdValue" to the CSO GUID.
     /// Used for cache warming to eliminate N+1 import lookups.
     /// </summary>
-    /// <param name="connectedSystemId">The connected system to load mappings for.</param>
+    /// <param name="connectedSystemId">The Connected System to load mappings for.</param>
     /// <returns>A dictionary of cache key → CSO GUID mappings.</returns>
     public Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId);
 
@@ -126,7 +126,7 @@ public interface IConnectedSystemRepository
     public Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId);
 
     /// <summary>
-    /// Retrieves pending exports that are ready for execution, filtering at the database level.
+    /// Retrieves Pending Exports that are ready for execution, filtering at the database level.
     /// Excludes exports that have exceeded max retries or are not yet due for retry.
     /// Results are ordered by CreatedAt (oldest first).
     /// </summary>
@@ -135,20 +135,20 @@ public interface IConnectedSystemRepository
     public Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId);
 
     /// <summary>
-    /// Returns the count of pending exports that are ready for execution, using the same
+    /// Returns the count of Pending Exports that are ready for execution, using the same
     /// database-level filtering as <see cref="GetExecutableExportsAsync"/>.
     /// Used to set progress totals before batch-loading exports.
     /// </summary>
     public Task<int> GetExecutableExportCountAsync(int connectedSystemId);
 
     /// <summary>
-    /// Retrieves a single batch of pending exports that are ready for execution, using AsNoTracking
+    /// Retrieves a single batch of Pending Exports that are ready for execution, using AsNoTracking
     /// for minimal memory overhead. Uses the same database-level filtering as <see cref="GetExecutableExportsAsync"/>.
     /// </summary>
     /// <param name="connectedSystemId">The Connected System to load exports for.</param>
     /// <param name="skip">Number of rows to skip (for paging).</param>
     /// <param name="take">Maximum number of rows to return.</param>
-    /// <returns>Untracked pending exports with ConnectedSystemObject, AttributeValues, and AttributeValueChanges loaded.</returns>
+    /// <returns>Untracked Pending Exports with ConnectedSystemObject, AttributeValues, and AttributeValueChanges loaded.</returns>
     public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take);
 
     /// <summary>
@@ -158,16 +158,16 @@ public interface IConnectedSystemRepository
     public Task<List<PendingExportSummary>> GetExecutableExportSummariesAsync(int connectedSystemId);
 
     /// <summary>
-    /// Deletes pending exports by their IDs using raw SQL.
+    /// Deletes Pending Exports by their IDs using raw SQL.
     /// Used by reconciliation which operates on lightweight summaries, not full entities.
     /// </summary>
     public Task DeletePendingExportsByIdsAsync(IList<Guid> pendingExportIds);
 
     /// <summary>
-    /// Retrieves pending exports by their IDs with all necessary includes for export processing.
+    /// Retrieves Pending Exports by their IDs with all necessary includes for export processing.
     /// Used by parallel batch processing where each batch re-loads its entities from its own DbContext.
     /// </summary>
-    /// <param name="pendingExportIds">The IDs of pending exports to load.</param>
+    /// <param name="pendingExportIds">The IDs of Pending Exports to load.</param>
     /// <returns>Pending exports with ConnectedSystemObject, AttributeValues, and AttributeValueChanges loaded.</returns>
     public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds);
 
@@ -205,20 +205,20 @@ public interface IConnectedSystemRepository
 
     /// <summary>
     /// Deletes multiple Pending Export objects in a single batch operation.
-    /// Used to efficiently remove confirmed pending exports during sync.
+    /// Used to efficiently remove confirmed Pending Exports during sync.
     /// </summary>
     /// <param name="pendingExports">The Pending Exports to delete.</param>
     public Task DeletePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
 
     /// <summary>
     /// Updates multiple Pending Export objects in a single batch operation.
-    /// Used to efficiently update pending exports during sync.
+    /// Used to efficiently update Pending Exports during sync.
     /// </summary>
     /// <param name="pendingExports">The Pending Exports to update.</param>
     public Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
 
     /// <summary>
-    /// Marks pending exports as Executing using a single raw SQL UPDATE statement.
+    /// Marks Pending Exports as Executing using a single raw SQL UPDATE statement.
     /// Sets Status to Executing and LastAttemptedAt to the current UTC time.
     /// This bypasses EF Core change tracking for maximum efficiency on simple status updates.
     /// Also updates the in-memory entity state to keep the objects consistent.
@@ -262,7 +262,7 @@ public interface IConnectedSystemRepository
     /// Multi-valued attribute changes are capped at 10 per attribute; total counts are returned separately.
     /// </summary>
     /// <param name="id">The unique identifier of the Pending Export.</param>
-    /// <returns>A <see cref="PendingExportDetailResult"/> containing the pending export and per-attribute
+    /// <returns>A <see cref="PendingExportDetailResult"/> containing the Pending Export and per-attribute
     /// total change counts, or null if not found.</returns>
     public Task<PendingExportDetailResult?> GetPendingExportDetailAsync(Guid id);
 
@@ -285,7 +285,7 @@ public interface IConnectedSystemRepository
 
     /// <summary>
     /// Retrieves a paged list of all attribute value changes across all attributes for a Pending Export.
-    /// Used by the CSO detail page for server-side pagination of the pending exports table.
+    /// Used by the CSO detail page for server-side pagination of the Pending Exports table.
     /// </summary>
     /// <param name="pendingExportId">The unique identifier of the Pending Export.</param>
     /// <param name="page">The 1-based page number.</param>
@@ -320,10 +320,10 @@ public interface IConnectedSystemRepository
     /// Retrieves Pending Exports for multiple Connected System Objects in a single query.
     /// More efficient than calling GetPendingExportByConnectedSystemObjectIdAsync multiple times.
     /// </summary>
-    /// <param name="connectedSystemObjectIds">The CSO IDs to retrieve pending exports for.</param>
-    /// <returns>A dictionary mapping CSO ID to its pending export (if any).</returns>
+    /// <param name="connectedSystemObjectIds">The CSO IDs to retrieve Pending Exports for.</param>
+    /// <returns>A dictionary mapping CSO ID to its Pending Export (if any).</returns>
     /// <exception cref="JIM.Models.Exceptions.DuplicatePendingExportException">
-    /// Thrown when duplicate pending exports are found for the same CSO, indicating a data integrity violation.
+    /// Thrown when duplicate Pending Exports are found for the same CSO, indicating a data integrity violation.
     /// </exception>
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
 
@@ -338,26 +338,26 @@ public interface IConnectedSystemRepository
     /// (e.g. confirmed PendingExportAttributeValueChange records) rather than relying on
     /// EF Core change tracking to detect collection removals.
     /// </remarks>
-    /// <param name="connectedSystemObjectIds">The CSO IDs to retrieve pending exports for.</param>
-    /// <returns>A dictionary mapping CSO ID to its pending export (if any).</returns>
+    /// <param name="connectedSystemObjectIds">The CSO IDs to retrieve Pending Exports for.</param>
+    /// <returns>A dictionary mapping CSO ID to its Pending Export (if any).</returns>
     /// <exception cref="JIM.Models.Exceptions.DuplicatePendingExportException">
-    /// Thrown when duplicate pending exports are found for the same CSO, indicating a data integrity violation.
+    /// Thrown when duplicate Pending Exports are found for the same CSO, indicating a data integrity violation.
     /// </exception>
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
 
 
 
     /// <summary>
-    /// Lightweight query that returns the CSO IDs that have pending exports for a given connected system.
-    /// Used to filter the CSO list before performing full pending export reconciliation,
-    /// avoiding unnecessary iteration over CSOs that have no pending exports.
+    /// Lightweight query that returns the CSO IDs that have Pending Exports for a given Connected System.
+    /// Used to filter the CSO list before performing full Pending Export reconciliation,
+    /// avoiding unnecessary iteration over CSOs that have no Pending Exports.
     /// </summary>
-    /// <param name="connectedSystemId">The connected system ID to find pending exports for.</param>
-    /// <returns>A HashSet of CSO IDs that have at least one pending export for the specified connected system.</returns>
+    /// <param name="connectedSystemId">The Connected System ID to find Pending Exports for.</param>
+    /// <returns>A HashSet of CSO IDs that have at least one Pending Export for the specified Connected System.</returns>
     public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId);
 
     /// <summary>
-    /// Loads all pending exports for a connected system in a single bulk query, keyed by CSO ID.
+    /// Loads all Pending Exports for a Connected System in a single bulk query, keyed by CSO ID.
     /// More efficient than per-page loading for large-scale reconciliation.
     /// </summary>
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId);
@@ -402,7 +402,7 @@ public interface IConnectedSystemRepository
     public Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByTargetSystemsAsync(IEnumerable<int> targetConnectedSystemIds);
 
     /// <summary>
-    /// Gets CSOs joined to specific MVOs within the specified target connected systems.
+    /// Gets CSOs joined to specific MVOs within the specified target Connected Systems.
     /// Used for per-page export evaluation cache refresh — loads only CSOs relevant to the current page.
     /// </summary>
     public Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByMvoIdsAndTargetSystemsAsync(
@@ -448,7 +448,7 @@ public interface IConnectedSystemRepository
     /// This is used for reference resolution where the referenced object can be of any type
     /// (e.g., a group's member reference can point to a user, another group, or other object types).
     /// </summary>
-    /// <param name="connectedSystemId">The connected system to search within.</param>
+    /// <param name="connectedSystemId">The Connected System to search within.</param>
     /// <param name="secondaryExternalIdValue">The secondary external ID value to search for (e.g., a DN).</param>
     /// <returns>The matching CSO, or null if not found.</returns>
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(int connectedSystemId, string secondaryExternalIdValue);
@@ -489,10 +489,10 @@ public interface IConnectedSystemRepository
     public Task<List<SyncRule>> GetSyncRulesAsync(bool withChangeTracking = false);
 
     /// <summary>
-    /// Retrieves all the sync rules for a given Connected System.
+    /// Retrieves all the Sync Rules for a given Connected System.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
-    /// <param name="includeDisabledSyncRules">Controls whether to return sync rules that are disabled</param>
+    /// <param name="includeDisabledSyncRules">Controls whether to return Sync Rules that are disabled</param>
     public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules, bool withChangeTracking = false);
 
     public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync();
@@ -520,7 +520,7 @@ public interface IConnectedSystemRepository
     /// Gets CSO changes where the CSO has been deleted (ChangeType = Deleted and ConnectedSystemObject is null).
     /// Used for the deleted objects browser.
     /// </summary>
-    /// <param name="connectedSystemId">Optional filter by connected system ID.</param>
+    /// <param name="connectedSystemId">Optional filter by Connected System ID.</param>
     /// <param name="fromDate">Optional filter for changes on or after this date.</param>
     /// <param name="toDate">Optional filter for changes on or before this date.</param>
     /// <param name="externalIdSearch">Optional search term for external ID.</param>
@@ -544,31 +544,31 @@ public interface IConnectedSystemRepository
 
     #region Sync Rule Mappings
     /// <summary>
-    /// Gets all mappings for a sync rule.
+    /// Gets all mappings for a Sync Rule.
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
     Task<List<SyncRuleMapping>> GetSyncRuleMappingsAsync(int syncRuleId);
 
     /// <summary>
-    /// Gets a specific sync rule mapping by ID.
+    /// Gets a specific Sync Rule mapping by ID.
     /// </summary>
     /// <param name="id">The unique identifier of the mapping.</param>
     Task<SyncRuleMapping?> GetSyncRuleMappingAsync(int id);
 
     /// <summary>
-    /// Creates a new sync rule mapping.
+    /// Creates a new Sync Rule mapping.
     /// </summary>
     /// <param name="mapping">The mapping to create.</param>
     Task CreateSyncRuleMappingAsync(SyncRuleMapping mapping);
 
     /// <summary>
-    /// Updates an existing sync rule mapping.
+    /// Updates an existing Sync Rule mapping.
     /// </summary>
     /// <param name="mapping">The mapping to update.</param>
     Task UpdateSyncRuleMappingAsync(SyncRuleMapping mapping);
 
     /// <summary>
-    /// Deletes a sync rule mapping.
+    /// Deletes a Sync Rule mapping.
     /// </summary>
     /// <param name="mapping">The mapping to delete.</param>
     Task DeleteSyncRuleMappingAsync(SyncRuleMapping mapping);
@@ -684,18 +684,18 @@ public interface IConnectedSystemRepository
     public Task<int> GetConnectedSystemObjectUnJoinedCountAsync(int connectedSystemId);
 
     /// <summary>
-    /// Returns the count of CSOs in a connected system that are joined to a specific MVO.
-    /// Used during sync to check if an MVO already has a join in this connected system (1:1 constraint).
+    /// Returns the count of CSOs in a Connected System that are joined to a specific MVO.
+    /// Used during sync to check if an MVO already has a join in this Connected System (1:1 constraint).
     /// </summary>
     public Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId);
 
     /// <summary>
-    /// Returns the count of attribute values across all CSOs in a connected system that have an
+    /// Returns the count of attribute values across all CSOs in a Connected System that have an
     /// unresolved reference (UnresolvedReferenceValue is not null and ReferenceValueId is null).
     /// A non-zero count indicates that some group member references (or other reference attributes)
     /// could not be resolved during the last import run.
     /// </summary>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     public Task<int> GetUnresolvedReferenceCountAsync(int connectedSystemId);
 
     public int GetConnectedSystemCount();
@@ -813,22 +813,22 @@ public interface IConnectedSystemRepository
 
     #region Object Matching Rules
     /// <summary>
-    /// Creates a new object matching rule for a Connected System Object Type.
+    /// Creates a new Object Matching Rule for a Connected System Object Type.
     /// </summary>
     Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule);
 
     /// <summary>
-    /// Updates an existing object matching rule.
+    /// Updates an existing Object Matching Rule.
     /// </summary>
     Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule);
 
     /// <summary>
-    /// Deletes an object matching rule and its sources.
+    /// Deletes an Object Matching Rule and its sources.
     /// </summary>
     Task DeleteObjectMatchingRuleAsync(ObjectMatchingRule rule);
 
     /// <summary>
-    /// Gets an object matching rule by ID with all related entities loaded.
+    /// Gets an Object Matching Rule by ID with all related entities loaded.
     /// </summary>
     Task<ObjectMatchingRule?> GetObjectMatchingRuleAsync(int id);
     #endregion
@@ -837,11 +837,11 @@ public interface IConnectedSystemRepository
     /// <summary>
     /// Deletes all Connected System Objects and their dependencies for a Connected System.
     /// This is used by both ClearConnectedSystemObjects and DeleteConnectedSystem.
-    /// Does NOT delete the Connected System itself or its configuration (sync rules, run profiles, etc.).
+    /// Does NOT delete the Connected System itself or its configuration (Sync Rules, Run Profiles, etc.).
     /// </summary>
     /// <param name="connectedSystemId">The ID of the Connected System.</param>
     /// <param name="deleteChangeHistory">If true, deletes ConnectedSystemObjectChanges. If false, nulls the CSO FK.</param>
-    /// <returns>Counts of pending exports and connected system objects removed.</returns>
+    /// <returns>Counts of Pending Exports and Connected System Objects removed.</returns>
     Task<ClearConnectedSystemResult> DeleteAllConnectedSystemObjectsAndDependenciesAsync(int connectedSystemId, bool deleteChangeHistory);
 
     /// <summary>

@@ -46,7 +46,7 @@ This plan addresses the performance bottlenecks identified in the export pipelin
 | 4 | Sequential worker task queue blocks all other tasks | `TaskingRepository.cs:98-121` | **Moderate** | Only one export task runs at a time; blocks imports and syncs |
 | 5 | `MaxParallelism` option defined but never wired up | `ExportExecutionOptions.cs` | **Low** | Dead code - infrastructure exists but is unused |
 | 6 | 2-second worker polling interval | `Worker.cs:137` | **Low** | Adds latency between task transitions |
-| 7 | All pending exports eagerly loaded into memory | `ConnectedSystemRepository.cs:1387-1402` | **Low** | Large export queues cause heavy initial query cost |
+| 7 | All Pending Exports eagerly loaded into memory | `ConnectedSystemRepository.cs:1387-1402` | **Low** | Large export queues cause heavy initial query cost |
 
 ### Why Resources Appear Idle
 
@@ -71,7 +71,7 @@ This is fundamentally an **I/O latency problem**, not a compute problem. The CPU
 
 1. **Batch CSO updates after successful exports** - Accumulated all CSO changes in-memory with single `SaveChangesAsync` per batch
 2. **Bulk reference resolution for deferred exports** - Collected all unresolved MVO IDs and fetched CSO mappings in a single query
-3. **Filter pending exports at the database level** - Pushed retry/due filters into the database query
+3. **Filter Pending Exports at the database level** - Pushed retry/due filters into the database query
 
 ---
 
@@ -119,7 +119,7 @@ This is fundamentally an **I/O latency problem**, not a compute problem. The CPU
 
 **Status:** Implemented. Integration tested via Scenarios 1, 2, 6, and 8.
 
-**Goal:** Process multiple export batches concurrently within a single export run profile.
+**Goal:** Process multiple export batches concurrently within a single export Run Profile.
 
 **Changes implemented:**
 

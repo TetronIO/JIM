@@ -81,7 +81,7 @@ flowchart TD
     PageEnd([Page flush:<br/>FlushPendingMvoDeletionsAsync]) --> Loop{More MVOs<br/>in batch?}
     Loop -->|No| Done([Done])
 
-    Loop -->|Yes| EvalExports[EvaluateMvoDeletionAsync:<br/>Create delete pending exports<br/>for provisioned target CSOs]
+    Loop -->|Yes| EvalExports[EvaluateMvoDeletionAsync:<br/>Create delete Pending Exports<br/>for provisioned target CSOs]
     EvalExports --> DeleteMVO[DeleteMetaverseObjectAsync<br/>with initiator info]
     DeleteMVO --> Success{Success?}
 
@@ -108,7 +108,7 @@ flowchart TD
     Eligible --> Loop{More eligible<br/>MVOs?}
     Loop -->|No| Done([Done])
 
-    Loop -->|Yes| EvalExports[EvaluateMvoDeletionAsync:<br/>Create delete pending exports<br/>for remaining provisioned CSOs]
+    Loop -->|Yes| EvalExports[EvaluateMvoDeletionAsync:<br/>Create delete Pending Exports<br/>for remaining provisioned CSOs]
     EvalExports --> DeleteMVO[DeleteMetaverseObjectAsync<br/>Uses ORIGINAL initiator info<br/>from when MVO was marked]
     DeleteMVO --> Result{Success?}
     Result -->|Yes| Loop
@@ -151,7 +151,7 @@ stateDiagram-v2
 
 - **Initiator preservation**<br /> When an MVO is marked for deferred deletion, the original initiator info (who/what caused the disconnection) is captured on the MVO. When housekeeping eventually deletes it, this original initiator is used in the audit trail, not "housekeeping" or "system".
 
-- **Export cleanup before deletion**<br /> Both immediate and housekeeping deletion paths call `EvaluateMvoDeletionAsync()` before the actual deletion. This creates delete pending exports for any provisioned target system CSOs, ensuring the external system is cleaned up.
+- **Export cleanup before deletion**<br /> Both immediate and housekeeping deletion paths call `EvaluateMvoDeletionAsync()` before the actual deletion. This creates delete Pending Exports for any provisioned target system CSOs, ensuring the external system is cleaned up.
 
 - **Fallback on failure**<br /> If immediate deletion fails (e.g., database error), the system sets `LastConnectorDisconnectedDate` as a fallback. This ensures housekeeping will pick up the MVO for retry on the next cycle, rather than losing the deletion intent.
 

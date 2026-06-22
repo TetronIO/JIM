@@ -70,9 +70,9 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 |----------|---------|-------------|
 | [System](system.md) | 4 | Health checks, version, auth config, and user info |
 | [Connection](connection.md) | 3 | Connect, disconnect, and test JIM sessions |
-| [Connected Systems](connected-systems.md) | 19 | Manage connected systems, schemas, partitions, and connector space objects |
+| [Connected Systems](connected-systems.md) | 19 | Manage Connected Systems, schemas, partitions, and connector space objects |
 | [Run Profiles](run-profiles.md) | 5 | Create and execute import, sync, and export operations |
-| [Synchronisation Rules](synchronisation-rules.md) | 17 | Define attribute mappings, scoping criteria, and object matching rules |
+| [Synchronisation Rules](synchronisation-rules.md) | 17 | Define attribute mappings, scoping criteria, and Object Matching Rules |
 | [Metaverse](metaverse.md) | 8 | Query objects, manage schema types and attributes, review pending deletions |
 | [Predefined Searches](predefined-searches.md) | 2 | List and toggle the searches that drive portal list views and the fast search API |
 | [Schedules](schedules.md) | 11 | Automate synchronisation workflows with scheduled execution |
@@ -80,10 +80,10 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [API Keys](api-keys.md) | 4 | Create, manage, and revoke API keys |
 | [Certificates](certificates.md) | 6 | Manage trusted certificates for connector authentication |
 | [Service Settings](service-settings.md) | 3 | View and modify runtime configuration |
-| [Security](security.md) | 5 | Manage security roles and their memberships, including listing the roles a metaverse object is in |
+| [Security](security.md) | 5 | Manage security roles and their memberships, including listing the roles a Metaverse Object is in |
 | [History](history.md) | 3 | Query deleted objects and manage change history retention |
 | [Example Data](example-data.md) | 3 | Generate sample data for testing and evaluation |
-| [Expressions](expressions.md) | 1 | Test synchronisation rule expressions before deployment |
+| [Expressions](expressions.md) | 1 | Test Synchronisation Rule expressions before deployment |
 
 ## Quick Start
 
@@ -92,13 +92,13 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 Install-Module -Name JIM
 Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
 
-# List connected systems
+# List Connected Systems
 Get-JIMConnectedSystem
 
 # Run a full import
 Start-JIMRunProfile -ConnectedSystemName "HR System" -RunProfileName "Full Import" -Wait
 
-# Check metaverse objects
+# Check Metaverse Objects
 Get-JIMMetaverseObject -ObjectTypeName "person" -All
 
 # View recent activity
@@ -110,12 +110,12 @@ Get-JIMActivity -PageSize 5
 Most cmdlets accept pipeline input and produce pipeline-friendly output, enabling powerful one-liners:
 
 ```powershell
-# Execute all "Full Import" run profiles across all connected systems
+# Execute all "Full Import" Run Profiles across all Connected Systems
 Get-JIMConnectedSystem | ForEach-Object {
     Start-JIMRunProfile -ConnectedSystemId $_.id -RunProfileName "Full Import" -Wait
 }
 
-# Find all sync rules for a specific connected system
+# Find all Sync Rules for a specific Connected System
 Get-JIMSyncRule -ConnectedSystemName "HR System"
 
 # Bulk-disable expired API keys

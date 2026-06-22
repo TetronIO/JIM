@@ -30,7 +30,7 @@ public class CalculateActivitySummaryStatsTests
 
     /// <summary>
     /// Creates an ActivityRunProfileExecutionItem with the specified change type,
-    /// optionally setting error type and attribute flow count.
+    /// optionally setting error type and Attribute Flow count.
     /// </summary>
     private static ActivityRunProfileExecutionItem CreateRpei(
         ObjectChangeType changeType,
@@ -221,8 +221,8 @@ public class CalculateActivitySummaryStatsTests
     [Test]
     public void CalculateActivitySummaryStats_SyncRun_AbsorbedAttributeFlows_NotDoubleCountedWithJoins()
     {
-        // Arrange - Joined RPEIs with attribute flows should NOT be counted in TotalAttributeFlows
-        // because joins inherently include attribute flow and are already counted in TotalJoined
+        // Arrange - Joined RPEIs with Attribute Flows should NOT be counted in TotalAttributeFlows
+        // because joins inherently include Attribute Flow and are already counted in TotalJoined
         var activity = CreateActivity();
         AddRpeisAndCalculate(activity,
             CreateRpei(ObjectChangeType.Joined, attributeFlowCount: 3),
@@ -368,7 +368,7 @@ public class CalculateActivitySummaryStatsTests
         // because those change types are already counted in their own stats.
         var activity = CreateActivity();
         AddRpeisAndCalculate(activity,
-            // 3 standalone attribute flow RPEIs (3 objects)
+            // 3 standalone Attribute Flow RPEIs (3 objects)
             CreateRpei(ObjectChangeType.AttributeFlow),
             CreateRpei(ObjectChangeType.AttributeFlow),
             CreateRpei(ObjectChangeType.AttributeFlow),
@@ -509,7 +509,7 @@ public class CalculateActivitySummaryStatsTests
         Assert.That(activity.TotalJoined, Is.EqualTo(1));
         Assert.That(activity.TotalDisconnected, Is.EqualTo(1));
         Assert.That(activity.TotalAttributeFlows, Is.EqualTo(3), "Each RPEI has one AttributeFlow outcome");
-        Assert.That(activity.TotalPendingExports, Is.EqualTo(2), "Only the projected RPEI has pending exports");
+        Assert.That(activity.TotalPendingExports, Is.EqualTo(2), "Only the projected RPEI has Pending Exports");
     }
 
     [Test]
@@ -650,7 +650,7 @@ public class CalculateActivitySummaryStatsTests
         // Assert
         Assert.That(activity.TotalDisconnected, Is.EqualTo(1));
         Assert.That(activity.TotalDeleted, Is.EqualTo(0));
-        Assert.That(activity.TotalAttributeFlows, Is.EqualTo(0), "Attribute recalls on disconnection are not standalone attribute flows");
+        Assert.That(activity.TotalAttributeFlows, Is.EqualTo(0), "Attribute recalls on disconnection are not standalone Attribute Flows");
     }
 
     [Test]
@@ -666,7 +666,7 @@ public class CalculateActivitySummaryStatsTests
         // Assert
         Assert.That(activity.TotalDisconnected, Is.EqualTo(3));
         Assert.That(activity.TotalDeleted, Is.EqualTo(0));
-        Assert.That(activity.TotalAttributeFlows, Is.EqualTo(0), "Attribute recalls on disconnection are not standalone attribute flows");
+        Assert.That(activity.TotalAttributeFlows, Is.EqualTo(0), "Attribute recalls on disconnection are not standalone Attribute Flows");
     }
 
     #endregion
@@ -694,7 +694,7 @@ public class CalculateActivitySummaryStatsTests
     public void CalculateActivitySummaryStats_WithOutcomes_CsoDeletedAndDeletionDetected_BothContributeToTotalDeleted()
     {
         // Arrange - Sync-phase CsoDeleted and import-phase DeletionDetected both contribute
-        // to TotalDeleted. These never overlap within a single activity (different run profile types)
+        // to TotalDeleted. These never overlap within a single activity (different Run Profile types)
         // but test the combined counting logic.
         var activity = CreateActivity();
         AddRpeisAndCalculate(activity,

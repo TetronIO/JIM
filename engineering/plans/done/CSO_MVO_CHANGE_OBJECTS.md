@@ -64,7 +64,7 @@ Complete the implementation of change object tracking and lifecycle management f
 
 #### 1. MVO Change Object Creation
 Currently `MetaverseObjectChange` is never instantiated. We need to create these during:
-- **Sync operations** - When sync rules modify MVO attributes
+- **Sync operations** - When Sync Rules modify MVO attributes
 - **Direct MVO updates** - When admins edit MVOs via UI/API
 - **MVO deletion** - Capture final state before deletion
 - **CSO deletion causing disconnection** - When a CSO is deleted and triggers MVO disconnection (so the RPEI can link to the affected MVO)
@@ -129,7 +129,7 @@ Reusable component for both CSO and MVO detail pages:
 ├── Paginated timeline entries
 │   ├── Timestamp
 │   ├── Change type badge
-│   ├── Initiator (user/sync rule/API key)
+│   ├── Initiator (user/Sync Rule/API key)
 │   ├── Expandable attribute changes
 │   │   ├── Attribute name
 │   │   ├── Old value -> New value
@@ -202,7 +202,7 @@ Scope: [All Connected Systems ▼]
        [✓] SAP
 
 This will permanently delete CSO change tracking records
-for the selected connected system(s).
+for the selected Connected System(s).
 This action cannot be undone.
 
 Records to be deleted: 8,234
@@ -536,7 +536,7 @@ When admin deletes an entire Connected System:
 ```
 ⚠️ Clear All Objects from "Active Directory"?
 
-This will delete all 5,432 CSOs from this connected system.
+This will delete all 5,432 CSOs from this Connected System.
 
 [✓] Also delete CSO change history (8,234 records)
     └── If unchecked, change history is retained for audit purposes
@@ -552,10 +552,10 @@ Type the system name to confirm: [________]
 ⚠️ Delete Connected System "Active Directory"?
 
 This will permanently delete:
-• The connected system configuration
+• The Connected System configuration
 • All 5,432 CSOs
-• All sync rules referencing this system
-• All pending exports for this system
+• All Sync Rules referencing this system
+• All Pending Exports for this system
 
 [✓] Also delete CSO change history (8,234 records)
     └── If unchecked, change history is retained for audit purposes
@@ -593,7 +593,7 @@ Type "DELETE" to confirm: [________]
    - [x] MVO deletion creates final change record (when enabled)
 
 4. **Deleted Object Access**
-   - [x] Admins can browse deleted CSOs by connected system
+   - [x] Admins can browse deleted CSOs by Connected System
    - [x] Admins can browse deleted MVOs by object type
    - [x] Admins can view full change history of deleted objects
 

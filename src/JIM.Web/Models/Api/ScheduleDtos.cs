@@ -195,7 +195,7 @@ public class ScheduleStepDto
 
     /// <summary>
     /// Display name for the step. For RunProfile steps, this is null and the name should
-    /// be derived from the connected system and run profile. For other step types, this
+    /// be derived from the Connected System and Run Profile. For other step types, this
     /// contains the user-specified name.
     /// </summary>
     public string? Name { get; set; }
@@ -225,12 +225,12 @@ public class ScheduleStepDto
     // -----------------------------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// The connected system ID (for RunProfile steps).
+    /// The Connected System ID (for RunProfile steps).
     /// </summary>
     public int? ConnectedSystemId { get; set; }
 
     /// <summary>
-    /// The run profile ID (for RunProfile steps).
+    /// The Run Profile ID (for RunProfile steps).
     /// </summary>
     public int? RunProfileId { get; set; }
 

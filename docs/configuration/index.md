@@ -4,7 +4,7 @@ title: Configuration
 
 # Configuration
 
-JIM configuration is centred on a small set of first-class objects: connected systems, run profiles, synchronisation rules, the metaverse schema, schedules, and a handful of supporting objects (API keys, certificates, service settings, roles). Understanding what each object is, how it relates to the others, and how to manage it is the core of running JIM in production.
+JIM configuration is centred on a small set of first-class objects: Connected Systems, Run Profiles, Synchronisation Rules, the metaverse schema, schedules, and a handful of supporting objects (API keys, certificates, service settings, roles). Understanding what each object is, how it relates to the others, and how to manage it is the core of running JIM in production.
 
 The pages in this section explain each configuration object in plain terms, describe its key behaviours and the workflows it participates in, and point you at the three ways to manage it: the JIM portal, PowerShell, and the REST API.
 
@@ -13,15 +13,15 @@ The pages in this section explain each configuration object in plain terms, desc
 The objects that drive identity flow between external systems and the metaverse.
 
 - [Connected Systems](connected-systems.md) -- external directories, databases, and files that JIM synchronises with
-- [Run Profiles](run-profiles.md) -- import, sync, and export operations executed against a connected system
-- [Synchronisation Rules](synchronisation-rules.md) -- the relationship between a connected system and the metaverse: scoping, joining, projection, and attribute flows
+- [Run Profiles](run-profiles.md) -- import, sync, and export operations executed against a Connected System
+- [Synchronisation Rules](synchronisation-rules.md) -- the relationship between a Connected System and the metaverse: scoping, joining, projection, and Attribute Flows
 
 ## Metaverse
 
 The central identity store and the searches that surface it.
 
 - [Metaverse](metaverse.md) -- object types, attributes, objects, and pending deletions
-- [Predefined Searches](predefined-searches.md) -- named, reusable searches over metaverse objects
+- [Predefined Searches](predefined-searches.md) -- named, reusable searches over Metaverse Objects
 
 ## Automation and Operations
 

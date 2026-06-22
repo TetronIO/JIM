@@ -127,7 +127,7 @@ public class SecurityController(ILogger<SecurityController> logger, JimApplicati
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetMetaverseObjectRolesAsync(Guid metaverseObjectId)
     {
-        _logger.LogTrace("Requested roles of metaverse object {MetaverseObjectId}", metaverseObjectId);
+        _logger.LogTrace("Requested roles of Metaverse Object {MetaverseObjectId}", metaverseObjectId);
 
         var mvo = await _application.Metaverse.GetMetaverseObjectAsync(metaverseObjectId);
         if (mvo == null)
@@ -165,7 +165,7 @@ public class SecurityController(ILogger<SecurityController> logger, JimApplicati
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> AddRoleMemberAsync(int roleId, Guid metaverseObjectId)
     {
-        _logger.LogInformation("Adding metaverse object {MetaverseObjectId} to role {RoleId}", metaverseObjectId, roleId);
+        _logger.LogInformation("Adding Metaverse Object {MetaverseObjectId} to role {RoleId}", metaverseObjectId, roleId);
 
         var role = await _application.Security.GetRoleByIdAsync(roleId);
         if (role == null)
@@ -186,7 +186,7 @@ public class SecurityController(ILogger<SecurityController> logger, JimApplicati
             return BadRequest(ApiErrorResponse.ValidationError(ex.Message));
         }
 
-        _logger.LogInformation("Added metaverse object {MetaverseObjectId} to role {RoleId} ({RoleName})", metaverseObjectId, roleId, role.Name);
+        _logger.LogInformation("Added Metaverse Object {MetaverseObjectId} to role {RoleId} ({RoleName})", metaverseObjectId, roleId, role.Name);
         return NoContent();
     }
 
@@ -214,7 +214,7 @@ public class SecurityController(ILogger<SecurityController> logger, JimApplicati
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RemoveRoleMemberAsync(int roleId, Guid metaverseObjectId)
     {
-        _logger.LogInformation("Removing metaverse object {MetaverseObjectId} from role {RoleId}", metaverseObjectId, roleId);
+        _logger.LogInformation("Removing Metaverse Object {MetaverseObjectId} from role {RoleId}", metaverseObjectId, roleId);
 
         var role = await _application.Security.GetRoleByIdAsync(roleId);
         if (role == null)
@@ -251,7 +251,7 @@ public class SecurityController(ILogger<SecurityController> logger, JimApplicati
             return BadRequest(ApiErrorResponse.ValidationError(ex.Message));
         }
 
-        _logger.LogInformation("Removed metaverse object {MetaverseObjectId} from role {RoleId} ({RoleName})", metaverseObjectId, roleId, role.Name);
+        _logger.LogInformation("Removed Metaverse Object {MetaverseObjectId} from role {RoleId} ({RoleName})", metaverseObjectId, roleId, role.Name);
         return NoContent();
     }
 
@@ -261,14 +261,14 @@ public class SecurityController(ILogger<SecurityController> logger, JimApplicati
     /// </summary>
     private Guid? GetCallerMetaverseObjectId()
     {
-        // API key callers have auth_method = "api_key" and don't map to metaverse objects
+        // API key callers have auth_method = "api_key" and don't map to Metaverse Objects
         var authMethod = User.FindFirst("auth_method")?.Value;
         if (authMethod == "api_key")
         {
             return null;
         }
 
-        // SSO users have their metaverse object ID in the "sub" claim
+        // SSO users have their Metaverse Object ID in the "sub" claim
         var subClaim = User.FindFirst("sub") ?? User.FindFirst(ClaimTypes.NameIdentifier);
         if (subClaim != null && Guid.TryParse(subClaim.Value, out var objectId))
         {

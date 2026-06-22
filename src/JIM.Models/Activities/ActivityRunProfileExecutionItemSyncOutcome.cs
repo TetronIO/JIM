@@ -36,12 +36,12 @@ public class ActivityRunProfileExecutionItemSyncOutcome
     public ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType { get; set; }
 
     /// <summary>
-    /// Target entity context — the MVO ID, target CSO ID, or connected system ID relevant to this outcome.
+    /// Target entity context — the MVO ID, target CSO ID, or Connected System ID relevant to this outcome.
     /// </summary>
     public Guid? TargetEntityId { get; set; }
 
     /// <summary>
-    /// Snapshot description for display without joins (e.g., connected system name, MVO display name).
+    /// Snapshot description for display without joins (e.g., Connected System name, MVO display name).
     /// </summary>
     public string? TargetEntityDescription { get; set; }
 
@@ -63,7 +63,7 @@ public class ActivityRunProfileExecutionItemSyncOutcome
     /// <summary>
     /// Optional FK to a ConnectedSystemObjectChange that captures the attribute-level detail
     /// for this outcome. Used by PendingExportCreated outcomes to persist a snapshot of the
-    /// pending export's attribute changes at sync time, before the PendingExport is deleted
+    /// Pending Export's attribute changes at sync time, before the PendingExport is deleted
     /// during export confirmation.
     /// </summary>
     public Guid? ConnectedSystemObjectChangeId { get; set; }

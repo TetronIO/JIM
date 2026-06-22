@@ -13,7 +13,7 @@
         <MudText Typo="Typo.h5">Matching Rules</MudText>
         @if (SyncRule.ConnectedSystem?.ObjectMatchingRuleMode == ObjectMatchingRuleMode.SyncRule)
         {
-            <MudTooltip Text="Matching rules are specific to this sync rule." Arrow="true" Placement="Placement.Top">
+            <MudTooltip Text="Matching rules are specific to this Sync Rule." Arrow="true" Placement="Placement.Top">
                 <MudChip T="string" Variant="Variant.Text" Text="Advanced Mode" Color="Color.Info" />
             </MudTooltip>
         }
@@ -40,7 +40,7 @@
     }
     else
     {
-        @* Advanced Mode - matching rules are managed per sync rule *@
+        @* Advanced Mode - matching rules are managed per Sync Rule *@
         @if (SyncRule.Direction == SyncRuleDirection.Import)
         {
             <MudText Class="mt-3">
@@ -241,7 +241,7 @@
             return true;
 
         // the rest depends on what type of source has been chosen by the user
-        // Must have either a connected system attribute or an expression
+        // Must have either a Connected System attribute or an expression
         if (_matchingRuleMappingSource.ConnectedSystemAttribute == null &&
         string.IsNullOrWhiteSpace(_matchingRuleMappingSource.Expression))
             return true;
@@ -284,9 +284,9 @@
 
     private async Task HandleToggleMatchingRuleCaseSensitive(ObjectMatchingRule rule, bool caseSensitive)
     {
-        // Update the local value - changes will be saved when user saves the sync rule
+        // Update the local value - changes will be saved when user saves the Sync Rule
         rule.CaseSensitive = caseSensitive;
-        Snackbar.Add($"Matching rule is now {(caseSensitive ? "case-sensitive" : "case-insensitive")}. Remember to save the sync rule.", Severity.Info);
+        Snackbar.Add($"Matching rule is now {(caseSensitive ? "case-sensitive" : "case-insensitive")}. Remember to save the Sync Rule.", Severity.Info);
         await OnChanged.InvokeAsync();
     }
 

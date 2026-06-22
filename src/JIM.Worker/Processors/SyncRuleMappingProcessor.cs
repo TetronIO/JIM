@@ -13,15 +13,15 @@ namespace JIM.Worker.Processors;
 public static class SyncRuleMappingProcessor
 {
     /// <summary>
-    /// Processes a sync rule mapping to flow attribute values from CSO to MVO.
+    /// Processes a Sync Rule mapping to flow attribute values from CSO to MVO.
     /// </summary>
     /// <param name="connectedSystemObject">The source CSO.</param>
-    /// <param name="syncRuleMapping">The sync rule mapping defining the attribute flow.</param>
+    /// <param name="syncRuleMapping">The Sync Rule mapping defining the Attribute Flow.</param>
     /// <param name="connectedSystemObjectTypes">Object types for attribute lookup.</param>
     /// <param name="expressionEvaluator">Optional expression evaluator for expression-based mappings.</param>
     /// <param name="skipReferenceAttributes">If true, skip reference attribute processing (deferred to second pass).</param>
     /// <param name="onlyReferenceAttributes">If true, process ONLY reference attributes (for deferred second pass). Takes precedence over skipReferenceAttributes.</param>
-    /// <param name="contributingSystemId">The ID of the connected system contributing these attribute values. Null for internally-managed MVO attributes.</param>
+    /// <param name="contributingSystemId">The ID of the Connected System contributing these attribute values. Null for internally-managed MVO attributes.</param>
     /// <param name="isFinalReferencePass">If true, this is the final cross-page resolution pass — unresolved references are logged as warnings. If false (within-page deferred pass), unresolved references are expected and logged at debug level.</param>
     public static void Process(
         ConnectedSystemObject connectedSystemObject,
@@ -56,8 +56,8 @@ public static class SyncRuleMappingProcessor
         {
             // goal:
             // generate or select a source value to assign to a target MVO attribute.
-            // inbound sync rule mappings can have one or more sources and will compound if numerous. those sources can be of different types, i.e:
-            // - direct attribute flow
+            // inbound Sync Rule mappings can have one or more sources and will compound if numerous. those sources can be of different types, i.e:
+            // - direct Attribute Flow
             // - generated from functions
             // - generated from expressions
 
@@ -66,7 +66,7 @@ public static class SyncRuleMappingProcessor
 
             if (source.ConnectedSystemAttributeId.HasValue)
             {
-                // process the specific CSO attribute defined in this sync rule mapping source
+                // process the specific CSO attribute defined in this Sync Rule mapping source
                 var csotAttribute = csoType.Attributes.SingleOrDefault(a => a.Id == source.ConnectedSystemAttributeId.Value);
                 if (csotAttribute != null)
                 {
@@ -170,7 +170,7 @@ public static class SyncRuleMappingProcessor
                     }
 
                     // Check if result is an array/collection (e.g., from Split() function)
-                    // This enables multi-valued attribute flow from expressions
+                    // This enables multi-valued Attribute Flow from expressions
                     if (result is string[] stringArrayResult)
                     {
                         ProcessExpressionArrayResult(mvo, syncRuleMapping.TargetMetaverseAttribute, stringArrayResult, contributingSystemId);
@@ -224,7 +224,7 @@ public static class SyncRuleMappingProcessor
     }
 
     /// <summary>
-    /// Processes text attribute flow from CSO to MVO.
+    /// Processes text Attribute Flow from CSO to MVO.
     /// Handles multi-valued attributes by processing all values at once.
     /// </summary>
     private static void ProcessTextAttribute(
@@ -254,7 +254,7 @@ public static class SyncRuleMappingProcessor
             !csoAttributeValues.Any(csoav => csoav.StringValue != null && csoav.StringValue.Equals(mvoav.StringValue)));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
-        // find values on the CSO of type string that aren't on the MVO according to the sync rule mapping.
+        // find values on the CSO of type string that aren't on the MVO according to the Sync Rule mapping.
         var csoNewAttributeValues = connectedSystemObject.AttributeValues.Where(csoav =>
             csoav.AttributeId == sourceAttributeId &&
             !mvo.AttributeValues.Any(mvoav =>
@@ -282,7 +282,7 @@ public static class SyncRuleMappingProcessor
     }
 
     /// <summary>
-    /// Processes number attribute flow from CSO to MVO.
+    /// Processes number Attribute Flow from CSO to MVO.
     /// Handles multi-valued attributes by processing all values at once.
     /// </summary>
     private static void ProcessNumberAttribute(
@@ -299,7 +299,7 @@ public static class SyncRuleMappingProcessor
             !csoAttributeValues.Any(csoav => csoav.IntValue != null && csoav.IntValue.Equals(mvoav.IntValue)));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
-        // find values on the CSO of type int that aren't on the MVO according to the sync rule mapping.
+        // find values on the CSO of type int that aren't on the MVO according to the Sync Rule mapping.
         var csoNewAttributeValues = connectedSystemObject.AttributeValues.Where(csoav =>
             csoav.AttributeId == sourceAttributeId &&
             !mvo.AttributeValues.Any(mvoav =>
@@ -321,7 +321,7 @@ public static class SyncRuleMappingProcessor
     }
 
     /// <summary>
-    /// Processes DateTime attribute flow from CSO to MVO.
+    /// Processes DateTime Attribute Flow from CSO to MVO.
     /// DateTime is typically single-valued.
     /// </summary>
     private static void ProcessDateTimeAttribute(
@@ -366,7 +366,7 @@ public static class SyncRuleMappingProcessor
     }
 
     /// <summary>
-    /// Processes binary attribute flow from CSO to MVO.
+    /// Processes binary Attribute Flow from CSO to MVO.
     /// Handles multi-valued attributes by processing all values at once.
     /// </summary>
     private static void ProcessBinaryAttribute(
@@ -384,7 +384,7 @@ public static class SyncRuleMappingProcessor
                 csoav.ByteValue != null && Utilities.Utilities.AreByteArraysTheSame(csoav.ByteValue, mvoav.ByteValue)));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
-        // find values on the CSO of type byte that aren't on the MVO according to the sync rule mapping.
+        // find values on the CSO of type byte that aren't on the MVO according to the Sync Rule mapping.
         var csoNewAttributeValues = connectedSystemObject.AttributeValues.Where(csoav =>
             csoav.AttributeId == sourceAttributeId &&
             !mvo.AttributeValues.Any(mvoav =>
@@ -406,7 +406,7 @@ public static class SyncRuleMappingProcessor
     }
 
     /// <summary>
-    /// Processes reference attribute flow from CSO to MVO.
+    /// Processes reference Attribute Flow from CSO to MVO.
     /// Handles multi-valued attributes (e.g., group members) by processing all values at once.
     /// </summary>
     private static void ProcessReferenceAttribute(
@@ -499,7 +499,7 @@ public static class SyncRuleMappingProcessor
                 connectedSystemObject.Id);
         }
 
-        // Find values on the CSO of type reference that aren't on the MVO according to the sync rule mapping.
+        // Find values on the CSO of type reference that aren't on the MVO according to the Sync Rule mapping.
         // Build a set of existing MVO reference IDs for O(1) lookup (avoids O(N*M) nested iteration).
         var existingMvoRefIds = new HashSet<Guid>(
             mvo.AttributeValues
@@ -544,7 +544,7 @@ public static class SyncRuleMappingProcessor
     }
 
     /// <summary>
-    /// Processes GUID attribute flow from CSO to MVO.
+    /// Processes GUID Attribute Flow from CSO to MVO.
     /// Handles multi-valued attributes by processing all values at once.
     /// </summary>
     private static void ProcessGuidAttribute(
@@ -561,7 +561,7 @@ public static class SyncRuleMappingProcessor
             !csoAttributeValues.Any(csoav => csoav.GuidValue.HasValue && csoav.GuidValue.Equals(mvoav.GuidValue)));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
-        // find values on the CSO of type guid that aren't on the MVO according to the sync rule mapping.
+        // find values on the CSO of type guid that aren't on the MVO according to the Sync Rule mapping.
         var csoNewAttributeValues = connectedSystemObject.AttributeValues.Where(csoav =>
             csoav.AttributeId == sourceAttributeId &&
             !mvo.AttributeValues.Any(mvoav =>
@@ -583,7 +583,7 @@ public static class SyncRuleMappingProcessor
     }
 
     /// <summary>
-    /// Processes boolean attribute flow from CSO to MVO.
+    /// Processes boolean Attribute Flow from CSO to MVO.
     /// Boolean is typically single-valued.
     /// </summary>
     private static void ProcessBooleanAttribute(

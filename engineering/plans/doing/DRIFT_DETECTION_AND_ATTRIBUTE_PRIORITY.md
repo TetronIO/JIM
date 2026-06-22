@@ -50,7 +50,7 @@ When Target AD sync runs today (full or delta):
 1. Import stage imports the drifted state ✓ (works today)
 2. Sync stage processes the CSO ✓ (works today)
 3. **NEW**: Re-evaluate export rules to compare expected vs actual state
-4. **NEW**: Stage pending exports to correct any drift
+4. **NEW**: Stage Pending Exports to correct any drift
 
 > **Note**: This behaviour applies to both full sync and delta sync operations. The trigger is the inbound sync processing of a CSO, regardless of whether it came from a full import or delta import.
 
@@ -69,9 +69,9 @@ When inbound sync processes a CSO from a system that has export rules targeting 
 Target import -> imports drifted group membership
 Target sync   -> processes CSO
               -> For each export rule targeting this object type:
-                  -> Calculate expected state from MVO + sync rules
+                  -> Calculate expected state from MVO + Sync Rules
                   -> Compare expected vs actual
-                  -> Stage corrective pending exports if different
+                  -> Stage corrective Pending Exports if different
 ```
 
 **Pros:**
@@ -87,9 +87,9 @@ Target sync   -> processes CSO
 
 #### Option 2: "Enforce State" Flag on Export Rules
 
-Add a boolean flag to export sync rules: `EnforceState` (default: **true**).
+Add a boolean flag to export Sync Rules: `EnforceState` (default: **true**).
 
-When enabled, inbound sync from that connected system triggers re-evaluation of export rules to detect and remediate drift.
+When enabled, inbound sync from that Connected System triggers re-evaluation of export rules to detect and remediate drift.
 
 **Pros:**
 - Explicit user control - can disable for specific rules
@@ -105,7 +105,7 @@ When enabled, inbound sync from that connected system triggers re-evaluation of 
 
 #### Option 3: Authoritative Direction on Sync Rules
 
-Mark the sync rule pair with an authoritative direction: `Source->Target` (unidirectional) or `Bidirectional`.
+Mark the Sync Rule pair with an authoritative direction: `Source->Target` (unidirectional) or `Bidirectional`.
 
 **Pros:**
 - Clear conceptual model at the rule level
@@ -119,7 +119,7 @@ Mark the sync rule pair with an authoritative direction: `Source->Target` (unidi
 
 #### Option 4: Dedicated "Drift Detection" Run Profile Step
 
-New run profile step type that explicitly checks for and corrects drift.
+New Run Profile step type that explicitly checks for and corrects drift.
 
 **Pros:**
 - Explicit, scheduled operation
@@ -148,7 +148,7 @@ New run profile step type that explicitly checks for and corrects drift.
 
 **Design Decisions:**
 
-- **Applies to export sync rules only** - Import rules define what flows into the metaverse; the concept of "enforcing state" doesn't apply to imports. Drift detection is inherently about ensuring targets match what authoritative sources dictate.
+- **Applies to export Sync Rules only** - Import rules define what flows into the metaverse; the concept of "enforcing state" doesn't apply to imports. Drift detection is inherently about ensuring targets match what authoritative sources dictate.
 - **Default: `EnforceState = true`** - The common case is that administrators want drift corrected automatically.
 - **UI: Hidden in "Advanced" section** - This is an edge-case control for unusual scenarios (e.g., emergency access patterns). Most users should never need to see or change it. The setting should be placed in an expandable "Advanced Options" panel or similar UX pattern that is collapsed by default.
 
@@ -160,8 +160,8 @@ With `EnforceState` flag:
 
 | Trigger | EnforceState = true (default) | EnforceState = false |
 |---------|------------------------------|---------------------|
-| Target import + sync (drift detected) | Export rules re-evaluated -> pending exports staged | CSO values updated, no export evaluation |
-| Source import + sync (Source change) | Export rules evaluated -> pending exports staged | Export rules evaluated -> pending exports staged |
+| Target import + sync (drift detected) | Export rules re-evaluated -> Pending Exports staged | CSO values updated, no export evaluation |
+| Source import + sync (Source change) | Export rules evaluated -> Pending Exports staged | Export rules evaluated -> Pending Exports staged |
 
 > **Note**: This behaviour applies identically to both full sync and delta sync. The difference is scope: delta sync processes only changed CSOs, while full sync processes all CSOs in scope.
 
@@ -176,7 +176,7 @@ With `EnforceState` flag:
 ### Current State
 
 **Existing Infrastructure:**
-- `ContributedBySystem` navigation property exists on `MetaverseObjectAttributeValue` ([MetaverseObjectAttributeValue.cs:45](../src/JIM.Models/Core/MetaverseObjectAttributeValue.cs#L45)) - tracks which connected system contributed each attribute value
+- `ContributedBySystem` navigation property exists on `MetaverseObjectAttributeValue` ([MetaverseObjectAttributeValue.cs:45](../src/JIM.Models/Core/MetaverseObjectAttributeValue.cs#L45)) - tracks which Connected System contributed each attribute value
 - `ContributedBySystemId` scalar FK (added Feb 2026, commit `41116255`); explicit `int?` property that avoids the need to `.Include(ContributedBySystem)`. All 14 attribute creation paths in `SyncRuleMappingProcessor` now set this scalar FK via a `contributingSystemId` parameter. Recall logic in `SyncTaskProcessorBase` uses the scalar FK directly (`av.ContributedBySystemId == connectedSystemId`).
 
 **Current Behaviour (Temporary):**
@@ -185,11 +185,11 @@ As noted in [SyncRuleMappingProcessor.cs:56](../src/JIM.Worker/Processors/SyncRu
 
 This "last-writer-wins" behaviour is intentionally temporary and will be replaced by proper priority resolution.
 
-**Known Limitation (Feb 2026):** When attributes are recalled (CSO obsoleted with `RemoveContributedAttributesOnObsoletion=true`), the system does not attempt to find an alternative contributor from another connected system with inbound attribute flow for the same MVO attribute. This requires the attribute priority infrastructure (Issue #91). Until then, recalled attributes are simply cleared.
+**Known Limitation (Feb 2026):** When attributes are recalled (CSO obsoleted with `RemoveContributedAttributesOnObsoletion=true`), the system does not attempt to find an alternative contributor from another Connected System with inbound Attribute Flow for the same MVO attribute. This requires the attribute priority infrastructure (Issue #91). Until then, recalled attributes are simply cleared.
 
 ### The Problem
 
-When multiple connected systems import values for the same MVO attribute, we need a deterministic way to decide which value wins.
+When multiple Connected Systems import values for the same MVO attribute, we need a deterministic way to decide which value wins.
 
 **Example scenario:**
 - HR System imports `department` with value "Engineering"
@@ -207,7 +207,7 @@ Many identity management systems use fallback logic where if the top-priority so
 
 #### Option A: System-Level Priority Ranking
 
-Each connected system has a **priority number** (1 = highest). For any MVO attribute, the highest-priority source that provides a value wins.
+Each Connected System has a **priority number** (1 = highest). For any MVO attribute, the highest-priority source that provides a value wins.
 
 **Pros:** Simple mental model, system-wide
 **Cons:** Too coarse - can't have different priorities per attribute on the same system. Ruled out.
@@ -216,7 +216,7 @@ Each connected system has a **priority number** (1 = highest). For any MVO attri
 
 #### Option B: Per-Attribute Numerical Priority
 
-Each import attribute flow has a **numerical priority** for that specific MVO attribute. When multiple systems contribute to the same attribute, evaluate in priority order.
+Each import Attribute Flow has a **numerical priority** for that specific MVO attribute. When multiple systems contribute to the same attribute, evaluate in priority order.
 
 **Design intent:** Similar to traditional attribute precedence systems, but with additional control over null handling.
 
@@ -224,7 +224,7 @@ Each import attribute flow has a **numerical priority** for that specific MVO at
 
 #### Option C: Attribute Ownership Model
 
-Each MVO attribute has **one owner** (connected system). Only the owner can update it.
+Each MVO attribute has **one owner** (Connected System). Only the owner can update it.
 
 **Pros:** Crystal clear - no conflicts possible
 **Cons:** Too inflexible - doesn't support fallback scenarios or staged configuration changes. Ruled out.
@@ -237,7 +237,7 @@ Each MVO attribute has **one owner** (connected system). Only the owner can upda
 
 **Core Design:**
 
-1. **Numerical priority per attribute contribution** - Each import sync rule mapping that targets an MVO attribute has a priority number (1 = highest priority, larger numbers = lower priority)
+1. **Numerical priority per attribute contribution** - Each import Sync Rule mapping that targets an MVO attribute has a priority number (1 = highest priority, larger numbers = lower priority)
 
 2. **Default behaviour (fallback chain)** - Evaluate contributing systems in priority order; use the first non-null value found
 
@@ -265,11 +265,11 @@ MVO Attribute: department
 
 **Rationale:**
 
-1. **Granular control** - Different attributes can have different priority orders, even from the same connected system
+1. **Granular control** - Different attributes can have different priority orders, even from the same Connected System
 
 2. **Addresses traditional ILM limitation** - The "Null is a value" option solves a common frustration with traditional identity management systems where you couldn't assert null from an authoritative source
 
-3. **Operational flexibility** - Admins can reorder priorities at any time without removing/recreating sync rules. This is valuable for staged configuration changes ahead of business change windows.
+3. **Operational flexibility** - Admins can reorder priorities at any time without removing/recreating Sync Rules. This is valuable for staged configuration changes ahead of business change windows.
 
 4. **Explicit over implicit** - Priority is explicitly configured, not inferred from rule order or other implicit factors
 
@@ -277,7 +277,7 @@ MVO Attribute: department
 
 - **Default priority**: When a new import mapping is created, assign the next available priority number (lowest priority)
 - **Default null handling**: "Null is a value" = false (fallback behaviour, matching traditional ILM expectations)
-- **UI placement**: Priority management should be accessible from both the sync rule page and a dedicated "Attribute Priority" view (see UI section below)
+- **UI placement**: Priority management should be accessible from both the Sync Rule page and a dedicated "Attribute Priority" view (see UI section below)
 
 ---
 
@@ -289,7 +289,7 @@ MVO Attribute: department
 |--------|----------|--------|
 | **Drift Detection** | | |
 | Drift detection trigger | On inbound sync, when CSO has export rules targeting it | ✓ Ready for implementation |
-| Drift detection control | `EnforceState` flag on **export** sync rules, **default: true**, hidden in Advanced Options UI | ✓ Ready for implementation |
+| Drift detection control | `EnforceState` flag on **export** Sync Rules, **default: true**, hidden in Advanced Options UI | ✓ Ready for implementation |
 | **Attribute Priority** | | |
 | Priority model | Per-attribute numerical priority on import mappings | Design approved, implementation deferred |
 | Default behaviour | Fallback chain - use first non-null value in priority order | Design approved, implementation deferred |
@@ -308,7 +308,7 @@ public class SyncRule
     /// When true (default), inbound changes from the target system will trigger
     /// re-evaluation of this export rule to detect and remediate drift.
     /// Set to false to allow drift (e.g., for emergency access scenarios).
-    /// Only applicable to export sync rules.
+    /// Only applicable to export Sync Rules.
     /// </summary>
     public bool EnforceState { get; set; } = true;
 }
@@ -324,7 +324,7 @@ public class SyncRuleMapping
     /// <summary>
     /// Priority for this attribute contribution when multiple systems import
     /// to the same MVO attribute. Lower numbers = higher priority (1 is highest).
-    /// Only applicable to import sync rules.
+    /// Only applicable to import Sync Rules.
     /// </summary>
     public int Priority { get; set; } = int.MaxValue; // Default: lowest priority
 
@@ -389,7 +389,7 @@ object? ResolveAttributeValue(string mvoAttributeName, MetaverseObjectType objec
 
 async Task ProcessCsoChangesAsync(ConnectedSystemObject cso, MetaverseObject mvo)
 {
-    // 1. Process inbound attribute flows with priority resolution
+    // 1. Process inbound Attribute Flows with priority resolution
     await ProcessInboundAttributeFlowsAsync(cso, mvo);
 
     // 2. Evaluate drift and enforce state if applicable
@@ -398,7 +398,7 @@ async Task ProcessCsoChangesAsync(ConnectedSystemObject cso, MetaverseObject mvo
 
 async Task EvaluateAndEnforceDriftAsync(ConnectedSystemObject cso, MetaverseObject mvo)
 {
-    // Get export rules targeting this CSO's connected system and object type
+    // Get export rules targeting this CSO's Connected System and object type
     var exportRules = await GetExportRulesForCsoAsync(cso);
 
     foreach (var exportRule in exportRules.Where(r => r.EnforceState))
@@ -419,7 +419,7 @@ async Task EvaluateAndEnforceDriftAsync(ConnectedSystemObject cso, MetaverseObje
 
             if (!ValuesEqual(expectedValue, actualValue))
             {
-                // Drift detected - stage corrective pending export
+                // Drift detected - stage corrective Pending Export
                 await StagePendingExportChangeAsync(cso, attrFlow.TargetAttribute, expectedValue);
             }
         }
@@ -440,7 +440,7 @@ bool HasImportRuleForAttribute(ConnectedSystem system, string attributeName, Met
 
 The `EnforceState` setting should be hidden in an **Advanced Options** section that is collapsed by default. Most users will never need to modify this setting.
 
-**UX Pattern:** Expandable panel or accordion section labelled "Advanced Options" at the bottom of the export sync rule configuration page.
+**UX Pattern:** Expandable panel or accordion section labelled "Advanced Options" at the bottom of the export Sync Rule configuration page.
 
 ```
 > Advanced Options
@@ -514,7 +514,7 @@ This page provides a centralised view of all MVO attributes that have multiple c
 
 ##### 2b. Import Sync Rule Mapping Editor
 
-When editing an import sync rule mapping, show priority context if the target MVO attribute has multiple contributors.
+When editing an import Sync Rule mapping, show priority context if the target MVO attribute has multiple contributors.
 
 ```
 +-----------------------------------------------------------------------------+
@@ -554,7 +554,7 @@ When editing an import sync rule mapping, show priority context if the target MV
 
 ##### 2c. Sync Rule Summary View
 
-In the sync rule list/summary view, indicate if any mappings have priority considerations:
+In the Sync Rule list/summary view, indicate if any mappings have priority considerations:
 
 ```
 +-----------------------------------------------------------------------------+
@@ -605,7 +605,7 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
   - Added to [SyncRuleHeader.cs](../../src/JIM.Models/Logic/DTOs/SyncRuleHeader.cs)
 - [x] **1.2** Create database migration
   - Created [20260117121840_AddEnforceStateToSyncRule.cs](../../src/JIM.PostgresData/Migrations/20260117121840_AddEnforceStateToSyncRule.cs)
-- [x] **1.3** Update API DTOs for sync rule configuration
+- [x] **1.3** Update API DTOs for Sync Rule configuration
   - Updated [SyncRuleRequestDtos.cs](../../src/JIM.Web/Models/Api/SyncRuleRequestDtos.cs)
   - Updated [SynchronisationController.cs](../../src/JIM.Web/Controllers/Api/SynchronisationController.cs)
 
@@ -627,11 +627,11 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 - [x] **2.3** Add performance optimisations
   - Cache import mapping lookups per sync run (`_importMappingCache`)
   - Cache export rules with EnforceState=true per sync run (`_driftDetectionExportRules`)
-  - Uses existing batched pending export creation infrastructure
+  - Uses existing batched Pending Export creation infrastructure
 
 #### Phase 3: UI Updates ✅
 
-- [x] **3.1** Add "Advanced Options" expandable section to export sync rule configuration page
+- [x] **3.1** Add "Advanced Options" expandable section to export Sync Rule configuration page
   - Updated [SyncRuleDetail.razor](../../src/JIM.Web/Pages/Admin/SyncRuleDetail.razor)
 - [x] **3.2** Add `EnforceState` checkbox inside "Advanced Options" section with appropriate help text
   - Displayed only for Export direction rules
@@ -682,9 +682,9 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 #### Future Phase 3: UI Updates
 
 - [ ] Create Attribute Priority page (Metaverse -> Attribute Priority)
-- [ ] Add priority context panel to import sync rule mapping editor
+- [ ] Add priority context panel to import Sync Rule mapping editor
 - [ ] Add "Advanced Options" section to import mapping editor with "Null is a value" checkbox
-- [ ] Add priority indicator column to sync rule list view
+- [ ] Add priority indicator column to Sync Rule list view
 
 #### Future Phase 4: Testing
 
@@ -720,7 +720,7 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 ### Attribute Priority
 
 4. **Priority assignment for bulk import rule creation**
-   - When creating a sync rule with many attribute mappings, how should priorities be assigned?
+   - When creating a Sync Rule with many attribute mappings, how should priorities be assigned?
    - Option: All mappings from same rule get same base priority, then order by attribute name?
    - Option: Interactive priority assignment during rule creation wizard?
 

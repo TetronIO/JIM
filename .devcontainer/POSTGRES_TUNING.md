@@ -66,7 +66,7 @@ The auto-tuning reserves a fixed amount of RAM for non-PostgreSQL workloads (JIM
 
 ### When to increase the reservation (give JIM more RAM)
 
-- **JIM.Worker processing large datasets** — bulk imports, full syncs of large directories, or complex sync rules with many joins can cause the worker to consume significantly more memory than the ~300MB baseline.
+- **JIM.Worker processing large datasets** — bulk imports, full syncs of large directories, or complex Sync Rules with many joins can cause the worker to consume significantly more memory than the ~300MB baseline.
 - **In-memory caching is added** — if JIM introduces application-level caches (e.g., metaverse attribute caches, connector schema caches), each service will need more headroom.
 - **OOM kills on JIM containers** — if `docker stats` shows a JIM service hitting its memory limit or the container is killed by the kernel, PostgreSQL has too large a share. Edit `RESERVED_GB` in `postgres-tune.sh` and re-tune.
 

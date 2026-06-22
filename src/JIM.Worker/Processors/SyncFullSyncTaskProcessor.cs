@@ -45,31 +45,31 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         Log.Verbose("PerformFullSyncAsync: Starting");
 
         // what needs to happen:
-        // - confirm pending exports
+        // - confirm Pending Exports
         // - establish new joins to existing Metaverse Objects
         // - project CSO to the MV if there are no join matches and if a Sync Rule for this CS has Projection enabled.
-        // - work out if we CAN update any Metaverse Objects (where there's attribute flow) and whether we SHOULD (where there's attribute flow priority).
+        // - work out if we CAN update any Metaverse Objects (where there's Attribute Flow) and whether we SHOULD (where there's Attribute Flow priority).
         // - update the Metaverse Objects accordingly.
         // - work out if this requires other Connected System to be updated by way of creating new Pending Export Objects.
 
         await _syncRepo.UpdateActivityMessageAsync(_activity, "Preparing");
 
         // how many CSOs are we processing? update the activity so a progress bar can be shown.
-        // pending exports are processed as a side-effect of CSO evaluation, not as separate objects.
+        // Pending Exports are processed as a side-effect of CSO evaluation, not as separate objects.
         var totalCsosToProcess = await _syncRepo.GetConnectedSystemObjectCountAsync(_connectedSystem.Id);
         var totalObjectsToProcess = totalCsosToProcess;
         _activity.ObjectsToProcess = totalObjectsToProcess;
         _activity.ObjectsProcessed = 0;
         await _syncRepo.UpdateActivityAsync(_activity);
 
-        // get all the active sync rules for this system
+        // get all the active Sync Rules for this system
         List<SyncRule> activeSyncRules;
         using (Diagnostics.Sync.StartSpan("LoadSyncRules"))
         {
             activeSyncRules = await _syncRepo.GetSyncRulesAsync(_connectedSystem.Id, false, withChangeTracking: true);
         }
 
-        // Load ALL sync rules from ALL systems for drift detection import mapping cache.
+        // Load ALL Sync Rules from ALL systems for drift detection import mapping cache.
         // This is needed because drift detection must know which systems contribute to which MVO attributes
         // to avoid false positives on export-only systems.
         List<SyncRule> allSyncRules;
@@ -86,12 +86,12 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // Object types with reference attribute rules need full attribute loading even when unchanged.
         BuildReferenceObjectTypeCache(activeSyncRules);
 
-        // Use object types already loaded on the connected system (with matching rules and attributes)
+        // Use object types already loaded on the Connected System (with matching rules and attributes)
         // to avoid creating duplicate entity instances that conflict with EF Core's change tracker.
         _objectTypes = _connectedSystem.ObjectTypes!;
 
-        // load all pending exports once upfront and index by CSO ID for O(1) lookup
-        // this avoids O(n²) behaviour from loading all pending exports for every CSO
+        // load all Pending Exports once upfront and index by CSO ID for O(1) lookup
+        // this avoids O(n²) behaviour from loading all Pending Exports for every CSO
         using (Diagnostics.Sync.StartSpan("LoadPendingExports"))
         {
             var allPendingExports = await _syncRepo.GetPendingExportsAsync(_connectedSystem.Id);
@@ -99,7 +99,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 .Where(pe => pe.ConnectedSystemObject?.Id != null)
                 .GroupBy(pe => pe.ConnectedSystemObject!.Id)
                 .ToDictionary(g => g.Key, g => g.ToList());
-            Log.Verbose("PerformFullSyncAsync: Loaded {Count} pending exports into lookup dictionary", allPendingExports.Count);
+            Log.Verbose("PerformFullSyncAsync: Loaded {Count} Pending Exports into lookup dictionary", allPendingExports.Count);
         }
 
         // Pre-load export evaluation cache (export rules + CSO lookups) for O(1) access
@@ -153,7 +153,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // Without this, GUID-based page ordering could cause a new CSO to be processed before an
                 // obsolete CSO, seeing a stale join count and incorrectly throwing CouldNotJoinDueToExistingJoin.
 
-                // Pass 1: Process pending export confirmations and obsolete CSO teardown.
+                // Pass 1: Process Pending Export confirmations and obsolete CSO teardown.
                 // This populates _pendingDisconnectedMvoIds so Pass 2 join checks account for disconnections.
                 foreach (var connectedSystemObject in csoPagedResult.Results)
                 {
@@ -170,7 +170,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // joined/projected yet, so Pass 2 batch collections are empty.
                 if (!_cancellationTokenSource.IsCancellationRequested)
                 {
-                    // Pass 2: Process joins, projections, and attribute flow for non-obsolete CSOs.
+                    // Pass 2: Process joins, projections, and Attribute Flow for non-obsolete CSOs.
                     // All disconnections from Pass 1 are now visible via _pendingDisconnectedMvoIds.
                     foreach (var connectedSystemObject in csoPagedResult.Results)
                     {
@@ -243,10 +243,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // batch evaluate exports for all MVOs that changed during this page
                 await EvaluatePendingExportsAsync();
 
-                // batch process pending export confirmations (deletes and updates)
+                // batch process Pending Export confirmations (deletes and updates)
                 await FlushPendingExportOperationsAsync();
 
-                // Resolve any pending export reference snapshots that couldn't be resolved during
+                // Resolve any Pending Export reference snapshots that couldn't be resolved during
                 // per-object processing (e.g. groups processed before their member users on this page).
                 // Must run after FlushPendingExportOperationsAsync (CSOs now in DB) and before
                 // FlushRpeisAsync (RPEIs with snapshots persisted).

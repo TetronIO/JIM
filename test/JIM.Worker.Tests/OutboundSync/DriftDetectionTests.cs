@@ -501,7 +501,7 @@ public class DriftDetectionTests
         var cso = CreateTestCso(mvo);
         mvo.ConnectedSystemObjects.Add(cso);
 
-        // Export rule for a different connected system
+        // Export rule for a different Connected System
         var exportRule = CreateExportRule(enforceState: true);
         exportRule.ConnectedSystemId = 999; // Different system
 
@@ -807,7 +807,7 @@ public class DriftDetectionTests
         }
         groupMvo.ConnectedSystemObjects.Add(groupCso);
 
-        // Build import mapping cache from ALL sync rules (includes Source import rule)
+        // Build import mapping cache from ALL Sync Rules (includes Source import rule)
         var importMappingCache = DriftDetectionService.BuildImportMappingCache(SyncRulesData);
 
         // Verify cache has Source system's import mapping for Static Members

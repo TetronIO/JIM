@@ -15,12 +15,12 @@ Retrieves deleted objects from the audit trail. Supports filtering by object typ
 ### Syntax
 
 ```powershell
-# Get deleted metaverse objects (default)
+# Get deleted Metaverse Objects (default)
 Get-JIMDeletedObject [-ObjectType <string>] [-MetaverseObjectTypeId <int>]
     [-Search <string>] [-FromDate <DateTime>] [-ToDate <DateTime>]
     [-Page <int>] [-PageSize <int>]
 
-# Get deleted connected system objects
+# Get deleted Connected System Objects
 Get-JIMDeletedObject -ObjectType CSO -ConnectedSystemId <int>
     [-Search <string>] [-FromDate <DateTime>] [-ToDate <DateTime>]
     [-Page <int>] [-PageSize <int>]
@@ -30,9 +30,9 @@ Get-JIMDeletedObject -ObjectType CSO -ConnectedSystemId <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ObjectType` | `string` | No | `MVO` | Type of deleted object to retrieve. Valid values: `MVO` (metaverse objects), `CSO` (connected system objects). |
-| `ConnectedSystemId` | `int` | No | | Filters deleted CSOs by connected system. Only applicable when `ObjectType` is `CSO`. |
-| `MetaverseObjectTypeId` | `int` | No | | Filters deleted MVOs by metaverse object type. Only applicable when `ObjectType` is `MVO`. |
+| `ObjectType` | `string` | No | `MVO` | Type of deleted object to retrieve. Valid values: `MVO` (Metaverse Objects), `CSO` (Connected System Objects). |
+| `ConnectedSystemId` | `int` | No | | Filters deleted CSOs by Connected System. Only applicable when `ObjectType` is `CSO`. |
+| `MetaverseObjectTypeId` | `int` | No | | Filters deleted MVOs by Metaverse Object Type. Only applicable when `ObjectType` is `MVO`. |
 | `Search` | `string` | No | | Search term to filter results. Searches `ExternalId` for CSOs and `DisplayName` for MVOs. |
 | `FromDate` | `DateTime` | No | | Start of the deletion date range (UTC). |
 | `ToDate` | `DateTime` | No | | End of the deletion date range (UTC). |
@@ -45,11 +45,11 @@ Returns a `PSCustomObject` with paginated results containing `items`, `totalCoun
 
 ### Examples
 
-```powershell title="Get all deleted metaverse objects"
+```powershell title="Get all deleted Metaverse Objects"
 Get-JIMDeletedObject
 ```
 
-```powershell title="Get deleted connected system objects"
+```powershell title="Get deleted Connected System Objects"
 Get-JIMDeletedObject -ObjectType CSO
 ```
 
@@ -65,7 +65,7 @@ Get-JIMDeletedObject -ObjectType CSO -Search "CN=jsmith"
 Get-JIMDeletedObject -FromDate "2026-01-01" -ToDate "2026-03-31"
 ```
 
-```powershell title="Get deleted CSOs for a specific connected system"
+```powershell title="Get deleted CSOs for a specific Connected System"
 Get-JIMDeletedObject -ObjectType CSO -ConnectedSystemId 5
 ```
 
@@ -77,15 +77,15 @@ Get-JIMDeletedObject -Page 3 -PageSize 100
 
 ## Get-JIMHistoryCount
 
-Gets the count of change history records for a connected system. Useful for monitoring history growth and planning cleanup operations.
+Gets the count of change history records for a Connected System. Useful for monitoring history growth and planning cleanup operations.
 
 ### Syntax
 
 ```powershell
-# By connected system ID (default)
+# By Connected System ID (default)
 Get-JIMHistoryCount -ConnectedSystemId <int>
 
-# By connected system name
+# By Connected System name
 Get-JIMHistoryCount -ConnectedSystemName <string>
 ```
 
@@ -93,8 +93,8 @@ Get-JIMHistoryCount -ConnectedSystemName <string>
 
 | Name | Type | Required | Default | Parameter Set | Description |
 |------|------|----------|---------|---------------|-------------|
-| `ConnectedSystemId` | `int` | Yes | | ById (default) | ID of the connected system. Alias: `Id`. Accepts pipeline input. |
-| `ConnectedSystemName` | `string` | Yes | | ByName | Name of the connected system. |
+| `ConnectedSystemId` | `int` | Yes | | ById (default) | ID of the Connected System. Alias: `Id`. Accepts pipeline input. |
+| `ConnectedSystemName` | `string` | Yes | | ByName | Name of the Connected System. |
 
 ### Output
 
@@ -110,7 +110,7 @@ Get-JIMHistoryCount -ConnectedSystemId 3
 Get-JIMHistoryCount -ConnectedSystemName "Active Directory"
 ```
 
-```powershell title="Get history counts for all connected systems"
+```powershell title="Get history counts for all Connected Systems"
 Get-JIMConnectedSystem | Get-JIMHistoryCount
 ```
 
@@ -145,8 +145,8 @@ When `PassThru` is specified, returns a `PSCustomObject` with the following prop
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `csoChangesDeleted` | `int` | Number of connected system object change records deleted. |
-| `mvoChangesDeleted` | `int` | Number of metaverse object change records deleted. |
+| `csoChangesDeleted` | `int` | Number of Connected System Object change records deleted. |
+| `mvoChangesDeleted` | `int` | Number of Metaverse Object change records deleted. |
 | `activitiesDeleted` | `int` | Number of activity records deleted. |
 | `oldestRecordDeleted` | `DateTime` | Timestamp of the oldest record removed. |
 | `newestRecordDeleted` | `DateTime` | Timestamp of the newest record removed. |

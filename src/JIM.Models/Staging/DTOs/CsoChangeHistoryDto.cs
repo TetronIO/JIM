@@ -9,7 +9,7 @@ namespace JIM.Models.Staging.DTOs;
 
 /// <summary>
 /// Flat projection of a Connected System Object change record for display and API consumption.
-/// Includes denormalised initiator and run profile context so consumers can render a row
+/// Includes denormalised initiator and Run Profile context so consumers can render a row
 /// without further joins, and a list of attribute-level changes.
 /// </summary>
 public class CsoChangeHistoryDto
@@ -29,7 +29,7 @@ public class CsoChangeHistoryDto
     public Guid? ActivityRunProfileExecutionItemId { get; set; }
 
     /// <summary>
-    /// The run profile name (taken from <c>Activity.TargetName</c>).
+    /// The Run Profile name (taken from <c>Activity.TargetName</c>).
     /// </summary>
     public string? RunProfileName { get; set; }
 

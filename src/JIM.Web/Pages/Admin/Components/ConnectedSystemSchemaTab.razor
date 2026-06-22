@@ -16,13 +16,13 @@
 <MudAlert Severity="ConnectedSystem.ObjectTypes is { Count: > 0 } ? Severity.Warning : Severity.Info" Variant="Variant.Outlined">
     @if (ConnectedSystem.ObjectTypes == null || ConnectedSystem.ObjectTypes.Count == 0)
     {
-        <MudText>Retrieve the schema from the connected system, to be able to select which object types and attributes you want to manage with JIM.</MudText>
+        <MudText>Retrieve the schema from the Connected System, to be able to select which object types and attributes you want to manage with JIM.</MudText>
     }
     else
     {
         <MudText>
-            <strong>Refreshing the schema can result in data-loss</strong>. If object types or attributes are discovered to have been removed at the connected system, then this
-            will result in all references to them being removed from within JIM, i.e. synchronisation rules, attribute flow, attributes values and even entire objects will be
+            <strong>Refreshing the schema can result in data-loss</strong>. If object types or attributes are discovered to have been removed at the Connected System, then this
+            will result in all references to them being removed from within JIM, i.e. Synchronisation Rules, Attribute Flow, attributes values and even entire objects will be
             deleted if object types are removed. Refresh with caution. Ensure the Connected System identity has the right permissions needed to retrieve the schema, and consider
             a database backup before proceeding.
         </MudText>
@@ -136,8 +136,8 @@
                 @if (result.ActionRequired)
                 {
                     <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-3">
-                        <strong>Action Required:</strong> Some attributes that were removed are still referenced by sync rules.
-                        Please update your sync rules to remove references to these attributes.
+                        <strong>Action Required:</strong> Some attributes that were removed are still referenced by Sync Rules.
+                        Please update your Sync Rules to remove references to these attributes.
                     </MudAlert>
                 }
             }
@@ -159,7 +159,7 @@
         @if (!_objectTypeAttributeBeingEditedIsEditable)
         {
             <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
-                This Connected System attribute cannot be edited as it is being referenced by either a synchronisation rule, or has values already populated.
+                This Connected System attribute cannot be edited as it is being referenced by either a Synchronisation Rule, or has values already populated.
             </MudAlert>
         }
         else
@@ -713,7 +713,7 @@
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to import schema for connected system {SystemId}", ConnectedSystem.Id);
+            Log.Error(ex, "Failed to import schema for Connected System {SystemId}", ConnectedSystem.Id);
             _schemaRefreshResult = SchemaRefreshResult.Failed(ex.Message);
         }
         finally
@@ -833,7 +833,7 @@
         var options = new MessageBoxOptions
         {
             Title = "Remove object type?",
-            MarkupMessage = (MarkupString)$"Remove <code class=\"jim-code-inline\">{encodedName}</code> from the object types JIM manages? This clears its attribute selection and configuration for this connected system. You can add it again later, but you will need to reconfigure it.",
+            MarkupMessage = (MarkupString)$"Remove <code class=\"jim-code-inline\">{encodedName}</code> from the object types JIM manages? This clears its attribute selection and configuration for this Connected System. You can add it again later, but you will need to reconfigure it.",
             YesText = "Remove",
             CancelText = "Cancel"
         };
@@ -1059,7 +1059,7 @@
 
     private async Task HandleShowEditAttributeDialogAsync(ConnectedSystemObjectTypeAttribute connectedSystemObjectTypeAttribute)
     {
-        // can the connected system attribute be edited? are there any references to it?
+        // can the Connected System attribute be edited? are there any references to it?
         using var jim = JimFactory.Create();
         _objectTypeAttributeBeingEditedIsEditable = !await jim.ConnectedSystems.IsObjectTypeAttributeBeingReferencedAsync(connectedSystemObjectTypeAttribute);
         _objectTypeAttributeBeingEdited = connectedSystemObjectTypeAttribute;

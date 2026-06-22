@@ -6,7 +6,7 @@ using JIM.Models.Transactional;
 namespace JIM.Models.Sync;
 
 /// <summary>
-/// The result of evaluating whether pending exports have been confirmed by a CSO's current state.
+/// The result of evaluating whether Pending Exports have been confirmed by a CSO's current state.
 /// Returned by <c>ISyncEngine.EvaluatePendingExportConfirmation</c>.
 /// </summary>
 public readonly struct PendingExportConfirmationResult
@@ -22,12 +22,12 @@ public readonly struct PendingExportConfirmationResult
     public IReadOnlyList<PendingExport> ToUpdate { get; init; }
 
     /// <summary>
-    /// True if any pending exports were evaluated.
+    /// True if any Pending Exports were evaluated.
     /// </summary>
     public bool HasResults => ToDelete.Count > 0 || ToUpdate.Count > 0;
 
     /// <summary>
-    /// Creates a result with no pending exports evaluated.
+    /// Creates a result with no Pending Exports evaluated.
     /// </summary>
     public static PendingExportConfirmationResult None() => new()
     {

@@ -6,19 +6,19 @@
 
 ## Problem Statement
 
-JIM currently has a gap in its Activity history for export operations and pending export outcomes:
+JIM currently has a gap in its Activity history for export operations and Pending Export outcomes:
 
 ### Gap 1: Export RPEIs Have No Attribute Detail
 
-When an export run profile executes, the RPEI records only `ObjectChangeType.Exported` or `ObjectChangeType.Deprovisioned` with a text summary in `DataSnapshot` (e.g., "Export: Update with 5 attribute change(s)"). The actual attribute names, values, and change types are lost once the `PendingExport` record is deleted post-export. The Causality Tree on the RPEI detail page therefore shows no expandable attribute detail for export outcomes.
+When an export Run Profile executes, the RPEI records only `ObjectChangeType.Exported` or `ObjectChangeType.Deprovisioned` with a text summary in `DataSnapshot` (e.g., "Export: Update with 5 attribute change(s)"). The actual attribute names, values, and change types are lost once the `PendingExport` record is deleted post-export. The Causality Tree on the RPEI detail page therefore shows no expandable attribute detail for export outcomes.
 
 By contrast, import and sync RPEIs have full attribute-level change history via `ConnectedSystemObjectChange` and `MetaverseObjectChange` navigation properties, which the Causality Tree renders as expandable `AttributeChangeTable` components.
 
 ### Gap 2: Sync RPEIs' PendingExportCreated Nodes Are Ephemeral
 
-During a synchronisation, when outbound attribute flow creates a `PendingExport`, the Causality Tree records a `PendingExportCreated` outcome node with `TargetEntityId = pendingExport.Id`. When the user later expands this node, `LoadPendingExportAsync` fetches the pending export by ID. However, after the export run confirms and reconciles, the `PendingExport` is deleted. The user then sees "Pending export detail not available."
+During a synchronisation, when outbound Attribute Flow creates a `PendingExport`, the Causality Tree records a `PendingExportCreated` outcome node with `TargetEntityId = pendingExport.Id`. When the user later expands this node, `LoadPendingExportAsync` fetches the Pending Export by ID. However, after the export run confirms and reconciles, the `PendingExport` is deleted. The user then sees "Pending export detail not available."
 
-This means the Causality Tree's pending export expansion, which already has UI for rendering attribute names and change types, is only useful for a brief window between sync and export confirmation.
+This means the Causality Tree's Pending Export expansion, which already has UI for rendering attribute names and change types, is only useful for a brief window between sync and export confirmation.
 
 ### Synergy
 
@@ -47,7 +47,7 @@ Both gaps share the same root cause: attribute-level change data for outbound op
 
 1. During sync, `SyncTaskProcessorBase` creates `PendingExportCreated` outcome nodes with `targetEntityId: pendingExport.Id`.
 2. The `OutcomeTreeNode` component recognises `PendingExportCreated` as expandable and lazy-loads the `PendingExport` by ID.
-3. If the pending export still exists, it renders a table of attribute names and change types.
+3. If the Pending Export still exists, it renders a table of attribute names and change types.
 4. If deleted (post-export-confirmation), it shows "Pending export detail not available."
 
 ### What `DataSnapshot` Is Today
@@ -62,13 +62,13 @@ Both gaps share the same root cause: attribute-level change data for outbound op
 
 ### Option A: Create ConnectedSystemObjectChange Records for Exports (Recommended)
 
-**Approach:** At export time, before the `PendingExport` is deleted, create a `ConnectedSystemObjectChange` record from the pending export's attribute changes and link it to the RPEI. For sync PendingExportCreated outcomes, snapshot the pending export's attribute changes into a `ConnectedSystemObjectChange` at sync time (when the data is guaranteed to exist).
+**Approach:** At export time, before the `PendingExport` is deleted, create a `ConnectedSystemObjectChange` record from the Pending Export's attribute changes and link it to the RPEI. For sync PendingExportCreated outcomes, snapshot the Pending Export's attribute changes into a `ConnectedSystemObjectChange` at sync time (when the data is guaranteed to exist).
 
 **Detail:**
 
 For **export RPEIs** (Gap 1):
 - In `ProcessExportResultAsync`, carry the `PendingExportAttributeValueChange` data through to RPEI creation via `ProcessedExportItem` (currently only carries `AttributeChangeCount`)
-- Create a `ConnectedSystemObjectChange` with `ChangeType = Exported` and populate its `ConnectedSystemObjectChangeAttribute` + `ConnectedSystemObjectChangeAttributeValue` children from the pending export data
+- Create a `ConnectedSystemObjectChange` with `ChangeType = Exported` and populate its `ConnectedSystemObjectChangeAttribute` + `ConnectedSystemObjectChangeAttributeValue` children from the Pending Export data
 - Link it to the RPEI via the existing `ConnectedSystemObjectChange` navigation property
 - The Causality Tree's `OutcomeTreeNode` already renders `AttributeChanges` for nodes with changes; zero UI work needed for basic rendering
 
@@ -79,7 +79,7 @@ For **sync PendingExportCreated outcomes** (Gap 2):
 
 **Pros:**
 - Reuses the exact same data model (`ConnectedSystemObjectChange*`) and rendering components (`AttributeChangeTable`) already used for import change history
-- Consistent mental model: an export/pending export is a change to a CSO; same as an import
+- Consistent mental model: an export/Pending Export is a change to a CSO; same as an import
 - Governed by existing `ChangeTracking.CsoChanges.Enabled` service setting; no new setting
 - Cleaned up by existing `History.RetentionPeriod` retention policy
 - Queryable and searchable (normalised tables, not JSON blobs)
@@ -92,11 +92,11 @@ For **sync PendingExportCreated outcomes** (Gap 2):
 
 **DataSnapshot fate:** Remove the property and drop the column. It was never used for its intended purpose and this approach supersedes it entirely.
 
-**Service Settings:** No new setting. Use existing `ChangeTracking.CsoChanges.Enabled`. When CSO change tracking is enabled, export and pending export changes are also recorded. This is intuitive; an export is a CSO change.
+**Service Settings:** No new setting. Use existing `ChangeTracking.CsoChanges.Enabled`. When CSO change tracking is enabled, export and Pending Export changes are also recorded. This is intuitive; an export is a CSO change.
 
 ### Option B: Store Structured JSON in DataSnapshot
 
-**Approach:** Serialise `PendingExportAttributeValueChange` data as JSON into `DataSnapshot` at export time. For sync PendingExportCreated outcomes, serialise the pending export data into a new field on the outcome node.
+**Approach:** Serialise `PendingExportAttributeValueChange` data as JSON into `DataSnapshot` at export time. For sync PendingExportCreated outcomes, serialise the Pending Export data into a new field on the outcome node.
 
 **Pros:**
 - Minimal schema change; `DataSnapshot` already exists
@@ -127,7 +127,7 @@ For **sync PendingExportCreated outcomes** (Gap 2):
 - New Service Setting needed
 - More migration surface area
 - Violates DRY; an export is conceptually a CSO change, just outbound
-- Does not solve Gap 2 without further duplication for pending export snapshots
+- Does not solve Gap 2 without further duplication for Pending Export snapshots
 
 ## Recommendation
 
@@ -139,9 +139,9 @@ For **sync PendingExportCreated outcomes** (Gap 2):
 
 1. **Extend `ObjectChangeType` enum**: add `Exported` and `PendingExport` values to distinguish outbound changes from inbound ones in the change history.
 
-2. **Extend `ProcessedExportItem`**: add a `List<PendingExportAttributeValueChange> AttributeValueChanges` property so that the attribute data survives pending export deletion and is available during RPEI creation.
+2. **Extend `ProcessedExportItem`**: add a `List<PendingExportAttributeValueChange> AttributeValueChanges` property so that the attribute data survives Pending Export deletion and is available during RPEI creation.
 
-3. **Capture attribute data before deletion**: in the export execution flow (where `ProcessedExportItem` instances are built from `PendingExport` records), copy the `AttributeValueChanges` onto the `ProcessedExportItem` before the pending export is deleted.
+3. **Capture attribute data before deletion**: in the export execution flow (where `ProcessedExportItem` instances are built from `PendingExport` records), copy the `AttributeValueChanges` onto the `ProcessedExportItem` before the Pending Export is deleted.
 
 ### Phase 2: Export RPEI Change History (Gap 1)
 
@@ -159,7 +159,7 @@ For **sync PendingExportCreated outcomes** (Gap 2):
 
 ### Phase 3: Sync PendingExportCreated Snapshot (Gap 2)
 
-7. **Snapshot pending export changes at sync time**: in `SyncTaskProcessorBase`, when building `PendingExportCreated` outcome nodes:
+7. **Snapshot Pending Export changes at sync time**: in `SyncTaskProcessorBase`, when building `PendingExportCreated` outcome nodes:
    - Check `ChangeTracking.CsoChanges.Enabled` setting
    - If enabled, create a `ConnectedSystemObjectChange` with `ChangeType = ObjectChangeType.PendingExport` from the `PendingExport.AttributeValueChanges`
    - Link the change record to the outcome node. Options:
@@ -190,14 +190,14 @@ For **sync PendingExportCreated outcomes** (Gap 2):
     - Setting disabled; no change records created
     - Error export; change record still created (the export was attempted)
 
-13. **Unit tests for sync pending export snapshot**: test that `PendingExportCreated` outcome nodes get a linked `ConnectedSystemObjectChange` when tracking is enabled.
+13. **Unit tests for sync Pending Export snapshot**: test that `PendingExportCreated` outcome nodes get a linked `ConnectedSystemObjectChange` when tracking is enabled.
 
 14. **Mapping tests**: test the mapping from `PendingExportAttributeValueChange` to `ConnectedSystemObjectChangeAttributeValue` for all value types (string, int, long, DateTime, Guid, bool, byte[]).
 
 15. **Integration tests (Scenario 1)**: extend the existing Scenario 1 integration test (`Invoke-Scenario1-HRToIdentityDirectory.ps1`) to validate export change history:
     - After the LDAP Export (Joiner) step, fetch RPEI detail via the API and assert that `ConnectedSystemObjectChange` is populated with attribute-level changes
     - Validate that the change record has `ChangeType = Exported` and contains expected attributes (e.g., the attributes provisioned to AD)
-    - After the Full Sync (Joiner) step, fetch an RPEI and validate that `PendingExportCreated` outcome nodes have a linked `ConnectedSystemObjectChange` with the pending export attribute snapshot
+    - After the Full Sync (Joiner) step, fetch an RPEI and validate that `PendingExportCreated` outcome nodes have a linked `ConnectedSystemObjectChange` with the Pending Export attribute snapshot
     - Add a new assertion helper (e.g., `Assert-RpeiHasExportChangeHistory`) to `Test-Helpers.ps1` for reuse
 
 ### Phase 6: Migration & Cleanup
@@ -211,7 +211,7 @@ For **sync PendingExportCreated outcomes** (Gap 2):
 
 | Setting | Role in This Feature |
 |---------|---------------------|
-| `ChangeTracking.CsoChanges.Enabled` | Controls whether export and pending export change records are created. When disabled, no attribute detail is persisted (same as import behaviour). |
+| `ChangeTracking.CsoChanges.Enabled` | Controls whether export and Pending Export change records are created. When disabled, no attribute detail is persisted (same as import behaviour). |
 | `ChangeTracking.SyncOutcomes.Level` | Controls the outcome tree structure (None/Standard/Detailed). Orthogonal to this feature; the outcome tree records *what happened*, the change records store *what changed*. |
 | `History.RetentionPeriod` | Governs cleanup of `ConnectedSystemObjectChange` records, including the new export/PE ones. No change needed. |
 
@@ -219,7 +219,7 @@ For **sync PendingExportCreated outcomes** (Gap 2):
 
 ## Storage Impact
 
-Each export or pending export operation with N attribute changes creates:
+Each export or Pending Export operation with N attribute changes creates:
 - 1 `ConnectedSystemObjectChange` row
 - N `ConnectedSystemObjectChangeAttribute` rows
 - N `ConnectedSystemObjectChangeAttributeValue` rows (typically 1:1 with attributes for exports)

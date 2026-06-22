@@ -174,7 +174,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (connectedSystem == null)
             return null;
 
-        // Load run profiles shallowly (with their partition reference, but without the container tree).
+        // Load Run Profiles shallowly (with their partition reference, but without the container tree).
         IQueryable<ConnectedSystemRunProfile> rpQuery = Repository.Database.ConnectedSystemRunProfiles
             .Include(q => q.Partition)
             .Where(q => q.ConnectedSystemId == id);
@@ -285,7 +285,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Partitions for this system, loaded once (shallow — containers are loaded in a separate
         // flat query and attached below). This replaces the previous 11-level deep partition+
         // container Include chain, which also left a residual "duplicate partition load" via the
-        // run profile Include above.
+        // Run Profile Include above.
         IQueryable<ConnectedSystemPartition> partQuery = Repository.Database.ConnectedSystemPartitions
             .Where(p => p.ConnectedSystem.Id == id);
 
@@ -299,13 +299,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // issue #586.
         await AttachFullContainerTreesAsync(partitions, withChangeTracking);
 
-        // Collect and merge data onto the connected system.
+        // Collect and merge data onto the Connected System.
         connectedSystem.RunProfiles = runProfiles;
         connectedSystem.ObjectTypes = types;
         connectedSystem.Partitions = partitions;
 
-        // With AsNoTracking, run profile Partition instances are separate from the partition
-        // instances loaded above. Wire them up so callers see Containers via the run profile.
+        // With AsNoTracking, Run Profile Partition instances are separate from the partition
+        // instances loaded above. Wire them up so callers see Containers via the Run Profile.
         var partitionsById = partitions.ToDictionary(p => p.Id);
         foreach (var rp in runProfiles.Where(rp => rp.Partition != null))
         {
@@ -476,7 +476,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// tracked database state: existing entities (matched by Id) have their scalar values updated; new
     /// entities (Id == 0, or an Id no longer present) are inserted. Removal of object types/attributes that
     /// are absent from the supplied collection is intentionally NOT performed here, because deleting schema
-    /// entries that may be referenced by sync rules requires reference-aware handling (see issue #782).
+    /// entries that may be referenced by Sync Rules requires reference-aware handling (see issue #782).
     /// Does not call SaveChanges; the caller persists.
     /// </summary>
     private async Task ReconcileObjectTypesAsync(ConnectedSystem connectedSystem)
@@ -639,7 +639,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     #region Object Matching Rules
     /// <summary>
-    /// Creates a new object matching rule for a Connected System Object Type.
+    /// Creates a new Object Matching Rule for a Connected System Object Type.
     /// </summary>
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule)
     {
@@ -659,7 +659,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Updates an existing object matching rule.
+    /// Updates an existing Object Matching Rule.
     /// </summary>
     public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule)
     {
@@ -670,7 +670,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Deletes an object matching rule and its sources.
+    /// Deletes an Object Matching Rule and its sources.
     /// </summary>
     public async Task DeleteObjectMatchingRuleAsync(ObjectMatchingRule rule)
     {
@@ -681,7 +681,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Gets an object matching rule by ID with all related entities loaded.
+    /// Gets an Object Matching Rule by ID with all related entities loaded.
     /// </summary>
     public async Task<ObjectMatchingRule?> GetObjectMatchingRuleAsync(int id)
     {
@@ -742,9 +742,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (pageSize > 100)
             pageSize = 100;
 
-        // Pre-resolve displayName attribute IDs for this connected system to avoid repeated
+        // Pre-resolve displayName attribute IDs for this Connected System to avoid repeated
         // ILike string comparisons in the search, sort, and projection clauses.
-        // Each object type in the connected system may have its own "displayname" attribute.
+        // Each object type in the Connected System may have its own "displayname" attribute.
         List<int> displayNameAttributeIds;
         using (ActivitySource.StartActivity("Cso.Headers.LoadDisplayNameAttrIds"))
         {
@@ -1007,7 +1007,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         {
             // Selective attribute loading: load CSO scalars for the whole page first,
             // then only load attribute values for CSOs that have changed since last sync.
-            // Unchanged CSOs skip attribute flow entirely, saving significant I/O at scale.
+            // Unchanged CSOs skip Attribute Flow entirely, saving significant I/O at scale.
             var watermark = lastSyncTimestamp.Value;
 
             // Step 1: Load all CSOs for this page WITHOUT attribute values (scalars + Type only)
@@ -1054,7 +1054,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             if (changedCsos.Count > 0)
                 await PopulateReferenceValuesAsync(changedCsos);
 
-            // Step 5: Load MVOs for ALL CSOs (needed for Pass 1 pending export confirmation
+            // Step 5: Load MVOs for ALL CSOs (needed for Pass 1 Pending Export confirmation
             // and for reference attribute processing of unchanged CSOs with reference rules)
             await LoadMetaverseObjectsForCsosAsync(allCsos);
 
@@ -1190,7 +1190,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // - LastUpdated > watermark: Captures existing CSOs that have been modified
         // Order by Id for consistent pagination.
         // AsTracking: CSOs are modified during sync processing, and the included Attribute entities
-        // must identity-fix with already-tracked instances from the connected system/sync rule queries.
+        // must identity-fix with already-tracked instances from the Connected System/Sync Rule queries.
         var csoQuery = Repository.Database.ConnectedSystemObjects
             .AsTracking()
             .Include(cso => cso.Type)
@@ -1438,7 +1438,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
     {
-        // External ID matching is case-sensitive to respect connected system identity
+        // External ID matching is case-sensitive to respect Connected System identity
         return await Repository.Database.ConnectedSystemObjects.Where(cso =>
             cso.ConnectedSystem.Id == connectedSystemId &&
             cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue == attributeValue)).Select(cso => cso.Id).SingleOrDefaultAsync();
@@ -1676,7 +1676,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (allMatches.Count > 1)
         {
             var csoIds = string.Join(", ", allMatches.Select(x => x.Id));
-            Log.Warning("GetConnectedSystemObjectByAttributeAsync: Found {Count} Connected System Objects with same external ID '{ExternalId}' in connected system {ConnectedSystemId}. CSO IDs: {CsoIds}. Returning first match. This indicates duplicate CSOs that should be investigated.",
+            Log.Warning("GetConnectedSystemObjectByAttributeAsync: Found {Count} Connected System Objects with same external ID '{ExternalId}' in Connected System {ConnectedSystemId}. CSO IDs: {CsoIds}. Returning first match. This indicates duplicate CSOs that should be investigated.",
                 allMatches.Count, attributeValue, connectedSystemId, csoIds);
         }
 
@@ -1704,7 +1704,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (allMatches.Count > 1)
         {
             var csoIds = string.Join(", ", allMatches.Select(x => x.Id));
-            Log.Warning("GetConnectedSystemObjectByAttributeAsync: Found {Count} Connected System Objects with same external ID {ExternalId} in connected system {ConnectedSystemId}. CSO IDs: {CsoIds}. Returning first match. This indicates duplicate CSOs that should be investigated.",
+            Log.Warning("GetConnectedSystemObjectByAttributeAsync: Found {Count} Connected System Objects with same external ID {ExternalId} in Connected System {ConnectedSystemId}. CSO IDs: {CsoIds}. Returning first match. This indicates duplicate CSOs that should be investigated.",
                 allMatches.Count, attributeValue, connectedSystemId, csoIds);
         }
 
@@ -1732,7 +1732,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (allMatches.Count > 1)
         {
             var csoIds = string.Join(", ", allMatches.Select(x => x.Id));
-            Log.Warning("GetConnectedSystemObjectByAttributeAsync: Found {Count} Connected System Objects with same external ID {ExternalId} in connected system {ConnectedSystemId}. CSO IDs: {CsoIds}. Returning first match. This indicates duplicate CSOs that should be investigated.",
+            Log.Warning("GetConnectedSystemObjectByAttributeAsync: Found {Count} Connected System Objects with same external ID {ExternalId} in Connected System {ConnectedSystemId}. CSO IDs: {CsoIds}. Returning first match. This indicates duplicate CSOs that should be investigated.",
                 allMatches.Count, attributeValue, connectedSystemId, csoIds);
         }
 
@@ -1760,7 +1760,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (allMatches.Count > 1)
         {
             var csoIds = string.Join(", ", allMatches.Select(x => x.Id));
-            Log.Warning("GetConnectedSystemObjectByAttributeAsync: Found {Count} Connected System Objects with same external ID {ExternalId} in connected system {ConnectedSystemId}. CSO IDs: {CsoIds}. Returning first match. This indicates duplicate CSOs that should be investigated.",
+            Log.Warning("GetConnectedSystemObjectByAttributeAsync: Found {Count} Connected System Objects with same external ID {ExternalId} in Connected System {ConnectedSystemId}. CSO IDs: {CsoIds}. Returning first match. This indicates duplicate CSOs that should be investigated.",
                 allMatches.Count, attributeValue, connectedSystemId, csoIds);
         }
 
@@ -1768,7 +1768,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Bulk-loads all CSO external ID mappings for a connected system.
+    /// Bulk-loads all CSO external ID mappings for a Connected System.
     /// Returns a dictionary mapping cache keys to CSO GUIDs for populating the lookup index.
     /// Each entry maps "connectedSystemId:attributeId:lowerExternalIdValue" to the CSO GUID.
     /// Handles all external ID data types (string, int, long, Guid).
@@ -1776,7 +1776,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     public async Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId)
     {
-        // Load all CSOs for this connected system with their external ID attribute values.
+        // Load all CSOs for this Connected System with their external ID attribute values.
         // Each CSO gets ONE cache entry, keyed by whichever external ID is available:
         // - Primary external ID (for Normal CSOs that have been imported)
         // - Secondary external ID (for PendingProvisioning CSOs awaiting confirming import)
@@ -1903,7 +1903,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(int connectedSystemId, int objectTypeId, string secondaryExternalIdValue)
     {
-        // External ID matching is case-sensitive to respect connected system identity
+        // External ID matching is case-sensitive to respect Connected System identity
         return await Repository.Database.ConnectedSystemObjects
             .AsSplitQuery()
             .Include(cso => cso.Type)
@@ -1927,7 +1927,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// (e.g., a group's member reference can point to a user, another group, or other object types).
     /// Uses case-insensitive comparison for LDAP DN compatibility.
     /// </summary>
-    /// <param name="connectedSystemId">The connected system to search within.</param>
+    /// <param name="connectedSystemId">The Connected System to search within.</param>
     /// <param name="secondaryExternalIdValue">The secondary external ID value to search for (e.g., a DN).</param>
     /// <returns>The matching CSO, or null if not found.</returns>
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(int connectedSystemId, string secondaryExternalIdValue)
@@ -1983,7 +1983,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             {
                 if (!result.TryAdd(matchingAttrValue.StringValue, cso))
                 {
-                    Log.Warning("GetConnectedSystemObjectsByAttributeValuesAsync: Found duplicate Connected System Objects for external ID '{ExternalId}' in connected system {ConnectedSystemId}. Returning first match.",
+                    Log.Warning("GetConnectedSystemObjectsByAttributeValuesAsync: Found duplicate Connected System Objects for external ID '{ExternalId}' in Connected System {ConnectedSystemId}. Returning first match.",
                         matchingAttrValue.StringValue, connectedSystemId);
                 }
             }
@@ -2027,7 +2027,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             {
                 if (!result.TryAdd(matchingAttrValue.StringValue, cso))
                 {
-                    Log.Warning("GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync: Found duplicate Connected System Objects for secondary external ID '{SecondaryExternalId}' in connected system {ConnectedSystemId}. Returning first match.",
+                    Log.Warning("GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync: Found duplicate Connected System Objects for secondary external ID '{SecondaryExternalId}' in Connected System {ConnectedSystemId}. Returning first match.",
                         matchingAttrValue.StringValue, connectedSystemId);
                 }
             }
@@ -2098,8 +2098,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Returns the count of CSOs in a connected system that are joined to a specific MVO.
-    /// Used during sync to check if an MVO already has a join in this connected system (1:1 constraint).
+    /// Returns the count of CSOs in a Connected System that are joined to a specific MVO.
+    /// Used during sync to check if an MVO already has a join in this Connected System (1:1 constraint).
     /// </summary>
     public async Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId)
     {
@@ -2109,7 +2109,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Returns the count of attribute values across all CSOs in a connected system that have an
+    /// Returns the count of attribute values across all CSOs in a Connected System that have an
     /// unresolved reference (UnresolvedReferenceValue is not null and ReferenceValueId is null).
     /// </summary>
 
@@ -2345,7 +2345,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Builds the base CSO query for deletion detection, filtering by connected system, object type,
+    /// Builds the base CSO query for deletion detection, filtering by Connected System, object type,
     /// and optionally by partition. Excludes PendingProvisioning CSOs as they don't have external IDs
     /// yet and would be incorrectly marked as obsolete.
     /// </summary>
@@ -2425,7 +2425,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Determines if a connected system object type attribute is being referenced by any sync rule attribute flow, or any attribute values.
+    /// Determines if a Connected System Object Type attribute is being referenced by any Sync Rule Attribute Flow, or any attribute values.
     /// This is to enable checks to see if things like attribute types can be edited.
     /// </summary>
     public async Task<bool> IsObjectTypeAttributeBeingReferencedAsync(ConnectedSystemObjectTypeAttribute connectedSystemObjectTypeAttribute)
@@ -2433,7 +2433,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (connectedSystemObjectTypeAttribute.Id == 0)
             return false;
 
-        // check for sync rule references (attribute flow or object matching)
+        // check for Sync Rule references (Attribute Flow or object matching)
         if (await Repository.Database.SyncRuleMappingSources.AnyAsync(q =>
                 q.ConnectedSystemAttribute != null &&
                 q.ConnectedSystemAttribute.Id == connectedSystemObjectTypeAttribute.Id))
@@ -2585,7 +2585,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return null;
 
         // Walk up the parent chain so callers (e.g. container-update validation) can reach the owning
-        // connected system for nested containers whose Partition and ConnectedSystem navs are null.
+        // Connected System for nested containers whose Partition and ConnectedSystem navs are null.
         // Bounded by hierarchy depth, not container count. See issue #586.
         var current = container;
         while (current.ParentContainerId != null && current.ParentContainer == null)
@@ -2718,7 +2718,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Note: We also include CSO.AttributeValues because connectors need access to
         // the current attribute values (e.g., current DN for LDAP rename operations).
         //
-        // AsNoTracking: pending exports loaded here are used for read-only cache lookups
+        // AsNoTracking: Pending Exports loaded here are used for read-only cache lookups
         // during sync (indexed by CSO ID for O(1) confirmation). In-place mutations during
         // EvaluatePendingExportConfirmation are persisted through separate batch methods
         // (DeletePendingExportsAsync, UpdatePendingExportsAsync), not EF change tracking.
@@ -2732,7 +2732,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Retrieves pending exports that are ready for execution, filtering at the database level.
+    /// Retrieves Pending Exports that are ready for execution, filtering at the database level.
     /// Excludes exports that have exceeded max retries or are not yet due for retry.
     /// Results are ordered by CreatedAt (oldest first).
     /// </summary>
@@ -2849,7 +2849,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Deletes pending exports by their IDs using raw SQL.
+    /// Deletes Pending Exports by their IDs using raw SQL.
     /// Used by reconciliation which operates on lightweight summaries, not full entities.
     /// </summary>
     public async Task DeletePendingExportsByIdsAsync(IList<Guid> pendingExportIds)
@@ -2871,7 +2871,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Retrieves pending exports by their IDs with all necessary includes for export processing.
+    /// Retrieves Pending Exports by their IDs with all necessary includes for export processing.
     /// Uses the same includes as GetExecutableExportsAsync to ensure connectors have access to
     /// CSO attributes, attribute value changes, and attribute definitions.
     /// </summary>
@@ -3192,7 +3192,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// <inheritdoc />
     public async Task<PendingExportDetailResult?> GetPendingExportDetailAsync(Guid id)
     {
-        // Step 1: Load the pending export shell without attribute value changes
+        // Step 1: Load the Pending Export shell without attribute value changes
         var entity = await Repository.Database.PendingExports
             .AsSplitQuery()
             .Include(pe => pe.ConnectedSystem)
@@ -3393,8 +3393,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(pe => pe.ConnectedSystemObject != null && csoIdList.Contains(pe.ConnectedSystemObject.Id))
             .ToListAsync();
 
-        // Build dictionary mapping CSO ID to pending export.
-        // There should only be one pending export per CSO. If duplicates are found (indicating a
+        // Build dictionary mapping CSO ID to Pending Export.
+        // There should only be one Pending Export per CSO. If duplicates are found (indicating a
         // previous data integrity issue), self-heal by keeping the newest PE and deleting the older one(s).
         var filteredExports = pendingExports.Where(pe => pe.ConnectedSystemObject != null).ToList();
         var result = new Dictionary<Guid, PendingExport>();
@@ -3457,7 +3457,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(pe => pe.ConnectedSystemObjectId != null && csoIdList.Contains(pe.ConnectedSystemObjectId.Value))
             .ToListAsync();
 
-        // Build dictionary mapping CSO ID to pending export using the FK property (no navigation needed).
+        // Build dictionary mapping CSO ID to Pending Export using the FK property (no navigation needed).
         // If duplicates are found (indicating a previous data integrity issue), self-heal by keeping
         // the newest PE and deleting the older one(s) via raw SQL (since these are AsNoTracking entities).
         var result = new Dictionary<Guid, PendingExport>();
@@ -3507,7 +3507,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 @"DELETE FROM ""PendingExports"" WHERE ""Id"" = ANY({0})",
                 duplicateIdsToDelete.ToArray());
 
-            Log.Information("GetPendingExportsLightweightByConnectedSystemObjectIdsAsync: Self-healed {Count} duplicate pending export(s)",
+            Log.Information("GetPendingExportsLightweightByConnectedSystemObjectIdsAsync: Self-healed {Count} duplicate Pending Export(s)",
                 duplicateIdsToDelete.Count);
         }
 
@@ -3517,7 +3517,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId)
     {
-        // Single bulk query: load ALL pending exports for this connected system in one round-trip.
+        // Single bulk query: load ALL Pending Exports for this Connected System in one round-trip.
         // Far more efficient than per-page WHERE IN queries for large-scale reconciliation (100K+ CSOs).
         var pendingExports = await Repository.Database.PendingExports
             .Include(pe => pe.AttributeValueChanges)
@@ -3525,7 +3525,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(pe => pe.ConnectedSystemId == connectedSystemId && pe.ConnectedSystemObjectId != null)
             .ToListAsync();
 
-        // Build dictionary mapping CSO ID to pending export, with duplicate self-healing.
+        // Build dictionary mapping CSO ID to Pending Export, with duplicate self-healing.
         var result = new Dictionary<Guid, PendingExport>();
         var duplicateIdsToDelete = new List<Guid>();
 
@@ -3571,7 +3571,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 @"DELETE FROM ""PendingExports"" WHERE ""Id"" = ANY({0})",
                 duplicateIdsToDelete.ToArray());
 
-            Log.Information("GetPendingExportsLightweightByConnectedSystemIdAsync: Self-healed {Count} duplicate pending export(s)",
+            Log.Information("GetPendingExportsLightweightByConnectedSystemIdAsync: Self-healed {Count} duplicate Pending Export(s)",
                 duplicateIdsToDelete.Count);
         }
 
@@ -3671,7 +3671,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Gets CSOs joined to specific MVOs within the specified target connected systems.
+    /// Gets CSOs joined to specific MVOs within the specified target Connected Systems.
     /// Used for per-page export evaluation cache refresh — loads only CSOs relevant to the current page.
     /// </summary>
     public async Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByMvoIdsAndTargetSystemsAsync(
@@ -3834,7 +3834,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         if (matches.Count > 1)
         {
-            Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Multiple CSOs matched rule {RuleId} in connected system {ConnectedSystemId}. Returning first by ID. This indicates duplicate CSOs that should be investigated.",
+            Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Multiple CSOs matched rule {RuleId} in Connected System {ConnectedSystemId}. Returning first by ID. This indicates duplicate CSOs that should be investigated.",
                 objectMatchingRule.Id, connectedSystem.Id);
         }
 
@@ -3902,10 +3902,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Retrieves all the sync rules for a given Connected System.
+    /// Retrieves all the Sync Rules for a given Connected System.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
-    /// <param name="includeDisabledSyncRules">Controls whether to return sync rules that are disabled</param>
+    /// <param name="includeDisabledSyncRules">Controls whether to return Sync Rules that are disabled</param>
     /// <param name="withChangeTracking">When true, enables EF Core change tracking for write operations.</param>
     public async Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules, bool withChangeTracking = false)
     {
@@ -4222,7 +4222,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task CreateSyncRuleAsync(SyncRule syncRule)
     {
         // The caller (ConnectedSystemServer.CreateOrUpdateSyncRuleAsync) has already detached every reference to an
-        // existing entity (connected system, object types and the attributes used by matching rules, attribute flow
+        // existing entity (Connected System, object types and the attributes used by matching rules, Attribute Flow
         // and scoping criteria), leaving only FK scalars set. The graph reaching Add() therefore contains only the
         // new rows to insert, so EF does not attempt to re-insert existing entities or trip over the duplicate
         // entity instances the editor's loaded graph can contain.
@@ -4269,7 +4269,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     #region Sync Rule Mappings
     /// <summary>
-    /// Gets all mappings for a sync rule.
+    /// Gets all mappings for a Sync Rule.
     /// </summary>
     public async Task<List<SyncRuleMapping>> GetSyncRuleMappingsAsync(int syncRuleId)
     {
@@ -4287,7 +4287,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Gets a specific sync rule mapping by ID.
+    /// Gets a specific Sync Rule mapping by ID.
     /// </summary>
     public async Task<SyncRuleMapping?> GetSyncRuleMappingAsync(int id)
     {
@@ -4304,7 +4304,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Creates a new sync rule mapping.
+    /// Creates a new Sync Rule mapping.
     /// </summary>
     public async Task CreateSyncRuleMappingAsync(SyncRuleMapping mapping)
     {
@@ -4313,7 +4313,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Updates an existing sync rule mapping.
+    /// Updates an existing Sync Rule mapping.
     /// </summary>
     public async Task UpdateSyncRuleMappingAsync(SyncRuleMapping mapping)
     {
@@ -4322,7 +4322,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Deletes a sync rule mapping.
+    /// Deletes a Sync Rule mapping.
     /// </summary>
     public async Task DeleteSyncRuleMappingAsync(SyncRuleMapping mapping)
     {
@@ -4343,7 +4343,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         Log.Information("DeleteAllConnectedSystemObjectsAndDependenciesAsync: Starting for Connected System {Id}, deleteChangeHistory={DeleteHistory}",
             connectedSystemId, deleteChangeHistory);
 
-        // Count pending exports and CSOs before deletion so we can report stats
+        // Count Pending Exports and CSOs before deletion so we can report stats
         var pendingExportCount = await Repository.Database.PendingExports
             .CountAsync(pe => pe.ConnectedSystemId == connectedSystemId);
         var csoCount = await Repository.Database.ConnectedSystemObjects
@@ -4351,7 +4351,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         // Wrap the multi-statement deletion in a transaction so a failure rolls back cleanly rather than leaving
         // a half-deleted system (fast/hard failure over corrupted state). When called from DeleteConnectedSystemAsync
-        // the ambient transaction is reused; when called standalone (clearing connected system objects) this method
+        // the ambient transaction is reused; when called standalone (clearing Connected System Objects) this method
         // owns and commits its own transaction. Npgsql does not support nested transactions, hence the ownership check.
         var ownsTransaction = Repository.Database.Database.CurrentTransaction == null;
         await using var transaction = ownsTransaction ? await Repository.Database.Database.BeginTransactionAsync() : null;
@@ -4445,7 +4445,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (ownsTransaction)
             await transaction!.CommitAsync();
 
-        Log.Information("DeleteAllConnectedSystemObjectsAndDependenciesAsync: Completed for Connected System {Id}. Removed {PendingExports} pending exports, {Csos} CSOs",
+        Log.Information("DeleteAllConnectedSystemObjectsAndDependenciesAsync: Completed for Connected System {Id}. Removed {PendingExports} Pending Exports, {Csos} CSOs",
             connectedSystemId, pendingExportCount, csoCount);
 
         return new ClearConnectedSystemResult
@@ -4481,7 +4481,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // 2. Sever audit and history foreign keys that reference rows deleted below. These rows are retained for
         //    audit; only the now-dead foreign key is nulled. They must be nulled before their targets are deleted.
 
-        // 2a. Activities referencing this system, its run profiles, or its sync rules.
+        // 2a. Activities referencing this system, its Run Profiles, or its Sync Rules.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"UPDATE ""Activities"" SET ""ConnectedSystemRunProfileId"" = NULL
               WHERE ""ConnectedSystemRunProfileId"" IN (SELECT ""Id"" FROM ""ConnectedSystemRunProfiles"" WHERE ""ConnectedSystemId"" = {0})",
@@ -4494,7 +4494,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             @"UPDATE ""Activities"" SET ""ConnectedSystemId"" = NULL WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
-        // 2b. Metaverse object changes referencing this system's sync rules.
+        // 2b. Metaverse object changes referencing this system's Sync Rules.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"UPDATE ""MetaverseObjectChanges"" SET ""SyncRuleId"" = NULL
               WHERE ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
@@ -4530,7 +4530,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             connectedSystemId);
 
         // 4. Delete Run Profiles. Must be before Partitions: ConnectedSystemRunProfiles.PartitionId is a
-        //    non-cascading FK to ConnectedSystemPartitions, so partitions cannot be deleted while run profiles
+        //    non-cascading FK to ConnectedSystemPartitions, so partitions cannot be deleted while Run Profiles
         //    still reference them.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystemRunProfiles"" WHERE ""ConnectedSystemId"" = {0}",
@@ -4551,7 +4551,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
               )",
             connectedSystemId);
 
-        // 7. Delete SyncRuleMappings (attribute flow rules)
+        // 7. Delete SyncRuleMappings (Attribute Flow Rules)
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""SyncRuleMappings""
               WHERE ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",
@@ -4575,7 +4575,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         // 10. Delete Object Matching Rules for this system before the Sync Rules and Object Types they reference
         //     (those foreign keys do not cascade). Their Sources are removed automatically via ON DELETE CASCADE.
-        //     An OMR belongs to this system when it is scoped to one of its object types or one of its sync rules.
+        //     An OMR belongs to this system when it is scoped to one of its object types or one of its Sync Rules.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ObjectMatchingRules""
               WHERE ""ConnectedSystemObjectTypeId"" IN (SELECT ""Id"" FROM ""ConnectedSystemObjectTypes"" WHERE ""ConnectedSystemId"" = {0})
@@ -4633,7 +4633,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task<int> GetContainerCountAsync(int connectedSystemId)
     {
-        // Count containers that belong to this connected system either:
+        // Count containers that belong to this Connected System either:
         // 1. Directly via ConnectedSystem reference (top-level containers without partitions)
         // 2. Via Partition reference (containers within a partition)
         return await Repository.Database.ConnectedSystemContainers
@@ -4658,7 +4658,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task<SynchronisationWorkerTask?> GetRunningSyncTaskAsync(int connectedSystemId)
     {
-        // Get run profile IDs for this system
+        // Get Run Profile IDs for this system
         var runProfileIds = await Repository.Database.ConnectedSystemRunProfiles
             .Where(rp => rp.ConnectedSystemId == connectedSystemId)
             .Select(rp => rp.Id)

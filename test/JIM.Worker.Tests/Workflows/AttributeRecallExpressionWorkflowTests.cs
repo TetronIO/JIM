@@ -13,7 +13,7 @@ using NUnit.Framework;
 namespace JIM.Worker.Tests.Workflows;
 
 /// <summary>
-/// Workflow tests for attribute recall with supplemental connected systems.
+/// Workflow tests for attribute recall with supplemental Connected Systems.
 ///
 /// Validates the representative topology for attribute recall:
 /// - HR Source (primary) — contributes identity-critical attributes (DisplayName, EmployeeId).
@@ -46,7 +46,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         hrType.RemoveContributedAttributesOnObsoletion = false;
 
         // Create Training source system (supplemental — contributes non-critical attributes)
-        // Uses SyncRule matching mode because the join rule is defined on the sync rule
+        // Uses SyncRule matching mode because the join rule is defined on the Sync Rule
         var trainingSystem = await CreateConnectedSystemAsync("Training Source");
         trainingSystem.ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule;
         var trainingDescriptionAttr = new ConnectedSystemObjectTypeAttribute
@@ -133,7 +133,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         await DbContext.SaveChangesAsync();
         mvType.Attributes.Add(mvDescriptionAttr);
 
-        // Create HR import sync rule (HR Source → MV: DisplayName, EmployeeId)
+        // Create HR import Sync Rule (HR Source → MV: DisplayName, EmployeeId)
         var hrImportRule = await CreateImportSyncRuleAsync(hrSystem.Id, hrType, mvType, "HR Import");
         var hrDisplayNameAttr = hrType.Attributes.Single(a => a.Name == "DisplayName");
         var hrEmployeeIdAttr = hrType.Attributes.Single(a => a.Name == "EmployeeId");
@@ -163,7 +163,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         });
         await DbContext.SaveChangesAsync();
 
-        // Create Training import sync rule (Training Source → MV: Description)
+        // Create Training import Sync Rule (Training Source → MV: Description)
         // Uses join (not projection) — joins to existing MVO via EmployeeId matching
         var trainingImportRule = await CreateImportSyncRuleAsync(
             trainingSystem.Id, trainingType, mvType, "Training Import", enableProjection: false);
@@ -201,7 +201,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         });
         await DbContext.SaveChangesAsync();
 
-        // Create export sync rule (MV → AD Target)
+        // Create export Sync Rule (MV → AD Target)
         var exportRule = new SyncRule
         {
             ConnectedSystemId = targetSystem.Id,
@@ -275,7 +275,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         Assert.That(hrCso.MetaverseObjectId, Is.Not.Null, "HR CSO should be joined to MVO after Full Sync");
         var mvoId = hrCso.MetaverseObjectId!.Value;
 
-        // Verify provisioning pending export was created with DN
+        // Verify provisioning Pending Export was created with DN
         var provisioningExports = SyncRepo.PendingExports.Values
             .Where(pe => pe.ConnectedSystemObject?.ConnectedSystemId == targetSystem.Id)
             .ToList();
@@ -286,11 +286,11 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         Assert.That(provisioningDnChange!.StringValue, Is.EqualTo("CN=John Smith,OU=Users,DC=testdomain,DC=local"));
 
         // Verify aggregate stats for HR Full Sync (guards against double-counting bugs).
-        // In Detailed mode, attribute flows under a Projected root are a single child outcome node
+        // In Detailed mode, Attribute Flows under a Projected root are a single child outcome node
         // with detailCount=N, so TotalAttributeFlows counts outcome nodes, not individual attributes.
         Assert.That(hrFullSyncActivity.TotalProjected, Is.EqualTo(1), "HR Full Sync: expected 1 projection.");
         Assert.That(hrFullSyncActivity.TotalJoined, Is.EqualTo(0), "HR Full Sync: expected 0 joins.");
-        Assert.That(hrFullSyncActivity.TotalAttributeFlows, Is.EqualTo(1), "HR Full Sync: expected 1 attribute flow outcome (absorbed under projection).");
+        Assert.That(hrFullSyncActivity.TotalAttributeFlows, Is.EqualTo(1), "HR Full Sync: expected 1 Attribute Flow outcome (absorbed under projection).");
 
         // Simulate that the provisioning export was executed
         var targetCso = SyncRepo.ConnectedSystemObjects.Values
@@ -348,7 +348,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         // Verify aggregate stats for Training Full Sync (guards against double-counting bugs)
         Assert.That(trainingFullSyncActivity.TotalJoined, Is.EqualTo(1), "Training Full Sync: expected 1 join.");
         Assert.That(trainingFullSyncActivity.TotalProjected, Is.EqualTo(0), "Training Full Sync: expected 0 projections.");
-        Assert.That(trainingFullSyncActivity.TotalAttributeFlows, Is.EqualTo(1), "Training Full Sync: expected 1 attribute flow (Description).");
+        Assert.That(trainingFullSyncActivity.TotalAttributeFlows, Is.EqualTo(1), "Training Full Sync: expected 1 Attribute Flow (Description).");
 
         // Simulate that Description export was executed
         targetCso = SyncRepo.ConnectedSystemObjects.Values
@@ -360,7 +360,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
             StringValue = "Completed Advanced Training",
             ConnectedSystemObject = targetCso
         });
-        // Clear any pending exports from the Training sync
+        // Clear any Pending Exports from the Training sync
         SyncRepo.ClearAllPendingExports();
 
         // --- Step 5: Mark Training CSO as Obsolete (training record removed) ---
@@ -375,17 +375,17 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         await new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo,trainingSystem, trainingDeltaSyncProfile, trainingDeltaSyncActivity, new CancellationTokenSource())
             .PerformDeltaSyncAsync();
 
-        // --- Assert: Check pending exports after Training recall ---
+        // --- Assert: Check Pending Exports after Training recall ---
         var recallExports = SyncRepo.PendingExports.Values
             .Where(pe => pe.ConnectedSystemObject?.ConnectedSystemId == targetSystem.Id)
             .ToList();
 
         Assert.That(recallExports, Has.Count.EqualTo(1),
-            "Expected exactly one Update pending export for the target system after Training attribute recall");
+            "Expected exactly one Update Pending Export for the target system after Training attribute recall");
 
         var recallExport = recallExports[0];
         Assert.That(recallExport.ChangeType, Is.EqualTo(JIM.Models.Transactional.PendingExportChangeType.Update),
-            "Expected an Update pending export");
+            "Expected an Update Pending Export");
 
         // Description (Training-contributed) should be null-cleared
         var descriptionChange = recallExport.AttributeValueChanges
@@ -443,7 +443,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
 
         // Verify aggregate stats for Training Delta Sync (guards against double-counting bugs)
         Assert.That(trainingDeltaSyncActivity.TotalDisconnected, Is.EqualTo(1), "Training Delta Sync: expected 1 disconnection.");
-        Assert.That(trainingDeltaSyncActivity.TotalAttributeFlows, Is.EqualTo(1), "Training Delta Sync: expected 1 attribute flow (recalled Description).");
+        Assert.That(trainingDeltaSyncActivity.TotalAttributeFlows, Is.EqualTo(1), "Training Delta Sync: expected 1 Attribute Flow (recalled Description).");
     }
 
     /// <summary>
@@ -504,7 +504,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
         var mvEmployeeIdAttr = mvType.Attributes.First(a => a.Name == "EmployeeId");
 
-        // Create HR import sync rule (HR Source → MV: DisplayName, EmployeeId)
+        // Create HR import Sync Rule (HR Source → MV: DisplayName, EmployeeId)
         var hrImportRule = await CreateImportSyncRuleAsync(hrSystem.Id, hrType, mvType, "HR Import");
         var hrDisplayNameAttr = hrType.Attributes.Single(a => a.Name == "DisplayName");
         var hrEmployeeIdAttr = hrType.Attributes.Single(a => a.Name == "EmployeeId");
@@ -534,7 +534,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         });
         await DbContext.SaveChangesAsync();
 
-        // Create export sync rule (MV → AD Target) with expression-based DN
+        // Create export Sync Rule (MV → AD Target) with expression-based DN
         var exportRule = new SyncRule
         {
             ConnectedSystemId = targetSystem.Id,
@@ -636,7 +636,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
             .Where(pe => pe.ConnectedSystemObject?.ConnectedSystemId == targetSystem.Id)
             .ToList();
         Assert.That(recallExports, Has.Count.EqualTo(0),
-            "No pending exports should be created — attributes were not recalled, so no changes to export");
+            "No Pending Exports should be created — attributes were not recalled, so no changes to export");
 
         // Note: LastConnectorDisconnectedDate is NOT set here because the target CSO is still
         // joined to the MVO. The deletion rule WhenLastConnectorDisconnected only fires when
@@ -701,7 +701,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
         var mvEmployeeIdAttr = mvType.Attributes.First(a => a.Name == "EmployeeId");
 
-        // Create HR import sync rule with projection and join
+        // Create HR import Sync Rule with projection and join
         var hrImportRule = await CreateImportSyncRuleAsync(hrSystem.Id, hrType, mvType, "HR Import");
         var hrDisplayNameAttr = hrType.Attributes.Single(a => a.Name == "DisplayName");
         var hrEmployeeIdAttr = hrType.Attributes.Single(a => a.Name == "EmployeeId");
@@ -750,7 +750,7 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         });
         await DbContext.SaveChangesAsync();
 
-        // Create export sync rule with expression-based DN
+        // Create export Sync Rule with expression-based DN
         var exportRule = new SyncRule
         {
             ConnectedSystemId = targetSystem.Id,

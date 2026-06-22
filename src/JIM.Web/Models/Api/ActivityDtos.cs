@@ -126,7 +126,7 @@ public class ActivityHeader
     public int TotalJoined { get; set; }
 
     /// <summary>
-    /// Count of attribute flow operations.
+    /// Count of Attribute Flow operations.
     /// </summary>
     public int TotalAttributeFlows { get; set; }
 
@@ -136,7 +136,7 @@ public class ActivityHeader
     public int TotalDisconnected { get; set; }
 
     /// <summary>
-    /// Count of CSOs disconnected because they fell out of scope of import sync rule scoping criteria.
+    /// Count of CSOs disconnected because they fell out of scope of import Sync Rule scoping criteria.
     /// </summary>
     public int TotalDisconnectedOutOfScope { get; set; }
 
@@ -146,12 +146,12 @@ public class ActivityHeader
     public int TotalOutOfScopeRetainJoin { get; set; }
 
     /// <summary>
-    /// Count of CSOs where drift was detected and corrective pending exports were created.
+    /// Count of CSOs where drift was detected and corrective Pending Exports were created.
     /// </summary>
     public int TotalDriftCorrections { get; set; }
 
     /// <summary>
-    /// Count of CSOs provisioned to target connected systems during sync.
+    /// Count of CSOs provisioned to target Connected Systems during sync.
     /// </summary>
     public int TotalProvisioned { get; set; }
     #endregion
@@ -177,7 +177,7 @@ public class ActivityHeader
 
     #region Pending Export Stats
     /// <summary>
-    /// Count of pending exports staged for the next export run.
+    /// Count of Pending Exports staged for the next export run.
     /// </summary>
     public int TotalPendingExports { get; set; }
     #endregion
@@ -373,22 +373,22 @@ public class ActivityDetailDto
     public ConnectedSystemRunType? ConnectedSystemRunType { get; set; }
 
     /// <summary>
-    /// The connected system ID if applicable.
+    /// The Connected System ID if applicable.
     /// </summary>
     public int? ConnectedSystemId { get; set; }
 
     /// <summary>
-    /// The run profile ID if applicable.
+    /// The Run Profile ID if applicable.
     /// </summary>
     public int? ConnectedSystemRunProfileId { get; set; }
 
     /// <summary>
-    /// The sync rule ID if applicable.
+    /// The Sync Rule ID if applicable.
     /// </summary>
     public int? SyncRuleId { get; set; }
 
     /// <summary>
-    /// The metaverse object ID if applicable.
+    /// The Metaverse Object ID if applicable.
     /// </summary>
     public Guid? MetaverseObjectId { get; set; }
 
@@ -398,7 +398,7 @@ public class ActivityDetailDto
     public int? ExampleDataTemplateId { get; set; }
 
     /// <summary>
-    /// Execution statistics for run profile activities.
+    /// Execution statistics for Run Profile activities.
     /// </summary>
     public ActivityRunProfileExecutionStatsDto? ExecutionStats { get; set; }
 
@@ -441,7 +441,7 @@ public class ActivityDetailDto
 }
 
 /// <summary>
-/// DTO for run profile execution statistics with granular change type counts.
+/// DTO for Run Profile execution statistics with granular change type counts.
 /// </summary>
 public class ActivityRunProfileExecutionStatsDto
 {
@@ -502,7 +502,7 @@ public class ActivityRunProfileExecutionStatsDto
     public int TotalJoins { get; set; }
 
     /// <summary>
-    /// Number of attribute flows between CSOs and MVOs.
+    /// Number of Attribute Flows between CSOs and MVOs.
     /// </summary>
     public int TotalAttributeFlows { get; set; }
 
@@ -512,7 +512,7 @@ public class ActivityRunProfileExecutionStatsDto
     public int TotalDisconnections { get; set; }
 
     /// <summary>
-    /// Number of CSOs disconnected from MVOs because they fell out of scope of import sync rule scoping criteria.
+    /// Number of CSOs disconnected from MVOs because they fell out of scope of import Sync Rule scoping criteria.
     /// </summary>
     public int TotalDisconnectedOutOfScope { get; set; }
 
@@ -522,12 +522,12 @@ public class ActivityRunProfileExecutionStatsDto
     public int TotalOutOfScopeRetainJoin { get; set; }
 
     /// <summary>
-    /// Number of CSOs where drift was detected and corrective pending exports were created.
+    /// Number of CSOs where drift was detected and corrective Pending Exports were created.
     /// </summary>
     public int TotalDriftCorrections { get; set; }
 
     /// <summary>
-    /// Number of CSOs provisioned to target connected systems during sync.
+    /// Number of CSOs provisioned to target Connected Systems during sync.
     /// </summary>
     public int TotalProvisioned { get; set; }
     #endregion
@@ -546,28 +546,28 @@ public class ActivityRunProfileExecutionStatsDto
 
     #region Pending Export Stats
     /// <summary>
-    /// Number of pending exports staged for the next export run.
+    /// Number of Pending Exports staged for the next export run.
     /// These are exports that were previously executed but not yet confirmed,
-    /// giving operators visibility into what changes will be made to connected systems.
+    /// giving operators visibility into what changes will be made to Connected Systems.
     /// </summary>
     public int TotalPendingExports { get; set; }
     #endregion
 
     #region Pending Export Reconciliation Stats
     /// <summary>
-    /// Number of pending exports that were fully confirmed and deleted.
+    /// Number of Pending Exports that were fully confirmed and deleted.
     /// The exported attribute values matched the imported values.
     /// </summary>
     public int TotalPendingExportsConfirmed { get; set; }
 
     /// <summary>
-    /// Number of pending exports with unconfirmed attributes that will be retried.
+    /// Number of Pending Exports with unconfirmed attributes that will be retried.
     /// Some attribute values did not match; they will be re-exported on the next export run.
     /// </summary>
     public int TotalPendingExportsRetrying { get; set; }
 
     /// <summary>
-    /// Number of pending exports that failed after maximum retry attempts.
+    /// Number of Pending Exports that failed after maximum retry attempts.
     /// Manual intervention may be required to resolve these exports.
     /// </summary>
     public int TotalPendingExportsFailed { get; set; }

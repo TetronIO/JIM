@@ -67,7 +67,7 @@ public class MetaverseServerAttributeValidationTests
             () => _jim.Metaverse.DeleteMetaverseAttributeAsync(attribute, (MetaverseObject?)null));
 
         Assert.That(ex!.Message, Does.Contain("costCentre"));
-        Assert.That(ex.Message, Does.Contain("2 sync rule(s)"));
+        Assert.That(ex.Message, Does.Contain("2 Sync Rule(s)"));
         Assert.That(ex.Message, Does.Contain("Import Users from LDAP"));
         Assert.That(ex.Message, Does.Contain("Export Users to LDAP"));
         Assert.That(ex.ReferencingSyncRules, Has.Count.EqualTo(2));
@@ -96,7 +96,7 @@ public class MetaverseServerAttributeValidationTests
             () => _jim.Metaverse.DeleteMetaverseAttributeAsync(attribute, (MetaverseObject?)null));
 
         Assert.That(ex!.Message, Does.Contain("costCentre"));
-        Assert.That(ex.Message, Does.Contain("1,523 metaverse object(s)"));
+        Assert.That(ex.Message, Does.Contain("1,523 Metaverse Object(s)"));
         Assert.That(ex.AffectedObjectCount, Is.EqualTo(1523));
 
         // Verify delete was NOT called
@@ -107,7 +107,7 @@ public class MetaverseServerAttributeValidationTests
     [Test]
     public async Task DeleteMetaverseAttributeAsync_WithSyncRulesAndStoredValues_ChecksSyncRulesFirstAsync()
     {
-        // Arrange: attribute has both sync rule references AND stored values
+        // Arrange: attribute has both Sync Rule references AND stored values
         var attribute = new MetaverseAttribute { Id = 42, Name = "costCentre" };
         var syncRuleRefs = new List<SyncRuleReference>
         {
@@ -122,14 +122,14 @@ public class MetaverseServerAttributeValidationTests
             .Setup(r => r.GetAttributeValueObjectCountAsync(attribute.Id))
             .ReturnsAsync(500);
 
-        // Act & Assert: sync rule check takes priority
+        // Act & Assert: Sync Rule check takes priority
         var ex = Assert.ThrowsAsync<MetaverseAttributeInUseException>(
             () => _jim.Metaverse.DeleteMetaverseAttributeAsync(attribute, (MetaverseObject?)null));
 
-        Assert.That(ex!.Message, Does.Contain("sync rule(s)"));
+        Assert.That(ex!.Message, Does.Contain("Sync Rule(s)"));
         Assert.That(ex.ReferencingSyncRules, Has.Count.EqualTo(1));
 
-        // Value count should NOT have been checked since sync rule check failed first
+        // Value count should NOT have been checked since Sync Rule check failed first
         _mockMetaverseRepo.Verify(
             r => r.GetAttributeValueObjectCountAsync(It.IsAny<int>()), Times.Never);
     }

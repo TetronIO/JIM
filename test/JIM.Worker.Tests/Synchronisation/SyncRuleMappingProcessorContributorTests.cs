@@ -12,7 +12,7 @@ namespace JIM.Worker.Tests.Synchronisation;
 /// <summary>
 /// Tests for SyncRuleMappingProcessor ContributedBySystemId tracking.
 /// Verifies that MVO attribute values created during sync flow correctly record
-/// which connected system contributed them.
+/// which Connected System contributed them.
 /// </summary>
 public class SyncRuleMappingProcessorContributorTests
 {

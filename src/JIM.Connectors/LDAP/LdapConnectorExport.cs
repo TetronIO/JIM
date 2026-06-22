@@ -41,7 +41,7 @@ internal class LdapConnectorExport
     /// primaryGroupID, userAccountControl, accountExpires, badPasswordTime, badPwdCount,
     /// codePage, countryCode, lastLogoff, lastLogon, logonCount, pwdLastSet
     ///
-    /// We only include attributes that JIM might legitimately try to clear via sync rules.
+    /// We only include attributes that JIM might legitimately try to clear via Sync Rules.
     /// System-managed attributes (objectSid, sAMAccountType, etc.) are not included as
     /// JIM would never attempt to modify them.
     /// </summary>
@@ -115,13 +115,13 @@ internal class LdapConnectorExport
 
     internal List<ConnectedSystemExportResult> Execute(IList<PendingExport> pendingExports)
     {
-        _logger.Debug("LdapConnectorExport.Execute: Starting export of {Count} pending exports", pendingExports.Count);
+        _logger.Debug("LdapConnectorExport.Execute: Starting export of {Count} Pending Exports", pendingExports.Count);
 
         var results = new List<ConnectedSystemExportResult>();
 
         if (pendingExports.Count == 0)
         {
-            _logger.Information("LdapConnectorExport.Execute: No pending exports to process");
+            _logger.Information("LdapConnectorExport.Execute: No Pending Exports to process");
             return results;
         }
 
@@ -134,7 +134,7 @@ internal class LdapConnectorExport
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "LdapConnectorExport.Execute: Failed to process pending export {Id} ({ChangeType})", pendingExport.Id, pendingExport.ChangeType);
+                _logger.Error(ex, "LdapConnectorExport.Execute: Failed to process Pending Export {Id} ({ChangeType})", pendingExport.Id, pendingExport.ChangeType);
 
                 // Return failure result - ExportExecutionServer is responsible for updating
                 // ErrorCount, Status, and retry timing. The connector should
@@ -143,7 +143,7 @@ internal class LdapConnectorExport
             }
         }
 
-        _logger.Information("LdapConnectorExport.Execute: Completed export processing of {Count} pending exports", pendingExports.Count);
+        _logger.Information("LdapConnectorExport.Execute: Completed export processing of {Count} Pending Exports", pendingExports.Count);
         return results;
     }
 
@@ -554,7 +554,7 @@ internal class LdapConnectorExport
     #region Concurrent execution (async path)
 
     /// <summary>
-    /// Executes pending exports asynchronously with configurable concurrency.
+    /// Executes Pending Exports asynchronously with configurable concurrency.
     /// When concurrency is 1, delegates to the sequential <see cref="Execute"/> method.
     /// When concurrency > 1, processes multiple exports concurrently using SemaphoreSlim
     /// while maintaining positional ordering of results.
@@ -563,12 +563,12 @@ internal class LdapConnectorExport
         IList<PendingExport> pendingExports,
         CancellationToken cancellationToken)
     {
-        _logger.Debug("LdapConnectorExport.ExecuteAsync: Starting export of {Count} pending exports (concurrency: {Concurrency})",
+        _logger.Debug("LdapConnectorExport.ExecuteAsync: Starting export of {Count} Pending Exports (concurrency: {Concurrency})",
             pendingExports.Count, _exportConcurrency);
 
         if (pendingExports.Count == 0)
         {
-            _logger.Information("LdapConnectorExport.ExecuteAsync: No pending exports to process");
+            _logger.Information("LdapConnectorExport.ExecuteAsync: No Pending Exports to process");
             return new List<ConnectedSystemExportResult>();
         }
 
@@ -598,7 +598,7 @@ internal class LdapConnectorExport
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error(ex, "LdapConnectorExport.ExecuteAsync: Failed to process pending export {Id} ({ChangeType})",
+                    _logger.Error(ex, "LdapConnectorExport.ExecuteAsync: Failed to process Pending Export {Id} ({ChangeType})",
                         pendingExport.Id, pendingExport.ChangeType);
                     results[index] = ConnectedSystemExportResult.Failed(ex.Message);
                 }
@@ -611,7 +611,7 @@ internal class LdapConnectorExport
 
         await Task.WhenAll(tasks);
 
-        _logger.Information("LdapConnectorExport.ExecuteAsync: Completed export processing of {Count} pending exports",
+        _logger.Information("LdapConnectorExport.ExecuteAsync: Completed export processing of {Count} Pending Exports",
             pendingExports.Count);
         return results.ToList();
     }
@@ -990,7 +990,7 @@ internal class LdapConnectorExport
     {
         var addRequest = new AddRequest(dn);
 
-        // Get the object class from the pending export
+        // Get the object class from the Pending Export
         var objectClass = GetObjectClass(pendingExport);
         if (!string.IsNullOrEmpty(objectClass))
         {
@@ -1583,7 +1583,7 @@ internal class LdapConnectorExport
     }
 
     /// <summary>
-    /// Gets the new distinguished name from the pending export's attribute changes.
+    /// Gets the new distinguished name from the Pending Export's attribute changes.
     /// This is used to detect if a rename operation is needed.
     /// </summary>
     private static string? GetNewDistinguishedName(PendingExport pendingExport)
@@ -1791,7 +1791,7 @@ internal class LdapConnectorExport
         }
         else
         {
-            Log.Warning("GetDistinguishedNameForUpdate: No DN found for pending export {ExportId} - neither CSO secondary external ID nor attribute changes contain DN",
+            Log.Warning("GetDistinguishedNameForUpdate: No DN found for Pending Export {ExportId} - neither CSO secondary external ID nor attribute changes contain DN",
                 pendingExport.Id);
         }
 
@@ -1979,7 +1979,7 @@ internal class LdapConnectorExport
     }
 
     /// <summary>
-    /// Determines whether placeholder member handling is required for the given pending export.
+    /// Determines whether placeholder member handling is required for the given Pending Export.
     /// Placeholder handling is needed when:
     /// 1. The directory is not Active Directory or Samba AD (which use 'group' class with no MUST member constraint)
     /// 2. The object class is one that requires at least one member value (e.g. groupOfNames, groupOfUniqueNames)

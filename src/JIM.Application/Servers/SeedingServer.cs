@@ -776,7 +776,7 @@ internal class SeedingServer
         {
             Key = Constants.SettingKeys.PartitionValidationMode,
             DisplayName = "Run profile partition validation",
-            Description = "Controls how JIM behaves when a run profile is executed for a Connected System that supports partitions but has none selected. 'Error' blocks execution; 'Warning' allows execution but logs a warning.",
+            Description = "Controls how JIM behaves when a Run Profile is executed for a Connected System that supports partitions but has none selected. 'Error' blocks execution; 'Warning' allows execution but logs a warning.",
             Category = ServiceSettingCategory.Synchronisation,
             ValueType = ServiceSettingValueType.Enum,
             DefaultValue = PartitionValidationMode.Error.ToString(),
@@ -834,7 +834,7 @@ internal class SeedingServer
         {
             Key = Constants.SettingKeys.ChangeTrackingSyncOutcomesLevel,
             DisplayName = "Sync outcome tracking level",
-            Description = "Controls how much detail is recorded for sync outcome graphs on each run profile execution item. " +
+            Description = "Controls how much detail is recorded for sync outcome graphs on each Run Profile execution item. " +
                           "None: no outcome tracking (legacy behaviour). Standard: root-level outcomes (enables stat chips). " +
                           "Detailed: full causal chain with nested outcomes (default). " +
                           "Higher levels provide richer audit trails but increase storage usage.",

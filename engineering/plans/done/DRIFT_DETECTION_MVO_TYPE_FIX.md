@@ -2,11 +2,11 @@
 
 - **Status:** Done
 - **Created:** 2026-01-19
-- **Related Issue:** Scenario 8 drift detection fails - no corrective pending exports created
+- **Related Issue:** Scenario 8 drift detection fails - no corrective Pending Exports created
 
 ## Problem Summary
 
-Drift detection fails to create corrective pending exports because the MVO's `Type` navigation property is not loaded when CSOs are fetched during delta sync. This causes the export rule filter to incorrectly exclude all rules.
+Drift detection fails to create corrective Pending Exports because the MVO's `Type` navigation property is not loaded when CSOs are fetched during delta sync. This causes the export rule filter to incorrectly exclude all rules.
 
 ### Root Cause
 
@@ -32,7 +32,7 @@ Since `targetMvo.Type` is null, `targetMvo.Type?.Id` returns null. The compariso
 ### Impact
 
 - Drift detection never finds applicable export rules
-- No corrective pending exports are created
+- No corrective Pending Exports are created
 - Unauthorised changes in target systems are not remediated
 - Scenario 8 integration test fails at the DetectDrift step
 
@@ -61,7 +61,7 @@ Add or update tests to verify:
 
 1. **MVO Type loading verification** - Assert that after loading CSOs via the repository, `cso.MetaverseObject.Type` is not null. This test will FAIL initially because the repository doesn't load the Type.
 
-2. **End-to-end delta sync drift detection** - Test that delta sync on a target system with export rules correctly detects drift and creates pending exports. This test will FAIL initially.
+2. **End-to-end delta sync drift detection** - Test that delta sync on a target system with export rules correctly detects drift and creates Pending Exports. This test will FAIL initially.
 
 3. **Multi-valued attribute drift correction** - Test drift on `member` attribute (group membership) creates atomic Add/Remove changes.
 
@@ -80,7 +80,7 @@ public async Task DeltaSync_WithDriftedGroupMembership_CreatesCorrectivePendingE
     // Assert:
     // 1. CSO.MetaverseObject.Type is loaded (not null)
     // 2. Drift detection found applicable export rules
-    // 3. Corrective pending exports were created
+    // 3. Corrective Pending Exports were created
     // 4. Pending export has correct Add/Remove changes
 }
 ```
@@ -147,7 +147,7 @@ After implementing the fix, verify:
 
 1. Run `./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario8-CrossDomainEntitlementSync -Template Micro`
 2. Confirm DetectDrift step passes
-3. Confirm pending exports are created for drift correction
+3. Confirm Pending Exports are created for drift correction
 4. Confirm ReassertState step successfully exports corrections
 
 ## Test Coverage Gaps Identified
@@ -180,7 +180,7 @@ After implementing the fix, verify:
 **Recommendation:** Add workflow tests that:
 - Use `ExecuteDeltaSyncAsync` (not direct service calls)
 - Verify drift detection is triggered during delta sync
-- Verify pending exports are created in the database
+- Verify Pending Exports are created in the database
 
 ### Gap 4: Multi-Valued Attribute Drift Correction
 

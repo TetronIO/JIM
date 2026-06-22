@@ -36,11 +36,11 @@ JIM follows a strict N-tier layered architecture. Upper layers depend on lower l
 
 ## Metaverse Pattern
 
-The metaverse is the authoritative identity repository at the centre of JIM's architecture. All identity operations flow through the metaverse; there is never a direct sync between connected systems.
+The metaverse is the authoritative identity repository at the centre of JIM's architecture. All identity operations flow through the metaverse; there is never a direct sync between Connected Systems.
 
 - **MetaverseObject**<br /> Central identity entity (users, groups, custom types)
 - **ConnectedSystem**<br /> External system synchronised with the metaverse
-- **SyncRule**<br /> Bidirectional mappings between connected systems and the metaverse
+- **SyncRule**<br /> Bidirectional mappings between Connected Systems and the metaverse
 - **Staging Areas**<br /> Import/export staging for transactional integrity
 
 ```mermaid
@@ -129,7 +129,7 @@ The Worker is the engine that processes all synchronisation operations. Its desi
 
 ### Core Interfaces
 
-- **`ISyncEngine`**<br /> Stateless domain engine with methods for join resolution, projection, attribute flow, scoping, and more. Zero I/O dependencies; receives all data as parameters and returns results. Fully unit-testable without mocks.
+- **`ISyncEngine`**<br /> Stateless domain engine with methods for join resolution, projection, Attribute Flow, scoping, and more. Zero I/O dependencies; receives all data as parameters and returns results. Fully unit-testable without mocks.
 - **`ISyncRepository`**<br /> Data access boundary with approximately 80 methods. Production implementation: `JIM.PostgresData.Repositories.SyncRepository`. Test implementation: `JIM.InMemoryData.SyncRepository`.
 
 ### Dependency Injection
@@ -154,9 +154,9 @@ Detailed Mermaid diagrams document the runtime behaviour of JIM's synchronisatio
 
 ### Synchronisation
 
-- [Full Sync CSO Processing](diagrams/FULL_SYNC_CSO_PROCESSING.md): Core per-CSO decision tree (scoping, join, projection, attribute flow, drift detection)
+- [Full Sync CSO Processing](diagrams/FULL_SYNC_CSO_PROCESSING.md): Core per-CSO decision tree (scoping, join, projection, Attribute Flow, drift detection)
 - [Delta Sync Flow](diagrams/DELTA_SYNC_FLOW.md): How delta sync differs from full sync (watermark, early exit, CSO selection)
-- [Full Import Flow](diagrams/FULL_IMPORT_FLOW.md): Object import, duplicate detection, deletion detection, pending export reconciliation
+- [Full Import Flow](diagrams/FULL_IMPORT_FLOW.md): Object import, duplicate detection, deletion detection, Pending Export reconciliation
 
 ### Export
 

@@ -9,19 +9,19 @@ namespace JIM.Models.Interfaces;
 public interface IConnectorCapabilities
 {
     /// <summary>
-    /// Does the Connector support receiving full imports? i.e. receiving the total representation of all objects in the connected system.
-    /// Most should, to enable reconciliation after exports, though some might just be drop-exports, i.e. for when connectivity to connected systems is not bidirectional.
+    /// Does the Connector support receiving full imports? i.e. receiving the total representation of all objects in the Connected System.
+    /// Most should, to enable reconciliation after exports, though some might just be drop-exports, i.e. for when connectivity to Connected Systems is not bidirectional.
     /// </summary>
     public bool SupportsFullImport { get; }
 
     /// <summary>
-    /// Does the Connector support receiving delta imports? i.e. receiving just specific attribute/object changes for objects in the connected system.
-    /// It's recommended that a Connector does support this approach where possible as this is the quickest way of receiving changes from connected systems.
+    /// Does the Connector support receiving delta imports? i.e. receiving just specific attribute/object changes for objects in the Connected System.
+    /// It's recommended that a Connector does support this approach where possible as this is the quickest way of receiving changes from Connected Systems.
     /// </summary>
     public bool SupportsDeltaImport { get; }
         
     /// <summary>
-    /// Does the Connector support exporting changes/objects to the connected system? Some systems might be import-only, i.e. source-of-truth/HCM systems.
+    /// Does the Connector support exporting changes/objects to the Connected System? Some systems might be import-only, i.e. source-of-truth/HCM systems.
     /// It's recommended that a Connector does support exports though, to ensure that the system can be updated with attribute values it's not authoritative for, i.e. email-address, phone-numbers, etc in the case of HCM systems.
     /// </summary>
     public bool SupportsExport { get; }
@@ -38,8 +38,8 @@ public interface IConnectorCapabilities
     public bool SupportsPartitionContainers { get; }
 
     /// <summary>
-    /// Some connected systems, such as LDAP-based directories, make use of a secondary identifier when referencing other objects, i.e. a DN, 
-    /// even though this is not an immutable identifier, but still has to be used to do things like resolve references. If the connected system needs to use a secondary ID, set this to true.
+    /// Some Connected Systems, such as LDAP-based directories, make use of a secondary identifier when referencing other objects, i.e. a DN, 
+    /// even though this is not an immutable identifier, but still has to be used to do things like resolve references. If the Connected System needs to use a secondary ID, set this to true.
     /// </summary>
     public bool SupportsSecondaryExternalId { get; }
 
@@ -51,7 +51,7 @@ public interface IConnectorCapabilities
     public bool SupportsUserSelectedExternalId { get; }
 
     /// <summary>
-    /// Controls whether the user can change the data type of connected system attribute. For systems with a defined
+    /// Controls whether the user can change the data type of Connected System attribute. For systems with a defined
     /// schema, this probably doesn't make sense to allow, but for systems where the schema is inferred, i.e. in CSVs, then it does.
     /// </summary>
     public bool SupportsUserSelectedAttributeTypes {  get; }
@@ -73,7 +73,7 @@ public interface IConnectorCapabilities
 
     /// <summary>
     /// Does the Connector support paged imports/exports? When true, the Page Size setting
-    /// is shown on run profiles so the user can control how many items the connector retrieves
+    /// is shown on Run Profiles so the user can control how many items the connector retrieves
     /// per request. Directory-style connectors (e.g. LDAP) typically support paging, whereas
     /// file-based connectors read the entire file in one pass and do not use the page size.
     /// </summary>
@@ -81,7 +81,7 @@ public interface IConnectorCapabilities
 
     /// <summary>
     /// Does the Connector use file paths for import and/or export operations? When true, the
-    /// File Path setting is shown on import and export run profiles so the user can specify
+    /// File Path setting is shown on import and export Run Profiles so the user can specify
     /// the in-container path to the data file. Connectors that read from or write to files
     /// (e.g. CSV) should return true; connectors that use API calls should return false.
     /// </summary>

@@ -23,7 +23,7 @@ namespace JIM.Worker.Tests.Servers;
 /// Regression guard: the SyncRuleMapping schema consolidated onto a single <c>SyncRuleId</c> foreign key, but the
 /// deletion SQL still referenced the removed <c>AttributeFlowSynchronisationRuleId</c> /
 /// <c>ObjectMatchingSynchronisationRuleId</c> columns, throwing PostgreSQL 42703 (undefined column) for every
-/// connected-system deletion (the offending statement is parsed regardless of whether any sync rules exist).
+/// connected-system deletion (the offending statement is parsed regardless of whether any Sync Rules exist).
 /// </remarks>
 [TestFixture]
 [Category("RequiresPostgres")]
@@ -163,7 +163,7 @@ public class ConnectedSystemDeletionDatabaseTests
                 Enabled = true
             };
 
-            // An object matching rule referencing both the system's object type and its sync rule, with a
+            // An Object Matching Rule referencing both the system's object type and its Sync Rule, with a
             // source and a source parameter value (the OMR source graph cascades from the rule).
             var omr = new ObjectMatchingRule
             {
@@ -213,9 +213,9 @@ public class ConnectedSystemDeletionDatabaseTests
     }
 
     /// <summary>
-    /// Seeds a complete connected-system dependency graph: partition, container, run profile, object type and
-    /// attribute, sync rule (+ mapping + source), a CSO (+ attribute value), a metaverse object with one attribute
-    /// value contributed by the system and one unresolved reference to a CSO, a metaverse object change, a
+    /// Seeds a complete connected-system dependency graph: partition, container, Run Profile, object type and
+    /// attribute, Sync Rule (+ mapping + source), a CSO (+ attribute value), a Metaverse Object with one attribute
+    /// value contributed by the system and one unresolved reference to a CSO, a Metaverse Object change, a
     /// connected-system object change (+ attribute + value) and an activity. Every inbound foreign key the deletion
     /// must null or reorder is populated, so the fixture exercises the full delete path an empty or sync-rules-only
     /// seed cannot reach. This is the graph that reproduces the partition / run-profile FK violation and the
@@ -225,7 +225,7 @@ public class ConnectedSystemDeletionDatabaseTests
     {
         await using var seed = NewContext();
 
-        // --- Phase 1: connected system, schema, partition, container, sync rule graph ---
+        // --- Phase 1: Connected System, schema, partition, container, Sync Rule graph ---
         var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
         var system = new ConnectedSystem { Name = "Full Graph System", ConnectorDefinition = connectorDefinition };
         var csType = new ConnectedSystemObjectType { Name = "USER", ConnectedSystem = system, Selected = true };
@@ -257,7 +257,7 @@ public class ConnectedSystemDeletionDatabaseTests
         seed.AddRange(connectorDefinition, system, csType, mvType, mvTextAttr, mvRefAttr, partition, container, rule, mapping);
         await seed.SaveChangesAsync();
 
-        // --- Phase 2: run profile, CSO graph, metaverse object + values, change records ---
+        // --- Phase 2: Run Profile, CSO graph, Metaverse Object + values, change records ---
         var runProfile = new ConnectedSystemRunProfile
         {
             Name = "Full Import",
@@ -321,7 +321,7 @@ public class ConnectedSystemDeletionDatabaseTests
         seed.AddRange(runProfile, cso, mvo, mvoChange, csoChange);
         await seed.SaveChangesAsync();
 
-        // --- Phase 3: activity referencing the now-persisted run profile and sync rule (scalar FKs) ---
+        // --- Phase 3: activity referencing the now-persisted Run Profile and Sync Rule (scalar FKs) ---
         var activity = new Activity
         {
             TargetType = ActivityTargetType.ConnectedSystem,
@@ -378,14 +378,14 @@ public class ConnectedSystemDeletionDatabaseTests
         Assert.That(activity.ConnectedSystemRunProfileId, Is.Null, "Activity ConnectedSystemRunProfileId should be nulled.");
         Assert.That(activity.SyncRuleId, Is.Null, "Activity SyncRuleId should be nulled.");
 
-        Assert.That(await verify.MetaverseObjects.AnyAsync(), Is.True, "Surviving metaverse object should be retained.");
+        Assert.That(await verify.MetaverseObjects.AnyAsync(), Is.True, "Surviving Metaverse Object should be retained.");
         var contributedMvav = await verify.MetaverseObjectAttributeValues.SingleAsync(av => av.Id == ids.ContributedMvavId);
         Assert.That(contributedMvav.ContributedBySystemId, Is.Null, "Contributed metaverse attribute value should keep the value but null the contributor.");
         var unresolvedMvav = await verify.MetaverseObjectAttributeValues.SingleAsync(av => av.Id == ids.UnresolvedMvavId);
         Assert.That(unresolvedMvav.UnresolvedReferenceValueId, Is.Null, "Unresolved reference to a deleted CSO should be nulled.");
 
         var mvoChange = await verify.MetaverseObjectChanges.SingleAsync(c => c.Id == ids.MvoChangeId);
-        Assert.That(mvoChange.SyncRuleId, Is.Null, "Metaverse object change should keep the record but null the deleted sync rule FK.");
+        Assert.That(mvoChange.SyncRuleId, Is.Null, "Metaverse object change should keep the record but null the deleted Sync Rule FK.");
     }
 
     [Test]

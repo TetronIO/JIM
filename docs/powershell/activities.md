@@ -21,7 +21,7 @@ Get-JIMActivity [-Search <string>] [-Page <int>] [-PageSize <int>]
 # Get a specific activity by ID
 Get-JIMActivity -Id <guid>
 
-# Get execution items for a run profile activity
+# Get execution items for a Run Profile activity
 Get-JIMActivity -Id <guid> -ExecutionItems
 ```
 
@@ -30,10 +30,10 @@ Get-JIMActivity -Id <guid> -ExecutionItems
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Id` | `guid` | Yes (ById, ExecutionItems sets) | | ID of the activity to retrieve. Alias: `ActivityId`. Accepts pipeline input by property name. |
-| `Search` | `string` | No (List set) | | Filters activities by target name or type. For example, searching for "Active Directory" returns activities related to that connected system. |
+| `Search` | `string` | No (List set) | | Filters activities by target name or type. For example, searching for "Active Directory" returns activities related to that Connected System. |
 | `Page` | `int` | No (List set) | `1` | Page number for paginated results. |
 | `PageSize` | `int` | No (List set) | `20` | Number of activities per page. |
-| `ExecutionItems` | `switch` | Yes (ExecutionItems set) | | Retrieves the run profile execution items (RPEIs) associated with the activity, providing detailed per-object processing results. |
+| `ExecutionItems` | `switch` | Yes (ExecutionItems set) | | Retrieves the Run Profile execution items (RPEIs) associated with the activity, providing detailed per-object processing results. |
 
 ### Output
 
@@ -63,7 +63,7 @@ Get-JIMActivity -Search "FullImport"
 Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 ```
 
-```powershell title="Get execution items for a run profile activity"
+```powershell title="Get execution items for a Run Profile activity"
 Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems
 ```
 
@@ -82,7 +82,7 @@ Get-JIMActivity -Id $result.ActivityId -ExecutionItems |
 
 ## Get-JIMActivityStats
 
-Retrieves execution statistics for a run profile activity, including counts of processed items, errors, and timing information. This is useful for monitoring synchronisation health and identifying performance trends.
+Retrieves execution statistics for a Run Profile activity, including counts of processed items, errors, and timing information. This is useful for monitoring synchronisation health and identifying performance trends.
 
 ### Syntax
 
@@ -111,7 +111,7 @@ Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" |
     Get-JIMActivityStats
 ```
 
-```powershell title="Get stats after a run profile completes"
+```powershell title="Get stats after a Run Profile completes"
 $result = Start-JIMRunProfile -RunProfileId 42 -Wait -PassThru
 Get-JIMActivityStats -Id $result.ActivityId
 ```
@@ -130,7 +130,7 @@ if ($stats.ErrorCount -gt 0) {
 
 ## Get-JIMActivityChildren
 
-Retrieves child activities spawned by a parent activity. For example, a schedule execution activity creates child activities for each individual run profile step within that schedule. This cmdlet is useful for drilling into multi-step operations to inspect each step independently.
+Retrieves child activities spawned by a parent activity. For example, a schedule execution activity creates child activities for each individual Run Profile step within that schedule. This cmdlet is useful for drilling into multi-step operations to inspect each step independently.
 
 ### Syntax
 
@@ -181,5 +181,5 @@ Get-JIMActivityChildren -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" |
 ## See also
 
 - [Activities](../configuration/activities.md): what activities are, lifecycle, summary statistics, and parent/child execution model
-- [Run Profiles](run-profiles.md): cmdlets for managing and executing synchronisation run profiles
-- [Schedules](schedules.md): cmdlets for managing automated run profile schedules
+- [Run Profiles](run-profiles.md): cmdlets for managing and executing synchronisation Run Profiles
+- [Schedules](schedules.md): cmdlets for managing automated Run Profile schedules

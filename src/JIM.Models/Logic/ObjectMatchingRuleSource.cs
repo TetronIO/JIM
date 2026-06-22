@@ -6,7 +6,7 @@ using JIM.Models.Staging;
 namespace JIM.Models.Logic;
 
 /// <summary>
-/// Defines a source for an object matching rule. Can hold either an attribute or an expression.
+/// Defines a source for an Object Matching Rule. Can hold either an attribute or an expression.
 /// If it's an attribute, it will be either a ConnectedSystemAttribute (for CSO → MVO matching)
 /// or a MetaverseAttribute (for MVO → CSO matching during export).
 /// </summary>

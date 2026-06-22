@@ -6,8 +6,8 @@ using JIM.Models.Staging;
 namespace JIM.Models.Logic;
 
 /// <summary>
-/// Defines a source for a sync rule mapping. Can hold either an attribute or an expression.
-/// If it is an attribute, then depending on the direction of the sync rule (import/export), then it'll
+/// Defines a source for a Sync Rule mapping. Can hold either an attribute or an expression.
+/// If it is an attribute, then depending on the direction of the Sync Rule (import/export), then it'll
 /// be either the ConnectedSystemAttribute or MetaverseAttribute that needs to be populated.
 /// </summary>
 public class SyncRuleMappingSource
@@ -21,13 +21,13 @@ public class SyncRuleMappingSource
     public int Order { get; set; }
 
     /// <summary>
-    /// For Export sync rules only: If populated, denotes that a Metaverse Attribute should be used to set the target attribute value.
+    /// For Export Sync Rules only: If populated, denotes that a Metaverse Attribute should be used to set the target attribute value.
     /// </summary>
     public MetaverseAttribute? MetaverseAttribute { get; set; }
     public int? MetaverseAttributeId { get; set; }
 
     /// <summary>
-    /// For Import sync rules only: If populated, denotes that a Connected System Attribute should be used to set the target attribute value.
+    /// For Import Sync Rules only: If populated, denotes that a Connected System Attribute should be used to set the target attribute value.
     /// </summary>
     public ConnectedSystemObjectTypeAttribute? ConnectedSystemAttribute { get; set; }
     public int? ConnectedSystemAttributeId { get; set; }

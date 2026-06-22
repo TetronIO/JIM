@@ -250,7 +250,7 @@
         catch (Exception ex)
         {
             _deletionInProgress = false;
-            Log.Error(ex, "Error deleting connected system {Id}", ConnectedSystem.Id);
+            Log.Error(ex, "Error deleting Connected System {Id}", ConnectedSystem.Id);
             Snackbar.Add($"An error occurred: {ex.Message}", Severity.Error);
         }
 

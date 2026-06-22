@@ -68,7 +68,7 @@ Cross-reference the identified changes against the documentation and update any 
 - **`README.md`** (root) — Feature list, quick-start instructions, architecture overview, prerequisites
 - **`docs/index.md`** — MkDocs landing page (feature cards, capabilities)
 - **`docs/getting-started/`** — Deployment and first-run guidance
-- **`docs/concepts/`** — Architecture, sync pipeline, sync rules, JML lifecycle
+- **`docs/concepts/`** — Architecture, sync pipeline, Sync Rules, JML lifecycle
 - **`docs/administration/`** — Configuration env vars, SSO setup, troubleshooting
 - **`docs/connectors/`** — LDAP, File, etc.
 - **`docs/powershell/`** — Cmdlet reference pages

@@ -7,7 +7,7 @@ namespace JIM.Models.Tasking;
 public class ClearConnectedSystemObjectsWorkerTask : WorkerTask
 {
     /// <summary>
-    /// The id for the connected system the run profile relates to.
+    /// The id for the Connected System the Run Profile relates to.
     /// </summary>
     public int ConnectedSystemId { get; set; }
 

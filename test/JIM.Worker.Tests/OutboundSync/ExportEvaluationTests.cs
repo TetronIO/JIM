@@ -937,7 +937,7 @@ public class ExportEvaluationTests
         Assert.That(pendingProvisioningCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning),
             "Existing CSO should remain in PendingProvisioning state");
 
-        // If a pending export is created, it should be Create (PendingProvisioning means object doesn't exist in target yet)
+        // If a Pending Export is created, it should be Create (PendingProvisioning means object doesn't exist in target yet)
         if (result.Count > 0)
         {
             Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Create),
@@ -949,7 +949,7 @@ public class ExportEvaluationTests
     }
 
     /// <summary>
-    /// Q1.Expression: Tests that expression-based export mappings correctly evaluate and create pending exports.
+    /// Q1.Expression: Tests that expression-based export mappings correctly evaluate and create Pending Exports.
     /// </summary>
     [Test]
     public async Task EvaluateExportRulesAsync_WithExpressionBasedMapping_CreatesCorrectPendingExportAsync()
@@ -1021,7 +1021,7 @@ public class ExportEvaluationTests
         var result = await Jim.ExportEvaluation.EvaluateExportRulesAsync(mvo, changedAttributes);
 
         // Assert
-        Assert.That(result, Has.Count.EqualTo(1), "Should create one pending export");
+        Assert.That(result, Has.Count.EqualTo(1), "Should create one Pending Export");
         var pendingExport = result[0];
 
         Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Create),
@@ -1051,7 +1051,7 @@ public class ExportEvaluationTests
 
     /// <summary>
     /// Tests that when MVO falls out of scope and OutboundDeprovisionAction is Disconnect,
-    /// the CSO is disconnected from MVO but no delete pending export is created.
+    /// the CSO is disconnected from MVO but no delete Pending Export is created.
     /// </summary>
     [Test]
     public async Task EvaluateOutOfScopeExportsAsync_WithDisconnectAction_DisconnectsCsoAsync()
@@ -1116,8 +1116,8 @@ public class ExportEvaluationTests
         // Act
         var result = await Jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(mvo);
 
-        // Assert - No delete pending export should be created for Disconnect action
-        Assert.That(result, Has.Count.EqualTo(0), "Disconnect action should not create a delete pending export");
+        // Assert - No delete Pending Export should be created for Disconnect action
+        Assert.That(result, Has.Count.EqualTo(0), "Disconnect action should not create a delete Pending Export");
 
         // Assert - CSO should be disconnected from MVO
         Assert.That(existingCso.MetaverseObject, Is.Null, "CSO should be disconnected from MVO");
@@ -1130,7 +1130,7 @@ public class ExportEvaluationTests
 
     /// <summary>
     /// Tests that when MVO falls out of scope and OutboundDeprovisionAction is Delete,
-    /// a delete pending export is created.
+    /// a delete Pending Export is created.
     /// </summary>
     [Test]
     public async Task EvaluateOutOfScopeExportsAsync_WithDeleteAction_CreatesDeletePendingExportAsync()
@@ -1195,8 +1195,8 @@ public class ExportEvaluationTests
         // Act
         var result = await Jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(mvo);
 
-        // Assert - Delete pending export should be created
-        Assert.That(result, Has.Count.EqualTo(1), "Delete action should create a delete pending export");
+        // Assert - Delete Pending Export should be created
+        Assert.That(result, Has.Count.EqualTo(1), "Delete action should create a delete Pending Export");
         Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Delete), "Pending export should be a Delete operation");
         Assert.That(result[0].ConnectedSystemObjectId, Is.EqualTo(existingCso.Id), "Pending export should reference the CSO");
     }
@@ -1475,7 +1475,7 @@ public class ExportEvaluationTests
         var result = await Jim.ExportEvaluation.EvaluateExportRulesAsync(mvo, changedAttributes);
 
         // Assert
-        Assert.That(result, Has.Count.EqualTo(1), "Should create one pending export");
+        Assert.That(result, Has.Count.EqualTo(1), "Should create one Pending Export");
         var pendingExport = result[0];
 
         Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Create),
@@ -1627,7 +1627,7 @@ public class ExportEvaluationTests
         var result = await Jim.ExportEvaluation.EvaluateExportRulesAsync(mvo, changedAttributes);
 
         // Assert
-        Assert.That(result, Has.Count.EqualTo(1), "Should create one pending export");
+        Assert.That(result, Has.Count.EqualTo(1), "Should create one Pending Export");
         var pendingExport = result[0];
 
         Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Update),
@@ -1648,7 +1648,7 @@ public class ExportEvaluationTests
 
     /// <summary>
     /// Tests that Update operations with NO changed attributes that have mappings
-    /// do not create a pending export.
+    /// do not create a Pending Export.
     /// </summary>
     [Test]
     public async Task EvaluateExportRulesAsync_ForUpdateWithNoMappedChanges_DoesNotCreateExportAsync()
@@ -1735,9 +1735,9 @@ public class ExportEvaluationTests
         // Act
         var result = await Jim.ExportEvaluation.EvaluateExportRulesAsync(mvo, changedAttributes);
 
-        // Assert - No pending export should be created for Update with no mapped attribute changes
+        // Assert - No Pending Export should be created for Update with no mapped attribute changes
         Assert.That(result, Has.Count.EqualTo(0),
-            "No pending export should be created when changed attributes don't have export mappings");
+            "No Pending Export should be created when changed attributes don't have export mappings");
     }
 
     #endregion

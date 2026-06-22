@@ -147,7 +147,7 @@ public class FullSyncAfterImportWorkflowTests
         // THIS IS THE BUG: We're seeing unexpected AttributeFlow RPEIs
         Assert.That(attributeFlowCount, Is.EqualTo(0),
             "Full sync after initial import should NOT have any AttributeFlow RPEIs - " +
-            "attribute flow happens as part of projection, not as a separate operation");
+            "Attribute Flow happens as part of projection, not as a separate operation");
 
         // Verify MVOs were created
         var mvoType = await _harness.DbContext.MetaverseObjectTypes.FirstAsync(t => t.Name == "Person");
@@ -238,7 +238,7 @@ public class FullSyncAfterImportWorkflowTests
         // The issue seems to be related to groups with reference attributes
         Assert.That(attributeFlowCount, Is.EqualTo(0),
             "Full sync after initial import should NOT have any AttributeFlow RPEIs - " +
-            "reference attribute flow during projection should not create separate RPEIs");
+            "reference Attribute Flow during projection should not create separate RPEIs");
 
         Console.WriteLine("=== Test Complete: Full sync with users and groups ===");
     }
@@ -262,7 +262,7 @@ public class FullSyncAfterImportWorkflowTests
             .WithStringAttribute("cn")
             .WithStringAttribute("Type"));
 
-        // Get attributes for sync rules
+        // Get attributes for Sync Rules
         var sourceUserType = _harness.GetObjectType("Source", "User");
         var sourceUserCn = sourceUserType.Attributes.First(a => a.Name == "cn");
         var mvPersonCn = await _harness.DbContext.MetaverseAttributes
@@ -270,7 +270,7 @@ public class FullSyncAfterImportWorkflowTests
         var mvType = await _harness.DbContext.MetaverseAttributes
             .FirstAsync(a => a.Name == "Type" && a.MetaverseObjectTypes.Any(t => t.Name == "Person"));
 
-        // Create Source import sync rule
+        // Create Source import Sync Rule
         await _harness.CreateSyncRuleAsync(
             "Source User Import",
             "Source",
@@ -326,7 +326,7 @@ public class FullSyncAfterImportWorkflowTests
             .WithStringAttribute("cn")
             .WithReferenceAttribute("member", isMultiValued: true));
 
-        // Get attributes for sync rules
+        // Get attributes for Sync Rules
         var sourceUserType = _harness.GetObjectType("Source", "User");
         var sourceGroupType = _harness.GetObjectType("Source", "Group");
         var targetUserType = _harness.GetObjectType("Target", "User");
@@ -349,7 +349,7 @@ public class FullSyncAfterImportWorkflowTests
         var mvType = await _harness.DbContext.MetaverseAttributes
             .FirstAsync(a => a.Name == "Type" && a.MetaverseObjectTypes.Any(t => t.Name == "Person"));
 
-        // Create Source import sync rules
+        // Create Source import Sync Rules
         await _harness.CreateSyncRuleAsync(
             "Source User Import",
             "Source",
@@ -372,7 +372,7 @@ public class FullSyncAfterImportWorkflowTests
                 .WithAttributeFlow(mvGroupCn, sourceGroupCn)
                 .WithAttributeFlow(mvGroupMember, sourceGroupMember));
 
-        // Create Target export sync rules
+        // Create Target export Sync Rules
         await _harness.CreateSyncRuleAsync(
             "Target User Export",
             "Target",

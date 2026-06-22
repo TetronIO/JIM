@@ -19,7 +19,7 @@ namespace JIM.Worker.Tests.OutboundSync;
 
 /// <summary>
 /// Tests for no-net-change detection in ExportEvaluationServer.
-/// Verifies that pending exports are skipped when CSO already has the target value.
+/// Verifies that Pending Exports are skipped when CSO already has the target value.
 /// Supports both single-valued and multi-valued attributes.
 /// </summary>
 public class ExportEvaluationNoChangeTests
@@ -624,7 +624,7 @@ public class ExportEvaluationNoChangeTests
     /// (snapshots from before removal), but the code detects they are in the removedAttributes
     /// set and creates changes with null values to clear them from the target system.
     /// Removals can occur due to attribute recall, source no longer returning a value, or CSO
-    /// falling out of sync rule scope.
+    /// falling out of Sync Rule scope.
     /// </summary>
     [Test]
     public void CreateAttributeValueChanges_RecalledSingleValuedAttributes_ProducesNullClearingChangesAsync()
@@ -641,7 +641,7 @@ public class ExportEvaluationNoChangeTests
         var targetDisplayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
         var targetEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.EmployeeId.ToString());
 
-        // Set up export sync rule with attribute flow mappings
+        // Set up export Sync Rule with Attribute Flow mappings
         var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
         exportSyncRule.ConnectedSystemId = targetSystem.Id;
         exportSyncRule.ConnectedSystem = targetSystem;
@@ -769,9 +769,9 @@ public class ExportEvaluationNoChangeTests
 
     /// <summary>
     /// Tests the full export evaluation flow for removed attributes. When attributes are removed
-    /// from the MVO, null-clearing pending exports should be created so the target system clears
+    /// from the MVO, null-clearing Pending Exports should be created so the target system clears
     /// the attribute values. The removed attributes flow through as null-valued changes, which
-    /// differ from the CSO's current values, so pending exports are generated.
+    /// differ from the CSO's current values, so Pending Exports are generated.
     /// </summary>
     [Test]
     public async Task EvaluateExportRules_RecalledAttributes_ProducesPendingExportWithNullClearingChangesAsync()
@@ -788,7 +788,7 @@ public class ExportEvaluationNoChangeTests
         var targetDisplayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
         var targetEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.EmployeeId.ToString());
 
-        // Set up export sync rule on the TARGET system
+        // Set up export Sync Rule on the TARGET system
         var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
         exportSyncRule.ConnectedSystemId = targetSystem.Id;
         exportSyncRule.ConnectedSystem = targetSystem;
@@ -899,13 +899,13 @@ public class ExportEvaluationNoChangeTests
             mvo, changedAttributes, sourceSystem, cache,
             removedAttributes: removedAttributes);
 
-        // Assert: a pending export should be created with null-clearing attribute changes
+        // Assert: a Pending Export should be created with null-clearing attribute changes
         Assert.That(result.PendingExports, Has.Count.EqualTo(1),
-            "Removed attributes should produce a pending export to clear target values");
+            "Removed attributes should produce a Pending Export to clear target values");
 
         var pendingExport = result.PendingExports.Single();
         Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Update),
-            "Removal pending export should be an Update (clearing attribute values)");
+            "Removal Pending Export should be an Update (clearing attribute values)");
         Assert.That(pendingExport.AttributeValueChanges, Has.Count.EqualTo(2),
             "Pending export should contain 2 null-clearing attribute changes");
 
@@ -944,7 +944,7 @@ public class ExportEvaluationNoChangeTests
         // Use Manager target attribute as a stand-in for member export
         var targetManagerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
 
-        // Set up export sync rule with multi-valued reference mapping
+        // Set up export Sync Rule with multi-valued reference mapping
         var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
         exportSyncRule.ConnectedSystemId = targetSystem.Id;
         exportSyncRule.ConnectedSystem = targetSystem;

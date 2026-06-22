@@ -111,7 +111,7 @@ Full plan: `docs/plans/EXPORT_PERFORMANCE_OPTIMISATION.md`
 - ~~PendingExportStatus Rename (#285)~~ - ExportNotImported renamed to ExportNotConfirmed for consistent terminology
 - ~~API Container Selection (#283)~~ - Container selection endpoints for LDAP connector
 - ~~Same-batch Import Deduplication (#280)~~ - Detect duplicate external IDs within a single import batch
-- ~~Unconfirmed Export Surfacing (#287)~~ - Sync surfaces unconfirmed pending exports with confirmation stats
+- ~~Unconfirmed Export Surfacing (#287)~~ - Sync surfaces unconfirmed Pending Exports with confirmation stats
 - ~~Integration Testing Framework (#173)~~ - Phase 1 complete with 5 scenarios (1, 2, 4, 5, 8), Samba AD infrastructure
 - ~~Scenario 8 Cross-domain Entitlement Sync~~ - Groups sync between AD domains with reference attribute translation
 - ~~Synchronous MVO Deletion~~ - MVOs with 0-grace-period now delete immediately during sync
@@ -135,7 +135,7 @@ Full plan: `docs/plans/EXPORT_PERFORMANCE_OPTIMISATION.md`
 
 ## Overview
 
-This document defines the Minimum Viable Product (MVP) for JIM - Junctional Identity Manager. The MVP represents the minimum feature set required for JIM to be a functional, production-ready identity management system that can synchronise identities between connected systems.
+This document defines the Minimum Viable Product (MVP) for JIM - Junctional Identity Manager. The MVP represents the minimum feature set required for JIM to be a functional, production-ready identity management system that can synchronise identities between Connected Systems.
 
 ## MVP Criteria
 
@@ -169,7 +169,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 ### 2. Inbound Synchronisation (Source → Metaverse)
 
 #### 2.1 Import Processing
-- Full Import run profile ✓
+- Full Import Run Profile ✓
 - Object creation detection ✓
 - Object update detection ✓
 - Object deletion detection (obsoletion) ✓
@@ -177,13 +177,13 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - All data types supported (Text, Number, DateTime, Binary, Reference, Guid, Boolean) ✓
 
 #### 2.2 Synchronisation / Reconciliation
-- Full Synchronisation run profile ✓
+- Full Synchronisation Run Profile ✓
 - Join rules - match CSO to existing MVO ✓
 - Projection - create new MVO from CSO when no match ✓
-- Attribute flow - CSO attributes flow to MVO via sync rules ✓
+- Attribute flow - CSO attributes flow to MVO via Sync Rules ✓
 - Attribute flow for new joins ✓
 - Attribute flow for existing joins (updates) ✓
-- Multi-valued attribute flow ✓
+- Multi-valued Attribute Flow ✓
 
 #### 2.3 MVO Lifecycle Management
 - MVO deletion rules (Manual, WhenLastConnectorDisconnected, WhenAuthoritativeSourceDisconnected) ✓
@@ -200,7 +200,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - Create Pending Export for MVO attribute changes ✓
 - Create Pending Export for new MVO (provisioning) ✓
 - Create Pending Export for MVO deletion (deprovisioning) ✓
-- Evaluate export sync rules to determine target CSO changes ✓
+- Evaluate export Sync Rules to determine target CSO changes ✓
 
 #### 3.2 Pending Export Management
 - Pending Export data model ✓
@@ -210,7 +210,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - Pending Export error handling ✓
 
 #### 3.3 Export Execution
-- Export run profile processing ✓
+- Export Run Profile processing ✓
 - Connector export method invocation ✓
 - Create object in target system ✓
 - Update object in target system ✓
@@ -260,7 +260,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - Deleted objects view with change audit ✓
 
 #### 5.2 Synchronisation Management
-- Manual run profile execution ✓
+- Manual Run Profile execution ✓
 - Activity monitoring ✓
 - Pending Export review/management (#25) ✓
 - Server-side file browser for connector settings (#177) ✓
@@ -297,13 +297,13 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 #### 8.1 Priority 1 - Critical for Automation
 - Activity Controller - Monitor sync operations via API ✓
 - Run Profile Execution - Trigger syncs via API ✓
-- MVO List/Search - Query metaverse objects via API ✓
+- MVO List/Search - Query Metaverse Objects via API ✓
 
 #### 8.2 Priority 2 - Full Automation
 - Connected System CRUD - Full API management ✓
 - Sync Rule CRUD - Full API management ✓
 - Run Profile CRUD - Full API management ✓
-- Pending Export Read - Monitor pending exports via API ✓
+- Pending Export Read - Monitor Pending Exports via API ✓
 
 ### 9. Tooling & Automation
 
@@ -313,7 +313,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - Script-based automation with name-based parameters ✓
 
 #### 9.2 Testing Framework (#173)
-- End-to-end integration tests with real connected systems ✓
+- End-to-end integration tests with real Connected Systems ✓
 - Automated test scenarios (Scenarios 1, 2, 4, 5, 6, 8 complete; 7 deferred pending Internal MVO design) ✓
 - Parallel execution timing validation in integration tests (Post-MVP) ✓
 - 10x integration test performance optimisation (Post-MVP) ✓

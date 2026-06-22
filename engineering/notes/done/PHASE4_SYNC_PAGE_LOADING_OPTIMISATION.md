@@ -349,7 +349,7 @@ was enabled but no attributes were recalled when a CSO was obsoleted. Investigat
 (test ran against `bd1c78c8` on main, before Phase 4 changes).
 
 **Root cause**: `ContributedBySystem` navigation property on `MetaverseObjectAttributeValue` was never set during
-sync attribute flow. `SyncRuleMappingProcessor.Process()` creates `new MetaverseObjectAttributeValue` at 14 locations
+sync Attribute Flow. `SyncRuleMappingProcessor.Process()` creates `new MetaverseObjectAttributeValue` at 14 locations
 but none set the contributor. The recall code in `SyncTaskProcessorBase.ProcessObsoleteConnectedSystemObjectAsync`
 filters by `av.ContributedBySystem?.Id == connectedSystemId` which always evaluates to false (null != int).
 
@@ -403,8 +403,8 @@ Tests 2 and 6 (`RemoveContributedAttributesOnObsoletion=false`) are unaffected; 
    tests, causing cascade corruption between tests.
 
 2. **Pending export drain**: Added `Invoke-DrainPendingExports` helper called before each test to clear any
-   stale pending exports from a prior test. This prevents cascade failures where Test N's LDAP Export picks
-   up unrelated pending exports from Test N-1.
+   stale Pending Exports from a prior test. This prevents cascade failures where Test N's LDAP Export picks
+   up unrelated Pending Exports from Test N-1.
 
 3. **Recall export handling; revised**: See entries below (Pure Recall Export Handling, then
    Null-Clearing Recall Exports).
@@ -416,7 +416,7 @@ Tests 2 and 6 (`RemoveContributedAttributesOnObsoletion=false`) are unaffected; 
 > legitimate recall exports for secondary/supplementary source attributes.
 
 **Problem**: After attribute recall, the MVO attribute values are cleared. The initial approach
-(commit `9b382409`) generated null-clearing pending exports to clear those values on downstream
+(commit `9b382409`) generated null-clearing Pending Exports to clear those values on downstream
 target systems. However, this caused two cascading failures when recalling ALL attributes from
 the **sole/primary** source (a non-representative test scenario):
 
@@ -460,7 +460,7 @@ should generate null-clearing exports to clear them from the target system.
 - `CreateAttributeValueChanges_RecalledSingleValuedAttributes_ProducesNullClearingChangesAsync`; 
   verifies that recalled single-valued attributes produce null-clearing export changes
 - `EvaluateExportRules_RecalledAttributes_ProducesPendingExportWithNullClearingChangesAsync`; 
-  verifies the full flow produces a pending export with null-clearing attribute changes
+  verifies the full flow produces a Pending Export with null-clearing attribute changes
 
 **Also fixed**: `MetaverseObject.IsPendingDeletion` computed property now supports both
 `WhenLastConnectorDisconnected` and `WhenAuthoritativeSourceDisconnected` deletion rules.
@@ -503,13 +503,13 @@ controls identity-critical attributes and its disconnection triggers **deprovisi
 
 2. **Code fix:** Replaced the blanket "pure recall export skip" (which prevented ALL export evaluation
    during recall) with targeted null-clearing logic. When single-valued attributes are recalled, the
-   export evaluation now creates pending exports with null values to clear them from target systems,
+   export evaluation now creates Pending Exports with null values to clear them from target systems,
    rather than copying the old (pre-recall) values. This works correctly because:
    - Expression-based mappings (DN, `userAccountControl`) reference HR attributes which remain intact
      after secondary-source recall, so they evaluate to unchanged values and no-net-change detection
      correctly skips them.
    - Direct mappings for recalled attributes create null-clearing changes which differ from the
-     target CSO's current values, generating pending exports that clear the attributes in LDAP.
+     target CSO's current values, generating Pending Exports that clear the attributes in LDAP.
    - Multi-valued recall attributes already used the correct `Remove` change type and were unaffected.
 
 **Training -> LDAP export mapping added:**

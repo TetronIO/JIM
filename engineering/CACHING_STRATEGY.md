@@ -10,7 +10,7 @@ This document describes the Connected System Object (CSO) lookup cache used by t
 
 ## Overview
 
-When the Worker imports objects from a connected system, it must determine whether each imported object matches an existing CSO in JIM (update) or is new (create). Without caching, this requires a database query per imported object, an O(N) problem that becomes the dominant bottleneck at scale.
+When the Worker imports objects from a Connected System, it must determine whether each imported object matches an existing CSO in JIM (update) or is new (create). Without caching, this requires a database query per imported object, an O(N) problem that becomes the dominant bottleneck at scale.
 
 The CSO lookup cache is an in-memory index that maps external ID values to CSO GUIDs, enabling O(1) lookups instead of per-object database queries.
 
@@ -42,7 +42,7 @@ cso:{connectedSystemId}:{attributeId}:{lowerExternalIdValue}
 
 | Component | Description |
 |---|---|
-| `connectedSystemId` | The connected system's integer ID |
+| `connectedSystemId` | The Connected System's integer ID |
 | `attributeId` | The external ID attribute's integer ID (primary OR secondary) |
 | `lowerExternalIdValue` | The external ID value, lowercased for case-insensitive matching |
 
@@ -63,9 +63,9 @@ Provisioning           Confirming Import         Normal Operation
 
 ### Why secondary IDs are needed
 
-When JIM provisions a new object to a connected system (e.g. creating a user in LDAP), the CSO is created with status `PendingProvisioning`. At this point:
+When JIM provisions a new object to a Connected System (e.g. creating a user in LDAP), the CSO is created with status `PendingProvisioning`. At this point:
 
-- The **primary** external ID (e.g. `objectGUID`) is unknown; it's assigned by the connected system during export
+- The **primary** external ID (e.g. `objectGUID`) is unknown; it's assigned by the Connected System during export
 - The **secondary** external ID (e.g. `distinguishedName`) is known; JIM computed it from export rules
 
 The CSO is cached by its secondary external ID so that the subsequent **confirming import** can find it via cache lookup instead of a per-object database query.
@@ -103,8 +103,8 @@ When `TryAndFindMatchingConnectedSystemObjectAsync` runs for each imported objec
    - Check cache → miss: query DB by secondary attribute, populate cache
    - Only return if CSO status is `PendingProvisioning`
 
-3. **Empty connected system optimisation** (`_csIsEmpty`):
-   - If the connected system has zero CSOs at the start of import, skip all lookups entirely
+3. **Empty Connected System optimisation** (`_csIsEmpty`):
+   - If the Connected System has zero CSOs at the start of import, skip all lookups entirely
    - Every imported object is guaranteed to be new
 
 ## Eviction
@@ -122,7 +122,7 @@ Cache entries are evicted whenever the external ID value they index changes or b
 
 ### Why eviction on value change matters
 
-External ID values can change in the connected system. The most common example is an LDAP `distinguishedName` (DN) rename: when a user's OU changes or their name changes, the DN changes. Without eviction, the old DN cache entry remains orphaned. While a lookup with the _new_ DN will miss the cache harmlessly and self-populate from the database, the stale entry becomes dangerous if a _different_ object is later assigned the old DN value: it would incorrectly resolve to the wrong CSO.
+External ID values can change in the Connected System. The most common example is an LDAP `distinguishedName` (DN) rename: when a user's OU changes or their name changes, the DN changes. Without eviction, the old DN cache entry remains orphaned. While a lookup with the _new_ DN will miss the cache harmlessly and self-populate from the database, the stale entry becomes dangerous if a _different_ object is later assigned the old DN value: it would incorrectly resolve to the wrong CSO.
 
 ## Thread Safety
 

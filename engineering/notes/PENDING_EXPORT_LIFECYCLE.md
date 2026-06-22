@@ -1,6 +1,6 @@
 # Pending Export Lifecycle
 
-> How pending exports are created, merged, consumed, and traced back to sync rules.
+> How Pending Exports are created, merged, consumed, and traced back to Sync Rules.
 
 ## Model Structure
 
@@ -86,12 +86,12 @@ When a drift-detection PE exists and a new export-eval PE is created for the sam
 - `SourceMetaverseObjectId`: the MVO that triggered the export
 - `ConnectedSystemId`: the target system
 
-The association to a sync rule is **indirect**, via the causality tree:
-- `ActivityRunProfileExecutionItemSyncOutcome` records a `PendingExportCreated` outcome as a child of the sync rule evaluation that produced it
+The association to a Sync Rule is **indirect**, via the causality tree:
+- `ActivityRunProfileExecutionItemSyncOutcome` records a `PendingExportCreated` outcome as a child of the Sync Rule evaluation that produced it
 - A `ConnectedSystemObjectChange` snapshot (attached to the outcome) captures the attribute values at creation time
 - But the PE attribute changes themselves are "rule-agnostic"; just the final computed values
 
-**Implication**: when a second sync merges into an existing PE, the original sync rule attribution is overwritten. The causality tree outcome is the only durable record of which sync rule originally created or modified the PE. This is why the `HasRelevantChangedAttributes` guard (added March 2026) is important; without it, the causality tree incorrectly claims ownership of PEs it didn't cause.
+**Implication**: when a second sync merges into an existing PE, the original Sync Rule attribution is overwritten. The causality tree outcome is the only durable record of which Sync Rule originally created or modified the PE. This is why the `HasRelevantChangedAttributes` guard (added March 2026) is important; without it, the causality tree incorrectly claims ownership of PEs it didn't cause.
 
 ## Consumption During Export
 
@@ -142,5 +142,5 @@ Attribute Change Status:
 | Clone drift-only changes | Drift PE deleted via cascade; prevents tracked EF instances from becoming unusable |
 | Capture before deletion | `ProcessedExportItem` enables RPEI creation after PE deletion |
 | PendingProvisioning CSO status | Allows confirming import to find CSO by secondary ID before system assigns primary ID |
-| No sync rule field on PE attribute changes | PEs are the final computed state; rule attribution lives in the causality tree |
+| No Sync Rule field on PE attribute changes | PEs are the final computed state; rule attribution lives in the causality tree |
 | Batch saves with raw SQL | Avoids EF change tracker overhead and identity resolution conflicts at scale |

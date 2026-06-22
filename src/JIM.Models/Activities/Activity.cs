@@ -9,8 +9,8 @@ namespace JIM.Models.Activities;
 /// Enables all activities being performed in JIM, whether user or system initiated to be tracked and logged.
 /// This enables areas of JIM to filter the activities view to the relevant objects, i.e. to view all sync runs being
 /// run or about to be run, then the relevant page can filter for
-/// those activities, and the same for say metaverse object updates to see when a group membership was updated, or a
-/// user created, or sync rules changed, etc.
+/// those activities, and the same for say Metaverse Object updates to see when a group membership was updated, or a
+/// user created, or Sync Rules changed, etc.
 /// </summary>
 public class Activity
 {
@@ -133,7 +133,7 @@ public class Activity
     public int ObjectsProcessed { get; set; }
 
     // -----------------------------------------------------------------------------------------------------------------
-    // granular summary stats for run profile executions (for list view display)
+    // granular summary stats for Run Profile executions (for list view display)
     // populated when activity completes by CalculateActivitySummaryStats() in Worker.cs
     // -----------------------------------------------------------------------------------------------------------------
 
@@ -156,7 +156,7 @@ public class Activity
     public int TotalJoined { get; set; }
 
     /// <summary>
-    /// Count of attribute flow operations. Includes both standalone attribute flows
+    /// Count of Attribute Flow operations. Includes both standalone Attribute Flows
     /// (to already-joined CSOs) and absorbed flows that occurred alongside joins, projections,
     /// or disconnections (tracked via RPEI.AttributeFlowCount).
     /// </summary>
@@ -165,16 +165,16 @@ public class Activity
     /// <summary>Count of CSOs disconnected from MVOs.</summary>
     public int TotalDisconnected { get; set; }
 
-    /// <summary>Count of CSOs disconnected because they fell out of scope of import sync rule scoping criteria.</summary>
+    /// <summary>Count of CSOs disconnected because they fell out of scope of import Sync Rule scoping criteria.</summary>
     public int TotalDisconnectedOutOfScope { get; set; }
 
     /// <summary>Count of CSOs that fell out of scope but remained joined (InboundOutOfScopeAction = RemainJoined).</summary>
     public int TotalOutOfScopeRetainJoin { get; set; }
 
-    /// <summary>Count of CSOs where drift was detected and corrective pending exports were created.</summary>
+    /// <summary>Count of CSOs where drift was detected and corrective Pending Exports were created.</summary>
     public int TotalDriftCorrections { get; set; }
 
-    /// <summary>Count of CSOs provisioned to target connected systems during sync.</summary>
+    /// <summary>Count of CSOs provisioned to target Connected Systems during sync.</summary>
     public int TotalProvisioned { get; set; }
     #endregion
 
@@ -192,7 +192,7 @@ public class Activity
     #endregion
 
     #region Pending Export Stats
-    /// <summary>Count of pending exports staged for the next export run (surfaced during sync).</summary>
+    /// <summary>Count of Pending Exports staged for the next export run (surfaced during sync).</summary>
     public int TotalPendingExports { get; set; }
     #endregion
 
@@ -202,11 +202,11 @@ public class Activity
     #endregion
 
     // -----------------------------------------------------------------------------------------------------------------
-    // pending export reconciliation stats (for confirming imports)
+    // Pending Export reconciliation stats (for confirming imports)
     // -----------------------------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// Count of pending exports that were fully confirmed and deleted during a confirming import.
+    /// Count of Pending Exports that were fully confirmed and deleted during a confirming import.
     /// The exported attribute values matched the imported values.
     /// </summary>
     public int PendingExportsConfirmed { get; set; }
@@ -224,7 +224,7 @@ public class Activity
     public Guid? MetaverseObjectId { get; set; }
 
     // -----------------------------------------------------------------------------------------------------------------
-    // run profile execution related...
+    // Run Profile execution related...
 
     /// <summary>
     /// The run-profile that was created, updated, deleted or executed.
@@ -232,7 +232,7 @@ public class Activity
     public int? ConnectedSystemRunProfileId { get; set; }
 
     /// <summary>
-    /// If the run profile has been deleted, the type of sync run this was can be accessed here still.
+    /// If the Run Profile has been deleted, the type of sync run this was can be accessed here still.
     /// </summary>
     public ConnectedSystemRunType? ConnectedSystemRunType { get; set; } = Staging.ConnectedSystemRunType.NotSet;
 
@@ -283,16 +283,16 @@ public class Activity
     public DateTime? DeletedRecordsToDate { get; set; }
 
     // -----------------------------------------------------------------------------------------------------------------
-    // clear connected system stats (for ClearConnectedSystem activities)
+    // clear Connected System stats (for ClearConnectedSystem activities)
     // -----------------------------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// For ClearConnectedSystem activities: Count of pending exports removed.
+    /// For ClearConnectedSystem activities: Count of Pending Exports removed.
     /// </summary>
     public int? ClearedPendingExportCount { get; set; }
 
     /// <summary>
-    /// For ClearConnectedSystem activities: Count of connected system objects removed.
+    /// For ClearConnectedSystem activities: Count of Connected System Objects removed.
     /// </summary>
     public int? ClearedConnectedSystemObjectCount { get; set; }
 
@@ -310,7 +310,7 @@ public class Activity
 
     // -----------------------------------------------------------------------------------------------------------------
     // object changes (created/update/delete)
-    // this would apply to all object types, i.e. metaverse object, sync rules, connected systems, etc.
+    // this would apply to all object types, i.e. Metaverse Object, Sync Rules, Connected Systems, etc.
     // todo:
     // - json blob that contains object changes (might regret this later, but it seems quicker to get going this way)
     // - some kind of access control for sensitive attribute values being logged, i.e. should someone reviewing the

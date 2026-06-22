@@ -15,7 +15,7 @@
 
 - **Phase 1: Test Data Infrastructure** - Implemented
   - `Populate-SambaAD-Scenario8.ps1` - Populates users and groups in Source AD
-  - `Setup-Scenario8.ps1` - Configures JIM with Connected Systems, sync rules, and attribute mappings
+  - `Setup-Scenario8.ps1` - Configures JIM with Connected Systems, Sync Rules, and attribute mappings
   - `Invoke-Scenario8-CrossDomainEntitlementSync.ps1` - Test scenario runner
   - `Test-GroupHelpers.ps1` - Group helper functions for test data generation
   - OU structure creation for both Source (Corp) and Target (CorpManaged)
@@ -25,7 +25,7 @@
   - Source LDAP Connected System (Panoply APAC)
   - Target LDAP Connected System (Panoply EMEA)
   - User and Group object type selection with required attributes
-  - Import/Export sync rules for both users and groups
+  - Import/Export Sync Rules for both users and groups
   - Attribute flow mappings including DN expressions
   - Matching rules (sAMAccountName -> Account Name)
   - Run profiles (Full Import, Full Sync, Export)
@@ -39,11 +39,11 @@
   - Fixed reference attribute resolution (member attribute now resolves to DN instead of MVO GUID)
   - Exports with reference attributes are now properly deferred until referenced objects exist
   - Users and groups successfully provisioned to Target AD
-  - Confirming import working - pending exports confirmed and cleared
+  - Confirming import working - Pending Exports confirmed and cleared
   - **Bugs Fixed**:
     - `ExportExecutionServer`: Resolve references to secondary external ID (DN) for LDAP systems
     - `PendingExportReconciliationService`: Process `ExportNotConfirmed` status and `ExportedNotConfirmed` attribute changes during confirming import
-  - Related: Created issue #287 for pending export visibility improvements
+  - Related: Created issue #287 for Pending Export visibility improvements
 
 - **Phase 5: ForwardSync Step** - Implemented
   - Test script implemented in `Invoke-Scenario8-CrossDomainEntitlementSync.ps1`
@@ -86,13 +86,13 @@
   - Runs Delta Forward Sync to propagate deletion
   - Validates group is deleted from Target AD
   - With `DeletionGracePeriodDays = 0`, MVO is deleted **synchronously during sync** (not deferred to housekeeping)
-  - Delete pending exports are created for target CSOs and executed in the subsequent export
+  - Delete Pending Exports are created for target CSOs and executed in the subsequent export
 
 - **Phase 10: Synchronous MVO Deletion** - Implemented (2026-01-20)
   - Implemented synchronous MVO deletion for 0-grace-period objects
   - Before: All MVO deletions were deferred to HousekeepingWorker (up to 60 second delay)
   - After: 0-grace-period MVOs are deleted immediately during sync
-  - Delete pending exports created for Provisioned CSOs before MVO deletion
+  - Delete Pending Exports created for Provisioned CSOs before MVO deletion
   - MVOs with grace period > 0 continue to use housekeeping worker for deferred deletion
 
 ### All Phases Complete ✅
@@ -409,7 +409,7 @@ This tests the single-valued DN reference attribute sync, which uses the same re
 **Preconditions**:
 - Users populated in Source AD and synced to Target AD (done by Scenario 8 setup)
 - Groups populated in Source AD with membership
-- JIM configured with user and group sync rules
+- JIM configured with user and group Sync Rules
 
 **Actions**:
 1. Trigger Full Import on Source AD
@@ -572,7 +572,7 @@ function Get-Scenario8GroupScale {
 7. Set `objectGUID` as External ID for groups
 8. Create Import Sync Rule: "APAC AD Import Groups"
 9. Create Export Sync Rule: "EMEA AD Export Groups"
-10. Configure attribute flow mappings
+10. Configure Attribute Flow mappings
 11. Configure DN expression for target placement
 12. Create/update Run Profiles to include group object type
 
@@ -629,7 +629,7 @@ function Get-Scenario8GroupScale {
 
 ### Group Object Type
 
-Verify the `Group` metaverse object type exists with these attributes:
+Verify the `Group` Metaverse Object Type exists with these attributes:
 
 | Attribute | Type | Required | Notes |
 |-----------|------|----------|-------|
@@ -659,7 +659,7 @@ If attributes are missing, the setup script should create them.
 Scenario 8 is fully self-contained and will:
 1. Create OUs in both Source and Target AD (`OU=Corp`, `OU=CorpManaged`)
 2. Populate users in Source AD
-3. Configure JIM with Connected Systems, sync rules for both users and groups
+3. Configure JIM with Connected Systems, Sync Rules for both users and groups
 4. Sync users between domains (prerequisite for group member resolution)
 5. Then sync groups with membership
 

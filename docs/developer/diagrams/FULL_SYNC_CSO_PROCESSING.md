@@ -5,19 +5,19 @@
 This diagram shows the core decision tree for processing a single Connected System Object (CSO) during Full or Delta Synchronisation. This is the central flow of JIM's identity management engine.
 
 Both Full Sync and Delta Sync use identical processing logic per-CSO. The only difference is CSO selection:
-- **Full Sync**: processes ALL CSOs in the Connected System (or only those in the target partition, if the run profile specifies a `TargetPartitionId`; see below)
+- **Full Sync**: processes ALL CSOs in the Connected System (or only those in the target partition, if the Run Profile specifies a `TargetPartitionId`; see below)
 - **Delta Sync**: processes only CSOs modified since `LastSyncCompletedAt`
 
 Since v0.7.1, sync decisions are split across three layers:
-- **ISyncEngine:** Pure domain logic (projection, attribute flow, deletion rules, export confirmation). Stateless, I/O-free.
+- **ISyncEngine:** Pure domain logic (projection, Attribute Flow, deletion rules, export confirmation). Stateless, I/O-free.
 - **ISyncServer:** Orchestration facade (matching, scoping, drift detection, export evaluation). Delegates to application-layer servers.
-- **ISyncRepository:** Dedicated data access (bulk CSO/MVO writes, pending exports, RPEIs).
+- **ISyncRepository:** Dedicated data access (bulk CSO/MVO writes, Pending Exports, RPEIs).
 
 ## Overall Page Processing
 
 ```mermaid
 flowchart TD
-    Start([Start Sync]) --> Prepare[Prepare: count CSOs + pending exports<br/>If TargetPartitionId set, scope to that partition<br/>Load sync rules, object types via ISyncRepository<br/>Build drift detection cache<br/>Build export evaluation cache<br/>Pre-load pending exports into dictionary]
+    Start([Start Sync]) --> Prepare[Prepare: count CSOs + Pending Exports<br/>If TargetPartitionId set, scope to that partition<br/>Load Sync Rules, object types via ISyncRepository<br/>Build drift detection cache<br/>Build export evaluation cache<br/>Pre-load Pending Exports into dictionary]
     Prepare --> PageLoop{More CSO<br/>pages?}
 
     PageLoop -->|Yes| LoadPage[Load page of CSOs<br/>without attributes for performance]
@@ -26,7 +26,7 @@ flowchart TD
     CsoLoop -->|Yes| CheckCancel{Cancellation<br/>requested?}
     CheckCancel -->|Yes| FlushBeforeCancel[Complete current page flush<br/>before stopping]
     FlushBeforeCancel --> Return([Return - activity<br/>finalised by caller])
-    CheckCancel -->|No| Pass1[Pass 1: for every CSO in page<br/>ProcessObsoleteAndExportConfirmationAsync<br/>- Confirm pending exports<br/>- Tear down obsolete CSOs<br/>- Populate _pendingDisconnectedMvoIds]
+    CheckCancel -->|No| Pass1[Pass 1: for every CSO in page<br/>ProcessObsoleteAndExportConfirmationAsync<br/>- Confirm Pending Exports<br/>- Tear down obsolete CSOs<br/>- Populate _pendingDisconnectedMvoIds]
     Pass1 --> Pass2[Pass 2: for every non-obsolete CSO<br/>ProcessActiveConnectedSystemObjectAsync<br/>See Per-CSO Processing below<br/>Skips if IsUnchangedSinceLastSync]
     Pass2 --> IncrProgress[Increment ObjectsProcessed]
     IncrProgress --> CsoLoop
@@ -35,8 +35,8 @@ flowchart TD
     DeferredRef --> PersistMvo[PersistPendingMetaverseObjectsAsync:<br/>bulk persist MVO creates + updates]
     PersistMvo --> CreateMvoChanges[CreatePendingMvoChangeObjectsAsync:<br/>build in-memory MVO change records<br/>for audit trail]
     CreateMvoChanges --> EvalExports[EvaluatePendingExportsAsync:<br/>batch-evaluate outbound exports<br/>for each tracked MVO]
-    EvalExports --> FlushPE[FlushPendingExportOperationsAsync:<br/>create/delete/update pending exports]
-    FlushPE --> ResolveSnapshots[ResolvePendingExportReferenceSnapshotsAsync:<br/>fix up reference attribute snapshots<br/>on newly-created pending exports]
+    EvalExports --> FlushPE[FlushPendingExportOperationsAsync:<br/>create/delete/update Pending Exports]
+    FlushPE --> ResolveSnapshots[ResolvePendingExportReferenceSnapshotsAsync:<br/>fix up reference attribute snapshots<br/>on newly-created Pending Exports]
     ResolveSnapshots --> FlushCSO[FlushObsoleteCsoOperationsAsync:<br/>persist queued CSO deletions]
     FlushCSO --> FlushMVO[FlushPendingMvoDeletionsAsync:<br/>0-grace-period MVO deletions]
     FlushMVO --> FlushRpeis[FlushRpeisAsync:<br/>bulk-insert RPEIs via raw SQL<br/>clear in-memory collection]
@@ -56,7 +56,7 @@ This is the decision tree within `ProcessConnectedSystemObjectAsync` for a singl
 
 ```mermaid
 flowchart TD
-    Entry([ProcessConnectedSystemObjectAsync]) --> ConfirmPE[Confirm pending exports<br/>ISyncEngine.EvaluatePendingExportConfirmation<br/>checks if exported values match CSO attributes]
+    Entry([ProcessConnectedSystemObjectAsync]) --> ConfirmPE[Confirm Pending Exports<br/>ISyncEngine.EvaluatePendingExportConfirmation<br/>checks if exported values match CSO attributes]
     ConfirmPE --> CheckObsolete{CSO status<br/>= Obsolete?}
 
     %% --- Obsolete CSO path ---
@@ -98,17 +98,17 @@ flowchart TD
     HandleOOS --> OosJoined{CSO joined<br/>to MVO?}
     OosJoined -->|No| Done
     OosJoined -->|Yes| OosAction{InboundOutOfScope<br/>Action?}
-    OosAction -->|RemainJoined| RetainJoin[OutOfScopeRetainJoin<br/>No attribute flow, preserve join]
+    OosAction -->|RemainJoined| RetainJoin[OutOfScopeRetainJoin<br/>No Attribute Flow, preserve join]
     OosAction -->|Disconnect| DisconnectOOS[DisconnectedOutOfScope<br/>Recall contributed attributes<br/>if enabled on object type<br/>Break join, evaluate deletion]
 
     InScope -->|Yes| CheckMvo{CSO joined<br/>to MVO?}
 
     %% --- Join/Project path ---
-    CheckMvo -->|No| AttemptJoin[Attempt Join<br/>For each import sync rule:<br/>Find matching MVO by join criteria]
+    CheckMvo -->|No| AttemptJoin[Attempt Join<br/>For each import Sync Rule:<br/>Find matching MVO by join criteria]
     AttemptJoin --> JoinResult{Match<br/>found?}
 
     JoinResult -->|No match| AttemptProject{ISyncEngine.EvaluateProjection<br/>Sync rule has<br/>ProjectToMetaverse = true?}
-    AttemptProject -->|Yes| Project[Create new MVO<br/>Set type from sync rule<br/>Link CSO to new MVO]
+    AttemptProject -->|Yes| Project[Create new MVO<br/>Set type from Sync Rule<br/>Link CSO to new MVO]
     AttemptProject -->|No| Done
 
     JoinResult -->|Single match| EstablishJoin[Establish join<br/>CSO.MetaverseObject = MVO<br/>Set JoinType + DateJoined]
@@ -118,13 +118,13 @@ flowchart TD
     %% --- Attribute Flow path ---
     EstablishJoin --> AttrFlow
     Project --> AttrFlow
-    CheckMvo -->|Yes| AttrFlow[ISyncEngine.FlowInboundAttributes<br/>Pass 1: scalar attributes only<br/>For each sync rule mapping:<br/>- Direct: CSO attr --> MVO attr<br/>- Expression: evaluate --> MVO attr<br/>- ContributedBySystemId set on all new values<br/>Skip reference attributes]
+    CheckMvo -->|Yes| AttrFlow[ISyncEngine.FlowInboundAttributes<br/>Pass 1: scalar attributes only<br/>For each Sync Rule mapping:<br/>- Direct: CSO attr --> MVO attr<br/>- Expression: evaluate --> MVO attr<br/>- ContributedBySystemId set on all new values<br/>Skip reference attributes]
 
     AttrFlow --> QueueRef[Queue CSO for deferred<br/>reference attribute processing<br/>Pass 2 at end of page]
     QueueRef --> ApplyChanges[ISyncEngine.ApplyPendingAttributeChanges<br/>Apply pending attribute<br/>additions and removals to MVO]
     ApplyChanges --> ValidateIntegrity[Data integrity validation<br/>on metaverse attribute operations]
     ValidateIntegrity --> QueueMvo[Queue MVO for batch<br/>persist and export evaluation]
-    QueueMvo --> DriftDetect[Drift Detection<br/>Compare CSO values against<br/>expected MVO state<br/>Create corrective pending exports<br/>for EnforceState export rules]
+    QueueMvo --> DriftDetect[Drift Detection<br/>Compare CSO values against<br/>expected MVO state<br/>Create corrective Pending Exports<br/>for EnforceState export rules]
     DriftDetect --> Result([Return change result:<br/>Projected / Joined / AttributeFlow / NoChanges])
 
     %% --- Error handling ---
@@ -134,31 +134,31 @@ flowchart TD
 
 ## Key Design Decisions
 
-- **Three-layer sync architecture (v0.7.1)**<br /> Sync decisions are split across `ISyncEngine` (pure domain logic: projection, attribute flow, deletion rules, export confirmation), `ISyncServer` (orchestration: matching, scoping, drift detection, export evaluation), and `ISyncRepository` (dedicated data access: bulk CSO/MVO writes, pending exports, RPEIs). This separation enables deterministic unit testing of business logic without I/O.
+- **Three-layer sync architecture (v0.7.1)**<br /> Sync decisions are split across `ISyncEngine` (pure domain logic: projection, Attribute Flow, deletion rules, export confirmation), `ISyncServer` (orchestration: matching, scoping, drift detection, export evaluation), and `ISyncRepository` (dedicated data access: bulk CSO/MVO writes, Pending Exports, RPEIs). This separation enables deterministic unit testing of business logic without I/O.
 
-- **Two-pass attribute flow**<br /> Scalar attributes are processed first (pass 1 via `ISyncEngine.FlowInboundAttributes`), then reference attributes are deferred to a second pass after all CSOs in the page have MVOs. This ensures group member references can resolve to MVOs that were created later in the same page.
+- **Two-pass Attribute Flow**<br /> Scalar attributes are processed first (pass 1 via `ISyncEngine.FlowInboundAttributes`), then reference attributes are deferred to a second pass after all CSOs in the page have MVOs. This ensures group member references can resolve to MVOs that were created later in the same page.
 
-- **Batch persistence**<br /> MVO creates/updates, pending exports, and CSO deletions are all batched per-page via `ISyncRepository` bulk operations to reduce database round trips. This is critical for performance at scale.
+- **Batch persistence**<br /> MVO creates/updates, Pending Exports, and CSO deletions are all batched per-page via `ISyncRepository` bulk operations to reduce database round trips. This is critical for performance at scale.
 
-- **No-net-change detection**<br /> Before creating pending exports, the system checks if the target CSO already has the expected values (using pre-cached data). This avoids unnecessary export operations.
+- **No-net-change detection**<br /> Before creating Pending Exports, the system checks if the target CSO already has the expected values (using pre-cached data). This avoids unnecessary export operations.
 
-- **Drift detection**<br /> After inbound attribute flow, `DriftDetectionService` checks whether CSO values match expected MVO state. If an `EnforceState` export rule exists and the CSO has drifted, a corrective pending export is created.
+- **Drift detection**<br /> After inbound Attribute Flow, `DriftDetectionService` checks whether CSO values match expected MVO state. If an `EnforceState` export rule exists and the CSO has drifted, a corrective Pending Export is created.
 
-- **Attribute recall via ContributedBySystemId**<br /> Every MVO attribute value tracks which connected system contributed it. When a CSO is obsoleted, attributes contributed by that system are recalled (removed from the MVO) only when **all three** of the following hold: the CSO type has `RemoveContributedAttributesOnObsoletion` enabled, the MVO type has no active deletion grace period, and the MVO is not slated for immediate deletion (the last check avoids nugatory work when the MVO is about to be deleted at page flush, per #390). The diagram shows only the first gate for clarity; the other two are evaluated alongside. When recall does run, the `removedAttributes` set is passed to export evaluation, where pure recall operations (all changes are removals) skip export evaluation entirely to avoid expression mapping errors against incomplete data.
+- **Attribute recall via ContributedBySystemId**<br /> Every MVO attribute value tracks which Connected System contributed it. When a CSO is obsoleted, attributes contributed by that system are recalled (removed from the MVO) only when **all three** of the following hold: the CSO type has `RemoveContributedAttributesOnObsoletion` enabled, the MVO type has no active deletion grace period, and the MVO is not slated for immediate deletion (the last check avoids nugatory work when the MVO is about to be deleted at page flush, per #390). The diagram shows only the first gate for clarity; the other two are evaluated alongside. When recall does run, the `removedAttributes` set is passed to export evaluation, where pure recall operations (all changes are removals) skip export evaluation entirely to avoid expression mapping errors against incomplete data.
 
 - **Cross-page reference resolution**<br /> After all pages are processed, CSOs with unresolved reference attributes are reloaded from the database. At this point, all MVOs exist, so cross-page references can be resolved. The standard flush pipeline (persist MVOs, evaluate exports, flush PEs) runs again for the resolved references.
 
-- **Partition-scoped imports (v0.8.0, #353)**<br /> When a run profile specifies a `TargetPartitionId`, CSO counting and page loading are filtered to only that partition's scope. This allows large connected systems to be synchronised in targeted slices rather than processing the entire CSO population every time.
+- **Partition-scoped imports (v0.8.0, #353)**<br /> When a Run Profile specifies a `TargetPartitionId`, CSO counting and page loading are filtered to only that partition's scope. This allows large Connected Systems to be synchronised in targeted slices rather than processing the entire CSO population every time.
 
 - **Error isolation**<br /> Each CSO is processed within its own try/catch. Errors create RPEIs but do not halt processing of remaining CSOs.
 
-- **Cancellation safety**<br /> `CheckCancel` completes the current page flush before stopping. This ensures all in-progress MVOs, pending exports, and RPEIs are persisted; no work is lost on cancellation.
+- **Cancellation safety**<br /> `CheckCancel` completes the current page flush before stopping. This ensures all in-progress MVOs, Pending Exports, and RPEIs are persisted; no work is lost on cancellation.
 
-- **Per-page cache loading**<br /> The export evaluation cache is loaded per-page and cleared at page boundaries. This keeps memory consumption bounded regardless of total CSO count, preventing out-of-memory conditions on large connected systems.
+- **Per-page cache loading**<br /> The export evaluation cache is loaded per-page and cleared at page boundaries. This keeps memory consumption bounded regardless of total CSO count, preventing out-of-memory conditions on large Connected Systems.
 
 - **Data integrity validation (v0.9.0, #465)**<br /> Metaverse attribute operations are validated for data integrity before being applied. This prevents silent corruption from malformed attribute values reaching the metaverse.
 
-- **Two-pass per-CSO processing (v0.10.0)**<br /> Each page iterates over its CSOs twice. Pass 1 (`ProcessObsoleteAndExportConfirmationAsync`) handles pending-export confirmation and obsolete CSO teardown for every CSO, populating `_pendingDisconnectedMvoIds` before any Pass 2 work begins. Pass 2 (`ProcessActiveConnectedSystemObjectAsync`) runs join/projection/attribute flow only for non-obsolete CSOs. This ordering guarantees that Pass 2 join attempts see the complete set of disconnected MVOs from Pass 1 and skip them, avoiding race conditions where a CSO tries to join an MVO that is being torn down in the same page.
+- **Two-pass per-CSO processing (v0.10.0)**<br /> Each page iterates over its CSOs twice. Pass 1 (`ProcessObsoleteAndExportConfirmationAsync`) handles pending-export confirmation and obsolete CSO teardown for every CSO, populating `_pendingDisconnectedMvoIds` before any Pass 2 work begins. Pass 2 (`ProcessActiveConnectedSystemObjectAsync`) runs join/projection/Attribute Flow only for non-obsolete CSOs. This ordering guarantees that Pass 2 join attempts see the complete set of disconnected MVOs from Pass 1 and skip them, avoiding race conditions where a CSO tries to join an MVO that is being torn down in the same page.
 
 - **Cross-page RPEI merge (v0.10.0)**<br /> The unique index `IX_MetaverseObjectChanges_ActivityRunProfileExecutionItemId` means each RPEI can have at most one MvoChange parent. Cross-page reference resolution therefore merges new reference-attribute changes *under the existing MvoChange parent* rather than creating a second standalone RPEI for the same MVO. This resolves the previous ~2x RPEI duplication and the confusing split-outcome rows that appeared in activity detail when groups spanned multiple pages.
 

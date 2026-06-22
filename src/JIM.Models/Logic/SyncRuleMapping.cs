@@ -8,7 +8,7 @@ using JIM.Models.Staging;
 namespace JIM.Models.Logic;
 
 /// <summary>
-/// Defines how data should flow from JIM to a connected system (or vice versa) for a specific attribute.
+/// Defines how data should flow from JIM to a Connected System (or vice versa) for a specific attribute.
 /// There can only be one mapping per target attribute.
 /// i.e. you might be mapping a single source attribute to a target attribute, or you might use an expression as a
 /// source that references multiple attributes.

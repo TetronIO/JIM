@@ -4,11 +4,11 @@ title: Expressions
 
 # Expressions
 
-Test synchronisation rule expressions with sample data before deploying them to production mappings. Expressions use DynamicExpresso syntax with `mv["AttributeName"]` and `cs["AttributeName"]` for attribute access.
+Test Synchronisation Rule expressions with sample data before deploying them to production mappings. Expressions use DynamicExpresso syntax with `mv["AttributeName"]` and `cs["AttributeName"]` for attribute access.
 
 ## Test-JIMExpression
 
-Tests an expression with sample metaverse and connected system attribute values.
+Tests an expression with sample metaverse and Connected System attribute values.
 
 ### Syntax
 
@@ -22,7 +22,7 @@ Test-JIMExpression -Expression <string> [-MvAttributes <hashtable>] [-CsAttribut
 |------|------|----------|---------|-------------|
 | Expression | string | Yes | | The expression to test (DynamicExpresso syntax) |
 | MvAttributes | hashtable | No | | Sample metaverse attribute values (name-value pairs) |
-| CsAttributes | hashtable | No | | Sample connected system attribute values (name-value pairs) |
+| CsAttributes | hashtable | No | | Sample Connected System attribute values (name-value pairs) |
 
 ### Output
 
@@ -66,7 +66,7 @@ if (-not $result.IsValid) {
 ---
 
 !!! tip "Expression Syntax"
-    Expressions use DynamicExpresso syntax. Use `mv["AttributeName"]` for metaverse attributes and `cs["AttributeName"]` for connected system attributes. Built-in functions include `Lower()`, `Upper()`, `Trim()`, `EscapeDN()`, `Left()`, `Right()`, `Mid()`, and more. See the [Expressions concept guide](../concepts/expressions.md) for the full function reference.
+    Expressions use DynamicExpresso syntax. Use `mv["AttributeName"]` for metaverse attributes and `cs["AttributeName"]` for Connected System attributes. Built-in functions include `Lower()`, `Upper()`, `Trim()`, `EscapeDN()`, `Left()`, `Right()`, `Mid()`, and more. See the [Expressions concept guide](../concepts/expressions.md) for the full function reference.
 
 ## See also
 

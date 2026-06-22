@@ -31,7 +31,7 @@ public class ExportExecutionResult
     public DateTime? CompletedAt { get; set; }
 
     /// <summary>
-    /// Total number of pending exports that were processed.
+    /// Total number of Pending Exports that were processed.
     /// </summary>
     public int TotalPendingExports { get; set; }
 
@@ -51,14 +51,14 @@ public class ExportExecutionResult
     public int DeferredCount { get; set; }
 
     /// <summary>
-    /// Number of pending exports cancelled by pre-export reconciliation.
+    /// Number of Pending Exports cancelled by pre-export reconciliation.
     /// CREATE+DELETE pairs and redundant UPDATE+DELETE pairs are detected and removed
-    /// before export execution to avoid unnecessary round-trips to the connected system.
+    /// before export execution to avoid unnecessary round-trips to the Connected System.
     /// </summary>
     public int ReconciledCount { get; set; }
 
     /// <summary>
-    /// IDs of the pending exports that were processed.
+    /// IDs of the Pending Exports that were processed.
     /// Use these IDs to fetch the actual PendingExport records for detailed information.
     /// Note: These records may be deleted after successful export, use ProcessedExportItems instead.
     /// </summary>
@@ -66,7 +66,7 @@ public class ExportExecutionResult
 
     /// <summary>
     /// Information about each processed export for activity tracking.
-    /// This is captured before pending exports are deleted, allowing execution item creation.
+    /// This is captured before Pending Exports are deleted, allowing execution item creation.
     /// </summary>
     public List<ProcessedExportItem> ProcessedExportItems { get; set; } = [];
 
@@ -98,7 +98,7 @@ public class ProcessedExportItem
     public int AttributeChangeCount { get; set; }
 
     /// <summary>
-    /// The attribute value changes from the pending export, captured before deletion.
+    /// The attribute value changes from the Pending Export, captured before deletion.
     /// Used to create ConnectedSystemObjectChange records for export change history.
     /// </summary>
     public List<PendingExportAttributeValueChange> AttributeValueChanges { get; set; } = [];

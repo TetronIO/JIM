@@ -6,7 +6,7 @@ using JIM.Models.Staging;
 namespace JIM.Models.Transactional;
 
 /// <summary>
-/// Result of export evaluation including pending exports and no-net-change statistics.
+/// Result of export evaluation including Pending Exports and no-net-change statistics.
 /// </summary>
 public class ExportEvaluationResult
 {
@@ -17,7 +17,7 @@ public class ExportEvaluationResult
 
     /// <summary>
     /// List of CSOs created for provisioning (when deferSave is true).
-    /// These need to be batch-persisted by the caller before the pending exports.
+    /// These need to be batch-persisted by the caller before the Pending Exports.
     /// </summary>
     public List<ConnectedSystemObject> ProvisioningCsosToCreate { get; set; } = [];
 

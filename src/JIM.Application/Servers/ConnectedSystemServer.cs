@@ -132,7 +132,7 @@ public class ConnectedSystemServer
         if (!AreRunProfilesValid(connectedSystem))
             throw new ArgumentException("connectedSystem.RunProfiles has some of a run type that is not supported by the Connector.");
 
-        // create the connected system setting value objects from the connected system definition settings
+        // create the Connected System setting value objects from the Connected System definition settings
         foreach (var definitionSetting in connectorDefinition.Settings)
         {
             var settingValue = new ConnectedSystemSettingValue {
@@ -193,7 +193,7 @@ public class ConnectedSystemServer
         if (!AreRunProfilesValid(connectedSystem))
             throw new ArgumentException("connectedSystem.RunProfiles has some of a run type that is not supported by the Connector.");
 
-        // create the connected system setting value objects from the connected system definition settings
+        // create the Connected System setting value objects from the Connected System definition settings
         foreach (var definitionSetting in connectorDefinition.Settings)
         {
             var settingValue = new ConnectedSystemSettingValue {
@@ -454,14 +454,14 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Switches the object matching rule mode for a Connected System.
+    /// Switches the Object Matching Rule mode for a Connected System.
     /// When switching to Advanced Mode (SyncRule), copies matching rules from
-    /// Connected System object types to all import sync rules.
-    /// When switching to Simple Mode (ConnectedSystem), analyses sync rule matching rules,
-    /// selects the most common configuration per object type, and clears sync rule rules.
+    /// Connected System object types to all import Sync Rules.
+    /// When switching to Simple Mode (ConnectedSystem), analyses Sync Rule matching rules,
+    /// selects the most common configuration per object type, and clears Sync Rule rules.
     /// </summary>
     /// <param name="connectedSystem">The Connected System to update</param>
-    /// <param name="newMode">The new object matching rule mode</param>
+    /// <param name="newMode">The new Object Matching Rule mode</param>
     /// <param name="initiatedBy">The user initiating the change</param>
     /// <returns>Result containing details about the switch operation</returns>
     public async Task<ObjectMatchingModeSwitchResult> SwitchObjectMatchingModeAsync(
@@ -486,12 +486,12 @@ public class ConnectedSystemServer
 
         if (newMode == ObjectMatchingRuleMode.SyncRule)
         {
-            // Switching to Advanced Mode - copy matching rules to import sync rules
+            // Switching to Advanced Mode - copy matching rules to import Sync Rules
             result = await SwitchToAdvancedModeAsync(connectedSystem, initiatedBy);
         }
         else
         {
-            // Switching to Simple Mode - migrate rules from sync rules to object types
+            // Switching to Simple Mode - migrate rules from Sync Rules to object types
             result = await SwitchToSimpleModeAsync(connectedSystem, initiatedBy);
         }
 
@@ -529,12 +529,12 @@ public class ConnectedSystemServer
 
         foreach (var syncRule in importSyncRules)
         {
-            // Find matching rules for the sync rule's object type
+            // Find matching rules for the Sync Rule's object type
             var objectType = connectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == syncRule.ConnectedSystemObjectTypeId);
             if (objectType == null || objectType.ObjectMatchingRules.Count == 0)
                 continue;
 
-            // Only copy if sync rule doesn't already have matching rules
+            // Only copy if Sync Rule doesn't already have matching rules
             if (syncRule.ObjectMatchingRules.Count > 0)
                 continue;
 
@@ -560,7 +560,7 @@ public class ConnectedSystemServer
             syncRulesUpdated++;
         }
 
-        Log.Information("SwitchToAdvancedModeAsync: Copied matching rules to {Count} sync rule(s)", syncRulesUpdated);
+        Log.Information("SwitchToAdvancedModeAsync: Copied matching rules to {Count} Sync Rule(s)", syncRulesUpdated);
         return ObjectMatchingModeSwitchResult.ToAdvancedMode(syncRulesUpdated);
     }
 
@@ -574,7 +574,7 @@ public class ConnectedSystemServer
         var syncRules = await GetSyncRulesAsync(connectedSystem.Id, includeDisabledSyncRules: true);
         var importSyncRules = syncRules.Where(sr => sr.Direction == SyncRuleDirection.Import).ToList();
 
-        // Group sync rules by object type
+        // Group Sync Rules by object type
         var syncRulesByObjectType = importSyncRules
             .GroupBy(sr => sr.ConnectedSystemObjectTypeId)
             .ToList();
@@ -595,14 +595,14 @@ public class ConnectedSystemServer
                 SyncRulesWithMatchingRules = objectTypeGroup.Count(sr => sr.ObjectMatchingRules.Count > 0)
             };
 
-            // Get sync rules that have matching rules defined
+            // Get Sync Rules that have matching rules defined
             var syncRulesWithRules = objectTypeGroup
                 .Where(sr => sr.ObjectMatchingRules.Count > 0)
                 .ToList();
 
             if (syncRulesWithRules.Count > 0)
             {
-                // Create a signature for each sync rule's matching rules configuration
+                // Create a signature for each Sync Rule's matching rules configuration
                 var ruleConfigurations = syncRulesWithRules
                     .Select(sr => GetMatchingRulesSignature(sr.ObjectMatchingRules))
                     .ToList();
@@ -616,7 +616,7 @@ public class ConnectedSystemServer
                     .First()
                     .Key;
 
-                // Get the sync rule with the most common configuration
+                // Get the Sync Rule with the most common configuration
                 var sourceSyncRule = syncRulesWithRules
                     .First(sr => GetMatchingRulesSignature(sr.ObjectMatchingRules) == mostCommonSignature);
 
@@ -647,13 +647,13 @@ public class ConnectedSystemServer
                     objectTypesUpdated++;
 
                     Log.Information("SwitchToSimpleModeAsync: Set {Count} matching rule(s) on object type {ObjectType} " +
-                        "(selected from {SyncRuleCount} sync rules with {UniqueConfigs} unique configuration(s))",
+                        "(selected from {SyncRuleCount} Sync Rules with {UniqueConfigs} unique configuration(s))",
                         migration.MatchingRulesSet, objectType.Name, migration.SyncRulesWithMatchingRules,
                         migration.UniqueSyncRuleConfigurations);
                 }
             }
 
-            // Clear matching rules from all sync rules for this object type
+            // Clear matching rules from all Sync Rules for this object type
             // (will be done automatically by CreateOrUpdateSyncRuleAsync due to Simple Mode validation)
             foreach (var syncRule in objectTypeGroup.Where(sr => sr.ObjectMatchingRules.Count > 0))
             {
@@ -747,13 +747,13 @@ public class ConnectedSystemServer
             preview.Warnings.Add("A synchronisation operation is currently running. Deletion will be queued to run after it completes.");
 
         if (preview.SyncRuleCount > 0)
-            preview.Warnings.Add($"{preview.SyncRuleCount} sync rule(s) will be permanently deleted.");
+            preview.Warnings.Add($"{preview.SyncRuleCount} Sync Rule(s) will be permanently deleted.");
 
         if (preview.JoinedMvoCount > 0)
             preview.Warnings.Add($"{preview.JoinedMvoCount} Metaverse Object(s) are joined to CSOs in this system. They will be disconnected.");
 
         if (preview.PendingExportCount > 0)
-            preview.Warnings.Add($"{preview.PendingExportCount} pending export(s) will be deleted.");
+            preview.Warnings.Add($"{preview.PendingExportCount} Pending Export(s) will be deleted.");
 
         if (connectedSystem.Status == ConnectedSystemStatus.Deleting)
             preview.Warnings.Add("This Connected System is already being deleted.");
@@ -1079,7 +1079,7 @@ public class ConnectedSystemServer
 
     #region Connected System Schema
     /// <summary>
-    /// Causes the associated Connector to be instantiated and the schema imported from the connected system.
+    /// Causes the associated Connector to be instantiated and the schema imported from the Connected System.
     /// Changes will be persisted, even if they are destructive, i.e. an attribute is removed.
     /// </summary>
     /// <returns>A result object containing details about what changed during the schema refresh.</returns>
@@ -1112,8 +1112,8 @@ public class ConnectedSystemServer
         else
             throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
 
-        // Merge the new schema with the existing one, preserving IDs for attributes that are referenced by sync rules
-        // This prevents FK constraint violations when attributes are used in sync rule mappings
+        // Merge the new schema with the existing one, preserving IDs for attributes that are referenced by Sync Rules
+        // This prevents FK constraint violations when attributes are used in Sync Rule mappings
         schema.ObjectTypes = schema.ObjectTypes.OrderBy(q => q.Name).ToList();
 
         // Keep track of existing object types for merging and change tracking
@@ -1418,7 +1418,7 @@ public class ConnectedSystemServer
 
     #region Connected System Hierarchy
     /// <summary>
-    /// Causes the associated Connector to be instantiated and the hierarchy (partitions and containers) to be imported from the connected system.
+    /// Causes the associated Connector to be instantiated and the hierarchy (partitions and containers) to be imported from the Connected System.
     /// You will need update the ConnectedSystem after if happy with the changes, to persist them.
     /// </summary>
     /// <returns>A result object describing what changed during the hierarchy refresh.</returns>
@@ -1482,9 +1482,9 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Import the hierarchy (partitions and containers) from the connected system (initiated by API key).
+    /// Import the hierarchy (partitions and containers) from the Connected System (initiated by API key).
     /// </summary>
-    /// <param name="connectedSystem">The connected system to import hierarchy for.</param>
+    /// <param name="connectedSystem">The Connected System to import hierarchy for.</param>
     /// <param name="initiatedByApiKey">The API key that initiated this operation.</param>
     /// <returns>A result object describing what changed during the hierarchy refresh.</returns>
     public async Task<HierarchyRefreshResult> ImportConnectedSystemHierarchyAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
@@ -1547,7 +1547,7 @@ public class ConnectedSystemServer
     /// Uses the connector's interface methods to parse container identifiers without connector-specific
     /// knowledge in the application layer.
     /// </summary>
-    /// <param name="connectedSystem">The connected system to update.</param>
+    /// <param name="connectedSystem">The Connected System to update.</param>
     /// <param name="connector">The connector that created the containers (must implement IConnectorContainerCreation).</param>
     /// <param name="createdContainerExternalIds">List of container external IDs that were created during export.</param>
     /// <param name="initiatedByApiKey">Optional API key that initiated this operation.</param>
@@ -1835,7 +1835,7 @@ public class ConnectedSystemServer
     /// Merges discovered partitions and containers with existing ones, preserving user selections.
     /// This replaces the previous destructive approach that wiped all selections on refresh.
     /// </summary>
-    /// <param name="connectedSystem">The connected system to merge hierarchy into.</param>
+    /// <param name="connectedSystem">The Connected System to merge hierarchy into.</param>
     /// <param name="discoveredPartitions">The partitions discovered from the connector.</param>
     /// <returns>A result object describing what changed during the merge.</returns>
     private static HierarchyRefreshResult MergeHierarchy(ConnectedSystem connectedSystem, List<ConnectorPartition> discoveredPartitions)
@@ -2313,7 +2313,7 @@ public class ConnectedSystemServer
     /// <summary>
     /// Bulk updates multiple Connected System Attributes with a single parent activity.
     /// </summary>
-    /// <param name="connectedSystem">The connected system containing the attributes.</param>
+    /// <param name="connectedSystem">The Connected System containing the attributes.</param>
     /// <param name="objectType">The object type containing the attributes.</param>
     /// <param name="attributeUpdates">Dictionary of attribute IDs to update requests.</param>
     /// <param name="initiatedBy">The user who initiated the update.</param>
@@ -2402,7 +2402,7 @@ public class ConnectedSystemServer
     /// <summary>
     /// Bulk updates multiple Connected System Attributes with a single parent activity (initiated by API key).
     /// </summary>
-    /// <param name="connectedSystem">The connected system containing the attributes.</param>
+    /// <param name="connectedSystem">The Connected System containing the attributes.</param>
     /// <param name="objectType">The object type containing the attributes.</param>
     /// <param name="attributeUpdates">Dictionary of attribute IDs to update requests.</param>
     /// <param name="initiatedByApiKey">The API key that initiated the update.</param>
@@ -2561,7 +2561,7 @@ public class ConnectedSystemServer
                 externalIdDisplayValue, change.AttributeChanges.Count);
         }
 
-        // The change object will be persisted with the activity run profile execution item further up the stack.
+        // The change object will be persisted with the activity Run Profile execution item further up the stack.
         // We just need to associate the change with the execution item.
         activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
 
@@ -2898,8 +2898,8 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Warms the CSO lookup cache for a connected system by bulk-loading all external ID → GUID mappings.
-    /// Should be called at Worker startup for each connected system.
+    /// Warms the CSO lookup cache for a Connected System by bulk-loading all external ID → GUID mappings.
+    /// Should be called at Worker startup for each Connected System.
     /// </summary>
     public async Task WarmCsoCacheAsync(int connectedSystemId, string? connectedSystemName = null)
     {
@@ -2910,7 +2910,7 @@ public class ConnectedSystemServer
             ? $"{connectedSystemName} ({connectedSystemId})"
             : connectedSystemId.ToString();
 
-        Log.Debug("WarmCsoCacheAsync: Starting cache warm for connected system {ConnectedSystem}", csLabel);
+        Log.Debug("WarmCsoCacheAsync: Starting cache warm for Connected System {ConnectedSystem}", csLabel);
 
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var mappings = await Application.Repository.ConnectedSystems.GetAllCsoExternalIdMappingsAsync(connectedSystemId);
@@ -2938,7 +2938,7 @@ public class ConnectedSystemServer
         }
 
         stopwatch.Stop();
-        Log.Debug("WarmCsoCacheAsync: Completed cache warm for connected system {ConnectedSystem}. Loaded {Count} mappings in {ElapsedMs}ms",
+        Log.Debug("WarmCsoCacheAsync: Completed cache warm for Connected System {ConnectedSystem}. Loaded {Count} mappings in {ElapsedMs}ms",
             csLabel, total, stopwatch.ElapsedMilliseconds);
     }
 
@@ -3048,8 +3048,8 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Returns the count of CSOs in a connected system that are joined to a specific MVO.
-    /// Used during sync to check if an MVO already has a join in this connected system (1:1 constraint).
+    /// Returns the count of CSOs in a Connected System that are joined to a specific MVO.
+    /// Used during sync to check if an MVO already has a join in this Connected System (1:1 constraint).
     /// </summary>
     public async Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId)
     {
@@ -3076,11 +3076,11 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Returns the count of reference attribute values across all CSOs in a connected system that are unresolved
+    /// Returns the count of reference attribute values across all CSOs in a Connected System that are unresolved
     /// (i.e. the referenced object could not be found during the last import run).
     /// A non-zero result indicates that group member references or other reference attributes are broken.
     /// </summary>
-    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     public async Task<int> GetUnresolvedReferenceCountAsync(int connectedSystemId)
     {
         return await Application.Repository.ConnectedSystems.GetUnresolvedReferenceCountAsync(connectedSystemId);
@@ -3167,7 +3167,7 @@ public class ConnectedSystemServer
                 rpeisByCsoId.TryAdd(rpei.ConnectedSystemObject.Id, rpei);
         }
 
-        // Add a change object to the relevant activity run profile execution item for each CSO to be updated.
+        // Add a change object to the relevant activity Run Profile execution item for each CSO to be updated.
         // The change objects will be persisted later, further up the call stack, when the activity gets persisted.
         foreach (var cso in connectedSystemObjects)
         {
@@ -3392,7 +3392,7 @@ public class ConnectedSystemServer
             return;
         }
 
-        // make sure the CSO is linked to the activity run profile execution item
+        // make sure the CSO is linked to the activity Run Profile execution item
         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
         activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
 
@@ -3436,7 +3436,7 @@ public class ConnectedSystemServer
                 DeletedObjectExternalId = connectedSystemObject.ExternalIdAttributeValue?.ToStringNoName()
             };
 
-            // the change object will be persisted with the activity run profile execution item further up the stack.
+            // the change object will be persisted with the activity Run Profile execution item further up the stack.
             // we just need to associate the change with the detail item.
             activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
 
@@ -3459,9 +3459,9 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Causes all the connected system objects and their dependencies to be deleted for a connected system.
-    /// This includes: pending exports, CSO attribute values, change history, and disconnects CSOs from MVOs.
-    /// Once performed, an admin must then re-synchronise all connectors to re-calculate any metaverse and connected system object changes.
+    /// Causes all the Connected System Objects and their dependencies to be deleted for a Connected System.
+    /// This includes: Pending Exports, CSO attribute values, change history, and disconnects CSOs from MVOs.
+    /// Once performed, an admin must then re-synchronise all connectors to re-calculate any metaverse and Connected System Object changes.
     /// </summary>
     /// <remarks>
     /// Only intended to be called by JIM.Service, i.e. this action should always be queued.
@@ -3469,7 +3469,7 @@ public class ConnectedSystemServer
     /// Uses the shared DeleteAllConnectedSystemObjectsAndDependenciesAsync method with deleteChangeHistory=true
     /// to remove all CSO-related data including change history (since objects will be re-imported).
     /// </remarks>
-    /// <param name="connectedSystemId">The unique identifier for the connected system to clear.</param>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System to clear.</param>
     /// <param name="deleteChangeHistory">Whether to delete change history for the cleared CSOs. Default: true (recommended for re-import scenarios).</param>
     /// <exception cref="InvalidOperationException">Thrown if the Connected System is being deleted.</exception>
     public async Task<ClearConnectedSystemResult> ClearConnectedSystemObjectsAsync(int connectedSystemId, bool deleteChangeHistory = true)
@@ -3495,7 +3495,7 @@ public class ConnectedSystemServer
         // Use the shared method that handles all CSO dependencies properly.
         var result = await Application.Repository.ConnectedSystems.DeleteAllConnectedSystemObjectsAndDependenciesAsync(connectedSystemId, deleteChangeHistory);
 
-        Log.Information("ClearConnectedSystemObjectsAsync: Completed for Connected System {Id}. Removed {PendingExports} pending exports, {Csos} CSOs",
+        Log.Information("ClearConnectedSystemObjectsAsync: Completed for Connected System {Id}. Removed {PendingExports} Pending Exports, {Csos} CSOs",
             connectedSystemId, result.PendingExportsRemoved, result.ConnectedSystemObjectsRemoved);
 
         return result;
@@ -3695,16 +3695,16 @@ public class ConnectedSystemServer
 
     #region Sync Rule Mappings
     /// <summary>
-    /// Gets all mappings for a sync rule.
+    /// Gets all mappings for a Sync Rule.
     /// </summary>
-    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="syncRuleId">The unique identifier of the Sync Rule.</param>
     public async Task<List<SyncRuleMapping>> GetSyncRuleMappingsAsync(int syncRuleId)
     {
         return await Application.Repository.ConnectedSystems.GetSyncRuleMappingsAsync(syncRuleId);
     }
 
     /// <summary>
-    /// Gets a specific sync rule mapping by ID.
+    /// Gets a specific Sync Rule mapping by ID.
     /// </summary>
     /// <param name="id">The unique identifier of the mapping.</param>
     public async Task<SyncRuleMapping?> GetSyncRuleMappingAsync(int id)
@@ -3726,7 +3726,7 @@ public class ConnectedSystemServer
             if (!string.IsNullOrWhiteSpace(source.Expression))
                 continue;
 
-            // Determine source and target attribute details based on sync rule direction
+            // Determine source and target attribute details based on Sync Rule direction
             string? sourceAttrName;
             AttributeDataType sourceType;
             AttributePlurality sourcePlurality;
@@ -3780,7 +3780,7 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Validates that export attribute flow mappings do not target read-only attributes.
+    /// Validates that export Attribute Flow mappings do not target read-only attributes.
     /// Read-only attributes (system-managed, constructed, back-links) cannot be written to
     /// and will cause export failures at runtime.
     /// </summary>
@@ -3788,18 +3788,18 @@ public class ConnectedSystemServer
     /// <exception cref="ArgumentException">Thrown when the target attribute is read-only.</exception>
     private static void ValidateMappingWritability(SyncRuleMapping mapping)
     {
-        // only applies to export rules (target is a connected system attribute)
+        // only applies to export rules (target is a Connected System attribute)
         if (mapping.TargetConnectedSystemAttribute == null)
             return;
 
         if (mapping.TargetConnectedSystemAttribute.Writability == AttributeWritability.ReadOnly)
             throw new ArgumentException(
-                $"Cannot create export attribute flow to read-only attribute '{mapping.TargetConnectedSystemAttribute.Name}'. " +
-                $"This attribute is marked as read-only by the connected system and cannot be written to.");
+                $"Cannot create export Attribute Flow to read-only attribute '{mapping.TargetConnectedSystemAttribute.Name}'. " +
+                $"This attribute is marked as read-only by the Connected System and cannot be written to.");
     }
 
     /// <summary>
-    /// Creates a new sync rule mapping.
+    /// Creates a new Sync Rule mapping.
     /// </summary>
     /// <param name="mapping">The mapping to create.</param>
     /// <param name="initiatedBy">The user who initiated the creation.</param>
@@ -3811,7 +3811,7 @@ public class ConnectedSystemServer
         ValidateMappingTypeCompatibility(mapping);
         ValidateMappingWritability(mapping);
 
-        Log.Debug("CreateSyncRuleMappingAsync() called for sync rule {SyncRuleId}", mapping.SyncRule?.Id);
+        Log.Debug("CreateSyncRuleMappingAsync() called for Sync Rule {SyncRuleId}", mapping.SyncRule?.Id);
 
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
         var activity = new Activity
@@ -3831,7 +3831,7 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Creates a new sync rule mapping (initiated by API key).
+    /// Creates a new Sync Rule mapping (initiated by API key).
     /// </summary>
     public async Task CreateSyncRuleMappingAsync(SyncRuleMapping mapping, ApiKey initiatedByApiKey)
     {
@@ -3841,7 +3841,7 @@ public class ConnectedSystemServer
         ValidateMappingTypeCompatibility(mapping);
         ValidateMappingWritability(mapping);
 
-        Log.Debug("CreateSyncRuleMappingAsync() called for sync rule {SyncRuleId} (API key initiated)", mapping.SyncRule?.Id);
+        Log.Debug("CreateSyncRuleMappingAsync() called for Sync Rule {SyncRuleId} (API key initiated)", mapping.SyncRule?.Id);
 
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
         var activity = new Activity
@@ -3861,7 +3861,7 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Updates an existing sync rule mapping.
+    /// Updates an existing Sync Rule mapping.
     /// </summary>
     /// <param name="mapping">The mapping to update.</param>
     /// <param name="initiatedBy">The user who initiated the update.</param>
@@ -3892,7 +3892,7 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Deletes a sync rule mapping.
+    /// Deletes a Sync Rule mapping.
     /// </summary>
     /// <param name="mapping">The mapping to delete.</param>
     /// <param name="initiatedBy">The user who initiated the deletion.</param>
@@ -3970,7 +3970,7 @@ public class ConnectedSystemServer
         AuditHelper.SetCreated(connectedSystemRunProfile, initiatedBy);
         await Application.Repository.ConnectedSystems.CreateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
 
-        // now the run profile has been persisted, associated it with the activity and complete it.
+        // now the Run Profile has been persisted, associated it with the activity and complete it.
         activity.ConnectedSystemRunProfileId = connectedSystemRunProfile.Id;
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -4009,7 +4009,7 @@ public class ConnectedSystemServer
         if (connectedSystemRunProfile == null)
             return;
 
-        // Get connected system name for activity context (Core: only .Name is read).
+        // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId);
 
         // every CRUD operation requires tracking with an activity...
@@ -4028,14 +4028,14 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Deletes a connected system run profile (initiated by API key).
+    /// Deletes a Connected System Run Profile (initiated by API key).
     /// </summary>
     public async Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, ApiKey initiatedByApiKey)
     {
         if (connectedSystemRunProfile == null)
             return;
 
-        // Get connected system name for activity context (Core: only .Name is read).
+        // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId);
 
         var activity = new Activity
@@ -4057,7 +4057,7 @@ public class ConnectedSystemServer
         if (connectedSystemRunProfile == null)
             throw new ArgumentNullException(nameof(connectedSystemRunProfile));
 
-        // Get connected system name for activity context (Core: only .Name is read).
+        // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId);
 
         // every CRUD operation requires tracking with an activity...
@@ -4077,14 +4077,14 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Updates a connected system run profile (initiated by API key).
+    /// Updates a Connected System Run Profile (initiated by API key).
     /// </summary>
     public async Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, ApiKey initiatedByApiKey)
     {
         if (connectedSystemRunProfile == null)
             throw new ArgumentNullException(nameof(connectedSystemRunProfile));
 
-        // Get connected system name for activity context (Core: only .Name is read).
+        // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId);
 
         var activity = new Activity
@@ -4118,9 +4118,9 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Captures the foreign-key id of every navigation property on a new sync rule that points to an
-    /// already-persisted entity (the connected system, the object types, and the attributes referenced by its
-    /// matching rules, attribute flow mappings and scoping criteria), then nulls those navigation properties.
+    /// Captures the foreign-key id of every navigation property on a new Sync Rule that points to an
+    /// already-persisted entity (the Connected System, the object types, and the attributes referenced by its
+    /// matching rules, Attribute Flow mappings and scoping criteria), then nulls those navigation properties.
     /// The web and API callers build the rule from entities loaded in an earlier, now-disposed scope: the FK
     /// scalars are unset and the loaded graph can contain duplicate instances of the same entity. Reducing every
     /// reference to an FK scalar leaves the repository's Add() with only the new rows to insert, so EF neither
@@ -4261,7 +4261,7 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Checks if any run profile types are not supported by the connectors capabilities.
+    /// Checks if any Run Profile types are not supported by the connectors capabilities.
     /// </summary>
     private static bool IsRunProfileValid(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile)
     {
@@ -4321,12 +4321,12 @@ public class ConnectedSystemServer
 
     /// <summary>
     /// Creates multiple Pending Export objects in a single batch operation.
-    /// Used to efficiently create pending exports during sync export evaluation.
+    /// Used to efficiently create Pending Exports during sync export evaluation.
     /// </summary>
     /// <param name="pendingExports">The Pending Exports to create.</param>
     /// <summary>
     /// Updates multiple Pending Export objects in a single batch operation.
-    /// Used to efficiently update pending exports during sync.
+    /// Used to efficiently update Pending Exports during sync.
     /// </summary>
     /// <param name="pendingExports">The Pending Exports to update.</param>
     public async Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
@@ -4371,7 +4371,7 @@ public class ConnectedSystemServer
     /// Multi-valued attribute changes are capped at 10 per attribute; total counts are returned separately.
     /// </summary>
     /// <param name="id">The unique identifier of the Pending Export.</param>
-    /// <returns>A <see cref="PendingExportDetailResult"/> containing the pending export and per-attribute
+    /// <returns>A <see cref="PendingExportDetailResult"/> containing the Pending Export and per-attribute
     /// total change counts, or null if not found.</returns>
     public async Task<PendingExportDetailResult?> GetPendingExportDetailAsync(Guid id)
     {
@@ -4401,7 +4401,7 @@ public class ConnectedSystemServer
 
     /// <summary>
     /// Retrieves a paged list of all attribute value changes across all attributes for a Pending Export.
-    /// Used by the CSO detail page for server-side pagination of the pending exports table.
+    /// Used by the CSO detail page for server-side pagination of the Pending Exports table.
     /// </summary>
     /// <param name="pendingExportId">The unique identifier of the Pending Export.</param>
     /// <param name="page">The 1-based page number.</param>
@@ -4490,10 +4490,10 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Retrieves all the sync rules for a given Connected System.
+    /// Retrieves all the Sync Rules for a given Connected System.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
-    /// <param name="includeDisabledSyncRules">Controls whether to return sync rules that are disabled</param>
+    /// <param name="includeDisabledSyncRules">Controls whether to return Sync Rules that are disabled</param>
     public async Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules)
     {
         return await Application.Repository.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, includeDisabledSyncRules);
@@ -4511,7 +4511,7 @@ public class ConnectedSystemServer
 
     public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null)
     {
-        // validate the sync rule
+        // validate the Sync Rule
         if (syncRule == null)
             throw new NullReferenceException(nameof(syncRule));
 
@@ -4527,7 +4527,7 @@ public class ConnectedSystemServer
             syncRule.ProvisionToConnectedSystem = null;
             // Note: ObjectScopingCriteriaGroups IS valid for import rules - evaluates CSO attributes
 
-            // In Simple Mode, matching rules are defined on the Connected System, not sync rules
+            // In Simple Mode, matching rules are defined on the Connected System, not Sync Rules
             // Clear any matching rules that may have been provided
             if (syncRule.ConnectedSystemId > 0)
             {
@@ -4539,7 +4539,7 @@ public class ConnectedSystemServer
                 {
                     if (syncRule.ObjectMatchingRules.Count > 0)
                     {
-                        Log.Warning("CreateOrUpdateSyncRuleAsync: Clearing {Count} matching rules from sync rule {Id} " +
+                        Log.Warning("CreateOrUpdateSyncRuleAsync: Clearing {Count} matching rules from Sync Rule {Id} " +
                             "because Connected System {CsId} is in Simple Mode",
                             syncRule.ObjectMatchingRules.Count, syncRule.Id, syncRule.ConnectedSystemId);
                         syncRule.ObjectMatchingRules.Clear();
@@ -4555,7 +4555,7 @@ public class ConnectedSystemServer
         }
 
 
-        // Get connected system name for activity context (Core: only .Name is read).
+        // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystemForContext = syncRule.ConnectedSystem ??
             (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(syncRule.ConnectedSystemId) : null);
 
@@ -4570,7 +4570,7 @@ public class ConnectedSystemServer
 
         if (syncRule.Id == 0)
         {
-            // new sync rule - create
+            // new Sync Rule - create
             activity.TargetOperationType = ActivityTargetOperationType.Create;
             AuditHelper.SetCreated(syncRule, initiatedBy);
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
@@ -4580,7 +4580,7 @@ public class ConnectedSystemServer
         }
         else
         {
-            // existing sync rule - update
+            // existing Sync Rule - update
             activity.TargetOperationType = ActivityTargetOperationType.Update;
             AuditHelper.SetUpdated(syncRule, initiatedBy);
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
@@ -4618,7 +4618,7 @@ public class ConnectedSystemServer
                 {
                     if (syncRule.ObjectMatchingRules.Count > 0)
                     {
-                        Log.Warning("CreateOrUpdateSyncRuleAsync: Clearing {Count} matching rules from sync rule {Id} " +
+                        Log.Warning("CreateOrUpdateSyncRuleAsync: Clearing {Count} matching rules from Sync Rule {Id} " +
                             "because Connected System {CsId} is in Simple Mode",
                             syncRule.ObjectMatchingRules.Count, syncRule.Id, syncRule.ConnectedSystemId);
                         syncRule.ObjectMatchingRules.Clear();
@@ -4632,7 +4632,7 @@ public class ConnectedSystemServer
             syncRule.ProjectToMetaverse = null;
         }
 
-        // Get connected system name for activity context (Core: only .Name is read).
+        // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystemForContext = syncRule.ConnectedSystem ??
             (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(syncRule.ConnectedSystemId) : null);
 
@@ -4667,7 +4667,7 @@ public class ConnectedSystemServer
 
     public async Task DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy)
     {
-        // Get connected system name for activity context (Core: only .Name is read).
+        // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = syncRule.ConnectedSystem ??
             (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(syncRule.ConnectedSystemId) : null);
 
@@ -4685,11 +4685,11 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Deletes a sync rule (initiated by API key).
+    /// Deletes a Sync Rule (initiated by API key).
     /// </summary>
     public async Task DeleteSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey)
     {
-        // Get connected system name for activity context (Core: only .Name is read).
+        // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = syncRule.ConnectedSystem ??
             (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(syncRule.ConnectedSystemId) : null);
 
@@ -4743,7 +4743,7 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Creates a new object matching rule for a Connected System Object Type.
+    /// Creates a new Object Matching Rule for a Connected System Object Type.
     /// </summary>
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
     {
@@ -4761,7 +4761,7 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Creates a new object matching rule (initiated by API key).
+    /// Creates a new Object Matching Rule (initiated by API key).
     /// </summary>
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
     {
@@ -4779,7 +4779,7 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Updates an existing object matching rule.
+    /// Updates an existing Object Matching Rule.
     /// </summary>
     public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
     {
@@ -4797,7 +4797,7 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Updates an existing object matching rule (initiated by API key).
+    /// Updates an existing Object Matching Rule (initiated by API key).
     /// </summary>
     public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
     {
@@ -4815,7 +4815,7 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Deletes an object matching rule and its sources.
+    /// Deletes an Object Matching Rule and its sources.
     /// </summary>
     public async Task DeleteObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
     {
@@ -4832,7 +4832,7 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Deletes an object matching rule and its sources (initiated by API key).
+    /// Deletes an Object Matching Rule and its sources (initiated by API key).
     /// </summary>
     public async Task DeleteObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
     {
@@ -4849,7 +4849,7 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Gets an object matching rule by ID.
+    /// Gets an Object Matching Rule by ID.
     /// </summary>
     public async Task<ObjectMatchingRule?> GetObjectMatchingRuleAsync(int id)
     {

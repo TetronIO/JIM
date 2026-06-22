@@ -30,7 +30,7 @@
 {
     <div class="d-flex flex-column align-center justify-center mt-16">
         <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
-        <MudText Typo="Typo.body2" Class="mt-4 mud-text-secondary">Loading synchronisation rule...</MudText>
+        <MudText Typo="Typo.body2" Class="mt-4 mud-text-secondary">Loading Synchronisation Rule...</MudText>
     </div>
 }
 else if (_syncRule != null)
@@ -63,7 +63,7 @@ else if (_syncRule != null)
                 <MudPaper Class="pa-4 jim-paper-danger-zone" Outlined="false">
                     <MudText Typo="Typo.h5" Class="mb-3">Danger Zone</MudText>
                     <MudText Class="mud-text-secondary mb-4">
-                        Deleting this synchronisation rule is permanent and cannot be undone. All configuration and attribute flow
+                        Deleting this Synchronisation Rule is permanent and cannot be undone. All configuration and Attribute Flow
                         mappings will be lost.
                     </MudText>
                     <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Delete" OnClick="HandleDeleteSyncRuleAsync"
@@ -158,11 +158,11 @@ else if (_syncRule != null)
 
         if (Id != null)
         {
-            // edit an existing sync rule - loaded change-tracked so edits persist on save
+            // edit an existing Sync Rule - loaded change-tracked so edits persist on save
             _syncRule = await _jim.ConnectedSystems.GetSyncRuleAsync(Id.Value);
             if (_syncRule == null)
             {
-                // sync rule not found, redirect to index page
+                // Sync Rule not found, redirect to index page
                 _isLoading = false;
                 NavManager.NavigateTo("../");
                 return;
@@ -173,7 +173,7 @@ else if (_syncRule != null)
         }
         else
         {
-            // create a new sync rule
+            // create a new Sync Rule
             _syncRule = new SyncRule();
             _syncRuleNameOrCreate = "New";
             _breadcrumbs.Add(new BreadcrumbItem("New", href: null, disabled: true));
@@ -184,7 +184,7 @@ else if (_syncRule != null)
 
     private void OnChildChanged()
     {
-        // a tab mutated the shared sync rule; re-render so the save bar's validation and
+        // a tab mutated the shared Sync Rule; re-render so the save bar's validation and
         // enabled state stay in sync with the latest edits.
         StateHasChanged();
     }

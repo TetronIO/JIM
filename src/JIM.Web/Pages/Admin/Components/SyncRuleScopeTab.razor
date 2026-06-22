@@ -47,21 +47,21 @@ else
                         Disconnect from Metaverse
                     </MudSelectItem>
                     <MudSelectItem Value="InboundOutOfScopeAction.RemainJoined">
-                        Remain joined (stop attribute flow)
+                        Remain joined (stop Attribute Flow)
                     </MudSelectItem>
                 </MudSelect>
                 <MudAlert Severity="Severity.Info" Class="mt-3" Variant="Variant.Outlined" Dense="true">
                     @if (SyncRule.InboundOutOfScopeAction == InboundOutOfScopeAction.Disconnect)
                     {
                         <text>Objects that fall out of scope will be disconnected from their Metaverse object. Whether
-                        attributes contributed by this connected system are also recalled depends on the Connected System
+                        attributes contributed by this Connected System are also recalled depends on the Connected System
                         object type's "Remove contributed attributes on obsoletion" setting, the Metaverse object type's
                         deletion grace period, and whether the Metaverse object is slated for immediate deletion. If this
                         was the last connector, the Metaverse object type's deletion rule may also fire.</text>
                     }
                     else
                     {
-                        <text>Objects that fall out of scope will remain joined but attribute flow will stop. Use this for
+                        <text>Objects that fall out of scope will remain joined but Attribute Flow will stop. Use this for
                         "once managed, always managed" scenarios.</text>
                     }
                 </MudAlert>

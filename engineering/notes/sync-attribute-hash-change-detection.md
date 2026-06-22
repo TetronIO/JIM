@@ -4,7 +4,7 @@
 
 ## Problem
 
-Full sync loads complete attribute values for every CSO to run attribute flow comparison, even when the vast majority of CSOs haven't changed since the last sync. At 100K objects this is the dominant performance bottleneck.
+Full sync loads complete attribute values for every CSO to run Attribute Flow comparison, even when the vast majority of CSOs haven't changed since the last sync. At 100K objects this is the dominant performance bottleneck.
 
 ## Current Approach: Watermark Comparison
 
@@ -12,7 +12,7 @@ The current implementation uses `CSO.LastUpdated` compared against `ConnectedSys
 
 **Limitations:**
 - Requires a prior successful sync to establish the watermark
-- First sync after adding new sync rules must process everything (watermark predates the rules)
+- First sync after adding new Sync Rules must process everything (watermark predates the rules)
 - If a sync fails partway through, the watermark isn't updated, so the next sync re-processes everything
 - Doesn't detect external database modifications (direct SQL changes to attribute values)
 

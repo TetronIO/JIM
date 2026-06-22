@@ -14,12 +14,12 @@ namespace JIM.Application.Servers;
 
 /// <summary>
 /// Attribute flow logic for the sync engine.
-/// Contains all sync rule mapping processing — formerly SyncRuleMappingProcessor.
+/// Contains all Sync Rule mapping processing — formerly SyncRuleMappingProcessor.
 /// </summary>
 public partial class SyncEngine
 {
     /// <summary>
-    /// Processes a sync rule mapping to flow attribute values from CSO to MVO.
+    /// Processes a Sync Rule mapping to flow attribute values from CSO to MVO.
     /// </summary>
     internal static void ProcessMapping(
         ConnectedSystemObject cso,
@@ -149,7 +149,7 @@ public partial class SyncEngine
     }
 
     /// <summary>
-    /// Processes an expression-based sync rule mapping source.
+    /// Processes an expression-based Sync Rule mapping source.
     /// </summary>
     private static void ProcessExpressionMapping(
         ConnectedSystemObject cso,

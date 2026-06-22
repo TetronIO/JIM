@@ -90,7 +90,7 @@ public class ChangeHistoryRepository : IChangeHistoryRepository
     }
 
     /// <summary>
-    /// Gets the count of CSO change records for a specific connected system.
+    /// Gets the count of CSO change records for a specific Connected System.
     /// </summary>
     /// <param name="connectedSystemId">Connected system ID</param>
     /// <returns>Count of CSO change records</returns>

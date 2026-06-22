@@ -82,7 +82,7 @@ public class MetaverseControllerAttributeTests
             HttpContext = new DefaultHttpContext { User = principal }
         };
 
-        // Default: no sync rule references and no stored values (so existing delete tests pass)
+        // Default: no Sync Rule references and no stored values (so existing delete tests pass)
         _mockMetaverseRepo.Setup(r => r.GetSyncRulesReferencingAttributeAsync(It.IsAny<int>()))
             .ReturnsAsync(new List<SyncRuleReference>());
         _mockMetaverseRepo.Setup(r => r.GetAttributeValueObjectCountAsync(It.IsAny<int>()))
@@ -512,7 +512,7 @@ public class MetaverseControllerAttributeTests
         Assert.That(error, Is.Not.Null);
         Assert.That(error!.Code, Is.EqualTo(ApiErrorCodes.ValidationError));
         Assert.That(error.Message, Does.Contain("costCentre"));
-        Assert.That(error.Message, Does.Contain("sync rule(s)"));
+        Assert.That(error.Message, Does.Contain("Sync Rule(s)"));
     }
 
     [Test]

@@ -31,7 +31,7 @@ This document explores the design considerations for outbound synchronisation - 
 
 Outbound sync is the process of:
 1. Detecting that a Metaverse Object (MVO) has changed
-2. Evaluating export sync rules to determine what Connected System Objects (CSOs) need updating
+2. Evaluating export Sync Rules to determine what Connected System Objects (CSOs) need updating
 3. Creating Pending Export records describing the required changes
 4. Executing those exports via the appropriate connector
 
@@ -41,11 +41,11 @@ All core outbound sync functionality has been implemented:
 
 - `PendingExport` model with `ChangeType` (Create, Update, Delete)
 - `PendingExportAttributeValueChange` for attribute-level changes with per-attribute confirmation tracking
-- Export sync rule direction (`SyncRuleDirection.Export`)
+- Export Sync Rule direction (`SyncRuleDirection.Export`)
 - `ExportEvaluationServer`: evaluates export rules and creates Pending Exports immediately when MVO changes (Q1)
 - `ExportExecutionServer`: executes Pending Exports via connectors with batching, retry, and parallel support
 - `PendingExportReconciliationService`: confirms exports via confirming import with per-attribute granularity
-- `SyncExportTaskProcessor`: processes Export run profiles in the Worker
+- `SyncExportTaskProcessor`: processes Export Run Profiles in the Worker
 - CSO origin tracking via `JoinType.Provisioned` (Q2)
 - Circular sync prevention via `ContributedBySystem` (Q3)
 - Deferred reference resolution for out-of-order object provisioning
@@ -73,7 +73,7 @@ B) **As a separate phase after inbound sync** - Process all MVO changes, then ev
    - Pros: Cleaner separation, easier to debug
    - Cons: Two passes over data, doesn't support real-time sync well
 
-C) **As a separate run profile** - Dedicated "Export Sync" that evaluates MVO changes
+C) **As a separate Run Profile** - Dedicated "Export Sync" that evaluates MVO changes
    - Pros: Maximum control, can run independently
    - Cons: Requires tracking which MVOs have pending outbound evaluation
 
@@ -116,7 +116,7 @@ B) **Add explicit `ProvisionedByJim` flag to CSO**
 - Add configurable `CsoDeletionBehaviour` enum: `ProvisionedOnly`, `AllJoined`, `DisconnectOnly`
 - Allow per-sync-rule configuration of deletion behaviour
 - Consider "disable before delete" pattern for AD accounts
-- Consider scope fallout behaviour (what happens when object falls out of sync rule scope)
+- Consider scope fallout behaviour (what happens when object falls out of Sync Rule scope)
 
 ---
 
@@ -126,7 +126,7 @@ If System A updates MVO, and MVO updates System B, and System B also syncs back 
 
 **When does this apply?**
 
-This is an edge case that only occurs when a connected system has **both import and export** flow defined for the same attribute. Most deployments have clear source/target separation (HR imports, AD exports), but bidirectional scenarios exist.
+This is an edge case that only occurs when a Connected System has **both import and export** flow defined for the same attribute. Most deployments have clear source/target separation (HR imports, AD exports), but bidirectional scenarios exist.
 
 **Example - AD with bidirectional title sync:**
 
@@ -185,7 +185,7 @@ public async Task EvaluateExportRulesAsync(MetaverseObject mvo, MetaverseObjectA
             continue;  // Don't export back to source
         }
 
-        // Create pending export for this target system
+        // Create Pending Export for this target system
         await CreatePendingExportAsync(mvo, rule, changedAttribute);
     }
 }
@@ -207,7 +207,7 @@ A) **All joined CSOs** - Every CSO linked to the MVO gets a delete export
 B) **Only provisioned CSOs** - Only CSOs with `JoinType = Provisioned`
    - Safer, only deletes what JIM created
 
-C) **Configurable per sync rule** - Export rule specifies whether deletions propagate
+C) **Configurable per Sync Rule** - Export rule specifies whether deletions propagate
    - Maximum flexibility but more complex
 
 **✅ DECISION: Option B** - Only provisioned CSOs for MVP, with Option C as future enhancement (Issue #126).
@@ -234,11 +234,11 @@ C) **Both** - Preview during development, approval for production changes
 **Implementation:**
 
 The user selects the run mode when executing a sync:
-- **Preview Only** - Evaluates sync rules and shows what changes would be made, but does not persist any Pending Exports or execute changes
-- **Preview + Sync** - Evaluates sync rules, shows the preview, then persists Pending Exports and executes them
+- **Preview Only** - Evaluates Sync Rules and shows what changes would be made, but does not persist any Pending Exports or execute changes
+- **Preview + Sync** - Evaluates Sync Rules, shows the preview, then persists Pending Exports and executes them
 
 This gives admins full control:
-- Use Preview Only when testing new sync rules or troubleshooting
+- Use Preview Only when testing new Sync Rules or troubleshooting
 - Use Preview + Sync for normal operations with visibility into what's happening
 
 ---
@@ -497,7 +497,7 @@ This decouples export *evaluation* from export *execution*, allowing references 
 
 #### Scenario 1: Scheduled Batch Export (Multi-Pass)
 
-For scheduled export runs processing many pending exports:
+For scheduled export runs processing many Pending Exports:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -868,7 +868,7 @@ When provisioning a new AD account, we need to generate:
 - userPrincipalName
 
 **Options:**
-- Expression-based generation in sync rules
+- Expression-based generation in Sync Rules
 - Function library for common patterns
 - Template system
 
@@ -909,7 +909,7 @@ Large reorganisation affecting many objects:
 Areas where JIM could improve on legacy ILM tools:
 
 ### 1. Simplified Sync Rule Configuration
-Legacy ILM tools often require complex XML and code for sync rules. JIM could offer:
+Legacy ILM tools often require complex XML and code for Sync Rules. JIM could offer:
 - Visual rule builder
 - Common patterns as templates
 - Plain-language rule descriptions
@@ -997,12 +997,12 @@ Based on the design decisions above, this is the implementation plan for outboun
 
 - [x] **2.2 Create `ScopingCriteriaEvaluator.cs`** (utility in `src/JIM.Worker/Processors/`)
   - Implemented as `ScopingEvaluationServer.cs` in `src/JIM.Application/Servers/`
-  - Evaluate if MVO matches sync rule scoping criteria groups
+  - Evaluate if MVO matches Sync Rule scoping criteria groups
   - Handle AND/OR logic for criteria groups
 
 - [x] **2.3 Create `OutboundSyncRuleMappingProcessor.cs`** (new processor)
   - Implemented within `ExportEvaluationServer.cs` - maps MVO attributes -> CSO attributes
-  - Maps MVO attributes -> CSO attributes based on sync rule mappings
+  - Maps MVO attributes -> CSO attributes based on Sync Rule mappings
 
 - [x] **2.4 Hook into `SyncFullSyncTaskProcessor.cs`**
   - Implemented in `SyncTaskProcessorBase.cs` calling `EvaluateExportRulesWithNoNetChangeDetectionAsync()`
@@ -1019,7 +1019,7 @@ Based on the design decisions above, this is the implementation plan for outboun
   - Reference resolution prefers secondary external ID (DN) for LDAP systems
 
 - [x] **3.2 Create `SyncExportTaskProcessor.cs`** (new processor in `src/JIM.Worker/Processors/`)
-  - Process Export run profile type
+  - Process Export Run Profile type
   - Supports SyncRunMode (PreviewOnly, PreviewAndSync)
   - Call connector export methods
 
@@ -1094,7 +1094,7 @@ Phase 4         Phase 5                              Phase 6
 | `ExportEvaluationServer.cs` | `src/JIM.Application/Servers/` | Evaluates export rules, creates PendingExports | ✅ Implemented |
 | `ExportExecutionServer.cs` | `src/JIM.Application/Servers/` | Executes exports via connectors (includes retry logic) | ✅ Implemented |
 | `SyncPreviewServer.cs` | `src/JIM.Application/Servers/` | Generates full sync previews (CSO->MVO->exports) | ❌ Not implemented (Issue #288) |
-| `SyncExportTaskProcessor.cs` | `src/JIM.Worker/Processors/` | Processes Export run profile | ✅ Implemented |
+| `SyncExportTaskProcessor.cs` | `src/JIM.Worker/Processors/` | Processes Export Run Profile | ✅ Implemented |
 | `ScopingEvaluationServer.cs` | `src/JIM.Application/Servers/` | Evaluates scoping criteria (AND/OR logic) | ✅ Implemented |
 | `DeferredReference.cs` | `src/JIM.Models/Transactional/` | Tracks unresolved references | ✅ Implemented |
 | `SyncPreviewResult.cs` | `src/JIM.Models/Transactional/` | Full sync preview results container | ❌ Not implemented (Issue #288) |
@@ -1104,10 +1104,10 @@ Phase 4         Phase 5                              Phase 6
 
 ## Open Questions for Discussion
 
-1. ~~**Should pending exports require approval by default, or be auto-executed?**~~
-   - **Resolved**: Auto-execute is the implemented approach. Pending exports are created and executed automatically via Export run profiles. Approval workflows remain a future enhancement (see [Innovation Opportunities](#innovation-opportunities)).
+1. ~~**Should Pending Exports require approval by default, or be auto-executed?**~~
+   - **Resolved**: Auto-execute is the implemented approach. Pending exports are created and executed automatically via Export Run Profiles. Approval workflows remain a future enhancement (see [Innovation Opportunities](#innovation-opportunities)).
 
-2. ~~**How granular should export sync rules be?**~~
+2. ~~**How granular should export Sync Rules be?**~~
    - **Resolved**: Per-attribute granularity is implemented. Each `SyncRuleMapping` maps individual attributes, and `PendingExportAttributeValueChange` tracks per-attribute confirmation status.
 
 3. **Should we support "disable before delete" pattern?**
@@ -1116,10 +1116,10 @@ Phase 4         Phase 5                              Phase 6
 
 4. **How do we handle provisioning to systems that require specific ID formats?**
    - AD needs DN, SAM, UPN
-   - **Partially resolved**: Expression-based mappings in sync rules support DN generation (e.g., `"CN=" + EscapeDN(mv["Display Name"]) + ",OU=Users,DC=domain,DC=local"`). Other ID formats handled similarly via expressions.
+   - **Partially resolved**: Expression-based mappings in Sync Rules support DN generation (e.g., `"CN=" + EscapeDN(mv["Display Name"]) + ",OU=Users,DC=domain,DC=local"`). Other ID formats handled similarly via expressions.
 
-5. ~~**Should export sync run as part of Full Sync, or as a separate run profile?**~~
-   - **Resolved**: Export is a separate run profile (`ConnectedSystemRunType.Export = 5`). Export evaluation happens during inbound sync (Q1), but export execution is a separate run profile step.
+5. ~~**Should export sync run as part of Full Sync, or as a separate Run Profile?**~~
+   - **Resolved**: Export is a separate Run Profile (`ConnectedSystemRunType.Export = 5`). Export evaluation happens during inbound sync (Q1), but export execution is a separate Run Profile step.
 
 ---
 

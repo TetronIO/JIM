@@ -7,12 +7,12 @@ using JIM.Models.Core.DTOs;
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// Lightweight DTO for metaverse objects in list views.
+/// Lightweight DTO for Metaverse Objects in list views.
 /// </summary>
 public class MetaverseObjectHeaderDto
 {
     /// <summary>
-    /// The unique identifier (GUID) of the metaverse object.
+    /// The unique identifier (GUID) of the Metaverse Object.
     /// </summary>
     public Guid Id { get; set; }
 

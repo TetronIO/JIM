@@ -38,7 +38,7 @@ public class CreateSyncRuleRequest
     public int MetaverseObjectTypeId { get; set; }
 
     /// <summary>
-    /// The direction of the sync rule (Import or Export).
+    /// The direction of the Sync Rule (Import or Export).
     /// </summary>
     [Required]
     public SyncRuleDirection Direction { get; set; }
@@ -54,7 +54,7 @@ public class CreateSyncRuleRequest
     public bool? ProvisionToConnectedSystem { get; set; }
 
     /// <summary>
-    /// Whether the sync rule is enabled.
+    /// Whether the Sync Rule is enabled.
     /// </summary>
     public bool Enabled { get; set; } = true;
 
@@ -78,7 +78,7 @@ public class UpdateSyncRuleRequest
     public string? Name { get; set; }
 
     /// <summary>
-    /// Whether the sync rule is enabled.
+    /// Whether the Sync Rule is enabled.
     /// </summary>
     public bool? Enabled { get; set; }
 
@@ -102,10 +102,10 @@ public class UpdateSyncRuleRequest
     /// <summary>
     /// For Import rules: Action to take when a CSO falls out of this rule's scope.
     /// Disconnect breaks the CSO -> MVO join; whether the attributes contributed by
-    /// this connected system are also recalled from the MVO depends on the CSO type's
+    /// this Connected System are also recalled from the MVO depends on the CSO type's
     /// RemoveContributedAttributesOnObsoletion flag, the MVO type's deletion grace
     /// period, and whether the MVO is slated for immediate deletion. RemainJoined
-    /// keeps the join intact and stops further attribute flow. Only applicable when
+    /// keeps the join intact and stops further Attribute Flow. Only applicable when
     /// Direction = Import.
     /// </summary>
     public InboundOutOfScopeAction? InboundOutOfScopeAction { get; set; }

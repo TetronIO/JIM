@@ -174,7 +174,7 @@ None.
 | `isAdministrator` | `boolean` | Whether the user has the Administrator role |
 | `name` | `string` | Display name |
 | `authMethod` | `string` | `oauth` or `api_key` |
-| `metaverseObjectId` | `guid?` | The user's metaverse object ID (`$null` if not authorised) |
+| `metaverseObjectId` | `guid?` | The user's Metaverse Object ID (`$null` if not authorised) |
 | `roles` | `array` | Role names assigned to the user |
 | `message` | `string?` | Additional context (present when not authorised) |
 
@@ -242,7 +242,7 @@ Reset-JIMSystem -Force
 
 ```powershell title="Capture and report on what was removed"
 $result = Reset-JIMSystem -Force
-"Removed $($result.connectedSystemsRemoved) connected systems"
+"Removed $($result.connectedSystemsRemoved) Connected Systems"
 ```
 
 ### Notes

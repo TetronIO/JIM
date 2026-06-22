@@ -11,7 +11,7 @@ namespace JIM.Worker.Tests.Workflows;
 /// <summary>
 /// Tests for safe cancellation behaviour during sync operations.
 /// Verifies that when cancellation is requested, the current page's flush pipeline
-/// completes before exiting — preventing orphaned MVOs without pending exports.
+/// completes before exiting — preventing orphaned MVOs without Pending Exports.
 /// </summary>
 [TestFixture]
 public class SyncCancellationTests : WorkflowTestBase
@@ -31,7 +31,7 @@ public class SyncCancellationTests : WorkflowTestBase
         var mvType = await CreateMvObjectTypeAsync("Person");
         var syncRule = await CreateImportSyncRuleAsync(connectedSystem.Id, csoType, mvType, "HR Import");
 
-        // Add attribute flow so projection creates MVO attribute values (proves flush worked)
+        // Add Attribute Flow so projection creates MVO attribute values (proves flush worked)
         await AddAttributeFlowAsync(syncRule, "DisplayName", "DisplayName");
 
         var csos = await CreateCsosAsync(connectedSystem.Id, csoType, 6);
@@ -297,7 +297,7 @@ public class SyncCancellationTests : WorkflowTestBase
     }
 
     /// <summary>
-    /// Adds an attribute flow mapping to a sync rule.
+    /// Adds an Attribute Flow mapping to a Sync Rule.
     /// Follows the same pattern as NugatoryWorkOptimisationTests.
     /// </summary>
     private Task AddAttributeFlowAsync(

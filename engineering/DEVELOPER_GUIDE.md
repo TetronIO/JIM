@@ -6,7 +6,7 @@
 
 ## Overview
 
-JIM is a .NET-based Identity Management (IDM) system implementing the metaverse pattern for centralised identity governance. It synchronises identities across heterogeneous systems (Active Directory, OpenLDAP, 389 DS, and other RFC 4512-compliant directories, files, databases, etc.) with bi-directional attribute flows, provisioning rules, and compliance tracking.
+JIM is a .NET-based Identity Management (IDM) system implementing the metaverse pattern for centralised identity governance. It synchronises identities across heterogeneous systems (Active Directory, OpenLDAP, 389 DS, and other RFC 4512-compliant directories, files, databases, etc.) with bi-directional Attribute Flows, provisioning rules, and compliance tracking.
 
 ## Architecture Principles
 
@@ -23,10 +23,10 @@ JIM is a .NET-based Identity Management (IDM) system implementing the metaverse 
 The metaverse is the authoritative identity repository:
 - **MetaverseObject**: Central identity entity (users, groups, custom types)
 - **ConnectedSystem**: External systems synchronised with the metaverse
-- **SyncRule**: Bidirectional mappings between connected systems and metaverse
+- **SyncRule**: Bidirectional mappings between Connected Systems and metaverse
 - **Staging Areas**: Import/export staging for transactional integrity
 
-**Rule**: All identity operations flow through the metaverse. Never sync directly between connected systems.
+**Rule**: All identity operations flow through the metaverse. Never sync directly between Connected Systems.
 
 ### 3. Modularity & Extensibility
 - **Connectors**: Implement `IConnector` and related interfaces for new systems
@@ -54,9 +54,9 @@ JIM's architecture is documented using C4 model diagrams (System Context, Contai
 Detailed Mermaid diagrams document the runtime behaviour of JIM's synchronisation engine, worker, and scheduler. These are viewable directly in GitHub, VS Code, or any Mermaid-compatible markdown renderer.
 
 **Synchronisation**:
-- [Full Sync CSO Processing](../docs/developer/diagrams/FULL_SYNC_CSO_PROCESSING.md): Core per-CSO decision tree (scoping, join, projection, attribute flow, drift detection)
+- [Full Sync CSO Processing](../docs/developer/diagrams/FULL_SYNC_CSO_PROCESSING.md): Core per-CSO decision tree (scoping, join, projection, Attribute Flow, drift detection)
 - [Delta Sync Flow](../docs/developer/diagrams/DELTA_SYNC_FLOW.md): How delta sync differs from full sync (watermark, early exit, CSO selection)
-- [Full Import Flow](../docs/developer/diagrams/FULL_IMPORT_FLOW.md): Object import, duplicate detection, deletion detection, pending export reconciliation
+- [Full Import Flow](../docs/developer/diagrams/FULL_IMPORT_FLOW.md): Object import, duplicate detection, deletion detection, Pending Export reconciliation
 
 **Export**:
 - [Export Execution Flow](../docs/developer/diagrams/EXPORT_EXECUTION_FLOW.md): Batching, parallelism, deferred reference resolution, retry with backoff
@@ -245,7 +245,7 @@ builder.Services.AddSingleton<IConfiguration>(configuration);
 public class MetaverseController : ControllerBase
 {
     /// <summary>
-    /// Gets a metaverse object by ID
+    /// Gets a Metaverse Object by ID
     /// </summary>
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(MetaverseObjectDto), 200)]
@@ -289,7 +289,7 @@ public class MetaverseController : ControllerBase
 
 The Worker separates pure domain logic from I/O via two core interfaces:
 
-- **`ISyncEngine`**: stateless domain engine with 7 methods (join resolution, projection, attribute flow, scoping, etc.). Zero I/O dependencies; receives all data as parameters and returns results. Unit-testable without mocks.
+- **`ISyncEngine`**: stateless domain engine with 7 methods (join resolution, projection, Attribute Flow, scoping, etc.). Zero I/O dependencies; receives all data as parameters and returns results. Unit-testable without mocks.
 - **`ISyncRepository`**: ~80-method data access boundary. Production implementation: `JIM.PostgresData.Repositories.SyncRepository`. Test implementation: `JIM.InMemoryData.SyncRepository`.
 
 **Dependency Injection**: The Worker and Scheduler use `IJimApplicationFactory` and `IConnectorFactory` for per-task context isolation. Each dispatched task gets its own DI scope with independent `DbContext` and connector instances.
@@ -394,7 +394,7 @@ See [GitHub Issue #212](https://github.com/TetronIO/JIM/issues/212) for .NET Asp
 ### 1. Authentication
 - **OIDC/SSO**: Required for all deployments
 - **No local accounts**: Users authenticated via external identity provider
-- **Claims mapping**: Map OIDC claims to metaverse objects for role assignment
+- **Claims mapping**: Map OIDC claims to Metaverse Objects for role assignment
 
 ### 2. Authorisation
 - **Role-based**: Use claims-based authorisation in controllers/pages
@@ -597,7 +597,7 @@ Workflow tests sit between unit tests and integration tests - they test multi-st
 [Test]
 public async Task ProvisioningWorkflow_CompleteCycle_SucceedsAsync()
 {
-    // Setup systems and sync rules
+    // Setup systems and Sync Rules
     await SetUpProvisioningScenarioAsync(objectCount: 100);
 
     // Execute import
@@ -1391,7 +1391,7 @@ Invoke-JIMApiRequest -Method Delete -Endpoint "api/v1/connected-systems/$id"
 2. Create seeding data in `SeedingServer`
 3. Define required attributes
 4. Add UI pages for management
-5. Update sync rules to support new type
+5. Update Sync Rules to support new type
 
 ### Adding a New API Endpoint
 1. Add method to appropriate controller in `src/JIM.Web/Controllers/Api/`

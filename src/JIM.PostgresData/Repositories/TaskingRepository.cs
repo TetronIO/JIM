@@ -301,13 +301,13 @@ public class TaskingRepository : ITaskingRepository
                 var runProfilePart = await db.ConnectedSystemRunProfiles.Select(q => new { q.Id, q.Name, ConnectedSystemName = db.ConnectedSystems.Single(cs => cs.Id == q.ConnectedSystemId).Name }).
                     SingleOrDefaultAsync(q => q.Id == synchronisationWorkerTask.ConnectedSystemRunProfileId);
 
-                return runProfilePart != null ? $"{runProfilePart.ConnectedSystemName} - {runProfilePart.Name}" : "run profile not found!";
+                return runProfilePart != null ? $"{runProfilePart.ConnectedSystemName} - {runProfilePart.Name}" : "Run Profile not found!";
             }
             case ClearConnectedSystemObjectsWorkerTask clearConnectedSystemObjectsTask:
-                // use the name of the connected system
+                // use the name of the Connected System
                 return db.ConnectedSystems.Single(q => q.Id == clearConnectedSystemObjectsTask.ConnectedSystemId).Name;
             case DeleteConnectedSystemWorkerTask deleteConnectedSystemTask:
-                // use the name of the connected system (may be null if already deleted)
+                // use the name of the Connected System (may be null if already deleted)
                 var systemToDelete = db.ConnectedSystems.SingleOrDefault(q => q.Id == deleteConnectedSystemTask.ConnectedSystemId);
                 return systemToDelete?.Name ?? $"Connected System {deleteConnectedSystemTask.ConnectedSystemId}";
             default:

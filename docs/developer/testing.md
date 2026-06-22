@@ -152,7 +152,7 @@ Workflow tests sit between unit tests and integration tests. They test multi-ste
 [Test]
 public async Task ProvisioningWorkflow_CompleteCycle_SucceedsAsync()
 {
-    // Setup systems and sync rules
+    // Setup systems and Sync Rules
     await SetUpProvisioningScenarioAsync(objectCount: 100);
 
     // Execute import

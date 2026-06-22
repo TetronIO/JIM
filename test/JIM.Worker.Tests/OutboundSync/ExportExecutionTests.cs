@@ -147,7 +147,7 @@ public class ExportExecutionTests
         };
         ConnectedSystemObjectsData.Add(cso);
 
-        // Create a pending export
+        // Create a Pending Export
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
@@ -189,14 +189,14 @@ public class ExportExecutionTests
         Assert.That(result.ProcessedPendingExportIds.Count, Is.GreaterThan(0), "Expected processed exports");
         Assert.That(result.ProcessedPendingExportIds, Does.Contain(pendingExport.Id));
 
-        // Verify export details via the original pending export
+        // Verify export details via the original Pending Export
         Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
         Assert.That(pendingExport.AttributeValueChanges.Count, Is.EqualTo(1));
         Assert.That(pendingExport.AttributeValueChanges[0].StringValue, Is.EqualTo("New Display Name"));
     }
 
     /// <summary>
-    /// Tests that when there are no pending exports, an empty result is returned.
+    /// Tests that when there are no Pending Exports, an empty result is returned.
     /// </summary>
     [Test]
     public async Task ExecuteExportsAsync_NoPendingExports_ReturnsEmptyResultAsync()
@@ -206,7 +206,7 @@ public class ExportExecutionTests
         var mockConnector = new Mock<IConnector>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
 
-        // Ensure no pending exports
+        // Ensure no Pending Exports
         PendingExportsData.Clear();
 
         // Act
@@ -241,7 +241,7 @@ public class ExportExecutionTests
         };
         ConnectedSystemObjectsData.Add(cso);
 
-        // Create a pending export that's not due for retry yet
+        // Create a Pending Export that's not due for retry yet
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
@@ -293,7 +293,7 @@ public class ExportExecutionTests
         };
         ConnectedSystemObjectsData.Add(cso);
 
-        // Create a pending export that has exceeded max retries
+        // Create a Pending Export that has exceeded max retries
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
@@ -408,7 +408,7 @@ public class ExportExecutionTests
 
         var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
 
-        // Create multiple pending exports
+        // Create multiple Pending Exports
         for (int i = 0; i < 10; i++)
         {
             var cso = new ConnectedSystemObject
@@ -534,7 +534,7 @@ public class ExportExecutionTests
         Assert.That(result.ProcessedPendingExportIds.Count, Is.EqualTo(1));
         Assert.That(result.ProcessedPendingExportIds[0], Is.EqualTo(pendingExport.Id));
 
-        // Verify export details via the original pending export
+        // Verify export details via the original Pending Export
         Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
         Assert.That(pendingExport.ConnectedSystemObject?.Id, Is.EqualTo(cso.Id));
         Assert.That(pendingExport.AttributeValueChanges.Count, Is.EqualTo(2));
@@ -608,7 +608,7 @@ public class ExportExecutionTests
         Assert.That(result.ProcessedPendingExportIds.Count, Is.EqualTo(1));
         Assert.That(result.ProcessedPendingExportIds, Does.Contain(pendingExport.Id));
 
-        // Verify the integer value is stored correctly in the pending export
+        // Verify the integer value is stored correctly in the Pending Export
         Assert.That(pendingExport.AttributeValueChanges.Count, Is.EqualTo(1));
         Assert.That(pendingExport.AttributeValueChanges[0].IntValue, Is.EqualTo(512));
     }
@@ -651,7 +651,7 @@ public class ExportExecutionTests
         Assert.That(result.ProcessedPendingExportIds.Count, Is.EqualTo(1));
         Assert.That(result.ProcessedPendingExportIds, Does.Contain(pendingExport.Id));
 
-        // Verify Create change type via the original pending export
+        // Verify Create change type via the original Pending Export
         Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Create));
         Assert.That(pendingExport.ConnectedSystemObject, Is.Null);
         Assert.That(pendingExport.SourceMetaverseObjectId, Is.EqualTo(mvo.Id));
@@ -704,7 +704,7 @@ public class ExportExecutionTests
         Assert.That(result.ProcessedPendingExportIds.Count, Is.EqualTo(1));
         Assert.That(result.ProcessedPendingExportIds, Does.Contain(pendingExport.Id));
 
-        // Verify Delete change type via the original pending export
+        // Verify Delete change type via the original Pending Export
         Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Delete));
         Assert.That(pendingExport.ConnectedSystemObject?.Id, Is.EqualTo(cso.Id));
     }
@@ -1105,7 +1105,7 @@ public class ExportExecutionTests
         };
         ConnectedSystemObjectsData.Add(cso);
 
-        // Create a pending export with ErrorCount = 0 (first attempt)
+        // Create a Pending Export with ErrorCount = 0 (first attempt)
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
@@ -1204,7 +1204,7 @@ public class ExportExecutionTests
         };
         ConnectedSystemObjectsData.Add(cso);
 
-        // Create a pending export that has already failed once (ErrorCount = 1)
+        // Create a Pending Export that has already failed once (ErrorCount = 1)
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
@@ -1289,7 +1289,7 @@ public class ExportExecutionTests
         };
         ConnectedSystemObjectsData.Add(cso);
 
-        // Create a pending export with only ExportedPendingConfirmation attribute changes (not exportable)
+        // Create a Pending Export with only ExportedPendingConfirmation attribute changes (not exportable)
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
@@ -1714,7 +1714,7 @@ public class ExportExecutionTests
         };
         ConnectedSystemObjectsData.Add(cso);
 
-        // Create pending exports
+        // Create Pending Exports
         var pendingExport1 = new PendingExport
         {
             Id = Guid.NewGuid(),
@@ -1787,7 +1787,7 @@ public class ExportExecutionTests
             mockConnector.Object,
             SyncRunMode.PreviewAndSync);
 
-        // Assert - FailedCount should reflect all pending exports
+        // Assert - FailedCount should reflect all Pending Exports
         Assert.That(result.FailedCount, Is.EqualTo(2), "Both exports should be marked as failed");
         Assert.That(result.SuccessCount, Is.EqualTo(0), "No exports should have succeeded");
 
@@ -1837,7 +1837,7 @@ public class ExportExecutionTests
         };
         ConnectedSystemObjectsData.Add(cso);
 
-        // Create a pending export
+        // Create a Pending Export
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),

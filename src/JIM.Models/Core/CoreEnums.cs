@@ -23,7 +23,7 @@ public enum AttributePlurality
 }
 
 /// <summary>
-/// Indicates whether an attribute can be written to in the connected system.
+/// Indicates whether an attribute can be written to in the Connected System.
 /// Attributes may be read-only due to being system-managed, constructed (computed),
 /// or back-link attributes that can only be modified from the forward-link side.
 /// </summary>
@@ -77,7 +77,7 @@ public enum MetaverseObjectDeletionRule
 
     /// <summary>
     /// The MVO will be deleted when ANY of the specified authoritative sources (DeletionTriggerConnectedSystemIds) disconnect.
-    /// Requires at least one connected system to be specified in the MetaverseObjectType.DeletionTriggerConnectedSystemIds list.
+    /// Requires at least one Connected System to be specified in the MetaverseObjectType.DeletionTriggerConnectedSystemIds list.
     /// If a grace period is configured on the MetaverseObjectType, deletion will be scheduled for after that period.
     /// </summary>
     WhenAuthoritativeSourceDisconnected = 2
@@ -102,18 +102,18 @@ public enum MetaverseObjectOrigin
 }
 
 /// <summary>
-/// Action to take when an MVO falls out of an export sync rule's scope.
+/// Action to take when an MVO falls out of an export Sync Rule's scope.
 /// </summary>
 public enum OutboundDeprovisionAction
 {
     /// <summary>
     /// Break the join, mark CSO as disconnected/unmanaged.
-    /// CSO remains in the connected system but JIM no longer manages it.
+    /// CSO remains in the Connected System but JIM no longer manages it.
     /// </summary>
     Disconnect = 0,
 
     /// <summary>
-    /// Break the join AND delete the CSO from the connected system.
+    /// Break the join AND delete the CSO from the Connected System.
     /// </summary>
     Delete = 1
 
@@ -121,7 +121,7 @@ public enum OutboundDeprovisionAction
 }
 
 /// <summary>
-/// Action to take when a CSO falls out of an import sync rule's scope.
+/// Action to take when a CSO falls out of an import Sync Rule's scope.
 /// </summary>
 public enum InboundOutOfScopeAction
 {
@@ -240,12 +240,12 @@ public enum ServiceSettingValueType
 }
 
 /// <summary>
-/// Determines how JIM handles run profile execution when no partitions/containers are selected.
+/// Determines how JIM handles Run Profile execution when no partitions/containers are selected.
 /// </summary>
 public enum PartitionValidationMode
 {
     /// <summary>
-    /// Execution is blocked with an error. The run profile will not execute.
+    /// Execution is blocked with an error. The Run Profile will not execute.
     /// This is the default and recommended setting.
     /// </summary>
     Error = 0,

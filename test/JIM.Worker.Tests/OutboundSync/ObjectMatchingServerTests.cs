@@ -549,7 +549,7 @@ public class ObjectMatchingServerTests
     [Test]
     public void ObjectMatchingRule_IsValid_AdvancedMode_WithMetaverseObjectTypeId_ReturnsFalse()
     {
-        // Arrange - Advanced mode rule WITH MetaverseObjectTypeId (invalid — sync rule provides MVO type)
+        // Arrange - Advanced mode rule WITH MetaverseObjectTypeId (invalid — Sync Rule provides MVO type)
         var mvAttr = new MetaverseAttribute { Id = 1, Name = "EmployeeId" };
         var csAttr = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "employeeNumber" };
         var syncRule = SyncRulesData[0];
@@ -646,7 +646,7 @@ public class ObjectMatchingServerTests
         var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
         exportRule.ConnectedSystem = connectedSystem;
 
-        // Add matching rules to the sync rule
+        // Add matching rules to the Sync Rule
         var mvAttr = new MetaverseAttribute { Id = 1, Name = "EmployeeId" };
         var csAttr = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "employeeNumber" };
 

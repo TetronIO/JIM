@@ -188,7 +188,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             if (objectType == null || string.IsNullOrEmpty(objectType.StringValue))
                 throw new InvalidSettingValuesException($"For Export Only mode without an existing file, {SettingObjectType} must be specified to define the object type for the schema.");
 
-            // Return a schema with just the object type, no attributes (will be defined by sync rules)
+            // Return a schema with just the object type, no attributes (will be defined by Sync Rules)
             var exportSchema = new ConnectorSchema();
             exportSchema.ObjectTypes.Add(new ConnectorSchemaObjectType(objectType.StringValue));
             logger.Information("GetSchemaAsync: Created empty schema for Export Only mode with object type: {ObjectType}", objectType.StringValue);
@@ -505,7 +505,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<ConnectedSystemSettingValue> settings, IList<PendingExport> pendingExports, CancellationToken cancellationToken)
     {
         var logger = Log.ForContext<FileConnector>();
-        logger.Verbose("ExportAsync() called with {Count} pending exports", pendingExports.Count);
+        logger.Verbose("ExportAsync() called with {Count} Pending Exports", pendingExports.Count);
 
         var export = new FileConnectorExport(settings, pendingExports, logger);
         return Task.FromResult(export.Execute());

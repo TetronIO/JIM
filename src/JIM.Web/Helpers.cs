@@ -245,9 +245,9 @@ public static class Helpers
         {
             // Import operations
             ObjectChangeType.Added =>
-                "A new connected system object (CSO) was discovered in the source system and added to the connector space.",
+                "A new Connected System Object (CSO) was discovered in the source system and added to the connector space.",
             ObjectChangeType.Updated =>
-                "An existing connected system object (CSO) was updated with changed attribute values from the source system.",
+                "An existing Connected System Object (CSO) was updated with changed attribute values from the source system.",
             ObjectChangeType.Deleted when !isSyncContext =>
                 "The object was detected as deleted from the source system. It is now pending removal during the next synchronisation.",
             ObjectChangeType.Deleted when isSyncContext =>
@@ -255,35 +255,35 @@ public static class Helpers
 
             // Sync operations
             ObjectChangeType.Projected =>
-                "A new metaverse object (MVO) was created because no existing match was found. The CSO's attributes were projected into the metaverse.",
+                "A new Metaverse Object (MVO) was created because no existing match was found. The CSO's attributes were projected into the metaverse.",
             ObjectChangeType.Joined =>
-                "The connected system object (CSO) was matched to an existing metaverse object (MVO) using the configured join rules.",
+                "The Connected System Object (CSO) was matched to an existing Metaverse Object (MVO) using the configured join rules.",
             ObjectChangeType.AttributeFlow =>
-                "Attribute values were flowed from the connected system object to the metaverse object according to the sync rule mappings.",
+                "Attribute values were flowed from the Connected System Object to the Metaverse Object according to the Sync Rule mappings.",
             ObjectChangeType.Disconnected =>
-                "The connected system object (CSO) was disconnected from its metaverse object (MVO). Attribute flow has stopped.",
+                "The Connected System Object (CSO) was disconnected from its Metaverse Object (MVO). Attribute flow has stopped.",
             ObjectChangeType.DisconnectedOutOfScope =>
-                "The object fell out of scope of the import sync rule scoping criteria and was disconnected from the metaverse.",
+                "The object fell out of scope of the import Sync Rule scoping criteria and was disconnected from the metaverse.",
             ObjectChangeType.OutOfScopeRetainJoin =>
                 "The object fell out of scope but the join was retained. Attribute flow has stopped, but the link is preserved for future re-scoping.",
             ObjectChangeType.DriftCorrection =>
-                "Drift was detected: the target system's values differed from the expected metaverse values. A corrective pending export was created to restore the expected state.",
+                "Drift was detected: the target system's values differed from the expected metaverse values. A corrective Pending Export was created to restore the expected state.",
 
             // Export operations
             ObjectChangeType.Exported =>
-                "The pending attribute changes were successfully exported to the target connected system.",
+                "The pending attribute changes were successfully exported to the target Connected System.",
             ObjectChangeType.Deprovisioned =>
-                "The object was deleted from the target connected system as part of deprovisioning.",
+                "The object was deleted from the target Connected System as part of deprovisioning.",
 
             // Pending Export visibility
             ObjectChangeType.PendingExport =>
-                "A pending export is staged and waiting for the next export run to apply changes to the target system.",
+                "A Pending Export is staged and waiting for the next export run to apply changes to the target system.",
             ObjectChangeType.PendingExportConfirmed =>
-                "The pending export was confirmed during the confirming import. The exported values matched the imported values.",
+                "The Pending Export was confirmed during the confirming import. The exported values matched the imported values.",
 
             // Direct creation
             ObjectChangeType.Created =>
-                "The metaverse object was created directly (e.g. via data generation or the admin interface) rather than through synchronisation.",
+                "The Metaverse Object was created directly (e.g. via data generation or the admin interface) rather than through synchronisation.",
 
             // Other
             ObjectChangeType.NoChange =>
@@ -413,7 +413,7 @@ public static class Helpers
     }
 
     /// <summary>
-    /// Returns a MudBlazor colour for attribute flow mapping type chips.
+    /// Returns a MudBlazor colour for Attribute Flow mapping type chips.
     /// </summary>
     public static Color GetMappingTypeChipColour(SyncRuleMappingSourcesType sourceType)
     {

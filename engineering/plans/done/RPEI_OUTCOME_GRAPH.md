@@ -8,7 +8,7 @@
 
 ## Overview
 
-Restructure Run Profile Execution Items (RPEIs) so that each RPEI records a structured graph of **causal outcomes**: the full chain of consequences that resulted from processing a single Connected System Object. Today, RPEIs are flat records with a single `ObjectChangeType`. This design replaces that with a tree of `ActivityRunProfileExecutionItemSyncOutcome` nodes that tells the complete story: "this CSO was projected, which caused attribute flow of 12 attributes, which caused provisioning into AD and LDAP."
+Restructure Run Profile Execution Items (RPEIs) so that each RPEI records a structured graph of **causal outcomes**: the full chain of consequences that resulted from processing a single Connected System Object. Today, RPEIs are flat records with a single `ObjectChangeType`. This design replaces that with a tree of `ActivityRunProfileExecutionItemSyncOutcome` nodes that tells the complete story: "this CSO was projected, which caused Attribute Flow of 12 attributes, which caused provisioning into AD and LDAP."
 
 This gives administrators immediate visibility into what happened and why, from a single row in the activity detail view.
 
@@ -33,7 +33,7 @@ Each `ActivityRunProfileExecutionItem` is a flat record:
 
 ### Problems
 
-1. **No causal chain**: A projection that triggers attribute flow and provisioning into 3 systems produces a single RPEI with `ObjectChangeType.Projected`. The downstream consequences are invisible unless you look at separate export activity RPEIs
+1. **No causal chain**: A projection that triggers Attribute Flow and provisioning into 3 systems produces a single RPEI with `ObjectChangeType.Projected`. The downstream consequences are invisible unless you look at separate export activity RPEIs
 2. **Stats are type-count-based**: Statistics count RPEIs by `ObjectChangeType`, which conflates "how many objects" with "what happened to each object"
 3. **Cross-activity blindness**: Import, sync, and export are separate activities; there is no single view showing the full impact of processing one object
 
@@ -41,7 +41,7 @@ Each `ActivityRunProfileExecutionItem` is a flat record:
 
 ### Approach: Per-Activity Causal Graphs
 
-Each activity type (import, sync, export) records its own causal graph within its scope. The sync RPEI captures the richest graph because sync orchestrates join/project, attribute flow, and export evaluation. Import and export RPEIs capture their own consequence chains independently.
+Each activity type (import, sync, export) records its own causal graph within its scope. The sync RPEI captures the richest graph because sync orchestrates join/project, Attribute Flow, and export evaluation. Import and export RPEIs capture their own consequence chains independently.
 
 This avoids cross-activity writes (which would complicate concurrency and the bulk-insert model) while still giving each activity a complete story within its operational scope.
 
@@ -67,10 +67,10 @@ public class ActivityRunProfileExecutionItemSyncOutcome
     // What happened
     public ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType { get; set; }
 
-    // Target entity context (MVO ID, target CSO ID, connected system ID, etc.)
+    // Target entity context (MVO ID, target CSO ID, Connected System ID, etc.)
     public Guid? TargetEntityId { get; set; }
 
-    // Snapshot description for display without joins (e.g., connected system name, MVO display name)
+    // Snapshot description for display without joins (e.g., Connected System name, MVO display name)
     public string? TargetEntityDescription { get; set; }
 
     // Quantitative detail (e.g., "12 attributes flowed", "3 attributes exported")
@@ -86,7 +86,7 @@ public class ActivityRunProfileExecutionItemSyncOutcome
 
 ### New Enum: `ActivityRunProfileExecutionItemSyncOutcomeType`
 
-Covers all three run profile types:
+Covers all three Run Profile types:
 
 ```csharp
 public enum ActivityRunProfileExecutionItemSyncOutcomeType
@@ -110,7 +110,7 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     MvoDeleted,
     DriftCorrection,
 
-    // Sync outcomes; outbound (pending export creation during sync)
+    // Sync outcomes; outbound (Pending Export creation during sync)
     Provisioned,
     PendingExportCreated,
 
@@ -123,12 +123,12 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
 ### Example Outcome Trees
 
 These diagrams represent the visual structure of the Causality Tree as rendered on the
-RPEI detail page. Each tree starts with the connected system context and CSO identity,
+RPEI detail page. Each tree starts with the Connected System context and CSO identity,
 followed by the outcome nodes as children.
 
 **Visual conventions:**
 
-- `{Connected System Name} - {Run Profile Name}:`: connected system and run profile context header (CS name hyperlinks to CS detail page)
+- `{Connected System Name} - {Run Profile Name}:`: Connected System and Run Profile context header (CS name hyperlinks to CS detail page)
 - `CSO {ExternalID} - {DisplayName}`: CSO identity (hyperlink to CSO detail page)
 - `[Outcome]`: outcome type rendered as a coloured icon + display name
 - `--`: em dash separator between outcome type and inline target description (Projected, Joined, Provisioned show target inline; Joined uses "; to")
@@ -242,7 +242,7 @@ ValueType: Enum
 EnumTypeName: "ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel"
 DefaultValue: "Detailed"
 Description: "Controls how much detail is recorded for sync outcome
-              graphs on each run profile execution item. Higher levels
+              graphs on each Run Profile execution item. Higher levels
               provide richer audit trails but increase storage usage."
 ```
 
@@ -292,7 +292,7 @@ GROUP BY OutcomeType
 
 Or equivalently via join.
 
-**Key semantic change for exports**: If 10 objects are each exported to 2 connected systems, the "Exported" stat shows **20**: the total number of export actions across target systems. This is the meaningful number for operators ("how many CSOs were exported to target systems").
+**Key semantic change for exports**: If 10 objects are each exported to 2 Connected Systems, the "Exported" stat shows **20**: the total number of export actions across target systems. This is the meaningful number for operators ("how many CSOs were exported to target systems").
 
 The current `TotalObjectsProcessed` / `TotalObjectChangeCount` concepts remain. Individual outcome-type totals replace the current `ObjectChangeType`-based counts.
 
@@ -364,8 +364,8 @@ Today creates 1 RPEI with `ObjectChangeType.Add/Update/Delete`. With outcome tra
 The richest graph. The processor already tracks decisions through `MetaverseObjectChangeResult` and runs export evaluation inline. Changes:
 
 1. After join/project decision: create root outcome node
-2. After attribute flow: create child outcome under the join/project node
-3. After export evaluation: for each target system with pending exports, create child outcome under the attribute flow node
+2. After Attribute Flow: create child outcome under the join/project node
+3. After export evaluation: for each target system with Pending Exports, create child outcome under the Attribute Flow node
 4. Build tree in memory during CSO processing, attach to RPEI before flush
 
 ### Export Processor
@@ -492,7 +492,7 @@ Statistics can be derived from two sources, with outcomes taking priority:
 1. **Outcome-based** (preferred): When RPEIs have sync outcomes, stats are counted from outcome nodes. This is the primary path for activities created with outcome tracking enabled.
 2. **RPEI-based** (legacy fallback): When no outcomes exist (tracking level = None, or legacy activities), stats are derived from `ObjectChangeType` counts on RPEIs.
 
-**Import deletions**: Import-phase deletion RPEIs record a `DeletionDetected` outcome. Sync-phase deletion RPEIs record a `CsoDeleted` outcome. The `TotalDeleted` stat combines both outcome types. These never overlap within a single activity since import and sync are separate run profile types.
+**Import deletions**: Import-phase deletion RPEIs record a `DeletionDetected` outcome. Sync-phase deletion RPEIs record a `CsoDeleted` outcome. The `TotalDeleted` stat combines both outcome types. These never overlap within a single activity since import and sync are separate Run Profile types.
 
 **Drift corrections**: When outcomes are available, `TotalDriftCorrections` is derived from `DriftCorrection` outcome nodes. Legacy fallback uses RPEI `ObjectChangeType.DriftCorrection` counts.
 
@@ -501,7 +501,7 @@ Statistics can be derived from two sources, with outcomes taking priority:
 Each CSO should produce at most one RPEI per activity. Multiple outcomes are recorded as sibling root nodes in the outcome graph on that single RPEI, rather than creating separate RPEIs. Examples:
 
 - **Import with confirmed export**: One RPEI with `CsoUpdated` + `ExportConfirmed` outcomes
-- **Sync obsoleted CSO**: One RPEI with `Disconnected` + `CsoDeleted` outcomes (+ children for MVO deletion, pending exports)
+- **Sync obsoleted CSO**: One RPEI with `Disconnected` + `CsoDeleted` outcomes (+ children for MVO deletion, Pending Exports)
 - **Import deletion detection**: One RPEI with `ObjectChangeType.Deleted`, no outcomes (detection only)
 
 ## Implementation Phases
@@ -519,8 +519,8 @@ Each CSO should produce at most one RPEI per activity. Multiple outcomes are rec
 
 ### Phase 2: Sync Processor Integration ✅
 
-1. ~~Add outcome tree building to `SyncTaskProcessorBase` (join/project/attribute flow)~~
-2. ~~Add export evaluation outcomes (pending export creation per target system)~~
+1. ~~Add outcome tree building to `SyncTaskProcessorBase` (join/project/Attribute Flow)~~
+2. ~~Add export evaluation outcomes (Pending Export creation per target system)~~
 3. ~~Add disconnection/deletion outcome chains~~
 4. ~~Build `OutcomeSummary` string during tree construction~~
 5. ~~Respect tracking level setting (None/Standard/Detailed)~~
@@ -601,7 +601,7 @@ navigation properties for Display Name and Object Type. When a CSO is deleted (F
 
 The outcome graph makes `ObjectChangeType` redundant in the UI. Outcomes provide a strict
 superset of the information Change Type offered; every Change Type has an equivalent Outcome
-Type, but outcomes also capture downstream consequences (e.g., pending exports, provisioning)
+Type, but outcomes also capture downstream consequences (e.g., Pending Exports, provisioning)
 that Change Type never could.
 
 1. ~~Remove "Filter by Change Type" section from Activity Detail page; the outcome filter covers all the same scenarios~~

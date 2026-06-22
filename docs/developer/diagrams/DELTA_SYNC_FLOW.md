@@ -26,8 +26,8 @@ flowchart TD
     HasChanges -->|No| EarlyWatermark[Update watermark<br/>to UtcNow]
     EarlyWatermark --> EarlyDone([Return - no work needed])
 
-    HasChanges -->|Yes| CountPE[Count pending exports<br/>Total = modified CSOs + PEs]
-    CountPE --> LoadCaches[Load sync rules, object types<br/>Drift detection cache<br/>Pending exports dictionary<br/>Export evaluation cache]
+    HasChanges -->|Yes| CountPE[Count Pending Exports<br/>Total = modified CSOs + PEs]
+    CountPE --> LoadCaches[Load Sync Rules, object types<br/>Drift detection cache<br/>Pending exports dictionary<br/>Export evaluation cache]
 
     LoadCaches --> PageLoop{More CSO<br/>pages?}
 
@@ -38,8 +38,8 @@ flowchart TD
 
     CsoLoop -->|Yes| CheckCancel{Cancellation<br/>requested?}
     CheckCancel -->|Yes| Return([Return])
-    CheckCancel -->|No| Pass1[Pass 1: every CSO in page<br/>ProcessObsoleteAndExportConfirmationAsync<br/>- Confirm pending exports<br/>- Tear down obsolete CSOs<br/>- Populate _pendingDisconnectedMvoIds]
-    Pass1 --> Pass2[Pass 2: non-obsolete CSOs<br/>ProcessActiveConnectedSystemObjectAsync<br/>Identical to Full Sync:<br/>join, project, attribute flow, drift]
+    CheckCancel -->|No| Pass1[Pass 1: every CSO in page<br/>ProcessObsoleteAndExportConfirmationAsync<br/>- Confirm Pending Exports<br/>- Tear down obsolete CSOs<br/>- Populate _pendingDisconnectedMvoIds]
+    Pass1 --> Pass2[Pass 2: non-obsolete CSOs<br/>ProcessActiveConnectedSystemObjectAsync<br/>Identical to Full Sync:<br/>join, project, Attribute Flow, drift]
     Pass2 --> CsoLoop
 
     CsoLoop -->|No| PageFlush[Page flush pipeline:<br/>1. Deferred reference attributes<br/>2. PersistPendingMetaverseObjectsAsync<br/>3. CreatePendingMvoChangeObjectsAsync<br/>4. EvaluatePendingExportsAsync<br/>5. FlushPendingExportOperationsAsync<br/>6. ResolvePendingExportReferenceSnapshotsAsync<br/>7. FlushObsoleteCsoOperationsAsync<br/>8. FlushPendingMvoDeletionsAsync<br/>9. FlushRpeisAsync (bulk-insert via raw SQL)<br/>10. FlushPendingMvoChangesAsync<br/>11. Clear change tracker, update progress]
@@ -82,6 +82,6 @@ flowchart LR
 
 - **Cross-page reference resolution (v0.10.0)**<br /> Both full and delta sync perform cross-page reference resolution after all pages are processed. CSOs with reference attributes that couldn't be resolved during page processing (because the referenced CSO was on a different page) are reloaded and resolved once all MVOs exist. New reference-attribute changes are merged under the existing MvoChange parent RPEI (rather than creating a second standalone RPEI for the same MVO), honouring the `IX_MetaverseObjectChanges_ActivityRunProfileExecutionItemId` unique index. The standard persist/flush pipeline runs again for the resolved references.
 
-- **Partition-scoped filtering (v0.8.0, #353)**<br /> Both full and delta sync support partition-scoped CSO selection via `TargetPartitionId` on the run profile. When set, CSO counting and page loading are filtered to only that partition's scope.
+- **Partition-scoped filtering (v0.8.0, #353)**<br /> Both full and delta sync support partition-scoped CSO selection via `TargetPartitionId` on the Run Profile. When set, CSO counting and page loading are filtered to only that partition's scope.
 
-- **Two-pass per-CSO processing (v0.10.0)**<br /> Each page iterates over its CSOs twice. Pass 1 handles pending-export confirmation and obsolete CSO teardown across all CSOs, populating `_pendingDisconnectedMvoIds`. Pass 2 runs join/projection/attribute flow only on non-obsolete CSOs. This ordering guarantees Pass 2 join attempts see the complete set of disconnected MVOs from Pass 1.
+- **Two-pass per-CSO processing (v0.10.0)**<br /> Each page iterates over its CSOs twice. Pass 1 handles pending-export confirmation and obsolete CSO teardown across all CSOs, populating `_pendingDisconnectedMvoIds`. Pass 2 runs join/projection/Attribute Flow only on non-obsolete CSOs. This ordering guarantees Pass 2 join attempts see the complete set of disconnected MVOs from Pass 1.

@@ -140,7 +140,7 @@ public class ObjectMatchingModeTests
         // Assert
         Assert.That(result.Success, Is.True);
         Assert.That(result.NewMode, Is.EqualTo(ObjectMatchingRuleMode.SyncRule));
-        Assert.That(result.SyncRulesUpdated, Is.EqualTo(1), "Should report 1 sync rule updated");
+        Assert.That(result.SyncRulesUpdated, Is.EqualTo(1), "Should report 1 Sync Rule updated");
         Assert.That(importSyncRule.ObjectMatchingRules.Count, Is.EqualTo(1));
         Assert.That(importSyncRule.ObjectMatchingRules[0].TargetMetaverseAttributeId, Is.EqualTo(100));
         Assert.That(importSyncRule.ObjectMatchingRules[0].CaseSensitive, Is.False);
@@ -211,7 +211,7 @@ public class ObjectMatchingModeTests
 
         // Assert
         Assert.That(result.Success, Is.True);
-        Assert.That(result.SyncRulesUpdated, Is.EqualTo(0), "Should report 0 sync rules updated");
+        Assert.That(result.SyncRulesUpdated, Is.EqualTo(0), "Should report 0 Sync Rules updated");
         Assert.That(syncRuleWithExistingRules.ObjectMatchingRules.Count, Is.EqualTo(1));
         Assert.That(syncRuleWithExistingRules.ObjectMatchingRules[0].Id, Is.EqualTo(99));
 
@@ -347,7 +347,7 @@ public class ObjectMatchingModeTests
             ConnectorDefinition = _connectorDefinition
         };
 
-        // Create 3 sync rules: 2 with config A, 1 with config B
+        // Create 3 Sync Rules: 2 with config A, 1 with config B
         var syncRuleA1 = new SyncRule
         {
             Id = 1,
@@ -504,7 +504,7 @@ public class ObjectMatchingModeTests
         await _jim.ConnectedSystems.SwitchObjectMatchingModeAsync(
             connectedSystem, ObjectMatchingRuleMode.ConnectedSystem, _initiatedBy);
 
-        // Assert - verify sync rule was updated (to clear its rules)
+        // Assert - verify Sync Rule was updated (to clear its rules)
         _mockCsRepo.Verify(r => r.UpdateSyncRuleAsync(importSyncRule), Times.Once);
         Assert.That(importSyncRule.ObjectMatchingRules.Count, Is.EqualTo(0));
     }

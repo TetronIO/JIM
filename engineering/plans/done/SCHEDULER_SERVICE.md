@@ -6,12 +6,12 @@
 
 ## Overview
 
-Implement a scheduler service to automate synchronisation workflows. A **Schedule** is a plan containing multiple steps (run profiles, scripts, executables) that execute as a cohesive unit - similar to enterprise sync schedules like "Delta Sync (Mon-Fri)" or "Full Sync (Sunday)".
+Implement a scheduler service to automate synchronisation workflows. A **Schedule** is a plan containing multiple steps (Run Profiles, scripts, executables) that execute as a cohesive unit - similar to enterprise sync schedules like "Delta Sync (Mon-Fri)" or "Full Sync (Sunday)".
 
 ### Key Concepts
 
 - **Schedule**: A reusable plan defining a sequence of steps with timing (cron or manual)
-- **ScheduleStep**: An individual task within a schedule (run profile, PowerShell, SQL, executable)
+- **ScheduleStep**: An individual task within a schedule (Run Profile, PowerShell, SQL, executable)
 - **ScheduleExecution**: A running instance of a schedule, tracking progress through its steps
 - **WorkerTask**: Individual tasks in the Worker queue (can be standalone or part of a ScheduleExecution)
 
@@ -204,7 +204,7 @@ public enum StepExecutionMode { Sequential, ParallelWithPrevious }
 
 public enum StepType
 {
-    RunProfile,      // Execute a connected system run profile
+    RunProfile,      // Execute a Connected System Run Profile
     PowerShell,      // Execute a PowerShell script
     Executable,      // Execute an external program
     SqlScript        // Execute a SQL script (future)

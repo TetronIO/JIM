@@ -1,6 +1,6 @@
 # JML Lifecycle
 
-The **Joiner/Mover/Leaver** (JML) lifecycle is the foundational automation model for identity management. It describes the three key transitions an identity goes through during its time in an organisation, and how JIM automates the provisioning, updating, and deprovisioning of accounts across connected systems.
+The **Joiner/Mover/Leaver** (JML) lifecycle is the foundational automation model for identity management. It describes the three key transitions an identity goes through during its time in an organisation, and how JIM automates the provisioning, updating, and deprovisioning of accounts across Connected Systems.
 
 ## Overview
 
@@ -15,7 +15,7 @@ flowchart LR
     L -.- LP["Deprovision\naccounts"]
 ```
 
-JIM handles each phase through its [synchronisation rules](../configuration/synchronisation-rules.md) and [synchronisation pipeline](synchronisation-pipeline.md), applying the appropriate actions automatically based on your configuration.
+JIM handles each phase through its [Synchronisation Rules](../configuration/synchronisation-rules.md) and [synchronisation pipeline](synchronisation-pipeline.md), applying the appropriate actions automatically based on your configuration.
 
 ## 👤 Joiner
 
@@ -25,13 +25,13 @@ A **joiner** event occurs when a new identity appears in a source system for the
 
 1. **Import**<br /> JIM imports the new record from the source system, creating a new CSO in the connector space.
 
-2. **Join attempt**<br /> During inbound sync, JIM evaluates the synchronisation rule's join rules to check whether this identity already exists in the metaverse (e.g. a rehire or a record that arrived from another source system).
+2. **Join attempt**<br /> During inbound sync, JIM evaluates the Synchronisation Rule's join rules to check whether this identity already exists in the metaverse (e.g. a rehire or a record that arrived from another source system).
 
 3. **Projection**<br /> If no existing MVO is found, JIM **projects** a new MetaverseObject. This is the birth of the identity in JIM's metaverse.
 
-4. **Inbound attribute flow**<br /> The new employee's attributes (name, department, employee ID, etc.) flow from the CSO into the newly created MVO.
+4. **Inbound Attribute Flow**<br /> The new employee's attributes (name, department, employee ID, etc.) flow from the CSO into the newly created MVO.
 
-5. **Outbound evaluation**<br /> Outbound synchronisation rules evaluate the new MVO. If the MVO is in scope for any outbound rules, JIM **provisions** new CSOs in the target connected systems.
+5. **Outbound evaluation**<br /> Outbound Synchronisation Rules evaluate the new MVO. If the MVO is in scope for any outbound rules, JIM **provisions** new CSOs in the target Connected Systems.
 
 6. **Export**<br /> The provisioned CSOs are exported to the target systems, creating the actual accounts (e.g. an Active Directory user account, an email mailbox).
 
@@ -55,9 +55,9 @@ A **mover** event occurs when an existing identity's attributes change. This cov
 
 1. **Import**<br /> JIM imports the updated record, detecting the changed attributes on the existing CSO.
 
-2. **Inbound sync**<br /> The changed attributes flow from the CSO to the linked MVO through the inbound attribute flow rules. Only changed attributes are processed.
+2. **Inbound sync**<br /> The changed attributes flow from the CSO to the linked MVO through the inbound Attribute Flow Rules. Only changed attributes are processed.
 
-3. **Outbound evaluation**<br /> Outbound synchronisation rules detect that the MVO has changed and evaluate whether the changes affect any target systems.
+3. **Outbound evaluation**<br /> Outbound Synchronisation Rules detect that the MVO has changed and evaluate whether the changes affect any target systems.
 
 4. **Attribute flow**<br /> Changed attributes flow outbound to the target CSOs. Expressions are re-evaluated (e.g. if the department changes, the target OU may need to change).
 
@@ -75,12 +75,12 @@ Jane Smith transfers from the Marketing department to Engineering:
 
 ### Scoping Changes
 
-A mover event can also change whether an identity is **in scope** for a particular synchronisation rule. For example:
+A mover event can also change whether an identity is **in scope** for a particular Synchronisation Rule. For example:
 
-- An employee changes from "Full-Time" to "Contractor" -- they may fall out of scope for the full-time employee synchronisation rule and into scope for a contractor synchronisation rule
+- An employee changes from "Full-Time" to "Contractor" -- they may fall out of scope for the full-time employee Synchronisation Rule and into scope for a contractor Synchronisation Rule
 - An employee transfers to a department that is excluded from a particular target system
 
-When an identity falls out of scope for an outbound synchronisation rule, this triggers **deprovisioning** behaviour for that specific target system (see Leaver below).
+When an identity falls out of scope for an outbound Synchronisation Rule, this triggers **deprovisioning** behaviour for that specific target system (see Leaver below).
 
 ## 🚪 Leaver
 
@@ -91,11 +91,11 @@ A **leaver** event occurs when an identity is removed or marked as inactive in t
 1. **Import**<br /> JIM detects the change. This could be:
    - The record is deleted from the source system (the CSO is **obsoleted**)
    - A status attribute changes (e.g. `employeeStatus` changes to "Terminated")
-   - The record falls out of scope for the inbound synchronisation rule
+   - The record falls out of scope for the inbound Synchronisation Rule
 
 2. **Inbound sync**<br /> The CSO is **disconnected** from the MVO. What happens next depends on the configured **deletion rules**.
 
-3. **Outbound evaluation**<br /> If the MVO is disconnected or deleted, outbound synchronisation rules trigger **deprovisioning** in target systems.
+3. **Outbound evaluation**<br /> If the MVO is disconnected or deleted, outbound Synchronisation Rules trigger **deprovisioning** in target systems.
 
 4. **Export**<br /> Deprovisioning actions are sent to the target systems.
 
@@ -109,11 +109,11 @@ Deprovisioning is the process of disabling or removing accounts in target system
 | **Delete** | Removes the account from the target system entirely |
 | **Disconnect** | Unlinks the CSO from the MVO but leaves the target account unchanged |
 
-The strategy is configured per outbound synchronisation rule, giving you fine-grained control over what happens in each target system when an identity leaves.
+The strategy is configured per outbound Synchronisation Rule, giving you fine-grained control over what happens in each target system when an identity leaves.
 
 ### Deletion Rules
 
-Deletion rules control what happens to the **metaverse object** when connected system objects are disconnected:
+Deletion rules control what happens to the **Metaverse Object** when Connected System Objects are disconnected:
 
 | Rule | Behaviour |
 |------|-----------|
@@ -152,7 +152,7 @@ Alex transfers from Sales to Engineering.
 
 - HR import detects the department change
 - Inbound sync updates Alex's MVO with the new department
-- Outbound sync detects the change and re-evaluates attribute flows
+- Outbound sync detects the change and re-evaluates Attribute Flows
 - Export updates Alex's AD account: new department, new OU, new group memberships
 
 ### Leaver (Year 2)

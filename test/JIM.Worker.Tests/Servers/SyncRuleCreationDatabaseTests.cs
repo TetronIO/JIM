@@ -75,8 +75,8 @@ public class SyncRuleCreationDatabaseTests
     }
 
     /// <summary>
-    /// Seeds the connected system, object types and one attribute each, returning their ids.
-    /// The connected system uses Advanced (SyncRule) matching mode so matching rules added to a rule are kept.
+    /// Seeds the Connected System, object types and one attribute each, returning their ids.
+    /// The Connected System uses Advanced (SyncRule) matching mode so matching rules added to a rule are kept.
     /// </summary>
     private async Task<SeedIds> SeedAsync()
     {
@@ -201,7 +201,7 @@ public class SyncRuleCreationDatabaseTests
             Assert.That(flow.Sources.Single().ConnectedSystemAttributeId, Is.EqualTo(ids.CsAttrId), "flow source FK");
             // No duplicate attribute rows should have been inserted by graph traversal.
             Assert.That(verify.MetaverseAttributes.Count(), Is.EqualTo(1), "metaverse attribute count");
-            Assert.That(verify.ConnectedSystemAttributes.Count(), Is.EqualTo(1), "connected system attribute count");
+            Assert.That(verify.ConnectedSystemAttributes.Count(), Is.EqualTo(1), "Connected System attribute count");
         });
     }
 
@@ -243,7 +243,7 @@ public class SyncRuleCreationDatabaseTests
         {
             Assert.That(persistedGroup.Criteria, Has.Count.EqualTo(1), "criteria persisted");
             // No duplicate connected-system attribute rows should have been inserted by graph traversal.
-            Assert.That(verify.ConnectedSystemAttributes.Count(), Is.EqualTo(1), "connected system attribute count");
+            Assert.That(verify.ConnectedSystemAttributes.Count(), Is.EqualTo(1), "Connected System attribute count");
         });
     }
 }

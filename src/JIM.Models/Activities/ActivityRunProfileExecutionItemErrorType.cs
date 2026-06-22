@@ -86,7 +86,7 @@ public enum ActivityRunProfileExecutionItemErrorType
     UnhandledError,
 
     /// <summary>
-    /// During import attribute flow, a multi-valued source attribute was mapped to a single-valued
+    /// During import Attribute Flow, a multi-valued source attribute was mapped to a single-valued
     /// target attribute. The first value was used. This is informational — the sync succeeded,
     /// but the administrator should verify the correct value was selected.
     /// </summary>

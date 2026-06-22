@@ -83,10 +83,10 @@ pwsh test/integration/Invoke-IntegrationTests.ps1 -ScenariosOnly
 - **Scenario 3: GALSYNC** - Placeholder (not implemented)
 - **Scenario 4: Deletion Rules** - MVO deletion triggers and attribute recall
 - **Scenario 5: Matching Rules** - Join logic, projection, deduplication
-- **Scenario 6: Scheduler Service** - End-to-end scheduled run profile execution
+- **Scenario 6: Scheduler Service** - End-to-end scheduled Run Profile execution
 - **Scenario 7: Clear Connected System Objects** - Bulk CSO removal workflow
 - **Scenario 8: Cross-Domain Entitlement Sync** - Large-scale group/entitlement sync
-- **Scenario 9: Partition-Scoped Imports** - Partition filtering on import run profiles
+- **Scenario 9: Partition-Scoped Imports** - Partition filtering on import Run Profiles
 - **Scenario 10: Sync Rule Scoping Behaviour** - Inbound/outbound scope transitions, deprovisioning actions, cross-system cascade
 - **Scenario 11: Scoping Criteria Evaluation Matrix** - Operator x value-type x group-structure coverage via per-cell CSO/MV types; three coverage tiers (Quick / Default / Exhaustive), round-trip persistence and API negative-cell probes
 

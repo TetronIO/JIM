@@ -13,7 +13,7 @@ namespace JIM.Worker.Tests.Repositories;
 
 /// <summary>
 /// Tests for GetPendingExportsByIdsAsync - the Phase 3 repository method
-/// that loads pending exports by ID for parallel batch re-loading.
+/// that loads Pending Exports by ID for parallel batch re-loading.
 /// </summary>
 [TestFixture]
 public class ConnectedSystemRepositoryGetPendingExportsByIdsTests

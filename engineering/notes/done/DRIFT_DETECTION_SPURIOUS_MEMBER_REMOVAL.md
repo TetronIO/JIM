@@ -26,7 +26,7 @@ have significantly more members.
 
 ## Sync Topology
 
-Two LDAP (Active Directory) connected systems in a cross-domain entitlement sync:
+Two LDAP (Active Directory) Connected Systems in a cross-domain entitlement sync:
 
 - **Source CS** ("Panoply APAC") - Authoritative source of users and groups
 - **Target CS** ("Panoply EMEA") - Receives users and groups from Source
@@ -45,7 +45,7 @@ Two LDAP (Active Directory) connected systems in a cross-domain entitlement sync
 Key attributes for groups:
 - **Source import**: `member` (multi-valued reference) flows to MVO `Static Members`
 - **Target export**: MVO `Static Members` flows to `member` (multi-valued reference)
-- **Target import**: No attribute flow mappings (join only, used for confirming imports)
+- **Target import**: No Attribute Flow mappings (join only, used for confirming imports)
 
 ---
 

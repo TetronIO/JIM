@@ -171,7 +171,7 @@ Before committing:
 2. Schedules + Schedule Executions
 3. Run Profiles
 4. Activities
-5. Sync Rules (large: includes mappings, scoping criteria, object matching rules)
+5. Sync Rules (large: includes mappings, scoping criteria, Object Matching Rules)
 6. Metaverse (Object Types, Attributes, Objects, Pending Deletions)
 7. API Keys, Certificates, Service Settings, Security (small: single page each)
 8. Health, Auth Config, User Info, Logs, History (small: single page each)

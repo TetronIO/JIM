@@ -203,7 +203,7 @@
                 </MudTd>
             </RowTemplate>
             <NoRecordsContent>
-                No attribute flow rules defined yet.
+                No Attribute Flow Rules defined yet.
             </NoRecordsContent>
         </MudTable>
     }
@@ -325,7 +325,7 @@
         </MudText>
     </TitleContent>
     <DialogContent>
-        <MudSelect T="string" Label="Source Type" Placeholder="Please select the type of source for this attribute flow"
+        <MudSelect T="string" Label="Source Type" Placeholder="Please select the type of source for this Attribute Flow"
             Required="true" Value="_attributeFlowMappingSourceType" ValueChanged="HandleSourceTypeChanged" Variant="Variant.Outlined">
             <MudSelectItem Value="@("Attribute")">Attribute</MudSelectItem>
             <MudSelectItem Value="@("Expression")">Expression</MudSelectItem>
@@ -556,7 +556,7 @@
     // export rules: the user can choose an invalid target attribute, depending on the makeup of the source attribute
     private bool IsAttributeFlowTargetDisabled(ConnectedSystemObjectTypeAttribute targetConnectedSystemObjectTypeAttribute)
     {
-        // read-only attributes cannot be targeted by export attribute flows
+        // read-only attributes cannot be targeted by export Attribute Flows
         if (targetConnectedSystemObjectTypeAttribute.Writability == AttributeWritability.ReadOnly)
             return true;
 

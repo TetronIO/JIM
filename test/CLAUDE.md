@@ -194,7 +194,7 @@ cd /workspaces/JIM
 3. Waits for all services to be ready
 4. Creates infrastructure API key
 5. Generates test data (CSV, Samba AD users)
-6. Configures JIM with connected systems and sync rules
+6. Configures JIM with Connected Systems and Sync Rules
 7. Runs the scenario
 8. Tears down all containers
 

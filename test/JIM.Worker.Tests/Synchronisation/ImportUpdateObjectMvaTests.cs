@@ -55,15 +55,15 @@ public class ImportUpdateObjectMvaTests
         TestUtilities.SetEnvironmentVariables();
         InitiatedBy = TestUtilities.GetInitiatedBy();
 
-        // set up the connected systems mock
+        // set up the Connected Systems mock
         ConnectedSystemsData = TestUtilities.GetConnectedSystemData();
         MockDbSetConnectedSystems = ConnectedSystemsData.BuildMockDbSet();
 
-        // setup up the connected system run profiles mock
+        // setup up the Connected System Run Profiles mock
         ConnectedSystemRunProfilesData = TestUtilities.GetConnectedSystemRunProfileData();
         MockDbSetConnectedSystemRunProfiles = ConnectedSystemRunProfilesData.BuildMockDbSet();
 
-        // set up the connected system object types mock. this acts as the persisted schema in JIM
+        // set up the Connected System Object Types mock. this acts as the persisted schema in JIM
         ConnectedSystemObjectTypesData = TestUtilities.GetConnectedSystemObjectTypeData();
         MockDbSetConnectedSystemObjectTypes = ConnectedSystemObjectTypesData.BuildMockDbSet();
 
@@ -80,7 +80,7 @@ public class ImportUpdateObjectMvaTests
         ServiceSettingsData = TestUtilities.GetServiceSettingsData();
         MockDbSetServiceSettings = ServiceSettingsData.BuildMockDbSet();
 
-        // set up the pending exports mock (empty - import tests don't have pending exports to reconcile)
+        // set up the Pending Exports mock (empty - import tests don't have Pending Exports to reconcile)
         PendingExportsData = new List<PendingExport>();
         MockDbSetPendingExports = PendingExportsData.BuildMockDbSet();
 
@@ -110,7 +110,7 @@ public class ImportUpdateObjectMvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: COMPLETED_COURSE_IDS has multiple values added for the first time.
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
@@ -189,7 +189,7 @@ public class ImportUpdateObjectMvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: PROXY_ADDRESSES has multiple values added for the first time.
         const string proxyAddress1 = "SMTP:jane.smith@phlebas.tetron.io";
         const string proxyAddress2 = "smtp:jane.wright@phlebas.tetron.io";
@@ -270,7 +270,7 @@ public class ImportUpdateObjectMvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: PREVIOUS_LOCATION_IDS has multiple values added for the first time.
         var previousLocation1 = Guid.NewGuid();
         var previousLocation2 = Guid.NewGuid();
@@ -351,7 +351,7 @@ public class ImportUpdateObjectMvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: CERTIFICATES has multiple values added for the first time.
         var certificate1 = Convert.FromHexString(TestConstants.IMAGE_1_HEX);
         var certificate2 = Convert.FromHexString(TestConstants.IMAGE_2_HEX);
@@ -427,7 +427,7 @@ public class ImportUpdateObjectMvaTests
     {
         InitialiseConnectedSystemObjectsData();
 
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: MEMBER has values added for the first time.
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
@@ -504,7 +504,7 @@ public class ImportUpdateObjectMvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: MEMBER has values removed.
         
         // add COMPLETED_COURSE_IDS to our CSO first
@@ -618,7 +618,7 @@ public class ImportUpdateObjectMvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: PROXY_ADDRESSES has some values removed.
         
         // add PROXY_ADDRESSES to our CSO first
@@ -735,7 +735,7 @@ public class ImportUpdateObjectMvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: PREVIOUS_LOCATION_IDS has some values removed.
         
         // add PREVIOUS_LOCATION_IDS to our CSO first
@@ -852,7 +852,7 @@ public class ImportUpdateObjectMvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: CERTIFICATES has some values removed.
         
         // add CERTIFICATES to our CSO first
@@ -958,7 +958,7 @@ public class ImportUpdateObjectMvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: CERTIFICATES has some values removed.
         
         // add some MEMBER references to our group CSO first
@@ -1177,7 +1177,7 @@ public class ImportUpdateObjectMvaTests
         }, "Expected InvalidOperationException when resolving a reference that matches multiple CSOs with the same external ID value.");
     }
 
-    // todo: test activity/run profile execution item/change object creation
+    // todo: test activity/Run Profile execution item/change object creation
 
     #region private methods
     private void InitialiseConnectedSystemObjectsData()

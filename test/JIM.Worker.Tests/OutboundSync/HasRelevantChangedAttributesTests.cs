@@ -129,7 +129,7 @@ public class HasRelevantChangedAttributesTests
     [Test]
     public void HasRelevantChangedAttributes_EmptyExportRule_ReturnsFalse()
     {
-        // Export rule with no attribute flow rules
+        // Export rule with no Attribute Flow Rules
         var exportRule = new SyncRule
         {
             Id = 1,

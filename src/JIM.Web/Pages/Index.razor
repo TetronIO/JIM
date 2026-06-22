@@ -332,7 +332,7 @@
         _userIcon = userType?.Icon;
         _groupIcon = groupType?.Icon;
 
-        // Load connected system and sync rule counts
+        // Load Connected System and Sync Rule counts
         _connectedSystemCount = jim.ConnectedSystems.GetConnectedSystemCount();
         var syncRuleHeaders = await jim.ConnectedSystems.GetSyncRuleHeadersAsync();
         _syncRuleCount = syncRuleHeaders.Count;

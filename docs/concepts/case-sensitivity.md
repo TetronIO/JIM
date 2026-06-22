@@ -7,7 +7,7 @@ Understanding this model helps you predict when a change will flow, when two obj
 ## ⚖️ The principle
 
 - **Data is exact by default.**<br /> Comparisons that decide whether data changes, whether objects link, or whether provisioning happens are case-sensitive. If a source system distinguishes `JSmith` from `jsmith`, JIM respects that distinction and propagates the change rather than silently dropping it.
-- **Configuration names are forgiving.**<br /> When you refer to an attribute, connected system, or object type by name, JIM matches it case-insensitively. A capital letter in the wrong place should not stop your configuration from working.
+- **Configuration names are forgiving.**<br /> When you refer to an attribute, Connected System, or object type by name, JIM matches it case-insensitively. A capital letter in the wrong place should not stop your configuration from working.
 - **Search is forgiving.**<br /> Searching and filtering in the admin UI and logs ignores case, for convenience.
 
 ## Where each rule applies

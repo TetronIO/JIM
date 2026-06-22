@@ -2,7 +2,7 @@
 
 > Last updated: 2026-04-22, JIM v0.10.0
 
-This diagram shows how objects are imported from a connected system into JIM's connector space. Both Full Import and Delta Import use the same processor (`SyncImportTaskProcessor`); the connector handles delta filtering internally via watermark/persisted data.
+This diagram shows how objects are imported from a Connected System into JIM's connector space. Both Full Import and Delta Import use the same processor (`SyncImportTaskProcessor`); the connector handles delta filtering internally via watermark/persisted data.
 
 Since v0.7.1, the import processor uses `ISyncServer` for orchestration (settings, caching, reconciliation) and `ISyncRepository` for dedicated bulk data access (CSO writes, RPEIs).
 
@@ -138,7 +138,7 @@ flowchart TD
     Obsolete --> Loop
 ```
 
-**Safety rule**: If zero objects were imported, deletion detection is skipped entirely. This prevents accidental mass-deletion when the connected system returns no data due to connectivity issues.
+**Safety rule**: If zero objects were imported, deletion detection is skipped entirely. This prevents accidental mass-deletion when the Connected System returns no data due to connectivity issues.
 
 **Delta Import exception**: Deletion detection only runs for Full Import. Delta Imports handle explicit deletes via `ObjectChangeType.Deleted` from the connector (e.g., LDAP tombstone/changelog entries).
 
@@ -198,15 +198,15 @@ After CSOs are persisted, the import processor reconciles previously exported ch
 
 ```mermaid
 flowchart TD
-    Start([ReconcilePendingExportsAsync]) --> LoadPE[Bulk fetch pending exports<br/>for updated CSOs<br/>Status = Exported]
-    LoadPE --> Loop{More CSOs<br/>with pending exports?}
+    Start([ReconcilePendingExportsAsync]) --> LoadPE[Bulk fetch Pending Exports<br/>for updated CSOs<br/>Status = Exported]
+    LoadPE --> Loop{More CSOs<br/>with Pending Exports?}
     Loop -->|No| Summary[Log reconciliation summary:<br/>Confirmed / Retry / Failed]
     Summary --> Done([Done])
 
-    Loop -->|Yes| Compare[For each attribute change<br/>in pending export:<br/>Compare expected value<br/>against CSO current value]
+    Loop -->|Yes| Compare[For each attribute change<br/>in Pending Export:<br/>Compare expected value<br/>against CSO current value]
     Compare --> Result{All attributes<br/>confirmed?}
 
-    Result -->|All confirmed| Delete[Queue pending export<br/>for batch deletion<br/>Export successfully applied]
+    Result -->|All confirmed| Delete[Queue Pending Export<br/>for batch deletion<br/>Export successfully applied]
     Result -->|Some confirmed| Partial[Remove confirmed attributes<br/>Keep unconfirmed attributes<br/>If was Create, change to Update<br/>Increment error count<br/>Queue for batch update]
     Result -->|None confirmed| AllFailed[Increment error count<br/>Queue for batch update]
     Result -->|Max retries exceeded| PermanentFail[RPEI: ExportConfirmationFailed<br/>Manual intervention required]

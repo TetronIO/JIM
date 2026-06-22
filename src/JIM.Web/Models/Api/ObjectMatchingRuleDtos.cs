@@ -6,7 +6,7 @@ using JIM.Models.Logic;
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// DTO for an object matching rule source.
+/// DTO for an Object Matching Rule source.
 /// </summary>
 public class ObjectMatchingRuleSourceDto
 {
@@ -58,7 +58,7 @@ public class ObjectMatchingRuleSourceDto
 }
 
 /// <summary>
-/// DTO for an object matching rule.
+/// DTO for an Object Matching Rule.
 /// </summary>
 public class ObjectMatchingRuleDto
 {

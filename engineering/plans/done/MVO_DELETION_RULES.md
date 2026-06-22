@@ -2,7 +2,7 @@
 
 ## Overview
 
-Implement comprehensive deletion rule and deprovisioning functionality for JIM's identity lifecycle management. This addresses critical gaps preventing proper user deprovisioning when employees leave organisations or fall out of sync rule scope.
+Implement comprehensive deletion rule and deprovisioning functionality for JIM's identity lifecycle management. This addresses critical gaps preventing proper user deprovisioning when employees leave organisations or fall out of Sync Rule scope.
 
 - **Status:** Done
 **Milestone**: MVP
@@ -24,7 +24,7 @@ Implement comprehensive deletion rule and deprovisioning functionality for JIM's
 - Sync engine correctly sets `LastConnectorDisconnectedDate` when last connector disconnects (deferred deletion)
 - Housekeeping deletes orphaned MVOs after grace period expires
 - API endpoint and PowerShell cmdlet for configuring deletion rules
-- Out-of-scope deprovisioning implemented for both inbound and outbound sync rules
+- Out-of-scope deprovisioning implemented for both inbound and outbound Sync Rules
 - Unit tests validate all deletion rule processing (579 tests passing)
 
 **Remaining**:
@@ -48,12 +48,12 @@ Following industry-standard identity management practices, **MVOs are NEVER dele
 
 1. **When a trigger connector disconnects** (e.g., HR system CSO deleted):
    - Set `LastConnectorDisconnectedDate` on the MVO
-   - Evaluate export sync rules for remaining CSOs
+   - Evaluate export Sync Rules for remaining CSOs
    - Create `PendingExport` records for CSO deletions (based on `OutboundDeprovisionAction`)
    - The MVO remains in place with its connectors
 
 2. **Export processing runs**:
-   - PendingExports are processed, deleting objects from target connected systems
+   - PendingExports are processed, deleting objects from target Connected Systems
    - On next import, deletions are confirmed and CSOs removed
 
 3. **Housekeeping cleanup** (Worker idle time):
@@ -112,7 +112,7 @@ Tactical solution: Worker checks during idle time for MVOs with expired grace pe
 - Origin = Projected (not Internal)
 - Type.DeletionRule = WhenLastConnectorDisconnected
 - LastConnectorDisconnectedDate + GracePeriodDays <= NOW
-- No connected system objects
+- No Connected System Objects
 
 **Safety checks**:
 - Verify no connectors before deleting (race condition protection)
@@ -163,7 +163,7 @@ Tactical solution: Worker checks during idle time for MVOs with expired grace pe
 `ObjectScopingCriteriaGroups` management via dedicated endpoints.
 
 API and PowerShell support:
-- [x] Add API endpoints for managing `ObjectScopingCriteriaGroups` on sync rules
+- [x] Add API endpoints for managing `ObjectScopingCriteriaGroups` on Sync Rules
 - [x] Add PowerShell cmdlets for scoping criteria (Get/New/Set/Remove-JIMScopingCriteria*)
 - [x] Implement inbound scope filter integration test (Test 5)
 - [x] Implement outbound scope filter integration test (Test 6)

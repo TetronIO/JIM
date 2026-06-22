@@ -21,7 +21,7 @@ The export is an **Update** operation (not a Delete), and it attempts a ModifyDN
 **Log excerpt (worker):**
 
 ```
-[ERR] LdapConnectorExport.ExecuteAsync: Failed to process pending export
+[ERR] LdapConnectorExport.ExecuteAsync: Failed to process Pending Export
       547a7773-... (Update)
 [WRN] MarkExportFailed: Export 547a7773-... failed (attempt 1/5).
       Error: The distinguished name contains invalid syntax.
@@ -102,7 +102,7 @@ Meanwhile, `ProcessMvoDeletionRuleAsync` runs with `WhenLastConnectorDisconnecte
 
 ### Option A (Recommended): Deprovisioning Exports Supersede Update Exports
 
-**Principle:** When the system determines that an MVO is being deprovisioned (source CSO disconnected), any Update pending exports for that MVO to target systems should be superseded. The deprovisioning outcome (Delete, Disconnect, or no action depending on config) takes priority over attribute-change-driven Updates that are now based on incomplete MVO state.
+**Principle:** When the system determines that an MVO is being deprovisioned (source CSO disconnected), any Update Pending Exports for that MVO to target systems should be superseded. The deprovisioning outcome (Delete, Disconnect, or no action depending on config) takes priority over attribute-change-driven Updates that are now based on incomplete MVO state.
 
 **Where:** `SyncTaskProcessorBase.cs`, in `ProcessObsoleteConnectedSystemObjectAsync()` and/or `EvaluateOutboundExportsAsync()`.
 

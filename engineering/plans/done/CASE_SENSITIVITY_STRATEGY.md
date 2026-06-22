@@ -16,7 +16,7 @@ This document defines JIM's consistent approach to string comparisons across all
 All string comparisons that affect data flow are **case-sensitive by default**. This ensures:
 
 - **Data fidelity**: Changes in case from source systems are detected and propagated
-- **External system respect**: If a connected system distinguishes "John123" from "JOHN123", JIM respects that
+- **External system respect**: If a Connected System distinguishes "John123" from "JOHN123", JIM respects that
 - **Predictable behaviour**: Users can rely on exact matching unless they explicitly choose otherwise
 
 ### 2. User-Configurable Where It Matters
@@ -165,7 +165,7 @@ av.StringValue == attributeValue
 
 1. Add case sensitivity section to Developer Guide
 2. Update API documentation
-3. Add notes to sync rule configuration UI
+3. Add notes to Sync Rule configuration UI
 4. Document PostgreSQL collation options for edge cases
 
 ## PostgreSQL Collation (Edge Case Support)
@@ -253,7 +253,7 @@ New-JIMScopingCriteria -SyncRuleId $ruleId `
 1. Sync scenario where source changes case of attribute value
 2. Matching rule join with case-insensitive matching
 3. Scoping filter with case-insensitive evaluation
-4. Mixed case sensitivity across multiple sync rules
+4. Mixed case sensitivity across multiple Sync Rules
 
 ## Success Criteria
 

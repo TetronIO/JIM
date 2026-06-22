@@ -22,7 +22,7 @@ public enum NoChangeReason
 
     /// <summary>
     /// The MVO attribute changed, but the CSO already has the same value.
-    /// The pending export was not created because it would result in no net change.
+    /// The Pending Export was not created because it would result in no net change.
     /// </summary>
     CsoAlreadyCurrent
 }

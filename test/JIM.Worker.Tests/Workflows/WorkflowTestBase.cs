@@ -312,7 +312,7 @@ public abstract class WorkflowTestBase
     #region Helper Methods - Sync Rules
 
     /// <summary>
-    /// Creates an import sync rule that maps CSOs to MVOs.
+    /// Creates an import Sync Rule that maps CSOs to MVOs.
     /// </summary>
     protected async Task<SyncRule> CreateImportSyncRuleAsync(
         int connectedSystemId,
@@ -347,7 +347,7 @@ public abstract class WorkflowTestBase
     #region Helper Methods - Run Profiles
 
     /// <summary>
-    /// Creates a run profile for a Connected System.
+    /// Creates a Run Profile for a Connected System.
     /// </summary>
     protected async Task<ConnectedSystemRunProfile> CreateRunProfileAsync(
         int connectedSystemId,

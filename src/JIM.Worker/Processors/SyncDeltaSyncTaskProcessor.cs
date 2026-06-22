@@ -79,14 +79,14 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         _activity.ObjectsProcessed = 0;
         await _syncRepo.UpdateActivityAsync(_activity);
 
-        // Get all the active sync rules for this system
+        // Get all the active Sync Rules for this system
         List<SyncRule> activeSyncRules;
         using (Diagnostics.Sync.StartSpan("LoadSyncRules"))
         {
             activeSyncRules = await _syncRepo.GetSyncRulesAsync(_connectedSystem.Id, false, withChangeTracking: true);
         }
 
-        // Load ALL sync rules from ALL systems for drift detection import mapping cache.
+        // Load ALL Sync Rules from ALL systems for drift detection import mapping cache.
         // This is needed because drift detection must know which systems contribute to which MVO attributes
         // to avoid false positives on export-only systems.
         List<SyncRule> allSyncRules;
@@ -99,11 +99,11 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         // This enables efficient drift detection during CSO processing
         BuildDriftDetectionCache(allSyncRules, activeSyncRules);
 
-        // Use object types already loaded on the connected system (with matching rules and attributes)
+        // Use object types already loaded on the Connected System (with matching rules and attributes)
         // to avoid creating duplicate entity instances that conflict with EF Core's change tracker.
         _objectTypes = _connectedSystem.ObjectTypes!;
 
-        // Load all pending exports once upfront and index by CSO ID for O(1) lookup
+        // Load all Pending Exports once upfront and index by CSO ID for O(1) lookup
         using (Diagnostics.Sync.StartSpan("LoadPendingExports"))
         {
             var allPendingExports = await _syncRepo.GetPendingExportsAsync(_connectedSystem.Id);
@@ -111,7 +111,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 .Where(pe => pe.ConnectedSystemObject?.Id != null)
                 .GroupBy(pe => pe.ConnectedSystemObject!.Id)
                 .ToDictionary(g => g.Key, g => g.ToList());
-            Log.Verbose("PerformDeltaSyncAsync: Loaded {Count} pending exports into lookup dictionary", allPendingExports.Count);
+            Log.Verbose("PerformDeltaSyncAsync: Loaded {Count} Pending Exports into lookup dictionary", allPendingExports.Count);
         }
 
         // Pre-load export evaluation cache
@@ -163,7 +163,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 // Two-pass processing ensures all CSO disconnections are recorded before any join attempts.
                 // See SyncFullSyncTaskProcessor for detailed rationale.
 
-                // Pass 1: Process pending export confirmations and obsolete CSO teardown.
+                // Pass 1: Process Pending Export confirmations and obsolete CSO teardown.
                 foreach (var connectedSystemObject in csoPagedResult.Results)
                 {
                     if (_cancellationTokenSource.IsCancellationRequested)
@@ -179,7 +179,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 // joined/projected yet, so Pass 2 batch collections are empty.
                 if (!_cancellationTokenSource.IsCancellationRequested)
                 {
-                    // Pass 2: Process joins, projections, and attribute flow for non-obsolete CSOs.
+                    // Pass 2: Process joins, projections, and Attribute Flow for non-obsolete CSOs.
                     foreach (var connectedSystemObject in csoPagedResult.Results)
                     {
                         if (_cancellationTokenSource.IsCancellationRequested)
@@ -219,10 +219,10 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 // Batch evaluate exports for all MVOs that changed during this page
                 await EvaluatePendingExportsAsync();
 
-                // batch process pending export confirmations (deletes and updates)
+                // batch process Pending Export confirmations (deletes and updates)
                 await FlushPendingExportOperationsAsync();
 
-                // Resolve any pending export reference snapshots that couldn't be resolved during
+                // Resolve any Pending Export reference snapshots that couldn't be resolved during
                 // per-object processing (e.g. groups processed before their member users on this page).
                 await ResolvePendingExportReferenceSnapshotsAsync();
 

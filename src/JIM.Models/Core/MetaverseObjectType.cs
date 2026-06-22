@@ -88,7 +88,7 @@ public class MetaverseObjectType : IAuditable
     public TimeSpan? DeletionGracePeriod { get; set; }
 
     /// <summary>
-    /// Optional list of connected system IDs that trigger MVO deletion when disconnected.
+    /// Optional list of Connected System IDs that trigger MVO deletion when disconnected.
     /// When set: Delete MVO if ANY of these specific systems disconnect.
     /// When empty/null: Delete MVO only when ALL connectors are disconnected.
     /// </summary>

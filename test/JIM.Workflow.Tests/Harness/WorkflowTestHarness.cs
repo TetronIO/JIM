@@ -78,7 +78,7 @@ public class WorkflowTestHarness : IDisposable
     #region Setup Methods
 
     /// <summary>
-    /// Creates a connected system with a mock connector.
+    /// Creates a Connected System with a mock connector.
     /// </summary>
     public async Task<ConnectedSystem> CreateConnectedSystemAsync(
         string name,
@@ -117,7 +117,7 @@ public class WorkflowTestHarness : IDisposable
     }
 
     /// <summary>
-    /// Gets the mock connector for a connected system.
+    /// Gets the mock connector for a Connected System.
     /// </summary>
     public MockCallConnector GetConnector(string systemName)
     {
@@ -127,17 +127,17 @@ public class WorkflowTestHarness : IDisposable
     }
 
     /// <summary>
-    /// Gets a connected system by name.
+    /// Gets a Connected System by name.
     /// </summary>
     public ConnectedSystem GetConnectedSystem(string systemName)
     {
         if (!_connectedSystems.TryGetValue(systemName, out var system))
-            throw new InvalidOperationException($"No connected system found with name '{systemName}'");
+            throw new InvalidOperationException($"No Connected System found with name '{systemName}'");
         return system;
     }
 
     /// <summary>
-    /// Creates an object type (schema) for a connected system.
+    /// Creates an object type (schema) for a Connected System.
     /// </summary>
     public async Task<ConnectedSystemObjectType> CreateObjectTypeAsync(
         string systemName,
@@ -174,7 +174,7 @@ public class WorkflowTestHarness : IDisposable
     }
 
     /// <summary>
-    /// Creates a metaverse object type.
+    /// Creates a Metaverse Object Type.
     /// </summary>
     public async Task<MetaverseObjectType> CreateMetaverseObjectTypeAsync(
         string name,
@@ -200,7 +200,7 @@ public class WorkflowTestHarness : IDisposable
     }
 
     /// <summary>
-    /// Creates a sync rule.
+    /// Creates a Sync Rule.
     /// </summary>
     public async Task<SyncRule> CreateSyncRuleAsync(
         string name,
@@ -233,7 +233,7 @@ public class WorkflowTestHarness : IDisposable
     }
 
     /// <summary>
-    /// Creates a run profile for a connected system.
+    /// Creates a Run Profile for a Connected System.
     /// </summary>
     public async Task<ConnectedSystemRunProfile> CreateRunProfileAsync(
         string systemName,
@@ -260,7 +260,7 @@ public class WorkflowTestHarness : IDisposable
     #region Workflow Step Methods
 
     /// <summary>
-    /// Executes a full import from a connected system.
+    /// Executes a full import from a Connected System.
     /// </summary>
     public async Task<Activity> ExecuteFullImportAsync(string systemName)
     {
@@ -295,7 +295,7 @@ public class WorkflowTestHarness : IDisposable
     }
 
     /// <summary>
-    /// Executes a full sync for a connected system.
+    /// Executes a full sync for a Connected System.
     /// </summary>
     public async Task<Activity> ExecuteFullSyncAsync(string systemName)
     {
@@ -322,7 +322,7 @@ public class WorkflowTestHarness : IDisposable
 
     /// <summary>
     /// Executes export evaluation for all MVOs that need exporting.
-    /// This creates PendingExports based on export sync rules.
+    /// This creates PendingExports based on export Sync Rules.
     /// </summary>
     public async Task ExecuteExportEvaluationAsync(string sourceSystemName)
     {
@@ -343,7 +343,7 @@ public class WorkflowTestHarness : IDisposable
     }
 
     /// <summary>
-    /// Executes pending exports to a target system.
+    /// Executes Pending Exports to a target system.
     /// </summary>
     public async Task<Activity> ExecuteExportAsync(string targetSystemName)
     {
@@ -368,12 +368,12 @@ public class WorkflowTestHarness : IDisposable
         // For confirming import, we run a full import which will:
         // 1. Find PendingProvisioning CSOs by secondary external ID
         // 2. Transition them to Normal status
-        // 3. Reconcile pending exports
+        // 3. Reconcile Pending Exports
         return await ExecuteFullImportAsync(systemName);
     }
 
     /// <summary>
-    /// Executes a delta sync for a connected system.
+    /// Executes a delta sync for a Connected System.
     /// Used for incremental sync operations including drift detection.
     /// </summary>
     public async Task<Activity> ExecuteDeltaSyncAsync(string systemName)

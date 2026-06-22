@@ -4,13 +4,13 @@ title: Connected Systems
 
 # Connected Systems
 
-The connected systems cmdlets manage the full lifecycle of connected systems in JIM: creating and configuring systems, importing schemas and hierarchy, selecting object types and attributes, browsing connector space objects, and reviewing pending exports. Most cmdlets support pipeline input for scripting and automation workflows.
+The Connected Systems cmdlets manage the full lifecycle of Connected Systems in JIM: creating and configuring systems, importing schemas and hierarchy, selecting object types and attributes, browsing connector space objects, and reviewing Pending Exports. Most cmdlets support pipeline input for scripting and automation workflows.
 
 ---
 
 ## Get-JIMConnectedSystem
 
-Retrieves one or more connected systems, their object types, or a deletion impact preview.
+Retrieves one or more Connected Systems, their object types, or a deletion impact preview.
 
 ### Syntax
 
@@ -34,18 +34,18 @@ Get-JIMConnectedSystem -Id <int> -DeletionPreview
 |------|------|----------|---------|-------------|
 | `Id` | `int` | Yes (ById, ObjectTypes, DeletionPreview) | | Connected system identifier. Accepts pipeline input by property name. |
 | `Name` | `string` | No (List only) | | Filter by name; supports wildcard characters (`*`, `?`) |
-| `ObjectTypes` | `switch` | No | `$false` | Returns the object types configured on the connected system |
-| `DeletionPreview` | `switch` | No | `$false` | Returns a deletion impact preview for the connected system |
+| `ObjectTypes` | `switch` | No | `$false` | Returns the object types configured on the Connected System |
+| `DeletionPreview` | `switch` | No | `$false` | Returns a deletion impact preview for the Connected System |
 
 ### Output
 
 - **List / ById**: Connected system objects with properties such as `Id`, `Name`, `Description`, `ConnectorDefinitionId`, and configuration state.
-- **ObjectTypes**: Object type definitions for the specified connected system.
+- **ObjectTypes**: Object type definitions for the specified Connected System.
 - **DeletionPreview**: Deletion impact preview with counts and warnings.
 
 ### Examples
 
-```powershell title="List all connected systems"
+```powershell title="List all Connected Systems"
 Get-JIMConnectedSystem
 ```
 
@@ -53,15 +53,15 @@ Get-JIMConnectedSystem
 Get-JIMConnectedSystem -Name "HR*"
 ```
 
-```powershell title="Get a specific connected system by ID"
+```powershell title="Get a specific Connected System by ID"
 Get-JIMConnectedSystem -Id 3
 ```
 
-```powershell title="Retrieve object types for a connected system"
+```powershell title="Retrieve object types for a Connected System"
 Get-JIMConnectedSystem -Id 3 -ObjectTypes
 ```
 
-```powershell title="Preview the impact of deleting a connected system"
+```powershell title="Preview the impact of deleting a Connected System"
 Get-JIMConnectedSystem -Id 3 -DeletionPreview
 ```
 
@@ -69,7 +69,7 @@ Get-JIMConnectedSystem -Id 3 -DeletionPreview
 
 ## New-JIMConnectedSystem
 
-Creates a new connected system.
+Creates a new Connected System.
 
 ### Syntax
 
@@ -82,18 +82,18 @@ New-JIMConnectedSystem [-Name] <string> -ConnectorDefinitionId <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Name` | `string` | Yes (Position 0) | | Display name for the connected system |
+| `Name` | `string` | Yes (Position 0) | | Display name for the Connected System |
 | `ConnectorDefinitionId` | `int` | Yes | | Identifier of the connector definition to use |
 | `Description` | `string` | No | | Optional description |
-| `PassThru` | `switch` | No | `$false` | Returns the created connected system object |
+| `PassThru` | `switch` | No | `$false` | Returns the created Connected System Object |
 
 ### Output
 
-When `-PassThru` is specified, returns the newly created connected system object. Otherwise, no output.
+When `-PassThru` is specified, returns the newly created Connected System Object. Otherwise, no output.
 
 ### Examples
 
-```powershell title="Create a connected system"
+```powershell title="Create a Connected System"
 New-JIMConnectedSystem -Name "Active Directory" -ConnectorDefinitionId 1
 ```
 
@@ -109,7 +109,7 @@ $cs = New-JIMConnectedSystem "HR Database" -ConnectorDefinitionId 2 -Description
 
 ## Set-JIMConnectedSystem
 
-Updates the configuration of an existing connected system.
+Updates the configuration of an existing Connected System.
 
 ### Syntax
 
@@ -134,15 +134,15 @@ Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>]
 | `Description` | `string` | No | | New description |
 | `SettingValues` | `hashtable` | No | | Connector-specific settings. Keys are setting IDs; values are hashtables with `stringValue`, `intValue`, or `checkboxValue`. |
 | `MaxExportParallelism` | `int` | No | | Maximum number of parallel export threads (1 to 16) |
-| `PassThru` | `switch` | No | `$false` | Returns the updated connected system object |
+| `PassThru` | `switch` | No | `$false` | Returns the updated Connected System Object |
 
 ### Output
 
-When `-PassThru` is specified, returns the updated connected system object. Otherwise, no output.
+When `-PassThru` is specified, returns the updated Connected System Object. Otherwise, no output.
 
 ### Examples
 
-```powershell title="Rename a connected system"
+```powershell title="Rename a Connected System"
 Set-JIMConnectedSystem -Id 3 -Name "AD Production"
 ```
 
@@ -166,7 +166,7 @@ Get-JIMConnectedSystem -Id 3 | Set-JIMConnectedSystem -MaxExportParallelism 8 -P
 
 ## Remove-JIMConnectedSystem
 
-Deletes a connected system and all its associated data.
+Deletes a Connected System and all its associated data.
 
 ### Syntax
 
@@ -185,15 +185,15 @@ Remove-JIMConnectedSystem -InputObject <PSCustomObject> [-Force] [-PassThru]
 | `Id` | `int` | Yes (ById) | | Connected system identifier |
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected system object from the pipeline |
 | `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt |
-| `PassThru` | `switch` | No | `$false` | Returns the deleted connected system object |
+| `PassThru` | `switch` | No | `$false` | Returns the deleted Connected System Object |
 
 ### Output
 
-When `-PassThru` is specified, returns the deleted connected system object. Otherwise, no output.
+When `-PassThru` is specified, returns the deleted Connected System Object. Otherwise, no output.
 
 ### Examples
 
-```powershell title="Delete a connected system with confirmation"
+```powershell title="Delete a Connected System with confirmation"
 Remove-JIMConnectedSystem -Id 3
 ```
 
@@ -208,7 +208,7 @@ Get-JIMConnectedSystem -Name "Decommissioned*" | Remove-JIMConnectedSystem -Forc
 ### Notes
 
 - Supports `ShouldProcess` (High impact). Without `-Force`, you will be prompted for confirmation.
-- Small connected systems (fewer than 1,000 objects) are deleted immediately. Large systems are queued as a background job; you can monitor progress in the activities log.
+- Small Connected Systems (fewer than 1,000 objects) are deleted immediately. Large systems are queued as a background job; you can monitor progress in the activities log.
 
 ---
 
@@ -232,15 +232,15 @@ Import-JIMConnectedSystemSchema -InputObject <PSCustomObject> [-PassThru]
 |------|------|----------|---------|-------------|
 | `Id` | `int` | Yes (ById) | | Connected system identifier |
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected system object from the pipeline |
-| `PassThru` | `switch` | No | `$false` | Returns the connected system object after schema import |
+| `PassThru` | `switch` | No | `$false` | Returns the Connected System Object after schema import |
 
 ### Output
 
-When `-PassThru` is specified, returns the connected system object. Otherwise, no output.
+When `-PassThru` is specified, returns the Connected System Object. Otherwise, no output.
 
 ### Examples
 
-```powershell title="Import schema for a connected system"
+```powershell title="Import schema for a Connected System"
 Import-JIMConnectedSystemSchema -Id 3
 ```
 
@@ -252,7 +252,7 @@ New-JIMConnectedSystem "LDAP Directory" -ConnectorDefinitionId 1 -PassThru |
 ### Notes
 
 - This operation is **destructive**: it replaces the existing schema. Any object type or attribute selections that no longer match the new schema are removed.
-- Schema import is required before creating synchronisation rules for a connected system.
+- Schema import is required before creating Synchronisation Rules for a Connected System.
 - Supports `ShouldProcess` (Medium impact).
 
 ---
@@ -277,11 +277,11 @@ Import-JIMConnectedSystemHierarchy -InputObject <PSCustomObject> [-PassThru]
 |------|------|----------|---------|-------------|
 | `Id` | `int` | Yes (ById) | | Connected system identifier |
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected system object from the pipeline |
-| `PassThru` | `switch` | No | `$false` | Returns the connected system object after hierarchy import |
+| `PassThru` | `switch` | No | `$false` | Returns the Connected System Object after hierarchy import |
 
 ### Output
 
-When `-PassThru` is specified, returns the connected system object. Otherwise, no output.
+When `-PassThru` is specified, returns the Connected System Object. Otherwise, no output.
 
 ### Examples
 
@@ -352,7 +352,7 @@ Get-JIMConnectorDefinition | Where-Object { $_.Capabilities -contains "DeltaImpo
 
 ## Get-JIMConnectedSystemObjectType
 
-Retrieves the object types and their attributes for a connected system.
+Retrieves the object types and their attributes for a Connected System.
 
 ### Syntax
 
@@ -372,7 +372,7 @@ Object type definitions with their attributes, selection state, and external ID 
 
 ### Examples
 
-```powershell title="Get object types for a connected system"
+```powershell title="Get object types for a Connected System"
 Get-JIMConnectedSystemObjectType -ConnectedSystemId 3
 ```
 
@@ -390,7 +390,7 @@ Get-JIMConnectedSystem -Id 3 |
 
 ## Set-JIMConnectedSystemObjectType
 
-Updates the configuration of an object type on a connected system.
+Updates the configuration of an object type on a Connected System.
 
 ### Syntax
 
@@ -431,7 +431,7 @@ Set-JIMConnectedSystemObjectType -ConnectedSystemId 3 -ObjectTypeId 2 -Selected 
 
 ## Set-JIMConnectedSystemAttribute
 
-Updates the selection and external ID configuration of attributes on a connected system object type. Supports updating a single attribute or multiple attributes in bulk.
+Updates the selection and external ID configuration of attributes on a Connected System Object Type. Supports updating a single attribute or multiple attributes in bulk.
 
 ### Syntax
 
@@ -490,7 +490,7 @@ Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 1 -AttributeU
 
 ## Get-JIMConnectedSystemPartition
 
-Retrieves the partitions and their containers for a connected system.
+Retrieves the partitions and their containers for a Connected System.
 
 ### Syntax
 
@@ -510,7 +510,7 @@ Partition objects with their container hierarchy and selection state.
 
 ### Examples
 
-```powershell title="Get partitions for a connected system"
+```powershell title="Get partitions for a Connected System"
 Get-JIMConnectedSystemPartition -ConnectedSystemId 3
 ```
 
@@ -522,7 +522,7 @@ Get-JIMConnectedSystem -Id 3 | Get-JIMConnectedSystemPartition
 
 ## Set-JIMConnectedSystemPartition
 
-Updates the selection state of a partition on a connected system.
+Updates the selection state of a partition on a Connected System.
 
 ### Syntax
 
@@ -605,7 +605,7 @@ Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 7 -Selected $t
 
 ## Get-JIMConnectedSystemObject
 
-Retrieves connector space objects (CSOs) from a connected system, with support for paging and attribute value drill-down.
+Retrieves connector space objects (CSOs) from a Connected System, with support for paging and attribute value drill-down.
 
 ### Syntax
 
@@ -661,7 +661,7 @@ Get-JIMConnectedSystemObject -ConnectedSystemId 3 -Id "a1b2c3d4-..." -AttributeN
 
 ## Get-JIMConnectedSystemObjectChangeHistory
 
-Retrieves the change history for a Connected System Object. Each record carries the initiator and run profile context, plus the per-attribute value changes, ordered by change time descending (most recent first).
+Retrieves the change history for a Connected System Object. Each record carries the initiator and Run Profile context, plus the per-attribute value changes, ordered by change time descending (most recent first).
 
 ### Syntax
 
@@ -686,7 +686,7 @@ Get-JIMConnectedSystemObjectChangeHistory -ConnectedSystemId <int> -Id <guid> -A
 
 ### Output
 
-Returns one `PSCustomObject` per change record, including the initiator, run profile context, and per-attribute value changes.
+Returns one `PSCustomObject` per change record, including the initiator, Run Profile context, and per-attribute value changes.
 
 ### Examples
 
@@ -758,7 +758,7 @@ Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId 3 `
 
 ## Get-JIMConnectedSystemUnresolvedReferenceCount
 
-Returns the count of unresolved references in a connected system's connector space.
+Returns the count of unresolved references in a Connected System's connector space.
 
 ### Syntax
 
@@ -799,7 +799,7 @@ Get-JIMConnectedSystem | ForEach-Object {
 
 ## Clear-JIMConnectedSystem
 
-Removes all connector space objects (CSOs) and associated data from a connected system without deleting the system itself. The connected system configuration, schema, and synchronisation rules are preserved.
+Removes all connector space objects (CSOs) and associated data from a Connected System without deleting the system itself. The Connected System configuration, schema, and Synchronisation Rules are preserved.
 
 ### Syntax
 
@@ -826,7 +826,7 @@ None.
 
 ### Examples
 
-```powershell title="Clear a connected system with confirmation"
+```powershell title="Clear a Connected System with confirmation"
 Clear-JIMConnectedSystem -Id 3
 ```
 
@@ -841,15 +841,15 @@ Get-JIMConnectedSystem -Name "Staging AD" | Clear-JIMConnectedSystem -Force
 ### Notes
 
 - Supports `ShouldProcess` (High impact). Without `-Force`, you will be prompted for confirmation.
-- Removes all CSOs, attribute values, pending exports, and deferred references from the connected system.
-- Metaverse objects are **not** deleted; their links to this connected system are severed.
+- Removes all CSOs, attribute values, Pending Exports, and deferred references from the Connected System.
+- Metaverse objects are **not** deleted; their links to this Connected System are severed.
 - By default, change history is also deleted. Use `-KeepChangeHistory` to retain it for auditing purposes.
 
 ---
 
 ## Get-JIMPendingExport
 
-Retrieves pending export operations queued for a connected system.
+Retrieves Pending Export operations queued for a Connected System.
 
 ### Syntax
 
@@ -887,24 +887,24 @@ Get-JIMPendingExport -Id <guid> -AttributeName <string> [-Search <string>] -All
 ### Output
 
 - **List / ListAll**: Pending export operations with export type (Add, Update, Delete) and summary of changes.
-- **ById**: Detailed view of a single pending export, including all attribute changes.
+- **ById**: Detailed view of a single Pending Export, including all attribute changes.
 - **AttributeChanges / AttributeChangesAll**: Paged or complete list of changes for a specific multi-valued attribute.
 
 ### Examples
 
-```powershell title="List pending exports for a connected system"
+```powershell title="List Pending Exports for a Connected System"
 Get-JIMPendingExport -ConnectedSystemId 3
 ```
 
-```powershell title="Search pending exports"
+```powershell title="Search Pending Exports"
 Get-JIMPendingExport -ConnectedSystemId 3 -Search "jsmith" -PageSize 25
 ```
 
-```powershell title="Get all pending exports"
+```powershell title="Get all Pending Exports"
 Get-JIMPendingExport -ConnectedSystemId 3 -All
 ```
 
-```powershell title="View details of a specific pending export"
+```powershell title="View details of a specific Pending Export"
 Get-JIMPendingExport -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 ```
 
@@ -920,7 +920,7 @@ Get-JIMPendingExport -Id "a1b2c3d4-..." -AttributeName "member" -Page 1 -PageSiz
 
 ## Get-JIMConnectedSystemDeletionPreview
 
-Retrieves a preview of the impact of deleting a connected system, including counts of affected objects and warnings.
+Retrieves a preview of the impact of deleting a Connected System, including counts of affected objects and warnings.
 
 ### Syntax
 
@@ -936,7 +936,7 @@ Get-JIMConnectedSystemDeletionPreview -ConnectedSystemId <int>
 
 ### Output
 
-A deletion impact preview object with counts of connector space objects, pending exports, synchronisation rules, and other dependent data that would be removed.
+A deletion impact preview object with counts of connector space objects, Pending Exports, Synchronisation Rules, and other dependent data that would be removed.
 
 ### Examples
 
@@ -963,7 +963,7 @@ Get-JIMConnectedSystem | ForEach-Object {
 
 ## See also
 
-- [Connected Systems](../configuration/connected-systems.md): what connected systems are, the connector space, partitions and containers, and common workflows
-- [Run Profiles](run-profiles.md): execute import, sync, and export operations on connected systems
-- [Synchronisation Rules](synchronisation-rules.md): define attribute mappings and scoping for connected system synchronisation
+- [Connected Systems](../configuration/connected-systems.md): what Connected Systems are, the connector space, partitions and containers, and common workflows
+- [Run Profiles](run-profiles.md): execute import, sync, and export operations on Connected Systems
+- [Synchronisation Rules](synchronisation-rules.md): define attribute mappings and scoping for Connected System synchronisation
 - [Connection](connection.md): establish a session before using these cmdlets

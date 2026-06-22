@@ -12,7 +12,7 @@
 <MudAlert Severity="(ConnectedSystem.Partitions is { Count: > 0 } ? Severity.Warning : Severity.Info)" Variant="Variant.Outlined">
     @if (ConnectedSystem.Partitions == null || ConnectedSystem.Partitions.Count == 0)
     {
-        <MudText>Retrieve the hierarchy @PartitionAndHierarchyText hierarchy from the connected system, to be able to select which ones you want to manage with JIM.</MudText>
+        <MudText>Retrieve the hierarchy @PartitionAndHierarchyText hierarchy from the Connected System, to be able to select which ones you want to manage with JIM.</MudText>
     }
     else
     {
@@ -263,7 +263,7 @@
             {
                 <text> and at least one container within that partition</text>
             }
-            before you can configure object matching rules or create run profiles.
+            before you can configure Object Matching Rules or create Run Profiles.
         </MudText>
     </MudAlert>
 }

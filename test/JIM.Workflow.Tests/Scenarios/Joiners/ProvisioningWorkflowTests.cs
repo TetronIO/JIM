@@ -365,7 +365,7 @@ public class ProvisioningWorkflowTests
         var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
         var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
 
-        // Create import sync rule (HR → MV) with attribute flows
+        // Create import Sync Rule (HR → MV) with Attribute Flows
         await _harness.CreateSyncRuleAsync(
             "HR Import",
             "HR",
@@ -377,7 +377,7 @@ public class ProvisioningWorkflowTests
                 .WithAttributeFlow(mvDisplayName, hrDisplayName)
                 .WithExpressionFlow("\"PersonEntity\"", mvType));
 
-        // Create export sync rule (MV → AD) with provisioning enabled
+        // Create export Sync Rule (MV → AD) with provisioning enabled
         await _harness.CreateSyncRuleAsync(
             "AD Export",
             "AD",

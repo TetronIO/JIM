@@ -163,7 +163,7 @@ public class ScheduleExecutionStepDto
     public StepExecutionMode ExecutionMode { get; set; }
 
     /// <summary>
-    /// The connected system ID for RunProfile steps.
+    /// The Connected System ID for RunProfile steps.
     /// Useful for distinguishing parallel sub-steps at the same StepIndex.
     /// </summary>
     public int? ConnectedSystemId { get; set; }

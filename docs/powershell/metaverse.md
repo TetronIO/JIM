@@ -4,13 +4,13 @@ title: Metaverse
 
 # Metaverse
 
-The metaverse is the central identity store in JIM. These cmdlets manage the metaverse schema (object types and attributes), query metaverse objects, and review pending deletions.
+The metaverse is the central identity store in JIM. These cmdlets manage the metaverse schema (object types and attributes), query Metaverse Objects, and review pending deletions.
 
 ## Object Types
 
 ### Get-JIMMetaverseObjectType
 
-Retrieves metaverse object type definitions. Returns all object types by default, or a specific type by ID or name.
+Retrieves Metaverse Object Type definitions. Returns all object types by default, or a specific type by ID or name.
 
 #### Syntax
 
@@ -57,7 +57,7 @@ Get-JIMMetaverseObjectType -Page 2 -PageSize 50
 
 ### Set-JIMMetaverseObjectType
 
-Modifies an existing metaverse object type. Use this cmdlet to configure automatic deletion behaviour for metaverse objects of a given type.
+Modifies an existing Metaverse Object Type. Use this cmdlet to configure automatic deletion behaviour for Metaverse Objects of a given type.
 
 #### Syntax
 
@@ -91,7 +91,7 @@ Set-JIMMetaverseObjectType -InputObject <object> [-DeletionRule <string>] [-Dele
     This cmdlet supports `ShouldProcess` with a **Medium** impact level. Use `-WhatIf` to preview changes or `-Confirm` to require confirmation.
 
 !!! note "Deletion rules"
-    The deletion rule controls how metaverse objects of this type are automatically cleaned up:
+    The deletion rule controls how Metaverse Objects of this type are automatically cleaned up:
 
     - **Manual**<br /> Objects are never automatically deleted; an administrator must delete them explicitly
     - **WhenLastConnectorDisconnected**<br /> The object is marked for deletion when all connectors are removed
@@ -111,7 +111,7 @@ Set-JIMMetaverseObjectType -Name "Person" -DeletionRule WhenLastConnectorDisconn
 Get-JIMMetaverseObjectType -Name "Group" | Set-JIMMetaverseObjectType -DeletionRule WhenAuthoritativeSourceDisconnected -DeletionGracePeriod "30.00:00:00" -PassThru
 ```
 
-```powershell title="Set deletion triggers for specific connected systems"
+```powershell title="Set deletion triggers for specific Connected Systems"
 Set-JIMMetaverseObjectType -Id 1 -DeletionRule WhenAuthoritativeSourceDisconnected -DeletionTriggerConnectedSystemIds @(3, 7)
 ```
 
@@ -140,7 +140,7 @@ New-JIMMetaverseObjectType -Name <string> -PluralName <string>
 | `AttributeIds` | `int[]` | No | | Optional array of existing Metaverse attribute IDs to associate with this type at creation time. Attributes can also be associated later. |
 | `DeletionRule` | `string` | No | `Manual` | Controls when objects of this type are automatically deleted. Valid values: `Manual`, `WhenLastConnectorDisconnected`, `WhenAuthoritativeSourceDisconnected`. |
 | `DeletionGracePeriod` | `TimeSpan` | No | | Grace period before deletion is executed. Use `[TimeSpan]::Zero` for immediate deletion. Ignored when `DeletionRule` is `Manual`. |
-| `DeletionTriggerConnectedSystemIds` | `int[]` | No | | Required when `DeletionRule` is `WhenAuthoritativeSourceDisconnected`. The connected system IDs whose disconnect triggers deletion. |
+| `DeletionTriggerConnectedSystemIds` | `int[]` | No | | Required when `DeletionRule` is `WhenAuthoritativeSourceDisconnected`. The Connected System IDs whose disconnect triggers deletion. |
 
 !!! info "ShouldProcess"
     This cmdlet supports `ShouldProcess` with a **Medium** impact level. Use `-WhatIf` to preview changes or `-Confirm` to require confirmation.
@@ -364,7 +364,7 @@ Get-JIMMetaverseAttribute -Name "Legacy Code" | Remove-JIMMetaverseAttribute -Fo
 
 ### Search-JIMMetaverseObject
 
-Searches for metaverse objects using a predefined search definition, returning lightweight headers with only the attributes configured in the search. Optimised for fast responses at scale (100k+ objects).
+Searches for Metaverse Objects using a predefined search definition, returning lightweight headers with only the attributes configured in the search. Optimised for fast responses at scale (100k+ objects).
 
 Use this cmdlet for fast list views and searches. Use `Get-JIMMetaverseObject` when you need full object details or custom attribute selection.
 
@@ -394,7 +394,7 @@ Search-JIMMetaverseObject -PredefinedSearchUri <string> [-Search <string>] [-Sor
 
 #### Output
 
-Lightweight metaverse object headers including ID, display name, object type, and the attributes defined in the predefined search.
+Lightweight Metaverse Object headers including ID, display name, object type, and the attributes defined in the predefined search.
 
 #### Examples
 
@@ -418,7 +418,7 @@ Search-JIMMetaverseObject -PredefinedSearchUri "groups" -SortBy "Display Name" -
 
 ### Get-JIMMetaverseObject
 
-Retrieves metaverse objects. Supports searching by ID, object type, attribute values, and wildcard patterns.
+Retrieves Metaverse Objects. Supports searching by ID, object type, attribute values, and wildcard patterns.
 
 #### Syntax
 
@@ -440,7 +440,7 @@ Get-JIMMetaverseObject [-ObjectTypeId <int>] [-ObjectTypeName <string>] [-Search
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `guid` | Yes (ById) | | The GUID of a specific metaverse object. Accepts pipeline input. |
+| `Id` | `guid` | Yes (ById) | | The GUID of a specific Metaverse Object. Accepts pipeline input. |
 | `ObjectTypeId` | `int` | No | | Filter by object type ID |
 | `ObjectTypeName` | `string` | No | | Filter by object type name |
 | `Search` | `string` | No | | Search string; supports wildcards |
@@ -481,7 +481,7 @@ Get-JIMMetaverseObject -ObjectTypeName "Person" -Page 3 -PageSize 50
 
 ### Get-JIMMetaverseObjectChangeHistory
 
-Retrieves the change history for a Metaverse Object. Each record carries the initiator, sync rule, and run profile context, plus the per-attribute value changes, ordered by change time descending (most recent first).
+Retrieves the change history for a Metaverse Object. Each record carries the initiator, Sync Rule, and Run Profile context, plus the per-attribute value changes, ordered by change time descending (most recent first).
 
 #### Syntax
 
@@ -504,7 +504,7 @@ Get-JIMMetaverseObjectChangeHistory -Id <guid> -All [-PageSize <int>]
 
 #### Output
 
-Returns one `PSCustomObject` per change record, including the initiator, sync rule, run profile context, and per-attribute value changes.
+Returns one `PSCustomObject` per change record, including the initiator, Sync Rule, Run Profile context, and per-attribute value changes.
 
 #### Examples
 
@@ -527,7 +527,7 @@ Get-JIMMetaverseObject -ObjectTypeName "Group" -Search "Project-Alpha" |
 
 ### Get-JIMPendingDeletion
 
-Retrieves metaverse objects that are pending deletion. Supports listing individual items, returning a count, or a summary breakdown by object type.
+Retrieves Metaverse Objects that are pending deletion. Supports listing individual items, returning a count, or a summary breakdown by object type.
 
 #### Syntax
 
