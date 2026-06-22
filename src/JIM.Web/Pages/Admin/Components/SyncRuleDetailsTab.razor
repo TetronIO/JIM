@@ -103,13 +103,11 @@
                             }
                         </MudSelect>
                     </MudItem>
-                    <MudItem xs="2">
-                        <MudPaper Outlined="false" Elevation="0"
-                                  Class="d-flex flex-column align-center justify-center mud-width-full py-10">
-                            <MudIcon Size="Size.Medium"
-                                     Icon="@(SyncRule.Direction == SyncRuleDirection.Export ? Icons.Material.Filled.KeyboardDoubleArrowRight : Icons.Material.Filled.KeyboardDoubleArrowLeft)">
-                            </MudIcon>
-                        </MudPaper>
+                    <MudItem xs="2" Class="d-flex align-center justify-center mt-5">
+                        <MudTooltip Text="@(SyncRule.Direction == SyncRuleDirection.Export ? "Exports to the Connected System" : "Imports to the Metaverse")" Arrow="true" Placement="Placement.Top">
+                            <MudIcon Size="Size.Large" Class="mud-text-secondary"
+                                     Icon="@(SyncRule.Direction == SyncRuleDirection.Export ? Icons.Material.Filled.KeyboardDoubleArrowRight : Icons.Material.Filled.KeyboardDoubleArrowLeft)" />
+                        </MudTooltip>
                     </MudItem>
                     <MudItem xs="5">
                         <MudSelect T="ConnectedSystemObjectType" Label="Connected System Object Type"
