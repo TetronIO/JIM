@@ -107,8 +107,25 @@ else if (_syncRule != null)
     private bool _isLoading = true;
     private List<ConnectedSystemHeader>? _connectedSystemHeaders;
     private List<MetaverseObjectType>? _metaverseObjectTypes;
+    private bool _loaded;
+    private int? _loadedId;
 
-    protected override async Task OnInitializedAsync()
+    // Both /admin/sync-rules/new and /admin/sync-rules/{id} resolve to this component, so creating a rule and
+    // navigating from /new to /{id} reuses the instance (OnInitializedAsync does not run again). Load from
+    // OnParametersSetAsync keyed on the route id so the page re-loads cleanly into edit mode after a create.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded && _loadedId == Id)
+            return;
+
+        _loaded = true;
+        _loadedId = Id;
+        _isLoading = true;
+        await LoadSyncRuleAsync();
+        _isLoading = false;
+    }
+
+    private async Task LoadSyncRuleAsync()
     {
         using var jim = JimFactory.Create();
         _breadcrumbs =
@@ -136,12 +153,11 @@ else if (_syncRule != null)
         {
             // create a new sync rule
             _syncRule = new SyncRule();
+            _syncRuleNameOrCreate = "New";
             _breadcrumbs.Add(new BreadcrumbItem("New", href: null, disabled: true));
             _connectedSystemHeaders = await jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
             _metaverseObjectTypes = await jim.Metaverse.GetMetaverseObjectTypesAsync(true);
         }
-
-        _isLoading = false;
     }
 
     private void OnChildChanged()
