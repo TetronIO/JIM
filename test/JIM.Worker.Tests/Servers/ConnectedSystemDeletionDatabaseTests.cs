@@ -136,10 +136,10 @@ public class ConnectedSystemDeletionDatabaseTests
         }
 
         await using var verify = NewContext();
-        Assert.That(await verify.ConnectedSystems.AnyAsync(), Is.False, "Connected system should be removed.");
-        Assert.That(await verify.SyncRules.AnyAsync(), Is.False, "Sync rules should be removed.");
-        Assert.That(await verify.SyncRuleMappings.AnyAsync(), Is.False, "Sync rule mappings should be removed.");
-        Assert.That(await verify.SyncRuleMappingSources.AnyAsync(), Is.False, "Sync rule mapping sources should be removed.");
+        Assert.That(await verify.ConnectedSystems.AnyAsync(), Is.False, "Connected System should be removed.");
+        Assert.That(await verify.SyncRules.AnyAsync(), Is.False, "Sync Rules should be removed.");
+        Assert.That(await verify.SyncRuleMappings.AnyAsync(), Is.False, "Sync Rule mappings should be removed.");
+        Assert.That(await verify.SyncRuleMappingSources.AnyAsync(), Is.False, "Sync Rule mapping sources should be removed.");
     }
 
     [Test]
@@ -192,10 +192,10 @@ public class ConnectedSystemDeletionDatabaseTests
         }
 
         await using var verify = NewContext();
-        Assert.That(await verify.ConnectedSystems.AnyAsync(), Is.False, "Connected system should be removed.");
-        Assert.That(await verify.SyncRules.AnyAsync(), Is.False, "Sync rules should be removed.");
-        Assert.That(await verify.ObjectMatchingRules.AnyAsync(), Is.False, "Object matching rules should be removed.");
-        Assert.That(await verify.ObjectMatchingRuleSources.AnyAsync(), Is.False, "Object matching rule sources should be removed.");
+        Assert.That(await verify.ConnectedSystems.AnyAsync(), Is.False, "Connected System should be removed.");
+        Assert.That(await verify.SyncRules.AnyAsync(), Is.False, "Sync Rules should be removed.");
+        Assert.That(await verify.ObjectMatchingRules.AnyAsync(), Is.False, "Object Matching Rules should be removed.");
+        Assert.That(await verify.ObjectMatchingRuleSources.AnyAsync(), Is.False, "Object Matching Rule sources should be removed.");
     }
 
     /// <summary>
@@ -365,9 +365,9 @@ public class ConnectedSystemDeletionDatabaseTests
         await using var verify = NewContext();
 
         // Connected-system graph fully removed.
-        Assert.That(await verify.ConnectedSystems.AnyAsync(), Is.False, "Connected system should be removed.");
-        Assert.That(await verify.SyncRules.AnyAsync(), Is.False, "Sync rules should be removed.");
-        Assert.That(await verify.ConnectedSystemRunProfiles.AnyAsync(), Is.False, "Run profiles should be removed.");
+        Assert.That(await verify.ConnectedSystems.AnyAsync(), Is.False, "Connected System should be removed.");
+        Assert.That(await verify.SyncRules.AnyAsync(), Is.False, "Sync Rules should be removed.");
+        Assert.That(await verify.ConnectedSystemRunProfiles.AnyAsync(), Is.False, "Run Profiles should be removed.");
         Assert.That(await verify.ConnectedSystemPartitions.AnyAsync(), Is.False, "Partitions should be removed.");
         Assert.That(await verify.ConnectedSystemObjects.AnyAsync(), Is.False, "CSOs should be removed.");
         Assert.That(await verify.ConnectedSystemObjectChanges.AnyAsync(), Is.False, "Change history should be removed when deleteChangeHistory is true.");
@@ -385,7 +385,7 @@ public class ConnectedSystemDeletionDatabaseTests
         Assert.That(unresolvedMvav.UnresolvedReferenceValueId, Is.Null, "Unresolved reference to a deleted CSO should be nulled.");
 
         var mvoChange = await verify.MetaverseObjectChanges.SingleAsync(c => c.Id == ids.MvoChangeId);
-        Assert.That(mvoChange.SyncRuleId, Is.Null, "Metaverse object change should keep the record but null the deleted Sync Rule FK.");
+        Assert.That(mvoChange.SyncRuleId, Is.Null, "Metaverse Object change should keep the record but null the deleted Sync Rule FK.");
     }
 
     [Test]
@@ -401,8 +401,8 @@ public class ConnectedSystemDeletionDatabaseTests
 
         await using var verify = NewContext();
 
-        Assert.That(await verify.ConnectedSystems.AnyAsync(), Is.False, "Connected system should be removed.");
-        Assert.That(await verify.SyncRules.AnyAsync(), Is.False, "Sync rules should be removed.");
+        Assert.That(await verify.ConnectedSystems.AnyAsync(), Is.False, "Connected System should be removed.");
+        Assert.That(await verify.SyncRules.AnyAsync(), Is.False, "Sync Rules should be removed.");
         Assert.That(await verify.ConnectedSystemObjects.AnyAsync(), Is.False, "CSOs should be removed.");
         Assert.That(await verify.ConnectedSystemObjectTypes.AnyAsync(), Is.False, "Object types should be removed.");
 

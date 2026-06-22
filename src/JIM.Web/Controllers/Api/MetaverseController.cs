@@ -122,7 +122,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             {
                 var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
                 if (connectedSystem == null)
-                    return BadRequest(ApiErrorResponse.BadRequest($"Connected system with ID {connectedSystemId} not found."));
+                    return BadRequest(ApiErrorResponse.BadRequest($"Connected System with ID {connectedSystemId} not found."));
             }
         }
 
@@ -208,7 +208,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             {
                 var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
                 if (connectedSystem == null)
-                    return BadRequest(ApiErrorResponse.BadRequest($"Connected system with ID {connectedSystemId} not found."));
+                    return BadRequest(ApiErrorResponse.BadRequest($"Connected System with ID {connectedSystemId} not found."));
             }
             objectType.DeletionTriggerConnectedSystemIds = request.DeletionTriggerConnectedSystemIds;
         }
@@ -614,7 +614,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         _logger.LogTrace("Requested Metaverse Object: {Id}", id);
         var obj = await _application.Metaverse.GetMetaverseObjectAsync(id);
         if (obj == null)
-            return NotFound(ApiErrorResponse.NotFound($"Metaverse object with ID {id} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse Object with ID {id} not found."));
 
         return Ok(MetaverseObjectDto.FromEntity(obj));
     }
@@ -641,7 +641,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         // Verify the MVO exists so a missing id returns 404 rather than an empty page.
         var exists = await _application.Metaverse.GetMetaverseObjectHeaderAsync(id);
         if (exists == null)
-            return NotFound(ApiErrorResponse.NotFound($"Metaverse object with ID {id} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse Object with ID {id} not found."));
 
         var (items, totalCount) = await _application.Metaverse.GetMvoChangeHistoryAsync(id, pagination.Page, pagination.PageSize);
         return Ok(PaginatedResponse<MvoChangeHistoryDto>.Create(items, totalCount, pagination.Page, pagination.PageSize));

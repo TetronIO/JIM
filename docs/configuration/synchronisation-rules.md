@@ -6,13 +6,13 @@ title: Synchronisation Rules
 
 A **Synchronisation Rule** defines the complete relationship between a [Connected System](connected-systems.md) and the metaverse. It controls which objects are in scope, how objects are matched, when new Metaverse Objects are created, and how attributes flow between systems.
 
-Synchronisation rules are the central configuration mechanism for identity synchronisation in JIM. Every Connected System needs at least one Synchronisation Rule to participate in synchronisation.
+Synchronisation Rules are the central configuration mechanism for identity synchronisation in JIM. Every Connected System needs at least one Synchronisation Rule to participate in synchronisation.
 
 ## What a Synchronisation Rule ties together
 
 1. **Direction**<br /> Whether data flows inbound (a source system into the metaverse) or outbound (the metaverse out to a target system).
 2. **Scoping criteria**<br /> Which objects the rule applies to.
-3. **Object matching rules**<br /> How to match a Connected System Object to an existing Metaverse Object.
+3. **Object Matching Rules**<br /> How to match a Connected System Object to an existing Metaverse Object.
 4. **Projection or provisioning**<br /> What to do when no match is found.
 5. **Attribute mappings**<br /> Which attributes to synchronise and how to transform them.
 
@@ -66,9 +66,9 @@ Criteria are organised into groups with AND/OR logic and support nested groups f
 
 Each criterion is evaluated case-sensitively by default. Where a data source is inconsistent about casing (for example `Sales` versus `SALES`), you can switch an individual criterion to case-insensitive matching; see [Case Sensitivity](../concepts/case-sensitivity.md).
 
-## Object matching rules
+## Object Matching Rules
 
-Object matching rules define how a Connected System Object is matched to an existing Metaverse Object. Rules specify one or more attribute pairs to compare:
+Object Matching Rules define how a Connected System Object is matched to an existing Metaverse Object. Rules specify one or more attribute pairs to compare:
 
 | CSO Attribute | MVO Attribute | Description |
 |---------------|---------------|-------------|
@@ -175,7 +175,7 @@ A complete import rule for an HR system might look like:
 | **Direction** | Import |
 | **Connected System** | HR Database |
 | **Scoping** | `Eq(cs["employeeType"], "FTE")` |
-| **Object matching rule 1** | Match `cs["employeeId"]` to `mv["Employee ID"]` |
+| **Object Matching Rule 1** | Match `cs["employeeId"]` to `mv["Employee ID"]` |
 | **Projection** | Create MVO of type `Person` |
 | **Attribute mappings** | `cs["givenName"]` to `mv["First Name"]` (direct) |
 | | `cs["sn"]` to `mv["Last Name"]` (direct) |

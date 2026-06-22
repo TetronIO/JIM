@@ -12,7 +12,7 @@ namespace JIM.Application.Exceptions;
 public class MetaverseAttributeInUseException : InvalidOperationException
 {
     /// <summary>
-    /// Sync rules that reference the attribute (via mappings, matching rules, or scoping criteria).
+    /// Sync Rules that reference the attribute (via mappings, matching rules, or scoping criteria).
     /// Empty if the exception is about stored values rather than Sync Rule references.
     /// </summary>
     public List<SyncRuleReference> ReferencingSyncRules { get; }

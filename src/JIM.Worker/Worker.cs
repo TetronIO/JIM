@@ -393,7 +393,7 @@ public class Worker : BackgroundService
                                         var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemCoreAsync(clearConnectedSystemObjectsTask.ConnectedSystemId, withChangeTracking: true);
                                         if (connectedSystem == null)
                                         {
-                                            Log.Warning($"ExecuteAsync: Connected system id {clearConnectedSystemObjectsTask.ConnectedSystemId} doesn't exist. Cannot continue.");
+                                            Log.Warning($"ExecuteAsync: Connected System id {clearConnectedSystemObjectsTask.ConnectedSystemId} doesn't exist. Cannot continue.");
                                             return;
                                         }
 
@@ -504,7 +504,7 @@ public class Worker : BackgroundService
 
     /// <summary>
     /// Warms the CSO lookup cache for all Connected Systems at startup.
-    /// Connected systems are warmed with limited parallelism to balance startup speed against database load.
+    /// Connected Systems are warmed with limited parallelism to balance startup speed against database load.
     /// This is a blocking operation — the Worker does not accept tasks until warming is complete.
     /// </summary>
     private async Task WarmCsoCacheForAllConnectedSystemsAsync(JimApplication jim)
@@ -858,7 +858,7 @@ public class Worker : BackgroundService
             activity.TotalExported = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported);
             activity.TotalDeprovisioned = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned);
 
-            // Pending export stats from outcomes
+            // Pending Export stats from outcomes
             activity.TotalPendingExports = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
 
             // Drift correction from outcomes
@@ -877,7 +877,7 @@ public class Worker : BackgroundService
             activity.TotalProjected = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Projected);
             activity.TotalJoined = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Joined);
 
-            // Attribute flows: count objects whose primary change was AttributeFlow only.
+            // Attribute Flows: count objects whose primary change was AttributeFlow only.
             // Joins, projections, and disconnections inherently include Attribute Flow but are
             // already counted in their own stats — counting them again here would be redundant.
             activity.TotalAttributeFlows = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.AttributeFlow);

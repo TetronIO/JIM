@@ -13,7 +13,7 @@ using Serilog;
 namespace JIM.Application.Servers;
 
 /// <summary>
-/// Attribute flow logic for the sync engine.
+/// Attribute Flow logic for the sync engine.
 /// Contains all Sync Rule mapping processing — formerly SyncRuleMappingProcessor.
 /// </summary>
 public partial class SyncEngine

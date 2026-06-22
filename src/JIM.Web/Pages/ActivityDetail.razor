@@ -314,7 +314,7 @@
                         <MudText Typo="Typo.h4" Color="Color.Error">@_activityRunProfileExecutionStats.TotalCsoDeletes.ToString("N0")</MudText>
                     </MudPaper>
 
-                    @* Pending export confirmation stats - shown during confirming import *@
+                    @* Pending Export confirmation stats - shown during confirming import *@
                     @if (_activityRunProfileExecutionStats.TotalPendingExportsConfirmed > 0)
                     {
                         <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Green.Default}; min-width: 120px;")">

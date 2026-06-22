@@ -16,8 +16,8 @@ We need an architecture that:
 We will implement the **metaverse pattern**, where:
 1. A central **metaverse** stores canonical identity objects
 2. Each Connected System has a **staging area** with copies of external data
-3. **Sync rules** define how data flows between staging and metaverse
-4. **Attribute flows** handle transformation and precedence
+3. **Sync Rules** define how data flows between staging and metaverse
+4. **Attribute Flows** handle transformation and precedence
 
 ## Consequences
 

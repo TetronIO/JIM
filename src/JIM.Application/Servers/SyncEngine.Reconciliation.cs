@@ -9,7 +9,7 @@ using Serilog;
 namespace JIM.Application.Servers;
 
 /// <summary>
-/// Pending export reconciliation logic — pure, stateless methods for comparing
+/// Pending Export reconciliation logic — pure, stateless methods for comparing
 /// imported CSO attribute values against Pending Export assertions.
 /// Consolidated from PendingExportReconciliationService to ensure both
 /// the sync path and import path use identical, comprehensive attribute matching.

@@ -135,7 +135,7 @@ public class SyncImportTaskProcessor
         _csIsEmpty = csoCountAtStart == 0;
         if (_csIsEmpty)
         {
-            Log.Information("PerformImportAsync: Connected system {ConnectedSystemId} has no existing CSOs. Skipping CSO lookups for this import.", _connectedSystem.Id);
+            Log.Information("PerformImportAsync: Connected System {ConnectedSystemId} has no existing CSOs. Skipping CSO lookups for this import.", _connectedSystem.Id);
         }
         else
         {

@@ -81,7 +81,7 @@ public async Task DeltaSync_WithDriftedGroupMembership_CreatesCorrectivePendingE
     // 1. CSO.MetaverseObject.Type is loaded (not null)
     // 2. Drift detection found applicable export rules
     // 3. Corrective Pending Exports were created
-    // 4. Pending export has correct Add/Remove changes
+    // 4. Pending Export has correct Add/Remove changes
 }
 ```
 

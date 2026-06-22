@@ -8,7 +8,7 @@ At the heart of JIM is the **metaverse**: a centralised repository of identity o
 
 - **Single source of truth**<br /> One authoritative record for each identity, assembled from multiple sources.
 - **Centralised governance**<br /> All data transformations, scoping decisions, and lifecycle rules are applied in one place.
-- **Decoupled systems**<br /> Connected systems do not need to know about each other; they only interact with the metaverse.
+- **Decoupled systems**<br /> Connected Systems do not need to know about each other; they only interact with the metaverse.
 - **Auditability**<br /> Every change is tracked as it passes through the hub.
 
 ```mermaid

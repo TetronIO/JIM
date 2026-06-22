@@ -551,7 +551,7 @@ public class PendingExportReconciliationTests
         var result = await service.ReconcileAsync(cso);
 
         // Assert
-        Assert.That(result.HasChanges, Is.False, "No reconciliation should happen for Pending exports");
+        Assert.That(result.HasChanges, Is.False, "No reconciliation should happen for Pending Exports");
         Assert.That(result.PendingExportDeleted, Is.False);
     }
 
@@ -1320,7 +1320,7 @@ public class PendingExportReconciliationTests
     /// substituted value, allowing reconciliation to confirm successfully.
     ///
     /// This simulates what happens when:
-    /// 1. Sync rule evaluates ToFileTime(mv["Employee End Date"]) and returns null
+    /// 1. Sync Rule evaluates ToFileTime(mv["Employee End Date"]) and returns null
     /// 2. Drift detection creates a Pending Export with no value (clearing the attribute)
     /// 3. LDAP connector substitutes the "never expires" default (9223372036854775807)
     /// 4. LDAP connector updates the PendingExportAttributeValueChange.LongValue
@@ -1585,7 +1585,7 @@ public class PendingExportReconciliationTests
         };
         TargetUserType.Attributes.Add(managedByAttr);
 
-        // Pending export has an Update with null value (clearing the attribute)
+        // Pending Export has an Update with null value (clearing the attribute)
         var attrChange = new PendingExportAttributeValueChange
         {
             Id = Guid.NewGuid(),
@@ -1626,7 +1626,7 @@ public class PendingExportReconciliationTests
         var cso = CreateTestCso();
         var pendingExport = CreateTestPendingExport(cso);
 
-        // Pending export has an Update with null string value (clearing the attribute)
+        // Pending Export has an Update with null string value (clearing the attribute)
         var attrChange = new PendingExportAttributeValueChange
         {
             Id = Guid.NewGuid(),
@@ -1673,7 +1673,7 @@ public class PendingExportReconciliationTests
         };
         TargetUserType.Attributes.Add(managedByAttr);
 
-        // Pending export has an Update with null value (clearing the attribute)
+        // Pending Export has an Update with null value (clearing the attribute)
         var attrChange = new PendingExportAttributeValueChange
         {
             Id = Guid.NewGuid(),

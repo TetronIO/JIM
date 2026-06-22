@@ -118,7 +118,7 @@ Review each Mermaid diagram in `docs/developer/diagrams/` against the current co
 - `FULL_SYNC_CSO_PROCESSING.md` — Per-CSO sync decision tree
 - `DELTA_SYNC_FLOW.md` — Delta sync watermark and early exit logic
 - `EXPORT_EXECUTION_FLOW.md` — Export batching, parallelism, retry
-- `PENDING_EXPORT_LIFECYCLE.md` — Pending export state machine
+- `PENDING_EXPORT_LIFECYCLE.md` — Pending Export state machine
 - `WORKER_TASK_LIFECYCLE.md` — Worker polling, dispatch, heartbeat
 - `SCHEDULE_EXECUTION_LIFECYCLE.md` — Schedule step groups and recovery
 - `CONNECTOR_LIFECYCLE.md` — Connector interface and lifecycle

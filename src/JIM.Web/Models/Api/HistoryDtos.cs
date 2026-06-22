@@ -55,12 +55,12 @@ public class HistoryCleanupResponse
 public class HistoryCountResponse
 {
     /// <summary>
-    /// Connected system ID.
+    /// Connected System ID.
     /// </summary>
     public int ConnectedSystemId { get; set; }
 
     /// <summary>
-    /// Connected system name.
+    /// Connected System name.
     /// </summary>
     public required string ConnectedSystemName { get; set; }
 

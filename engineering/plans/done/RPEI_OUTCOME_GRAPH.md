@@ -182,7 +182,7 @@ HR CSV Source - Delta Synchronisation:
                 +-- [CSO Deprovisioned] LDAP
 ```
 
-**Export: Pending exports executed**
+**Export: Pending Exports executed**
 
 ```
 Active Directory - Export:
@@ -455,9 +455,9 @@ This section documents the relationship between `ObjectChangeType` (per-RPEI), `
 | New CSO staged | `Added` | `CsoAdded` | "CSOs Added" | "CSO Added" |
 | CSO attributes updated | `Updated` | `CsoUpdated` | "CSOs Updated" | "CSO Updated" |
 | CSO deletion detected (marked Obsolete) | `Deleted` | `DeletionDetected` | "CSO Deletions Detected" | "CSO Deletion Detected" |
-| Pending export confirmed | `PendingExportConfirmed` | `ExportConfirmed` | "CSO Exports Confirmed" | "CSO Export Confirmed" |
-| Pending export retrying | *(error on RPEI)* | *(none)* | "Exports Retrying" | *(N/A)* |
-| Pending export failed | *(error on RPEI)* | `ExportFailed` | "CSO Exports Failed" | "CSO Export Failed" |
+| Pending Export confirmed | `PendingExportConfirmed` | `ExportConfirmed` | "CSO Exports Confirmed" | "CSO Export Confirmed" |
+| Pending Export retrying | *(error on RPEI)* | *(none)* | "Exports Retrying" | *(N/A)* |
+| Pending Export failed | *(error on RPEI)* | `ExportFailed` | "CSO Exports Failed" | "CSO Export Failed" |
 
 **Key point; import deletions**: During import, the CSO is only marked `Obsolete` (not actually deleted). A `DeletionDetected` outcome is recorded to show the detection in the outcome tree. The actual deletion and `CsoDeleted` outcome occur during the subsequent sync run.
 
@@ -473,7 +473,7 @@ This section documents the relationship between `ObjectChangeType` (per-RPEI), `
 | MVO deleted | *(N/A)* | `MvoDeleted` | *(N/A)* | "MVO Deleted" |
 | Drift detected | `DriftCorrection` | `DriftCorrection` | "CSOs Drift Corrected" | "CSO Drift Corrected" |
 | CSO provisioned to target CS | *(N/A)* | `Provisioned` | "CSOs Provisioned" | "CSO Provisioned" |
-| Pending export created | `PendingExport` | `PendingExportCreated` | "CSO Pending Exports" | "CSO Pending Export" |
+| Pending Export created | `PendingExport` | `PendingExportCreated` | "CSO Pending Exports" | "CSO Pending Export" |
 | No attribute changes | `NoChange` | *(none)* | "Unchanged" | *(N/A)* |
 
 **Key point; obsoleted CSOs**: When a joined CSO is marked Obsolete and processed during sync, a single RPEI is created with `ObjectChangeType.Disconnected`. The outcome graph contains sibling root nodes: `Disconnected` (for the join break) and `CsoDeleted` (for the actual CSO deletion). If an MVO deletion rule fires, there may also be `MvoDeleted` and `PendingExportCreated` child outcomes.

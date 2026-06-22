@@ -71,7 +71,7 @@ Get-JIMRoleMember -InputObject <PSCustomObject>
 
 ### Output
 
-Metaverse object members with `id`, `displayName`, `typeId`, and `typeName` properties.
+Metaverse Object members with `id`, `displayName`, `typeId`, and `typeName` properties.
 
 ### Examples
 
@@ -159,7 +159,7 @@ Add-JIMRoleMember -RoleId <int> -InputObject <PSCustomObject>
 |------|------|----------|---------|-------------|
 | `RoleId` | `int` | Yes | | The unique identifier of the role to add the member to. |
 | `MetaverseObjectId` | `guid` | Yes* | | The unique identifier of the Metaverse Object. |
-| `InputObject` | `PSCustomObject` | Yes* | | Metaverse object from the pipeline (e.g., from `Get-JIMMetaverseObject`). |
+| `InputObject` | `PSCustomObject` | Yes* | | Metaverse Object from the pipeline (e.g., from `Get-JIMMetaverseObject`). |
 
 *One of `MetaverseObjectId` or `InputObject` is required.
 
@@ -197,7 +197,7 @@ Remove-JIMRoleMember -RoleId <int> -InputObject <PSCustomObject> [-Force]
 |------|------|----------|---------|-------------|
 | `RoleId` | `int` | Yes | | The unique identifier of the role to remove the member from. |
 | `MetaverseObjectId` | `guid` | Yes* | | The unique identifier of the Metaverse Object. |
-| `InputObject` | `PSCustomObject` | Yes* | | Metaverse object from the pipeline. |
+| `InputObject` | `PSCustomObject` | Yes* | | Metaverse Object from the pipeline. |
 | `Force` | `switch` | No | `$false` | Suppresses confirmation prompts. |
 
 *One of `MetaverseObjectId` or `InputObject` is required.

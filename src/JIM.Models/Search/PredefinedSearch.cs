@@ -58,7 +58,7 @@ public class PredefinedSearch : IAuditable
     public string? LastUpdatedByName { get; set; }
 
     /// <summary>
-    /// The type of Metaverse object this search will result results for.
+    /// The type of Metaverse Object this search will result results for.
     /// </summary>
     public MetaverseObjectType MetaverseObjectType { get; set; } = null!;
 

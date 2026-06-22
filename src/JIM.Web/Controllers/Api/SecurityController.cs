@@ -132,7 +132,7 @@ public class SecurityController(ILogger<SecurityController> logger, JimApplicati
         var mvo = await _application.Metaverse.GetMetaverseObjectAsync(metaverseObjectId);
         if (mvo == null)
         {
-            return NotFound(ApiErrorResponse.NotFound($"Metaverse object not found: {metaverseObjectId}"));
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse Object not found: {metaverseObjectId}"));
         }
 
         var roles = await _application.Security.GetMetaverseObjectRolesAsync(metaverseObjectId);
@@ -179,7 +179,7 @@ public class SecurityController(ILogger<SecurityController> logger, JimApplicati
         }
         catch (ArgumentException ex) when (ex.Message.Contains("already in that role"))
         {
-            return Conflict(ApiErrorResponse.Conflict("Metaverse object is already a member of this role"));
+            return Conflict(ApiErrorResponse.Conflict("Metaverse Object is already a member of this role"));
         }
         catch (ArgumentException ex)
         {

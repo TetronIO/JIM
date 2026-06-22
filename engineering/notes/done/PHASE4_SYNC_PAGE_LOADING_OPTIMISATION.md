@@ -402,7 +402,7 @@ Tests 2 and 6 (`RemoveContributedAttributesOnObsoletion=false`) are unaffected; 
    Previously, the `if ($Step -ne "All") { throw }` guard deliberately swallowed failures when running all
    tests, causing cascade corruption between tests.
 
-2. **Pending export drain**: Added `Invoke-DrainPendingExports` helper called before each test to clear any
+2. **Pending Export drain**: Added `Invoke-DrainPendingExports` helper called before each test to clear any
    stale Pending Exports from a prior test. This prevents cascade failures where Test N's LDAP Export picks
    up unrelated Pending Exports from Test N-1.
 

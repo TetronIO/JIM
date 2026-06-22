@@ -206,7 +206,7 @@ This ensures that if an admin misconfigures attribute recall on a primary source
 
 **Gotchas encountered:**
 - EF Core in-memory database auto-tracks navigation properties. When `CreateMvObjectTypeAsync` both adds attributes to `DbContext.MetaverseAttributes` AND manually adds them to `mvType.Attributes`, duplicates appear. Fix: query attributes from DB directly with `DbContext.MetaverseAttributes.FirstAsync()`.
-- EF Core in-memory database does not support `EF.Functions.ILike()` (PostgreSQL-specific). Object matching rules in workflow tests must use `CaseSensitive = true` to avoid ILike.
+- EF Core in-memory database does not support `EF.Functions.ILike()` (PostgreSQL-specific). Object Matching Rules in workflow tests must use `CaseSensitive = true` to avoid ILike.
 
 **Result:** All unit tests pass (1783).
 

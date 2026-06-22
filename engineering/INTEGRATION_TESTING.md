@@ -75,7 +75,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario7-ClearConnectedSystemObjects" # Clear connector space testing
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync"  # Group sync between domains
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario9-PartitionScopedImports"  # Partition-scoped import Run Profiles
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario10-SyncRuleScoping"          # Sync rule scoping behaviour (inbound + outbound)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario10-SyncRuleScoping"          # Sync Rule scoping behaviour (inbound + outbound)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix"    # Scoping criteria evaluation matrix (Default tier)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix" -Quick      # Quick tier (~12 cells, < 90s)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix" -Exhaustive # Exhaustive tier (~152 cells, < 10 min)
@@ -143,12 +143,12 @@ This single script handles everything:
 | `Scenario2-CrossDomainSync` | APAC -> EMEA directory sync | samba-ad-source, samba-ad-target / openldap-primary | ✅ |
 | `Scenario3-GALSYNC` | AD -> CSV global address list export (stub, not implemented) | samba-ad-primary / openldap-primary | ✅ |
 | `Scenario4-DeletionRules` | Deletion rules and grace period testing | samba-ad-primary / openldap-primary | ✅ |
-| `Scenario5-MatchingRules` | Object matching rules testing | samba-ad-primary / openldap-primary | ✅ |
+| `Scenario5-MatchingRules` | Object Matching Rules testing | samba-ad-primary / openldap-primary | ✅ |
 | `Scenario6-SchedulerService` | Scheduler service end-to-end testing | samba-ad-primary / openldap-primary | ✅ |
 | `Scenario7-ClearConnectedSystemObjects` | Clear connector space testing | samba-ad-primary / openldap-primary | ✅ |
 | `Scenario8-CrossDomainEntitlementSync` | Group sync between APAC and EMEA domains | samba-ad-source, samba-ad-target / openldap-primary | ✅ |
 | `Scenario9-PartitionScopedImports` | Partition-scoped import Run Profiles | samba-ad-primary / openldap-primary | ✅ |
-| `Scenario10-SyncRuleScoping` | Sync rule scoping behaviour: inbound enter/in-scope-update/exit (Disconnect, RemainJoined); outbound enter/exit (Disconnect, Delete); cross-system inline cascade; criteria persistence | file (HR CSV), samba-ad-primary / openldap-primary | ✅ |
+| `Scenario10-SyncRuleScoping` | Sync Rule scoping behaviour: inbound enter/in-scope-update/exit (Disconnect, RemainJoined); outbound enter/exit (Disconnect, Delete); cross-system inline cascade; criteria persistence | file (HR CSV), samba-ad-primary / openldap-primary | ✅ |
 | `Scenario11-ScopingCriteriaMatrix` | Scoping criteria evaluation matrix: full operator x value-type x group-structure coverage via batched per-cell CSO and MV types. Three tiers: Quick (~12 cells, < 90s), Default (~41 cells, < 5 min), Exhaustive (~152 cells, < 10 min). Round-trip persistence and API negative-cell probes run first. | file (bespoke deterministic seed) | n/a |
 
 **Available Templates (`-Template` parameter):**
@@ -285,7 +285,7 @@ Integration tests create real data in JIM:
 
 - **Metaverse Objects** - Identity records from imports
 - **Connected System Objects** - Links to external systems
-- **Sync Rules** - Attribute flow configurations
+- **Sync Rules** - Attribute Flow configurations
 - **Run Profiles** - Execution schedules
 - **Activity History** - Sync operation logs
 
@@ -1327,7 +1327,7 @@ The issue was that ASP.NET Core's authentication pipeline only runs the DefaultS
 - ✅ Fixed JSON serialization of hashtable keys (Set-JIMConnectedSystem)
 
 **Remaining Work:**
-- Sync rules require object type IDs from imported connector schema (needs schema import cmdlet)
+- Sync Rules require object type IDs from imported connector schema (needs schema import cmdlet)
 
 ---
 
@@ -1952,7 +1952,7 @@ The map size cannot be reliably increased on a running instance; it requires a c
 4. Check Run Profile executed successfully
 5. Review Activity history in JIM UI
 
-**Attribute flow incorrect**:
+**Attribute Flow incorrect**:
 1. Review Sync Rule configuration
 2. Check attribute precedence rules
 3. Verify source attribute populated
@@ -2026,7 +2026,7 @@ JIM/
         │   ├── Invoke-Scenario7-ClearConnectedSystemObjects.ps1  # Clear connector space testing
         │   ├── Invoke-Scenario8-CrossDomainEntitlementSync.ps1   # Group sync between domains
         │   ├── Invoke-Scenario9-PartitionScopedImports.ps1       # Partition-scoped import Run Profiles
-        │   ├── Invoke-Scenario10-SyncRuleScoping.ps1             # Sync rule scoping behaviour
+        │   ├── Invoke-Scenario10-SyncRuleScoping.ps1             # Sync Rule scoping behaviour
         │   ├── Invoke-Scenario11-ScopingCriteriaMatrix.ps1       # Scoping criteria evaluation matrix
         │   ├── data/                                             # Per-scenario data + manifests (incl. Scenario 11 matrix)
         │   └── data/                                              # Scenario-specific CSV overlays (Scenarios 4, 5)
@@ -2102,7 +2102,7 @@ JIM/
 | Scenario 7 | ✅ Complete | Clear Connected System Objects (DeleteHistory, KeepHistory, EdgeCases) |
 | Scenario 8 | ✅ Complete | All 6 tests (InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup) plus ImportToMV diagnostic step |
 | Scenario 9 | ✅ Complete | Partition-scoped import Run Profiles |
-| Scenario 10 | ✅ Complete | Sync rule scoping behaviour: 9 sub-tests covering the full inbound + outbound scope transition matrix, cross-system inline cascade, and criteria persistence (#656) |
+| Scenario 10 | ✅ Complete | Sync Rule scoping behaviour: 9 sub-tests covering the full inbound + outbound scope transition matrix, cross-system inline cascade, and criteria persistence (#656) |
 | Scenario 11 | ✅ Complete | Scoping criteria evaluation matrix: three tiers (Quick / Default / Exhaustive) covering operator x value-type x group-structure end-to-end via batched per-cell CSO types, plus round-trip persistence and API negative-cell probes |
 | Entitlement (JIM-to-AD) | ⏸️ Deferred | Requires Internal MVO design |
 | Entitlement (Convert Authority) | ⏸️ Deferred | Requires Internal MVO design |

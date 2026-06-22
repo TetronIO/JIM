@@ -147,7 +147,7 @@ public class CalculateActivitySummaryStatsTests
         // Assert - Direct creation stats
         Assert.That(activity.TotalCreated, Is.EqualTo(0));
 
-        // Assert - Pending export stats
+        // Assert - Pending Export stats
         Assert.That(activity.TotalPendingExports, Is.EqualTo(0));
 
         // Assert - Error stats
@@ -230,7 +230,7 @@ public class CalculateActivitySummaryStatsTests
 
         // Assert
         Assert.That(activity.TotalJoined, Is.EqualTo(2));
-        // Attribute flows absorbed into joins are not double-counted
+        // Attribute Flows absorbed into joins are not double-counted
         Assert.That(activity.TotalAttributeFlows, Is.EqualTo(0));
     }
 
@@ -364,7 +364,7 @@ public class CalculateActivitySummaryStatsTests
     public void CalculateActivitySummaryStats_MixedAbsorbedAndStandaloneFlows_OnlyStandaloneCounted()
     {
         // Arrange - Only standalone AttributeFlow RPEIs contribute to TotalAttributeFlows.
-        // Attribute flows absorbed into Joined/Projected/Disconnected RPEIs are NOT counted
+        // Attribute Flows absorbed into Joined/Projected/Disconnected RPEIs are NOT counted
         // because those change types are already counted in their own stats.
         var activity = CreateActivity();
         AddRpeisAndCalculate(activity,

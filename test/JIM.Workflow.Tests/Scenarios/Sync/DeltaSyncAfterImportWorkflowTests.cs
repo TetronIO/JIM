@@ -72,7 +72,7 @@ public class DeltaSyncAfterImportWorkflowTests
     /// 2. Delta import detects group membership change (add 1 member)
     /// 3. Delta sync should process the changed group CSO
     /// 4. MVO member attribute should be updated
-    /// 5. Pending export should be created for the target system
+    /// 5. Pending Export should be created for the target system
     /// </summary>
     [Test]
     public async Task DeltaSync_AfterDeltaImportWithMembershipChange_ProcessesChangedCsoAsync()
@@ -189,12 +189,12 @@ public class DeltaSyncAfterImportWorkflowTests
 
         // Verify Pending Export was created for target system
         Assert.That(afterDeltaSync.PendingExportCount, Is.GreaterThan(0),
-            "Pending export should be created for target system after member change");
+            "Pending Export should be created for target system after member change");
 
         // Verify the Pending Export is for the group with member changes
         var groupPe = afterDeltaSync.PendingExports
             .FirstOrDefault(pe => pe.AttributeValueChanges.Any(av => av.AttributeInfo?.Name == "member"));
-        Assert.That(groupPe, Is.Not.Null, "Pending export with member changes should exist");
+        Assert.That(groupPe, Is.Not.Null, "Pending Export with member changes should exist");
 
         Console.WriteLine("=== Test Complete: Delta sync correctly processed group membership change ===");
     }
@@ -298,7 +298,7 @@ public class DeltaSyncAfterImportWorkflowTests
 
         // Verify Pending Export was created
         Assert.That(afterDeltaSync.PendingExportCount, Is.GreaterThan(0),
-            "Pending export should be created after member removal");
+            "Pending Export should be created after member removal");
 
         Console.WriteLine("=== Test Complete: Delta sync correctly processed group membership removal ===");
     }

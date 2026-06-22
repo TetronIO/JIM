@@ -38,7 +38,7 @@ A `stepIndex` orders steps; multiple steps with the same index run in parallel.
 
 ### Step types
 
-- **Run profile**<br /> Execute a [Run Profile](run-profiles.md) against a Connected System.
+- **Run Profile**<br /> Execute a [Run Profile](run-profiles.md) against a Connected System.
 - **PowerShell**<br /> Run a PowerShell script with arguments.
 - **Executable**<br /> Run an external executable.
 - **SQL script**<br /> Run a SQL script against a configured database connection.

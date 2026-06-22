@@ -219,7 +219,7 @@ Connectors also declare capability flags via `IConnectorCapabilities`:
 
 ## 5. Sync Rules
 
-Sync rules define the relationship between Connected Systems and the metaverse.
+Sync Rules define the relationship between Connected Systems and the metaverse.
 
 ### Rule Components
 
@@ -233,7 +233,7 @@ Sync rules define the relationship between Connected Systems and the metaverse.
 
 ### Expression Language
 
-Attribute flows can use expressions for transformations:
+Attribute Flows can use expressions for transformations:
 
 ```
 // Simple mapping
@@ -378,9 +378,9 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 - ✅ **Run Profile Editing** - Edit existing Run Profile configurations without recreating them
 - ✅ **Tabs View** - Tabbed navigation for Connected System and Metaverse Object views
 - ✅ **Healthchecks** (#185) - Container health probes for orchestration readiness and liveness monitoring
-- ✅ **MVA to SVA Flow** (#435) - Attribute flow support for multi-valued to single-valued attribute mappings
+- ✅ **MVA to SVA Flow** (#435) - Attribute Flow support for multi-valued to single-valued attribute mappings
 - ✅ **Case-Insensitive Expression Lookups** (#341) - Expression attribute lookups are now case-insensitive, matching expected behaviour
-- ✅ **PE Reconciliation for All Data Types** (#263) - Pending export reconciliation extended to cover all attribute data types
+- ✅ **PE Reconciliation for All Data Types** (#263) - Pending Export reconciliation extended to cover all attribute data types
 
 ### Recent Enhancements (v0.10.0)
 
@@ -426,7 +426,7 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 ### Previous Enhancements
 
 - ✅ **Disconnection Causality Tracking** (#392) - Causality tree traces MVO attribute changes and deletion fate during disconnection and recall
-- ✅ **Self-Contained Object Matching Rules** (#386) - Sync rules carry their own matching logic for import and export, enabling portable rule definitions
+- ✅ **Self-Contained Object Matching Rules** (#386) - Sync Rules carry their own matching logic for import and export, enabling portable rule definitions
 - ✅ **One-Command Deployment** - Interactive installer auto-detects latest release, configures SSO and database, and starts JIM in minutes
 - ✅ **Sync Outcome Graph** (#363) - Full causal tracing of every change during synchronisation with configurable tracking levels (None/Standard/Detailed)
 - ✅ **CSO Large MVA Pagination** (#320) - Paginated attribute values with server-side search for objects with 10K+ multi-valued attributes

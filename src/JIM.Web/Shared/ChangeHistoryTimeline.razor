@@ -1292,7 +1292,7 @@ else
                     }
                     else
                     {
-                        // Sync rule was deleted, show name with "(deleted)" indicator
+                        // Sync Rule was deleted, show name with "(deleted)" indicator
                         builder.OpenComponent<MudText>(seq++);
                         builder.AddAttribute(seq++, "Style", "display: inline; margin-left: 4px;");
                         builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, $"{changeGroup.SyncRuleName} (deleted)")));
@@ -1361,7 +1361,7 @@ else
             // MVO Sync operations
             ObjectChangeType.Projected => Color.Success, // New MVO = green (creation)
             ObjectChangeType.Joined => Color.Tertiary, // Join = purple/tertiary (linking)
-            ObjectChangeType.AttributeFlow => Color.Info, // Attribute flow = blue (update)
+            ObjectChangeType.AttributeFlow => Color.Info, // Attribute Flow = blue (update)
 
             // Direct creation
             ObjectChangeType.Created => Color.Success,

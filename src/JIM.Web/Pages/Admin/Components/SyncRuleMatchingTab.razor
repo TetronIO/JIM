@@ -44,14 +44,14 @@
         @if (SyncRule.Direction == SyncRuleDirection.Import)
         {
             <MudText Class="mt-3">
-                Define rules to match Connected System Objects to Metaverse objects. Use immutable attributes (e.g., employeeID, objectGUID).
+                Define rules to match Connected System Objects to Metaverse Objects. Use immutable attributes (e.g., employeeID, objectGUID).
                 Multiple rules can be ordered; the first match wins. Objects are Joined when matched, Disconnected when not.
             </MudText>
         }
         else if (SyncRule.Direction == SyncRuleDirection.Export)
         {
             <MudText Class="mt-3">
-                Define rules to match Metaverse objects to Connected System Objects. Use immutable attributes (e.g., employeeID, objectGUID).
+                Define rules to match Metaverse Objects to Connected System Objects. Use immutable attributes (e.g., employeeID, objectGUID).
                 Multiple rules can be ordered; the first match wins.
             </MudText>
         }

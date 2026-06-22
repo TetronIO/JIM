@@ -4,7 +4,7 @@ title: Run Profiles
 
 # Run Profiles
 
-Run profile cmdlets manage and execute synchronisation Run Profiles on Connected Systems. A Run Profile defines a specific operation type (import, sync, or export) that can be executed against a Connected System. Use these cmdlets to list, create, modify, remove, and trigger Run Profiles.
+Run Profile cmdlets manage and execute synchronisation Run Profiles on Connected Systems. A Run Profile defines a specific operation type (import, sync, or export) that can be executed against a Connected System. Use these cmdlets to list, create, modify, remove, and trigger Run Profiles.
 
 ---
 
@@ -283,7 +283,7 @@ Get-JIMRunProfile -ConnectedSystemId 1 |
 try {
     Start-JIMRunProfile -RunProfileId 42 -Wait -Timeout 600 -PassThru -ErrorAction Stop
 } catch {
-    Write-Error "Run profile execution failed or timed out: $_"
+    Write-Error "Run Profile execution failed or timed out: $_"
 }
 ```
 
@@ -292,7 +292,7 @@ try {
 - The Run Profile is queued as an asynchronous task on the JIM worker service. Without `-Wait`, the cmdlet returns immediately after the task is queued.
 - When `-Wait` is specified, the cmdlet polls the activity status every 2 seconds and displays a progress bar. If authentication tokens expire during polling, the cmdlet retries up to 3 times before failing.
 - If `-Timeout` is exceeded, the cmdlet throws a terminating error that includes the activity ID, allowing you to check progress manually via [Get-JIMActivity](activities.md) or the JIM web interface.
-- Run profiles that are already executing will be rejected by the server; you do not need to check for running profiles before calling this cmdlet.
+- Run Profiles that are already executing will be rejected by the server; you do not need to check for running profiles before calling this cmdlet.
 
 ---
 

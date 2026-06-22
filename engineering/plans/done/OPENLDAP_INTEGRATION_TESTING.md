@@ -343,7 +343,7 @@ $ldapSettings = @{
 }
 ```
 
-Sync rule attribute mappings also vary by directory type; the setup script branches on `$DirectoryConfig.UserObjectClass` to select the appropriate attribute names.
+Sync Rule attribute mappings also vary by directory type; the setup script branches on `$DirectoryConfig.UserObjectClass` to select the appropriate attribute names.
 
 ## Connector Code Gaps
 

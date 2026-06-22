@@ -261,11 +261,11 @@ public static class Helpers
             ObjectChangeType.AttributeFlow =>
                 "Attribute values were flowed from the Connected System Object to the Metaverse Object according to the Sync Rule mappings.",
             ObjectChangeType.Disconnected =>
-                "The Connected System Object (CSO) was disconnected from its Metaverse Object (MVO). Attribute flow has stopped.",
+                "The Connected System Object (CSO) was disconnected from its Metaverse Object (MVO). Attribute Flow has stopped.",
             ObjectChangeType.DisconnectedOutOfScope =>
                 "The object fell out of scope of the import Sync Rule scoping criteria and was disconnected from the metaverse.",
             ObjectChangeType.OutOfScopeRetainJoin =>
-                "The object fell out of scope but the join was retained. Attribute flow has stopped, but the link is preserved for future re-scoping.",
+                "The object fell out of scope but the join was retained. Attribute Flow has stopped, but the link is preserved for future re-scoping.",
             ObjectChangeType.DriftCorrection =>
                 "Drift was detected: the target system's values differed from the expected metaverse values. A corrective Pending Export was created to restore the expected state.",
 
@@ -318,7 +318,7 @@ public static class Helpers
             ObjectChangeType.Exported => Icons.Material.Filled.Output,
             ObjectChangeType.Deprovisioned => Icons.Material.Filled.CloudOff,
 
-            // Pending export visibility
+            // Pending Export visibility
             ObjectChangeType.PendingExport => Icons.Material.Filled.Schedule,
             ObjectChangeType.PendingExportConfirmed => Icons.Material.Filled.CheckCircle,
 

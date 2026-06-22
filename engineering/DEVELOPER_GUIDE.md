@@ -1355,7 +1355,7 @@ param(
 if ($PSCmdlet.ParameterSetName -eq "ByName") {
     $system = Get-JIMConnectedSystem -Name $ConnectedSystemName
     if (-not $system) {
-        throw "Connected system '$ConnectedSystemName' not found"
+        throw "Connected System '$ConnectedSystemName' not found"
     }
     $ConnectedSystemId = $system.Id
 }

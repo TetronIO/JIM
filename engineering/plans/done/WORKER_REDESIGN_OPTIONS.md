@@ -160,7 +160,7 @@ The boundary between engine and orchestrator is: **"deciding what changes should
 - Join evaluation: given candidates and existing join count, should this CSO join an MVO?
 - Projection: should a new MVO be created for this CSO?
 - Inbound Attribute Flow: what MVO attribute values change?
-- Pending export confirmation: does the CSO's current state confirm a Pending Export?
+- Pending Export confirmation: does the CSO's current state confirm a Pending Export?
 - Obsolete CSO handling: disconnect, recall attributes, determine MVO deletion fate
 - Drift detection and corrective export evaluation
 - MVO deletion rule evaluation
@@ -222,7 +222,7 @@ public interface ISyncEngine
         IReadOnlyList<ConnectedSystemObjectType> objectTypes,
         bool skipReferenceAttributes);
 
-    // Pending export confirmation
+    // Pending Export confirmation
     PendingExportConfirmationResult EvaluatePendingExportConfirmation(
         ConnectedSystemObject cso,
         Dictionary<Guid, PendingExport> pendingExports);
@@ -680,7 +680,7 @@ Decompose the worker into independent, horizontally scalable processing units co
 
 3. **Shared state via Redis (optional cache layer)**
    - MVO lookup cache in Redis for sync workers (avoid each worker loading full MVO set)
-   - Sync rule cache in Redis (loaded once, shared across workers)
+   - Sync Rule cache in Redis (loaded once, shared across workers)
    - Database remains source of truth; Redis is a performance optimisation only
    - Falls back to direct DB queries if Redis unavailable
    - *CSO caching was considered but deferred*; unlike MVOs (single bounded set, read-heavy for join matching), CSOs scale per Connected System (N systems x objects each), are primarily accessed during import as full-scan diffs where caching doesn't help, and their main cacheable use case (export target lookup) is not the bottleneck since connector I/O dominates export time. Revisit if export DB lookups prove costly at scale

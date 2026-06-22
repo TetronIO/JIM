@@ -269,7 +269,7 @@ When a connector fails to apply an export (network error, permission denied, etc
 
 ---
 
-### Q7: Attribute flow priority for exports
+### Q7: Attribute Flow priority for exports
 
 When an MVO has attributes from multiple sources, which value gets exported?
 
@@ -408,8 +408,8 @@ Because Q1 Option A separates *export evaluation* from *export execution*, suppo
 ```csharp
 public enum ExportExecutionMode
 {
-    Scheduled,    // Pending exports processed by scheduled job
-    Immediate,    // Pending exports processed immediately after creation
+    Scheduled,    // Pending Exports processed by scheduled job
+    Immediate,    // Pending Exports processed immediately after creation
     Hybrid        // Per-system configuration
 }
 ```
@@ -922,7 +922,7 @@ Before running sync, show:
 
 ### 3. Approval Workflows (Lightweight)
 For sensitive changes:
-- Pending exports require approval
+- Pending Exports require approval
 - Notification to approvers
 - Audit trail of approvals
 
@@ -945,9 +945,9 @@ If an export causes issues:
 
 ### 7. Dependency Visualisation
 Show relationships between:
-- Sync rules
+- Sync Rules
 - Object types
-- Connected systems
+- Connected Systems
 - Which rules affect which attributes
 
 ---
@@ -1105,7 +1105,7 @@ Phase 4         Phase 5                              Phase 6
 ## Open Questions for Discussion
 
 1. ~~**Should Pending Exports require approval by default, or be auto-executed?**~~
-   - **Resolved**: Auto-execute is the implemented approach. Pending exports are created and executed automatically via Export Run Profiles. Approval workflows remain a future enhancement (see [Innovation Opportunities](#innovation-opportunities)).
+   - **Resolved**: Auto-execute is the implemented approach. Pending Exports are created and executed automatically via Export Run Profiles. Approval workflows remain a future enhancement (see [Innovation Opportunities](#innovation-opportunities)).
 
 2. ~~**How granular should export Sync Rules be?**~~
    - **Resolved**: Per-attribute granularity is implemented. Each `SyncRuleMapping` maps individual attributes, and `PendingExportAttributeValueChange` tracks per-attribute confirmation status.

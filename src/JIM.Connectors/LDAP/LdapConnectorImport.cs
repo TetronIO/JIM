@@ -341,7 +341,7 @@ internal class LdapConnectorImport
     {
         if (_connectedSystemRunProfile.Partition != null)
         {
-            _logger.Debug("GetTargetPartitions: Run profile targets specific partition: {PartitionName}",
+            _logger.Debug("GetTargetPartitions: Run Profile targets specific partition: {PartitionName}",
                 LogSanitiser.Sanitise(_connectedSystemRunProfile.Partition.Name));
             return [_connectedSystemRunProfile.Partition];
         }

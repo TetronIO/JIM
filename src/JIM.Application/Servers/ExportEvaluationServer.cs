@@ -1776,7 +1776,7 @@ public class ExportEvaluationServer
     /// </summary>
     /// <remarks>
     /// Reference attributes (like group members) may have their DNs stored in different fields:
-    /// - Pending exports from sync store resolved DNs in StringValue
+    /// - Pending Exports from sync store resolved DNs in StringValue
     /// - CSO values from AD import store DNs in UnresolvedReferenceValue
     /// This method handles cross-field comparison for these cases.
     /// </remarks>
@@ -1792,7 +1792,7 @@ public class ExportEvaluationServer
 
         if (pendingHasUnresolvedRef)
         {
-            // Pending export has an MVO GUID - compare with the MVO that the existing CSO reference points to
+            // Pending Export has an MVO GUID - compare with the MVO that the existing CSO reference points to
             if (existingHasResolvedRef && existingValue.ReferenceValue!.MetaverseObjectId.HasValue)
             {
                 // Compare MVO GUIDs

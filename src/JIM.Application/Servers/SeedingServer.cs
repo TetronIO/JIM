@@ -775,7 +775,7 @@ internal class SeedingServer
         await SeedSettingAsync(new ServiceSetting
         {
             Key = Constants.SettingKeys.PartitionValidationMode,
-            DisplayName = "Run profile partition validation",
+            DisplayName = "Run Profile partition validation",
             Description = "Controls how JIM behaves when a Run Profile is executed for a Connected System that supports partitions but has none selected. 'Error' blocks execution; 'Warning' allows execution but logs a warning.",
             Category = ServiceSettingCategory.Synchronisation,
             ValueType = ServiceSettingValueType.Enum,

@@ -1197,8 +1197,8 @@ public class ExportEvaluationTests
 
         // Assert - Delete Pending Export should be created
         Assert.That(result, Has.Count.EqualTo(1), "Delete action should create a delete Pending Export");
-        Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Delete), "Pending export should be a Delete operation");
-        Assert.That(result[0].ConnectedSystemObjectId, Is.EqualTo(existingCso.Id), "Pending export should reference the CSO");
+        Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Delete), "Pending Export should be a Delete operation");
+        Assert.That(result[0].ConnectedSystemObjectId, Is.EqualTo(existingCso.Id), "Pending Export should reference the CSO");
     }
 
     /// <summary>

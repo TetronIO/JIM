@@ -725,7 +725,7 @@ public class ActivityRepository : IActivityRepository
             outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Exported, out totalExported);
             outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned, out totalDeprovisioned);
 
-            // Pending export stats from outcomes
+            // Pending Export stats from outcomes
             outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated, out totalPendingExportsFromOutcomes);
 
             // Drift correction from outcomes
@@ -762,11 +762,11 @@ public class ActivityRepository : IActivityRepository
         var totalOutOfScopeRetainJoin = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.OutOfScopeRetainJoin).Sum(x => x.Count);
         var totalCreated = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Created).Sum(x => x.Count);
 
-        // Pending export stats: use outcome-based count when available, otherwise fall back to RPEI count
+        // Pending Export stats: use outcome-based count when available, otherwise fall back to RPEI count
         var totalPendingExportsFromRpeis = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.PendingExport).Sum(x => x.Count);
         var totalPendingExports = hasOutcomes ? totalPendingExportsFromOutcomes : totalPendingExportsFromRpeis;
 
-        // Pending export reconciliation stats (populated during confirming import)
+        // Pending Export reconciliation stats (populated during confirming import)
         // TotalPendingExportsConfirmed is stored directly on the Activity (not derived from RPEIs)
         var totalPendingExportsConfirmed = activity?.PendingExportsConfirmed ?? 0;
         // Retrying and Failed are derived from error type counts (already calculated above)
@@ -811,10 +811,10 @@ public class ActivityRepository : IActivityRepository
             TotalExported = totalExported,
             TotalDeprovisioned = totalDeprovisioned,
 
-            // Pending export stats
+            // Pending Export stats
             TotalPendingExports = totalPendingExports,
 
-            // Pending export reconciliation stats
+            // Pending Export reconciliation stats
             TotalPendingExportsConfirmed = totalPendingExportsConfirmed,
             TotalPendingExportsRetrying = totalPendingExportsRetrying,
             TotalPendingExportsFailed = totalPendingExportsFailed,

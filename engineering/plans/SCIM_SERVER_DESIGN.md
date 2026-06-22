@@ -876,7 +876,7 @@ PATCH operation has 5 operations, 2 fail.
 
 ### Integration Tests
 - Full request flow: SCIM request -> CSO -> MVO -> Pending Export
-- Sync rule application
+- Sync Rule application
 - Error handling
 
 ### Compliance Tests

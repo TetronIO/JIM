@@ -4,7 +4,7 @@ title: Connected Systems
 
 # Connected Systems
 
-A **Connected System** is any external directory, database, or file that JIM synchronises identity data with. Connected systems are the endpoints of JIM's hub-and-spoke architecture: they provide source data (e.g. an HR system) and receive provisioned data (e.g. an LDAP directory).
+A **Connected System** is any external directory, database, or file that JIM synchronises identity data with. Connected Systems are the endpoints of JIM's hub-and-spoke architecture: they provide source data (e.g. an HR system) and receive provisioned data (e.g. an LDAP directory).
 
 Every Connected System is associated with a [connector](../connectors/index.md) that knows how to talk to its kind of external store, and holds a connector space of imported objects, a discovered schema, and (where applicable) a partition and container hierarchy.
 
@@ -13,8 +13,8 @@ Every Connected System is associated with a [connector](../connectors/index.md) 
 - **Connection details**<br /> How to reach the external system: server address, credentials, file path, and other connector-specific settings.
 - **Discovered schema**<br /> The object types and attributes available in the external system, populated on first contact.
 - **Connector space**<br /> A staging area that holds JIM's local copy of the external system's data.
-- **Run profiles**<br /> Configured operations (import, sync, export) that can be executed against the system.
-- **Synchronisation rules**<br /> The rules that govern how data flows between this system and the metaverse.
+- **Run Profiles**<br /> Configured operations (import, sync, export) that can be executed against the system.
+- **Synchronisation Rules**<br /> The rules that govern how data flows between this system and the metaverse.
 
 ## The connector space
 
@@ -40,7 +40,7 @@ A **CSO** is JIM's local representation of an object in an external system. Each
 - **Distinguished name or anchor**<br /> A unique identifier that maps to the external object.
 - **Attributes**<br /> The attribute values as imported from the external system.
 - **Link to metaverse**<br /> If the CSO has been joined or projected, it links to a Metaverse Object (MVO).
-- **Pending exports**<br /> Changes queued to be sent back to the external system.
+- **Pending Exports**<br /> Changes queued to be sent back to the external system.
 
 CSOs have a lifecycle:
 
@@ -67,7 +67,7 @@ Inside a partition, or directly inside the connector space of a connector that d
 
 In practice, selecting a partition brings an entire naming context into scope, while selecting containers narrows what is imported within that partition (or within the connector space for connectors that have no partitions).
 
-## Pending exports
+## Pending Exports
 
 Changes destined for the Connected System that have been computed by synchronisation but not yet written back. Run an export Run Profile to flush them. Inspecting Pending Exports is the right place to look when you want to know "what is JIM about to change in this system?"
 

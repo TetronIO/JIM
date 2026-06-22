@@ -73,7 +73,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             return;
         }
 
-        // Pending exports are processed as a side-effect of CSO evaluation, not as separate objects.
+        // Pending Exports are processed as a side-effect of CSO evaluation, not as separate objects.
         var totalObjectsToProcess = totalCsosToProcess;
         _activity.ObjectsToProcess = totalObjectsToProcess;
         _activity.ObjectsProcessed = 0;

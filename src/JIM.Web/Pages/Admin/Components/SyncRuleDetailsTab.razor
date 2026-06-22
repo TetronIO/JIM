@@ -128,7 +128,7 @@
         <MudSwitch Class="mt-5" @bind-Value="@SyncRule.ProjectToMetaverse" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary"
                    Label="@($"Project {SyncRule.MetaverseObjectType?.PluralName ?? "objects"} to the Metaverse?")" />
         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">By default, objects imported from this
-            Connected System will not result in a Metaverse object being projected if no match is found.
+            Connected System will not result in a Metaverse Object being projected if no match is found.
             Enabling this option causes the object to be projected to the Metaverse, allowing it to be managed within
             JIM and synchronised to other Connected Systems. You would typically enable this for a source system, i.e. a
             HR system.</MudText>
@@ -138,13 +138,13 @@
     {
         <MudSwitch Class="mt-5" @bind-Value="@SyncRule.ProvisionToConnectedSystem" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary"
                    Label="@($"Provision {(SyncRule.ConnectedSystemObjectType?.Name ?? "objects").Pluralise()} to the Connected System?")" />
-        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">By default, Metaverse objects scoped to
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">By default, Metaverse Objects scoped to
             this Synchronisation Rule will not be created (provisioned) in the Connected Systems. Enabling this
-            option will cause the Metaverse object to be created in the Connected System. You would typically enable
+            option will cause the Metaverse Object to be created in the Connected System. You would typically enable
             this option for a destination system, i.e. when trying to implement a HR to Active Directory flow.</MudText>
     }
     <MudSwitch Class="mt-5" @bind-Value="@SyncRule.Enabled" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary" Label="Enabled?" />
-    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">Synchronisation rules are not evaluated when disabled. Use
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">Synchronisation Rules are not evaluated when disabled. Use
         this to prepare a rule in advance of it being needed, or to temporarily stop a rule from being evaluated.</MudText>
 </MudPaper>
 

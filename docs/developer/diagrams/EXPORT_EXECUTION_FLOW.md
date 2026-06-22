@@ -11,7 +11,7 @@ Since v0.10.0, connector exceptions thrown during export are always reported as 
 ```mermaid
 flowchart TD
     Start([PerformExportAsync]) --> CountPE[Count Pending Exports<br/>for Connected System]
-    CountPE --> HasExports{Pending exports<br/>> 0?}
+    CountPE --> HasExports{Pending Exports<br/>> 0?}
     HasExports -->|No| NoWork[Update activity:<br/>No exports to process]
     NoWork --> Done([Return])
 

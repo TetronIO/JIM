@@ -907,7 +907,7 @@ public class ExportEvaluationNoChangeTests
         Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Update),
             "Removal Pending Export should be an Update (clearing attribute values)");
         Assert.That(pendingExport.AttributeValueChanges, Has.Count.EqualTo(2),
-            "Pending export should contain 2 null-clearing attribute changes");
+            "Pending Export should contain 2 null-clearing attribute changes");
 
         // Verify the changes have null values
         var displayNameChange = pendingExport.AttributeValueChanges

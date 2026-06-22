@@ -59,9 +59,9 @@ A **mover** event occurs when an existing identity's attributes change. This cov
 
 3. **Outbound evaluation**<br /> Outbound Synchronisation Rules detect that the MVO has changed and evaluate whether the changes affect any target systems.
 
-4. **Attribute flow**<br /> Changed attributes flow outbound to the target CSOs. Expressions are re-evaluated (e.g. if the department changes, the target OU may need to change).
+4. **Attribute Flow**<br /> Changed attributes flow outbound to the target CSOs. Expressions are re-evaluated (e.g. if the department changes, the target OU may need to change).
 
-5. **Export**<br /> Pending exports are sent to the target systems, updating the existing accounts.
+5. **Export**<br /> Pending Exports are sent to the target systems, updating the existing accounts.
 
 ### Example
 

@@ -129,7 +129,7 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
         {
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
         }
 
         var count = await _application.Repository.ChangeHistory.GetCsoChangeCountAsync(connectedSystemId);

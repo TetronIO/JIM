@@ -86,7 +86,7 @@ public class SynchronisationController(
         _logger.LogTrace("Requested Connected System: {Id}", connectedSystemId);
         var system = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
         if (system == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         // GetConnectedSystemAsync doesn't load PendingExports or Objects (too expensive for
         // the detail query and can be very large). Compute counts via dedicated queries,
@@ -111,7 +111,7 @@ public class SynchronisationController(
         _logger.LogTrace("Requested object types for Connected System: {Id}", connectedSystemId);
         var objectTypes = await _application.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);
         if (objectTypes == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         var dtos = objectTypes.Select(ConnectedSystemObjectTypeDto.FromEntity);
         return Ok(dtos);
@@ -152,7 +152,7 @@ public class SynchronisationController(
         // Verify Connected System exists (Core retrieval — we only need existence, not the full graph)
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         // Get the object type
         var objectType = await _application.ConnectedSystems.GetObjectTypeAsync(objectTypeId);
@@ -217,7 +217,7 @@ public class SynchronisationController(
         // Verify Connected System exists (Core retrieval — we only need existence, not the full graph)
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         // Get the attribute
         var attribute = await _application.ConnectedSystems.GetAttributeAsync(attributeId);
@@ -337,7 +337,7 @@ public class SynchronisationController(
         // the Connected System's Id/Name for activity attribution, not its full graph).
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         // Get the object type with attributes
         var objectType = await _application.ConnectedSystems.GetObjectTypeAsync(objectTypeId);
@@ -485,7 +485,7 @@ public class SynchronisationController(
 
         var preview = await _application.ConnectedSystems.GetDeletionPreviewAsync(connectedSystemId);
         if (preview == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         return Ok(preview);
     }
@@ -607,7 +607,7 @@ public class SynchronisationController(
         _logger.LogTrace("Requested Pending Export: {PendingExportId}", pendingExportId);
         var result = await _application.ConnectedSystems.GetPendingExportDetailAsync(pendingExportId);
         if (result == null)
-            return NotFound(ApiErrorResponse.NotFound($"Pending export with ID {pendingExportId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Pending Export with ID {pendingExportId} not found."));
 
         return Ok(PendingExportDetailDto.FromDetailResult(result));
     }
@@ -669,7 +669,7 @@ public class SynchronisationController(
         // Core retrieval — partitions are then fetched separately with their own include chain.
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         var partitions = await _application.ConnectedSystems.GetConnectedSystemPartitionsAsync(connectedSystem);
         var dtos = partitions.Select(ConnectedSystemPartitionDto.FromEntity);
@@ -704,7 +704,7 @@ public class SynchronisationController(
         // Verify Connected System exists (Core retrieval — we only need existence, not the full graph)
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         // Get the partition with change tracking since we modify and save it
         var partition = await _application.ConnectedSystems.GetConnectedSystemPartitionAsync(partitionId, withChangeTracking: true);
@@ -750,7 +750,7 @@ public class SynchronisationController(
         // Verify Connected System exists (Core retrieval — we only need existence, not the full graph)
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         // Get the container
         var container = await _application.ConnectedSystems.GetConnectedSystemContainerAsync(containerId);
@@ -803,7 +803,7 @@ public class SynchronisationController(
 
         if (IsApiKeyAuthenticated())
         {
-            _logger.LogInformation("Connected system creation initiated via API key: {ApiKeyName}", LogSanitiser.Sanitise(GetApiKeyName()));
+            _logger.LogInformation("Connected System creation initiated via API key: {ApiKeyName}", LogSanitiser.Sanitise(GetApiKeyName()));
         }
 
         // Validate the connector definition exists
@@ -872,7 +872,7 @@ public class SynchronisationController(
         // Get the existing Connected System with change tracking since we modify and save it
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         // Apply updates
         if (!string.IsNullOrEmpty(request.Name))
@@ -997,7 +997,7 @@ public class SynchronisationController(
         // Get the Connected System with change tracking since schema import modifies and saves it
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         try
         {
@@ -1054,7 +1054,7 @@ public class SynchronisationController(
         // Get the Connected System with change tracking since hierarchy import modifies and saves it
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         try
         {
@@ -1159,7 +1159,7 @@ public class SynchronisationController(
             var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
             if (connectedSystem == null)
             {
-                return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+                return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
             }
 
             await _application.ConnectedSystems.ClearConnectedSystemObjectsAsync(connectedSystemId, deleteChangeHistory);
@@ -1256,7 +1256,7 @@ public class SynchronisationController(
         // Core retrieval — we only need to verify existence before listing Run Profiles.
         var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (system == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         var runProfiles = await _application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemId);
         var dtos = runProfiles.Select(RunProfileDto.FromEntity);
@@ -1281,19 +1281,19 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ExecuteRunProfileAsync(int connectedSystemId, int runProfileId)
     {
-        _logger.LogInformation("Run profile execution requested: ConnectedSystem={SystemId}, RunProfile={ProfileId}",
+        _logger.LogInformation("Run Profile execution requested: ConnectedSystem={SystemId}, RunProfile={ProfileId}",
             connectedSystemId, runProfileId);
 
         // Verify Connected System exists (Core retrieval — the sync task only needs the id).
         var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (system == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         // Verify Run Profile exists and belongs to this Connected System
         var runProfiles = await _application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemId);
         var runProfile = runProfiles.FirstOrDefault(rp => rp.Id == runProfileId);
         if (runProfile == null)
-            return NotFound(ApiErrorResponse.NotFound($"Run profile with ID {runProfileId} not found for Connected System {connectedSystemId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Run Profile with ID {runProfileId} not found for Connected System {connectedSystemId}."));
 
         // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
@@ -1324,18 +1324,18 @@ public class SynchronisationController(
         var result = await _application.Tasking.CreateWorkerTaskAsync(workerTask);
         if (!result.Success)
         {
-            _logger.LogWarning("Run profile execution blocked: {Error}", LogSanitiser.Sanitise(result.ErrorMessage));
+            _logger.LogWarning("Run Profile execution blocked: {Error}", LogSanitiser.Sanitise(result.ErrorMessage));
             return BadRequest(ApiErrorResponse.BadRequest(result.ErrorMessage ?? "Validation failed."));
         }
 
-        _logger.LogInformation("Run profile execution queued: ConnectedSystem={SystemId}, RunProfile={ProfileId}, TaskId={TaskId}, ActivityId={ActivityId}",
+        _logger.LogInformation("Run Profile execution queued: ConnectedSystem={SystemId}, RunProfile={ProfileId}, TaskId={TaskId}, ActivityId={ActivityId}",
             connectedSystemId, runProfileId, workerTask.Id, workerTask.Activity?.Id);
 
         var response = new RunProfileExecutionResponse
         {
             ActivityId = workerTask.Activity?.Id ?? Guid.Empty,
             TaskId = workerTask.Id,
-            Message = $"Run profile '{runProfile.Name}' has been queued for execution.",
+            Message = $"Run Profile '{runProfile.Name}' has been queued for execution.",
             Warnings = result.Warnings
         };
 
@@ -1372,7 +1372,7 @@ public class SynchronisationController(
         // Verify Connected System exists (Core retrieval — partitions are fetched separately below).
         var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (system == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         // Create the Run Profile
         var runProfile = new ConnectedSystemRunProfile
@@ -1444,13 +1444,13 @@ public class SynchronisationController(
         // Verify Connected System exists (Core retrieval — partitions are fetched separately below).
         var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (system == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         // Get the Run Profile
         var runProfiles = await _application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemId);
         var runProfile = runProfiles.FirstOrDefault(rp => rp.Id == runProfileId);
         if (runProfile == null)
-            return NotFound(ApiErrorResponse.NotFound($"Run profile with ID {runProfileId} not found for Connected System {connectedSystemId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Run Profile with ID {runProfileId} not found for Connected System {connectedSystemId}."));
 
         // Apply updates
         if (!string.IsNullOrEmpty(request.Name))
@@ -1519,13 +1519,13 @@ public class SynchronisationController(
         // Verify Connected System exists (Core retrieval — we only need existence).
         var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (system == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         // Get the Run Profile
         var runProfiles = await _application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemId);
         var runProfile = runProfiles.FirstOrDefault(rp => rp.Id == runProfileId);
         if (runProfile == null)
-            return NotFound(ApiErrorResponse.NotFound($"Run profile with ID {runProfileId} not found for Connected System {connectedSystemId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Run Profile with ID {runProfileId} not found for Connected System {connectedSystemId}."));
 
         var apiKey = await GetCurrentApiKeyAsync();
         if (apiKey != null)
@@ -1567,7 +1567,7 @@ public class SynchronisationController(
     /// Get a Synchronisation Rule
     /// </summary>
     /// <param name="id">The unique identifier of the Synchronisation Rule.</param>
-    /// <returns>The Synchronisation Rule details including Attribute flow configuration.</returns>
+    /// <returns>The Synchronisation Rule details including Attribute Flow configuration.</returns>
     [HttpGet("sync-rules/{id:int}", Name = "GetSyncRule")]
     [ProducesResponseType(typeof(SyncRuleHeader), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -1577,7 +1577,7 @@ public class SynchronisationController(
         _logger.LogTrace("Requested Sync Rule: {Id}", id);
         var rule = await _application.ConnectedSystems.GetSyncRuleAsync(id);
         if (rule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {id} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {id} not found."));
 
         return Ok(SyncRuleHeader.FromEntity(rule));
     }
@@ -1586,7 +1586,7 @@ public class SynchronisationController(
     /// Create a Synchronisation Rule
     /// </summary>
     /// <remarks>
-    /// For Import rules, set <c>ProjectToMetaverse</c> to true to create Metaverse objects from imported data. For Export rules, set <c>ProvisionToConnectedSystem</c> to true to create Connected System Objects.
+    /// For Import rules, set <c>ProjectToMetaverse</c> to true to create Metaverse Objects from imported data. For Export rules, set <c>ProvisionToConnectedSystem</c> to true to create Connected System Objects.
     /// </remarks>
     /// <param name="request">The Synchronisation Rule creation request.</param>
     /// <returns>The created Synchronisation Rule details.</returns>
@@ -1613,18 +1613,18 @@ public class SynchronisationController(
         // Sync Rule; object types are fetched separately below).
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(request.ConnectedSystemId);
         if (connectedSystem == null)
-            return BadRequest(ApiErrorResponse.BadRequest($"Connected system with ID {request.ConnectedSystemId} not found."));
+            return BadRequest(ApiErrorResponse.BadRequest($"Connected System with ID {request.ConnectedSystemId} not found."));
 
         // Get Connected System Object Type
         var csObjectTypes = await _application.ConnectedSystems.GetObjectTypesAsync(request.ConnectedSystemId);
         var csObjectType = csObjectTypes?.FirstOrDefault(t => t.Id == request.ConnectedSystemObjectTypeId);
         if (csObjectType == null)
-            return BadRequest(ApiErrorResponse.BadRequest($"Connected system object type with ID {request.ConnectedSystemObjectTypeId} not found."));
+            return BadRequest(ApiErrorResponse.BadRequest($"Connected System Object Type with ID {request.ConnectedSystemObjectTypeId} not found."));
 
         // Get Metaverse Object Type
         var mvObjectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(request.MetaverseObjectTypeId, false);
         if (mvObjectType == null)
-            return BadRequest(ApiErrorResponse.BadRequest($"Metaverse object type with ID {request.MetaverseObjectTypeId} not found."));
+            return BadRequest(ApiErrorResponse.BadRequest($"Metaverse Object Type with ID {request.MetaverseObjectTypeId} not found."));
 
         // Create the Sync Rule
         var syncRule = new SyncRule
@@ -1653,7 +1653,7 @@ public class SynchronisationController(
         {
             var validationErrors = syncRule.Validate();
             var errorMessage = string.Join("; ", validationErrors.Select(v => v.Message));
-            return BadRequest(ApiErrorResponse.BadRequest($"Sync rule validation failed: {errorMessage}"));
+            return BadRequest(ApiErrorResponse.BadRequest($"Sync Rule validation failed: {errorMessage}"));
         }
 
         _logger.LogInformation("Created Sync Rule: {Id} ({Name})", syncRule.Id, LogSanitiser.Sanitise(syncRule.Name));
@@ -1693,7 +1693,7 @@ public class SynchronisationController(
         // Get the existing Sync Rule
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(id);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {id} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {id} not found."));
 
         // Apply updates
         if (!string.IsNullOrEmpty(request.Name))
@@ -1727,7 +1727,7 @@ public class SynchronisationController(
         {
             var validationErrors = syncRule.Validate();
             var errorMessage = string.Join("; ", validationErrors.Select(v => v.Message));
-            return BadRequest(ApiErrorResponse.BadRequest($"Sync rule validation failed: {errorMessage}"));
+            return BadRequest(ApiErrorResponse.BadRequest($"Sync Rule validation failed: {errorMessage}"));
         }
 
         _logger.LogInformation("Updated Sync Rule: {Id} ({Name})", syncRule.Id, LogSanitiser.Sanitise(syncRule.Name));
@@ -1764,7 +1764,7 @@ public class SynchronisationController(
         // Get the Sync Rule
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(id);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {id} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {id} not found."));
 
         var apiKey = await GetCurrentApiKeyAsync();
         if (apiKey != null)
@@ -1796,7 +1796,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
 
         var mappings = await _application.ConnectedSystems.GetSyncRuleMappingsAsync(syncRuleId);
         var dtos = mappings.Select(SyncRuleMappingDto.FromEntity);
@@ -1819,7 +1819,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
 
         var mapping = await _application.ConnectedSystems.GetSyncRuleMappingAsync(mappingId);
         if (mapping == null || mapping.SyncRule?.Id != syncRuleId)
@@ -1859,7 +1859,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
 
         // Create the mapping using FK ID and nav property (nav property needed for validation;
         // cleared before save by ClearMappingNavigationProperties)
@@ -1889,7 +1889,7 @@ public class SynchronisationController(
 
             var csAttr = await _application.ConnectedSystems.GetAttributeAsync(request.TargetConnectedSystemAttributeId.Value);
             if (csAttr == null)
-                return NotFound(ApiErrorResponse.NotFound($"Connected system attribute with ID {request.TargetConnectedSystemAttributeId} not found."));
+                return NotFound(ApiErrorResponse.NotFound($"Connected System attribute with ID {request.TargetConnectedSystemAttributeId} not found."));
 
             // Verify attribute belongs to the Sync Rule's object type
             if (csAttr.ConnectedSystemObjectType.Id != syncRule.ConnectedSystemObjectTypeId)
@@ -1925,7 +1925,7 @@ public class SynchronisationController(
 
                 var csAttr = await _application.ConnectedSystems.GetAttributeAsync(sourceRequest.ConnectedSystemAttributeId.Value);
                 if (csAttr == null)
-                    return NotFound(ApiErrorResponse.NotFound($"Connected system attribute with ID {sourceRequest.ConnectedSystemAttributeId} not found."));
+                    return NotFound(ApiErrorResponse.NotFound($"Connected System attribute with ID {sourceRequest.ConnectedSystemAttributeId} not found."));
 
                 // Verify attribute belongs to the Sync Rule's object type
                 if (csAttr.ConnectedSystemObjectType.Id != syncRule.ConnectedSystemObjectTypeId)
@@ -2003,7 +2003,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
 
         var mapping = await _application.ConnectedSystems.GetSyncRuleMappingAsync(mappingId);
         if (mapping == null || mapping.SyncRule?.Id != syncRuleId)
@@ -2043,7 +2043,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
 
         var dtos = syncRule.ObjectScopingCriteriaGroups
             .Where(g => g.ParentGroup == null) // Only return root groups (children are nested)
@@ -2067,7 +2067,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
 
         var group = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, groupId);
         if (group == null)
@@ -2103,7 +2103,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
 
         if (!Enum.TryParse<SearchGroupType>(request.Type, true, out var groupType))
             return BadRequest(ApiErrorResponse.BadRequest($"Invalid group type '{request.Type}'. Valid values: All, Any."));
@@ -2155,7 +2155,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
 
         var parentGroup = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, parentGroupId);
         if (parentGroup == null)
@@ -2212,7 +2212,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
 
         var group = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, groupId);
         if (group == null)
@@ -2265,7 +2265,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
 
         var group = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, groupId);
         if (group == null)
@@ -2319,7 +2319,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
 
         var group = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, groupId);
         if (group == null)
@@ -2357,7 +2357,7 @@ public class SynchronisationController(
                 .FirstOrDefault(a => a.Id == request.MetaverseAttributeId);
 
             if (mvAttribute == null)
-                return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {request.MetaverseAttributeId} not found on this Sync Rule's Metaverse object type."));
+                return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {request.MetaverseAttributeId} not found on this Sync Rule's Metaverse Object Type."));
 
             criterion.MetaverseAttribute = mvAttribute;
         }
@@ -2417,7 +2417,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
 
         var group = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, groupId);
         if (group == null)
@@ -2485,7 +2485,7 @@ public class SynchronisationController(
 
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         var objectType = connectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == objectTypeId);
         if (objectType == null)
@@ -2517,15 +2517,15 @@ public class SynchronisationController(
         // Core retrieval — the rule itself is loaded via its own repository method below.
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         var rule = await _application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
         if (rule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found."));
 
         // Verify the rule belongs to this Connected System
         if (rule.ConnectedSystemObjectType?.ConnectedSystemId != connectedSystemId)
-            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found in Connected System {connectedSystemId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found in Connected System {connectedSystemId}."));
 
         return Ok(ObjectMatchingRuleDto.FromEntity(rule));
     }
@@ -2558,7 +2558,7 @@ public class SynchronisationController(
 
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         var objectType = connectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == request.ConnectedSystemObjectTypeId);
         if (objectType == null)
@@ -2567,7 +2567,7 @@ public class SynchronisationController(
         // Validate Metaverse Object Type exists
         var metaverseObjectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(request.MetaverseObjectTypeId, false);
         if (metaverseObjectType == null)
-            return NotFound(ApiErrorResponse.NotFound($"Metaverse object type with ID {request.MetaverseObjectTypeId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse Object Type with ID {request.MetaverseObjectTypeId} not found."));
 
         // Validate target MV attribute exists
         var mvAttributes = await _application.Metaverse.GetMetaverseAttributesAsync();
@@ -2674,15 +2674,15 @@ public class SynchronisationController(
 
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         var rule = await _application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
         if (rule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found."));
 
         // Verify the rule belongs to this Connected System
         if (rule.ConnectedSystemObjectType?.ConnectedSystemId != connectedSystemId)
-            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found in Connected System {connectedSystemId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found in Connected System {connectedSystemId}."));
 
         // Update order if specified
         if (request.Order.HasValue)
@@ -2693,7 +2693,7 @@ public class SynchronisationController(
         {
             var metaverseObjectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(request.MetaverseObjectTypeId.Value, false);
             if (metaverseObjectType == null)
-                return NotFound(ApiErrorResponse.NotFound($"Metaverse object type with ID {request.MetaverseObjectTypeId} not found."));
+                return NotFound(ApiErrorResponse.NotFound($"Metaverse Object Type with ID {request.MetaverseObjectTypeId} not found."));
 
             rule.MetaverseObjectTypeId = metaverseObjectType.Id;
             rule.MetaverseObjectType = metaverseObjectType;
@@ -2803,15 +2803,15 @@ public class SynchronisationController(
         // Core retrieval — the rule itself is loaded via its own repository method below.
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         var rule = await _application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
         if (rule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found."));
 
         // Verify the rule belongs to this Connected System
         if (rule.ConnectedSystemObjectType?.ConnectedSystemId != connectedSystemId)
-            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found in Connected System {connectedSystemId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found in Connected System {connectedSystemId}."));
 
         var apiKey = await GetCurrentApiKeyAsync();
         if (apiKey != null)
@@ -2844,7 +2844,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
 
         var rules = syncRule.ObjectMatchingRules
             .OrderBy(r => r.Order)
@@ -2871,11 +2871,11 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
 
         var rule = syncRule.ObjectMatchingRules.FirstOrDefault(r => r.Id == ruleId);
         if (rule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found on Sync Rule {syncRuleId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found on Sync Rule {syncRuleId}."));
 
         return Ok(ObjectMatchingRuleDto.FromEntity(rule));
     }
@@ -2908,7 +2908,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
 
         // Validate target MV attribute exists
         var mvAttributes = await _application.Metaverse.GetMetaverseAttributesAsync();
@@ -3014,15 +3014,15 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
 
         var rule = await _application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
         if (rule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found."));
 
         // Verify the rule belongs to this Sync Rule
         if (rule.SyncRuleId != syncRuleId)
-            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found on Sync Rule {syncRuleId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found on Sync Rule {syncRuleId}."));
 
         // Update order if specified
         if (request.Order.HasValue)
@@ -3130,15 +3130,15 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Sync Rule with ID {syncRuleId} not found."));
 
         var rule = await _application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
         if (rule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found."));
 
         // Verify the rule belongs to this Sync Rule
         if (rule.SyncRuleId != syncRuleId)
-            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found on Sync Rule {syncRuleId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found on Sync Rule {syncRuleId}."));
 
         var apiKey = await GetCurrentApiKeyAsync();
         if (apiKey != null)
@@ -3187,7 +3187,7 @@ public class SynchronisationController(
         // Get the Connected System with change tracking since matching mode switch modifies and saves it
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         var result = await _application.ConnectedSystems.SwitchObjectMatchingModeAsync(connectedSystem, request.Mode, initiatedBy);
 

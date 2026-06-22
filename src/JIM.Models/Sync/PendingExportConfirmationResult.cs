@@ -12,12 +12,12 @@ namespace JIM.Models.Sync;
 public readonly struct PendingExportConfirmationResult
 {
     /// <summary>
-    /// Pending exports that should be deleted (all attribute changes confirmed).
+    /// Pending Exports that should be deleted (all attribute changes confirmed).
     /// </summary>
     public IReadOnlyList<PendingExport> ToDelete { get; init; }
 
     /// <summary>
-    /// Pending exports that should be updated (partial confirmation or complete failure).
+    /// Pending Exports that should be updated (partial confirmation or complete failure).
     /// </summary>
     public IReadOnlyList<PendingExport> ToUpdate { get; init; }
 

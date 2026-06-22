@@ -4,7 +4,7 @@ title: Synchronisation Rules
 
 # Synchronisation Rules
 
-Synchronisation rules define how data flows between Connected Systems and the metaverse. They control attribute mappings, scoping criteria, and object matching logic. The cmdlets on this page cover the full lifecycle of Synchronisation Rule configuration.
+Synchronisation Rules define how data flows between Connected Systems and the metaverse. They control attribute mappings, scoping criteria, and object matching logic. The cmdlets on this page cover the full lifecycle of Synchronisation Rule configuration.
 
 ---
 

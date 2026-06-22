@@ -129,7 +129,7 @@ The cache stores a **lookup index only**: mapping external ID values to CSO GUID
 | CSO deleted (obsolete removal) | Evict from cache |
 | Full CS deletion | Evict all entries for that Connected System |
 
-**Run profile sequencing**:
+**Run Profile sequencing**:
 
 | Scenario | Behaviour |
 |----------|-----------|
@@ -149,7 +149,7 @@ The cache stores a **lookup index only**: mapping external ID values to CSO GUID
 - `IX_ConnectedSystemObjects_ConnectedSystemId_TypeId`: `ConnectedSystemId` as leading column satisfies the CS filter
 - `IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId`: composite on `(ConnectedSystemObjectId, AttributeId)` covers the join and attribute filter
 
-**Cache warming strategy**: Blocking startup warm. When the Worker starts, it loads CSO lookup indexes for all Connected Systems before accepting tasks. Connected systems are warmed with limited parallelism (default 3 concurrent, configurable) to balance startup speed against database load.
+**Cache warming strategy**: Blocking startup warm. When the Worker starts, it loads CSO lookup indexes for all Connected Systems before accepting tasks. Connected Systems are warmed with limited parallelism (default 3 concurrent, configurable) to balance startup speed against database load.
 
 | Environment | Total CSOs (all CS) | Est. Startup (sequential) | Est. Startup (3 parallel) |
 |-------------|--------------------|--------------------------|----|

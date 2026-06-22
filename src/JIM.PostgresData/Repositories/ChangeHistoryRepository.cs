@@ -92,7 +92,7 @@ public class ChangeHistoryRepository : IChangeHistoryRepository
     /// <summary>
     /// Gets the count of CSO change records for a specific Connected System.
     /// </summary>
-    /// <param name="connectedSystemId">Connected system ID</param>
+    /// <param name="connectedSystemId">Connected System ID</param>
     /// <returns>Count of CSO change records</returns>
     public async Task<int> GetCsoChangeCountAsync(int connectedSystemId)
     {

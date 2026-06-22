@@ -6,7 +6,7 @@ This diagram shows how objects are imported from a Connected System into JIM's c
 
 Since v0.7.1, the import processor uses `ISyncServer` for orchestration (settings, caching, reconciliation) and `ISyncRepository` for dedicated bulk data access (CSO writes, RPEIs).
 
-Since v0.8.0, LDAP connectors for OpenLDAP/Generic directories import using **parallel connections**: each container+objectType combination runs on its own dedicated `LdapConnection`, bypassing RFC 2696 paging cookie limitations (#72). CSO persistence uses **two-phase parallel writes** when writing large batches (#427). Run profiles can optionally **target a specific partition**, filtering which containers are imported (#353).
+Since v0.8.0, LDAP connectors for OpenLDAP/Generic directories import using **parallel connections**: each container+objectType combination runs on its own dedicated `LdapConnection`, bypassing RFC 2696 paging cookie limitations (#72). CSO persistence uses **two-phase parallel writes** when writing large batches (#427). Run Profiles can optionally **target a specific partition**, filtering which containers are imported (#353).
 
 ## Overall Import Flow
 
@@ -17,7 +17,7 @@ flowchart TD
     %% --- Call-based connector (e.g., LDAP) ---
     ConnType -->|IConnectorImportUsingCalls| InjectServices[Inject CertificateProvider<br/>and CredentialProtection<br/>if connector supports them]
     InjectServices --> OpenConn[OpenImportConnection<br/>with system settings]
-    OpenConn --> PartFilter[GetTargetPartitions:<br/>Run profile partition set?<br/>Use it. Otherwise all selected.]
+    OpenConn --> PartFilter[GetTargetPartitions:<br/>Run Profile partition set?<br/>Use it. Otherwise all selected.]
     PartFilter --> InitPage[initialPage = true<br/>paginationTokens = empty<br/>Capture original PersistedConnectorData]
 
     InitPage --> PagingCheck{Connection-scoped<br/>paging? OpenLDAP/Generic}
@@ -235,7 +235,7 @@ flowchart TD
 
 - **Two-phase parallel write (#427)**<br /> CSO persistence splits INSERT into two committed phases (CSO rows first, then attribute values) so that cross-partition FK references (ReferenceValueId pointing to a CSO on a different parallel connection) succeed without post-hoc fixup. Small batches (< parallelism x 50) bypass this and write on a single connection. Write parallelism defaults to `Environment.ProcessorCount` (minimum 2) and is tuneable via `JIM_WRITE_PARALLELISM`.
 
-- **Partition-scoped imports (#353)**<br /> Run profiles can target a specific partition via `GetTargetPartitions()`. When set, only containers within that partition are imported; otherwise all selected partitions are included. This applies to both the import data collection and deletion detection scope. Deletion detection is scoped to the target partition, so CSOs in other partitions are not incorrectly marked as obsolete.
+- **Partition-scoped imports (#353)**<br /> Run Profiles can target a specific partition via `GetTargetPartitions()`. When set, only containers within that partition are imported; otherwise all selected partitions are included. This applies to both the import data collection and deletion detection scope. Deletion detection is scoped to the target partition, so CSOs in other partitions are not incorrectly marked as obsolete.
 
 - **Cancellation safety**<br /> When a cancellation is requested, the current page flush completes before exiting. This ensures no data loss; partially processed pages are fully persisted before the operation stops.
 

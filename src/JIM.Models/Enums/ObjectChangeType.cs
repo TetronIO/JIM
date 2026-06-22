@@ -58,7 +58,7 @@ public enum ObjectChangeType
 
     /// <summary>
     /// CSO fell out of scope of import Sync Rule scoping criteria but remained joined
-    /// because InboundOutOfScopeAction was set to RemainJoined. Attribute flow has stopped
+    /// because InboundOutOfScopeAction was set to RemainJoined. Attribute Flow has stopped
     /// but the join is preserved ("once managed, always managed" pattern).
     /// </summary>
     OutOfScopeRetainJoin,
@@ -91,7 +91,7 @@ public enum ObjectChangeType
     /// </summary>
     NoChange,
 
-    // Pending export visibility (surfaced during sync)
+    // Pending Export visibility (surfaced during sync)
     /// <summary>
     /// A Pending Export exists that is staged for the next export run.
     /// This surfaces unconfirmed exports (ExportNotConfirmed status) so operators
@@ -99,7 +99,7 @@ public enum ObjectChangeType
     /// </summary>
     PendingExport,
 
-    // Pending export reconciliation (surfaced during confirming import)
+    // Pending Export reconciliation (surfaced during confirming import)
     /// <summary>
     /// A Pending Export was confirmed during the confirming import.
     /// The exported attribute values matched the imported values.

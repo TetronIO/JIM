@@ -59,7 +59,7 @@ public class ActivityRunProfileExecutionStats
 
     /// <summary>
     /// Count of CSOs that fell out of scope but remained joined (InboundOutOfScopeAction = RemainJoined).
-    /// Attribute flow stopped but join preserved ("once managed, always managed" pattern).
+    /// Attribute Flow stopped but join preserved ("once managed, always managed" pattern).
     /// </summary>
     public int TotalOutOfScopeRetainJoin { get; set; }
 

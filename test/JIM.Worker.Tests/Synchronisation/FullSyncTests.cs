@@ -482,7 +482,7 @@ public class FullSyncTests
     }
 
     /// <summary>
-    /// Tests that a CSO can successfully join to a Metaverse object using matching rules on a Sync Rule using a text data type attribute. 
+    /// Tests that a CSO can successfully join to a Metaverse Object using matching rules on a Sync Rule using a text data type attribute. 
     /// </summary>
     [Test]
     public async Task CsoJoinToMvoViaTextAttributeTestAsync()
@@ -530,7 +530,7 @@ public class FullSyncTests
     }
     
     /// <summary>
-    /// Tests that a CSO can successfully join to a Metaverse object using matching rules on a Sync Rule using a number data type attribute. 
+    /// Tests that a CSO can successfully join to a Metaverse Object using matching rules on a Sync Rule using a number data type attribute. 
     /// </summary>
     [Test]
     public async Task CsoJoinToMvoViaNumberAttributeTestAsync()
@@ -578,7 +578,7 @@ public class FullSyncTests
     }
     
     /// <summary>
-    /// Tests that a CSO can successfully join to a Metaverse object using matching rules on a Sync Rule using a guid data type attribute. 
+    /// Tests that a CSO can successfully join to a Metaverse Object using matching rules on a Sync Rule using a guid data type attribute. 
     /// </summary>
     [Test]
     public async Task CsoJoinToMvoViaGuidAttributeTestAsync()
@@ -626,7 +626,7 @@ public class FullSyncTests
     }
     
     /// <summary>
-    /// Tests that a CSO successfully projects to create a new Metaverse object when projection is enabled on the Sync Rule.
+    /// Tests that a CSO successfully projects to create a new Metaverse Object when projection is enabled on the Sync Rule.
     /// </summary>
     [Test]
     public async Task CsoProjectToMvoTestAsync()
@@ -2625,7 +2625,7 @@ public class FullSyncTests
     /// <summary>
     /// Tests that existing Pending Exports are NOT surfaced as RPEIs during FullSync.
     /// RPEIs should only be created when an actual object change occurs, not to mirror
-    /// pre-existing Pending Exports. Pending exports created by a prior sync on a different
+    /// pre-existing Pending Exports. Pending Exports created by a prior sync on a different
     /// Connected System should not appear as activity items on this sync.
     /// </summary>
     [Test]

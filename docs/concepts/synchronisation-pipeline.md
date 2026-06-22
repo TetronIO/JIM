@@ -56,7 +56,7 @@ Inbound sync processes CSOs from source systems and updates the metaverse. For e
 
 3. **Projection**<br /> If no matching MVO is found and the Synchronisation Rule allows projection, JIM creates a new MVO. The projected MVO is linked to the CSO.
 
-4. **Attribute flow**<br /> Once a CSO is joined or projected to an MVO, JIM applies the Attribute Flow Rules. Inbound Attribute Flows copy values from the CSO to the MVO, optionally transforming them using [expressions](expressions.md).
+4. **Attribute Flow**<br /> Once a CSO is joined or projected to an MVO, JIM applies the Attribute Flow Rules. Inbound Attribute Flows copy values from the CSO to the MVO, optionally transforming them using [expressions](expressions.md).
 
 ### Outbound Sync (Metaverse to Target)
 
@@ -66,9 +66,9 @@ Outbound sync evaluates MVOs against outbound Synchronisation Rules and determin
 
 2. **Provisioning**<br /> If an MVO is in scope but does not have a corresponding CSO in the target Connected System, JIM provisions (creates) a new CSO.
 
-3. **Attribute flow**<br /> Outbound Attribute Flows copy values from the MVO to the CSO, optionally transforming them using expressions.
+3. **Attribute Flow**<br /> Outbound Attribute Flows copy values from the MVO to the CSO, optionally transforming them using expressions.
 
-4. **Pending exports**<br /> Changes to CSOs are recorded as **Pending Exports** rather than being sent to the target system immediately. This allows administrators to review queued changes before they are applied.
+4. **Pending Exports**<br /> Changes to CSOs are recorded as **Pending Exports** rather than being sent to the target system immediately. This allows administrators to review queued changes before they are applied.
 
 ### Full Sync vs Delta Sync
 
@@ -132,4 +132,4 @@ Each phase is executed through a **Run Profile** -- a configured operation on a 
 | Delta Sync | Sync | Process only changed objects |
 | Export | Export | Send pending changes to the Connected System |
 
-Run profiles can be executed manually from the UI, triggered via the API, invoked from PowerShell, or scheduled to run automatically.
+Run Profiles can be executed manually from the UI, triggered via the API, invoked from PowerShell, or scheduled to run automatically.

@@ -586,7 +586,7 @@ public abstract class SyncTaskProcessorBase
     /// <summary>
     /// Check if a CSO has been obsoleted and delete it, applying any joined Metaverse Object changes as necessary.
     /// Respects the InboundOutOfScopeAction setting on import Sync Rules to determine whether to disconnect.
-    /// Deleting a Metaverse Object can have downstream impacts on other Connected System objects.
+    /// Deleting a Metaverse Object can have downstream impacts on other Connected System Objects.
     /// CSO deletions are batched for performance - call FlushObsoleteCsoOperationsAsync() at page boundaries.
     /// When a joined CSO is obsoleted with Disconnect action, two RPEIs are produced:
     /// 1. Disconnected - records the CSO-MVO join being broken (with any attribute removals)
@@ -923,7 +923,7 @@ public abstract class SyncTaskProcessorBase
     /// <summary>
     /// Checks if the not-Obsolete CSO is joined to a Metaverse Object and updates it per any Sync Rules,
     /// or checks to see if a Metaverse Object needs creating (projecting the CSO) according to any Sync Rules.
-    /// Changes to Metaverse Objects can have downstream impacts on other Connected System objects.
+    /// Changes to Metaverse Objects can have downstream impacts on other Connected System Objects.
     /// </summary>
     /// <returns>A result indicating what MVO changes occurred (projection, join, Attribute Flow).</returns>
     protected async Task<MetaverseObjectChangeResult> ProcessMetaverseObjectChangesAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
@@ -1170,7 +1170,7 @@ public abstract class SyncTaskProcessorBase
     /// Implements Q1 decision: evaluate exports immediately when MVO changes.
     /// Uses pre-cached export rules and CSO lookups for O(1) access instead of O(N×M) database queries.
     /// Includes no-net-change detection to skip creating Pending Exports when CSO already has current values.
-    /// Pending exports are deferred for batch saving to reduce database round trips.
+    /// Pending Exports are deferred for batch saving to reduce database round trips.
     /// </summary>
     /// <param name="mvo">The Metaverse Object that changed (must have a valid Id assigned).</param>
     /// <param name="changedAttributes">The list of attribute values that changed.</param>
@@ -1188,7 +1188,7 @@ public abstract class SyncTaskProcessorBase
 
         // Evaluate export rules for MVOs that are IN scope, using cached data for O(1) lookups
         // Uses no-net-change detection (against target CSO attributes in cache) to skip Pending Exports when CSO already has current values
-        // Pending exports and provisioning CSOs are deferred (deferSave=true) and collected for batch saving
+        // Pending Exports and provisioning CSOs are deferred (deferSave=true) and collected for batch saving
         using (Diagnostics.Sync.StartSpan("EvaluateExportRules"))
         {
             var result = await _syncServer.EvaluateExportRulesWithNoNetChangeDetectionAsync(
@@ -3203,7 +3203,7 @@ public abstract class SyncTaskProcessorBase
     /// Call this once at the start of sync, after loading Sync Rules.
     /// </summary>
     /// <param name="allSyncRules">All Sync Rules from ALL Connected Systems (needed to build complete import mapping cache).</param>
-    /// <param name="currentSystemSyncRules">Sync rules for the current Connected System being synced.</param>
+    /// <param name="currentSystemSyncRules">Sync Rules for the current Connected System being synced.</param>
     protected void BuildDriftDetectionCache(List<SyncRule> allSyncRules, List<SyncRule> currentSystemSyncRules)
     {
         using var span = Diagnostics.Sync.StartSpan("BuildDriftDetectionCache");

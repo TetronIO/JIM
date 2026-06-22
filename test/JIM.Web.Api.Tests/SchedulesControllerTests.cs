@@ -317,7 +317,7 @@ public class SchedulesControllerTests
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
         var badRequest = result as BadRequestObjectResult;
         var error = badRequest?.Value as ApiErrorResponse;
-        Assert.That(error?.Message, Does.Contain("Connected system ID is required"));
+        Assert.That(error?.Message, Does.Contain("Connected System ID is required"));
     }
 
     [Test]
@@ -343,7 +343,7 @@ public class SchedulesControllerTests
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
         var badRequest = result as BadRequestObjectResult;
         var error = badRequest?.Value as ApiErrorResponse;
-        Assert.That(error?.Message, Does.Contain("Run profile ID is required"));
+        Assert.That(error?.Message, Does.Contain("Run Profile ID is required"));
     }
 
     [Test]

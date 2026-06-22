@@ -24,8 +24,8 @@ Each Connected System in JIM has:
 - **Connection settings**<br /> How to reach the external system (hostname, credentials, file path, etc.)
 - **Schema**<br /> The object types and attributes available in the external system.
 - **Connector space**<br /> The staging area holding imported CSOs.
-- **Run profiles**<br /> Configured operations (full import, delta import, export).
-- **Synchronisation rules**<br /> Rules governing how data flows between the Connected System and the metaverse.
+- **Run Profiles**<br /> Configured operations (full import, delta import, export).
+- **Synchronisation Rules**<br /> Rules governing how data flows between the Connected System and the metaverse.
 
 For more detail on these concepts, see [Connected Systems](../configuration/connected-systems.md).
 

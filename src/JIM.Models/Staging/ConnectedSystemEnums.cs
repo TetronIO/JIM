@@ -29,12 +29,12 @@ public enum ConnectedSystemObjectStatus
 public enum ObjectMatchingRuleMode
 {
     /// <summary>
-    /// Default: Object matching rules are defined at the Connected System Object Type level.
+    /// Default: Object Matching Rules are defined at the Connected System Object Type level.
     /// These rules are shared across all Sync Rules for that object type.
     /// </summary>
     ConnectedSystem = 0,
     /// <summary>
-    /// Advanced: Object matching rules are defined per Sync Rule.
+    /// Advanced: Object Matching Rules are defined per Sync Rule.
     /// Allows different matching logic for different Sync Rules.
     /// </summary>
     SyncRule = 1

@@ -58,7 +58,7 @@ These comparisons determine whether data changes, objects link, or provisioning 
 |-----------|---------|--------------|----------------|
 | Attribute value change detection | Case-sensitive | No (system-wide) | `StringComparison.Ordinal` |
 | External ID matching | Case-sensitive | No | `StringComparison.Ordinal` |
-| Object matching rules | Case-sensitive | **Yes (per rule)** | Add `CaseSensitive` property |
+| Object Matching Rules | Case-sensitive | **Yes (per rule)** | Add `CaseSensitive` property |
 | Scope filter evaluation | Case-sensitive | **Yes (per criterion)** | Add `CaseSensitive` property |
 | Reference value matching | Case-sensitive | No | `StringComparison.Ordinal` |
 
@@ -69,7 +69,7 @@ These comparisons find configuration elements by name.
 | Operation | Behaviour | Rationale |
 |-----------|-----------|-----------|
 | Attribute name lookups | Case-insensitive | Schema names should be forgiving |
-| Connected system name lookups | Case-insensitive | Configuration names should be forgiving |
+| Connected System name lookups | Case-insensitive | Configuration names should be forgiving |
 | Object type name lookups | Case-insensitive | Configuration names should be forgiving |
 | API endpoint routing | Case-insensitive | HTTP standard |
 

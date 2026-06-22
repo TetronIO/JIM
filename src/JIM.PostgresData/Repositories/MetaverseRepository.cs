@@ -291,18 +291,18 @@ public class MetaverseRepository : IMetaverseRepository
 
     public async Task<List<SyncRuleReference>> GetSyncRulesReferencingAttributeAsync(int attributeId)
     {
-        // Sync rule mappings where this attribute is the target (import rules)
+        // Sync Rule mappings where this attribute is the target (import rules)
         var fromMappings = Repository.Database.SyncRuleMappings
             .Where(m => m.TargetMetaverseAttributeId == attributeId && m.SyncRule != null)
             .Select(m => new SyncRuleReference { Id = m.SyncRule!.Id, Name = m.SyncRule.Name });
 
-        // Sync rule mapping sources where this attribute is the source (export rules)
+        // Sync Rule mapping sources where this attribute is the source (export rules)
         // SyncRuleMappingSource has no navigation to SyncRuleMapping, so join through the parent
         var fromMappingSources = Repository.Database.SyncRuleMappings
             .Where(m => m.Sources.Any(s => s.MetaverseAttributeId == attributeId) && m.SyncRule != null)
             .Select(m => new SyncRuleReference { Id = m.SyncRule!.Id, Name = m.SyncRule.Name });
 
-        // Object matching rules where this attribute is the target
+        // Object Matching Rules where this attribute is the target
         var fromMatchingRules = Repository.Database.ObjectMatchingRules
             .Where(r => r.TargetMetaverseAttributeId == attributeId && r.SyncRule != null)
             .Select(r => new SyncRuleReference { Id = r.SyncRule!.Id, Name = r.SyncRule.Name });

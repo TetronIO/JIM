@@ -186,7 +186,7 @@
             <MudTd DataLabel="External Id" Class="jim-text-code mud-text-secondary">
                 @if (!string.IsNullOrEmpty(context.PendingExternalId))
                 {
-                    <MudTooltip Text="Pending export - not yet confirmed" Arrow="true" Placement="Placement.Top">
+                    <MudTooltip Text="Pending Export - not yet confirmed" Arrow="true" Placement="Placement.Top">
                         <MudText Color="Color.Info">@context.PendingExternalId</MudText>
                     </MudTooltip>
                 }
@@ -204,7 +204,7 @@
                     }
                     else if (!string.IsNullOrEmpty(context.PendingSecondaryExternalId))
                     {
-                        <MudTooltip Text="Pending export - not yet confirmed" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="Pending Export - not yet confirmed" Arrow="true" Placement="Placement.Top">
                             <MudText Color="Color.Info">@context.PendingSecondaryExternalId</MudText>
                         </MudTooltip>
                     }
@@ -217,7 +217,7 @@
                 }
                 else if (!string.IsNullOrEmpty(context.PendingDisplayName))
                 {
-                    <MudTooltip Text="Pending export - not yet confirmed" Arrow="true" Placement="Placement.Top">
+                    <MudTooltip Text="Pending Export - not yet confirmed" Arrow="true" Placement="Placement.Top">
                         <MudText Color="Color.Info">@context.PendingDisplayName</MudText>
                     </MudTooltip>
                 }
@@ -488,7 +488,7 @@ else
             return;
         }
 
-        Snackbar.Add("Connected system objects queued for deletion.", Severity.Info);
+        Snackbar.Add("Connected System Objects queued for deletion.", Severity.Info);
     }
 
     private static IEnumerable<ConnectedSystemObjectStatus> GetAvailableStatuses()

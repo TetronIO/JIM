@@ -32,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 The Synchronisation Rule expression tester now resolves attribute names case-insensitively, exactly as live synchronisation does, so an expression that works during a sync run no longer reports "no result" in the tester purely because an attribute name's casing differs.
 - 🐛 Connected System settings now enforce either/or requirements at save time instead of failing later. The File Connector requires exactly one of "Object Type Column" or "Object Type"; previously you could save settings with neither (only discovering the problem when a schema refresh errored out) or with both (in which case JIM silently ignored the column and used the fixed type). The settings form now groups the two fields together, shows live feedback until exactly one is supplied, and disables saving otherwise; the same rule is also enforced server-side for API callers. Connectors can now declare these setting groups in their metadata, as either "at least one of" or mutually exclusive "exactly one of", and JIM validates and renders them generically.
 - 🐛 Deleting a Connected System no longer fails with a database error. The bulk-deletion SQL referenced sync-rule-mapping columns removed in an earlier schema change (`column ... does not exist`), and did not remove the system's Object Matching Rules before the Sync Rules and object types they reference (foreign key violation). Both are fixed, and the deletion is covered by new database-backed tests.
-- 🐛 Deleting a Connected System that has been synchronised no longer fails with a foreign-key database error, and the deletion is now atomic: it either completes fully or rolls back, rather than leaving the system behind with its objects already removed. Run profiles, partitions, activities, metaverse change history, and metaverse attribute values contributed by the system are now removed or detached in the correct order. Metaverse attribute values contributed by the deleted system are retained with their contributor link cleared (attribute recall remains a synchronisation-time behaviour).
+- 🐛 Deleting a Connected System that has been synchronised no longer fails with a foreign-key database error, and the deletion is now atomic: it either completes fully or rolls back, rather than leaving the system behind with its objects already removed. Run Profiles, partitions, activities, metaverse change history, and metaverse attribute values contributed by the system are now removed or detached in the correct order. Metaverse attribute values contributed by the deleted system are retained with their contributor link cleared (attribute recall remains a synchronisation-time behaviour).
 
 ### Removed
 
@@ -49,7 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ✨ Create custom Metaverse Object Types via the API and the new `New-JIMMetaverseObjectType` cmdlet, to model identity types beyond Users and Groups.
 - ✨ Scoping criteria now support long-integer and case-sensitive comparisons via the API and `New-JIMScopingCriterion`.
-- ✨ Sync rules can now set their out-of-scope and deprovisioning actions and drift detection via the API and `Set-JIMSyncRule`.
+- ✨ Sync Rules can now set their out-of-scope and deprovisioning actions and drift detection via the API and `Set-JIMSyncRule`.
 - ✨ New factory reset (`Reset-JIMSystem` / `POST /api/v1/system/reset`) wipes all customer data and configuration in one transaction while preserving the schema, built-ins, and infrastructure access.
 
 ### Fixed
@@ -192,7 +192,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Paginated List Optimisation (#482, #485)
 
-- ⚡ Metaverse object list sorting now uses a pre-computed cached display name column, eliminating expensive per-query subqueries for display name resolution
+- ⚡ Metaverse Object list sorting now uses a pre-computed cached display name column, eliminating expensive per-query subqueries for display name resolution
 - ⚡ New composite index on metaverse attribute values for faster attribute-based sorting and filtering
 - ⚡ Paginated list queries for Metaverse Objects and Connected System Objects rewritten to use keyset pagination with optimised sort subqueries
 
@@ -322,9 +322,9 @@ JIM now supports deployments of 100,000+ objects, validated by Scale100K integra
 
 #### Pending Export Management
 
-- 🖥️ Pending export detail page with grouped attribute changes, capped multi-valued attribute loading, and server-side paginated drill-down for large change sets
+- 🖥️ Pending Export detail page with grouped attribute changes, capped multi-valued attribute loading, and server-side paginated drill-down for large change sets
 - 🖥️ `Get-JIMPendingExport` and `Get-JIMConnectedSystemObject` PowerShell cmdlets with corresponding API endpoints
-- 🖥️ Pending exports list now shows display names instead of raw GUIDs
+- 🖥️ Pending Exports list now shows display names instead of raw GUIDs
 
 #### Activity Monitoring
 
@@ -335,7 +335,7 @@ JIM now supports deployments of 100,000+ objects, validated by Scale100K integra
 
 #### Run Profile Editing
 
-- 🖥️ Run profile editing UI — edit name, file path, partition, and page size for existing Run Profiles
+- 🖥️ Run Profile editing UI — edit name, file path, partition, and page size for existing Run Profiles
 - ✨ `SupportsFilePaths` connector capability — File Path fields only appear for connectors that use file-based import/export
 - ✨ `SupportsPaging` connector capability — Page Size controls only appear for connectors that support paged queries
 
@@ -376,7 +376,7 @@ JIM now supports deployments of 100,000+ objects, validated by Scale100K integra
 
 - 🔒 Attribute change history is no longer cascade-deleted when a metaverse or Connected System attribute definition is removed — the FK is set to null and snapshot `AttributeName`/`AttributeType` properties preserve the audit trail indefinitely (#58)
 - 🐛 Expression attribute lookups (e.g. `mv["Department"]`) are now case-insensitive, preventing silent failures when attribute name casing in expressions did not exactly match stored names (#341)
-- 🐛 Pending export reconciliation now correctly matches all 8 attribute data types — Boolean, Guid, and LongNumber exports previously failed to reconcile and appeared permanently stuck (#263)
+- 🐛 Pending Export reconciliation now correctly matches all 8 attribute data types — Boolean, Guid, and LongNumber exports previously failed to reconcile and appeared permanently stuck (#263)
 - 🐛 Deferred export progress bar no longer shows values exceeding 100%
 - 🐛 Progress bars on the History tab now update in real-time instead of freezing after initial page load
 - 🐛 Worker database operations no longer time out during large imports — command timeout increased from 30s default to 300s (#426)
@@ -442,10 +442,10 @@ JIM now supports deployments of 100,000+ objects, validated by Scale100K integra
 
 #### Pending Export Reference Display (#404)
 
-- 🐛 Pending export reference attributes (e.g. group members) now display meaningful identifiers (DN, External ID) instead of raw GUIDs with a misleading "unresolved reference" warning
+- 🐛 Pending Export reference attributes (e.g. group members) now display meaningful identifiers (DN, External ID) instead of raw GUIDs with a misleading "unresolved reference" warning
 - 🐛 References to objects processed later on the same sync page are now resolved via a post-page resolution pass
 - 🐛 Resolved reference attributes (e.g. group members) now appear in export causality tree attribute changes — previously they were silently dropped
-- 🖥️ Pending export references show a "Pending Export" indicator to distinguish them from fully resolved and genuinely unresolved references
+- 🖥️ Pending Export references show a "Pending Export" indicator to distinguish them from fully resolved and genuinely unresolved references
 
 #### Database Resilience (#408, #409)
 
@@ -458,7 +458,7 @@ JIM now supports deployments of 100,000+ objects, validated by Scale100K integra
 ### Performance
 
 - ⚡ MVO detail page now caps multi-valued attribute values with server-side pagination, dramatically reducing load time for objects with large MVAs
-- ⚡ Pending export reconciliation query optimised with sub-phase progress messages
+- ⚡ Pending Export reconciliation query optimised with sub-phase progress messages
 
 ## [0.6.1] - 2026-03-15
 
@@ -575,7 +575,7 @@ JIM now supports deployments of 100,000+ objects, validated by Scale100K integra
 - 🐛 `Get-JIMMetaverseObject` now correctly returns all results when page size exceeds 100
 - 🐛 Fixed spurious export operations being generated for objects queued for immediate deletion
 - 🐛 Activity Attribute Flow statistics now show accurate object counts instead of inflated per-attribute counts
-- 🐛 Connected system object join state now reliably persisted during synchronisation
+- 🐛 Connected System Object join state now reliably persisted during synchronisation
 - 🐛 Activity Detail rows now show display name and object type even after the Connected System Object has been deleted (#363)
 - 🐛 OIDC `Identity.Name` now correctly resolved when claims are unmapped
 - 🐛 Two-pass CSO processing prevents false `CouldNotJoinDueToExistingJoin` errors during synchronisation
@@ -688,7 +688,7 @@ JIM now supports deployments of 100,000+ objects, validated by Scale100K integra
 - Pending CSO disconnections now accounted for when validating join constraints
 - Connected System settings not persisting on save
 - Partition column hidden on Run Profiles tab when connector doesn't support partitions
-- Run profile create/delete and dropdown positioning
+- Run Profile create/delete and dropdown positioning
 - Container tree duplicates and selection not persisting
 - Matching rule creation failing with duplicate key violation
 - `ExecuteDeleteAsync` used for Pending Export deletion with inner exception unwrapping

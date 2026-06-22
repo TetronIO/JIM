@@ -178,7 +178,7 @@ public class SyncRule : IAuditable, IValidated
         if (Direction == SyncRuleDirection.Import &&
             ObjectMatchingRules.Count == 0 &&
             ConnectedSystem?.ObjectMatchingRuleMode != ObjectMatchingRuleMode.ConnectedSystem)
-            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Warning, "No Object Matching Rules have been defined. Whilst valid, this is not recommended. Object Matching rules help minimise synchronisation errors in uncommon, but important scenarios"));
+            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Warning, "No Object Matching Rules have been defined. Whilst valid, this is not recommended. Object Matching Rules help minimise synchronisation errors in uncommon, but important scenarios"));
 
         if (AttributeFlowRules.Count == 0)
             response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Warning, "No Attribute Flow Rules have been defined. Whilst valid, this means no data will flow between the two systems"));

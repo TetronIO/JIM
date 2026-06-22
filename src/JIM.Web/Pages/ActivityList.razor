@@ -188,7 +188,7 @@
                  && context.TargetOperationType == ActivityTargetOperationType.Execute
                  && context.Status != ActivityStatus.InProgress)
             {
-                @* Run profile execution stats - run-type-aware display *@
+                @* Run Profile execution stats - run-type-aware display *@
                 @if (HasAnyStats(context))
                 {
                     var effectiveRunType = GetEffectiveRunType(context.ConnectedSystemRunType, context.TargetName);
@@ -333,7 +333,7 @@
                 }
                 else
                 {
-                    @* Run profile execution completed with no changes *@
+                    @* Run Profile execution completed with no changes *@
                     <MudTooltip Text="No changes" Arrow="true" Placement="Placement.Top">
                         <MudChip T="string" Color="Color.Default" Variant="Variant.Text"
                                  Icon="@Icons.Material.Outlined.CheckCircle" Class="jim-stat-chip">

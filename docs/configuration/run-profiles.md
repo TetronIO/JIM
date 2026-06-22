@@ -6,7 +6,7 @@ title: Run Profiles
 
 A **Run Profile** defines a synchronisation operation that can be executed against a [Connected System](connected-systems.md). Each Run Profile specifies the type of operation (import, sync, or export), a batch size, and (where applicable) a target partition or file path.
 
-Run profiles are the building blocks of [schedules](schedules.md): each schedule step typically references a Run Profile to execute. Run profiles can also be executed directly for one-off operations.
+Run Profiles are the building blocks of [schedules](schedules.md): each schedule step typically references a Run Profile to execute. Run Profiles can also be executed directly for one-off operations.
 
 ## Run types
 

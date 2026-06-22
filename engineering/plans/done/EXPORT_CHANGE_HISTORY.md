@@ -16,7 +16,7 @@ By contrast, import and sync RPEIs have full attribute-level change history via 
 
 ### Gap 2: Sync RPEIs' PendingExportCreated Nodes Are Ephemeral
 
-During a synchronisation, when outbound Attribute Flow creates a `PendingExport`, the Causality Tree records a `PendingExportCreated` outcome node with `TargetEntityId = pendingExport.Id`. When the user later expands this node, `LoadPendingExportAsync` fetches the Pending Export by ID. However, after the export run confirms and reconciles, the `PendingExport` is deleted. The user then sees "Pending export detail not available."
+During a synchronisation, when outbound Attribute Flow creates a `PendingExport`, the Causality Tree records a `PendingExportCreated` outcome node with `TargetEntityId = pendingExport.Id`. When the user later expands this node, `LoadPendingExportAsync` fetches the Pending Export by ID. However, after the export run confirms and reconciles, the `PendingExport` is deleted. The user then sees "Pending Export detail not available."
 
 This means the Causality Tree's Pending Export expansion, which already has UI for rendering attribute names and change types, is only useful for a brief window between sync and export confirmation.
 
@@ -48,7 +48,7 @@ Both gaps share the same root cause: attribute-level change data for outbound op
 1. During sync, `SyncTaskProcessorBase` creates `PendingExportCreated` outcome nodes with `targetEntityId: pendingExport.Id`.
 2. The `OutcomeTreeNode` component recognises `PendingExportCreated` as expandable and lazy-loads the `PendingExport` by ID.
 3. If the Pending Export still exists, it renders a table of attribute names and change types.
-4. If deleted (post-export-confirmation), it shows "Pending export detail not available."
+4. If deleted (post-export-confirmation), it shows "Pending Export detail not available."
 
 ### What `DataSnapshot` Is Today
 

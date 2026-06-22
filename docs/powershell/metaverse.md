@@ -84,7 +84,7 @@ Set-JIMMetaverseObjectType -InputObject <object> [-DeletionRule <string>] [-Dele
 | `InputObject` | `object` | Yes (ByInputObject) | | An object type object from the pipeline |
 | `DeletionRule` | `string` | No | | The deletion rule to apply. Valid values: `Manual`, `WhenLastConnectorDisconnected`, `WhenAuthoritativeSourceDisconnected` |
 | `DeletionGracePeriod` | `TimeSpan` | No | | Grace period before a pending deletion is executed |
-| `DeletionTriggerConnectedSystemIds` | `int[]` | No | | Connected system IDs that trigger deletion when disconnected |
+| `DeletionTriggerConnectedSystemIds` | `int[]` | No | | Connected System IDs that trigger deletion when disconnected |
 | `PassThru` | `switch` | No | `false` | Return the updated object type |
 
 !!! info "ShouldProcess"
@@ -453,7 +453,7 @@ Get-JIMMetaverseObject [-ObjectTypeId <int>] [-ObjectTypeName <string>] [-Search
 
 #### Output
 
-Metaverse objects including their ID, object type, and requested attributes.
+Metaverse Objects including their ID, object type, and requested attributes.
 
 #### Examples
 

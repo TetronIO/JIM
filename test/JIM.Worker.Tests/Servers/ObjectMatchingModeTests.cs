@@ -321,7 +321,7 @@ public class ObjectMatchingModeTests
         Assert.That(csObjectType.ObjectMatchingRules[0].TargetMetaverseAttributeId, Is.EqualTo(100));
         Assert.That(csObjectType.ObjectMatchingRules[0].CaseSensitive, Is.True);
 
-        // Sync rule should have rules cleared
+        // Sync Rule should have rules cleared
         Assert.That(importSyncRule.ObjectMatchingRules.Count, Is.EqualTo(0));
 
         Assert.That(connectedSystem.ObjectMatchingRuleMode, Is.EqualTo(ObjectMatchingRuleMode.ConnectedSystem));

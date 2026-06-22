@@ -456,7 +456,7 @@ public class ConnectedSystemServer
     /// <summary>
     /// Switches the Object Matching Rule mode for a Connected System.
     /// When switching to Advanced Mode (SyncRule), copies matching rules from
-    /// Connected System object types to all import Sync Rules.
+    /// Connected System Object Types to all import Sync Rules.
     /// When switching to Simple Mode (ConnectedSystem), analyses Sync Rule matching rules,
     /// selects the most common configuration per object type, and clears Sync Rule rules.
     /// </summary>
@@ -2931,7 +2931,7 @@ public class ConnectedSystemServer
                 if (percentage >= lastReportedPercentage + 10)
                 {
                     lastReportedPercentage = percentage / 10 * 10; // Round down to nearest 10
-                    Log.Verbose("WarmCsoCacheAsync: Connected system {ConnectedSystem} cache warm progress: {Percentage}% ({Processed}/{Total})",
+                    Log.Verbose("WarmCsoCacheAsync: Connected System {ConnectedSystem} cache warm progress: {Percentage}% ({Processed}/{Total})",
                         csLabel, lastReportedPercentage, processed, total);
                 }
             }
@@ -3955,7 +3955,7 @@ public class ConnectedSystemServer
         // Core: IsRunProfileValid only reads ConnectorDefinition.Supports* and we read .Name for activity context.
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId) ?? throw new ArgumentException("No such Connected System found!");
         if (!IsRunProfileValid(connectedSystem, connectedSystemRunProfile))
-            throw new ArgumentException("Run profile is not valid for the Connector!");
+            throw new ArgumentException("Run Profile is not valid for the Connector!");
 
         // every CRUD operation requires tracking with an activity...
         var activity = new Activity
@@ -3986,7 +3986,7 @@ public class ConnectedSystemServer
         // Core: IsRunProfileValid only reads ConnectorDefinition.Supports* and we read .Name for activity context.
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId) ?? throw new ArgumentException("No such Connected System found!");
         if (!IsRunProfileValid(connectedSystem, connectedSystemRunProfile))
-            throw new ArgumentException("Run profile is not valid for the Connector!");
+            throw new ArgumentException("Run Profile is not valid for the Connector!");
 
         var activity = new Activity
         {

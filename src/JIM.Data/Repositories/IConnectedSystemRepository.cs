@@ -131,7 +131,7 @@ public interface IConnectedSystemRepository
     /// Results are ordered by CreatedAt (oldest first).
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
-    /// <returns>Pending exports that pass database-level eligibility checks.</returns>
+    /// <returns>Pending Exports that pass database-level eligibility checks.</returns>
     public Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId);
 
     /// <summary>
@@ -168,7 +168,7 @@ public interface IConnectedSystemRepository
     /// Used by parallel batch processing where each batch re-loads its entities from its own DbContext.
     /// </summary>
     /// <param name="pendingExportIds">The IDs of Pending Exports to load.</param>
-    /// <returns>Pending exports with ConnectedSystemObject, AttributeValues, and AttributeValueChanges loaded.</returns>
+    /// <returns>Pending Exports with ConnectedSystemObject, AttributeValues, and AttributeValueChanges loaded.</returns>
     public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds);
 
     /// <summary>

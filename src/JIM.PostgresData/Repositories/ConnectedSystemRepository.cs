@@ -209,7 +209,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (connectedSystem == null)
             return null;
 
-        // Run profiles. We Include Partition shallowly so EF populates the navigation (plus its
+        // Run Profiles. We Include Partition shallowly so EF populates the navigation (plus its
         // shadow FK column). These transient partition instances are replaced below via an
         // in-memory fixup pass with the instances owned by the partition query, so consumers
         // see the full container tree through either access path.
@@ -234,7 +234,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         var types = await otQuery.ToListAsync();
 
-        // Object matching rules, loaded in a single keyed query and wired onto their owning object
+        // Object Matching Rules, loaded in a single keyed query and wired onto their owning object
         // types in memory.
         //
         // Why not Include them as part of the query above? Before #494 we used four repeated
@@ -912,7 +912,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
                         .Select(av => av.Attribute.Name)
                         .FirstOrDefault(),
-                // Pending export fields: scalar correlated subqueries; no Includes, no left join.
+                // Pending Export fields: scalar correlated subqueries; no Includes, no left join.
                 HasPendingExport = Repository.Database.PendingExports.Any(pe => pe.ConnectedSystemObjectId == cso.Id),
                 PendingExportId = Repository.Database.PendingExports
                     .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
@@ -4494,7 +4494,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             @"UPDATE ""Activities"" SET ""ConnectedSystemId"" = NULL WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
-        // 2b. Metaverse object changes referencing this system's Sync Rules.
+        // 2b. Metaverse Object changes referencing this system's Sync Rules.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"UPDATE ""MetaverseObjectChanges"" SET ""SyncRuleId"" = NULL
               WHERE ""SyncRuleId"" IN (SELECT ""Id"" FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0})",

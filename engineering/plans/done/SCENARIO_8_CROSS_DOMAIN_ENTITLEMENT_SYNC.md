@@ -26,9 +26,9 @@
   - Target LDAP Connected System (Panoply EMEA)
   - User and Group object type selection with required attributes
   - Import/Export Sync Rules for both users and groups
-  - Attribute flow mappings including DN expressions
+  - Attribute Flow mappings including DN expressions
   - Matching rules (sAMAccountName -> Account Name)
-  - Run profiles (Full Import, Full Sync, Export)
+  - Run Profiles (Full Import, Full Sync, Export)
 
 - **Phase 3: ImportToMV Step** - Implemented
   - Successfully imports users and groups from Source AD

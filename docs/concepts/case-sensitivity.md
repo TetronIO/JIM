@@ -21,17 +21,17 @@ These comparisons determine whether data moves. They are case-sensitive so that 
 | Attribute value change detection | Case-sensitive | ❌ No |
 | External ID matching | Case-sensitive | ❌ No |
 | Reference (link) value matching | Case-sensitive | ❌ No |
-| Object matching rules | Case-sensitive | ✅ Per rule |
+| Object Matching Rules | Case-sensitive | ✅ Per rule |
 | Scoping criteria | Case-sensitive | ✅ Per criterion |
 
-Object matching rules and scoping criteria expose a **case sensitive** toggle, so you can opt into case-insensitive behaviour where a data source is inconsistent. For example, if an HR feed sometimes records a department as `Sales` and sometimes `SALES`, you can make a scoping criterion match both by turning case sensitivity off for that criterion. The same applies to a matching rule joining objects across systems that disagree on casing.
+Object Matching Rules and scoping criteria expose a **case sensitive** toggle, so you can opt into case-insensitive behaviour where a data source is inconsistent. For example, if an HR feed sometimes records a department as `Sales` and sometimes `SALES`, you can make a scoping criterion match both by turning case sensitivity off for that criterion. The same applies to a matching rule joining objects across systems that disagree on casing.
 
 ### Configuration names (forgiving)
 
 | Lookup | Behaviour |
 |--------|-----------|
 | Attribute names (including `mv["..."]` / `cs["..."]` in expressions) | Case-insensitive |
-| Connected system names | Case-insensitive |
+| Connected System names | Case-insensitive |
 | Object type names | Case-insensitive |
 
 ### Search and display (forgiving)

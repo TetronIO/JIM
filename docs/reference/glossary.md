@@ -6,7 +6,7 @@ Activity
 :   A logged operation (such as import, sync, or export) with its status, timing, and outcome details. Activities provide a complete audit trail of every operation JIM performs.
 
 Attribute Flow
-:   A rule that maps an attribute between a Connected System Object and a Metaverse Object. Attribute flows define how data moves during synchronisation, including any transformations applied via expressions.
+:   A rule that maps an attribute between a Connected System Object and a Metaverse Object. Attribute Flows define how data moves during synchronisation, including any transformations applied via expressions.
 
 Connector
 :   An adapter for communicating with an external system. Each connector implements the protocol and logic required to import from and export to a specific type of data source (e.g. LDAP directories, CSV files).
@@ -42,7 +42,7 @@ Partition
 :   A logical division within a Connected System. Partitions allow JIM to scope imports and exports to specific segments of a directory or data source, such as organisational units in an LDAP directory.
 
 Pending Export
-:   A queued change waiting to be sent to a target system. Pending exports are created during synchronisation and held until an export Run Profile is executed, at which point they are applied to the Connected System.
+:   A queued change waiting to be sent to a target system. Pending Exports are created during synchronisation and held until an export Run Profile is executed, at which point they are applied to the Connected System.
 
 Projection
 :   The process of creating a new Metaverse Object when no existing match is found for an incoming Connected System Object. Projection establishes a new identity in the metaverse based on the Synchronisation Rule configuration.
@@ -51,7 +51,7 @@ Provisioning
 :   The process of creating accounts in target systems when a new identity meets the criteria defined by export Synchronisation Rules. Provisioning ensures that identities are represented in all systems where they require access.
 
 Run Profile
-:   A configured operation that defines what action to perform on a Connected System. Run profiles include Full Import, Delta Import, Full Sync, Delta Sync, and Export, each with configurable parameters such as page size and target partition.
+:   A configured operation that defines what action to perform on a Connected System. Run Profiles include Full Import, Delta Import, Full Sync, Delta Sync, and Export, each with configurable parameters such as page size and target partition.
 
 Synchronisation Rule
-:   A complete mapping configuration between a Connected System and the metaverse. Synchronisation rules define object type mappings, Attribute Flows, scoping criteria, Object Matching Rules, and the direction of data flow (inbound or outbound).
+:   A complete mapping configuration between a Connected System and the metaverse. Synchronisation Rules define object type mappings, Attribute Flows, scoping criteria, Object Matching Rules, and the direction of data flow (inbound or outbound).

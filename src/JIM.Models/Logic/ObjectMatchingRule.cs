@@ -9,7 +9,7 @@ namespace JIM.Models.Logic;
 
 /// <summary>
 /// Defines how objects should be matched/correlated between a Connected System and the Metaverse.
-/// Object matching rules are used during import (to join CSOs to MVOs) and during export evaluation
+/// Object Matching Rules are used during import (to join CSOs to MVOs) and during export evaluation
 /// (to find existing CSOs for provisioning).
 ///
 /// Rules can belong to EITHER:

@@ -29,9 +29,9 @@ The rest of this document shows the specific code paths that realise these scena
 |---|---|---|---|
 | `SyncRule.InboundOutOfScopeAction` | Import rules | `Disconnect`, `RemainJoined` | `Disconnect` |
 | `SyncRule.OutboundDeprovisionAction` | Export rules | `Disconnect`, `Delete` | `Disconnect` |
-| `MetaverseObjectType.DeletionRule` | Metaverse object type | `Manual`, `WhenLastConnectorDisconnected`, `WhenAuthoritativeSourceDisconnected` | per type |
-| `MetaverseObjectType.DeletionTriggerConnectedSystemIds` | Metaverse object type | Set of Connected System IDs | empty |
-| `MetaverseObjectType.DeletionGracePeriod` | Metaverse object type | Timespan (nullable) | null (immediate) |
+| `MetaverseObjectType.DeletionRule` | Metaverse Object Type | `Manual`, `WhenLastConnectorDisconnected`, `WhenAuthoritativeSourceDisconnected` | per type |
+| `MetaverseObjectType.DeletionTriggerConnectedSystemIds` | Metaverse Object Type | Set of Connected System IDs | empty |
+| `MetaverseObjectType.DeletionGracePeriod` | Metaverse Object Type | Timespan (nullable) | null (immediate) |
 
 ## Inbound (import rule) scope transitions
 

@@ -19,7 +19,7 @@ else
         @if (SyncRule.Direction == SyncRuleDirection.Export)
         {
             <MudText>
-                By default, all Metaverse objects of type '@SyncRule.MetaverseObjectType.Name' will be in scope of this
+                By default, all Metaverse Objects of type '@SyncRule.MetaverseObjectType.Name' will be in scope of this
                 Synchronisation Rule, though to have it apply to a subset of those objects, use a filter. i.e. you might
                 only want this rule to apply to Staff, not Contractors.
             </MudText>
@@ -27,7 +27,7 @@ else
         else
         {
             <MudText>
-                By default, all Connected System objects of type '@SyncRule.ConnectedSystemObjectType.Name' will be in scope
+                By default, all Connected System Objects of type '@SyncRule.ConnectedSystemObjectType.Name' will be in scope
                 of this Synchronisation Rule. Use a filter to import only specific objects, e.g. only Active users, not Disabled.
             </MudText>
         }
@@ -53,11 +53,11 @@ else
                 <MudAlert Severity="Severity.Info" Class="mt-3" Variant="Variant.Outlined" Dense="true">
                     @if (SyncRule.InboundOutOfScopeAction == InboundOutOfScopeAction.Disconnect)
                     {
-                        <text>Objects that fall out of scope will be disconnected from their Metaverse object. Whether
+                        <text>Objects that fall out of scope will be disconnected from their Metaverse Object. Whether
                         attributes contributed by this Connected System are also recalled depends on the Connected System
-                        object type's "Remove contributed attributes on obsoletion" setting, the Metaverse object type's
-                        deletion grace period, and whether the Metaverse object is slated for immediate deletion. If this
-                        was the last connector, the Metaverse object type's deletion rule may also fire.</text>
+                        object type's "Remove contributed attributes on obsoletion" setting, the Metaverse Object Type's
+                        deletion grace period, and whether the Metaverse Object is slated for immediate deletion. If this
+                        was the last connector, the Metaverse Object Type's deletion rule may also fire.</text>
                     }
                     else
                     {

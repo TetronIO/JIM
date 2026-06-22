@@ -100,7 +100,7 @@ public class JimRoleEnrichmentMiddleware(RequestDelegate next)
             // Add the virtual "User" role (basic access)
             roleClaims.Add(new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.User));
 
-            // Add the Metaverse object ID claim
+            // Add the Metaverse Object ID claim
             roleClaims.Add(new Claim(Constants.BuiltInClaims.MetaverseObjectId, user.Id.ToString()));
 
             // Create a new identity with JIM claims and add it to the principal

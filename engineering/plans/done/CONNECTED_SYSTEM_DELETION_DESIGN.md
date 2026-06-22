@@ -421,8 +421,8 @@ public async Task<DeletionResult> RequestDeleteConnectedSystemAsync(
     //    a. PendingExports
     //    b. CSO attribute values, changes, then CSOs
     //    c. Partitions, containers
-    //    d. Run profiles
-    //    e. Sync rules (cascade handles mappings)
+    //    d. Run Profiles
+    //    e. Sync Rules (cascade handles mappings)
     //    f. Object types (cascade handles attributes)
     //    g. Setting values
     //    h. Null Activity FKs
@@ -474,7 +474,7 @@ Query params:
 - Add "Delete System" button to Connected System detail page
 - Confirmation dialog showing:
   - CSO count
-  - Sync rule count
+  - Sync Rule count
   - Warning about joined MVOs
   - Checkbox for MVO deletion rule evaluation
 - Progress indicator for sync operations
@@ -584,7 +584,7 @@ DELETE FROM "ConnectedSystems" WHERE "Id" = @id;
 
 1. **Preview is default** - Show deletion impact preview before confirming (can be skipped)
 2. **Type name to confirm** - Require typing the system name for safety (like GitHub repo deletion)
-3. **Pending exports shown in preview** - Warn about Pending Exports but don't block deletion
+3. **Pending Exports shown in preview** - Warn about Pending Exports but don't block deletion
 4. **Q1: Handle MVO deletion** - Option D (Disconnect first, delete second) - preserves referential integrity and allows MVO rules to be evaluated in background
 5. **Q2: Handle Sync Rules** - Option B (Cascade delete) - Sync Rules are useless without the system; show count in confirmation
 6. **Q3: Handle Activities** - Option B (Null FK) - preserve immutable audit logs; activity serialization deferred to post-MVP enhancement ([#136](https://github.com/TetronIO/JIM/issues/136))

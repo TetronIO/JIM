@@ -107,7 +107,7 @@ flowchart TD
     CheckMvo -->|No| AttemptJoin[Attempt Join<br/>For each import Sync Rule:<br/>Find matching MVO by join criteria]
     AttemptJoin --> JoinResult{Match<br/>found?}
 
-    JoinResult -->|No match| AttemptProject{ISyncEngine.EvaluateProjection<br/>Sync rule has<br/>ProjectToMetaverse = true?}
+    JoinResult -->|No match| AttemptProject{ISyncEngine.EvaluateProjection<br/>Sync Rule has<br/>ProjectToMetaverse = true?}
     AttemptProject -->|Yes| Project[Create new MVO<br/>Set type from Sync Rule<br/>Link CSO to new MVO]
     AttemptProject -->|No| Done
 

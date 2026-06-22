@@ -180,9 +180,9 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - Full Synchronisation Run Profile ✓
 - Join rules - match CSO to existing MVO ✓
 - Projection - create new MVO from CSO when no match ✓
-- Attribute flow - CSO attributes flow to MVO via Sync Rules ✓
-- Attribute flow for new joins ✓
-- Attribute flow for existing joins (updates) ✓
+- Attribute Flow - CSO attributes flow to MVO via Sync Rules ✓
+- Attribute Flow for new joins ✓
+- Attribute Flow for existing joins (updates) ✓
 - Multi-valued Attribute Flow ✓
 
 #### 2.3 MVO Lifecycle Management
@@ -224,7 +224,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - Scheduled task data model (Schedule, ScheduleStep, ScheduleExecution entities) ✓
 - Scheduler service implementation (background polling service) ✓
 - Cron-style or interval-based scheduling (with user-friendly pattern configuration) ✓
-- Run profile scheduling configuration (multi-step sequential and parallel step execution) ✓
+- Run Profile scheduling configuration (multi-step sequential and parallel step execution) ✓
 - Scheduler configuration UI (full Blazor management interface) ✓
 - Schedule REST API (CRUD, enable/disable, manual trigger, execution monitoring) ✓
 - Schedule PowerShell cmdlets (11 cmdlets with name-based parameters) ✓
@@ -289,7 +289,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 
 #### 7.2 Monitoring & Troubleshooting
 - Activity logging ✓
-- Run profile execution tracking ✓
+- Run Profile execution tracking ✓
 - Error capture and display ✓
 
 ### 8. API Coverage (#183)

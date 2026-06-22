@@ -32,14 +32,14 @@ Get-JIMConnectedSystem -Id <int> -DeletionPreview
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById, ObjectTypes, DeletionPreview) | | Connected system identifier. Accepts pipeline input by property name. |
+| `Id` | `int` | Yes (ById, ObjectTypes, DeletionPreview) | | Connected System identifier. Accepts pipeline input by property name. |
 | `Name` | `string` | No (List only) | | Filter by name; supports wildcard characters (`*`, `?`) |
 | `ObjectTypes` | `switch` | No | `$false` | Returns the object types configured on the Connected System |
 | `DeletionPreview` | `switch` | No | `$false` | Returns a deletion impact preview for the Connected System |
 
 ### Output
 
-- **List / ById**: Connected system objects with properties such as `Id`, `Name`, `Description`, `ConnectorDefinitionId`, and configuration state.
+- **List / ById**: Connected System Objects with properties such as `Id`, `Name`, `Description`, `ConnectorDefinitionId`, and configuration state.
 - **ObjectTypes**: Object type definitions for the specified Connected System.
 - **DeletionPreview**: Deletion impact preview with counts and warnings.
 
@@ -128,8 +128,8 @@ Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>]
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById) | | Connected system identifier |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected system object from the pipeline |
+| `Id` | `int` | Yes (ById) | | Connected System identifier |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected System Object from the pipeline |
 | `Name` | `string` | No | | New display name |
 | `Description` | `string` | No | | New description |
 | `SettingValues` | `hashtable` | No | | Connector-specific settings. Keys are setting IDs; values are hashtables with `stringValue`, `intValue`, or `checkboxValue`. |
@@ -182,8 +182,8 @@ Remove-JIMConnectedSystem -InputObject <PSCustomObject> [-Force] [-PassThru]
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById) | | Connected system identifier |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected system object from the pipeline |
+| `Id` | `int` | Yes (ById) | | Connected System identifier |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected System Object from the pipeline |
 | `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt |
 | `PassThru` | `switch` | No | `$false` | Returns the deleted Connected System Object |
 
@@ -230,8 +230,8 @@ Import-JIMConnectedSystemSchema -InputObject <PSCustomObject> [-PassThru]
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById) | | Connected system identifier |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected system object from the pipeline |
+| `Id` | `int` | Yes (ById) | | Connected System identifier |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected System Object from the pipeline |
 | `PassThru` | `switch` | No | `$false` | Returns the Connected System Object after schema import |
 
 ### Output
@@ -275,8 +275,8 @@ Import-JIMConnectedSystemHierarchy -InputObject <PSCustomObject> [-PassThru]
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById) | | Connected system identifier |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected system object from the pipeline |
+| `Id` | `int` | Yes (ById) | | Connected System identifier |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected System Object from the pipeline |
 | `PassThru` | `switch` | No | `$false` | Returns the Connected System Object after hierarchy import |
 
 ### Output
@@ -364,7 +364,7 @@ Get-JIMConnectedSystemObjectType -ConnectedSystemId <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes | | Connected system identifier. Alias: `Id`. Accepts pipeline input by property name. |
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Alias: `Id`. Accepts pipeline input by property name. |
 
 ### Output
 
@@ -403,7 +403,7 @@ Set-JIMConnectedSystemObjectType -ConnectedSystemId <int> -ObjectTypeId <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes | | Connected system identifier |
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier |
 | `ObjectTypeId` | `int` | Yes | | Object type identifier. Alias: `Id`. Accepts pipeline input by property name. |
 | `Selected` | `bool` | No | | Whether this object type is selected for synchronisation |
 | `RemoveContributedAttributesOnObsoletion` | `bool` | No | | Whether to remove attributes contributed by this system when an object becomes obsolete |
@@ -450,7 +450,7 @@ Set-JIMConnectedSystemAttribute -ConnectedSystemId <int> -ObjectTypeId <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes | | Connected system identifier |
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier |
 | `ObjectTypeId` | `int` | Yes | | Object type identifier |
 | `AttributeId` | `int` | Yes (Single) | | Attribute identifier. Alias: `Id`. Accepts pipeline input by property name. |
 | `Selected` | `bool` | No (Single) | | Whether this attribute is selected for synchronisation |
@@ -502,7 +502,7 @@ Get-JIMConnectedSystemPartition -ConnectedSystemId <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes | | Connected system identifier. Alias: `Id`. Accepts pipeline input by property name. |
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Alias: `Id`. Accepts pipeline input by property name. |
 
 ### Output
 
@@ -535,7 +535,7 @@ Set-JIMConnectedSystemPartition -ConnectedSystemId <int> -PartitionId <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes | | Connected system identifier |
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier |
 | `PartitionId` | `int` | Yes | | Partition identifier. Alias: `Id`. Accepts pipeline input by property name. |
 | `Selected` | `bool` | No | | Whether this partition is selected for synchronisation |
 | `PassThru` | `switch` | No | `$false` | Returns the updated partition |
@@ -575,7 +575,7 @@ Set-JIMConnectedSystemContainer -ConnectedSystemId <int> -ContainerId <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes | | Connected system identifier |
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier |
 | `ContainerId` | `int` | Yes | | Container identifier. Alias: `Id`. Accepts pipeline input by property name. |
 | `Selected` | `bool` | No | | Whether this container is selected for synchronisation |
 | `PassThru` | `switch` | No | `$false` | Returns the updated container |
@@ -626,7 +626,7 @@ Get-JIMConnectedSystemObject -ConnectedSystemId <int> -Id <guid>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes | | Connected system identifier |
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier |
 | `Id` | `guid` | Yes | | Connector space object identifier |
 | `AttributeName` | `string` | No | | Name of a multi-valued attribute to page through |
 | `Search` | `string` | No | | Filter attribute values by search term |
@@ -678,7 +678,7 @@ Get-JIMConnectedSystemObjectChangeHistory -ConnectedSystemId <int> -Id <guid> -A
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes | | Connected system identifier. Accepts pipeline input by property name. |
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Accepts pipeline input by property name. |
 | `Id` | `guid` | Yes | | Connector space object identifier. Accepts pipeline input by property name. |
 | `All` | `switch` | No | `$false` | Automatically paginates through all results. Cannot be used with `-Page`. |
 | `Page` | `int` | No | `1` | Page number for paginated results. Cannot be used with `-All`. |
@@ -724,7 +724,7 @@ Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId <int> -CsoId <guid
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes | | Connected system identifier |
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier |
 | `CsoId` | `guid` | Yes | | Connector space object identifier |
 | `AttributeName` | `string` | Yes | | Name of the multi-valued attribute |
 | `Search` | `string` | No | | Filter values by search term |
@@ -770,7 +770,7 @@ Get-JIMConnectedSystemUnresolvedReferenceCount -ConnectedSystemId <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes | | Connected system identifier. Alias: `Id`. Accepts pipeline input by property name. |
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Alias: `Id`. Accepts pipeline input by property name. |
 
 ### Output
 
@@ -815,8 +815,8 @@ Clear-JIMConnectedSystem -InputObject <PSCustomObject> [-KeepChangeHistory] [-Fo
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById) | | Connected system identifier |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected system object from the pipeline |
+| `Id` | `int` | Yes (ById) | | Connected System identifier |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Connected System Object from the pipeline |
 | `KeepChangeHistory` | `switch` | No | `$false` | Preserves change history records; by default, change history is also deleted |
 | `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt |
 
@@ -842,7 +842,7 @@ Get-JIMConnectedSystem -Name "Staging AD" | Clear-JIMConnectedSystem -Force
 
 - Supports `ShouldProcess` (High impact). Without `-Force`, you will be prompted for confirmation.
 - Removes all CSOs, attribute values, Pending Exports, and deferred references from the Connected System.
-- Metaverse objects are **not** deleted; their links to this Connected System are severed.
+- Metaverse Objects are **not** deleted; their links to this Connected System are severed.
 - By default, change history is also deleted. Use `-KeepChangeHistory` to retain it for auditing purposes.
 
 ---
@@ -876,8 +876,8 @@ Get-JIMPendingExport -Id <guid> -AttributeName <string> [-Search <string>] -All
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes (List, ListAll) | | Connected system identifier |
-| `Id` | `guid` | Yes (ById, AttributeChanges, AttributeChangesAll) | | Pending export operation identifier |
+| `ConnectedSystemId` | `int` | Yes (List, ListAll) | | Connected System identifier |
+| `Id` | `guid` | Yes (ById, AttributeChanges, AttributeChangesAll) | | Pending Export operation identifier |
 | `AttributeName` | `string` | No | | Name of a multi-valued attribute to page through its changes |
 | `Search` | `string` | No | | Filter results by search term |
 | `Page` | `int` | No | `1` | Page number |
@@ -886,7 +886,7 @@ Get-JIMPendingExport -Id <guid> -AttributeName <string> [-Search <string>] -All
 
 ### Output
 
-- **List / ListAll**: Pending export operations with export type (Add, Update, Delete) and summary of changes.
+- **List / ListAll**: Pending Export operations with export type (Add, Update, Delete) and summary of changes.
 - **ById**: Detailed view of a single Pending Export, including all attribute changes.
 - **AttributeChanges / AttributeChangesAll**: Paged or complete list of changes for a specific multi-valued attribute.
 
@@ -932,7 +932,7 @@ Get-JIMConnectedSystemDeletionPreview -ConnectedSystemId <int>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes | | Connected system identifier. Alias: `Id`. Accepts pipeline input by property name. |
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Alias: `Id`. Accepts pipeline input by property name. |
 
 ### Output
 

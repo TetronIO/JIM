@@ -536,7 +536,7 @@ public static class TestUtilities
                     {
                         // mimicking an organisational unique and immutable identifier for a person in the organisation.
                         // should be unique, but any Senior Identity Engineer will most likely have stories to tell about HR re-issuing, or changing employee ids.
-                        // intended to be used as a correlating attribute for Metaverse to Connected System object joins.
+                        // intended to be used as a correlating attribute for Metaverse to Connected System Object joins.
                         Id = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
                         Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString(),
                         Type = AttributeDataType.Text,
@@ -546,7 +546,7 @@ public static class TestUtilities
                     {
                         // mimicking another organisational unique and immutable identifier for a person in the organisation.
                         // should be unique, but any Senior Identity Engineer will most likely have stories to tell about HR re-issuing, or changing employee numbers.
-                        // intended to be used as a correlating attribute for Metaverse to Connected System object joins.
+                        // intended to be used as a correlating attribute for Metaverse to Connected System Object joins.
                         Id = (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER,
                         Name = MockSourceSystemAttributeNames.EMPLOYEE_NUMBER.ToString(),
                         Type = AttributeDataType.Number,
@@ -772,7 +772,7 @@ public static class TestUtilities
                     {
                         // mimicking the organisational unique and immutable identifier for a person in the organisation.
                         // should be unique, but any Senior Identity Engineer will most likely have stories to tell about HR re-issuing, or changing employee ids.
-                        // intended to be used as the correlating attribute for Metaverse to Connected System object joins.
+                        // intended to be used as the correlating attribute for Metaverse to Connected System Object joins.
                         Id = (int)MockTargetSystemAttributeNames.EmployeeId,
                         Name = MockTargetSystemAttributeNames.EmployeeId.ToString(),
                         Type = AttributeDataType.Text,
