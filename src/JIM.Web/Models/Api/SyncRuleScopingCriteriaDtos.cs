@@ -8,7 +8,7 @@ using JIM.Models.Search;
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// API representation of a sync rule scoping criteria (a single filter condition).
+/// API representation of a Synchronisation Rule scoping criteria (a single filter condition).
 /// </summary>
 public class SyncRuleScopingCriteriaDto
 {
@@ -18,22 +18,22 @@ public class SyncRuleScopingCriteriaDto
     public int Id { get; set; }
 
     /// <summary>
-    /// The Metaverse Attribute ID being evaluated (for export sync rules).
+    /// The Metaverse Attribute ID being evaluated (for export Synchronisation Rules).
     /// </summary>
     public int? MetaverseAttributeId { get; set; }
 
     /// <summary>
-    /// The name of the Metaverse Attribute being evaluated (for export sync rules).
+    /// The name of the Metaverse Attribute being evaluated (for export Synchronisation Rules).
     /// </summary>
     public string? MetaverseAttributeName { get; set; }
 
     /// <summary>
-    /// The Connected System Attribute ID being evaluated (for import sync rules).
+    /// The Connected System Attribute ID being evaluated (for import Synchronisation Rules).
     /// </summary>
     public int? ConnectedSystemAttributeId { get; set; }
 
     /// <summary>
-    /// The name of the Connected System Attribute being evaluated (for import sync rules).
+    /// The name of the Connected System Attribute being evaluated (for import Synchronisation Rules).
     /// </summary>
     public string? ConnectedSystemAttributeName { get; set; }
 
@@ -125,7 +125,7 @@ public class SyncRuleScopingCriteriaDto
 }
 
 /// <summary>
-/// API representation of a sync rule scoping criteria group (contains criteria with AND/OR logic).
+/// API representation of a Synchronisation Rule scoping criteria group (contains criteria with AND/OR logic).
 /// </summary>
 public class SyncRuleScopingCriteriaGroupDto
 {
@@ -205,19 +205,19 @@ public class UpdateScopingCriteriaGroupRequest
 
 /// <summary>
 /// Request DTO for creating a new scoping criterion within a group.
-/// For export sync rules, provide MetaverseAttributeId.
-/// For import sync rules, provide ConnectedSystemAttributeId.
+/// For export Synchronisation Rules, provide MetaverseAttributeId.
+/// For import Synchronisation Rules, provide ConnectedSystemAttributeId.
 /// </summary>
 public class CreateScopingCriterionRequest
 {
     /// <summary>
-    /// The Metaverse Attribute ID to evaluate (for export sync rules).
+    /// The Metaverse Attribute ID to evaluate (for export Synchronisation Rules).
     /// Either MetaverseAttributeId or ConnectedSystemAttributeId must be provided.
     /// </summary>
     public int? MetaverseAttributeId { get; set; }
 
     /// <summary>
-    /// The Connected System Attribute ID to evaluate (for import sync rules).
+    /// The Connected System Attribute ID to evaluate (for import Synchronisation Rules).
     /// Either MetaverseAttributeId or ConnectedSystemAttributeId must be provided.
     /// </summary>
     public int? ConnectedSystemAttributeId { get; set; }

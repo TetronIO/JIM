@@ -34,7 +34,7 @@ A separate validation operation lets you check a certificate's chain and validit
 1. Either upload the Base64-encoded data, or place the file in the connector-files mount and reference it by path
 2. Validate the certificate to confirm chain and validity
 3. Confirm the certificate is enabled
-4. Configure the relevant connector to authenticate using the connected system's LDAPS or HTTPS endpoint
+4. Configure the relevant connector to authenticate using the Connected System's LDAPS or HTTPS endpoint
 
 **Rotating a CA before expiry:**
 

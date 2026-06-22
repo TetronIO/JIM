@@ -33,7 +33,7 @@ This creates a barrier for quick evaluation, onboarding new contributors, and lo
 - Production Keycloak deployment (customer's responsibility)
 - Persistent Keycloak data (H2 ephemeral database is fine; realm re-imports on restart)
 - Keycloak customisation UI/themes
-- Keycloak as a connected system / connector target
+- Keycloak as a Connected System / connector target
 
 ---
 

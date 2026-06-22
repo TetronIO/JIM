@@ -33,7 +33,7 @@ namespace JIM.Application.Servers
 
         /// <summary>
         /// Retrieves a list of the current tasks, with any inherited task information formatted into the name,
-        /// i.e. connected system name and connected system run profile name for a SynchronisationWorkerTask.
+        /// i.e. Connected System name and Connected System Run Profile name for a SynchronisationWorkerTask.
         /// </summary>
         public async Task<List<WorkerTaskHeader>> GetWorkerTaskHeadersAsync()
         {
@@ -76,7 +76,7 @@ namespace JIM.Application.Servers
                 partitionWarning = validationResult.WarningMessage;
 
                 // every CRUD operation requires tracking with an activity...
-                // Core: only .Name is read for activity context; run profiles are loaded separately.
+                // Core: only .Name is read for activity context; Run Profiles are loaded separately.
                 var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemCoreAsync(synchronisationWorkerTask.ConnectedSystemId);
                 var runProfiles = await Application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(synchronisationWorkerTask.ConnectedSystemId);
                 var runProfile = runProfiles.Single(rp => rp.Id == synchronisationWorkerTask.ConnectedSystemRunProfileId);

@@ -4,7 +4,7 @@ title: Schedules
 
 # Schedules
 
-The schedule cmdlets manage automated synchronisation schedules in JIM. Schedules define when and how connected system run profiles execute, supporting cron-based, interval, and manual trigger types.
+The schedule cmdlets manage automated synchronisation schedules in JIM. Schedules define when and how Connected System Run Profiles execute, supporting cron-based, interval, and manual trigger types.
 
 Cmdlets are grouped into four areas: [CRUD operations](#schedule-crud), [control actions](#schedule-control), [step management](#schedule-steps), and [execution monitoring](#schedule-executions).
 
@@ -379,7 +379,7 @@ Get-JIMSchedule -Name "On-Demand Full Sync" | Start-JIMSchedule -Wait
 
 ### Add-JIMScheduleStep
 
-Adds a new step to a schedule. Each step defines a run profile to execute against a connected system. Steps run sequentially by default; use `-Parallel` to run a step concurrently with the preceding step.
+Adds a new step to a schedule. Each step defines a Run Profile to execute against a Connected System. Steps run sequentially by default; use `-Parallel` to run a step concurrently with the preceding step.
 
 #### Syntax
 
@@ -409,10 +409,10 @@ Add-JIMScheduleStep -ScheduleId <Guid>
 |---|---|---|---|---|
 | `ScheduleId` | `Guid` | Yes | Both | The schedule to add the step to. Alias: `Id`. |
 | `StepType` | `String` | Yes | Both | The type of step. Currently only `RunProfile` is supported. |
-| `ConnectedSystemId` | `Int32` | Yes | ById | The numeric identifier of the connected system. |
-| `ConnectedSystemName` | `String` | Yes | ByName | The name of the connected system. |
-| `RunProfileId` | `Int32` | Yes | ById | The numeric identifier of the run profile to execute. |
-| `RunProfileName` | `String` | Yes | ByName | The name of the run profile to execute. |
+| `ConnectedSystemId` | `Int32` | Yes | ById | The numeric identifier of the Connected System. |
+| `ConnectedSystemName` | `String` | Yes | ByName | The name of the Connected System. |
+| `RunProfileId` | `Int32` | Yes | ById | The numeric identifier of the Run Profile to execute. |
+| `RunProfileName` | `String` | Yes | ByName | The name of the Run Profile to execute. |
 | `Parallel` | `Switch` | No | Both | Runs this step in parallel with the previous step. |
 | `ContinueOnFailure` | `Switch` | No | Both | Continues to the next step even if this step fails. |
 | `PassThru` | `Switch` | No | Both | Returns the updated schedule object. |
@@ -423,7 +423,7 @@ None by default. When `-PassThru` is specified, returns the updated schedule obj
 
 #### Examples
 
-```powershell title="Add a step by connected system and run profile IDs"
+```powershell title="Add a step by Connected System and Run Profile IDs"
 Add-JIMScheduleStep -ScheduleId "a1b2c3d4-e5f6-7890-abcd-ef1234567890" `
     -StepType RunProfile `
     -ConnectedSystemId 1 `
@@ -612,5 +612,5 @@ Get-JIMScheduleExecution -ScheduleId "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -Act
 ## See also
 
 - [Schedules](../configuration/schedules.md): what schedules are, trigger types and patterns, step types, and execution behaviour
-- [Run Profiles](run-profiles.md): Managing connected system run profiles
+- [Run Profiles](run-profiles.md): Managing Connected System Run Profiles
 - [Activities](activities.md): Viewing synchronisation activity results

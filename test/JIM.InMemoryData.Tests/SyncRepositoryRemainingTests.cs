@@ -45,7 +45,7 @@ public class SyncRepositoryRemainingTests
 
     #endregion
 
-    #region Sync Rules and Configuration
+    #region Synchronisation Rules and Configuration
 
     [Test]
     public async Task GetSyncRulesAsync_ReturnsForSystemAsync()

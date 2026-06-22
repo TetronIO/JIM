@@ -4,21 +4,21 @@ title: Run Profiles
 
 # Run Profiles
 
-Run profile cmdlets manage and execute synchronisation run profiles on connected systems. A run profile defines a specific operation type (import, sync, or export) that can be executed against a connected system. Use these cmdlets to list, create, modify, remove, and trigger run profiles.
+Run Profile cmdlets manage and execute synchronisation Run Profiles on Connected Systems. A Run Profile defines a specific operation type (import, sync, or export) that can be executed against a Connected System. Use these cmdlets to list, create, modify, remove, and trigger Run Profiles.
 
 ---
 
 ## Get-JIMRunProfile
 
-Retrieves one or more run profiles from a connected system, either by connected system or by run profile ID.
+Retrieves one or more Run Profiles from a Connected System, either by Connected System or by Run Profile ID.
 
 ### Syntax
 
 ```powershell
-# By connected system ID (default)
+# By Connected System ID (default)
 Get-JIMRunProfile -ConnectedSystemId <int> [-Name <string>]
 
-# By connected system name
+# By Connected System name
 Get-JIMRunProfile -ConnectedSystemName <string> [-Name <string>]
 ```
 
@@ -26,17 +26,17 @@ Get-JIMRunProfile -ConnectedSystemName <string> [-Name <string>]
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes (ById set) | | ID of the connected system. Alias: `Id`. Accepts pipeline input by property name. |
-| `ConnectedSystemName` | `string` | Yes (ByName set) | | Name of the connected system. Must be an exact match. |
-| `Name` | `string` | No | | Filter run profiles by name. Supports wildcards (e.g., `"Full*"`). |
+| `ConnectedSystemId` | `int` | Yes (ById set) | | ID of the Connected System. Alias: `Id`. Accepts pipeline input by property name. |
+| `ConnectedSystemName` | `string` | Yes (ByName set) | | Name of the Connected System. Must be an exact match. |
+| `Name` | `string` | No | | Filter Run Profiles by name. Supports wildcards (e.g., `"Full*"`). |
 
 ### Output
 
-Returns one or more `PSCustomObject` instances representing run profiles, each containing properties such as `Id`, `Name`, `Type`, `ConnectedSystemId`, and `PartitionId`.
+Returns one or more `PSCustomObject` instances representing Run Profiles, each containing properties such as `Id`, `Name`, `Type`, `ConnectedSystemId`, and `PartitionId`.
 
 ### Examples
 
-```powershell title="List all run profiles for a connected system"
+```powershell title="List all Run Profiles for a Connected System"
 Get-JIMRunProfile -ConnectedSystemId 1
 ```
 
@@ -56,15 +56,15 @@ Get-JIMConnectedSystem -Name "Active Directory" | Get-JIMRunProfile
 
 ## New-JIMRunProfile
 
-Creates a new run profile on a connected system. Supports `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm the operation.
+Creates a new Run Profile on a Connected System. Supports `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm the operation.
 
 ### Syntax
 
 ```powershell
-# By connected system ID (default)
+# By Connected System ID (default)
 New-JIMRunProfile -ConnectedSystemId <int> -Name <string> -Type <string> [-PartitionId <int>] [-PassThru] [-WhatIf] [-Confirm]
 
-# By connected system name
+# By Connected System name
 New-JIMRunProfile -ConnectedSystemName <string> -Name <string> -Type <string> [-PartitionId <int>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
@@ -72,24 +72,24 @@ New-JIMRunProfile -ConnectedSystemName <string> -Name <string> -Type <string> [-
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `ConnectedSystemId` | `int` | Yes (ById set) | | ID of the connected system to create the run profile on. |
-| `ConnectedSystemName` | `string` | Yes (ByName set) | | Name of the connected system to create the run profile on. |
-| `Name` | `string` | Yes (Position 0) | | Display name for the new run profile. |
+| `ConnectedSystemId` | `int` | Yes (ById set) | | ID of the Connected System to create the Run Profile on. |
+| `ConnectedSystemName` | `string` | Yes (ByName set) | | Name of the Connected System to create the Run Profile on. |
+| `Name` | `string` | Yes (Position 0) | | Display name for the new Run Profile. |
 | `Type` | `string` | Yes | | Operation type. Valid values: `FullImport`, `DeltaImport`, `FullSync`, `DeltaSync`, `Export`. |
-| `PartitionId` | `int` | No | | Optional partition to scope this run profile to. If omitted, the run profile applies to the default partition. |
-| `PassThru` | `switch` | No | `$false` | Returns the created run profile object to the pipeline. |
+| `PartitionId` | `int` | No | | Optional partition to scope this Run Profile to. If omitted, the Run Profile applies to the default partition. |
+| `PassThru` | `switch` | No | `$false` | Returns the created Run Profile object to the pipeline. |
 
 ### Output
 
-By default, no output. When `-PassThru` is specified, returns the created run profile object.
+By default, no output. When `-PassThru` is specified, returns the created Run Profile object.
 
 ### Examples
 
-```powershell title="Create a full import run profile"
+```powershell title="Create a full import Run Profile"
 New-JIMRunProfile -ConnectedSystemId 1 -Name "Full Import" -Type FullImport
 ```
 
-```powershell title="Create a run profile by connected system name"
+```powershell title="Create a Run Profile by Connected System name"
 New-JIMRunProfile -ConnectedSystemName "Active Directory" -Name "Delta Sync" -Type DeltaSync
 ```
 
@@ -98,7 +98,7 @@ $rp = New-JIMRunProfile -ConnectedSystemId 1 -Name "Export" -Type Export -PassTh
 $rp.Id
 ```
 
-```powershell title="Create a partition-scoped run profile"
+```powershell title="Create a partition-scoped Run Profile"
 New-JIMRunProfile -ConnectedSystemId 1 -Name "Full Import (UK)" -Type FullImport -PartitionId 3
 ```
 
@@ -110,7 +110,7 @@ New-JIMRunProfile -ConnectedSystemId 1 -Name "Delta Import" -Type DeltaImport -W
 
 ## Set-JIMRunProfile
 
-Modifies an existing run profile. Supports `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm the operation.
+Modifies an existing Run Profile. Supports `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm the operation.
 
 ### Syntax
 
@@ -126,19 +126,19 @@ Set-JIMRunProfile -InputObject <PSCustomObject> [-Name <string>] [-PartitionId <
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById set) | | ID of the run profile to modify. Accepts pipeline input by property name. |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject set) | | A run profile object, typically from `Get-JIMRunProfile`. Accepts pipeline input. |
-| `Name` | `string` | No | | New display name for the run profile. |
-| `PartitionId` | `int` | No | | New partition ID to scope the run profile to. |
-| `PassThru` | `switch` | No | `$false` | Returns the updated run profile object to the pipeline. |
+| `Id` | `int` | Yes (ById set) | | ID of the Run Profile to modify. Accepts pipeline input by property name. |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject set) | | A Run Profile object, typically from `Get-JIMRunProfile`. Accepts pipeline input. |
+| `Name` | `string` | No | | New display name for the Run Profile. |
+| `PartitionId` | `int` | No | | New partition ID to scope the Run Profile to. |
+| `PassThru` | `switch` | No | `$false` | Returns the updated Run Profile object to the pipeline. |
 
 ### Output
 
-By default, no output. When `-PassThru` is specified, returns the updated run profile object.
+By default, no output. When `-PassThru` is specified, returns the updated Run Profile object.
 
 ### Examples
 
-```powershell title="Rename a run profile"
+```powershell title="Rename a Run Profile"
 Set-JIMRunProfile -Id 42 -Name "Full Import (Production)"
 ```
 
@@ -158,7 +158,7 @@ Set-JIMRunProfile -Id 42 -Name "New Name" -WhatIf
 
 ## Remove-JIMRunProfile
 
-Deletes a run profile. This is a destructive operation with high impact; by default, PowerShell will prompt for confirmation. Use `-Force` to suppress the confirmation prompt. Supports `ShouldProcess`.
+Deletes a Run Profile. This is a destructive operation with high impact; by default, PowerShell will prompt for confirmation. Use `-Force` to suppress the confirmation prompt. Supports `ShouldProcess`.
 
 ### Syntax
 
@@ -174,18 +174,18 @@ Remove-JIMRunProfile -InputObject <PSCustomObject> [-Force] [-PassThru] [-WhatIf
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `int` | Yes (ById set) | | ID of the run profile to delete. Accepts pipeline input by property name. |
-| `InputObject` | `PSCustomObject` | Yes (ByInputObject set) | | A run profile object, typically from `Get-JIMRunProfile`. Accepts pipeline input. |
+| `Id` | `int` | Yes (ById set) | | ID of the Run Profile to delete. Accepts pipeline input by property name. |
+| `InputObject` | `PSCustomObject` | Yes (ByInputObject set) | | A Run Profile object, typically from `Get-JIMRunProfile`. Accepts pipeline input. |
 | `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt. |
-| `PassThru` | `switch` | No | `$false` | Returns the deleted run profile object to the pipeline before removal. |
+| `PassThru` | `switch` | No | `$false` | Returns the deleted Run Profile object to the pipeline before removal. |
 
 ### Output
 
-By default, no output. When `-PassThru` is specified, returns the run profile object that was deleted.
+By default, no output. When `-PassThru` is specified, returns the Run Profile object that was deleted.
 
 ### Examples
 
-```powershell title="Delete a run profile by ID"
+```powershell title="Delete a Run Profile by ID"
 Remove-JIMRunProfile -Id 42
 ```
 
@@ -197,34 +197,34 @@ Remove-JIMRunProfile -Id 42 -Force
 Get-JIMRunProfile -Id 42 | Remove-JIMRunProfile -Force
 ```
 
-```powershell title="Delete all run profiles for a connected system"
+```powershell title="Delete all Run Profiles for a Connected System"
 Get-JIMRunProfile -ConnectedSystemId 1 | Remove-JIMRunProfile -Force
 ```
 
 ```powershell title="Capture before deleting"
 $deleted = Remove-JIMRunProfile -Id 42 -Force -PassThru
-Write-Host "Removed run profile: $($deleted.Name)"
+Write-Host "Removed Run Profile: $($deleted.Name)"
 ```
 
 ---
 
 ## Start-JIMRunProfile
 
-Queues a run profile for execution on the JIM worker service. The operation is asynchronous by default; use `-Wait` to block until execution completes.
+Queues a Run Profile for execution on the JIM worker service. The operation is asynchronous by default; use `-Wait` to block until execution completes.
 
 ### Syntax
 
 ```powershell
-# By run profile ID (default)
+# By Run Profile ID (default)
 Start-JIMRunProfile -RunProfileId <int> [-Wait] [-Timeout <int>] [-PassThru]
 
-# By run profile name and connected system name
+# By Run Profile name and Connected System name
 Start-JIMRunProfile -ConnectedSystemName <string> -RunProfileName <string> [-Wait] [-Timeout <int>] [-PassThru]
 
-# By run profile ID and connected system name
+# By Run Profile ID and Connected System name
 Start-JIMRunProfile -RunProfileId <int> -ConnectedSystemName <string> [-Wait] [-Timeout <int>] [-PassThru]
 
-# By run profile name and connected system ID
+# By Run Profile name and Connected System ID
 Start-JIMRunProfile -ConnectedSystemId <int> -RunProfileName <string> [-Wait] [-Timeout <int>] [-PassThru]
 ```
 
@@ -232,10 +232,10 @@ Start-JIMRunProfile -ConnectedSystemId <int> -RunProfileName <string> [-Wait] [-
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `RunProfileId` | `int` | Yes (ById, ByIdAndName sets) | | ID of the run profile to execute. Alias: `Id`. |
-| `RunProfileName` | `string` | Yes (ByName, ByNameAndId sets) | | Name of the run profile to execute. |
-| `ConnectedSystemId` | `int` | Yes (ByNameAndId set) | | ID of the connected system that owns the run profile. |
-| `ConnectedSystemName` | `string` | Yes (ByName, ByIdAndName sets) | | Name of the connected system that owns the run profile. |
+| `RunProfileId` | `int` | Yes (ById, ByIdAndName sets) | | ID of the Run Profile to execute. Alias: `Id`. |
+| `RunProfileName` | `string` | Yes (ByName, ByNameAndId sets) | | Name of the Run Profile to execute. |
+| `ConnectedSystemId` | `int` | Yes (ByNameAndId set) | | ID of the Connected System that owns the Run Profile. |
+| `ConnectedSystemName` | `string` | Yes (ByName, ByIdAndName sets) | | Name of the Connected System that owns the Run Profile. |
 | `Wait` | `switch` | No | `$false` | Blocks until execution completes, displaying a progress indicator. Polls every 2 seconds. |
 | `Timeout` | `int` | No | | Maximum number of seconds to wait when `-Wait` is specified. If exceeded, an error is thrown containing the activity ID for manual follow-up. |
 | `PassThru` | `switch` | No | `$false` | Returns the execution response object to the pipeline. |
@@ -251,7 +251,7 @@ By default, writes status messages to the host. When `-PassThru` is specified, r
 
 ### Examples
 
-```powershell title="Start a run profile by ID"
+```powershell title="Start a Run Profile by ID"
 Start-JIMRunProfile -RunProfileId 42
 ```
 
@@ -273,7 +273,7 @@ Write-Host "Activity ID: $($result.ActivityId)"
 Write-Host "Task ID: $($result.TaskId)"
 ```
 
-```powershell title="Pipeline: start all full imports for a connected system"
+```powershell title="Pipeline: start all full imports for a Connected System"
 Get-JIMRunProfile -ConnectedSystemId 1 |
     Where-Object { $_.Type -eq "FullImport" } |
     ForEach-Object { Start-JIMRunProfile -RunProfileId $_.Id -Wait }
@@ -283,21 +283,21 @@ Get-JIMRunProfile -ConnectedSystemId 1 |
 try {
     Start-JIMRunProfile -RunProfileId 42 -Wait -Timeout 600 -PassThru -ErrorAction Stop
 } catch {
-    Write-Error "Run profile execution failed or timed out: $_"
+    Write-Error "Run Profile execution failed or timed out: $_"
 }
 ```
 
 ### Notes
 
-- The run profile is queued as an asynchronous task on the JIM worker service. Without `-Wait`, the cmdlet returns immediately after the task is queued.
+- The Run Profile is queued as an asynchronous task on the JIM worker service. Without `-Wait`, the cmdlet returns immediately after the task is queued.
 - When `-Wait` is specified, the cmdlet polls the activity status every 2 seconds and displays a progress bar. If authentication tokens expire during polling, the cmdlet retries up to 3 times before failing.
 - If `-Timeout` is exceeded, the cmdlet throws a terminating error that includes the activity ID, allowing you to check progress manually via [Get-JIMActivity](activities.md) or the JIM web interface.
-- Run profiles that are already executing will be rejected by the server; you do not need to check for running profiles before calling this cmdlet.
+- Run Profiles that are already executing will be rejected by the server; you do not need to check for running profiles before calling this cmdlet.
 
 ---
 
 ## See also
 
-- [Run Profiles](../configuration/run-profiles.md): what run profiles are, run types, and how they fit alongside schedules and activities
+- [Run Profiles](../configuration/run-profiles.md): what Run Profiles are, run types, and how they fit alongside schedules and activities
 - [Activities](activities.md): cmdlets for monitoring and inspecting activity execution history
-- [Connected Systems](connected-systems.md): cmdlets for managing connected systems
+- [Connected Systems](connected-systems.md): cmdlets for managing Connected Systems

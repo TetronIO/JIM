@@ -571,7 +571,7 @@ public class ConnectedSystemCsoCacheTests
     [Test]
     public async Task WarmCsoCacheAsync_IncludesSecondaryExternalIdForPendingProvisioningCsosAsync()
     {
-        // Arrange — simulate a connected system with a PendingProvisioning CSO (no primary ID, has secondary)
+        // Arrange — simulate a Connected System with a PendingProvisioning CSO (no primary ID, has secondary)
         var connectedSystemId = 1;
         var secondaryAttributeId = 55;
         var csoId = Guid.NewGuid();

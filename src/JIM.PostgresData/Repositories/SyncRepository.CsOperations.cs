@@ -415,7 +415,7 @@ public partial class SyncRepository
         // DN strings in StringValue but have ReferenceValueId nulled during COPY binary persistence
         // to avoid FK violations when the referenced CSO is in a later batch. After all batches
         // complete, this method resolves those references by matching StringValue against the
-        // secondary external ID attribute values of CSOs in the same connected system.
+        // secondary external ID attribute values of CSOs in the same Connected System.
         //
         // Unlike the CSO attribute value fixup, there is no dedicated "UnresolvedReferenceValue"
         // column on change records — the DN is stored in StringValue alongside regular string values.
@@ -464,7 +464,7 @@ public partial class SyncRepository
         if (pendingExportsList.Count == 0)
             return;
 
-        // Pre-generate IDs for all pending exports and their attribute value changes
+        // Pre-generate IDs for all Pending Exports and their attribute value changes
         foreach (var pe in pendingExportsList)
         {
             if (pe.Id == Guid.Empty)

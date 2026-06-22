@@ -58,17 +58,17 @@ ConnectedSystem
 - No cascading sync operations during delete
 - Admin can choose whether to queue MVO cleanup job
 
-### Q2: How do we handle Sync Rules?
+### Q2: How do we handle Synchronisation Rules?
 
 **Options:**
 
 | Option | Description |
 |--------|-------------|
-| A. Block deletion if sync rules exist | Require admin to delete sync rules first |
-| B. Cascade delete sync rules | Automatically delete all sync rules for this system |
-| C. Disable sync rules | Mark sync rules as disabled rather than deleting |
+| A. Block deletion if Synchronisation Rules exist | Require admin to delete Synchronisation Rules first |
+| B. Cascade delete Synchronisation Rules | Automatically delete all Synchronisation Rules for this system |
+| C. Disable Synchronisation Rules | Mark Synchronisation Rules as disabled rather than deleting |
 
-**Decision**: Option B - Cascade delete sync rules. They're useless without the system anyway. Show count in confirmation dialog.
+**Decision**: Option B - Cascade delete Synchronisation Rules. They're useless without the system anyway. Show count in confirmation dialog.
 
 ### Q3: How do we handle Activities?
 
@@ -308,7 +308,7 @@ public async Task<ConnectedSystemDeletionPreview> GenerateDeletionPreviewAsync(i
         preview.Warnings.Add($"{preview.MvosWithGracePeriodCount} MVOs will be scheduled for deletion (grace period applies)");
 
     if (preview.PendingExportCount > 0)
-        preview.Warnings.Add($"{preview.PendingExportCount} pending exports will be discarded");
+        preview.Warnings.Add($"{preview.PendingExportCount} Pending Exports will be discarded");
 
     // Estimate time
     preview.WillRunAsBackgroundJob = preview.ConnectedSystemObjectCount >= 1000;
@@ -332,7 +332,7 @@ User clicks "Delete System"
 |  +-- Preview Impact ----------------------------------------+   |
 |  |  Objects to delete:                                      |   |
 |  |  - 12,847 Connected System Objects                       |   |
-|  |  - 3 Sync Rules                                          |   |
+|  |  - 3 Synchronisation Rules                                          |   |
 |  |  - 2 Run Profiles                                        |   |
 |  |  - 15 Pending Exports                                    |   |
 |  |                                                          |   |
@@ -342,7 +342,7 @@ User clicks "Delete System"
 |  |  - 4,300 MVOs will be scheduled for deletion (30d grace) |   |
 |  |  - 0 MVOs will be immediately deleted                    |   |
 |  |                                                          |   |
-|  |  [!] 15 pending exports will be discarded                |   |
+|  |  [!] 15 Pending Exports will be discarded                |   |
 |  |                                                          |   |
 |  |  Estimated time: ~45 seconds (background job)            |   |
 |  +----------------------------------------------------------+   |
@@ -421,8 +421,8 @@ public async Task<DeletionResult> RequestDeleteConnectedSystemAsync(
     //    a. PendingExports
     //    b. CSO attribute values, changes, then CSOs
     //    c. Partitions, containers
-    //    d. Run profiles
-    //    e. Sync rules (cascade handles mappings)
+    //    d. Run Profiles
+    //    e. Synchronisation Rules (cascade handles mappings)
     //    f. Object types (cascade handles attributes)
     //    g. Setting values
     //    h. Null Activity FKs
@@ -474,7 +474,7 @@ Query params:
 - Add "Delete System" button to Connected System detail page
 - Confirmation dialog showing:
   - CSO count
-  - Sync rule count
+  - Synchronisation Rule count
   - Warning about joined MVOs
   - Checkbox for MVO deletion rule evaluation
 - Progress indicator for sync operations
@@ -499,7 +499,7 @@ Query params:
 ## SQL Delete Order (PostgreSQL)
 
 ```sql
--- 1. Delete pending exports and their attribute changes
+-- 1. Delete Pending Exports and their attribute changes
 DELETE FROM "PendingExportAttributeValueChanges"
 WHERE "PendingExportId" IN (SELECT "Id" FROM "PendingExports" WHERE "ConnectedSystemId" = @id);
 DELETE FROM "PendingExports" WHERE "ConnectedSystemId" = @id;
@@ -528,7 +528,7 @@ WHERE "ConnectedSystemObjectId" IN (
 );
 DELETE FROM "ConnectedSystemObjects" WHERE "ConnectedSystemId" = @id;
 
--- 5. Delete sync rules (cascades to mappings, sources, scoping)
+-- 5. Delete Synchronisation Rules (cascades to mappings, sources, scoping)
 DELETE FROM "SyncRules" WHERE "ConnectedSystemId" = @id;
 
 -- 6. Delete containers and partitions
@@ -538,7 +538,7 @@ WHERE "PartitionId" IN (
 );
 DELETE FROM "ConnectedSystemPartitions" WHERE "ConnectedSystemId" = @id;
 
--- 7. Delete run profiles
+-- 7. Delete Run Profiles
 DELETE FROM "ConnectedSystemRunProfiles" WHERE "ConnectedSystemId" = @id;
 
 -- 8. Delete object types (cascades to attributes)
@@ -554,7 +554,7 @@ UPDATE "Activities" SET "ConnectedSystemId" = NULL WHERE "ConnectedSystemId" = @
 DELETE FROM "WorkerTasks" WHERE "Discriminator" IN ('SynchronisationWorkerTask', 'ClearConnectedSystemObjectsWorkerTask')
 AND (("SyncTask_ConnectedSystemId" = @id) OR ("ClearTask_ConnectedSystemId" = @id));
 
--- 12. Finally, delete the connected system
+-- 12. Finally, delete the Connected System
 DELETE FROM "ConnectedSystems" WHERE "Id" = @id;
 ```
 
@@ -565,7 +565,7 @@ DELETE FROM "ConnectedSystems" WHERE "Id" = @id;
    - Delete system with no CSOs
    - Delete system with CSOs (no MVO joins)
    - Delete system with joined CSOs
-   - Delete system with sync rules
+   - Delete system with Synchronisation Rules
    - Delete system with running tasks (should block and report clear error)
    - Verify "Deleting" status is set atomically
    - Verify status is rolled back if deletion fails
@@ -584,9 +584,9 @@ DELETE FROM "ConnectedSystems" WHERE "Id" = @id;
 
 1. **Preview is default** - Show deletion impact preview before confirming (can be skipped)
 2. **Type name to confirm** - Require typing the system name for safety (like GitHub repo deletion)
-3. **Pending exports shown in preview** - Warn about pending exports but don't block deletion
+3. **Pending Exports shown in preview** - Warn about Pending Exports but don't block deletion
 4. **Q1: Handle MVO deletion** - Option D (Disconnect first, delete second) - preserves referential integrity and allows MVO rules to be evaluated in background
-5. **Q2: Handle Sync Rules** - Option B (Cascade delete) - sync rules are useless without the system; show count in confirmation
+5. **Q2: Handle Synchronisation Rules** - Option B (Cascade delete) - Synchronisation Rules are useless without the system; show count in confirmation
 6. **Q3: Handle Activities** - Option B (Null FK) - preserve immutable audit logs; activity serialization deferred to post-MVP enhancement ([#136](https://github.com/TetronIO/JIM/issues/136))
 7. **Q4: Deletion mode** - Option C (Auto-detect) - synchronous for <1000 CSOs, async background job for >=1000 CSOs
 8. **Q5: Concurrency safety** - Option E (Queue-based approach) - set "Deleting" status, block new ops, queue deletion after any running sync completes
@@ -662,7 +662,7 @@ public class MvoImpactDetail
 
 This analysis is expensive:
 - Must iterate all CSOs and their contributed attributes
-- Must check sync rule recall settings and priority
+- Must check Synchronisation Rule recall settings and priority
 - Must evaluate export rules for each MVO change
 - For 100k CSOs × 50 attributes = 5M evaluations
 
@@ -671,7 +671,7 @@ This analysis is expensive:
 2. Sample-based: Analyse first N MVOs, extrapolate
 3. Attribute-focused: Show top 10 most-impacted attributes with counts
 4. Background job: Queue analysis, show results when ready
-5. Caching: Cache sync rule/priority lookups
+5. Caching: Cache Synchronisation Rule/priority lookups
 
 ### UI Mockup
 
@@ -681,7 +681,7 @@ This analysis is expensive:
 |                                                                |
 |  +-- Basic Impact ----------------------------------------+    |
 |  |  - 12,847 CSOs will be deleted                         |    |
-|  |  - 3 Sync Rules will be deleted                        |    |
+|  |  - 3 Synchronisation Rules will be deleted                        |    |
 |  |  - 4,300 MVOs may be affected                          |    |
 |  +--------------------------------------------------------+    |
 |                                                                |

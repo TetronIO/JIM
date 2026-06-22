@@ -90,7 +90,7 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
     }
 
     /// <summary>
-    /// Sets a factory function to generate export results for each pending export.
+    /// Sets a factory function to generate export results for each Pending Export.
     /// If not set, all exports succeed by default.
     /// </summary>
     public MockCallConnector WithConnectedSystemExportResultFactory(Func<PendingExport, ConnectedSystemExportResult> factory)
@@ -100,7 +100,7 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
     }
 
     /// <summary>
-    /// Sets a specific export result for a pending export ID.
+    /// Sets a specific export result for a Pending Export ID.
     /// Takes precedence over the export result factory.
     /// </summary>
     public MockCallConnector WithConnectedSystemExportResult(Guid pendingExportId, ConnectedSystemExportResult result)
@@ -110,7 +110,7 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
     }
 
     /// <summary>
-    /// Sets a factory to generate confirming import objects from exported pending exports.
+    /// Sets a factory to generate confirming import objects from exported Pending Exports.
     /// Used to simulate the target system returning the objects we just created.
     /// </summary>
     public MockCallConnector WithConfirmingImportFactory(Func<PendingExport, ConnectedSystemImportObject> factory)
@@ -140,7 +140,7 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
     public List<string?> ImportPersistedDataHistory { get; } = new();
 
     /// <summary>
-    /// Gets all pending exports that were processed during Export calls.
+    /// Gets all Pending Exports that were processed during Export calls.
     /// Useful for verifying what was sent to the "target system".
     /// </summary>
     public IReadOnlyList<PendingExport> ExportedItems => _exportedItems;

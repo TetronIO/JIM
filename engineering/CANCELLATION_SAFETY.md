@@ -39,9 +39,9 @@ When cancellation is detected inside the CSO processing loop, the processor imme
 
 ### Level 2: Flush Already-Processed Objects
 
-Objects already evaluated within the current page have accumulated in-memory batch collections (pending MVO creates/updates, pending exports, RPEIs, etc.). These must be flushed to the database before exiting. This is bounded work -- at most one page of objects (typically 100-500).
+Objects already evaluated within the current page have accumulated in-memory batch collections (pending MVO creates/updates, Pending Exports, RPEIs, etc.). These must be flushed to the database before exiting. This is bounded work -- at most one page of objects (typically 100-500).
 
-Without this flush, the database can be left in an inconsistent state where MVOs exist without corresponding pending exports, causing target systems to silently miss updates.
+Without this flush, the database can be left in an inconsistent state where MVOs exist without corresponding Pending Exports, causing target systems to silently miss updates.
 
 ## Risk Windows by Operation Type
 
@@ -53,14 +53,14 @@ The sync page pipeline has 8 sequential persistence calls:
 1. PersistPendingMetaverseObjectsAsync    -- saves MVO creates/updates
 2. CreatePendingMvoChangeObjectsAsync     -- saves MVO change history
 3. EvaluatePendingExportsAsync            -- evaluates export rules
-4. FlushPendingExportOperationsAsync      -- saves pending exports
+4. FlushPendingExportOperationsAsync      -- saves Pending Exports
 5. ResolvePendingExportReferenceSnapshotsAsync -- resolves deferred refs
 6. FlushObsoleteCsoOperationsAsync        -- deletes obsolete CSOs
 7. FlushPendingMvoDeletionsAsync          -- deletes 0-grace-period MVOs
 8. FlushRpeisAsync                        -- bulk inserts RPEIs
 ```
 
-**Highest-risk window** (before #339 fix): If a crash or cancellation occurs after step 1 but before step 4, MVOs are updated but no pending exports are created. Target systems silently miss the update, and a subsequent sync won't regenerate exports because CSO attributes haven't changed.
+**Highest-risk window** (before #339 fix): If a crash or cancellation occurs after step 1 but before step 4, MVOs are updated but no Pending Exports are created. Target systems silently miss the update, and a subsequent sync won't regenerate exports because CSO attributes haven't changed.
 
 **After the fix**: The flush pipeline always runs to completion for objects already processed on the current page. Cancellation only takes effect after the flush, and only prevents advancing to the next page.
 
@@ -96,7 +96,7 @@ No special cancellation handling needed:
 
 1. Re-process all CSOs from scratch
 2. Re-evaluate all export rules
-3. Regenerate any missing pending exports
+3. Regenerate any missing Pending Exports
 4. Set the watermark correctly
 
 For delta sync specifically: since the watermark is not updated on cancellation, the next delta sync will re-process all objects modified since the last successful sync.

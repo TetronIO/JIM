@@ -10,12 +10,12 @@ namespace JIM.Models.Activities;
 public class ActivityFilterOptions
 {
     /// <summary>
-    /// Distinct connected system names (from TargetContext).
+    /// Distinct Connected System names (from TargetContext).
     /// </summary>
     public List<string> ConnectedSystems { get; set; } = [];
 
     /// <summary>
-    /// Distinct run profile names (from TargetName).
+    /// Distinct Run Profile names (from TargetName).
     /// </summary>
     public List<string> RunProfiles { get; set; } = [];
 }

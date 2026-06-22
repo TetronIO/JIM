@@ -11,9 +11,9 @@ public interface IConnectorImportUsingCalls
     public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, ILogger logger);
 
     /// <summary>
-    /// Used by JIM.Service to retrieve data from the connected system. This will be called multiple times, depending on the user-configured page size, and whether there are more results to retrieve after a page of results.
+    /// Used by JIM.Service to retrieve data from the Connected System. This will be called multiple times, depending on the user-configured page size, and whether there are more results to retrieve after a page of results.
     /// </summary>
-    /// <param name="connectedSystem">Contains informaton on the connected system, i.e. schema, containers, etc.</param>
+    /// <param name="connectedSystem">Contains informaton on the Connected System, i.e. schema, containers, etc.</param>
     /// <param name="runProfile">Contains information on what type of synchronisation run to perform.</param>
     /// <param name="paginationTokens">If you previously supplied pagination tokens as part of returning a page of results to JIM, then they will be played back to you on the next call to ImportAsync().</param>
     /// <param name="persistedConnectorData">If you have previously returned a value to JIM for ConnectedSystemImportResult.PersistedConnectorData, then this is the replayed value. Useful for knowing what the state of a previous synchronisarion run was, i.e. for determining where to query from in a Delta Import run.</param>

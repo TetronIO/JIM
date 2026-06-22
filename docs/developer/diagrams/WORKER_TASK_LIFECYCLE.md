@@ -158,9 +158,9 @@ flowchart LR
 ## Key Design Decisions
 
 - **Three-layer sync DI architecture (#394)**<br /> Worker processors use three collaborating interfaces injected at task spawn time:
-  - **ISyncEngine:** Pure domain logic (projection decisions, attribute flow, deletion rules, export confirmation). Stateless, synchronous, zero-dependency, I/O-free, fully unit-testable. 8 methods covering projection, attribute flow, export confirmation, deletion rules, and reconciliation. Used by import, full sync, and delta sync processors.
+  - **ISyncEngine:** Pure domain logic (projection decisions, Attribute Flow, deletion rules, export confirmation). Stateless, synchronous, zero-dependency, I/O-free, fully unit-testable. 8 methods covering projection, Attribute Flow, export confirmation, deletion rules, and reconciliation. Used by import, full sync, and delta sync processors.
   - **ISyncServer:** Orchestration facade that delegates to existing application-layer servers (ExportEvaluationServer, ExportExecutionServer, ScopingEvaluationServer, DriftDetectionService) and ISyncRepository. All processors use this.
-  - **ISyncRepository:** Dedicated data access boundary for sync operations (bulk CSO/MVO writes, pending exports, RPEIs). Replaces scattered access through multiple server properties.
+  - **ISyncRepository:** Dedicated data access boundary for sync operations (bulk CSO/MVO writes, Pending Exports, RPEIs). Replaces scattered access through multiple server properties.
 
 - **Per-task DI scope (#394)**<br /> Each spawned task gets its own `JimApplication` (via `IJimApplicationFactory.Create()`), `JimDbContext`, `ISyncRepository`, `ISyncServer`, and `ISyncEngine`, fully isolated from the main loop and other tasks. This avoids EF Core connection sharing issues and ensures each task can be disposed independently. The main loop has its own instance for polling and heartbeats.
 

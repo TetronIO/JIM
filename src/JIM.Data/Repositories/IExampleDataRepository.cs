@@ -34,7 +34,7 @@ public interface IExampleDataRepository
     public Task DeleteTemplateAsync(int templateId);
 
     /// <summary>
-    /// Bulk creates metaverse objects in the database using batched persistence.
+    /// Bulk creates Metaverse Objects in the database using batched persistence.
     /// </summary>
     /// <param name="metaverseObjects">The list of MetaverseObjects to persist.</param>
     /// <param name="batchSize">Number of objects to persist per batch. Smaller batches reduce memory pressure.</param>

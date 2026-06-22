@@ -16,7 +16,7 @@ namespace JIM.Workflow.Tests.Scenarios.Sync;
 /// Workflow tests for no-net-change detection in export evaluation.
 /// These tests verify that exports are skipped when:
 /// 1. MVO has no attribute changes relevant to export rule
-/// 2. CSO already has the same value(s) as the pending export
+/// 2. CSO already has the same value(s) as the Pending Export
 ///
 /// Issue #244: Export Evaluation No-Net-Change Detection
 /// </summary>
@@ -71,7 +71,7 @@ public class NoNetChangeWorkflowTests
         await _harness.ExecuteExportAsync("AD");
         var afterExport = await _harness.TakeSnapshotAsync("After Export");
 
-        // Clear the pending exports (mark as completed)
+        // Clear the Pending Exports (mark as completed)
         foreach (var pe in _harness.SyncRepo.PendingExports.Values.ToList())
         {
             pe.Status = PendingExportStatus.Exported;
@@ -80,7 +80,7 @@ public class NoNetChangeWorkflowTests
         // Simulate CSO attribute values being populated (as they would be after confirming import)
         await PopulateCsoAttributeValuesFromPendingExportsAsync();
 
-        // Delete pending exports to reset state
+        // Delete Pending Exports to reset state
         _harness.SyncRepo.ClearAllPendingExports();
 
         var beforeSecondSync = await _harness.TakeSnapshotAsync("Before Second Sync");
@@ -119,7 +119,7 @@ public class NoNetChangeWorkflowTests
         await _harness.ExecuteExportAsync("AD");
         await PopulateCsoAttributeValuesFromPendingExportsAsync();
 
-        // Clear pending exports
+        // Clear Pending Exports
         _harness.SyncRepo.ClearAllPendingExports();
 
         // Step 2: Change department but keep displayName the same
@@ -173,7 +173,7 @@ public class NoNetChangeWorkflowTests
         await _harness.ExecuteExportAsync("AD");
         await PopulateCsoAttributeValuesFromPendingExportsAsync();
 
-        // Clear pending exports
+        // Clear Pending Exports
         _harness.SyncRepo.ClearAllPendingExports();
 
         // Step 2: Run sync with same data
@@ -228,7 +228,7 @@ public class NoNetChangeWorkflowTests
             }
         }
 
-        // Clear pending exports
+        // Clear Pending Exports
         _harness.SyncRepo.ClearAllPendingExports();
 
         // Step 2: Update with non-null displayName
@@ -263,7 +263,7 @@ public class NoNetChangeWorkflowTests
         await _harness.ExecuteExportAsync("AD");
         await PopulateCsoAttributeValuesFromPendingExportsAsync();
 
-        // Clear pending exports
+        // Clear Pending Exports
         _harness.SyncRepo.ClearAllPendingExports();
 
         // Step 2: Sync with different value "NewName"
@@ -324,7 +324,7 @@ public class NoNetChangeWorkflowTests
         await _harness.ExecuteExportAsync("AD");
         await PopulateCsoAttributeValuesFromPendingExportsAsync();
 
-        // Clear pending exports
+        // Clear Pending Exports
         _harness.SyncRepo.ClearAllPendingExports();
 
         // Step 2: Sync with same string value
@@ -356,7 +356,7 @@ public class NoNetChangeWorkflowTests
         await _harness.ExecuteExportAsync("AD");
         await PopulateCsoAttributeValuesFromPendingExportsAsync();
 
-        // Clear pending exports
+        // Clear Pending Exports
         _harness.SyncRepo.ClearAllPendingExports();
 
         // Step 2: Sync with same integer value
@@ -388,7 +388,7 @@ public class NoNetChangeWorkflowTests
         await _harness.ExecuteExportAsync("AD");
         await PopulateCsoAttributeValuesFromPendingExportsAsync();
 
-        // Clear pending exports
+        // Clear Pending Exports
         _harness.SyncRepo.ClearAllPendingExports();
 
         // Step 2: Sync with different integer value
@@ -410,12 +410,12 @@ public class NoNetChangeWorkflowTests
     /// Verifies that Add operation is skipped when value already exists in CSO.
     /// Scenario: Group already has member, trying to add same member should skip.
     ///
-    /// Note: This test requires multi-valued attribute flow support which is complex
+    /// Note: This test requires multi-valued Attribute Flow support which is complex
     /// to set up in the workflow harness. The unit tests in ExportEvaluationNoChangeTests
     /// cover the IsCsoAttributeAlreadyCurrent logic for Add operations.
     /// </summary>
     [Test]
-    [Explicit("Requires multi-valued attribute flow infrastructure not yet implemented in harness")]
+    [Explicit("Requires multi-valued Attribute Flow infrastructure not yet implemented in harness")]
     public async Task GroupMembership_AddMemberAlreadyExists_NoExportCreated_Async()
     {
         // Arrange: Set up group membership scenario
@@ -432,7 +432,7 @@ public class NoNetChangeWorkflowTests
         await _harness.ExecuteExportAsync("GroupTarget");
         await PopulateCsoMultiValuedAttributesAsync("member", new[] { "Member1", "Member2" });
 
-        // Clear pending exports
+        // Clear Pending Exports
         _harness.SyncRepo.ClearAllPendingExports();
 
         // Step 2: Try to add same member (Member1 already exists)
@@ -451,12 +451,12 @@ public class NoNetChangeWorkflowTests
     /// <summary>
     /// Verifies that Add operation creates export when adding new member.
     ///
-    /// Note: This test requires multi-valued attribute flow support which is complex
+    /// Note: This test requires multi-valued Attribute Flow support which is complex
     /// to set up in the workflow harness. The unit tests in ExportEvaluationNoChangeTests
     /// cover the IsCsoAttributeAlreadyCurrent logic for Add operations.
     /// </summary>
     [Test]
-    [Explicit("Requires multi-valued attribute flow infrastructure not yet implemented in harness")]
+    [Explicit("Requires multi-valued Attribute Flow infrastructure not yet implemented in harness")]
     public async Task GroupMembership_AddNewMember_ExportCreated_Async()
     {
         // Arrange: Set up group membership scenario
@@ -473,7 +473,7 @@ public class NoNetChangeWorkflowTests
         await _harness.ExecuteExportAsync("GroupTarget");
         await PopulateCsoMultiValuedAttributesAsync("member", new[] { "Member1", "Member2" });
 
-        // Clear pending exports
+        // Clear Pending Exports
         _harness.SyncRepo.ClearAllPendingExports();
 
         // Step 2: Add new member (Member3)
@@ -493,12 +493,12 @@ public class NoNetChangeWorkflowTests
     /// <summary>
     /// Verifies that Remove operation is skipped when member doesn't exist in CSO.
     ///
-    /// Note: This test requires multi-valued attribute flow support which is complex
+    /// Note: This test requires multi-valued Attribute Flow support which is complex
     /// to set up in the workflow harness. The unit tests in ExportEvaluationNoChangeTests
     /// cover the IsCsoAttributeAlreadyCurrent logic for Remove operations.
     /// </summary>
     [Test]
-    [Explicit("Requires multi-valued attribute flow infrastructure not yet implemented in harness")]
+    [Explicit("Requires multi-valued Attribute Flow infrastructure not yet implemented in harness")]
     public async Task GroupMembership_RemoveMemberNotExists_NoExportCreated_Async()
     {
         // Arrange: Set up group membership scenario
@@ -517,7 +517,7 @@ public class NoNetChangeWorkflowTests
         // Populate CSO with only Member1 (not Member2)
         await PopulateCsoMultiValuedAttributesAsync("member", new[] { "Member1" });
 
-        // Clear pending exports
+        // Clear Pending Exports
         _harness.SyncRepo.ClearAllPendingExports();
 
         // Step 2: Try to remove Member2 (doesn't exist in CSO)
@@ -563,7 +563,7 @@ public class NoNetChangeWorkflowTests
         var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
         var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
 
-        // Create import sync rule (HR → MV)
+        // Create import Synchronisation Rule (HR → MV)
         await _harness.CreateSyncRuleAsync(
             "HR Import",
             "HR",
@@ -575,7 +575,7 @@ public class NoNetChangeWorkflowTests
                 .WithAttributeFlow(mvDisplayName, hrDisplayName)
                 .WithExpressionFlow("\"PersonEntity\"", mvType));
 
-        // Create export sync rule (MV → AD)
+        // Create export Synchronisation Rule (MV → AD)
         await _harness.CreateSyncRuleAsync(
             "AD Export",
             "AD",
@@ -627,7 +627,7 @@ public class NoNetChangeWorkflowTests
         var mvDepartment = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "department");
         var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
 
-        // Create import sync rule (HR → MV)
+        // Create import Synchronisation Rule (HR → MV)
         await _harness.CreateSyncRuleAsync(
             "HR Import",
             "HR",
@@ -640,7 +640,7 @@ public class NoNetChangeWorkflowTests
                 .WithAttributeFlow(mvDepartment, hrDepartment)
                 .WithExpressionFlow("\"PersonEntity\"", mvType));
 
-        // Create export sync rule (MV → AD)
+        // Create export Synchronisation Rule (MV → AD)
         await _harness.CreateSyncRuleAsync(
             "AD Export",
             "AD",
@@ -693,7 +693,7 @@ public class NoNetChangeWorkflowTests
         var mvEmployeeNumber = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "employeeNumber");
         var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
 
-        // Create import sync rule (HR → MV)
+        // Create import Synchronisation Rule (HR → MV)
         await _harness.CreateSyncRuleAsync(
             "HR Import",
             "HR",
@@ -706,7 +706,7 @@ public class NoNetChangeWorkflowTests
                 .WithAttributeFlow(mvEmployeeNumber, hrEmployeeNumber)
                 .WithExpressionFlow("\"PersonEntity\"", mvType));
 
-        // Create export sync rule (MV → AD)
+        // Create export Synchronisation Rule (MV → AD)
         await _harness.CreateSyncRuleAsync(
             "AD Export",
             "AD",
@@ -757,7 +757,7 @@ public class NoNetChangeWorkflowTests
         var mvGroupName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "groupName");
         var mvMembers = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "members");
 
-        // Create import sync rule
+        // Create import Synchronisation Rule
         await _harness.CreateSyncRuleAsync(
             "Group Import",
             "GroupSource",
@@ -769,7 +769,7 @@ public class NoNetChangeWorkflowTests
                 .WithAttributeFlow(mvGroupName, sourceGroupName)
                 .WithAttributeFlow(mvMembers, sourceMember));
 
-        // Create export sync rule
+        // Create export Synchronisation Rule
         await _harness.CreateSyncRuleAsync(
             "Group Export",
             "GroupTarget",
@@ -964,7 +964,7 @@ public class NoNetChangeWorkflowTests
     #region Helper Methods
 
     /// <summary>
-    /// Populates CSO attribute values based on pending exports.
+    /// Populates CSO attribute values based on Pending Exports.
     /// This simulates what would happen after a confirming import.
     /// </summary>
     private Task PopulateCsoAttributeValuesFromPendingExportsAsync()
@@ -999,7 +999,7 @@ public class NoNetChangeWorkflowTests
                     liveCso.AttributeValues.Add(existingAttrValue);
                 }
 
-                // Copy values from pending export
+                // Copy values from Pending Export
                 existingAttrValue.StringValue = avc.StringValue;
                 existingAttrValue.IntValue = avc.IntValue;
                 existingAttrValue.DateTimeValue = avc.DateTimeValue;

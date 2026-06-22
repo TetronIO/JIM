@@ -27,7 +27,7 @@ using NUnit.Framework;
 namespace JIM.Web.Api.Tests;
 
 /// <summary>
-/// Tests for Sync Rule Mapping CRUD endpoints.
+/// Tests for Synchronisation Rule Mapping CRUD endpoints.
 /// </summary>
 [TestFixture]
 public class SynchronisationControllerMappingTests

@@ -439,11 +439,11 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     {
         if (!step.ConnectedSystemId.HasValue || step.ConnectedSystemId.Value == 0)
         {
-            return "Connected system ID is required for RunProfile steps";
+            return "Connected System ID is required for RunProfile steps";
         }
         if (!step.RunProfileId.HasValue || step.RunProfileId.Value == 0)
         {
-            return "Run profile ID is required for RunProfile steps";
+            return "Run Profile ID is required for RunProfile steps";
         }
         return null;
     }

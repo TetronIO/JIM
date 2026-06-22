@@ -137,16 +137,16 @@ public class ConnectedSystemObjectReferenceDto
 /// </summary>
 public class PendingDeletionDto
 {
-    /// <summary>The unique identifier of the metaverse object.</summary>
+    /// <summary>The unique identifier of the Metaverse Object.</summary>
     public Guid Id { get; set; }
 
-    /// <summary>The display name of the metaverse object.</summary>
+    /// <summary>The display name of the Metaverse Object.</summary>
     public string? DisplayName { get; set; }
 
-    /// <summary>The type of the metaverse object.</summary>
+    /// <summary>The type of the Metaverse Object.</summary>
     public string TypeName { get; set; } = null!;
 
-    /// <summary>The type ID of the metaverse object.</summary>
+    /// <summary>The type ID of the Metaverse Object.</summary>
     public int TypeId { get; set; }
 
     /// <summary>When the last connector was disconnected from this MVO.</summary>
@@ -161,7 +161,7 @@ public class PendingDeletionDto
     /// <summary>The grace period configured for this object type.</summary>
     public TimeSpan? GracePeriod { get; set; }
 
-    /// <summary>Number of connected system objects still linked to this MVO.</summary>
+    /// <summary>Number of Connected System Objects still linked to this MVO.</summary>
     public int ConnectedSystemObjectCount { get; set; }
 
     /// <summary>

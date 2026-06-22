@@ -95,8 +95,8 @@ SCIM requests are processed through the **same inbound sync engine** as schedule
 
 This means:
 - Same join/project logic
-- Same attribute flow rules
-- Same pending export creation
+- Same Attribute Flow Rules
+- Same Pending Export creation
 - Same audit trail
 
 ---
@@ -131,7 +131,7 @@ Connected System: "HR Source"
 │       ├── members[].value (multi-valued reference)
 │       └── externalId (string)
 │
-└── Sync Rules:
+└── Synchronisation Rules:
     ├── "SCIM User -> MV Person" (Import)
     └── "SCIM Group -> MV Group" (Import)
 ```
@@ -200,7 +200,7 @@ public class ScimServerConnector : IConnector, IConnectorCapabilities, IConnecto
 /scim/v2/{systemId}/...
 ```
 
-Where `{systemId}` is the GUID of the Connected System. This allows multiple SCIM sources, each with their own authentication and sync rules.
+Where `{systemId}` is the GUID of the Connected System. This allows multiple SCIM sources, each with their own authentication and Synchronisation Rules.
 
 ### Required SCIM Endpoints
 
@@ -446,7 +446,7 @@ public class ScimAuthenticator : IScimAuthenticator
 │  6. Sync Engine Does:                                                   │
 │     ├── Find/create CSO for this external ID                            │
 │     ├── Evaluate join rules -> find/create MVO                          │
-│     ├── Apply attribute flow rules                                      │
+│     ├── Apply Attribute Flow Rules                                      │
 │     ├── Update MVO attributes                                           │
 │     └── Create Pending Exports (per Option A decision)                  │
 │                                                                         │
@@ -539,12 +539,12 @@ public async Task<IActionResult> DeleteUser(Guid systemId, string userId)
 | `department` | `department` | |
 | `manager.value` | `manager` | Reference to another user |
 
-### Sync Rule Example
+### Synchronisation Rule Example
 
-Admin configures sync rules to map SCIM attributes to MVO:
+Admin configures Synchronisation Rules to map SCIM attributes to MVO:
 
 ```
-Sync Rule: "SCIM User to MV Person"
+Synchronisation Rule: "SCIM User to MV Person"
 ├── Source: Connected System "HR Source", Object Type "User"
 ├── Target: Metaverse Object Type "Person"
 ├── Direction: Import
@@ -642,7 +642,7 @@ A) **Strict** - Reject if any member not found
 B) **Lenient** - Accept group, ignore unknown members
 C) **Deferred** - Store references, resolve during sync
 
-**Recommendation**: Option C - Store member references as-is, resolve during attribute flow to MVO.
+**Recommendation**: Option C - Store member references as-is, resolve during Attribute Flow to MVO.
 
 ---
 
@@ -668,7 +668,7 @@ public async Task<IActionResult> CreateUser(Guid systemId, ScimUser user)
 {
     if (user.Manager?.Value != null)
     {
-        // Look up referenced CSO in THIS connected system
+        // Look up referenced CSO in THIS Connected System
         var managerCso = await _repository.ConnectedSystemObjects
             .GetByExternalIdAsync(systemId, user.Manager.Value);
 
@@ -816,13 +816,13 @@ Multiple SCIM requests for the same user arrive simultaneously.
 
 SCIM manager reference points to user that doesn't exist yet.
 
-**Solution**: Store raw reference value. Resolve to MVO reference during attribute flow (deferred resolution).
+**Solution**: Store raw reference value. Resolve to MVO reference during Attribute Flow (deferred resolution).
 
 ### 3. Schema Extensions
 
 Client sends custom SCIM schema extensions.
 
-**Solution**: Store in CSO as custom attributes. Admin can map via sync rules.
+**Solution**: Store in CSO as custom attributes. Admin can map via Synchronisation Rules.
 
 ### 4. Large Payloads
 
@@ -876,7 +876,7 @@ PATCH operation has 5 operations, 2 fail.
 
 ### Integration Tests
 - Full request flow: SCIM request -> CSO -> MVO -> Pending Export
-- Sync rule application
+- Synchronisation Rule application
 - Error handling
 
 ### Compliance Tests

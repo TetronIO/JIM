@@ -4,7 +4,7 @@
 namespace JIM.Models.Staging;
 
 /// <summary>
-/// Represents the result of an export operation to a connected system.
+/// Represents the result of an export operation to a Connected System.
 /// Connectors return this to provide feedback about the export, including
 /// any system-generated identifiers.
 /// </summary>

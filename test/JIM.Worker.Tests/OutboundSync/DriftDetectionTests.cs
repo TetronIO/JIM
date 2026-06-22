@@ -78,7 +78,7 @@ public class DriftDetectionTests
         MetaverseObjectTypesData = TestUtilities.GetMetaverseObjectTypeData();
         MockDbSetMetaverseObjectTypes = MetaverseObjectTypesData.BuildMockDbSet();
 
-        // Set up the Sync Rules mock
+        // Set up the Synchronisation Rules mock
         SyncRulesData = new List<SyncRule>();
         MockDbSetSyncRules = SyncRulesData.BuildMockDbSet();
 
@@ -501,7 +501,7 @@ public class DriftDetectionTests
         var cso = CreateTestCso(mvo);
         mvo.ConnectedSystemObjects.Add(cso);
 
-        // Export rule for a different connected system
+        // Export rule for a different Connected System
         var exportRule = CreateExportRule(enforceState: true);
         exportRule.ConnectedSystemId = 999; // Different system
 
@@ -807,7 +807,7 @@ public class DriftDetectionTests
         }
         groupMvo.ConnectedSystemObjects.Add(groupCso);
 
-        // Build import mapping cache from ALL sync rules (includes Source import rule)
+        // Build import mapping cache from ALL Synchronisation Rules (includes Source import rule)
         var importMappingCache = DriftDetectionService.BuildImportMappingCache(SyncRulesData);
 
         // Verify cache has Source system's import mapping for Static Members

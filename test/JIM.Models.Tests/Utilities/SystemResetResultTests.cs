@@ -23,11 +23,11 @@ public class SystemResetResultTests
 
         Assert.That(message, Does.StartWith("Factory reset completed (administrators removed)."));
         Assert.That(message, Does.Contain("Removed:"));
-        Assert.That(message, Does.Contain("• 2 connected systems"));
-        Assert.That(message, Does.Contain("• 1,119 metaverse objects"));
+        Assert.That(message, Does.Contain("• 2 Connected Systems"));
+        Assert.That(message, Does.Contain("• 1,119 Metaverse Objects"));
         // Count of 1 uses the singular form.
-        Assert.That(message, Does.Contain("• 1 synchronisation rule"));
-        Assert.That(message, Does.Not.Contain("• 1 synchronisation rules"));
+        Assert.That(message, Does.Contain("• 1 Synchronisation Rule"));
+        Assert.That(message, Does.Not.Contain("• 1 Synchronisation Rules"));
         // Categories with a zero count are omitted entirely.
         Assert.That(message, Does.Not.Contain("schedule"));
         Assert.That(message, Does.Not.Contain("certificate"));
@@ -45,7 +45,7 @@ public class SystemResetResultTests
         var message = result.BuildResetMessage(includeAdministrators: false);
 
         Assert.That(message, Does.StartWith("Factory reset completed (administrators retained: 2)."));
-        Assert.That(message, Does.Contain("• 5 metaverse objects"));
+        Assert.That(message, Does.Contain("• 5 Metaverse Objects"));
     }
 
     [Test]
@@ -62,10 +62,10 @@ public class SystemResetResultTests
 
         var message = result.BuildResetMessage(includeAdministrators: true);
 
-        Assert.That(message, Does.Contain("• 4 object matching rules"));
+        Assert.That(message, Does.Contain("• 4 Object Matching Rules"));
         Assert.That(message, Does.Contain("• 2 custom example data templates"));
-        Assert.That(message, Does.Contain("• 50 metaverse object change records"));
-        Assert.That(message, Does.Contain("• 60 connected system object change records"));
+        Assert.That(message, Does.Contain("• 50 Metaverse Object change records"));
+        Assert.That(message, Does.Contain("• 60 Connected System Object change records"));
         Assert.That(message, Does.Contain("• 9 schedule executions"));
     }
 

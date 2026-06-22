@@ -12,7 +12,7 @@ public enum SyncRuleDirection
 
 
 /// <summary>
-/// Used to provide some context to the user on what type of sources configuration has been used in a sync rule mapping.
+/// Used to provide some context to the user on what type of sources configuration has been used in a Synchronisation Rule mapping.
 /// </summary>
 public enum SyncRuleMappingSourcesType
 {

@@ -55,15 +55,15 @@ public class ImportUpdateObjectSvaTests
         TestUtilities.SetEnvironmentVariables();
         InitiatedBy = TestUtilities.GetInitiatedBy();
 
-        // set up the connected systems mock
+        // set up the Connected Systems mock
         ConnectedSystemsData = TestUtilities.GetConnectedSystemData();
         MockDbSetConnectedSystems = ConnectedSystemsData.BuildMockDbSet();
 
-        // setup up the connected system run profiles mock
+        // setup up the Connected System Run Profiles mock
         ConnectedSystemRunProfilesData = TestUtilities.GetConnectedSystemRunProfileData();
         MockDbSetConnectedSystemRunProfiles = ConnectedSystemRunProfilesData.BuildMockDbSet();
 
-        // set up the connected system object types mock. this acts as the persisted schema in JIM
+        // set up the Connected System Object Types mock. this acts as the persisted schema in JIM
         ConnectedSystemObjectTypesData = TestUtilities.GetConnectedSystemObjectTypeData();
         MockDbSetConnectedSystemObjectTypes = ConnectedSystemObjectTypesData.BuildMockDbSet();
 
@@ -80,7 +80,7 @@ public class ImportUpdateObjectSvaTests
         ServiceSettingsData = TestUtilities.GetServiceSettingsData();
         MockDbSetServiceSettings = ServiceSettingsData.BuildMockDbSet();
 
-        // set up the pending exports mock (empty - import tests don't have pending exports to reconcile)
+        // set up the Pending Exports mock (empty - import tests don't have Pending Exports to reconcile)
         PendingExportsData = new List<PendingExport>();
         MockDbSetPendingExports = PendingExportsData.BuildMockDbSet();
 
@@ -110,7 +110,7 @@ public class ImportUpdateObjectSvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: CONTRACTED_WEEKLY_HOURS has a populated, but different value
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
@@ -278,7 +278,7 @@ public class ImportUpdateObjectSvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: DISPLAY_NAME has a populated, but different value
         const string newDisplayNameValue = "Jane Smith-Watson";
         var mockFileConnector = new MockFileConnector();
@@ -447,7 +447,7 @@ public class ImportUpdateObjectSvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: LOCATION_ID has a populated, but different value
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
@@ -616,7 +616,7 @@ public class ImportUpdateObjectSvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: PROFILE_PICTURE_BYTES has a populated but different value.
         var newProfilePictureValue = Convert.FromHexString(TestConstants.IMAGE_2_HEX);
         var mockFileConnector = new MockFileConnector();
@@ -785,7 +785,7 @@ public class ImportUpdateObjectSvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: END_DATE has a populated but different value.
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
@@ -960,7 +960,7 @@ public class ImportUpdateObjectSvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: LEAVER has a populated but different value.
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
@@ -1135,7 +1135,7 @@ public class ImportUpdateObjectSvaTests
     {
         InitialiseConnectedSystemObjectsData();
 
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: MANAGER has a populated but different value.
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
@@ -1393,7 +1393,7 @@ public class ImportUpdateObjectSvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: ROLE has been removed.
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
@@ -1486,7 +1486,7 @@ public class ImportUpdateObjectSvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: LEAVER has been removed.
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
@@ -1579,7 +1579,7 @@ public class ImportUpdateObjectSvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: START_DATE has been removed.
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
@@ -1672,7 +1672,7 @@ public class ImportUpdateObjectSvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: LOCATION_ID has been removed.
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
@@ -1765,7 +1765,7 @@ public class ImportUpdateObjectSvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: CONTRACTED_WEEKLY_HOURS has been removed.
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
@@ -1858,7 +1858,7 @@ public class ImportUpdateObjectSvaTests
     {
         InitialiseConnectedSystemObjectsData();
 
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: MANAGER has been removed.
         var mockFileConnector = new MockFileConnector();
         
@@ -1959,7 +1959,7 @@ public class ImportUpdateObjectSvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: PROFILE_PICTURE_BYTES has been removed.
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
@@ -2052,7 +2052,7 @@ public class ImportUpdateObjectSvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: COURSE_COUNT has a value added for the first time.
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
@@ -2158,7 +2158,7 @@ public class ImportUpdateObjectSvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: COURSE_END_DATE is being populated for the first time.
         var mockFileConnector = new MockFileConnector();
         var courseEndDate = DateTime.UtcNow;
@@ -2266,7 +2266,7 @@ public class ImportUpdateObjectSvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: CURRENT_COURSE_NAME gets a value for the first time.
         const string currentCourseName = "HGV Training L1";
         var mockFileConnector = new MockFileConnector();
@@ -2373,7 +2373,7 @@ public class ImportUpdateObjectSvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: CURRENT_COURSE_ID gets a value for the first time.
         var currentCourseId = Guid.NewGuid();
         var mockFileConnector = new MockFileConnector();
@@ -2481,7 +2481,7 @@ public class ImportUpdateObjectSvaTests
     {
         InitialiseConnectedSystemObjectsData();
         
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: CURRENT_COURSE_ACTIVE has a value set for the first time.
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
@@ -2588,7 +2588,7 @@ public class ImportUpdateObjectSvaTests
     {
         InitialiseConnectedSystemObjectsData();
 
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: CURRENT_COURSE_TUTOR has a value set for the first time.
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
@@ -2782,7 +2782,7 @@ public class ImportUpdateObjectSvaTests
     {
         InitialiseConnectedSystemObjectsData();
 
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         // changes: PROFILE_PICTURE_BYTES is being added to cso2 for the first time.
         var newProfilePicture = Convert.FromHexString(TestConstants.IMAGE_2_HEX);
         var mockFileConnector = new MockFileConnector();
@@ -2964,7 +2964,7 @@ public class ImportUpdateObjectSvaTests
         Assert.Pass();
     }
 
-    // todo: test activity/run profile execution item/change object creation
+    // todo: test activity/Run Profile execution item/change object creation
 
     #region private methods
     private void InitialiseConnectedSystemObjectsData()

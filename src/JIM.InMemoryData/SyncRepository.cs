@@ -66,31 +66,31 @@ public class SyncRepository : ISyncRepository
 
     #region Test Inspection — Read-Only Access to Internal State
 
-    /// <summary>All connected system objects, keyed by CSO ID.</summary>
+    /// <summary>All Connected System Objects, keyed by CSO ID.</summary>
     public IReadOnlyDictionary<Guid, ConnectedSystemObject> ConnectedSystemObjects => _csos;
 
-    /// <summary>All metaverse objects, keyed by MVO ID.</summary>
+    /// <summary>All Metaverse Objects, keyed by MVO ID.</summary>
     public IReadOnlyDictionary<Guid, MetaverseObject> MetaverseObjects => _mvos;
 
-    /// <summary>All pending exports, keyed by pending export ID.</summary>
+    /// <summary>All Pending Exports, keyed by Pending Export ID.</summary>
     public IReadOnlyDictionary<Guid, PendingExport> PendingExports => _pendingExports;
 
     /// <summary>All activities, keyed by activity ID.</summary>
     public IReadOnlyDictionary<Guid, Activity> Activities => _activities;
 
-    /// <summary>All run profile execution items, keyed by RPEI ID.</summary>
+    /// <summary>All Run Profile execution items, keyed by RPEI ID.</summary>
     public IReadOnlyDictionary<Guid, ActivityRunProfileExecutionItem> Rpeis => _rpeis;
 
-    /// <summary>All connected systems, keyed by connected system ID.</summary>
+    /// <summary>All Connected Systems, keyed by Connected System ID.</summary>
     public IReadOnlyDictionary<int, ConnectedSystem> ConnectedSystems => _connectedSystems;
 
-    /// <summary>All sync rules, keyed by sync rule ID.</summary>
+    /// <summary>All Synchronisation Rules, keyed by Synchronisation Rule ID.</summary>
     public IReadOnlyDictionary<int, SyncRule> SyncRules => _syncRules;
 
-    /// <summary>All connected system object types, keyed by object type ID.</summary>
+    /// <summary>All Connected System Object Types, keyed by object type ID.</summary>
     public IReadOnlyDictionary<int, ConnectedSystemObjectType> ObjectTypes => _objectTypes;
 
-    /// <summary>All metaverse object change records, keyed by change ID.</summary>
+    /// <summary>All Metaverse Object change records, keyed by change ID.</summary>
     public IReadOnlyDictionary<Guid, MetaverseObjectChange> MetaverseObjectChanges => _mvoChanges;
 
     #endregion
@@ -151,7 +151,7 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <summary>
-    /// Removes all pending exports from the store. Used by tests to reset state between sync cycles.
+    /// Removes all Pending Exports from the store. Used by tests to reset state between sync cycles.
     /// </summary>
     public void ClearAllPendingExports()
     {
@@ -591,7 +591,7 @@ public class SyncRepository : ISyncRepository
                 if (av.UnresolvedReferenceValue == null || av.ReferenceValueId.HasValue)
                     continue;
 
-                // Try to find a CSO with this external ID value in the same connected system
+                // Try to find a CSO with this external ID value in the same Connected System
                 var target = GetCsosForSystem(connectedSystemId)
                     .FirstOrDefault(c => c.AttributeValues
                         .Any(tav => tav.AttributeId == c.ExternalIdAttributeId &&
@@ -610,7 +610,7 @@ public class SyncRepository : ISyncRepository
 
     public Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId)
     {
-        // Build a lookup of secondary external ID values → CSO for the connected system
+        // Build a lookup of secondary external ID values → CSO for the Connected System
         var secondaryIdLookup = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
         foreach (var cso in GetCsosForSystem(connectedSystemId))
         {
@@ -706,7 +706,7 @@ public class SyncRepository : ISyncRepository
 
             if (matches.Count > 1)
                 throw new MultipleMatchesException(
-                    $"Multiple metaverse objects matched for rule {rule.Id}",
+                    $"Multiple Metaverse Objects matched for rule {rule.Id}",
                     matches.Select(m => m.Id).ToList());
 
             if (matches.Count == 1)
@@ -763,7 +763,7 @@ public class SyncRepository : ISyncRepository
 
         if (matches.Count > 1)
             throw new MultipleMatchesException(
-                $"Multiple metaverse objects matched for rule {rule.Id}",
+                $"Multiple Metaverse Objects matched for rule {rule.Id}",
                 matches.Select(m => m.Id).ToList());
 
         return Task.FromResult(matches.Count == 1 ? matches[0] : null);
@@ -1161,7 +1161,7 @@ public class SyncRepository : ISyncRepository
 
     #endregion
 
-    #region Sync Rules and Configuration
+    #region Synchronisation Rules and Configuration
 
     public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabled, bool withChangeTracking = false)
     {

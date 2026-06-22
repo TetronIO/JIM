@@ -59,12 +59,12 @@ Evolves JIM's core IDAM capabilities so identities can be managed directly in JI
 
 ### Entitlement Management
 
-- **Direct group management**<br /> Create, update, and delete groups directly within JIM rather than only synchronising them from connected systems.
+- **Direct group management**<br /> Create, update, and delete groups directly within JIM rather than only synchronising them from Connected Systems.
 - **Governance**<br /> Access reviews and attestation, delegated administration, dynamic memberships, time-based memberships, self-service requests, and approval workflows, etc.
 
 ### Identity Lifecycle Management
 
-- **Direct user management**<br /> Create, update, and delete users directly within JIM rather than only synchronising them from connected systems.
+- **Direct user management**<br /> Create, update, and delete users directly within JIM rather than only synchronising them from Connected Systems.
 - **Self-service for locally-managed attributes**<br /> Allow users to maintain attributes owned by JIM (photos, pronouns, bios, and similar) rather than relying on upstream systems.
 - **Lifecycle Workflows**<br /> Event-driven workflows that automate joiner/mover/leaver processes end-to-end.
 

@@ -343,7 +343,7 @@ public class ConnectedSystemActivityTests
         // Assert
         Assert.That(_capturedActivity, Is.Not.Null);
         Assert.That(_capturedActivity!.TargetName, Is.EqualTo("Full Import"),
-            "TargetName should be the run profile name");
+            "TargetName should be the Run Profile name");
         Assert.That(_capturedActivity.TargetType, Is.EqualTo(ActivityTargetType.ConnectedSystemRunProfile));
         Assert.That(_capturedActivity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Update));
         Assert.That(_capturedActivity.ConnectedSystemRunProfileId, Is.EqualTo(1));

@@ -9,8 +9,8 @@ using Serilog;
 namespace JIM.Application.Servers;
 
 /// <summary>
-/// Pending export reconciliation logic — pure, stateless methods for comparing
-/// imported CSO attribute values against pending export assertions.
+/// Pending Export reconciliation logic — pure, stateless methods for comparing
+/// imported CSO attribute values against Pending Export assertions.
 /// Consolidated from PendingExportReconciliationService to ensure both
 /// the sync path and import path use identical, comprehensive attribute matching.
 /// </summary>
@@ -22,11 +22,11 @@ public partial class SyncEngine
     public const int DefaultMaxRetries = 5;
 
     /// <summary>
-    /// Reconciles a Connected System Object against a pre-loaded pending export.
+    /// Reconciles a Connected System Object against a pre-loaded Pending Export.
     /// This method does NOT perform any database operations — the caller is responsible for persistence.
     /// </summary>
     /// <param name="connectedSystemObject">The CSO that was just imported/updated.</param>
-    /// <param name="pendingExport">The pre-loaded pending export for this CSO (or null if none).</param>
+    /// <param name="pendingExport">The pre-loaded Pending Export for this CSO (or null if none).</param>
     /// <param name="result">The result object to populate with reconciliation outcomes.</param>
     public void ReconcileCsoAgainstPendingExport(
         ConnectedSystemObject connectedSystemObject,
@@ -35,7 +35,7 @@ public partial class SyncEngine
     {
         if (pendingExport == null)
         {
-            Log.Debug("ReconcileCsoAgainstPendingExport: No pending export for CSO {CsoId}", connectedSystemObject.Id);
+            Log.Debug("ReconcileCsoAgainstPendingExport: No Pending Export for CSO {CsoId}", connectedSystemObject.Id);
             return;
         }
 
@@ -48,7 +48,7 @@ public partial class SyncEngine
             return;
         }
 
-        Log.Debug("ReconcileCsoAgainstPendingExport: Found pending export {ExportId} with {Count} attribute changes for CSO {CsoId}",
+        Log.Debug("ReconcileCsoAgainstPendingExport: Found Pending Export {ExportId} with {Count} attribute changes for CSO {CsoId}",
             pendingExport.Id, pendingExport.AttributeValueChanges.Count, connectedSystemObject.Id);
 
         // Build a lookup of CSO attribute values by attribute ID once per CSO.
@@ -114,14 +114,14 @@ public partial class SyncEngine
             }
         }
 
-        // Remove confirmed changes from the pending export
+        // Remove confirmed changes from the Pending Export
         foreach (var confirmed in result.ConfirmedChanges)
             pendingExport.AttributeValueChanges.Remove(confirmed);
 
         // If this was a Create and the Secondary External ID was confirmed, transition to Update
         TransitionCreateToUpdateIfSecondaryExternalIdConfirmed(pendingExport, result);
 
-        // Determine if the pending export should be deleted or updated
+        // Determine if the Pending Export should be deleted or updated
         var hasRemainingChanges = pendingExport.AttributeValueChanges.Any(ac =>
             ac.Status == PendingExportAttributeChangeStatus.Pending ||
             ac.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation ||
@@ -193,7 +193,7 @@ public partial class SyncEngine
     }
 
     /// <summary>
-    /// Checks if the pending export attribute change value exists in the CSO's attribute values.
+    /// Checks if the Pending Export attribute change value exists in the CSO's attribute values.
     /// Uses type-aware comparison based on the attribute's data type.
     /// </summary>
     public static bool ValueExistsOnCso(List<ConnectedSystemObjectAttributeValue> csoValues, PendingExportAttributeValueChange attrChange)
@@ -237,7 +237,7 @@ public partial class SyncEngine
                 // Reference attributes can be stored in two ways:
                 // 1. UnresolvedReferenceValue — the raw DN string (before or after resolution)
                 // 2. StringValue — set during export resolution (when UnresolvedReferenceValue is cleared)
-                // We need to check both the pending export value AND the CSO values to handle both cases
+                // We need to check both the Pending Export value AND the CSO values to handle both cases
                 (!string.IsNullOrEmpty(attrChange.UnresolvedReferenceValue) &&
                  csoValues.Any(v => string.Equals(v.UnresolvedReferenceValue, attrChange.UnresolvedReferenceValue, StringComparison.Ordinal))) ||
                 (!string.IsNullOrEmpty(attrChange.StringValue) &&
@@ -248,7 +248,7 @@ public partial class SyncEngine
     }
 
     /// <summary>
-    /// Checks if a pending export attribute value change represents an empty/null value
+    /// Checks if a Pending Export attribute value change represents an empty/null value
     /// (i.e., clearing a single-valued attribute).
     /// </summary>
     public static bool IsPendingChangeEmpty(PendingExportAttributeValueChange change)
@@ -272,7 +272,7 @@ public partial class SyncEngine
     }
 
     /// <summary>
-    /// If the pending export was a Create and the Secondary External ID attribute has been confirmed,
+    /// If the Pending Export was a Create and the Secondary External ID attribute has been confirmed,
     /// transition it to an Update. Once an object is created, remaining unconfirmed attribute changes
     /// should be applied as updates. Connectors require the Secondary External ID (e.g., distinguishedName
     /// for LDAP) in the attribute changes for Create operations, but once confirmed, it is removed.
@@ -296,7 +296,7 @@ public partial class SyncEngine
                 .FirstOrDefault(ac => ac.Attribute?.IsSecondaryExternalId == true)?.Attribute?.Name ?? "unknown";
 
             pendingExport.ChangeType = PendingExportChangeType.Update;
-            Log.Debug("ReconcileCsoAgainstPendingExport: Transitioned pending export {ExportId} from Create to Update. " +
+            Log.Debug("ReconcileCsoAgainstPendingExport: Transitioned Pending Export {ExportId} from Create to Update. " +
                 "Secondary External ID attribute '{AttributeName}' was confirmed but {RemainingCount} attribute changes remain.",
                 pendingExport.Id, confirmedAttrName, pendingExport.AttributeValueChanges.Count);
         }

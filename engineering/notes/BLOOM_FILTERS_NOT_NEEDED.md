@@ -45,7 +45,7 @@ The dangerous failure mode is not the filter itself; it is staleness. Forgetting
 
 ## What to do instead, if sync performance becomes a concern
 
-1. **Add per-batch Stopwatch timings** to the three big sync phases (import write, matching, attribute flow). Emit at end of each batch. No instrumentation currently exists, so any optimisation talk before this is speculative.
+1. **Add per-batch Stopwatch timings** to the three big sync phases (import write, matching, Attribute Flow). Emit at end of each batch. No instrumentation currently exists, so any optimisation talk before this is speculative.
 2. **Run a representative full sync** (1M+ CSOs, multiple matching rules) and look at where time actually goes.
 3. **If object matching dominates**, add an exact in-memory negative-result memo keyed by `(rule id, attribute value)` scoped to the sync task. Cheaper, exact, and easier to reason about than a Bloom filter.
 4. **Revisit Bloom filters only if** a future scenario emerges where an exact cache cannot fit in memory (e.g. tens of millions of CSOs on a memory-constrained Worker). That is the one genuine Bloom use case, and JIM does not have it today.

@@ -16,13 +16,13 @@
 <MudAlert Severity="ConnectedSystem.ObjectTypes is { Count: > 0 } ? Severity.Warning : Severity.Info" Variant="Variant.Outlined">
     @if (ConnectedSystem.ObjectTypes == null || ConnectedSystem.ObjectTypes.Count == 0)
     {
-        <MudText>Retrieve the schema from the connected system, to be able to select which object types and attributes you want to manage with JIM.</MudText>
+        <MudText>Retrieve the schema from the Connected System, to be able to select which object types and attributes you want to manage with JIM.</MudText>
     }
     else
     {
         <MudText>
-            <strong>Refreshing the schema can result in data-loss</strong>. If object types or attributes are discovered to have been removed at the connected system, then this
-            will result in all references to them being removed from within JIM, i.e. synchronisation rules, attribute flow, attributes values and even entire objects will be
+            <strong>Refreshing the schema can result in data-loss</strong>. If object types or attributes are discovered to have been removed at the Connected System, then this
+            will result in all references to them being removed from within JIM, i.e. Synchronisation Rules, Attribute Flow, attributes values and even entire objects will be
             deleted if object types are removed. Refresh with caution. Ensure the Connected System identity has the right permissions needed to retrieve the schema, and consider
             a database backup before proceeding.
         </MudText>
@@ -136,8 +136,8 @@
                 @if (result.ActionRequired)
                 {
                     <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-3">
-                        <strong>Action Required:</strong> Some attributes that were removed are still referenced by sync rules.
-                        Please update your sync rules to remove references to these attributes.
+                        <strong>Action Required:</strong> Some attributes that were removed are still referenced by Synchronisation Rules.
+                        Please update your Synchronisation Rules to remove references to these attributes.
                     </MudAlert>
                 }
             }
@@ -159,7 +159,7 @@
         @if (!_objectTypeAttributeBeingEditedIsEditable)
         {
             <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
-                This Connected System attribute cannot be edited as it is being referenced by either a synchronisation rule, or has values already populated.
+                This Connected System attribute cannot be edited as it is being referenced by either a Synchronisation Rule, or has values already populated.
             </MudAlert>
         }
         else
@@ -206,37 +206,103 @@
 
 @if (ConnectedSystem.ObjectTypes is { Count: > 0 })
 {
-    if (ConnectedSystem.ObjectTypes.Count > 1 || (ConnectedSystem.ObjectTypes.Count == 1 && !ConnectedSystem.ObjectTypes[0].Selected))
-    {
-        <MudPaper Outlined="true" Class="pa-4 mt-5">
-            <MudText>
-                Select which object types from this system you would like to use in JIM.
-            </MudText>
-            <div class="d-flex flex-grow-1 flex-wrap">
-                @foreach (var objectType in ConnectedSystem.ObjectTypes)
-                {
-                    <MudCheckBox T="bool" Value="@objectType.Selected" Color="Color.Primary" Label="@objectType.Name" ValueChanged="((e) => HandleSelectedObjectTypeClick(objectType, e))" />
+    var selectedObjectTypes = GetSelectedObjectTypes();
+    <div class="schema-tabs mt-6">
+        <MudTabs Elevation="0"
+                 Rounded="true"
+                 Outlined="true"
+                 Border="true"
+                 ApplyEffectsToContainer="true"
+                 TabPanelsClass="pa-4"
+                 ActivePanelIndex="_activeSchemaTabIndex"
+                 ActivePanelIndexChanged="OnSchemaTabChanged">
+
+            @* ─── Object type discovery & selection ─── *@
+            <MudTabPanel Icon="@Icons.Material.Filled.Tune" Text="Object Types">
+                <MudText Typo="Typo.subtitle1" Class="mb-1">Choose which object types JIM should manage</MudText>
+                <MudText Typo="Typo.body1" Class="mud-text-secondary mb-4">
+                    Each type you select gets its own tab above, where you choose the attributes to import or export. To maximise system performance, select only the types you actually need.
+                </MudText>
+
+                <MudGrid>
+                    <MudItem xs="12" md="8">
+                        <MudTextField T="string"
+                                      @bind-Value="_objectTypeSearchString"
+                                      Immediate="true"
+                                      Clearable="true"
+                                      Label="Search object types"
+                                      Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Filled.Search"
+                                      IconSize="Size.Small"
+                                      Variant="Variant.Outlined"
+                                      HelperText="Show only types whose name contains a specific value" />
+                    </MudItem>
+                    <MudItem xs="12" md="4" Class="d-flex align-center justify-md-end">
+                        <MudChipSet T="bool"
+                                    SelectionMode="SelectionMode.SingleSelection"
+                                    SelectedValue="_objectTypeSelectedFilter"
+                                    SelectedValueChanged="@((bool val) => _objectTypeSelectedFilter = val)">
+                            <MudChip Value="false"
+                                     Color="Color.Default"
+                                     Variant="@(!_objectTypeSelectedFilter ? Variant.Outlined : Variant.Text)">
+                                All (@ConnectedSystem.ObjectTypes.Count)
+                            </MudChip>
+                            <MudChip Value="true"
+                                     Color="Color.Primary"
+                                     Variant="@(_objectTypeSelectedFilter ? Variant.Outlined : Variant.Text)">
+                                Selected (@selectedObjectTypes.Count)
+                            </MudChip>
+                        </MudChipSet>
+                    </MudItem>
+                </MudGrid>
+
+                @{
+                    var discoveryObjectTypes = GetFilteredDiscoveryObjectTypes().ToList();
                 }
-            </div>
-        </MudPaper>
-    }
+                @if (discoveryObjectTypes.Count == 0)
+                {
+                    <MudText Class="mt-6 mb-2 mud-text-secondary" Align="Align.Center">No object types match the current filter.</MudText>
+                }
+                else
+                {
+                    <MudGrid Spacing="2" Class="mt-2">
+                        @foreach (var objectType in discoveryObjectTypes)
+                        {
+                            var selectedAttributeCount = objectType.Attributes.Count(a => a.Selected);
+                            var totalAttributeCount = objectType.Attributes.Count;
+                            <MudItem xs="12" sm="6" md="4">
+                                <MudPaper Outlined="true" Class="@(objectType.Selected ? "schema-type-card schema-type-card-selected" : "schema-type-card")">
+                                    @* The whole card is the toggle target; the switch is presentational (read-only, no
+                                       pointer events) so deselecting can be confirmed before anything actually changes. *@
+                                    <div class="d-flex align-center pa-2 px-3" style="gap: 10px; cursor: pointer;"
+                                         @onclick="@(() => HandleObjectTypeGridToggleAsync(objectType, !objectType.Selected))">
+                                        <MudSwitch T="bool"
+                                                   Value="@objectType.Selected"
+                                                   Color="Color.Primary"
+                                                   ReadOnly="true"
+                                                   Style="pointer-events: none;" />
+                                        <span class="flex-grow-1 text-truncate">@objectType.Name</span>
+                                        <MudTooltip Text="@($"{selectedAttributeCount} of {totalAttributeCount} attributes selected")" Arrow="true" Placement="Placement.Top">
+                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@selectedAttributeCount / @totalAttributeCount</MudText>
+                                        </MudTooltip>
+                                    </div>
+                                </MudPaper>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                    <MudText Typo="Typo.body1" Class="mt-4 mud-text-secondary d-block" Align="Align.Center">
+                        Showing @discoveryObjectTypes.Count of @ConnectedSystem.ObjectTypes.Count object types
+                    </MudText>
+                }
+            </MudTabPanel>
 
-    @if (ConnectedSystem.ObjectTypes.Count(q => q.Selected) > 1)
-    {
-        <MudButtonGroup Class="mt-5" OverrideStyles="false">
-            @foreach (var objectType in ConnectedSystem.ObjectTypes.Where(q => q.Selected))
+            @* ─── One tab per selected object type ─── *@
+            @foreach (var objectType in selectedObjectTypes)
             {
-                <MudButton
-                    OnClick="@((_) => HandleActiveObjectTypeClick(objectType))"
-                    Variant="@(_selectedObjectType == objectType ? Variant.Filled : Variant.Outlined)"
-                    Color="Color.Primary">@objectType.Name</MudButton>
-            }
-        </MudButtonGroup>
-    }
-
-    @if (_selectedObjectType != null)
-    {
-        <MudText Typo="Typo.h5" Class="mt-5"><span>Object Type:</span> <span class="mud-primary-text">@_selectedObjectType.Name</span></MudText>
+                <MudTabPanel Text="@objectType.Name">
+                    <MudText Typo="Typo.h5"><span>Object Type:</span> <span class="mud-primary-text">@objectType.Name</span></MudText>
+                    @if (_selectedObjectType != null)
+                    {
         @if (ConnectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId)
         {
             <MudPaper Outlined="true" Class="pa-4 mt-5">
@@ -267,7 +333,7 @@
                     Color="@Color.Primary"
                     Label="Remove contributed attributes when source objects are deleted" />
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                    When enabled, this will remove attribute values on joined Metaverse objects contributed by this system, for this object type when the source object is deleted.
+                    When enabled, this will remove attribute values on joined Metaverse Objects contributed by this system, for this object type when the source object is deleted.
                 </MudText>
             </MudPaper>
         }
@@ -528,13 +594,17 @@
                 <MudTablePager PageSizeOptions="new[] { 10, 25, 50, 100 }" />
             </PagerContent>
         </MudTable>
-    }
+                    }
+                </MudTabPanel>
+            }
+        </MudTabs>
+    </div>
 
     <MudButton
         Color="Color.Primary"
         Variant="Variant.Filled"
         OnClick="HandleObjectTypesAndAttributeSelectionSubmitAsync"
-        Class="mt-5"
+        Class="mt-6"
         DropShadow="false"
         Disabled="DisableSaveSchemaButton()">Save Changes</MudButton>
 }
@@ -552,6 +622,9 @@
     private bool _schemaBeingRetrieved;
     private SchemaRefreshResult? _schemaRefreshResult;
     private ConnectedSystemObjectType? _selectedObjectType;
+    private int _activeSchemaTabIndex;
+    private string _objectTypeSearchString = "";
+    private bool _objectTypeSelectedFilter;
     private bool _selectedObjectTypeHasClasses;
     private bool _selectedObjectTypeHasDescriptions;
     private bool _selectedObjectTypeHasReadOnlyAttributes;
@@ -640,7 +713,7 @@
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to import schema for connected system {SystemId}", ConnectedSystem.Id);
+            Log.Error(ex, "Failed to import schema for Connected System {SystemId}", ConnectedSystem.Id);
             _schemaRefreshResult = SchemaRefreshResult.Failed(ex.Message);
         }
         finally
@@ -678,9 +751,95 @@
         _selectedObjectTypeHasDescriptions = connectedSystemObjectType.Attributes.Any(q => q.Description != null);
     }
 
-    private void HandleActiveObjectTypeClick(ConnectedSystemObjectType connectedSystemObjectType)
+    /// <summary>
+    /// The selected object types, ordered by name. This is the ordering used to render the per-type sub-tabs, so the
+    /// tab at index N+1 corresponds to GetSelectedObjectTypes()[N] (index 0 is the "Object Types" discovery tab).
+    /// </summary>
+    private List<ConnectedSystemObjectType> GetSelectedObjectTypes() =>
+        ConnectedSystem.ObjectTypes?.Where(ot => ot.Selected).OrderBy(ot => ot.Name).ToList() ?? new List<ConnectedSystemObjectType>();
+
+    /// <summary>
+    /// The object types shown in the discovery grid, after applying the name search and the All / Selected filter.
+    /// Selected types are ordered first so the current selection stays visible as the list is filtered.
+    /// </summary>
+    private IEnumerable<ConnectedSystemObjectType> GetFilteredDiscoveryObjectTypes()
     {
-        _selectedObjectType = connectedSystemObjectType;
+        var objectTypes = ConnectedSystem.ObjectTypes?.AsEnumerable() ?? Enumerable.Empty<ConnectedSystemObjectType>();
+
+        if (_objectTypeSelectedFilter)
+            objectTypes = objectTypes.Where(ot => ot.Selected);
+
+        if (!string.IsNullOrWhiteSpace(_objectTypeSearchString))
+            objectTypes = objectTypes.Where(ot => ot.Name.Contains(_objectTypeSearchString.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        return objectTypes.OrderByDescending(ot => ot.Selected).ThenBy(ot => ot.Name);
+    }
+
+    /// <summary>
+    /// Keeps the active sub-tab and the active object type in sync. Index 0 is the "Object Types" discovery tab (no
+    /// active object type); indexes 1..n map onto the per-type sub-tabs in GetSelectedObjectTypes() order.
+    /// </summary>
+    private void OnSchemaTabChanged(int index)
+    {
+        _activeSchemaTabIndex = index;
+
+        var selected = GetSelectedObjectTypes();
+        _selectedObjectType = index >= 1 && index - 1 < selected.Count ? selected[index - 1] : null;
+        RecomputeSelectedObjectTypeFlags();
+    }
+
+    /// <summary>
+    /// Recomputes the flags that drive which optional columns and controls the attribute table shows, for the
+    /// currently active object type. No-op when no object type is active (the discovery tab).
+    /// </summary>
+    private void RecomputeSelectedObjectTypeFlags()
+    {
+        if (_selectedObjectType == null)
+            return;
+
+        _selectedObjectTypeHasClasses = _selectedObjectType.Attributes.Any(q => q.ClassName != null);
+        _selectedObjectTypeHasDescriptions = _selectedObjectType.Attributes.Any(q => q.Description != null);
+        _selectedObjectTypeHasReadOnlyAttributes = _selectedObjectType.Attributes.Any(q => q.Writability == AttributeWritability.ReadOnly);
+    }
+
+    /// <summary>
+    /// Handles toggling an object type's selection from the discovery grid. Selecting is immediate; deselecting is
+    /// confirmed first, because removing a type discards its attribute selection and configuration, which can
+    /// represent significant effort. The grid switch is read-only/presentational, so nothing changes until this
+    /// runs: cancelling simply leaves the type selected.
+    /// </summary>
+    private async Task HandleObjectTypeGridToggleAsync(ConnectedSystemObjectType connectedSystemObjectType, bool isSelected)
+    {
+        if (isSelected)
+        {
+            HandleSelectedObjectTypeClick(connectedSystemObjectType, true);
+            return;
+        }
+
+        if (!await ConfirmObjectTypeRemovalAsync(connectedSystemObjectType))
+            return;
+
+        HandleSelectedObjectTypeClick(connectedSystemObjectType, false);
+    }
+
+    /// <summary>
+    /// Asks the admin to confirm removing an object type from those JIM manages, spelling out that the type's
+    /// attribute selection and configuration will be discarded. Returns true only if they confirm.
+    /// </summary>
+    private async Task<bool> ConfirmObjectTypeRemovalAsync(ConnectedSystemObjectType connectedSystemObjectType)
+    {
+        // HTML-encode the name: it is interpolated into a MarkupString, which bypasses Razor's auto-encoding.
+        var encodedName = System.Net.WebUtility.HtmlEncode(connectedSystemObjectType.Name);
+        var options = new MessageBoxOptions
+        {
+            Title = "Remove object type?",
+            MarkupMessage = (MarkupString)$"Remove <code class=\"jim-code-inline\">{encodedName}</code> from the object types JIM manages? This clears its attribute selection and configuration for this Connected System. You can add it again later, but you will need to reconfigure it.",
+            YesText = "Remove",
+            CancelText = "Cancel"
+        };
+
+        var confirmed = await DialogService.ShowMessageBoxAsync(options);
+        return confirmed == true;
     }
 
     private void HandleMakeExternalId(ConnectedSystemObjectTypeAttribute selectedAttribute)
@@ -900,7 +1059,7 @@
 
     private async Task HandleShowEditAttributeDialogAsync(ConnectedSystemObjectTypeAttribute connectedSystemObjectTypeAttribute)
     {
-        // can the connected system attribute be edited? are there any references to it?
+        // can the Connected System attribute be edited? are there any references to it?
         using var jim = JimFactory.Create();
         _objectTypeAttributeBeingEditedIsEditable = !await jim.ConnectedSystems.IsObjectTypeAttributeBeingReferencedAsync(connectedSystemObjectTypeAttribute);
         _objectTypeAttributeBeingEdited = connectedSystemObjectTypeAttribute;

@@ -460,7 +460,7 @@
     private int _selectedConnectedSystemId;
     private int _selectedRunProfileId;
 
-    // Cache of run profiles by connected system ID for display lookups
+    // Cache of Run Profiles by Connected System ID for display lookups
     private Dictionary<int, List<ConnectedSystemRunProfile>> _runProfilesCache = new();
 
     protected override async Task OnInitializedAsync()
@@ -470,7 +470,7 @@
         // Initialise days of week ordered by current culture (e.g., Mon-Sun for en-GB, Sun-Sat for en-US)
         _daysOfWeek = GetDaysOfWeekForCulture();
 
-        // Load connected systems for step configuration
+        // Load Connected Systems for step configuration
         using var jim = JimFactory.Create();
         _connectedSystems = await jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
 
@@ -482,7 +482,7 @@
                 // Load schedule configuration from model fields
                 LoadScheduleConfiguration();
 
-                // Preload run profiles for all RunProfile steps so we can display their names
+                // Preload Run Profiles for all RunProfile steps so we can display their names
                 var connectedSystemIds = _schedule.Steps
                     .Where(s => s.StepType == ScheduleStepType.RunProfile && s.ConnectedSystemId.HasValue)
                     .Select(s => s.ConnectedSystemId!.Value)
@@ -1070,7 +1070,7 @@
             SqlScriptPath = step.SqlScriptPath
         };
 
-        // Load run profiles if this is a RunProfile step
+        // Load Run Profiles if this is a RunProfile step
         if (step.StepType == ScheduleStepType.RunProfile && step.ConnectedSystemId.HasValue)
         {
             _selectedConnectedSystemId = step.ConnectedSystemId.Value;
@@ -1197,7 +1197,7 @@
     }
 
     /// <summary>
-    /// Gets run profiles for a connected system, using cache if available.
+    /// Gets Run Profiles for a Connected System, using cache if available.
     /// </summary>
     private async Task<List<ConnectedSystemRunProfile>> GetRunProfilesForConnectedSystemAsync(int connectedSystemId)
     {
@@ -1226,7 +1226,7 @@
         {
             if (_selectedConnectedSystemId == 0 || _selectedRunProfileId == 0)
             {
-                Snackbar.Add("Please select a connected system and run profile.", Severity.Warning);
+                Snackbar.Add("Please select a Connected System and Run Profile.", Severity.Warning);
                 return Task.CompletedTask;
             }
 
@@ -1269,11 +1269,11 @@
     {
         if (step.StepType == ScheduleStepType.RunProfile && step.ConnectedSystemId.HasValue && step.RunProfileId.HasValue)
         {
-            // Look up connected system name
+            // Look up Connected System name
             var cs = _connectedSystems.FirstOrDefault(c => c.Id == step.ConnectedSystemId.Value);
             var connectedSystemName = cs?.Name ?? "Unknown System";
 
-            // Look up run profile name from cache
+            // Look up Run Profile name from cache
             var runProfileName = "Unknown Profile";
             if (_runProfilesCache.TryGetValue(step.ConnectedSystemId.Value, out var profiles))
             {

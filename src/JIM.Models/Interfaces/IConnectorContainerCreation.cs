@@ -18,7 +18,7 @@ public interface IConnectorContainerCreation
     IReadOnlyList<string> CreatedContainerExternalIds { get; }
 
     /// <summary>
-    /// Verifies that a container exists in the connected system.
+    /// Verifies that a container exists in the Connected System.
     /// Implementations should perform a lightweight, targeted check rather than
     /// fetching the entire container hierarchy.
     /// </summary>

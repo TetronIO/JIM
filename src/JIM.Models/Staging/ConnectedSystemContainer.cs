@@ -28,7 +28,7 @@ public class ConnectedSystemContainer
     public ConnectedSystem? ConnectedSystem { get; set; }
 
     /// <summary>
-    /// The unique identifier for this container in the connected system.
+    /// The unique identifier for this container in the Connected System.
     /// For LDAP systems, this would be the DN (Distinguished Name).
     /// </summary>
     public string ExternalId { get; set; } = null!;

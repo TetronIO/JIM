@@ -38,7 +38,7 @@ public class SyncImportTaskProcessor
     private readonly IDbContextFactory<JIM.PostgresData.JimDbContext>? _dbContextFactory;
     // Lightweight RPEI lookup for reconciliation. Populated during the update-phase flush
     // so that ReconcilePendingExportsAsync can merge outcomes onto already-persisted RPEIs.
-    // Only contains RPEIs for updated CSOs (not created CSOs, which can't have pending exports).
+    // Only contains RPEIs for updated CSOs (not created CSOs, which can't have Pending Exports).
     private readonly Dictionary<Guid, ActivityRunProfileExecutionItem> _reconciliationRpeiLookup = new();
     private readonly CancellationTokenSource _cancellationTokenSource;
 
@@ -49,7 +49,7 @@ public class SyncImportTaskProcessor
     private const int ImportBatchSize = 2000;
 
     /// <summary>
-    /// When true, the connected system has no existing CSOs, so all imported objects are known to be new.
+    /// When true, the Connected System has no existing CSOs, so all imported objects are known to be new.
     /// This eliminates N unnecessary DB round-trips during first-ever imports.
     /// </summary>
     private bool _csIsEmpty;
@@ -128,14 +128,14 @@ public class SyncImportTaskProcessor
         if (_connectedSystem.ObjectTypes == null)
             throw new InvalidDataException("PerformImportAsync: _connectedSystem.ObjectTypes was null. Cannot continue.");
 
-        // Check if the connected system has any existing CSOs. If it's empty (first-ever import),
+        // Check if the Connected System has any existing CSOs. If it's empty (first-ever import),
         // we can skip all FindMatchingCso lookups since every object is guaranteed to be new.
         // This eliminates N unnecessary DB round-trips for initial imports.
         var csoCountAtStart = await _syncRepo.GetConnectedSystemObjectCountAsync(_connectedSystem.Id);
         _csIsEmpty = csoCountAtStart == 0;
         if (_csIsEmpty)
         {
-            Log.Information("PerformImportAsync: Connected system {ConnectedSystemId} has no existing CSOs. Skipping CSO lookups for this import.", _connectedSystem.Id);
+            Log.Information("PerformImportAsync: Connected System {ConnectedSystemId} has no existing CSOs. Skipping CSO lookups for this import.", _connectedSystem.Id);
         }
         else
         {
@@ -147,11 +147,11 @@ public class SyncImportTaskProcessor
             {
                 _csoExternalIdLookup = await _syncRepo.GetAllCsoExternalIdMappingsAsync(_connectedSystem.Id);
             }
-            Log.Information("PerformImportAsync: Pre-fetched {Count} CSO external ID mappings for connected system {ConnectedSystemId}.",
+            Log.Information("PerformImportAsync: Pre-fetched {Count} CSO external ID mappings for Connected System {ConnectedSystemId}.",
                 _csoExternalIdLookup.Count, _connectedSystem.Id);
         }
 
-        // Pre-load pending exports in the background while import processing runs.
+        // Pre-load Pending Exports in the background while import processing runs.
         // Uses a separate DbContext (via IDbContextFactory) to avoid thread-safety issues
         // with the main DbContext used by import processing. The query is independent of
         // import processing and takes several seconds at scale; by starting it now, the data
@@ -160,7 +160,7 @@ public class SyncImportTaskProcessor
         if (!_csIsEmpty && _dbContextFactory != null)
         {
             var connectedSystemId = _connectedSystem.Id;
-            Log.Debug("PerformImportAsync: Starting background pre-load of pending exports for connected system {ConnectedSystemId}", connectedSystemId);
+            Log.Debug("PerformImportAsync: Starting background pre-load of Pending Exports for Connected System {ConnectedSystemId}", connectedSystemId);
             pendingExportsTask = Task.Run(async () =>
             {
                 using var bgContext = await _dbContextFactory.CreateDbContextAsync();
@@ -211,7 +211,7 @@ public class SyncImportTaskProcessor
                     credentialAwareConnector.SetCredentialProtection(credentialProtection);
                 }
 
-                await _syncRepo.UpdateActivityMessageAsync(_activity, "Connecting to connected system");
+                await _syncRepo.UpdateActivityMessageAsync(_activity, "Connecting to Connected System");
                 using (Diagnostics.Connector.StartSpan("OpenImportConnection"))
                 {
                     callBasedImportConnector.OpenImportConnection(_connectedSystem.SettingValues, Log.Logger);
@@ -243,8 +243,8 @@ public class SyncImportTaskProcessor
                     // watermark queries across all pages of a delta import.
                     ConnectedSystemImportResult result;
                     var fetchMessage = pageNumber > 0
-                        ? $"Importing objects from connected system (page {pageNumber + 1})"
-                        : "Importing objects from connected system";
+                        ? $"Importing objects from Connected System (page {pageNumber + 1})"
+                        : "Importing objects from Connected System";
                     await _syncRepo.UpdateActivityMessageAsync(_activity, fetchMessage);
                     using (Diagnostics.Connector.StartSpan("ImportPage")
                         .SetTag("connectedSystemId", _connectedSystem.Id)
@@ -336,7 +336,7 @@ public class SyncImportTaskProcessor
             {
                 using var connectorSpan = Diagnostics.Connector.StartSpan("FileBasedImport");
 
-                // file based connectors return all the results from the connected system in one go. no paging.
+                // file based connectors return all the results from the Connected System in one go. no paging.
                 await _syncRepo.UpdateActivityMessageAsync(_activity, "Importing objects from file");
                 ConnectedSystemImportResult result;
                 using (Diagnostics.Connector.StartSpan("ReadFile"))
@@ -380,12 +380,12 @@ public class SyncImportTaskProcessor
         // note: only run deletion detection for Full Imports
         // Delta Imports only return changed objects, so absence doesn't mean deletion
         // Explicit deletes from delta imports are handled in ProcessImportObjectsAsync via ObjectChangeType.Deleted
-        // note: make sure it doesn't apply deletes if no objects were imported, as this suggests there was a problem collecting data from the connected system?
+        // note: make sure it doesn't apply deletes if no objects were imported, as this suggests there was a problem collecting data from the Connected System?
         // note: if it's expected that 0 imported objects means all objects were deleted, then an admin will have to clear the Connected System manually to achieve the same result.
         if (totalObjectsImported > 0 && _connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport)
         {
             // Get count of existing CSOs to determine how many we need to check for deletions.
-            // Scope to the run profile's partition so that partition-scoped full imports only
+            // Scope to the Run Profile's partition so that partition-scoped full imports only
             // check their own CSOs, not CSOs from other partitions (which would be false deletions).
             var deletionPartitionId = _connectedSystemRunProfile.Partition?.Id;
             var existingCsoCount = await _syncRepo.GetConnectedSystemObjectCountAsync(_connectedSystem.Id, deletionPartitionId);
@@ -635,7 +635,7 @@ public class SyncImportTaskProcessor
                 await _syncServer.UpdateConnectedSystemObjectsAsync(csoBatch, batchRpeis);
 
                 // Populate the reconciliation RPEI lookup before flushing.
-                // Only update-phase RPEIs are needed — created CSOs can't have pending exports.
+                // Only update-phase RPEIs are needed — created CSOs can't have Pending Exports.
                 foreach (var rpei in batchRpeis)
                 {
                     if (rpei.ConnectedSystemObjectId.HasValue)
@@ -715,10 +715,10 @@ public class SyncImportTaskProcessor
             savePhaseSw.Elapsed.TotalSeconds, createdCount, connectedSystemObjectsToBeUpdated.Count);
 
         // CSO → RPEI lookup for reconciliation was populated during the update-phase flush.
-        // Only updated CSOs can have pending exports, so create-RPEIs are not included.
+        // Only updated CSOs can have Pending Exports, so create-RPEIs are not included.
         var importRpeisByCsoId = _reconciliationRpeiLookup;
 
-        // Reconcile pending exports against imported values (confirming import)
+        // Reconcile Pending Exports against imported values (confirming import)
         // This confirms exported attribute changes or marks them for retry
         if (_cancellationTokenSource.IsCancellationRequested)
         {
@@ -736,7 +736,7 @@ public class SyncImportTaskProcessor
 
         _activity.ObjectsToProcess = connectedSystemObjectsToBeUpdated.Count;
         _activity.ObjectsProcessed = 0;
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling pending exports");
+        await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling Pending Exports");
         var reconcileSw = System.Diagnostics.Stopwatch.StartNew();
         using (Diagnostics.Sync.StartSpan("ReconcilePendingExports"))
         {
@@ -771,7 +771,7 @@ public class SyncImportTaskProcessor
         var remainingRpeiCount = _activityRunProfileExecutionItems.Count;
         _activity.ObjectsToProcess = remainingRpeiCount;
         _activity.ObjectsProcessed = 0;
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Creating activity run profile execution items");
+        await _syncRepo.UpdateActivityMessageAsync(_activity, "Creating activity Run Profile execution items");
         await FlushImportRpeisAsync();
         _activity.ObjectsProcessed = remainingRpeiCount;
 
@@ -799,8 +799,8 @@ public class SyncImportTaskProcessor
         // external ID was updated during import processing and the new value isn't in externalIdsImported)
         var processedCsoIds = connectedSystemObjectsToBeUpdated.Select(cso => cso.Id).ToHashSet();
 
-        // have any objects been deleted in the connected system since our last import?
-        // get the connected system object type list for the ones the user has selected to manage
+        // have any objects been deleted in the Connected System since our last import?
+        // get the Connected System Object Type list for the ones the user has selected to manage
         foreach (var selectedObjectType in _connectedSystem.ObjectTypes.Where(ot => ot.Selected))
         {
             // what's the external id attribute for this object type?
@@ -809,7 +809,7 @@ public class SyncImportTaskProcessor
             {
                 case AttributeDataType.Number:
                 {
-                    // get the int connected system object external ids for this object type
+                    // get the int Connected System Object external ids for this object type
                     var connectedSystemObjectExternalIdsOfTypeInt = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeIntAsync(_connectedSystem.Id, selectedObjectType.Id, partitionId);
 
                     // get the int import object external ids for this object type
@@ -817,17 +817,17 @@ public class SyncImportTaskProcessor
                         .Where(q => q.ConnectedSystemObjectType.Id == selectedObjectType.Id)
                         .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.IntValues);
 
-                    // create a collection with the connected system objects no longer in the connected system for this object type
+                    // create a collection with the Connected System Objects no longer in the Connected System for this object type
                     var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeInt.Except(connectedSystemIntExternalIdValues);
 
-                    // obsolete the connected system objects no longer in the connected system for this object type
+                    // obsolete the Connected System Objects no longer in the Connected System for this object type
                     foreach (var externalId in connectedSystemObjectDeletesExternalIds)
                         await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated, processedCsoIds);
                     break;
                 }
                 case AttributeDataType.Text:
                 {
-                    // get the string connected system object external ids for this object type
+                    // get the string Connected System Object external ids for this object type
                     var connectedSystemObjectExternalIdsOfTypeString = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeStringAsync(_connectedSystem.Id, selectedObjectType.Id, partitionId);
 
                     // get the string import object external ids for this object type
@@ -835,17 +835,17 @@ public class SyncImportTaskProcessor
                         .Where(q => q.ConnectedSystemObjectType.Id == selectedObjectType.Id)
                         .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.StringValues);
 
-                    // create a collection with the connected system objects no longer in the connected system for this object type
+                    // create a collection with the Connected System Objects no longer in the Connected System for this object type
                     var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeString.Except(connectedSystemStringExternalIdValues);
 
-                    // obsolete the connected system objects no longer in the connected system for this object type
+                    // obsolete the Connected System Objects no longer in the Connected System for this object type
                     foreach (var externalId in connectedSystemObjectDeletesExternalIds)
                         await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated, processedCsoIds);
                     break;
                 }
                 case AttributeDataType.Guid:
                 {
-                    // get the guid connected system object external ids for this object type
+                    // get the guid Connected System Object external ids for this object type
                     var connectedSystemObjectExternalIdsOfTypeGuid = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeGuidAsync(_connectedSystem.Id, selectedObjectType.Id, partitionId);
 
                     // get the guid import object external ids for this object type
@@ -853,17 +853,17 @@ public class SyncImportTaskProcessor
                         .Where(q => q.ConnectedSystemObjectType.Id == selectedObjectType.Id)
                         .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.GuidValues);
 
-                    // create a collection with the connected system objects no longer in the connected system for this object type
+                    // create a collection with the Connected System Objects no longer in the Connected System for this object type
                     var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeGuid.Except(connectedSystemGuidExternalIdValues);
 
-                    // obsolete the connected system objects no longer in the connected system for this object type
+                    // obsolete the Connected System Objects no longer in the Connected System for this object type
                     foreach (var externalId in connectedSystemObjectDeletesExternalIds)
                         await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated, processedCsoIds);
                     break;
                 }
                 case AttributeDataType.LongNumber:
                 {
-                    // get the long connected system object external ids for this object type
+                    // get the long Connected System Object external ids for this object type
                     var connectedSystemObjectExternalIdsOfTypeLong = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeLongAsync(_connectedSystem.Id, selectedObjectType.Id, partitionId);
 
                     // get the long import object external ids for this object type
@@ -871,10 +871,10 @@ public class SyncImportTaskProcessor
                         .Where(q => q.ConnectedSystemObjectType.Id == selectedObjectType.Id)
                         .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.LongValues);
 
-                    // create a collection with the connected system objects no longer in the connected system for this object type
+                    // create a collection with the Connected System Objects no longer in the Connected System for this object type
                     var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeLong.Except(connectedSystemLongExternalIdValues);
 
-                    // obsolete the connected system objects no longer in the connected system for this object type
+                    // obsolete the Connected System Objects no longer in the Connected System for this object type
                     foreach (var externalId in connectedSystemObjectDeletesExternalIds)
                         await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated, processedCsoIds);
                     break;
@@ -1013,7 +1013,7 @@ public class SyncImportTaskProcessor
             return;
         }
 
-        // we need to create a run profile execution item for the object deletion. it will get persisted in the activity tree.
+        // we need to create a Run Profile execution item for the object deletion. it will get persisted in the activity tree.
         var activityRunProfileExecutionItem = new ActivityRunProfileExecutionItem();
         _activityRunProfileExecutionItems.Add(activityRunProfileExecutionItem);
         activityRunProfileExecutionItem.Activity = _activity;  // Set Activity for initiator tracking in CSO change history
@@ -1029,12 +1029,12 @@ public class SyncImportTaskProcessor
             SyncOutcomeBuilder.AddRootOutcome(activityRunProfileExecutionItem,
                 ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected);
 
-        // mark it obsolete internally, so that it's deleted when a synchronisation run profile is performed.
+        // mark it obsolete internally, so that it's deleted when a synchronisation Run Profile is performed.
         // Note: The RPEI uses DeletionDetected (user-facing), but the CSO status uses Obsolete (internal state)
         cso.Status = ConnectedSystemObjectStatus.Obsolete;
         cso.LastUpdated = DateTime.UtcNow;
 
-        // Clean up any stale pending exports for this CSO. When a CSO's object is deleted from the
+        // Clean up any stale Pending Exports for this CSO. When a CSO's object is deleted from the
         // target system, any Exported-status Delete PEs (awaiting confirmation) or other stale PEs
         // are no longer relevant. Without this cleanup, stale PEs accumulate and can cause duplicate
         // PE errors when subsequent operations create new PEs for other CSOs.
@@ -1042,7 +1042,7 @@ public class SyncImportTaskProcessor
             .DeletePendingExportsByConnectedSystemObjectIdsAsync(new[] { cso.Id });
         if (deletedPeCount > 0)
         {
-            Log.Information("ObsoleteConnectedSystemObjectAsync: Cleaned up {Count} stale pending export(s) for obsolete CSO {CsoId}",
+            Log.Information("ObsoleteConnectedSystemObjectAsync: Cleaned up {Count} stale Pending Export(s) for obsolete CSO {CsoId}",
                 deletedPeCount, cso.Id);
         }
 
@@ -1134,14 +1134,14 @@ public class SyncImportTaskProcessor
                 }
 
                 // is this a new, or existing object for the Connected System within JIM?
-                // find the external id attribute(s) for this connected system object type, and then pull out the right type attribute values from the imported object.
+                // find the external id attribute(s) for this Connected System Object Type, and then pull out the right type attribute values from the imported object.
 
                 // match the string object type to a name of an object type in the schema…
                 var csObjectType = _connectedSystem.ObjectTypes.SingleOrDefault(q => q.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase));
                 if (csObjectType == null || !csObjectType.Attributes.Any(a => a.IsExternalId))
                 {
                     activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType;
-                    activityRunProfileExecutionItem.ErrorMessage = $"PerformImportAsync: Couldn't find valid connected system ({_connectedSystem.Id}) object type for imported object type: {importObject.ObjectType}";
+                    activityRunProfileExecutionItem.ErrorMessage = $"PerformImportAsync: Couldn't find valid Connected System ({_connectedSystem.Id}) object type for imported object type: {importObject.ObjectType}";
                     continue;
                 }
 
@@ -1264,7 +1264,7 @@ public class SyncImportTaskProcessor
                     }
                 }
 
-                // see if we already have a matching connected system object for this imported object within JIM
+                // see if we already have a matching Connected System Object for this imported object within JIM
                 ConnectedSystemObject? connectedSystemObject;
                 using (Diagnostics.Sync.StartSpan("FindMatchingCso"))
                 {
@@ -1396,11 +1396,11 @@ public class SyncImportTaskProcessor
                     }
 
                     // Transition PendingProvisioning CSOs to Normal status now that import confirms they exist
-                    // in the connected system. This is essential for proper reconciliation and subsequent lookups.
+                    // in the Connected System. This is essential for proper reconciliation and subsequent lookups.
                     var statusTransitioned = false;
                     if (connectedSystemObject.Status == ConnectedSystemObjectStatus.PendingProvisioning)
                     {
-                        Log.Debug("ProcessImportObjectsAsync: Transitioning CSO {CsoId} from PendingProvisioning to Normal status. Object now confirmed in connected system.",
+                        Log.Debug("ProcessImportObjectsAsync: Transitioning CSO {CsoId} from PendingProvisioning to Normal status. Object now confirmed in Connected System.",
                             connectedSystemObject.Id);
                         connectedSystemObject.Status = ConnectedSystemObjectStatus.Normal;
                         statusTransitioned = true;
@@ -1471,7 +1471,7 @@ public class SyncImportTaskProcessor
             }
             catch (Exception e)
             {
-                // log the unhandled exception to the run profile execution item, so admins can see the error via a client.
+                // log the unhandled exception to the Run Profile execution item, so admins can see the error via a client.
                 activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
                 activityRunProfileExecutionItem.ErrorMessage = e.Message;
                 activityRunProfileExecutionItem.ErrorStackTrace = e.StackTrace;
@@ -1585,7 +1585,7 @@ public class SyncImportTaskProcessor
             AttributeDataType.Guid when importObjectAttribute.GuidValues.Count == 0 =>
                 throw new ExternalIdAttributeValueMissingException($"External Id guid attribute ({externalIdAttribute.Name}) on the imported object has no value."),
             AttributeDataType.Guid => importObjectAttribute.GuidValues[0].ToString().ToLowerInvariant(),
-            _ => throw new InvalidDataException($"LookupCsoByExternalId: Unsupported connected system object type External Id attribute type: {externalIdAttribute.Type}")
+            _ => throw new InvalidDataException($"LookupCsoByExternalId: Unsupported Connected System Object Type External Id attribute type: {externalIdAttribute.Type}")
         };
 
         var cacheKey = $"cso:{_connectedSystem.Id}:{externalIdAttribute.Id}:{externalIdValue}";
@@ -1672,7 +1672,7 @@ public class SyncImportTaskProcessor
                 ?.GuidValues.FirstOrDefault().ToString();
         DeduplicateImportObjectAttributes(connectedSystemImportObject, tempExternalId);
 
-        // new object - create connected system object using data from an import object
+        // new object - create Connected System Object using data from an import object
         var connectedSystemObject = new ConnectedSystemObject
         {
             ConnectedSystem = _connectedSystem,
@@ -1691,7 +1691,7 @@ public class SyncImportTaskProcessor
         var csoIsInvalid = false;
         foreach (var importObjectAttribute in connectedSystemImportObject.Attributes)
         {
-            // find the connected system schema attribute that has the same name
+            // find the Connected System schema attribute that has the same name
             var csAttribute = connectedSystemObjectType.Attributes.SingleOrDefault(q => q.Name.Equals(importObjectAttribute.Name, StringComparison.OrdinalIgnoreCase));
             if (csAttribute == null)
             {
@@ -1714,7 +1714,7 @@ public class SyncImportTaskProcessor
             }
 
             // assign the attribute value(s)
-            // remember, JIM requires an attribute value object for each connected system attribute value, i.e. everything's multi-valued capable
+            // remember, JIM requires an attribute value object for each Connected System attribute value, i.e. everything's multi-valued capable
             switch (csAttribute.Type)
             {
                 case AttributeDataType.Text:
@@ -2191,7 +2191,7 @@ public class SyncImportTaskProcessor
     }
 
     /// <summary>
-    /// Enumerate each connected system object with an unresolved reference string value and attempts to convert it to a resolved reference to another connected system object.
+    /// Enumerate each Connected System Object with an unresolved reference string value and attempts to convert it to a resolved reference to another Connected System Object.
     /// </summary>
     private async Task ResolveReferencesAsync(IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
     {
@@ -2200,7 +2200,7 @@ public class SyncImportTaskProcessor
         // add the cso id as the reference value
         // remove the unresolved reference value
         // update the cso
-        // create a connected system object change for this
+        // create a Connected System Object change for this
 
         // Use sync page size for consistent progress persistence across all sync operations
         var pageSize = await _syncServer.GetSyncPageSizeAsync();
@@ -2339,7 +2339,7 @@ public class SyncImportTaskProcessor
                 else
                 {
                     // reference not found. referenced object probably out of container scope!
-                    // todo: make it a per-connected system setting whether to raise an error, or ignore. sometimes this is desirable.
+                    // todo: make it a per-Connected System setting whether to raise an error, or ignore. sometimes this is desirable.
                     rpeiLookup.TryGetValue(cso, out var activityRunProfileExecutionItem);
                     if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet))
                     {
@@ -2579,7 +2579,7 @@ public class SyncImportTaskProcessor
 
     /// <summary>
     /// Reconciles Pending Exports against imported CSO values.
-    /// This is the "confirming import" step that validates exported attribute changes were persisted in the connected system.
+    /// This is the "confirming import" step that validates exported attribute changes were persisted in the Connected System.
     /// Merges reconciliation outcomes (ExportConfirmed, ExportFailed) onto existing import RPEIs when available,
     /// or creates new RPEIs for CSOs that had no import RPEI (pure confirming import with no attribute changes).
     /// Uses batched database operations for better performance, processing CSOs in pages using the sync page size setting.
@@ -2595,22 +2595,22 @@ public class SyncImportTaskProcessor
         if (updatedCsos.Count == 0)
             return;
 
-        // Use pre-loaded pending exports if available (loaded in parallel during import processing
+        // Use pre-loaded Pending Exports if available (loaded in parallel during import processing
         // on a separate DbContext). Otherwise, fall back to loading them now.
         Dictionary<Guid, PendingExport> allPendingExportsByCsoId;
         if (preLoadedPendingExportsTask != null)
         {
-            await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling pending exports - awaiting pre-loaded data");
+            await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling Pending Exports - awaiting pre-loaded data");
             using (Diagnostics.Sync.StartSpan("AwaitPreLoadedPendingExports"))
             {
                 allPendingExportsByCsoId = await preLoadedPendingExportsTask;
             }
-            Log.Information("ReconcilePendingExportsAsync: Using pre-loaded pending exports ({Count} loaded in background)",
+            Log.Information("ReconcilePendingExportsAsync: Using pre-loaded Pending Exports ({Count} loaded in background)",
                 allPendingExportsByCsoId.Count);
         }
         else
         {
-            await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling pending exports - loading pending exports");
+            await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling Pending Exports - loading Pending Exports");
             using (Diagnostics.Sync.StartSpan("BulkLoadPendingExports"))
             {
                 allPendingExportsByCsoId = await _syncRepo
@@ -2620,7 +2620,7 @@ public class SyncImportTaskProcessor
 
         if (allPendingExportsByCsoId.Count == 0)
         {
-            Log.Debug("ReconcilePendingExportsAsync: No pending exports found for connected system {ConnectedSystemId}. Skipping reconciliation",
+            Log.Debug("ReconcilePendingExportsAsync: No Pending Exports found for Connected System {ConnectedSystemId}. Skipping reconciliation",
                 connectedSystemId);
 
             // Mark progress as complete so the UI doesn't stay stuck at "0 / N"
@@ -2629,19 +2629,19 @@ public class SyncImportTaskProcessor
             return;
         }
 
-        Log.Information("ReconcilePendingExportsAsync: {PendingExportCount} pending exports pre-loaded",
+        Log.Information("ReconcilePendingExportsAsync: {PendingExportCount} Pending Exports pre-loaded",
             allPendingExportsByCsoId.Count);
 
-        // Filter to only CSOs that have pending exports
+        // Filter to only CSOs that have Pending Exports
         var csoList = updatedCsos.Where(c => allPendingExportsByCsoId.ContainsKey(c.Id)).ToList();
 
-        // Update progress counter to reflect the filtered count (only CSOs with pending exports)
+        // Update progress counter to reflect the filtered count (only CSOs with Pending Exports)
         _activity.ObjectsToProcess = csoList.Count;
         _activity.ObjectsProcessed = 0;
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling pending exports");
+        await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling Pending Exports");
         await _syncRepo.UpdateActivityAsync(_activity);
 
-        Log.Debug("ReconcilePendingExportsAsync: {FilteredCount} of {TotalCount} CSOs have pending exports",
+        Log.Debug("ReconcilePendingExportsAsync: {FilteredCount} of {TotalCount} CSOs have Pending Exports",
             csoList.Count, updatedCsos.Count);
 
         var totalConfirmed = 0;
@@ -2653,7 +2653,7 @@ public class SyncImportTaskProcessor
         var pageSize = await _syncServer.GetSyncPageSizeAsync();
         var totalPages = (int)Math.Ceiling((double)csoList.Count / pageSize);
 
-        Log.Information("ReconcilePendingExportsAsync: Processing {CsoCount} CSOs with pending exports in {PageCount} pages of {PageSize}",
+        Log.Information("ReconcilePendingExportsAsync: Processing {CsoCount} CSOs with Pending Exports in {PageCount} pages of {PageSize}",
             csoList.Count, totalPages, pageSize);
 
         var processedCount = 0;
@@ -2680,11 +2680,11 @@ public class SyncImportTaskProcessor
             var pageExecutionItems = new System.Collections.Concurrent.ConcurrentBag<ActivityRunProfileExecutionItem>();
 
             // Process CSOs in parallel - reconciliation is pure in-memory comparison.
-            // All pending exports are already loaded; no database queries per CSO in this loop.
+            // All Pending Exports are already loaded; no database queries per CSO in this loop.
             // Thread safety:
             // - allPendingExportsByCsoId: read-only dictionary (concurrent reads are safe)
             // - Each CSO gets its own PendingExportReconciliationResult (no sharing)
-            // - Each pending export is unique per CSO (no cross-CSO contention)
+            // - Each Pending Export is unique per CSO (no cross-CSO contention)
             // - SyncEngine reconciliation methods are stateless (pure logic, no instance state)
             // - Shared collections use ConcurrentBag, counters use Interlocked
             // Timing diagnostics for the first page to identify bottlenecks
@@ -2700,7 +2700,7 @@ public class SyncImportTaskProcessor
                     {
                         var perCsoSw = isFirstPage ? Stopwatch.StartNew() : null;
 
-                        // Get the pre-loaded pending export for this CSO (if any)
+                        // Get the pre-loaded Pending Export for this CSO (if any)
                         allPendingExportsByCsoId.TryGetValue(cso.Id, out var pendingExport);
 
                         // Perform in-memory reconciliation (no database operations)
@@ -2719,7 +2719,7 @@ public class SyncImportTaskProcessor
                             Interlocked.Add(ref totalRetry, result.RetryChanges.Count);
                             Interlocked.Add(ref totalFailed, result.FailedChanges.Count);
 
-                            // Collect pending exports for batch operations
+                            // Collect Pending Exports for batch operations
                             if (result.PendingExportToDelete != null)
                             {
                                 pendingExportsToDelete.Add(result.PendingExportToDelete);
@@ -2881,7 +2881,7 @@ public class SyncImportTaskProcessor
                     }
                     catch (Exception ex)
                     {
-                        Log.Error(ex, "ReconcilePendingExportsAsync: Error reconciling pending exports for CSO {CsoId}", cso.Id);
+                        Log.Error(ex, "ReconcilePendingExportsAsync: Error reconciling Pending Exports for CSO {CsoId}", cso.Id);
                         Interlocked.Increment(ref processedCount);
                     }
                 });
@@ -2905,7 +2905,7 @@ public class SyncImportTaskProcessor
                     _activityRunProfileExecutionItems.Add(item);
             }
 
-            // Batch persist pending export changes for this page.
+            // Batch persist Pending Export changes for this page.
             // Uses ID-based and tracker-aware methods to avoid conflicts with entities
             // already tracked from the per-CSO processing phase (AsNoTracking loads separate instances).
             var flushSw = isFirstPage ? Stopwatch.StartNew() : null;
@@ -2946,7 +2946,7 @@ public class SyncImportTaskProcessor
 
             // Update activity progress after each page
             await _syncRepo.UpdateActivityMessageAsync(_activity,
-                $"Reconciling pending exports ({processedCount:N0}/{csoList.Count:N0})");
+                $"Reconciling Pending Exports ({processedCount:N0}/{csoList.Count:N0})");
             await _syncRepo.UpdateActivityAsync(_activity);
         }
 
@@ -2999,7 +2999,7 @@ public class SyncImportTaskProcessor
     }
 
     /// <summary>
-    /// Updates the connected system with the appropriate initiator using the initiator triad.
+    /// Updates the Connected System with the appropriate initiator using the initiator triad.
     /// </summary>
     private async Task UpdateConnectedSystemWithInitiatorAsync()
     {

@@ -121,15 +121,15 @@ The cache stores a **lookup index only**: mapping external ID values to CSO GUID
 
 | Event | Cache action |
 |-------|-------------|
-| Full Import start | Bulk-load all CSO external ID → GUID mappings for the connected system |
+| Full Import start | Bulk-load all CSO external ID → GUID mappings for the Connected System |
 | Cache hit (any import) | Return GUID, load entity by PK |
 | Cache miss (delta import) | Query DB by attribute value, add result to cache if found |
 | CSO created (import) | Add to cache after DB persist |
 | CSO updated (import) | Update cache entry if external ID changed |
 | CSO deleted (obsolete removal) | Evict from cache |
-| Full CS deletion | Evict all entries for that connected system |
+| Full CS deletion | Evict all entries for that Connected System |
 
-**Run profile sequencing**:
+**Run Profile sequencing**:
 
 | Scenario | Behaviour |
 |----------|-----------|
@@ -149,7 +149,7 @@ The cache stores a **lookup index only**: mapping external ID values to CSO GUID
 - `IX_ConnectedSystemObjects_ConnectedSystemId_TypeId`: `ConnectedSystemId` as leading column satisfies the CS filter
 - `IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId`: composite on `(ConnectedSystemObjectId, AttributeId)` covers the join and attribute filter
 
-**Cache warming strategy**: Blocking startup warm. When the Worker starts, it loads CSO lookup indexes for all connected systems before accepting tasks. Connected systems are warmed with limited parallelism (default 3 concurrent, configurable) to balance startup speed against database load.
+**Cache warming strategy**: Blocking startup warm. When the Worker starts, it loads CSO lookup indexes for all Connected Systems before accepting tasks. Connected Systems are warmed with limited parallelism (default 3 concurrent, configurable) to balance startup speed against database load.
 
 | Environment | Total CSOs (all CS) | Est. Startup (sequential) | Est. Startup (3 parallel) |
 |-------------|--------------------|--------------------------|----|
@@ -174,7 +174,7 @@ Blocking startup avoids all concurrency complexity between cache warming and tas
 | 500,000 | ~50 MB | Extreme scale |
 | 1,000,000 | ~100 MB | Theoretical upper bound; comfortably viable |
 
-**Empty connected system optimisation**: When a connected system has no existing CSOs (first-ever import), `TryAndFindMatchingConnectedSystemObjectAsync` is skipped entirely. A single `COUNT(*)` query at import start determines if the CS is empty; if so, all N per-object lookups (cache and DB) are eliminated since every object is guaranteed to be new. This is particularly beneficial for integration tests (which run from a blank slate) and for initial production deployments with large source systems. CSOs are bulk-persisted after all pages are processed, so the empty flag remains valid for the entire import run.
+**Empty Connected System optimisation**: When a Connected System has no existing CSOs (first-ever import), `TryAndFindMatchingConnectedSystemObjectAsync` is skipped entirely. A single `COUNT(*)` query at import start determines if the CS is empty; if so, all N per-object lookups (cache and DB) are eliminated since every object is guaranteed to be new. This is particularly beneficial for integration tests (which run from a blank slate) and for initial production deployments with large source systems. CSOs are bulk-persisted after all pages are processed, so the empty flag remains valid for the entire import run.
 
 **Estimated impact**: Eliminates all N+1 import lookup queries. Import of 10,000 objects drops from ~30,000-40,000 queries to 10,000 PK lookups (cache hit path) or 1 bulk query + 10,000 PK lookups (first full import). For first-ever imports against an empty CS, the lookup is skipped entirely; reducing to 0 lookup queries.
 
@@ -368,10 +368,10 @@ If the above phases don't yield sufficient improvement, or if we decide to push 
 **Advantages**:
 - Eliminates all per-object database round-trips for CSO matching during import (zero DB queries on cache hit)
 - Builds on the same `IMemoryCache` infrastructure from Phase 1; only the cached value type changes from `Guid` to `ConnectedSystemObject`
-- Memory usage is bounded by the connected system's object count (known up front)
+- Memory usage is bounded by the Connected System's object count (known up front)
 
 **Trade-offs**:
-- Memory consumption scales with connected system size (~10 KB per CSO with attribute values vs ~100 bytes for index-only)
+- Memory consumption scales with Connected System size (~10 KB per CSO with attribute values vs ~100 bytes for index-only)
 - Entity lifecycle complexity: cached entities are detached from EF Core change tracking. Modification requires attaching to the current `DbContext`, which needs careful handling to avoid tracking conflicts
 - Cache invalidation becomes more critical; a stale cached entity with outdated attribute values could cause incorrect delta detection
 - Requires `AsNoTracking()` on load and explicit `Attach()`/`Update()` on modification
@@ -384,28 +384,28 @@ If the above phases don't yield sufficient improvement, or if we decide to push 
 | 50,000 | ~500 MB | Requires adequate Worker host resources |
 | 100,000 | ~1 GB | Large but viable for enterprise deployments |
 
-**When to consider**: If Phase 1's index-only approach still results in unacceptable import times due to per-object PK loads, particularly for very large connected systems (50k+ objects) where even fast indexed queries accumulate significant total time.
+**When to consider**: If Phase 1's index-only approach still results in unacceptable import times due to per-object PK loads, particularly for very large Connected Systems (50k+ objects) where even fast indexed queries accumulate significant total time.
 
 ### B. MVO Join-Attribute Lookup Cache
 
-**Concept**: Extend the `IMemoryCache` infrastructure from Phase 1 to cache MVO join-attribute values; the attributes referenced in object matching rules across all sync rules. During sync, `FindMetaverseObjectUsingMatchingRuleAsync` is called per CSO to find a matching MVO. If the join-rule-referenced attribute values are cached (e.g., `mvo-match:{objectTypeId}:{attributeId}:{value}` → MVO GUID), sync matching becomes a pure in-memory lookup followed by a single PK load, eliminating the N+1 matching queries entirely.
+**Concept**: Extend the `IMemoryCache` infrastructure from Phase 1 to cache MVO join-attribute values; the attributes referenced in Object Matching Rules across all Synchronisation Rules. During sync, `FindMetaverseObjectUsingMatchingRuleAsync` is called per CSO to find a matching MVO. If the join-rule-referenced attribute values are cached (e.g., `mvo-match:{objectTypeId}:{attributeId}:{value}` → MVO GUID), sync matching becomes a pure in-memory lookup followed by a single PK load, eliminating the N+1 matching queries entirely.
 
 **Advantages**:
 - Reuses the proven `IMemoryCache` infrastructure and patterns from Phase 1 (cache warming, miss-population, eviction)
-- Join rules typically reference a small, well-defined set of attributes (1-2 per sync rule; e.g., `employeeId`, `sAMAccountName`, `objectGUID`), keeping the cache footprint small
+- Join rules typically reference a small, well-defined set of attributes (1-2 per Synchronisation Rule; e.g., `employeeId`, `sAMAccountName`, `objectGUID`), keeping the cache footprint small
 - MVO join attributes are identity anchors that rarely change, making the cache highly effective
-- Cache warming can read sync rule configurations to determine exactly which attributes to index
+- Cache warming can read Synchronisation Rule configurations to determine exactly which attributes to index
 
 **Trade-offs**:
 - MVO attribute values can change during sync (unlike CSO external IDs which are essentially immutable). Cache invalidation must cover attribute value updates, not just creates/deletes
-- The set of "which attributes are join-rule attributes" must be resolved at warmup time by reading sync rule configurations. If sync rules change (admin adds/modifies a join rule), the cache needs re-warming; but this is rare and a Worker restart suffices
+- The set of "which attributes are join-rule attributes" must be resolved at warmup time by reading Synchronisation Rule configurations. If Synchronisation Rules change (admin adds/modifies a join rule), the cache needs re-warming; but this is rare and a Worker restart suffices
 - More complex than the lightweight query optimisation in Phase 2, but potentially higher impact
 
 **When to consider**: If Phase 2's lightweight query optimisation doesn't sufficiently reduce sync matching times, particularly for large environments with 50k+ MVOs where even optimised per-object queries accumulate significant total time.
 
 ### C. Persistent In-Memory Model for the Worker Service
 
-**Concept**: Adopt an in-memory processing model for the Worker service. When the Worker starts, establish and maintain a persistent in-memory cache of everything needed for run profile execution -- CSOs, MVOs, attribute values, sync rules, object types, etc. The cache stays warm across run profile executions, so the Worker is always ready to execute without per-run database loading. Database writes are batched and the cache is kept in sync with persisted changes.
+**Concept**: Adopt an in-memory processing model for the Worker service. When the Worker starts, establish and maintain a persistent in-memory cache of everything needed for Run Profile execution -- CSOs, MVOs, attribute values, Synchronisation Rules, object types, etc. The cache stays warm across Run Profile executions, so the Worker is always ready to execute without per-run database loading. Database writes are batched and the cache is kept in sync with persisted changes.
 
 This is a fundamentally different approach to the surgical per-query optimisations above. Rather than optimising individual database calls, it shifts the Worker to an in-memory processing model where the database becomes a persistence layer rather than the primary data source during execution. The architectural options for this will need exploring and analysing for suitability.
 
@@ -423,7 +423,7 @@ This is a fundamentally different approach to the surgical per-query optimisatio
 - Simplifies processing code -- no async database calls in hot loops
 
 **Trade-offs**:
-- Memory consumption scales with total environment size across all connected systems
+- Memory consumption scales with total environment size across all Connected Systems
 - Cache coherency with the database needs careful design (especially when the Web/API layer modifies configuration)
 - Larger upfront engineering effort -- this is an architectural shift, not a surgical optimisation
 - Requires thorough analysis of which data structures are appropriate and how much memory is realistic for target environment sizes (10k, 50k, 100k+ objects)

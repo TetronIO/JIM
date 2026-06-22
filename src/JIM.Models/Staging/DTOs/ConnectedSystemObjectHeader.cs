@@ -61,12 +61,12 @@ public class ConnectedSystemObjectHeader
     public string? PendingExternalId { get; set; }
 
     /// <summary>
-    /// The secondary external ID (e.g., DN) from a pending export, if one exists and the CSO doesn't have a confirmed value.
+    /// The secondary external ID (e.g., DN) from a Pending Export, if one exists and the CSO doesn't have a confirmed value.
     /// </summary>
     public string? PendingSecondaryExternalId { get; set; }
 
     /// <summary>
-    /// Whether there is a pending export for this CSO.
+    /// Whether there is a Pending Export for this CSO.
     /// </summary>
     public bool HasPendingExport { get; set; }
 

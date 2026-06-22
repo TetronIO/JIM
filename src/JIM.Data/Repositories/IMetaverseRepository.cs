@@ -85,14 +85,14 @@ public interface IMetaverseRepository
     public Task<int> GetMetaverseObjectOfTypeCountAsync(int metaverseObjectTypeId);
 
     /// <summary>
-    /// Gets the count of metaverse objects with optional filtering by type, search query, or specific attribute value.
+    /// Gets the count of Metaverse Objects with optional filtering by type, search query, or specific attribute value.
     /// Optimised for fast counting without loading entity data.
     /// </summary>
     /// <param name="objectTypeId">Optional object type ID to filter by.</param>
     /// <param name="searchQuery">Optional search query to filter by display name (partial match, case-insensitive).</param>
     /// <param name="filterAttributeName">Optional attribute name to filter by (must be used with filterAttributeValue).</param>
     /// <param name="filterAttributeValue">Optional attribute value to filter by (exact match, case-insensitive).</param>
-    /// <returns>The count of matching metaverse objects.</returns>
+    /// <returns>The count of matching Metaverse Objects.</returns>
     public Task<int> GetMetaverseObjectsCountAsync(
         int? objectTypeId = null,
         string? searchQuery = null,
@@ -115,7 +115,7 @@ public interface IMetaverseRepository
         bool sortDescending = true);
 
     /// <summary>
-    /// Gets a paginated list of lightweight metaverse object headers with only the attributes defined
+    /// Gets a paginated list of lightweight Metaverse Object headers with only the attributes defined
     /// in the PredefinedSearch projected directly in SQL. No EF Include chain is used — attribute values
     /// are projected inline for optimum performance at scale (100k+ objects).
     /// </summary>
@@ -134,7 +134,7 @@ public interface IMetaverseRepository
         bool sortDescending = true);
 
     /// <summary>
-    /// Gets a paginated list of metaverse objects with optional filtering by type, search query, or specific attribute value.
+    /// Gets a paginated list of Metaverse Objects with optional filtering by type, search query, or specific attribute value.
     /// </summary>
     /// <param name="page">The page number (1-based).</param>
     /// <param name="pageSize">The number of items per page.</param>
@@ -144,7 +144,7 @@ public interface IMetaverseRepository
     /// <param name="attributes">Optional list of attribute names to include. Use "*" to include all attributes. DisplayName is always included.</param>
     /// <param name="filterAttributeName">Optional attribute name to filter by (must be used with filterAttributeValue).</param>
     /// <param name="filterAttributeValue">Optional attribute value to filter by (exact match, case-insensitive).</param>
-    /// <returns>A paged result set of metaverse object headers.</returns>
+    /// <returns>A paged result set of Metaverse Object headers.</returns>
     public Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectsAsync(
         int page,
         int pageSize,
@@ -164,7 +164,7 @@ public interface IMetaverseRepository
     /// <param name="objectMatchingRule">The Object Matching Rule contains the logic needed to construct a Metaverse Object query.</param>
     /// <returns>A Metaverse Object if a single result is found, otherwise null.</returns>
     /// <exception cref="NotImplementedException">Will be thrown if more than one source is specified (advanced matching). This is not yet supported.</exception>
-    /// <exception cref="ArgumentNullException">Will be thrown if the object matching rule source connected system attribute is null.</exception>
+    /// <exception cref="ArgumentNullException">Will be thrown if the Object Matching Rule source Connected System attribute is null.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Will be thrown if an unsupported attribute type is specified.</exception>
     /// <exception cref="MultipleMatchesException">Will be thrown if there's more than one Metaverse Object that matches the matching rule criteria.</exception>
     public Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(ConnectedSystemObject connectedSystemObject, MetaverseObjectType metaverseObjectType, ObjectMatchingRule objectMatchingRule);
@@ -202,7 +202,7 @@ public interface IMetaverseRepository
     /// - Origin = Projected (not Internal - protects admin accounts)
     /// - Type.DeletionRule = WhenLastConnectorDisconnected
     /// - LastConnectorDisconnectedDate + GracePeriodDays <= now
-    /// - No connected system objects remain
+    /// - No Connected System Objects remain
     /// </summary>
     /// <param name="maxResults">Maximum number of results to return.</param>
     /// <returns>List of MVOs eligible for deletion.</returns>
@@ -338,28 +338,28 @@ public interface IMetaverseRepository
     public Task DeleteMetaverseAttributeAsync(MetaverseAttribute attribute);
 
     /// <summary>
-    /// Counts the number of distinct metaverse objects that have at least one value
+    /// Counts the number of distinct Metaverse Objects that have at least one value
     /// stored for the specified attribute.
     /// </summary>
     /// <param name="attributeId">The unique identifier of the attribute.</param>
-    /// <returns>The count of distinct metaverse objects with values for this attribute.</returns>
+    /// <returns>The count of distinct Metaverse Objects with values for this attribute.</returns>
     public Task<int> GetAttributeValueObjectCountAsync(int attributeId);
 
     /// <summary>
-    /// Counts the number of distinct metaverse objects of a specific type that have
+    /// Counts the number of distinct Metaverse Objects of a specific type that have
     /// at least one value stored for the specified attribute.
     /// </summary>
     /// <param name="attributeId">The unique identifier of the attribute.</param>
     /// <param name="metaverseObjectTypeId">The unique identifier of the object type to filter by.</param>
-    /// <returns>The count of distinct metaverse objects of the given type with values for this attribute.</returns>
+    /// <returns>The count of distinct Metaverse Objects of the given type with values for this attribute.</returns>
     public Task<int> GetAttributeValueObjectCountByTypeAsync(int attributeId, int metaverseObjectTypeId);
 
     /// <summary>
-    /// Gets the sync rules that reference the specified metaverse attribute via
-    /// sync rule mappings, mapping sources, object matching rules, or scoping criteria.
+    /// Gets the Synchronisation Rules that reference the specified metaverse attribute via
+    /// Synchronisation Rule mappings, mapping sources, Object Matching Rules, or scoping criteria.
     /// </summary>
     /// <param name="attributeId">The unique identifier of the attribute.</param>
-    /// <returns>A list of sync rule references (ID and Name) that use this attribute.</returns>
+    /// <returns>A list of Synchronisation Rule references (ID and Name) that use this attribute.</returns>
     public Task<List<SyncRuleReference>> GetSyncRulesReferencingAttributeAsync(int attributeId);
     #endregion
 }

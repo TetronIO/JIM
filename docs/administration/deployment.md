@@ -23,7 +23,7 @@ Storage scales with the number of identity objects and the frequency of synchron
 
 #### Memory Scaling by Identity Object Count
 
-The worker service loads all objects from a connector into memory during full import processing (CSOs, attribute values, RPEIs, duplicate detection structures). Memory requirements scale linearly with the number of objects in the largest connected system.
+The worker service loads all objects from a connector into memory during full import processing (CSOs, attribute values, RPEIs, duplicate detection structures). Memory requirements scale linearly with the number of objects in the largest Connected System.
 
 These figures are for the **host machine** (or VM) running the Docker stack -- they must cover the operating system, all JIM containers, and the database.
 
@@ -38,7 +38,7 @@ These figures are for the **host machine** (or VM) running the Docker stack -- t
     During a full import, the worker loads all imported objects with their attributes into memory before the save phase begins (for duplicate detection, deletion detection, and reference resolution). A full import of 100,000 objects with 20 attributes each produces a worker peak working set of approximately 2.3 GB. The database requires an additional 1--2 GB during bulk inserts. Combined with the web, scheduler, and operating system overhead, total system memory consumption reaches 8--10 GB for 100K objects.
 
 !!! note
-    These requirements apply to the largest single full import. If you have multiple connected systems of 50K objects each but import them sequentially (not concurrently), size for 50K, not the sum. Delta imports process only changed objects and require significantly less memory.
+    These requirements apply to the largest single full import. If you have multiple Connected Systems of 50K objects each but import them sequentially (not concurrently), size for 50K, not the sum. Delta imports process only changed objects and require significantly less memory.
 
 ### Software Requirements
 

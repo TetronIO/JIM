@@ -265,9 +265,9 @@ Add a `global.json` to pin the SDK version:
 Eliminates the double-render problem across the Blazor UI. Currently, every page that loads data in `OnInitializedAsync` fetches that data twice during prerendering: once on the server, then again when the circuit connects.
 
 **Concrete impact in JIM:**
-- `ConnectedSystemList.razor` (line 102): loads connected system headers; would avoid a redundant `GetConnectedSystemHeadersAsync()` call on every page load
-- `ActivityDetail.razor` (lines 576-597): loads activity, connected system header, metaverse object header, and execution stats in sequence; all four queries currently run twice
-- `ConnectedSystemObjectList.razor` (lines 330-352): loads connected system header + object types; double-fetched on navigation
+- `ConnectedSystemList.razor` (line 102): loads Connected System headers; would avoid a redundant `GetConnectedSystemHeadersAsync()` call on every page load
+- `ActivityDetail.razor` (lines 576-597): loads activity, Connected System header, Metaverse Object header, and execution stats in sequence; all four queries currently run twice
+- `ConnectedSystemObjectList.razor` (lines 330-352): loads Connected System header + object types; double-fetched on navigation
 - `ConnectorList.razor` (line 56): loads connector definitions; simple but still double-rendered
 - `UserPreferenceService.cs`: already has try-catch workarounds for "JS interop not available during prerendering" (12+ catch blocks); `[PersistentState]` would eliminate this entire pattern
 

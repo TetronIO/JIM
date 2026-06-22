@@ -46,7 +46,7 @@ public class SecurityControllerTests
         _application = new JimApplication(_mockRepository.Object);
         _controller = new SecurityController(_mockLogger.Object, _application);
 
-        // Set up SSO user authentication context (metaverse object ID as sub claim)
+        // Set up SSO user authentication context (Metaverse Object ID as sub claim)
         _callerObjectId = Guid.NewGuid();
         SetupUserContext(_callerObjectId);
     }

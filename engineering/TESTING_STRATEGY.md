@@ -97,7 +97,7 @@ Total: 40 tests.
 
 **Two Patterns**:
 
-1. **`WorkflowTestBase`** (`test/JIM.Worker.Tests/Workflows/`): Abstract base class with in-memory database and helper methods for creating test data (connected systems, CSOs, sync rules, run profiles). Best for focused tests on specific processor logic.
+1. **`WorkflowTestBase`** (`test/JIM.Worker.Tests/Workflows/`): Abstract base class with in-memory database and helper methods for creating test data (Connected Systems, CSOs, Synchronisation Rules, Run Profiles). Best for focused tests on specific processor logic.
 
 2. **`WorkflowTestHarness`** (`test/JIM.Workflow.Tests/Harness/`): Higher-level harness that orchestrates complete sync cycles (import → sync → export → confirming import) with state snapshots between steps. Uses `MockCallConnector` to simulate external systems. Best for end-to-end scenario tests.
 
@@ -231,7 +231,7 @@ public class FullSyncAfterImportWorkflowTests
     {
         using var harness = new WorkflowTestHarness();
 
-        // Setup: Create connected system with mock connector
+        // Setup: Create Connected System with mock connector
         await harness.CreateConnectedSystemAsync("HR", ...);
 
         // Execute: Import -> Sync cycle
@@ -295,7 +295,7 @@ var cso = await context.ConnectedSystemObjects.FirstAsync(c => c.Id == id);
 - `targetMvo.Type` was always `null`
 - Export rule filter `r.MetaverseObjectTypeId == targetMvo.Type?.Id` always evaluated to `false`
 - Drift detection found NO applicable export rules
-- NO corrective pending exports were created
+- NO corrective Pending Exports were created
 - **Scenario 8 integration test failed**
 
 **Result in Unit/Workflow Tests**:

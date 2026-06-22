@@ -122,7 +122,7 @@
 - [x] Implement dynamic sorting via reflection in `QueryableExtensions.ApplySort`
 
 ### 4.5 Implementation Notes
-- Pagination is applied at the API layer (in-memory) for configuration endpoints (Connected Systems, Sync Rules, Object Types, Attributes) which have small, bounded datasets
+- Pagination is applied at the API layer (in-memory) for configuration endpoints (Connected Systems, Synchronisation Rules, Object Types, Attributes) which have small, bounded datasets
 - Database-level pagination already exists for large datasets (CSOs and MVOs) via `PagedResultSet<T>` in the repository layer
 - Default page size: 25, max: 100
 

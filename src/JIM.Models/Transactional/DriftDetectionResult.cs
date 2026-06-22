@@ -22,7 +22,7 @@ public class DriftDetectionResult
     public bool HasDrift => DriftedAttributes.Count > 0;
 
     /// <summary>
-    /// Pending exports that were created to correct the drift.
+    /// Pending Exports that were created to correct the drift.
     /// </summary>
     public List<PendingExport> CorrectiveExports { get; } = [];
 }

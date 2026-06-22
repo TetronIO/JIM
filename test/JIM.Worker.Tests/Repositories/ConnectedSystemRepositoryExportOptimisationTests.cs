@@ -22,7 +22,7 @@ public class ConnectedSystemRepositoryExportOptimisationTests
     private Mock<JimDbContext> _mockDbContext = null!;
     private PostgresDataRepository _repository = null!;
 
-    // Pending export data
+    // Pending Export data
     private List<PendingExport> _pendingExportsData = null!;
     private Mock<DbSet<PendingExport>> _mockDbSetPendingExports = null!;
 

@@ -10,7 +10,7 @@ FileConnector export is fundamentally broken for its primary use case. Four rela
 
 1. **Export writes wrong schema** - Adds system columns (`_objectType`, `_externalId`, `_changeType`), reorders attributes alphabetically. Subsequent import fails because schema doesn't match.
 2. **External ID not returned** - `ExportResult.Succeeded()` returns no External ID, so the provisioning CSO never gets its External ID value populated.
-3. **Duplicate pending exports** - When Training sync re-evaluates export rules for MVOs that already have pending Create exports for Cross-Domain, no deduplication occurs because the database fallback check only runs for Update operations.
+3. **Duplicate Pending Exports** - When Training sync re-evaluates export rules for MVOs that already have pending Create exports for Cross-Domain, no deduplication occurs because the database fallback check only runs for Update operations.
 4. **Activity view empty** - RPEIs for Create exports show no External ID or Name because CSO is null at export time.
 
 ## Design Decisions
@@ -18,7 +18,7 @@ FileConnector export is fundamentally broken for its primary use case. Four rela
 - **Full-state export only for MVP.** Delta/change-log export deferred to post-MVP issue.
 - **Remove "Include Full State" setting** from FileConnector and hardcode full-state behaviour.
 - **Merge-on-write approach**: Read existing file, apply changes, write result. File always represents current state.
-- **External ID from attribute flow**: For Creates, find the IsExternalId attribute in the pending export's attribute changes and return it in ExportResult.
+- **External ID from Attribute Flow**: For Creates, find the IsExternalId attribute in the Pending Export's attribute changes and return it in ExportResult.
 
 ---
 
@@ -30,9 +30,9 @@ FileConnector export is fundamentally broken for its primary use case. Four rela
 
 Rewrote `Execute()` to:
 
-- Determine schema columns from the pending exports' attribute metadata (no system columns)
+- Determine schema columns from the Pending Exports' attribute metadata (no system columns)
 - Load existing file content into `Dictionary<string, Dictionary<string, string>>` keyed by External ID
-- Apply pending export changes (Create = add row, Update = merge, Delete = remove row)
+- Apply Pending Export changes (Create = add row, Update = merge, Delete = remove row)
 - Write merged full-state result back to CSV
 - Return `ExportResult.Succeeded(externalId)` with External ID from IsExternalId attribute
 
@@ -53,7 +53,7 @@ In `CreateOrUpdatePendingExportWithNoNetChangeAsync`:
 
 - **Before:** The database fallback check (~line 1038) only ran for `changeType == PendingExportChangeType.Update`
 - **After:** Changed condition to `changeType == PendingExportChangeType.Update || changeType == PendingExportChangeType.Create`
-- When a pending export already exists in the DB for that CSO, it merges rather than creating a duplicate
+- When a Pending Export already exists in the DB for that CSO, it merges rather than creating a duplicate
 
 ---
 
@@ -92,7 +92,7 @@ Post-MVP issue created documenting delta/change-log export as a future enhanceme
 **File:** `test/JIM.Worker.Tests/Connectors/FileConnectorExportTests.cs`
 
 Full test suite covering:
-- No-op / error cases (no pending exports, missing file path, no external ID attribute)
+- No-op / error cases (no Pending Exports, missing file path, no external ID attribute)
 - Create exports (correct headers, correct data, returns External ID, multiple creates, no external ID value fails)
 - Update exports (merge with existing, preserve unchanged attributes, preserve other rows)
 - Delete exports (remove row, non-existent row still succeeds)

@@ -67,7 +67,7 @@ public class UserInfoController(ILogger<UserInfoController> logger, JimApplicati
                 authMethod,
                 metaverseObjectId = (Guid?)null,
                 roles = Array.Empty<string>(),
-                message = "You are authenticated but do not have a JIM identity. Identities are created when you are synchronised into JIM from a connected system, or provisioned by an administrator. Contact your JIM administrator if you believe this is in error."
+                message = "You are authenticated but do not have a JIM identity. Identities are created when you are synchronised into JIM from a Connected System, or provisioned by an administrator. Contact your JIM administrator if you believe this is in error."
             }));
         }
 

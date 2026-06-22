@@ -101,7 +101,7 @@ public interface IUserPreferenceService
     /// <summary>
     /// Gets the expanded state for an attribute category panel on the MVO detail page.
     /// </summary>
-    /// <param name="objectTypeId">The metaverse object type ID (stable across renames).</param>
+    /// <param name="objectTypeId">The Metaverse Object Type ID (stable across renames).</param>
     /// <param name="categoryName">The category name (e.g., "Identity", "Contact").</param>
     /// <returns>True if expanded, false if collapsed, null if no preference (default to expanded).</returns>
     Task<bool?> GetCategoryExpandedAsync(int objectTypeId, string categoryName);
@@ -109,7 +109,7 @@ public interface IUserPreferenceService
     /// <summary>
     /// Sets the expanded state for an attribute category panel on the MVO detail page.
     /// </summary>
-    /// <param name="objectTypeId">The metaverse object type ID (stable across renames).</param>
+    /// <param name="objectTypeId">The Metaverse Object Type ID (stable across renames).</param>
     /// <param name="categoryName">The category name (e.g., "Identity", "Contact").</param>
     /// <param name="expanded">Whether the category panel is expanded.</param>
     Task SetCategoryExpandedAsync(int objectTypeId, string categoryName, bool expanded);

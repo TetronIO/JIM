@@ -12,7 +12,7 @@ namespace JIM.Worker.Tests.Utilities;
 
 /// <summary>
 /// Tests for <see cref="ExportChangeHistoryBuilder"/> to ensure export change history records
-/// are correctly built from pending export data.
+/// are correctly built from Pending Export data.
 /// </summary>
 [TestFixture]
 public class ExportChangeHistoryBuilderTests
@@ -501,7 +501,7 @@ public class ExportChangeHistoryBuilderTests
 
     #endregion
 
-    #region MapAttributeValueChanges — resolved pending export references
+    #region MapAttributeValueChanges — resolved Pending Export references
 
     [Test]
     public void MapAttributeValueChanges_ReferenceWithResolvedStubCso_StoresDisplayNameWithPendingFlag()
