@@ -25,7 +25,7 @@ public class MetaverseObjectChange
     public DateTime ChangeTime { get; set; }
 
     /// <summary>
-    /// The run profile execution item that caused this change (for sync-initiated changes).
+    /// The Run Profile execution item that caused this change (for sync-initiated changes).
     /// May be null if run history has been cleared or for non-sync changes.
     /// </summary>
     public Activities.ActivityRunProfileExecutionItem? ActivityRunProfileExecutionItem { get; set; }
@@ -53,7 +53,7 @@ public class MetaverseObjectChange
     public string? InitiatedByName { get; set; }
 
     /// <summary>
-    /// What mechanism triggered this change (sync rule, workflow, direct user action, etc.).
+    /// What mechanism triggered this change (Synchronisation Rule, workflow, direct user action, etc.).
     /// </summary>
     public MetaverseObjectChangeInitiatorType ChangeInitiatorType { get; set; }
 
@@ -63,20 +63,20 @@ public class MetaverseObjectChange
     public ObjectChangeType ChangeType { get; set; }
 
     /// <summary>
-    /// The sync rule that caused this change (for sync-initiated changes).
-    /// Nullable FK - if sync rule is deleted, this becomes null.
+    /// The Synchronisation Rule that caused this change (for sync-initiated changes).
+    /// Nullable FK - if Synchronisation Rule is deleted, this becomes null.
     /// </summary>
     public SyncRule? SyncRule { get; set; }
     public int? SyncRuleId { get; set; }
 
     /// <summary>
-    /// Snapshot of sync rule name at time of change.
-    /// Preserved even if sync rule is deleted for audit trail.
+    /// Snapshot of Synchronisation Rule name at time of change.
+    /// Preserved even if Synchronisation Rule is deleted for audit trail.
     /// </summary>
     public string? SyncRuleName { get; set; }
 
     /// <summary>
-    /// Enables access to per-attribute value changes for the metaverse object in question.
+    /// Enables access to per-attribute value changes for the Metaverse Object in question.
     /// </summary>
     public List<MetaverseObjectChangeAttribute> AttributeChanges { get; set; } = new List<MetaverseObjectChangeAttribute>();
 

@@ -54,15 +54,15 @@ public class ImportCreateObjectTests
         TestUtilities.SetEnvironmentVariables();
         InitiatedBy = TestUtilities.GetInitiatedBy();
         
-        // set up the connected systems mock
+        // set up the Connected Systems mock
         ConnectedSystemsData = TestUtilities.GetConnectedSystemData();
         MockDbSetConnectedSystems = ConnectedSystemsData.BuildMockDbSet();
 
-        // setup up the connected system run profiles mock
+        // setup up the Connected System Run Profiles mock
         ConnectedSystemRunProfilesData = TestUtilities.GetConnectedSystemRunProfileData();
         MockDbSetConnectedSystemRunProfiles = ConnectedSystemRunProfilesData.BuildMockDbSet();
 
-        // set up the connected system object types mock. this acts as the persisted schema in JIM
+        // set up the Connected System Object Types mock. this acts as the persisted schema in JIM
         ConnectedSystemObjectTypesData = TestUtilities.GetConnectedSystemObjectTypeData();
         MockDbSetConnectedSystemObjectTypes = ConnectedSystemObjectTypesData.BuildMockDbSet();
 
@@ -79,7 +79,7 @@ public class ImportCreateObjectTests
         ServiceSettingsData = TestUtilities.GetServiceSettingsData();
         MockDbSetServiceSettings = ServiceSettingsData.BuildMockDbSet();
 
-        // set up the pending exports mock (empty - import tests don't have pending exports to reconcile)
+        // set up the Pending Exports mock (empty - import tests don't have Pending Exports to reconcile)
         PendingExportsData = new List<PendingExport>();
         MockDbSetPendingExports = PendingExportsData.BuildMockDbSet();
 
@@ -393,7 +393,7 @@ public class ImportCreateObjectTests
         Assert.Pass();
     }
     
-    // todo: test activity/run profile execution item/change object creation
+    // todo: test activity/Run Profile execution item/change object creation
 
     /// <summary>
     /// Tests that when the connector throws an exception during import (simulating connectivity errors),
@@ -429,7 +429,7 @@ public class ImportCreateObjectTests
 
     /// <summary>
     /// Tests that when an imported object has duplicate attribute names, the error is
-    /// recorded in the activity run profile execution item with the appropriate error type.
+    /// recorded in the activity Run Profile execution item with the appropriate error type.
     /// </summary>
     [Test]
     public async Task FullImportDuplicateAttributeErrorTestAsync()
@@ -494,7 +494,7 @@ public class ImportCreateObjectTests
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(0), "Expected no Connected System Objects to be created due to duplicate attribute error.");
 
         // verify the error was recorded in the activity
-        Assert.That(activity.RunProfileExecutionItems, Is.Not.Empty, "Expected run profile execution items to be created.");
+        Assert.That(activity.RunProfileExecutionItems, Is.Not.Empty, "Expected Run Profile execution items to be created.");
         var errorItem = activity.RunProfileExecutionItems.FirstOrDefault(item => item.ErrorType == ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes);
         Assert.That(errorItem, Is.Not.Null, "Expected an error item for duplicate imported attributes.");
         Assert.That(errorItem.ErrorMessage, Does.Contain("DISPLAY_NAME"), "Expected the error message to mention the duplicate attribute name.");
@@ -504,7 +504,7 @@ public class ImportCreateObjectTests
 
     /// <summary>
     /// Tests that when an imported object has an unexpected attribute (not in the schema),
-    /// the error is recorded in the activity run profile execution item.
+    /// the error is recorded in the activity Run Profile execution item.
     /// </summary>
     [Test]
     public async Task FullImportUnexpectedAttributeErrorTestAsync()
@@ -563,7 +563,7 @@ public class ImportCreateObjectTests
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(0), "Expected no Connected System Objects to be created due to unexpected attribute error.");
 
         // verify the error was recorded in the activity
-        Assert.That(activity.RunProfileExecutionItems, Is.Not.Empty, "Expected run profile execution items to be created.");
+        Assert.That(activity.RunProfileExecutionItems, Is.Not.Empty, "Expected Run Profile execution items to be created.");
         var errorItem = activity.RunProfileExecutionItems.FirstOrDefault(item => item.ErrorType == ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute);
         Assert.That(errorItem, Is.Not.Null, "Expected an error item for unexpected attribute.");
         Assert.That(errorItem.ErrorMessage, Does.Contain("ATTRIBUTE_NOT_IN_SCHEMA"), "Expected the error message to mention the unexpected attribute name.");
@@ -662,7 +662,7 @@ public class ImportCreateObjectTests
         Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(0), "Expected no Connected System Objects to be created due to duplicate external ID error.");
 
         // verify BOTH objects have DuplicateObject errors in the activity
-        Assert.That(activity.RunProfileExecutionItems, Is.Not.Empty, "Expected run profile execution items to be created.");
+        Assert.That(activity.RunProfileExecutionItems, Is.Not.Empty, "Expected Run Profile execution items to be created.");
         var duplicateErrors = activity.RunProfileExecutionItems
             .Where(item => item.ErrorType == ActivityRunProfileExecutionItemErrorType.DuplicateObject)
             .ToList();

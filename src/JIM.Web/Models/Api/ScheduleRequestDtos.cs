@@ -225,12 +225,12 @@ public class ScheduleStepRequest
     // -----------------------------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// The connected system ID (required for RunProfile steps).
+    /// The Connected System ID (required for RunProfile steps).
     /// </summary>
     public int? ConnectedSystemId { get; set; }
 
     /// <summary>
-    /// The run profile ID (required for RunProfile steps).
+    /// The Run Profile ID (required for RunProfile steps).
     /// </summary>
     public int? RunProfileId { get; set; }
 

@@ -143,7 +143,7 @@ JIM has reached MVP completion (100%). The core identity lifecycle is fully func
 
 - **Import** identities from source systems (LDAP, CSV)
 - **Sync** to reconcile identities in the central metaverse
-- **Export** changes to target systems with pending export management
+- **Export** changes to target systems with Pending Export management
 - **Schedule** automated synchronisation using cron or interval-based triggers
 
 For detailed feature checklists and post-MVP roadmap, see the [Roadmap](https://docs.junctional.io/reference/roadmap/).

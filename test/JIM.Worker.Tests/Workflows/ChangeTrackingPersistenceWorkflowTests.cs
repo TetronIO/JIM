@@ -90,7 +90,7 @@ public class ChangeTrackingPersistenceWorkflowTests : WorkflowTestBase
         var projectedChange = changes.First(c =>
             c.ChangeType == ObjectChangeType.Projected || c.ChangeType == ObjectChangeType.Joined);
         Assert.That(projectedChange.AttributeChanges, Has.Count.GreaterThanOrEqualTo(2),
-            "Projected change should record DisplayName and EmployeeId attribute flows");
+            "Projected change should record DisplayName and EmployeeId Attribute Flows");
     }
 
     [Test]
@@ -154,7 +154,7 @@ public class ChangeTrackingPersistenceWorkflowTests : WorkflowTestBase
         var displayNameAttrChange = latestChange.AttributeChanges
             .FirstOrDefault(ac => ac.Attribute?.Name == "DisplayName");
         Assert.That(displayNameAttrChange, Is.Not.Null,
-            "Change record should include the DisplayName attribute flow");
+            "Change record should include the DisplayName Attribute Flow");
     }
 
     #endregion

@@ -17,7 +17,7 @@ You are assisting with JIM (developed by Tetron), an enterprise Identity Lifecyc
 
 ## Project Context
 
-JIM is a self-hosted, container-native identity management platform that synchronises identity data between connected systems (HR, Active Directory, databases, etc.) through a central "metaverse" hub.
+JIM is a self-hosted, container-native identity management platform that synchronises identity data between Connected Systems (HR, Active Directory, databases, etc.) through a central "metaverse" hub.
 
 **Repository:** https://github.com/TetronIO/JIM
 

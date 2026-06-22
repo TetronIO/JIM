@@ -42,7 +42,7 @@ public enum StepExecutionMode
 public enum ScheduleStepType
 {
     /// <summary>
-    /// Execute a connected system run profile.
+    /// Execute a Connected System Run Profile.
     /// </summary>
     RunProfile = 0,
 

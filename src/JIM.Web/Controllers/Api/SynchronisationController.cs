@@ -59,7 +59,7 @@ public class SynchronisationController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetConnectedSystemsAsync([FromQuery] PaginationRequest pagination)
     {
-        _logger.LogTrace("Requested connected systems (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
+        _logger.LogTrace("Requested Connected Systems (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
         // Use GetConnectedSystemHeadersAsync which correctly computes PendingExportObjectsCount via SQL COUNT subquery.
         // The previous implementation used GetConnectedSystemsAsync().Select(FromEntity) which didn't load
         // the PendingExports navigation property, resulting in PendingExportObjectsCount always being 0.
@@ -83,10 +83,10 @@ public class SynchronisationController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetConnectedSystemAsync(int connectedSystemId)
     {
-        _logger.LogTrace("Requested connected system: {Id}", connectedSystemId);
+        _logger.LogTrace("Requested Connected System: {Id}", connectedSystemId);
         var system = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
         if (system == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         // GetConnectedSystemAsync doesn't load PendingExports or Objects (too expensive for
         // the detail query and can be very large). Compute counts via dedicated queries,
@@ -108,10 +108,10 @@ public class SynchronisationController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetConnectedSystemObjectTypesAsync(int connectedSystemId)
     {
-        _logger.LogTrace("Requested object types for connected system: {Id}", connectedSystemId);
+        _logger.LogTrace("Requested object types for Connected System: {Id}", connectedSystemId);
         var objectTypes = await _application.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);
         if (objectTypes == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         var dtos = objectTypes.Select(ConnectedSystemObjectTypeDto.FromEntity);
         return Ok(dtos);
@@ -140,7 +140,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> UpdateConnectedSystemObjectTypeAsync(int connectedSystemId, int objectTypeId, [FromBody] UpdateConnectedSystemObjectTypeRequest request)
     {
-        _logger.LogInformation("Updating object type {ObjectTypeId} for connected system {SystemId}", objectTypeId, connectedSystemId);
+        _logger.LogInformation("Updating object type {ObjectTypeId} for Connected System {SystemId}", objectTypeId, connectedSystemId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -149,15 +149,15 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Verify connected system exists (Core retrieval — we only need existence, not the full graph)
+        // Verify Connected System exists (Core retrieval — we only need existence, not the full graph)
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         // Get the object type
         var objectType = await _application.ConnectedSystems.GetObjectTypeAsync(objectTypeId);
         if (objectType == null || objectType.ConnectedSystemId != connectedSystemId)
-            return NotFound(ApiErrorResponse.NotFound($"Object type with ID {objectTypeId} not found in connected system {connectedSystemId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Object type with ID {objectTypeId} not found in Connected System {connectedSystemId}."));
 
         // Apply updates
         if (request.Selected.HasValue)
@@ -205,7 +205,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> UpdateConnectedSystemAttributeAsync(int connectedSystemId, int objectTypeId, int attributeId, [FromBody] UpdateConnectedSystemAttributeRequest request)
     {
-        _logger.LogInformation("Updating attribute {AttributeId} for object type {ObjectTypeId} in connected system {SystemId}", attributeId, objectTypeId, connectedSystemId);
+        _logger.LogInformation("Updating attribute {AttributeId} for object type {ObjectTypeId} in Connected System {SystemId}", attributeId, objectTypeId, connectedSystemId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -214,21 +214,21 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Verify connected system exists (Core retrieval — we only need existence, not the full graph)
+        // Verify Connected System exists (Core retrieval — we only need existence, not the full graph)
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         // Get the attribute
         var attribute = await _application.ConnectedSystems.GetAttributeAsync(attributeId);
         if (attribute == null)
             return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {attributeId} not found."));
 
-        // Verify attribute belongs to the specified object type and connected system
+        // Verify attribute belongs to the specified object type and Connected System
         if (attribute.ConnectedSystemObjectType.Id != objectTypeId ||
             attribute.ConnectedSystemObjectType.ConnectedSystemId != connectedSystemId)
         {
-            return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {attributeId} not found in object type {objectTypeId} of connected system {connectedSystemId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {attributeId} not found in object type {objectTypeId} of Connected System {connectedSystemId}."));
         }
 
         // Validate: Cannot unselect an External ID or Secondary External ID attribute
@@ -318,7 +318,7 @@ public class SynchronisationController(
         [FromBody] BulkUpdateConnectedSystemAttributesRequest request)
     {
         var attributeCount = request.Attributes?.Count ?? 0;
-        _logger.LogInformation("Bulk updating {Count} attributes for object type {ObjectTypeId} in connected system {SystemId}",
+        _logger.LogInformation("Bulk updating {Count} attributes for object type {ObjectTypeId} in Connected System {SystemId}",
             attributeCount, objectTypeId, connectedSystemId);
 
         if (request.Attributes == null || request.Attributes.Count == 0)
@@ -333,16 +333,16 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Verify connected system exists (Core retrieval — BulkUpdateAttributesAsync only reads
-        // the connected system's Id/Name for activity attribution, not its full graph).
+        // Verify Connected System exists (Core retrieval — BulkUpdateAttributesAsync only reads
+        // the Connected System's Id/Name for activity attribution, not its full graph).
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         // Get the object type with attributes
         var objectType = await _application.ConnectedSystems.GetObjectTypeAsync(objectTypeId);
         if (objectType == null || objectType.ConnectedSystemId != connectedSystemId)
-            return NotFound(ApiErrorResponse.NotFound($"Object type with ID {objectTypeId} not found in connected system {connectedSystemId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Object type with ID {objectTypeId} not found in Connected System {connectedSystemId}."));
 
         // Convert request DTOs to the format expected by the server
         var attributeUpdates = request.Attributes.ToDictionary(
@@ -387,11 +387,11 @@ public class SynchronisationController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id)
     {
-        _logger.LogTrace("Requested object {ObjectId} for connected system: {SystemId}", id, connectedSystemId);
+        _logger.LogTrace("Requested object {ObjectId} for Connected System: {SystemId}", id, connectedSystemId);
         var result = await _application.ConnectedSystems.GetConnectedSystemObjectDetailAsync(
             connectedSystemId, id, CsoAttributeLoadStrategy.CappedMva);
         if (result == null)
-            return NotFound(ApiErrorResponse.NotFound($"Object with ID {id} not found in connected system {connectedSystemId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Object with ID {id} not found in Connected System {connectedSystemId}."));
 
         return Ok(ConnectedSystemObjectDetailDto.FromDetailResult(result));
     }
@@ -402,7 +402,7 @@ public class SynchronisationController(
     /// <remarks>
     /// Returns a paginated list of change records for the specified Connected System Object,
     /// ordered by change time descending (most recent first). Each row carries the initiator
-    /// and run profile context, plus the per-attribute value changes.
+    /// and Run Profile context, plus the per-attribute value changes.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="csoId">The unique identifier (GUID) of the Connected System Object.</param>
@@ -414,12 +414,12 @@ public class SynchronisationController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetConnectedSystemObjectChangeHistoryAsync(int connectedSystemId, Guid csoId, [FromQuery] PaginationRequest pagination)
     {
-        _logger.LogTrace("Requested change history for CSO {CsoId} in connected system {SystemId}", csoId, connectedSystemId);
+        _logger.LogTrace("Requested change history for CSO {CsoId} in Connected System {SystemId}", csoId, connectedSystemId);
 
-        // Verify the CSO exists in this connected system so a missing id returns 404 rather than an empty page.
+        // Verify the CSO exists in this Connected System so a missing id returns 404 rather than an empty page.
         var cso = await _application.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, csoId);
         if (cso == null)
-            return NotFound(ApiErrorResponse.NotFound($"Object with ID {csoId} not found in connected system {connectedSystemId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Object with ID {csoId} not found in Connected System {connectedSystemId}."));
 
         var (items, totalCount) = await _application.ConnectedSystems.GetCsoChangeHistoryAsync(csoId, pagination.Page, pagination.PageSize);
         return Ok(PaginatedResponse<CsoChangeHistoryDto>.Create(items, totalCount, pagination.Page, pagination.PageSize));
@@ -481,11 +481,11 @@ public class SynchronisationController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetConnectedSystemDeletionPreviewAsync(int connectedSystemId)
     {
-        _logger.LogInformation("Deletion preview requested for connected system: {Id}", connectedSystemId);
+        _logger.LogInformation("Deletion preview requested for Connected System: {Id}", connectedSystemId);
 
         var preview = await _application.ConnectedSystems.GetDeletionPreviewAsync(connectedSystemId);
         if (preview == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         return Ok(preview);
     }
@@ -503,7 +503,7 @@ public class SynchronisationController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetUnresolvedReferenceCountAsync(int connectedSystemId)
     {
-        _logger.LogTrace("Requested unresolved reference count for connected system: {ConnectedSystemId}", connectedSystemId);
+        _logger.LogTrace("Requested unresolved reference count for Connected System: {ConnectedSystemId}", connectedSystemId);
         var count = await _application.ConnectedSystems.GetUnresolvedReferenceCountAsync(connectedSystemId);
         return Ok(count);
     }
@@ -523,7 +523,7 @@ public class SynchronisationController(
         [FromQuery] int? objectTypeId = null,
         [FromQuery] int? partitionId = null)
     {
-        _logger.LogDebug("Getting connector space count for connected system {ConnectedSystemId} (TypeId: {TypeId}, PartitionId: {PartitionId})",
+        _logger.LogDebug("Getting connector space count for Connected System {ConnectedSystemId} (TypeId: {TypeId}, PartitionId: {PartitionId})",
             connectedSystemId, objectTypeId, partitionId);
         var count = await _application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync(
             connectedSystemId, objectTypeId, partitionId);
@@ -583,7 +583,7 @@ public class SynchronisationController(
         [FromQuery] PendingExportChangeType? changeType = null,
         [FromQuery] PendingExportStatus? status = null)
     {
-        _logger.LogDebug("Getting pending exports count for connected system {ConnectedSystemId} (ChangeType: {ChangeType}, Status: {Status})",
+        _logger.LogDebug("Getting Pending Exports count for Connected System {ConnectedSystemId} (ChangeType: {ChangeType}, Status: {Status})",
             connectedSystemId, changeType, status);
         var count = await _application.Repository.ConnectedSystems.GetPendingExportsFilteredCountAsync(
             connectedSystemId, changeType, status);
@@ -604,10 +604,10 @@ public class SynchronisationController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetPendingExportAsync(Guid pendingExportId)
     {
-        _logger.LogTrace("Requested pending export: {PendingExportId}", pendingExportId);
+        _logger.LogTrace("Requested Pending Export: {PendingExportId}", pendingExportId);
         var result = await _application.ConnectedSystems.GetPendingExportDetailAsync(pendingExportId);
         if (result == null)
-            return NotFound(ApiErrorResponse.NotFound($"Pending export with ID {pendingExportId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Pending Export with ID {pendingExportId} not found."));
 
         return Ok(PendingExportDetailDto.FromDetailResult(result));
     }
@@ -664,12 +664,12 @@ public class SynchronisationController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetConnectedSystemPartitionsAsync(int connectedSystemId)
     {
-        _logger.LogTrace("Requested partitions for connected system: {Id}", connectedSystemId);
+        _logger.LogTrace("Requested partitions for Connected System: {Id}", connectedSystemId);
 
         // Core retrieval — partitions are then fetched separately with their own include chain.
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         var partitions = await _application.ConnectedSystems.GetConnectedSystemPartitionsAsync(connectedSystem);
         var dtos = partitions.Select(ConnectedSystemPartitionDto.FromEntity);
@@ -692,7 +692,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> UpdateConnectedSystemPartitionAsync(int connectedSystemId, int partitionId, [FromBody] UpdateConnectedSystemPartitionRequest request)
     {
-        _logger.LogInformation("Updating partition {PartitionId} for connected system {SystemId}", partitionId, connectedSystemId);
+        _logger.LogInformation("Updating partition {PartitionId} for Connected System {SystemId}", partitionId, connectedSystemId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -701,15 +701,15 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Verify connected system exists (Core retrieval — we only need existence, not the full graph)
+        // Verify Connected System exists (Core retrieval — we only need existence, not the full graph)
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         // Get the partition with change tracking since we modify and save it
         var partition = await _application.ConnectedSystems.GetConnectedSystemPartitionAsync(partitionId, withChangeTracking: true);
         if (partition == null || partition.ConnectedSystem?.Id != connectedSystemId)
-            return NotFound(ApiErrorResponse.NotFound($"Partition with ID {partitionId} not found in connected system {connectedSystemId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Partition with ID {partitionId} not found in Connected System {connectedSystemId}."));
 
         // Apply updates
         if (request.Selected.HasValue)
@@ -738,7 +738,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> UpdateConnectedSystemContainerAsync(int connectedSystemId, int containerId, [FromBody] UpdateConnectedSystemContainerRequest request)
     {
-        _logger.LogInformation("Updating container {ContainerId} for connected system {SystemId}", containerId, connectedSystemId);
+        _logger.LogInformation("Updating container {ContainerId} for Connected System {SystemId}", containerId, connectedSystemId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -747,20 +747,20 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Verify connected system exists (Core retrieval — we only need existence, not the full graph)
+        // Verify Connected System exists (Core retrieval — we only need existence, not the full graph)
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         // Get the container
         var container = await _application.ConnectedSystems.GetConnectedSystemContainerAsync(containerId);
         if (container == null)
             return NotFound(ApiErrorResponse.NotFound($"Container with ID {containerId} not found."));
 
-        // Verify container belongs to the connected system (via partition, directly, or through parent container chain)
+        // Verify container belongs to the Connected System (via partition, directly, or through parent container chain)
         var belongsToSystem = ContainerBelongsToConnectedSystem(container, connectedSystemId);
         if (!belongsToSystem)
-            return NotFound(ApiErrorResponse.NotFound($"Container with ID {containerId} not found in connected system {connectedSystemId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Container with ID {containerId} not found in Connected System {connectedSystemId}."));
 
         // Apply updates
         if (request.Selected.HasValue)
@@ -791,19 +791,19 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateConnectedSystemAsync([FromBody] CreateConnectedSystemRequest request)
     {
-        _logger.LogInformation("Creating connected system: {Name} with connector {ConnectorId}", LogSanitiser.Sanitise(request.Name), request.ConnectorDefinitionId);
+        _logger.LogInformation("Creating Connected System: {Name} with connector {ConnectorId}", LogSanitiser.Sanitise(request.Name), request.ConnectorDefinitionId);
 
         // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
-            _logger.LogWarning("Could not identify user from JWT claims for connected system creation");
+            _logger.LogWarning("Could not identify user from JWT claims for Connected System creation");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
         if (IsApiKeyAuthenticated())
         {
-            _logger.LogInformation("Connected system creation initiated via API key: {ApiKeyName}", LogSanitiser.Sanitise(GetApiKeyName()));
+            _logger.LogInformation("Connected System creation initiated via API key: {ApiKeyName}", LogSanitiser.Sanitise(GetApiKeyName()));
         }
 
         // Validate the connector definition exists
@@ -811,7 +811,7 @@ public class SynchronisationController(
         if (connectorDefinition == null)
             return BadRequest(ApiErrorResponse.BadRequest($"Connector definition with ID {request.ConnectorDefinitionId} not found."));
 
-        // Create the connected system using the FK ID (not the nav property) to avoid
+        // Create the Connected System using the FK ID (not the nav property) to avoid
         // EF Core graph traversal inserting the untracked ConnectorDefinition as a new entity.
         var connectedSystem = new ConnectedSystem
         {
@@ -829,7 +829,7 @@ public class SynchronisationController(
             else
                 await _application.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem, initiatedBy);
 
-            _logger.LogInformation("Created connected system: {Id} ({Name})", connectedSystem.Id, LogSanitiser.Sanitise(connectedSystem.Name));
+            _logger.LogInformation("Created Connected System: {Id} ({Name})", connectedSystem.Id, LogSanitiser.Sanitise(connectedSystem.Name));
 
             // Retrieve the created system to get all populated fields
             var created = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystem.Id);
@@ -837,7 +837,7 @@ public class SynchronisationController(
         }
         catch (ArgumentException ex)
         {
-            _logger.LogWarning(ex, "Failed to create connected system: {Message}", ex.Message);
+            _logger.LogWarning(ex, "Failed to create Connected System: {Message}", ex.Message);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
     }
@@ -859,20 +859,20 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> UpdateConnectedSystemAsync(int connectedSystemId, [FromBody] UpdateConnectedSystemRequest request)
     {
-        _logger.LogInformation("Updating connected system: {Id}", connectedSystemId);
+        _logger.LogInformation("Updating Connected System: {Id}", connectedSystemId);
 
         // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
-            _logger.LogWarning("Could not identify user from JWT claims for connected system update");
+            _logger.LogWarning("Could not identify user from JWT claims for Connected System update");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Get the existing connected system with change tracking since we modify and save it
+        // Get the existing Connected System with change tracking since we modify and save it
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         // Apply updates
         if (!string.IsNullOrEmpty(request.Name))
@@ -914,9 +914,9 @@ public class SynchronisationController(
             var invalidResults = validationResults.Where(r => !r.IsValid).ToList();
             if (invalidResults.Count > 0)
             {
-                _logger.LogInformation("Rejected settings update for connected system {Id}: {Count} validation error(s)", connectedSystem.Id, invalidResults.Count);
+                _logger.LogInformation("Rejected settings update for Connected System {Id}: {Count} validation error(s)", connectedSystem.Id, invalidResults.Count);
                 return BadRequest(ApiErrorResponse.ValidationError(
-                    "One or more connected system settings are invalid.",
+                    "One or more Connected System settings are invalid.",
                     BuildSettingValidationErrors(invalidResults)));
             }
         }
@@ -930,7 +930,7 @@ public class SynchronisationController(
             else
                 await _application.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, initiatedBy);
 
-            _logger.LogInformation("Updated connected system: {Id} ({Name})", connectedSystem.Id, LogSanitiser.Sanitise(connectedSystem.Name));
+            _logger.LogInformation("Updated Connected System: {Id} ({Name})", connectedSystem.Id, LogSanitiser.Sanitise(connectedSystem.Name));
 
             // Retrieve the updated system
             var updated = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
@@ -938,13 +938,13 @@ public class SynchronisationController(
         }
         catch (ArgumentException ex)
         {
-            _logger.LogWarning(ex, "Failed to update connected system: {Message}", ex.Message);
+            _logger.LogWarning(ex, "Failed to update Connected System: {Message}", ex.Message);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
     }
 
     /// <summary>
-    /// Groups connected system setting validation failures into the API's field-keyed validation error shape.
+    /// Groups Connected System setting validation failures into the API's field-keyed validation error shape.
     /// Failures tied to a specific setting are keyed by that setting's name; group-level failures (which have no
     /// single owning setting) are collected under the generic "settings" key.
     /// </summary>
@@ -984,7 +984,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ImportConnectedSystemSchemaAsync(int connectedSystemId)
     {
-        _logger.LogInformation("Schema import requested for connected system: {Id}", connectedSystemId);
+        _logger.LogInformation("Schema import requested for Connected System: {Id}", connectedSystemId);
 
         // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
@@ -994,10 +994,10 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Get the connected system with change tracking since schema import modifies and saves it
+        // Get the Connected System with change tracking since schema import modifies and saves it
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         try
         {
@@ -1008,7 +1008,7 @@ public class SynchronisationController(
             else
                 await _application.ConnectedSystems.ImportConnectedSystemSchemaAsync(connectedSystem, initiatedBy);
 
-            _logger.LogInformation("Schema imported for connected system: {Id} ({Name}), {Count} object types",
+            _logger.LogInformation("Schema imported for Connected System: {Id} ({Name}), {Count} object types",
                 connectedSystemId, connectedSystem.Name, connectedSystem.ObjectTypes?.Count ?? 0);
 
             // Retrieve the updated system
@@ -1017,7 +1017,7 @@ public class SynchronisationController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to import schema for connected system: {Id}", connectedSystemId);
+            _logger.LogError(ex, "Failed to import schema for Connected System: {Id}", connectedSystemId);
             return BadRequest(ApiErrorResponse.BadRequest($"Schema import failed: {ex.Message}"));
         }
     }
@@ -1041,7 +1041,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ImportConnectedSystemHierarchyAsync(int connectedSystemId)
     {
-        _logger.LogInformation("Hierarchy import requested for connected system: {Id}", connectedSystemId);
+        _logger.LogInformation("Hierarchy import requested for Connected System: {Id}", connectedSystemId);
 
         // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
@@ -1051,10 +1051,10 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Get the connected system with change tracking since hierarchy import modifies and saves it
+        // Get the Connected System with change tracking since hierarchy import modifies and saves it
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         try
         {
@@ -1066,14 +1066,14 @@ public class SynchronisationController(
             else
                 result = await _application.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem, initiatedBy);
 
-            _logger.LogInformation("Hierarchy imported for connected system: {Id} ({Name}). Summary: {Summary}",
+            _logger.LogInformation("Hierarchy imported for Connected System: {Id} ({Name}). Summary: {Summary}",
                 connectedSystemId, connectedSystem.Name, result.GetSummary());
 
             return Ok(HierarchyRefreshResultDto.FromModel(result));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to import hierarchy for connected system: {Id}", connectedSystemId);
+            _logger.LogError(ex, "Failed to import hierarchy for Connected System: {Id}", connectedSystemId);
             return BadRequest(ApiErrorResponse.BadRequest($"Hierarchy import failed: {ex.Message}"));
         }
     }
@@ -1100,7 +1100,7 @@ public class SynchronisationController(
         int connectedSystemId,
         [FromQuery] bool deleteChangeHistory = false)
     {
-        _logger.LogInformation("Deletion requested for connected system: {Id}, deleteChangeHistory={DeleteHistory}",
+        _logger.LogInformation("Deletion requested for Connected System: {Id}, deleteChangeHistory={DeleteHistory}",
             connectedSystemId, deleteChangeHistory);
 
         // Get the current user from the JWT claims (may be null for API key auth)
@@ -1150,31 +1150,31 @@ public class SynchronisationController(
         int connectedSystemId,
         [FromQuery] bool deleteChangeHistory = true)
     {
-        _logger.LogInformation("Clear connector space requested for connected system: {Id}, deleteChangeHistory={DeleteHistory}",
+        _logger.LogInformation("Clear connector space requested for Connected System: {Id}, deleteChangeHistory={DeleteHistory}",
             connectedSystemId, deleteChangeHistory);
 
         try
         {
-            // Verify connected system exists (Core retrieval — we only need existence, not the full graph)
+            // Verify Connected System exists (Core retrieval — we only need existence, not the full graph)
             var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
             if (connectedSystem == null)
             {
-                return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+                return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
             }
 
             await _application.ConnectedSystems.ClearConnectedSystemObjectsAsync(connectedSystemId, deleteChangeHistory);
 
-            _logger.LogInformation("Connector space cleared for connected system: {Id}", connectedSystemId);
+            _logger.LogInformation("Connector space cleared for Connected System: {Id}", connectedSystemId);
             return Ok();
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Clear connector space failed for connected system: {Id}", connectedSystemId);
+            _logger.LogWarning(ex, "Clear connector space failed for Connected System: {Id}", connectedSystemId);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Clear connector space failed for connected system: {Id}", connectedSystemId);
+            _logger.LogError(ex, "Clear connector space failed for Connected System: {Id}", connectedSystemId);
             return StatusCode(StatusCodes.Status500InternalServerError,
                 ApiErrorResponse.InternalError($"Clear operation failed: {ex.Message}"));
         }
@@ -1251,12 +1251,12 @@ public class SynchronisationController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetRunProfilesAsync(int connectedSystemId)
     {
-        _logger.LogTrace("Requested run profiles for connected system: {Id}", connectedSystemId);
+        _logger.LogTrace("Requested Run Profiles for Connected System: {Id}", connectedSystemId);
 
-        // Core retrieval — we only need to verify existence before listing run profiles.
+        // Core retrieval — we only need to verify existence before listing Run Profiles.
         var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (system == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         var runProfiles = await _application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemId);
         var dtos = runProfiles.Select(RunProfileDto.FromEntity);
@@ -1281,25 +1281,25 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ExecuteRunProfileAsync(int connectedSystemId, int runProfileId)
     {
-        _logger.LogInformation("Run profile execution requested: ConnectedSystem={SystemId}, RunProfile={ProfileId}",
+        _logger.LogInformation("Run Profile execution requested: ConnectedSystem={SystemId}, RunProfile={ProfileId}",
             connectedSystemId, runProfileId);
 
-        // Verify connected system exists (Core retrieval — the sync task only needs the id).
+        // Verify Connected System exists (Core retrieval — the sync task only needs the id).
         var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (system == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
-        // Verify run profile exists and belongs to this connected system
+        // Verify Run Profile exists and belongs to this Connected System
         var runProfiles = await _application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemId);
         var runProfile = runProfiles.FirstOrDefault(rp => rp.Id == runProfileId);
         if (runProfile == null)
-            return NotFound(ApiErrorResponse.NotFound($"Run profile with ID {runProfileId} not found for connected system {connectedSystemId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Run Profile with ID {runProfileId} not found for Connected System {connectedSystemId}."));
 
         // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
-            _logger.LogWarning("Could not identify user from JWT claims for run profile execution");
+            _logger.LogWarning("Could not identify user from JWT claims for Run Profile execution");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
@@ -1315,7 +1315,7 @@ public class SynchronisationController(
             var apiKey = await GetCurrentApiKeyAsync();
             if (apiKey == null)
             {
-                _logger.LogError("Failed to resolve API key for run profile execution");
+                _logger.LogError("Failed to resolve API key for Run Profile execution");
                 return BadRequest(new { error = "Failed to identify initiating API key" });
             }
             workerTask = SynchronisationWorkerTask.ForApiKey(connectedSystemId, runProfileId, apiKey.Id, apiKey.Name);
@@ -1324,18 +1324,18 @@ public class SynchronisationController(
         var result = await _application.Tasking.CreateWorkerTaskAsync(workerTask);
         if (!result.Success)
         {
-            _logger.LogWarning("Run profile execution blocked: {Error}", LogSanitiser.Sanitise(result.ErrorMessage));
+            _logger.LogWarning("Run Profile execution blocked: {Error}", LogSanitiser.Sanitise(result.ErrorMessage));
             return BadRequest(ApiErrorResponse.BadRequest(result.ErrorMessage ?? "Validation failed."));
         }
 
-        _logger.LogInformation("Run profile execution queued: ConnectedSystem={SystemId}, RunProfile={ProfileId}, TaskId={TaskId}, ActivityId={ActivityId}",
+        _logger.LogInformation("Run Profile execution queued: ConnectedSystem={SystemId}, RunProfile={ProfileId}, TaskId={TaskId}, ActivityId={ActivityId}",
             connectedSystemId, runProfileId, workerTask.Id, workerTask.Activity?.Id);
 
         var response = new RunProfileExecutionResponse
         {
             ActivityId = workerTask.Activity?.Id ?? Guid.Empty,
             TaskId = workerTask.Id,
-            Message = $"Run profile '{runProfile.Name}' has been queued for execution.",
+            Message = $"Run Profile '{runProfile.Name}' has been queued for execution.",
             Warnings = result.Warnings
         };
 
@@ -1359,22 +1359,22 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateRunProfileAsync(int connectedSystemId, [FromBody] CreateRunProfileRequest request)
     {
-        _logger.LogInformation("Creating run profile: {Name} for connected system {SystemId}", LogSanitiser.Sanitise(request.Name), connectedSystemId);
+        _logger.LogInformation("Creating Run Profile: {Name} for Connected System {SystemId}", LogSanitiser.Sanitise(request.Name), connectedSystemId);
 
         // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
-            _logger.LogWarning("Could not identify user from JWT claims for run profile creation");
+            _logger.LogWarning("Could not identify user from JWT claims for Run Profile creation");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Verify connected system exists (Core retrieval — partitions are fetched separately below).
+        // Verify Connected System exists (Core retrieval — partitions are fetched separately below).
         var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (system == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
-        // Create the run profile
+        // Create the Run Profile
         var runProfile = new ConnectedSystemRunProfile
         {
             Name = request.Name,
@@ -1402,13 +1402,13 @@ public class SynchronisationController(
             else
                 await _application.ConnectedSystems.CreateConnectedSystemRunProfileAsync(runProfile, initiatedBy);
 
-            _logger.LogInformation("Created run profile: {Id} ({Name})", runProfile.Id, LogSanitiser.Sanitise(runProfile.Name));
+            _logger.LogInformation("Created Run Profile: {Id} ({Name})", runProfile.Id, LogSanitiser.Sanitise(runProfile.Name));
 
             return CreatedAtRoute("GetRunProfiles", new { connectedSystemId }, RunProfileDto.FromEntity(runProfile));
         }
         catch (ArgumentException ex)
         {
-            _logger.LogWarning(ex, "Failed to create run profile: {Message}", LogSanitiser.Sanitise(ex.Message));
+            _logger.LogWarning(ex, "Failed to create Run Profile: {Message}", LogSanitiser.Sanitise(ex.Message));
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
     }
@@ -1431,26 +1431,26 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> UpdateRunProfileAsync(int connectedSystemId, int runProfileId, [FromBody] UpdateRunProfileRequest request)
     {
-        _logger.LogInformation("Updating run profile: {Id} for connected system {SystemId}", runProfileId, connectedSystemId);
+        _logger.LogInformation("Updating Run Profile: {Id} for Connected System {SystemId}", runProfileId, connectedSystemId);
 
         // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
-            _logger.LogWarning("Could not identify user from JWT claims for run profile update");
+            _logger.LogWarning("Could not identify user from JWT claims for Run Profile update");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Verify connected system exists (Core retrieval — partitions are fetched separately below).
+        // Verify Connected System exists (Core retrieval — partitions are fetched separately below).
         var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (system == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
-        // Get the run profile
+        // Get the Run Profile
         var runProfiles = await _application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemId);
         var runProfile = runProfiles.FirstOrDefault(rp => rp.Id == runProfileId);
         if (runProfile == null)
-            return NotFound(ApiErrorResponse.NotFound($"Run profile with ID {runProfileId} not found for connected system {connectedSystemId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Run Profile with ID {runProfileId} not found for Connected System {connectedSystemId}."));
 
         // Apply updates
         if (!string.IsNullOrEmpty(request.Name))
@@ -1480,13 +1480,13 @@ public class SynchronisationController(
             else
                 await _application.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(runProfile, initiatedBy);
 
-            _logger.LogInformation("Updated run profile: {Id} ({Name})", runProfile.Id, LogSanitiser.Sanitise(runProfile.Name));
+            _logger.LogInformation("Updated Run Profile: {Id} ({Name})", runProfile.Id, LogSanitiser.Sanitise(runProfile.Name));
 
             return Ok(RunProfileDto.FromEntity(runProfile));
         }
         catch (ArgumentException ex)
         {
-            _logger.LogWarning(ex, "Failed to update run profile: {Message}", LogSanitiser.Sanitise(ex.Message));
+            _logger.LogWarning(ex, "Failed to update Run Profile: {Message}", LogSanitiser.Sanitise(ex.Message));
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
     }
@@ -1506,26 +1506,26 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> DeleteRunProfileAsync(int connectedSystemId, int runProfileId)
     {
-        _logger.LogInformation("Deleting run profile: {Id} for connected system {SystemId}", runProfileId, connectedSystemId);
+        _logger.LogInformation("Deleting Run Profile: {Id} for Connected System {SystemId}", runProfileId, connectedSystemId);
 
         // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
-            _logger.LogWarning("Could not identify user from JWT claims for run profile deletion");
+            _logger.LogWarning("Could not identify user from JWT claims for Run Profile deletion");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Verify connected system exists (Core retrieval — we only need existence).
+        // Verify Connected System exists (Core retrieval — we only need existence).
         var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (system == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
-        // Get the run profile
+        // Get the Run Profile
         var runProfiles = await _application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemId);
         var runProfile = runProfiles.FirstOrDefault(rp => rp.Id == runProfileId);
         if (runProfile == null)
-            return NotFound(ApiErrorResponse.NotFound($"Run profile with ID {runProfileId} not found for connected system {connectedSystemId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Run Profile with ID {runProfileId} not found for Connected System {connectedSystemId}."));
 
         var apiKey = await GetCurrentApiKeyAsync();
         if (apiKey != null)
@@ -1533,14 +1533,14 @@ public class SynchronisationController(
         else
             await _application.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(runProfile, initiatedBy);
 
-        _logger.LogInformation("Deleted run profile: {Id}", runProfileId);
+        _logger.LogInformation("Deleted Run Profile: {Id}", runProfileId);
 
         return NoContent();
     }
 
     #endregion
 
-    #region Sync Rules
+    #region Synchronisation Rules
 
     /// <summary>
     /// List Synchronisation Rules
@@ -1552,7 +1552,7 @@ public class SynchronisationController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetSyncRulesAsync([FromQuery] PaginationRequest pagination)
     {
-        _logger.LogTrace("Requested synchronisation rules (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
+        _logger.LogTrace("Requested Synchronisation Rules (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
         var rules = await _application.ConnectedSystems.GetSyncRulesAsync();
         var headers = rules.Select(SyncRuleHeader.FromEntity).AsQueryable();
 
@@ -1567,17 +1567,17 @@ public class SynchronisationController(
     /// Get a Synchronisation Rule
     /// </summary>
     /// <param name="id">The unique identifier of the Synchronisation Rule.</param>
-    /// <returns>The Synchronisation Rule details including Attribute flow configuration.</returns>
+    /// <returns>The Synchronisation Rule details including Attribute Flow configuration.</returns>
     [HttpGet("sync-rules/{id:int}", Name = "GetSyncRule")]
     [ProducesResponseType(typeof(SyncRuleHeader), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetSyncRuleAsync(int id)
     {
-        _logger.LogTrace("Requested sync rule: {Id}", id);
+        _logger.LogTrace("Requested Synchronisation Rule: {Id}", id);
         var rule = await _application.ConnectedSystems.GetSyncRuleAsync(id);
         if (rule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {id} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {id} not found."));
 
         return Ok(SyncRuleHeader.FromEntity(rule));
     }
@@ -1586,7 +1586,7 @@ public class SynchronisationController(
     /// Create a Synchronisation Rule
     /// </summary>
     /// <remarks>
-    /// For Import rules, set <c>ProjectToMetaverse</c> to true to create Metaverse objects from imported data. For Export rules, set <c>ProvisionToConnectedSystem</c> to true to create Connected System Objects.
+    /// For Import rules, set <c>ProjectToMetaverse</c> to true to create Metaverse Objects from imported data. For Export rules, set <c>ProvisionToConnectedSystem</c> to true to create Connected System Objects.
     /// </remarks>
     /// <param name="request">The Synchronisation Rule creation request.</param>
     /// <returns>The created Synchronisation Rule details.</returns>
@@ -1599,34 +1599,34 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateSyncRuleAsync([FromBody] CreateSyncRuleRequest request)
     {
-        _logger.LogInformation("Creating sync rule: {Name}", LogSanitiser.Sanitise(request.Name));
+        _logger.LogInformation("Creating Synchronisation Rule: {Name}", LogSanitiser.Sanitise(request.Name));
 
         // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
-            _logger.LogWarning("Could not identify user from JWT claims for sync rule creation");
+            _logger.LogWarning("Could not identify user from JWT claims for Synchronisation Rule creation");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Verify connected system exists (Core retrieval — only used as a FK reference on the new
-        // sync rule; object types are fetched separately below).
+        // Verify Connected System exists (Core retrieval — only used as a FK reference on the new
+        // Synchronisation Rule; object types are fetched separately below).
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(request.ConnectedSystemId);
         if (connectedSystem == null)
-            return BadRequest(ApiErrorResponse.BadRequest($"Connected system with ID {request.ConnectedSystemId} not found."));
+            return BadRequest(ApiErrorResponse.BadRequest($"Connected System with ID {request.ConnectedSystemId} not found."));
 
-        // Get connected system object type
+        // Get Connected System Object Type
         var csObjectTypes = await _application.ConnectedSystems.GetObjectTypesAsync(request.ConnectedSystemId);
         var csObjectType = csObjectTypes?.FirstOrDefault(t => t.Id == request.ConnectedSystemObjectTypeId);
         if (csObjectType == null)
-            return BadRequest(ApiErrorResponse.BadRequest($"Connected system object type with ID {request.ConnectedSystemObjectTypeId} not found."));
+            return BadRequest(ApiErrorResponse.BadRequest($"Connected System Object Type with ID {request.ConnectedSystemObjectTypeId} not found."));
 
-        // Get metaverse object type
+        // Get Metaverse Object Type
         var mvObjectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(request.MetaverseObjectTypeId, false);
         if (mvObjectType == null)
-            return BadRequest(ApiErrorResponse.BadRequest($"Metaverse object type with ID {request.MetaverseObjectTypeId} not found."));
+            return BadRequest(ApiErrorResponse.BadRequest($"Metaverse Object Type with ID {request.MetaverseObjectTypeId} not found."));
 
-        // Create the sync rule
+        // Create the Synchronisation Rule
         var syncRule = new SyncRule
         {
             Name = request.Name,
@@ -1653,12 +1653,12 @@ public class SynchronisationController(
         {
             var validationErrors = syncRule.Validate();
             var errorMessage = string.Join("; ", validationErrors.Select(v => v.Message));
-            return BadRequest(ApiErrorResponse.BadRequest($"Sync rule validation failed: {errorMessage}"));
+            return BadRequest(ApiErrorResponse.BadRequest($"Synchronisation Rule validation failed: {errorMessage}"));
         }
 
-        _logger.LogInformation("Created sync rule: {Id} ({Name})", syncRule.Id, LogSanitiser.Sanitise(syncRule.Name));
+        _logger.LogInformation("Created Synchronisation Rule: {Id} ({Name})", syncRule.Id, LogSanitiser.Sanitise(syncRule.Name));
 
-        // Retrieve the created sync rule
+        // Retrieve the created Synchronisation Rule
         var created = await _application.ConnectedSystems.GetSyncRuleAsync(syncRule.Id);
         return CreatedAtRoute("GetSyncRule", new { id = syncRule.Id }, SyncRuleHeader.FromEntity(created!));
     }
@@ -1680,20 +1680,20 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> UpdateSyncRuleAsync(int id, [FromBody] UpdateSyncRuleRequest request)
     {
-        _logger.LogInformation("Updating sync rule: {Id}", id);
+        _logger.LogInformation("Updating Synchronisation Rule: {Id}", id);
 
         // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
-            _logger.LogWarning("Could not identify user from JWT claims for sync rule update");
+            _logger.LogWarning("Could not identify user from JWT claims for Synchronisation Rule update");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Get the existing sync rule
+        // Get the existing Synchronisation Rule
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(id);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {id} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {id} not found."));
 
         // Apply updates
         if (!string.IsNullOrEmpty(request.Name))
@@ -1727,12 +1727,12 @@ public class SynchronisationController(
         {
             var validationErrors = syncRule.Validate();
             var errorMessage = string.Join("; ", validationErrors.Select(v => v.Message));
-            return BadRequest(ApiErrorResponse.BadRequest($"Sync rule validation failed: {errorMessage}"));
+            return BadRequest(ApiErrorResponse.BadRequest($"Synchronisation Rule validation failed: {errorMessage}"));
         }
 
-        _logger.LogInformation("Updated sync rule: {Id} ({Name})", syncRule.Id, LogSanitiser.Sanitise(syncRule.Name));
+        _logger.LogInformation("Updated Synchronisation Rule: {Id} ({Name})", syncRule.Id, LogSanitiser.Sanitise(syncRule.Name));
 
-        // Retrieve the updated sync rule
+        // Retrieve the updated Synchronisation Rule
         var updated = await _application.ConnectedSystems.GetSyncRuleAsync(id);
         return Ok(SyncRuleHeader.FromEntity(updated!));
     }
@@ -1751,20 +1751,20 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> DeleteSyncRuleAsync(int id)
     {
-        _logger.LogInformation("Deleting sync rule: {Id}", id);
+        _logger.LogInformation("Deleting Synchronisation Rule: {Id}", id);
 
         // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
         {
-            _logger.LogWarning("Could not identify user from JWT claims for sync rule deletion");
+            _logger.LogWarning("Could not identify user from JWT claims for Synchronisation Rule deletion");
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Get the sync rule
+        // Get the Synchronisation Rule
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(id);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {id} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {id} not found."));
 
         var apiKey = await GetCurrentApiKeyAsync();
         if (apiKey != null)
@@ -1772,14 +1772,14 @@ public class SynchronisationController(
         else
             await _application.ConnectedSystems.DeleteSyncRuleAsync(syncRule, initiatedBy);
 
-        _logger.LogInformation("Deleted sync rule: {Id}", id);
+        _logger.LogInformation("Deleted Synchronisation Rule: {Id}", id);
 
         return NoContent();
     }
 
     #endregion
 
-    #region Sync Rule Mappings
+    #region Synchronisation Rule Mappings
 
     /// <summary>
     /// List Attribute Flow Mappings for a Synchronisation Rule
@@ -1792,11 +1792,11 @@ public class SynchronisationController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetSyncRuleMappingsAsync(int syncRuleId)
     {
-        _logger.LogTrace("Requested mappings for sync rule: {Id}", syncRuleId);
+        _logger.LogTrace("Requested mappings for Synchronisation Rule: {Id}", syncRuleId);
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var mappings = await _application.ConnectedSystems.GetSyncRuleMappingsAsync(syncRuleId);
         var dtos = mappings.Select(SyncRuleMappingDto.FromEntity);
@@ -1815,15 +1815,15 @@ public class SynchronisationController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetSyncRuleMappingAsync(int syncRuleId, int mappingId)
     {
-        _logger.LogTrace("Requested mapping {MappingId} for sync rule: {SyncRuleId}", mappingId, syncRuleId);
+        _logger.LogTrace("Requested mapping {MappingId} for Synchronisation Rule: {SyncRuleId}", mappingId, syncRuleId);
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var mapping = await _application.ConnectedSystems.GetSyncRuleMappingAsync(mappingId);
         if (mapping == null || mapping.SyncRule?.Id != syncRuleId)
-            return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} not found in sync rule {syncRuleId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} not found in Synchronisation Rule {syncRuleId}."));
 
         return Ok(SyncRuleMappingDto.FromEntity(mapping));
     }
@@ -1848,7 +1848,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateSyncRuleMappingAsync(int syncRuleId, [FromBody] CreateSyncRuleMappingRequest request)
     {
-        _logger.LogInformation("Creating mapping for sync rule: {SyncRuleId}", syncRuleId);
+        _logger.LogInformation("Creating mapping for Synchronisation Rule: {SyncRuleId}", syncRuleId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -1859,7 +1859,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         // Create the mapping using FK ID and nav property (nav property needed for validation;
         // cleared before save by ClearMappingNavigationProperties)
@@ -1896,11 +1896,11 @@ public class SynchronisationController(
 
             var csAttr = await _application.ConnectedSystems.GetAttributeAsync(request.TargetConnectedSystemAttributeId.Value);
             if (csAttr == null)
-                return NotFound(ApiErrorResponse.NotFound($"Connected system attribute with ID {request.TargetConnectedSystemAttributeId} not found."));
+                return NotFound(ApiErrorResponse.NotFound($"Connected System attribute with ID {request.TargetConnectedSystemAttributeId} not found."));
 
-            // Verify attribute belongs to the sync rule's object type
+            // Verify attribute belongs to the Synchronisation Rule's object type
             if (csAttr.ConnectedSystemObjectType.Id != syncRule.ConnectedSystemObjectTypeId)
-                return BadRequest(ApiErrorResponse.BadRequest($"Attribute {csAttr.Name} does not belong to the sync rule's object type."));
+                return BadRequest(ApiErrorResponse.BadRequest($"Attribute {csAttr.Name} does not belong to the Synchronisation Rule's object type."));
 
             mapping.TargetConnectedSystemAttributeId = csAttr.Id;
             mapping.TargetConnectedSystemAttribute = csAttr;
@@ -1932,11 +1932,11 @@ public class SynchronisationController(
 
                 var csAttr = await _application.ConnectedSystems.GetAttributeAsync(sourceRequest.ConnectedSystemAttributeId.Value);
                 if (csAttr == null)
-                    return NotFound(ApiErrorResponse.NotFound($"Connected system attribute with ID {sourceRequest.ConnectedSystemAttributeId} not found."));
+                    return NotFound(ApiErrorResponse.NotFound($"Connected System attribute with ID {sourceRequest.ConnectedSystemAttributeId} not found."));
 
-                // Verify attribute belongs to the sync rule's object type
+                // Verify attribute belongs to the Synchronisation Rule's object type
                 if (csAttr.ConnectedSystemObjectType.Id != syncRule.ConnectedSystemObjectTypeId)
-                    return BadRequest(ApiErrorResponse.BadRequest($"Attribute {csAttr.Name} does not belong to the sync rule's object type."));
+                    return BadRequest(ApiErrorResponse.BadRequest($"Attribute {csAttr.Name} does not belong to the Synchronisation Rule's object type."));
 
                 source.ConnectedSystemAttributeId = csAttr.Id;
                 source.ConnectedSystemAttribute = csAttr;
@@ -1971,7 +1971,7 @@ public class SynchronisationController(
             else
                 await _application.ConnectedSystems.CreateSyncRuleMappingAsync(mapping, initiatedBy);
 
-            _logger.LogInformation("Created mapping {MappingId} for sync rule {SyncRuleId}", mapping.Id, syncRuleId);
+            _logger.LogInformation("Created mapping {MappingId} for Synchronisation Rule {SyncRuleId}", mapping.Id, syncRuleId);
 
             // Retrieve the created mapping to get all populated fields
             var created = await _application.ConnectedSystems.GetSyncRuleMappingAsync(mapping.Id);
@@ -1979,7 +1979,7 @@ public class SynchronisationController(
         }
         catch (ArgumentException ex)
         {
-            _logger.LogWarning(ex, "Failed to create sync rule mapping: {Message}", ex.Message);
+            _logger.LogWarning(ex, "Failed to create Synchronisation Rule mapping: {Message}", ex.Message);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
     }
@@ -1999,7 +1999,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> DeleteSyncRuleMappingAsync(int syncRuleId, int mappingId)
     {
-        _logger.LogInformation("Deleting mapping {MappingId} for sync rule {SyncRuleId}", mappingId, syncRuleId);
+        _logger.LogInformation("Deleting mapping {MappingId} for Synchronisation Rule {SyncRuleId}", mappingId, syncRuleId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -2010,11 +2010,11 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var mapping = await _application.ConnectedSystems.GetSyncRuleMappingAsync(mappingId);
         if (mapping == null || mapping.SyncRule?.Id != syncRuleId)
-            return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} not found in sync rule {syncRuleId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} not found in Synchronisation Rule {syncRuleId}."));
 
         // Get the current API key for Activity attribution if authenticated via API key
         var apiKey = await GetCurrentApiKeyAsync();
@@ -2023,14 +2023,14 @@ public class SynchronisationController(
         else
             await _application.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping, initiatedBy);
 
-        _logger.LogInformation("Deleted mapping {MappingId} from sync rule {SyncRuleId}", mappingId, syncRuleId);
+        _logger.LogInformation("Deleted mapping {MappingId} from Synchronisation Rule {SyncRuleId}", mappingId, syncRuleId);
 
         return NoContent();
     }
 
     #endregion
 
-    #region Sync Rule Scoping Criteria
+    #region Synchronisation Rule Scoping Criteria
 
     /// <summary>
     /// List Scoping Criteria groups for a Synchronisation Rule
@@ -2046,11 +2046,11 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetScopingCriteriaGroupsAsync(int syncRuleId)
     {
-        _logger.LogTrace("Requested scoping criteria for sync rule: {Id}", syncRuleId);
+        _logger.LogTrace("Requested scoping criteria for Synchronisation Rule: {Id}", syncRuleId);
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var dtos = syncRule.ObjectScopingCriteriaGroups
             .Where(g => g.ParentGroup == null) // Only return root groups (children are nested)
@@ -2070,15 +2070,15 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetScopingCriteriaGroupAsync(int syncRuleId, int groupId)
     {
-        _logger.LogTrace("Requested scoping criteria group {GroupId} for sync rule: {SyncRuleId}", groupId, syncRuleId);
+        _logger.LogTrace("Requested scoping criteria group {GroupId} for Synchronisation Rule: {SyncRuleId}", groupId, syncRuleId);
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var group = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, groupId);
         if (group == null)
-            return NotFound(ApiErrorResponse.NotFound($"Scoping criteria group with ID {groupId} not found in sync rule {syncRuleId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Scoping criteria group with ID {groupId} not found in Synchronisation Rule {syncRuleId}."));
 
         return Ok(SyncRuleScopingCriteriaGroupDto.FromEntity(group));
     }
@@ -2102,7 +2102,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateScopingCriteriaGroupAsync(int syncRuleId, [FromBody] CreateScopingCriteriaGroupRequest request)
     {
-        _logger.LogInformation("Creating scoping criteria group for sync rule: {SyncRuleId}", syncRuleId);
+        _logger.LogInformation("Creating scoping criteria group for Synchronisation Rule: {SyncRuleId}", syncRuleId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -2110,7 +2110,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         if (!Enum.TryParse<SearchGroupType>(request.Type, true, out var groupType))
             return BadRequest(ApiErrorResponse.BadRequest($"Invalid group type '{request.Type}'. Valid values: All, Any."));
@@ -2130,7 +2130,7 @@ public class SynchronisationController(
                 await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey);
             else
                 await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
-            _logger.LogInformation("Created scoping criteria group {GroupId} for sync rule {SyncRuleId}", group.Id, syncRuleId);
+            _logger.LogInformation("Created scoping criteria group {GroupId} for Synchronisation Rule {SyncRuleId}", group.Id, syncRuleId);
             return CreatedAtRoute("GetScopingCriteriaGroup", new { syncRuleId, groupId = group.Id }, SyncRuleScopingCriteriaGroupDto.FromEntity(group));
         }
         catch (ArgumentException ex)
@@ -2154,7 +2154,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateChildScopingCriteriaGroupAsync(int syncRuleId, int parentGroupId, [FromBody] CreateScopingCriteriaGroupRequest request)
     {
-        _logger.LogInformation("Creating child scoping criteria group under {ParentId} for sync rule: {SyncRuleId}", parentGroupId, syncRuleId);
+        _logger.LogInformation("Creating child scoping criteria group under {ParentId} for Synchronisation Rule: {SyncRuleId}", parentGroupId, syncRuleId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -2162,7 +2162,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var parentGroup = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, parentGroupId);
         if (parentGroup == null)
@@ -2211,7 +2211,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> UpdateScopingCriteriaGroupAsync(int syncRuleId, int groupId, [FromBody] UpdateScopingCriteriaGroupRequest request)
     {
-        _logger.LogInformation("Updating scoping criteria group {GroupId} for sync rule: {SyncRuleId}", groupId, syncRuleId);
+        _logger.LogInformation("Updating scoping criteria group {GroupId} for Synchronisation Rule: {SyncRuleId}", groupId, syncRuleId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -2219,7 +2219,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var group = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, groupId);
         if (group == null)
@@ -2264,7 +2264,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> DeleteScopingCriteriaGroupAsync(int syncRuleId, int groupId)
     {
-        _logger.LogInformation("Deleting scoping criteria group {GroupId} for sync rule: {SyncRuleId}", groupId, syncRuleId);
+        _logger.LogInformation("Deleting scoping criteria group {GroupId} for Synchronisation Rule: {SyncRuleId}", groupId, syncRuleId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -2272,7 +2272,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var group = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, groupId);
         if (group == null)
@@ -2318,7 +2318,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateScopingCriterionAsync(int syncRuleId, int groupId, [FromBody] CreateScopingCriterionRequest request)
     {
-        _logger.LogInformation("Creating criterion in group {GroupId} for sync rule: {SyncRuleId}", groupId, syncRuleId);
+        _logger.LogInformation("Creating criterion in group {GroupId} for Synchronisation Rule: {SyncRuleId}", groupId, syncRuleId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -2326,7 +2326,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var group = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, groupId);
         if (group == null)
@@ -2348,23 +2348,23 @@ public class SynchronisationController(
             CaseSensitive = request.CaseSensitive
         };
 
-        // Set the appropriate attribute based on sync rule direction
+        // Set the appropriate attribute based on Synchronisation Rule direction
         if (syncRule.Direction == SyncRuleDirection.Export)
         {
             // Export rules evaluate Metaverse attributes. Resolve the attribute from the
-            // sync rule's already-tracked MetaverseObjectType.Attributes graph rather than
+            // Synchronisation Rule's already-tracked MetaverseObjectType.Attributes graph rather than
             // a separate Metaverse repository call: that would return a second untracked
             // instance with the same Id and throw "another instance with the same key value
             // is already being tracked" on SaveChanges. This mirrors the inbound path
             // immediately below.
             if (!request.MetaverseAttributeId.HasValue)
-                return BadRequest(ApiErrorResponse.BadRequest("MetaverseAttributeId is required for export sync rules."));
+                return BadRequest(ApiErrorResponse.BadRequest("MetaverseAttributeId is required for export Synchronisation Rules."));
 
             var mvAttribute = syncRule.MetaverseObjectType?.Attributes
                 .FirstOrDefault(a => a.Id == request.MetaverseAttributeId);
 
             if (mvAttribute == null)
-                return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {request.MetaverseAttributeId} not found on this sync rule's Metaverse object type."));
+                return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {request.MetaverseAttributeId} not found on this Synchronisation Rule's Metaverse Object Type."));
 
             criterion.MetaverseAttribute = mvAttribute;
         }
@@ -2372,14 +2372,14 @@ public class SynchronisationController(
         {
             // Import rules evaluate Connected System attributes
             if (!request.ConnectedSystemAttributeId.HasValue)
-                return BadRequest(ApiErrorResponse.BadRequest("ConnectedSystemAttributeId is required for import sync rules."));
+                return BadRequest(ApiErrorResponse.BadRequest("ConnectedSystemAttributeId is required for import Synchronisation Rules."));
 
-            // Get the CS attribute from the sync rule's connected system object type
+            // Get the CS attribute from the Synchronisation Rule's Connected System Object Type
             var csAttribute = syncRule.ConnectedSystemObjectType?.Attributes
                 .FirstOrDefault(a => a.Id == request.ConnectedSystemAttributeId);
 
             if (csAttribute == null)
-                return NotFound(ApiErrorResponse.NotFound($"Connected System attribute with ID {request.ConnectedSystemAttributeId} not found in sync rule's object type."));
+                return NotFound(ApiErrorResponse.NotFound($"Connected System attribute with ID {request.ConnectedSystemAttributeId} not found in Synchronisation Rule's object type."));
 
             criterion.ConnectedSystemAttribute = csAttribute;
         }
@@ -2424,7 +2424,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var group = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, groupId);
         if (group == null)
@@ -2488,15 +2488,15 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetObjectMatchingRulesAsync(int connectedSystemId, int objectTypeId)
     {
-        _logger.LogInformation("Getting object matching rules for connected system {SystemId}, object type {TypeId}", connectedSystemId, objectTypeId);
+        _logger.LogInformation("Getting Object Matching Rules for Connected System {SystemId}, object type {TypeId}", connectedSystemId, objectTypeId);
 
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         var objectType = connectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == objectTypeId);
         if (objectType == null)
-            return NotFound(ApiErrorResponse.NotFound($"Object type with ID {objectTypeId} not found in connected system {connectedSystemId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Object type with ID {objectTypeId} not found in Connected System {connectedSystemId}."));
 
         var rules = objectType.ObjectMatchingRules
             .OrderBy(r => r.Order)
@@ -2519,20 +2519,20 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetObjectMatchingRuleAsync(int connectedSystemId, int ruleId)
     {
-        _logger.LogInformation("Getting object matching rule {RuleId} for connected system {SystemId}", ruleId, connectedSystemId);
+        _logger.LogInformation("Getting Object Matching Rule {RuleId} for Connected System {SystemId}", ruleId, connectedSystemId);
 
         // Core retrieval — the rule itself is loaded via its own repository method below.
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         var rule = await _application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
         if (rule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found."));
 
-        // Verify the rule belongs to this connected system
+        // Verify the rule belongs to this Connected System
         if (rule.ConnectedSystemObjectType?.ConnectedSystemId != connectedSystemId)
-            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found in connected system {connectedSystemId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found in Connected System {connectedSystemId}."));
 
         return Ok(ObjectMatchingRuleDto.FromEntity(rule));
     }
@@ -2554,7 +2554,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateObjectMatchingRuleAsync(int connectedSystemId, [FromBody] CreateObjectMatchingRuleRequest request)
     {
-        _logger.LogInformation("Creating object matching rule for connected system {SystemId}", connectedSystemId);
+        _logger.LogInformation("Creating Object Matching Rule for Connected System {SystemId}", connectedSystemId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -2565,16 +2565,16 @@ public class SynchronisationController(
 
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         var objectType = connectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == request.ConnectedSystemObjectTypeId);
         if (objectType == null)
-            return NotFound(ApiErrorResponse.NotFound($"Object type with ID {request.ConnectedSystemObjectTypeId} not found in connected system {connectedSystemId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Object type with ID {request.ConnectedSystemObjectTypeId} not found in Connected System {connectedSystemId}."));
 
         // Validate Metaverse Object Type exists
         var metaverseObjectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(request.MetaverseObjectTypeId, false);
         if (metaverseObjectType == null)
-            return NotFound(ApiErrorResponse.NotFound($"Metaverse object type with ID {request.MetaverseObjectTypeId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse Object Type with ID {request.MetaverseObjectTypeId} not found."));
 
         // Validate target MV attribute exists
         var mvAttributes = await _application.Metaverse.GetMetaverseAttributesAsync();
@@ -2639,7 +2639,7 @@ public class SynchronisationController(
             else
                 await _application.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, initiatedBy);
 
-            _logger.LogInformation("Created object matching rule {RuleId} for connected system {SystemId}", rule.Id, connectedSystemId);
+            _logger.LogInformation("Created Object Matching Rule {RuleId} for Connected System {SystemId}", rule.Id, connectedSystemId);
 
             return CreatedAtRoute("GetObjectMatchingRule",
                 new { connectedSystemId, ruleId = rule.Id },
@@ -2647,7 +2647,7 @@ public class SynchronisationController(
         }
         catch (ArgumentException ex)
         {
-            _logger.LogWarning(ex, "Failed to create object matching rule: {Message}", ex.Message);
+            _logger.LogWarning(ex, "Failed to create Object Matching Rule: {Message}", ex.Message);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
     }
@@ -2670,7 +2670,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> UpdateObjectMatchingRuleAsync(int connectedSystemId, int ruleId, [FromBody] UpdateObjectMatchingRuleRequest request)
     {
-        _logger.LogInformation("Updating object matching rule {RuleId} for connected system {SystemId}", ruleId, connectedSystemId);
+        _logger.LogInformation("Updating Object Matching Rule {RuleId} for Connected System {SystemId}", ruleId, connectedSystemId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -2681,15 +2681,15 @@ public class SynchronisationController(
 
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         var rule = await _application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
         if (rule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found."));
 
-        // Verify the rule belongs to this connected system
+        // Verify the rule belongs to this Connected System
         if (rule.ConnectedSystemObjectType?.ConnectedSystemId != connectedSystemId)
-            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found in connected system {connectedSystemId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found in Connected System {connectedSystemId}."));
 
         // Update order if specified
         if (request.Order.HasValue)
@@ -2700,7 +2700,7 @@ public class SynchronisationController(
         {
             var metaverseObjectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(request.MetaverseObjectTypeId.Value, false);
             if (metaverseObjectType == null)
-                return NotFound(ApiErrorResponse.NotFound($"Metaverse object type with ID {request.MetaverseObjectTypeId} not found."));
+                return NotFound(ApiErrorResponse.NotFound($"Metaverse Object Type with ID {request.MetaverseObjectTypeId} not found."));
 
             rule.MetaverseObjectTypeId = metaverseObjectType.Id;
             rule.MetaverseObjectType = metaverseObjectType;
@@ -2772,13 +2772,13 @@ public class SynchronisationController(
             else
                 await _application.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, initiatedBy);
 
-            _logger.LogInformation("Updated object matching rule {RuleId} for connected system {SystemId}", ruleId, connectedSystemId);
+            _logger.LogInformation("Updated Object Matching Rule {RuleId} for Connected System {SystemId}", ruleId, connectedSystemId);
 
             return Ok(ObjectMatchingRuleDto.FromEntity(rule));
         }
         catch (ArgumentException ex)
         {
-            _logger.LogWarning(ex, "Failed to update object matching rule: {Message}", ex.Message);
+            _logger.LogWarning(ex, "Failed to update Object Matching Rule: {Message}", ex.Message);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
     }
@@ -2798,7 +2798,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> DeleteObjectMatchingRuleAsync(int connectedSystemId, int ruleId)
     {
-        _logger.LogInformation("Deleting object matching rule {RuleId} for connected system {SystemId}", ruleId, connectedSystemId);
+        _logger.LogInformation("Deleting Object Matching Rule {RuleId} for Connected System {SystemId}", ruleId, connectedSystemId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -2810,15 +2810,15 @@ public class SynchronisationController(
         // Core retrieval — the rule itself is loaded via its own repository method below.
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         var rule = await _application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
         if (rule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found."));
 
-        // Verify the rule belongs to this connected system
+        // Verify the rule belongs to this Connected System
         if (rule.ConnectedSystemObjectType?.ConnectedSystemId != connectedSystemId)
-            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found in connected system {connectedSystemId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found in Connected System {connectedSystemId}."));
 
         var apiKey = await GetCurrentApiKeyAsync();
         if (apiKey != null)
@@ -2826,14 +2826,14 @@ public class SynchronisationController(
         else
             await _application.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule, initiatedBy);
 
-        _logger.LogInformation("Deleted object matching rule {RuleId} for connected system {SystemId}", ruleId, connectedSystemId);
+        _logger.LogInformation("Deleted Object Matching Rule {RuleId} for Connected System {SystemId}", ruleId, connectedSystemId);
 
         return NoContent();
     }
 
     #endregion
 
-    #region Sync Rule Object Matching Rules (Advanced Mode)
+    #region Synchronisation Rule Object Matching Rules (Advanced Mode)
 
     /// <summary>
     /// List Object Matching Rules for a Synchronisation Rule
@@ -2847,11 +2847,11 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetSyncRuleObjectMatchingRulesAsync(int syncRuleId)
     {
-        _logger.LogInformation("Getting object matching rules for sync rule {SyncRuleId}", syncRuleId);
+        _logger.LogInformation("Getting Object Matching Rules for Synchronisation Rule {SyncRuleId}", syncRuleId);
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var rules = syncRule.ObjectMatchingRules
             .OrderBy(r => r.Order)
@@ -2874,15 +2874,15 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetSyncRuleObjectMatchingRuleAsync(int syncRuleId, int ruleId)
     {
-        _logger.LogInformation("Getting object matching rule {RuleId} for sync rule {SyncRuleId}", ruleId, syncRuleId);
+        _logger.LogInformation("Getting Object Matching Rule {RuleId} for Synchronisation Rule {SyncRuleId}", ruleId, syncRuleId);
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var rule = syncRule.ObjectMatchingRules.FirstOrDefault(r => r.Id == ruleId);
         if (rule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found on sync rule {syncRuleId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found on Synchronisation Rule {syncRuleId}."));
 
         return Ok(ObjectMatchingRuleDto.FromEntity(rule));
     }
@@ -2904,7 +2904,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateSyncRuleObjectMatchingRuleAsync(int syncRuleId, [FromBody] CreateSyncRuleObjectMatchingRuleRequest request)
     {
-        _logger.LogInformation("Creating object matching rule for sync rule {SyncRuleId}", syncRuleId);
+        _logger.LogInformation("Creating Object Matching Rule for Synchronisation Rule {SyncRuleId}", syncRuleId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -2915,7 +2915,7 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         // Validate target MV attribute exists
         var mvAttributes = await _application.Metaverse.GetMetaverseAttributesAsync();
@@ -2938,7 +2938,7 @@ public class SynchronisationController(
             CaseSensitive = request.CaseSensitive
         };
 
-        // Add sources - for advanced mode, sources reference CS attributes from the sync rule's object type
+        // Add sources - for advanced mode, sources reference CS attributes from the Synchronisation Rule's object type
         var objectType = syncRule.ConnectedSystemObjectType;
         foreach (var sourceRequest in request.Sources)
         {
@@ -2979,7 +2979,7 @@ public class SynchronisationController(
             else
                 await _application.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, initiatedBy);
 
-            _logger.LogInformation("Created object matching rule {RuleId} for sync rule {SyncRuleId}", rule.Id, syncRuleId);
+            _logger.LogInformation("Created Object Matching Rule {RuleId} for Synchronisation Rule {SyncRuleId}", rule.Id, syncRuleId);
 
             return CreatedAtRoute("GetSyncRuleObjectMatchingRule",
                 new { syncRuleId, ruleId = rule.Id },
@@ -2987,7 +2987,7 @@ public class SynchronisationController(
         }
         catch (ArgumentException ex)
         {
-            _logger.LogWarning(ex, "Failed to create object matching rule: {Message}", ex.Message);
+            _logger.LogWarning(ex, "Failed to create Object Matching Rule: {Message}", ex.Message);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
     }
@@ -3010,7 +3010,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> UpdateSyncRuleObjectMatchingRuleAsync(int syncRuleId, int ruleId, [FromBody] UpdateObjectMatchingRuleRequest request)
     {
-        _logger.LogInformation("Updating object matching rule {RuleId} for sync rule {SyncRuleId}", ruleId, syncRuleId);
+        _logger.LogInformation("Updating Object Matching Rule {RuleId} for Synchronisation Rule {SyncRuleId}", ruleId, syncRuleId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -3021,15 +3021,15 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var rule = await _application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
         if (rule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found."));
 
-        // Verify the rule belongs to this sync rule
+        // Verify the rule belongs to this Synchronisation Rule
         if (rule.SyncRuleId != syncRuleId)
-            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found on sync rule {syncRuleId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found on Synchronisation Rule {syncRuleId}."));
 
         // Update order if specified
         if (request.Order.HasValue)
@@ -3100,13 +3100,13 @@ public class SynchronisationController(
             else
                 await _application.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, initiatedBy);
 
-            _logger.LogInformation("Updated object matching rule {RuleId} for sync rule {SyncRuleId}", ruleId, syncRuleId);
+            _logger.LogInformation("Updated Object Matching Rule {RuleId} for Synchronisation Rule {SyncRuleId}", ruleId, syncRuleId);
 
             return Ok(ObjectMatchingRuleDto.FromEntity(rule));
         }
         catch (ArgumentException ex)
         {
-            _logger.LogWarning(ex, "Failed to update object matching rule: {Message}", ex.Message);
+            _logger.LogWarning(ex, "Failed to update Object Matching Rule: {Message}", ex.Message);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
     }
@@ -3126,7 +3126,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> DeleteSyncRuleObjectMatchingRuleAsync(int syncRuleId, int ruleId)
     {
-        _logger.LogInformation("Deleting object matching rule {RuleId} from sync rule {SyncRuleId}", ruleId, syncRuleId);
+        _logger.LogInformation("Deleting Object Matching Rule {RuleId} from Synchronisation Rule {SyncRuleId}", ruleId, syncRuleId);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -3137,15 +3137,15 @@ public class SynchronisationController(
 
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var rule = await _application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
         if (rule == null)
-            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found."));
 
-        // Verify the rule belongs to this sync rule
+        // Verify the rule belongs to this Synchronisation Rule
         if (rule.SyncRuleId != syncRuleId)
-            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found on sync rule {syncRuleId}."));
+            return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found on Synchronisation Rule {syncRuleId}."));
 
         var apiKey = await GetCurrentApiKeyAsync();
         if (apiKey != null)
@@ -3153,7 +3153,7 @@ public class SynchronisationController(
         else
             await _application.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule, initiatedBy);
 
-        _logger.LogInformation("Deleted object matching rule {RuleId} from sync rule {SyncRuleId}", ruleId, syncRuleId);
+        _logger.LogInformation("Deleted Object Matching Rule {RuleId} from Synchronisation Rule {SyncRuleId}", ruleId, syncRuleId);
 
         return NoContent();
     }
@@ -3182,7 +3182,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> SwitchObjectMatchingModeAsync(int connectedSystemId, [FromBody] SwitchObjectMatchingModeRequest request)
     {
-        _logger.LogInformation("Switching object matching mode for connected system {SystemId} to {Mode}", connectedSystemId, request.Mode);
+        _logger.LogInformation("Switching object matching mode for Connected System {SystemId} to {Mode}", connectedSystemId, request.Mode);
 
         var initiatedBy = await GetCurrentUserAsync();
         if (initiatedBy == null && !IsApiKeyAuthenticated())
@@ -3191,20 +3191,20 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Get the connected system with change tracking since matching mode switch modifies and saves it
+        // Get the Connected System with change tracking since matching mode switch modifies and saves it
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true);
         if (connectedSystem == null)
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         var result = await _application.ConnectedSystems.SwitchObjectMatchingModeAsync(connectedSystem, request.Mode, initiatedBy);
 
         if (!result.Success)
         {
-            _logger.LogWarning("Failed to switch matching mode for connected system {SystemId}: {Error}", connectedSystemId, LogSanitiser.Sanitise(result.ErrorMessage));
+            _logger.LogWarning("Failed to switch matching mode for Connected System {SystemId}: {Error}", connectedSystemId, LogSanitiser.Sanitise(result.ErrorMessage));
             return BadRequest(ApiErrorResponse.BadRequest(result.ErrorMessage ?? "Failed to switch object matching mode."));
         }
 
-        _logger.LogInformation("Switched object matching mode for connected system {SystemId} to {Mode}", connectedSystemId, result.NewMode);
+        _logger.LogInformation("Switched object matching mode for Connected System {SystemId} to {Mode}", connectedSystemId, result.NewMode);
 
         return Ok(result);
     }

@@ -4,7 +4,7 @@ title: Certificates
 
 # Certificates
 
-Cmdlets for managing certificates in JIM's trusted certificate store. Certificates are used for secure authentication with connected systems (e.g. LDAP over TLS).
+Cmdlets for managing certificates in JIM's trusted certificate store. Certificates are used for secure authentication with Connected Systems (e.g. LDAP over TLS).
 
 ---
 
@@ -220,7 +220,7 @@ Get-JIMCertificate | Where-Object { -not $_.Enabled } | Remove-JIMCertificate -F
 ### Notes
 
 - Supports `ShouldProcess` (High impact). Without `-Force`, you will be prompted for confirmation.
-- Removing a certificate that is in use by a connected system may cause authentication failures. Verify usage before deleting.
+- Removing a certificate that is in use by a Connected System may cause authentication failures. Verify usage before deleting.
 
 ---
 
@@ -336,4 +336,4 @@ Get-JIMCertificate -EnabledOnly | ForEach-Object {
 ## See also
 
 - [Certificates](../configuration/certificates.md): what certificates are, source types, expiry awareness, and rotation workflows
-- [Connected Systems](connected-systems.md): configure connected systems that use trusted certificates
+- [Connected Systems](connected-systems.md): configure Connected Systems that use trusted certificates

@@ -98,7 +98,7 @@
                 }
                 @if (IsPendingExportWithChanges)
                 {
-                    <MudTooltip Text="@(_expanded ? "Hide pending export detail" : "Show pending export detail")">
+                    <MudTooltip Text="@(_expanded ? "Hide Pending Export detail" : "Show Pending Export detail")">
                         <MudIconButton Icon="@(_expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
                                        Size="Size.Small" OnClick="ToggleExpand" />
                     </MudTooltip>
@@ -249,7 +249,7 @@
         && ParentOutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned;
 
     /// <summary>
-    /// Whether this outcome node has a connected system link available.
+    /// Whether this outcome node has a Connected System link available.
     /// The CS integer ID is stored in DetailMessage, either as a plain integer ("4") or
     /// as "csId|csoTypeName" for Provisioned outcomes ("4|person").
     /// </summary>
@@ -324,7 +324,7 @@
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled => null,
             // AttributeFlow child nodes don't need a separate MVO description line
             ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => null,
-            // For connected system targets (pending exports, exports), just show the name
+            // For Connected System targets (Pending Exports, exports), just show the name
             _ => RenderPlainDescription()
         };
     }
@@ -393,7 +393,7 @@
     }
 
     /// <summary>
-    /// Builds the connected system href for Provisioned and PendingExportCreated outcomes.
+    /// Builds the Connected System href for Provisioned and PendingExportCreated outcomes.
     /// </summary>
     private string GetCsHref() => $"/admin/connected-systems/{GetCsIdFromDetailMessage()}";
 

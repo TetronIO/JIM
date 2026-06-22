@@ -18,7 +18,7 @@ Discussion on #637 established that the right fix is not narrow (plumb a callbac
 
 Connectors own long-running, multi-step operations that are opaque to the orchestrator. Today:
 
-- `IConnectorExportUsingFiles.ExportAsync` receives a batch of pending exports and returns when done. The File connector's internal Load → Merge → Write phases take real wall-clock time at scale, but the server has no way to surface them.
+- `IConnectorExportUsingFiles.ExportAsync` receives a batch of Pending Exports and returns when done. The File connector's internal Load → Merge → Write phases take real wall-clock time at scale, but the server has no way to surface them.
 - `IConnectorImportUsingFiles.ImportAsync` reads an entire file in a single call. The worker sees one page at the end, with no visibility into read/parse progress.
 - `IConnectorImportUsingCalls.ImportAsync` reports per-page (one page per call), but within a page the worker has no visibility into connection setup, root DSE queries, container enumeration, or internal parallel fan-out.
 - `IConnectorExportUsingCalls.ExportAsync` naturally iterates per-item and already benefits from per-item progress at the server level, but has no way to emit pre-flight sub-phases ("Creating parent containers…", "Resolving references…").

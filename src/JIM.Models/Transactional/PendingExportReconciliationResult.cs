@@ -6,7 +6,7 @@ using JIM.Models.Staging;
 namespace JIM.Models.Transactional;
 
 /// <summary>
-/// Result of a pending export reconciliation operation.
+/// Result of a Pending Export reconciliation operation.
 /// </summary>
 public class PendingExportReconciliationResult
 {
@@ -32,13 +32,13 @@ public class PendingExportReconciliationResult
     public bool PendingExportDeleted { get; set; }
 
     /// <summary>
-    /// The pending export to delete (for batched operations).
+    /// The Pending Export to delete (for batched operations).
     /// Only set when PendingExportDeleted is true.
     /// </summary>
     public PendingExport? PendingExportToDelete { get; set; }
 
     /// <summary>
-    /// The pending export to update (for batched operations).
+    /// The Pending Export to update (for batched operations).
     /// Only set when there are changes but the export should not be deleted.
     /// </summary>
     public PendingExport? PendingExportToUpdate { get; set; }

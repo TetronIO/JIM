@@ -110,7 +110,7 @@ internal sealed class SystemRepository : ISystemRepository
         _repository.Database.ChangeTracker.Clear();
 
         Log.Information(
-            "ResetSystemAsync: Completed. Removed {ConnectedSystems} connected systems, {Csos} CSOs, {Mvos} MVOs ({AdminsRetained} administrators retained, {AdminsRemoved} removed), {MvoChanges} MVO change records, {CsoChanges} CSO change records, {SyncRules} sync rules, {MatchingRules} object matching rules, {Schedules} schedules, {ScheduleExecutions} schedule executions, {Activities} activities, {PendingExports} pending exports, {CustomTypes} custom MV object types, {CustomAttrs} custom MV attributes, {CustomRoles} custom roles, {CustomConnectors} custom connector definitions, {CustomSearches} custom predefined searches, {CustomDataSets} custom example data sets, {CustomDataTemplates} custom example data templates, {CustomApiKeys} custom API keys, {Certs} trusted certificates",
+            "ResetSystemAsync: Completed. Removed {ConnectedSystems} Connected Systems, {Csos} CSOs, {Mvos} MVOs ({AdminsRetained} administrators retained, {AdminsRemoved} removed), {MvoChanges} MVO change records, {CsoChanges} CSO change records, {SyncRules} Synchronisation Rules, {MatchingRules} Object Matching Rules, {Schedules} schedules, {ScheduleExecutions} schedule executions, {Activities} activities, {PendingExports} Pending Exports, {CustomTypes} custom MV object types, {CustomAttrs} custom MV attributes, {CustomRoles} custom roles, {CustomConnectors} custom connector definitions, {CustomSearches} custom predefined searches, {CustomDataSets} custom example data sets, {CustomDataTemplates} custom example data templates, {CustomApiKeys} custom API keys, {Certs} trusted certificates",
             result.ConnectedSystemsRemoved,
             result.ConnectedSystemObjectsRemoved,
             result.MetaverseObjectsRemoved,
@@ -180,7 +180,7 @@ internal sealed class SystemRepository : ISystemRepository
     /// <c>MetaverseObjectAttributeValues</c> table (it has foreign keys into both), destroying the
     /// preserved administrators' attribute values. So this path snapshots the administrators' rows into
     /// transaction-scoped temporary tables, runs the same fast full TRUNCATE, then restores them. On
-    /// restore, references to now-deleted objects (other Metaverse Objects, connected systems, connector
+    /// restore, references to now-deleted objects (other Metaverse Objects, Connected Systems, connector
     /// space objects) are nulled. Administrator attribute values that referenced custom Metaverse
     /// Attributes are subsequently cascade-removed when those custom attributes are deleted, so a
     /// preserved administrator ends up with built-in attribute values only.

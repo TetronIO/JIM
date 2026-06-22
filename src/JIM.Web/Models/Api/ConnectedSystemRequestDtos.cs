@@ -109,12 +109,12 @@ public class UpdateConnectedSystemAttributeRequest
     public bool? Selected { get; set; }
 
     /// <summary>
-    /// Indicates if this attribute is a unique identifier for the object type in the connected system.
+    /// Indicates if this attribute is a unique identifier for the object type in the Connected System.
     /// </summary>
     public bool? IsExternalId { get; set; }
 
     /// <summary>
-    /// Indicates if this attribute is used as a secondary identifier by the connected system (e.g., DN in LDAP).
+    /// Indicates if this attribute is used as a secondary identifier by the Connected System (e.g., DN in LDAP).
     /// </summary>
     public bool? IsSecondaryExternalId { get; set; }
 }

@@ -42,9 +42,9 @@ public class ConnectedSystemObjectChangeAttributeValue
 
     /// <summary>
     /// When true, the <see cref="ReferenceValue"/> points to a stub CSO that has not yet been
-    /// exported to the target connected system (status PendingProvisioning). The UI should render
+    /// exported to the target Connected System (status PendingProvisioning). The UI should render
     /// this differently from a fully resolved reference — e.g. no clickable link, with a
-    /// "pending export" visual indicator.
+    /// "Pending Export" visual indicator.
     /// </summary>
     public bool IsPendingExportStub { get; set; }
     #endregion

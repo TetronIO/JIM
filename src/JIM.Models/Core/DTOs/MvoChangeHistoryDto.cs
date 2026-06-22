@@ -9,7 +9,7 @@ namespace JIM.Models.Core.DTOs;
 
 /// <summary>
 /// Flat projection of a Metaverse Object change record for display and API consumption.
-/// Includes denormalised initiator, sync rule, and run profile context so consumers can
+/// Includes denormalised initiator, Synchronisation Rule, and Run Profile context so consumers can
 /// render a row without further joins, and a list of attribute-level changes.
 /// </summary>
 public class MvoChangeHistoryDto
@@ -35,7 +35,7 @@ public class MvoChangeHistoryDto
     public Guid? ActivityRunProfileExecutionItemId { get; set; }
 
     /// <summary>
-    /// The CSO id, if this change was raised by a sync run profile execution item.
+    /// The CSO id, if this change was raised by a sync Run Profile execution item.
     /// </summary>
     public Guid? CsoId { get; set; }
 
@@ -45,22 +45,22 @@ public class MvoChangeHistoryDto
     public string? CsoExternalId { get; set; }
 
     /// <summary>
-    /// The connected system id behind the activity, if the change was sync-initiated.
+    /// The Connected System id behind the activity, if the change was sync-initiated.
     /// </summary>
     public int? ConnectedSystemId { get; set; }
 
     /// <summary>
-    /// The connected system name (taken from <c>Activity.TargetContext</c>).
+    /// The Connected System name (taken from <c>Activity.TargetContext</c>).
     /// </summary>
     public string? ConnectedSystemName { get; set; }
 
     /// <summary>
-    /// The run profile name (taken from <c>Activity.TargetName</c>).
+    /// The Run Profile name (taken from <c>Activity.TargetName</c>).
     /// </summary>
     public string? RunProfileName { get; set; }
 
     /// <summary>
-    /// The connected system run type for sync-initiated changes; used to render the
+    /// The Connected System run type for sync-initiated changes; used to render the
     /// change mechanism (Import / SynchronisationRule / Export) when the initiator
     /// type is the default <c>NotSet</c> sync value.
     /// </summary>

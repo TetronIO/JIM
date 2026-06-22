@@ -12,21 +12,21 @@ graph LR
 
 ## 📥 Phase 1: Import
 
-Import pulls data from a connected system into JIM's **connector space**. The result is a set of Connected System Objects (CSOs) that represent the current state of the external system.
+Import pulls data from a Connected System into JIM's **connector space**. The result is a set of Connected System Objects (CSOs) that represent the current state of the external system.
 
 ### Full Import
 
-A **full import** reads every object from the connected system and compares it against the existing connector space. JIM determines which objects are new, which have changed, and which have been deleted (obsoleted).
+A **full import** reads every object from the Connected System and compares it against the existing connector space. JIM determines which objects are new, which have changed, and which have been deleted (obsoleted).
 
 Full imports are used for:
 
-- **Initial setup of a connected system**<br /> Bringing in all data from a new external system for the first time.
+- **Initial setup of a Connected System**<br /> Bringing in all data from a new external system for the first time.
 - **Periodic reconciliation to ensure the connector space is accurate**<br /> Regular checks to verify imported data matches the source system.
 - **Recovery after errors or data issues**<br /> Reloading all data to restore consistency after problems.
 
 ### Delta Import
 
-A **delta import** reads only the objects that have changed since the last import. This is significantly faster than a full import for large directories, but requires the connected system to support change tracking.
+A **delta import** reads only the objects that have changed since the last import. This is significantly faster than a full import for large directories, but requires the Connected System to support change tracking.
 
 For example, the OpenLDAP connector supports delta imports via the accesslog overlay, which records changes to the directory.
 
@@ -44,46 +44,46 @@ Import does **not** modify the metaverse. The connector space acts as a staging 
 
 ## 🔀 Phase 2: Sync (Synchronisation)
 
-Sync is the core phase where JIM reconciles connector space data with the metaverse. It applies **synchronisation rules** to determine how CSOs relate to MetaverseObjects (MVOs) and how attributes flow between them.
+Sync is the core phase where JIM reconciles connector space data with the metaverse. It applies **Synchronisation Rules** to determine how CSOs relate to MetaverseObjects (MVOs) and how attributes flow between them.
 
 ### Inbound Sync (Source to Metaverse)
 
 Inbound sync processes CSOs from source systems and updates the metaverse. For each CSO in scope:
 
-1. **Scoping**<br /> JIM evaluates the synchronisation rule's scoping filter to determine whether this CSO should be processed. Objects that fall out of scope are disconnected from the metaverse.
+1. **Scoping**<br /> JIM evaluates the Synchronisation Rule's scoping filter to determine whether this CSO should be processed. Objects that fall out of scope are disconnected from the metaverse.
 
-2. **Join resolution**<br /> JIM checks the synchronisation rule's join rules to find a matching MVO. Join rules define how to correlate a CSO with an existing metaverse object (e.g., match on employee ID, email address, or a combination of attributes).
+2. **Join resolution**<br /> JIM checks the Synchronisation Rule's join rules to find a matching MVO. Join rules define how to correlate a CSO with an existing Metaverse Object (e.g., match on employee ID, email address, or a combination of attributes).
 
-3. **Projection**<br /> If no matching MVO is found and the synchronisation rule allows projection, JIM creates a new MVO. The projected MVO is linked to the CSO.
+3. **Projection**<br /> If no matching MVO is found and the Synchronisation Rule allows projection, JIM creates a new MVO. The projected MVO is linked to the CSO.
 
-4. **Attribute flow**<br /> Once a CSO is joined or projected to an MVO, JIM applies the attribute flow rules. Inbound attribute flows copy values from the CSO to the MVO, optionally transforming them using [expressions](expressions.md).
+4. **Attribute Flow**<br /> Once a CSO is joined or projected to an MVO, JIM applies the Attribute Flow Rules. Inbound Attribute Flows copy values from the CSO to the MVO, optionally transforming them using [expressions](expressions.md).
 
 ### Outbound Sync (Metaverse to Target)
 
-Outbound sync evaluates MVOs against outbound synchronisation rules and determines what changes need to be exported to target systems. For each MVO in scope:
+Outbound sync evaluates MVOs against outbound Synchronisation Rules and determines what changes need to be exported to target systems. For each MVO in scope:
 
-1. **Scoping**<br /> JIM evaluates which MVOs are in scope for the outbound synchronisation rule.
+1. **Scoping**<br /> JIM evaluates which MVOs are in scope for the outbound Synchronisation Rule.
 
-2. **Provisioning**<br /> If an MVO is in scope but does not have a corresponding CSO in the target connected system, JIM provisions (creates) a new CSO.
+2. **Provisioning**<br /> If an MVO is in scope but does not have a corresponding CSO in the target Connected System, JIM provisions (creates) a new CSO.
 
-3. **Attribute flow**<br /> Outbound attribute flows copy values from the MVO to the CSO, optionally transforming them using expressions.
+3. **Attribute Flow**<br /> Outbound Attribute Flows copy values from the MVO to the CSO, optionally transforming them using expressions.
 
-4. **Pending exports**<br /> Changes to CSOs are recorded as **pending exports** rather than being sent to the target system immediately. This allows administrators to review queued changes before they are applied.
+4. **Pending Exports**<br /> Changes to CSOs are recorded as **Pending Exports** rather than being sent to the target system immediately. This allows administrators to review queued changes before they are applied.
 
 ### Full Sync vs Delta Sync
 
-- **Full Sync** re-evaluates every CSO against the synchronisation rules. Use this after changing synchronisation rule configuration or for periodic reconciliation.
+- **Full Sync** re-evaluates every CSO against the Synchronisation Rules. Use this after changing Synchronisation Rule configuration or for periodic reconciliation.
 - **Delta Sync** processes only CSOs that have changed since the last sync. This is faster and is the normal operational mode.
 
 ## 📤 Phase 3: Export
 
-Export sends pending changes from the connector space to the target connected system. Each pending export represents a create, update, or delete operation.
+Export sends pending changes from the connector space to the target Connected System. Each Pending Export represents a create, update, or delete operation.
 
 ### What Happens During Export
 
-1. JIM reads the pending exports for the connected system.
-2. For each pending export, the connector sends the change to the external system.
-3. Successful exports are confirmed and the pending export is cleared.
+1. JIM reads the Pending Exports for the Connected System.
+2. For each Pending Export, the connector sends the change to the external system.
+3. Successful exports are confirmed and the Pending Export is cleared.
 4. Failed exports are logged with error details for troubleshooting.
 5. Export statistics are recorded in the activity log.
 
@@ -93,7 +93,7 @@ For performance, exports can be processed in batches. Connectors that support pa
 
 ### Pre-Export Reconciliation
 
-JIM performs intelligent reconciliation before export. For example, if an object is created and then deleted before the export runs, the redundant pending exports are automatically cancelled -- avoiding unnecessary operations on the target system.
+JIM performs intelligent reconciliation before export. For example, if an object is created and then deleted before the export runs, the redundant Pending Exports are automatically cancelled -- avoiding unnecessary operations on the target system.
 
 ## Putting It Together
 
@@ -108,28 +108,28 @@ sequenceDiagram
     participant AD as Active Directory
 
     HR->>CS1: 1. Import (read employees)
-    CS1->>MV: 2. Inbound Sync (join/project, attribute flow)
-    MV->>CS2: 3. Outbound Sync (provision, attribute flow)
+    CS1->>MV: 2. Inbound Sync (join/project, Attribute Flow)
+    MV->>CS2: 3. Outbound Sync (provision, Attribute Flow)
     CS2->>AD: 4. Export (create/update accounts)
 ```
 
 1. **Import** from the HR system brings employee records into the HR connector space
-2. **Inbound sync** joins or projects those records to metaverse objects and flows attributes inward
-3. **Outbound sync** evaluates the metaverse objects against Active Directory synchronisation rules and creates pending exports
+2. **Inbound sync** joins or projects those records to Metaverse Objects and flows attributes inward
+3. **Outbound sync** evaluates the Metaverse Objects against Active Directory Synchronisation Rules and creates Pending Exports
 4. **Export** sends the pending changes to Active Directory (creating accounts, updating attributes, etc.)
 
 This cycle can be automated using the **Scheduler** service, which supports cron expressions and interval-based triggers with multi-step execution.
 
 ## Run Profiles
 
-Each phase is executed through a **run profile** -- a configured operation on a connected system. Common run profiles include:
+Each phase is executed through a **Run Profile** -- a configured operation on a Connected System. Common Run Profiles include:
 
 | Run Profile | Phase | Description |
 |-------------|-------|-------------|
-| Full Import | Import | Read all objects from the connected system |
+| Full Import | Import | Read all objects from the Connected System |
 | Delta Import | Import | Read only changed objects |
-| Full Sync | Sync | Re-evaluate all objects against synchronisation rules |
+| Full Sync | Sync | Re-evaluate all objects against Synchronisation Rules |
 | Delta Sync | Sync | Process only changed objects |
-| Export | Export | Send pending changes to the connected system |
+| Export | Export | Send pending changes to the Connected System |
 
-Run profiles can be executed manually from the UI, triggered via the API, invoked from PowerShell, or scheduled to run automatically.
+Run Profiles can be executed manually from the UI, triggered via the API, invoked from PowerShell, or scheduled to run automatically.

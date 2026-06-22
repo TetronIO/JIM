@@ -53,7 +53,7 @@ When `DeletionRule = WhenAuthoritativeSourceDisconnected`, you must specify whic
 | One system `[1]` | MVO is deleted when that specific system disconnects |
 | Multiple systems `[1, 2]` | MVO is deleted when **ANY** of the specified systems disconnect |
 
-**Note**: Only "contributing systems" (systems with inbound sync rules for this object type) can be selected as authoritative sources.
+**Note**: Only "contributing systems" (systems with inbound Synchronisation Rules for this object type) can be selected as authoritative sources.
 
 #### Example: HR → AD Synchronisation
 
@@ -73,7 +73,7 @@ Scenario: User deleted from HR
   4. MVO.LastConnectorDisconnectedDate is set (marking MVO for deletion)
   5. AD CSO is still connected, but deletion is triggered because HR is authoritative
   6. Housekeeping runs:
-     - Calls EvaluateMvoDeletionAsync() → creates Delete pending export for AD CSO
+     - Calls EvaluateMvoDeletionAsync() → creates Delete Pending Export for AD CSO
      - Deletes MVO
   7. Export runs → deletes user from AD
 ```
@@ -126,7 +126,7 @@ The worker's `PerformHousekeepingAsync()` runs periodically (max every 60 second
    - No CSOs remain connected (for safety)
 
 2. For each eligible MVO:
-   - Calls `EvaluateMvoDeletionAsync()` to create Delete pending exports for any remaining Provisioned CSOs
+   - Calls `EvaluateMvoDeletionAsync()` to create Delete Pending Exports for any remaining Provisioned CSOs
    - Deletes the MVO from the database
 
 ### Why Two Stages?
@@ -161,12 +161,12 @@ MVOs expose computed properties for UI display:
 
 ## Deprovisioning Behaviour
 
-When an MVO is deleted, downstream CSOs need to be handled. This is controlled by the export sync rule's `OutboundDeprovisionAction`:
+When an MVO is deleted, downstream CSOs need to be handled. This is controlled by the export Synchronisation Rule's `OutboundDeprovisionAction`:
 
 | Action | Behaviour |
 |--------|-----------|
 | `Disconnect` | Break the join but leave the object in the target system |
-| `Delete` | Create a Delete pending export to remove the object from the target system |
+| `Delete` | Create a Delete Pending Export to remove the object from the target system |
 
 **Important**: Only CSOs with `JoinType = Provisioned` trigger delete exports. Matched CSOs are only disconnected.
 
@@ -192,7 +192,7 @@ When an MVO is deleted, downstream CSOs need to be handled. This is controlled b
    - Dropdown for selecting deletion rule (Manual, When Last Connector Disconnected, When Authoritative Source Disconnected)
    - Grace period input field
    - Checkboxes for selecting authoritative sources (only visible when `WhenAuthoritativeSourceDisconnected` is selected)
-   - Only "contributing systems" (systems with inbound sync rules for this object type) appear as selectable authoritative sources
+   - Only "contributing systems" (systems with inbound Synchronisation Rules for this object type) appear as selectable authoritative sources
 5. **Admin UI - List view** - `SchemaObjectTypeList.razor` shows deletion rule column with coloured chips and tooltips
 
 ## Phase 1 Implementation Status: Implemented ✅
@@ -294,7 +294,7 @@ The following GitHub issues define additional deletion rule features. This secti
 
 ### #115: Authoritative Source Triggers (DeletionTriggerConnectedSystemIds)
 
-**Description**: Delete MVO when specific "authoritative" connected systems disconnect, regardless of whether other CSOs remain connected.
+**Description**: Delete MVO when specific "authoritative" Connected Systems disconnect, regardless of whether other CSOs remain connected.
 
 **Current State**: ✅ **COMPLETE**
 - ✅ `WhenAuthoritativeSourceDisconnected` enum value added
@@ -324,7 +324,7 @@ The following GitHub issues define additional deletion rule features. This secti
 
 ### #116: Excluded Systems (ExcludedFromLastConnectorCheck)
 
-**Description**: Exclude specific connected systems from the "last connector" check. MVO deletion only considers non-excluded systems.
+**Description**: Exclude specific Connected Systems from the "last connector" check. MVO deletion only considers non-excluded systems.
 
 **Use Cases**:
 - ServiceDesk creates shadow accounts that shouldn't prevent deletion

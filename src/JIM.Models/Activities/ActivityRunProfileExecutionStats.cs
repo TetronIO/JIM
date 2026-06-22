@@ -6,7 +6,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace JIM.Models.Activities;
 
 /// <summary>
-/// Represents statistics for an activity's run profile execution items, categorised by change type.
+/// Represents statistics for an activity's Run Profile execution items, categorised by change type.
 /// Not persisted.
 /// </summary>
 [NotMapped]
@@ -43,7 +43,7 @@ public class ActivityRunProfileExecutionStats
     public int TotalJoins { get; set; }
 
     /// <summary>
-    /// Count of attribute flows between CSOs and MVOs.
+    /// Count of Attribute Flows between CSOs and MVOs.
     /// </summary>
     public int TotalAttributeFlows { get; set; }
 
@@ -53,24 +53,24 @@ public class ActivityRunProfileExecutionStats
     public int TotalDisconnections { get; set; }
 
     /// <summary>
-    /// Count of CSOs disconnected from MVOs because they fell out of scope of import sync rule scoping criteria.
+    /// Count of CSOs disconnected from MVOs because they fell out of scope of import Synchronisation Rule scoping criteria.
     /// </summary>
     public int TotalDisconnectedOutOfScope { get; set; }
 
     /// <summary>
     /// Count of CSOs that fell out of scope but remained joined (InboundOutOfScopeAction = RemainJoined).
-    /// Attribute flow stopped but join preserved ("once managed, always managed" pattern).
+    /// Attribute Flow stopped but join preserved ("once managed, always managed" pattern).
     /// </summary>
     public int TotalOutOfScopeRetainJoin { get; set; }
 
     /// <summary>
-    /// Count of CSOs where drift was detected and corrective pending exports were created.
+    /// Count of CSOs where drift was detected and corrective Pending Exports were created.
     /// Drift occurs when target system attributes differ from expected MVO values.
     /// </summary>
     public int TotalDriftCorrections { get; set; }
 
     /// <summary>
-    /// Count of CSOs provisioned to target connected systems during sync.
+    /// Count of CSOs provisioned to target Connected Systems during sync.
     /// Provisioning creates a new CSO in a target system as a result of export evaluation.
     /// </summary>
     public int TotalProvisioned { get; set; }
@@ -90,28 +90,28 @@ public class ActivityRunProfileExecutionStats
 
     #region Pending Export Stats (surfaced during sync)
     /// <summary>
-    /// Count of pending exports staged for the next export run.
+    /// Count of Pending Exports staged for the next export run.
     /// These are exports that were previously executed but not yet confirmed (ExportNotConfirmed status),
-    /// giving operators visibility into what changes will be made to connected systems.
+    /// giving operators visibility into what changes will be made to Connected Systems.
     /// </summary>
     public int TotalPendingExports { get; set; }
     #endregion
 
     #region Pending Export Reconciliation Stats (populated during confirming import)
     /// <summary>
-    /// Count of pending exports that were fully confirmed and deleted.
+    /// Count of Pending Exports that were fully confirmed and deleted.
     /// The exported attribute values matched the imported values.
     /// </summary>
     public int TotalPendingExportsConfirmed { get; set; }
 
     /// <summary>
-    /// Count of pending exports with unconfirmed attributes that will be retried.
+    /// Count of Pending Exports with unconfirmed attributes that will be retried.
     /// Some attribute values did not match; they will be re-exported on the next export run.
     /// </summary>
     public int TotalPendingExportsRetrying { get; set; }
 
     /// <summary>
-    /// Count of pending exports that failed after maximum retry attempts.
+    /// Count of Pending Exports that failed after maximum retry attempts.
     /// Manual intervention may be required to resolve these exports.
     /// </summary>
     public int TotalPendingExportsFailed { get; set; }
@@ -125,7 +125,7 @@ public class ActivityRunProfileExecutionStats
     public int TotalObjectsProcessed { get; set; }
 
     /// <summary>
-    /// Total count of all run profile execution items (objects that had changes).
+    /// Total count of all Run Profile execution items (objects that had changes).
     /// </summary>
     public int TotalObjectChangeCount { get; set; }
 

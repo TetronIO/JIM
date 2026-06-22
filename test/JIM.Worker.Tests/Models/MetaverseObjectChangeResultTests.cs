@@ -232,7 +232,7 @@ public class MetaverseObjectChangeResultTests
     [Test]
     public void AttributeFlow_ReturnsNullAttributeFlowCount()
     {
-        // Act - AttributeFlow itself doesn't use AttributeFlowCount since it IS the attribute flow
+        // Act - AttributeFlow itself doesn't use AttributeFlowCount since it IS the Attribute Flow
         var result = MetaverseObjectChangeResult.AttributeFlow(attributesAdded: 2, attributesRemoved: 1);
 
         // Assert
@@ -451,8 +451,8 @@ public class MetaverseObjectChangeResultTests
     {
         // Verify that only DisconnectedOutOfScope can carry AttributeFlowCount.
         // All other factory methods should return null for AttributeFlowCount,
-        // since they either ARE the attribute flow (AttributeFlow type) or don't
-        // have a secondary attribute flow concern.
+        // since they either ARE the Attribute Flow (AttributeFlow type) or don't
+        // have a secondary Attribute Flow concern.
         var noChanges = MetaverseObjectChangeResult.NoChanges();
         var projected = MetaverseObjectChangeResult.Projected(2);
         var joined = MetaverseObjectChangeResult.Joined(1, 1);

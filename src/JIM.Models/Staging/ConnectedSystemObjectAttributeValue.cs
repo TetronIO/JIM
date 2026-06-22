@@ -27,7 +27,7 @@ public class ConnectedSystemObjectAttributeValue
     public int AttributeId { get; set; }
 
     /// <summary>
-    /// The parent connected system object for this attribute value object.
+    /// The parent Connected System Object for this attribute value object.
     /// </summary>
     public ConnectedSystemObject ConnectedSystemObject { get; set; } = null!;
 

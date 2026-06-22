@@ -6,7 +6,7 @@ namespace JIM.Models.Activities.DTOs;
 /// <summary>
 /// Pairs an already-persisted RPEI (with its SyncOutcomes) against the id of its existing
 /// <see cref="Staging.MetaverseObjectChange"/>, when one exists. Returned by cross-page
-/// reference resolution to merge new reference attribute flow into the existing RPEI/MvoChange
+/// reference resolution to merge new reference Attribute Flow into the existing RPEI/MvoChange
 /// pair rather than creating duplicates.
 /// </summary>
 public class CrossPageMergeRpei

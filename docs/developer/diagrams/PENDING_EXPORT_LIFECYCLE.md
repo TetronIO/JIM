@@ -2,7 +2,7 @@
 
 > Last updated: 2026-04-22, JIM v0.10.0
 
-This diagram shows the full lifecycle of a Pending Export from creation during synchronisation, through export execution, to confirmation during a confirming import. Pending Exports are the mechanism by which JIM propagates changes from the metaverse to target connected systems.
+This diagram shows the full lifecycle of a Pending Export from creation during synchronisation, through export execution, to confirmation during a confirming import. Pending Exports are the mechanism by which JIM propagates changes from the metaverse to target Connected Systems.
 
 ## State Diagram
 
@@ -53,17 +53,17 @@ stateDiagram-v2
 
 ## Full Lifecycle Across Operations
 
-A Pending Export's journey typically spans three separate run profile executions:
+A Pending Export's journey typically spans three separate Run Profile executions:
 
 ```mermaid
 flowchart LR
     subgraph "1. Sync (Full or Delta)"
         SyncStart[MVO attribute changes<br/>during inbound flow] --> CheckRecall{Pure recall?<br/>All changes are<br/>attribute removals}
         CheckRecall -->|Yes| SkipRecall[Skip export evaluation<br/>Prevents expression mapping<br/>errors against incomplete data<br/>No PE created]
-        CheckRecall -->|No| EvalExport[EvaluateExportRules:<br/>Find export sync rules<br/>for MVO type]
+        CheckRecall -->|No| EvalExport[EvaluateExportRules:<br/>Find export Synchronisation Rules<br/>for MVO type]
         EvalExport --> InScope{MVO in scope<br/>for export rule?}
         InScope -->|No| EvalDeprov[Evaluate deprovisioning:<br/>Create Delete PE if CSO exists]
-        InScope -->|Yes| MapAttrs[Map MVO attributes<br/>to CSO attributes<br/>via export sync rule mappings]
+        InScope -->|Yes| MapAttrs[Map MVO attributes<br/>to CSO attributes<br/>via export Synchronisation Rule mappings]
         MapAttrs --> NetChange{No-net-change<br/>detection}
         NetChange -->|CSO already current| Skip[Skip - no PE created<br/>Target already has correct values]
         NetChange -->|Changes needed| CheckExisting{Existing CSO<br/>in target system?}
@@ -105,11 +105,11 @@ flowchart LR
 
 ## Pending Export Confirmation During Sync
 
-During Full/Delta Sync, pending exports are also checked for confirmation (separate from the confirming import path above). This uses `ISyncEngine.EvaluatePendingExportConfirmation` for the pure comparison logic, invoked from `SyncTaskProcessorBase`:
+During Full/Delta Sync, Pending Exports are also checked for confirmation (separate from the confirming import path above). This uses `ISyncEngine.EvaluatePendingExportConfirmation` for the pure comparison logic, invoked from `SyncTaskProcessorBase`:
 
 ```mermaid
 flowchart TD
-    Start([ProcessPendingExport<br/>for each CSO]) --> LookupPE[Lookup pending exports<br/>for this CSO from<br/>pre-loaded dictionary]
+    Start([ProcessPendingExport<br/>for each CSO]) --> LookupPE[Lookup Pending Exports<br/>for this CSO from<br/>pre-loaded dictionary]
     LookupPE --> HasPE{PE exists<br/>for CSO?}
     HasPE -->|No| Done([Skip])
 
@@ -173,7 +173,7 @@ flowchart TD
 
 ## Drift Correction and Export Evaluation Merge
 
-When both drift corrections and export evaluation produce changes for the same pending export, they are merged at the **value level** using composite keys:
+When both drift corrections and export evaluation produce changes for the same Pending Export, they are merged at the **value level** using composite keys:
 
 ```mermaid
 flowchart TD
@@ -187,20 +187,20 @@ This prevents silent loss of drift corrections when merging with export evaluati
 
 ## Key Design Decisions
 
-- **Three-operation lifecycle**<br /> A pending export typically spans Sync (creation), Export (execution), and Confirming Import (confirmation). This design ensures changes are verified end-to-end.
+- **Three-operation lifecycle**<br /> A Pending Export typically spans Sync (creation), Export (execution), and Confirming Import (confirmation). This design ensures changes are verified end-to-end.
 
-- **Partial confirmation**<br /> Individual attribute changes can be confirmed independently. If 3 out of 5 attributes match the target system, only the 2 unconfirmed attributes remain on the pending export for retry.
+- **Partial confirmation**<br /> Individual attribute changes can be confirmed independently. If 3 out of 5 attributes match the target system, only the 2 unconfirmed attributes remain on the Pending Export for retry.
 
 - **Create-to-Update demotion**<br /> When a Create PE is partially confirmed (object was created but some attributes didn't take), it's demoted to an Update PE. This prevents the next export from trying to create an already-existing object.
 
 - **No-net-change detection**<br /> Before creating a PE during sync, the system checks if the target CSO already has the expected values (using pre-cached data in `ExportEvaluationCache`). This avoids unnecessary export operations and reduces connector load.
 
-- **Drift correction**<br /> When `EnforceState` is enabled on an export synchronisation rule and the CSO has values that don't match the MVO, a corrective PE is created to reassert the correct values. This detects and corrects unauthorised changes made directly in target systems.
+- **Drift correction**<br /> When `EnforceState` is enabled on an export Synchronisation Rule and the CSO has values that don't match the MVO, a corrective PE is created to reassert the correct values. This detects and corrects unauthorised changes made directly in target systems.
 
 - **Pure recall skip**<br /> When all changed attributes on an MVO are removals (attribute recall due to CSO disconnection), export evaluation is skipped entirely. Expression-based mappings (e.g., DN templates) would evaluate against post-recall null attributes and produce invalid values. Target systems retain their existing attribute values until attribute priority (Issue #91) enables replacement value resolution.
 
 - **Value-level drift merge**<br /> When merging drift corrections with export evaluation changes, the merge key is a composite of `AttributeId` + value identity (not just `AttributeId`). This prevents silent loss of multi-valued attribute drift corrections; e.g., 117 member removals would be dropped if merged by `AttributeId` alone.
 
-- **Pre-export CREATE→DELETE reconciliation** (#218)<br /> Dual-layer reconciliation cancels contradictory pending exports before they reach the connector. At **flush time** (during sync), deferred CREATE/UPDATE PEs are checked against persisted DELETE PEs for the same CSO: CREATE+DELETE pairs cancel both (no net change), UPDATE+DELETE cancels the UPDATE (deletion still needed). At **export time**, the same logic runs across all pending exports to catch pairs persisted in different sync runs. This prevents unnecessary export operations and connector errors.
+- **Pre-export CREATE→DELETE reconciliation** (#218)<br /> Dual-layer reconciliation cancels contradictory Pending Exports before they reach the connector. At **flush time** (during sync), deferred CREATE/UPDATE PEs are checked against persisted DELETE PEs for the same CSO: CREATE+DELETE pairs cancel both (no net change), UPDATE+DELETE cancels the UPDATE (deletion still needed). At **export time**, the same logic runs across all Pending Exports to catch pairs persisted in different sync runs. This prevents unnecessary export operations and connector errors.
 
 - **Exponential backoff**<br /> Failed exports use increasing retry delays (`NextRetryAt`) to avoid hammering a target system that's experiencing issues.

@@ -129,7 +129,7 @@ public class ExportExecutionParallelBatchTests
         var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
         var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
 
-        // Create 3 pending exports (fits in 1 batch with default size 100)
+        // Create 3 Pending Exports (fits in 1 batch with default size 100)
         for (var i = 0; i < 3; i++)
         {
             var cso = CreateCso(targetSystem, targetUserType);
@@ -216,7 +216,7 @@ public class ExportExecutionParallelBatchTests
         var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
         var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
 
-        // Create 4 pending exports - with BatchSize=2, processed in 2 sequential batches
+        // Create 4 Pending Exports - with BatchSize=2, processed in 2 sequential batches
         var pendingExportIds = new List<Guid>();
         for (var i = 0; i < 4; i++)
         {
@@ -284,7 +284,7 @@ public class ExportExecutionParallelBatchTests
         var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
         var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
 
-        // Create 4 pending exports - 2 batches of 2
+        // Create 4 Pending Exports - 2 batches of 2
         for (var i = 0; i < 4; i++)
         {
             var cso = CreateCso(targetSystem, targetUserType);
@@ -337,7 +337,7 @@ public class ExportExecutionParallelBatchTests
         var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
         var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
 
-        // Create 6 pending exports - 3 batches of 2
+        // Create 6 Pending Exports - 3 batches of 2
         for (var i = 0; i < 6; i++)
         {
             var cso = CreateCso(targetSystem, targetUserType);
@@ -506,7 +506,7 @@ public class ExportExecutionParallelBatchTests
         var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
         var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
 
-        // Create 6 pending exports - 3 batches of 2
+        // Create 6 Pending Exports - 3 batches of 2
         var expectedIds = new List<Guid>();
         for (var i = 0; i < 6; i++)
         {

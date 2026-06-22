@@ -185,7 +185,7 @@ public class ExportConfirmationWorkflowTests
     [Test]
     public async Task Workflow_SingleAttributeChange_ConfirmsOnFirstImportAsync()
     {
-        // Arrange: Create pending export with one attribute change
+        // Arrange: Create Pending Export with one attribute change
         var cso = CreateTestCso();
         var pendingExport = CreateTestPendingExport(cso);
         var attrChange = new PendingExportAttributeValueChange
@@ -224,7 +224,7 @@ public class ExportConfirmationWorkflowTests
     [Test]
     public async Task Workflow_MultipleAttributeChanges_AllConfirmSuccessfullyAsync()
     {
-        // Arrange: Create pending export with multiple attribute changes
+        // Arrange: Create Pending Export with multiple attribute changes
         var cso = CreateTestCso();
         var pendingExport = CreateTestPendingExport(cso);
 
@@ -278,7 +278,7 @@ public class ExportConfirmationWorkflowTests
     [Test]
     public async Task Workflow_AttributeChange_FailsThenConfirmsOnRetryAsync()
     {
-        // Arrange: Create pending export
+        // Arrange: Create Pending Export
         var cso = CreateTestCso();
         var pendingExport = CreateTestPendingExport(cso);
         var attrChange = new PendingExportAttributeValueChange
@@ -551,7 +551,7 @@ public class ExportConfirmationWorkflowTests
         Assert.That(result.RetryChanges.Count, Is.EqualTo(1), "mail should need retry");
         Assert.That(result.PendingExportDeleted, Is.False, "PendingExport should still exist");
 
-        // The confirmed change should have been removed from pending export
+        // The confirmed change should have been removed from Pending Export
         Assert.That(pendingExport.AttributeValueChanges.Count, Is.EqualTo(1));
         Assert.That(pendingExport.AttributeValueChanges[0].AttributeId, Is.EqualTo(MailAttr.Id));
     }

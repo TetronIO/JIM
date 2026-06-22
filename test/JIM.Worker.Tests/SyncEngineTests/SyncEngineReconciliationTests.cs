@@ -10,7 +10,7 @@ using NUnit.Framework;
 namespace JIM.Worker.Tests.SyncEngineTests;
 
 /// <summary>
-/// Pure unit tests for SyncEngine pending export reconciliation methods — no mocking, no database.
+/// Pure unit tests for SyncEngine Pending Export reconciliation methods — no mocking, no database.
 /// These test the comprehensive attribute matching that replaces the old basic AttributeValuesMatch.
 /// </summary>
 public class SyncEngineReconciliationTests

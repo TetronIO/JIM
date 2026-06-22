@@ -157,7 +157,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
         // Auto-tune settings based on the detected directory type.
         // This modifies setting values in-place; the application layer persists
-        // the connected system after schema import, saving any changes.
+        // the Connected System after schema import, saving any changes.
         AutoTuneExportConcurrency(settingValues, rootDse, logger);
 
         var ldapConnectorSchema = new LdapConnectorSchema(_connection, logger, rootDse, includeAuxiliaryClasses);

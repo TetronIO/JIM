@@ -7,7 +7,7 @@
 
 ## Context
 
-JIM.Worker is the synchronisation engine - the beating heart of JIM. It processes imports from connected systems, reconciles identity data in the metaverse, evaluates exports, and writes changes back to connected systems. This document was originally written during an optimisation/debugging loop to evaluate whether incremental improvements were sufficient or whether a more fundamental redesign was warranted. Since then, significant performance work has been completed (see [Progress Since Original Analysis](#progress-since-original-analysis)).
+JIM.Worker is the synchronisation engine - the beating heart of JIM. It processes imports from Connected Systems, reconciles identity data in the metaverse, evaluates exports, and writes changes back to Connected Systems. This document was originally written during an optimisation/debugging loop to evaluate whether incremental improvements were sufficient or whether a more fundamental redesign was warranted. Since then, significant performance work has been completed (see [Progress Since Original Analysis](#progress-since-original-analysis)).
 
 ### Current Architecture Summary
 
@@ -66,7 +66,7 @@ JIM.Worker is the synchronisation engine - the beating heart of JIM. It processe
 1. **EF Core is the bottleneck and the untestable seam**
    - ~~Change tracking overhead on hot paths (every `SaveChangesAsync` scans all tracked entities)~~ **(Addressed by #338)**: `SetAutoDetectChangesEnabled(false)` during flush sequences; RPEIs detached from tracker after bulk insert
    - ~~Include chains generate multi-round-trip split queries for deep object graphs~~ **(Addressed by #338)**: `AsSplitQuery` removed from sync page loading; replaced with two-query transaction approach
-   - ~~`AddRange`/`UpdateRange` generate N individual SQL statements, not bulk operations~~ **(Addressed by #338)**: CSO creates/updates, pending export creates/updates/deletes, and RPEI persistence all use raw SQL bulk operations
+   - ~~`AddRange`/`UpdateRange` generate N individual SQL statements, not bulk operations~~ **(Addressed by #338)**: CSO creates/updates, Pending Export creates/updates/deletes, and RPEI persistence all use raw SQL bulk operations
    - In-memory provider masks missing `.Include()` bugs, making unit tests unreliable; **still a problem**
    - Cannot fully unit test repository logic - requires integration tests with real PostgreSQL; **still a problem**
    - ~~**New concern (#338):** Production and test code paths now diverge via `_hasRawSqlSupport` flag and try/catch EF fallbacks~~ **(Resolved by #394 + Phase 8)**: `_hasRawSqlSupport` flag and all try/catch EF fallback blocks deleted. Worker tests use purpose-built in-memory `SyncRepository` (JIM.InMemoryData); production uses `PostgresData.SyncRepository` which owns Worker-only bulk SQL directly (partial classes) and delegates dual-called methods to shared EF repos
@@ -156,11 +156,11 @@ The original estimate of ~3,970 LOC assumed the entire `SyncTaskProcessorBase` (
 The boundary between engine and orchestrator is: **"deciding what changes should happen to in-memory objects"** vs **"persisting those changes and wiring activity/outcome tracking"**.
 
 **Engine decides (no I/O, no async, plain objects in, decisions out):**
-- Scope evaluation: is this CSO in scope for each import sync rule?
+- Scope evaluation: is this CSO in scope for each import Synchronisation Rule?
 - Join evaluation: given candidates and existing join count, should this CSO join an MVO?
 - Projection: should a new MVO be created for this CSO?
-- Inbound attribute flow: what MVO attribute values change?
-- Pending export confirmation: does the CSO's current state confirm a pending export?
+- Inbound Attribute Flow: what MVO attribute values change?
+- Pending Export confirmation: does the CSO's current state confirm a Pending Export?
 - Obsolete CSO handling: disconnect, recall attributes, determine MVO deletion fate
 - Drift detection and corrective export evaluation
 - MVO deletion rule evaluation
@@ -214,7 +214,7 @@ public interface ISyncEngine
         ConnectedSystemObject cso,
         IReadOnlyList<SyncRule> syncRules);
 
-    // Inbound attribute flow
+    // Inbound Attribute Flow
     AttributeFlowResult FlowInboundAttributes(
         ConnectedSystemObject cso,
         MetaverseObject mvo,
@@ -222,7 +222,7 @@ public interface ISyncEngine
         IReadOnlyList<ConnectedSystemObjectType> objectTypes,
         bool skipReferenceAttributes);
 
-    // Pending export confirmation
+    // Pending Export confirmation
     PendingExportConfirmationResult EvaluatePendingExportConfirmation(
         ConnectedSystemObject cso,
         Dictionary<Guid, PendingExport> pendingExports);
@@ -283,7 +283,7 @@ Each method is synchronous (no `Task`), takes plain objects, returns decision re
 **Phase 1c-4: Pure unit tests for SyncEngine**: ✅ DONE
 - 39 pure unit tests in `test/JIM.Worker.Tests/SyncEngineTests/`
 - No mocking, no database, no EF Core; plain C# objects only
-- Coverage: join evaluation (4 tests), projection (4 tests), deletion rules (11 tests), attribute flow (5 tests), out-of-scope action (5 tests), pending export confirmation (10 tests)
+- Coverage: join evaluation (4 tests), projection (4 tests), deletion rules (11 tests), Attribute Flow (5 tests), out-of-scope action (5 tests), Pending Export confirmation (10 tests)
 - Total tests: 2,234 (39 new + 2,195 existing)
 
 ### Philosophy
@@ -390,7 +390,7 @@ Keep the current architecture but surgically extract the sync processing logic i
 
 1. **Extract `ISyncEngine`** (JIM.Application) - Pure domain logic, no I/O dependencies; **NOT STARTED**
    - Interface defined in JIM.Application; implementation lives alongside existing Servers
-   - Takes in-memory objects (CSO batch, sync rules, MVO candidates)
+   - Takes in-memory objects (CSO batch, Synchronisation Rules, MVO candidates)
    - Returns decisions/commands (JoinDecision, ProjectDecision, FlowDecision, ExportDecision)
    - Fully unit testable with plain objects - no mocking needed
    - The ~3,970 lines of SyncTaskProcessorBase + SyncRuleMappingProcessor become the engine
@@ -413,7 +413,7 @@ Keep the current architecture but surgically extract the sync processing logic i
    Two data-access paths, optimised for different purposes; with no code duplication between them:
 
    - **Shared EF Core repositories** (`ConnectedSystemRepository`, `MetaverseRepository`, etc.); used by the Web UI, API, and for generic reads/writes. Over time, individual methods can be swapped from EF LINQ to raw SQL where EF quirks cause issues; benefiting all callers.
-   - **`PostgresData.SyncRepository`**: used exclusively by the Worker. Exposes the full `ISyncRepository` interface (~80 methods). Generic reads (counts, single-record lookups, sync rules, settings) delegate to the shared EF repos. Hot-path bulk/batch operations (~15-20 methods) should own their implementations directly using Npgsql COPY binary imports and raw SQL.
+   - **`PostgresData.SyncRepository`**: used exclusively by the Worker. Exposes the full `ISyncRepository` interface (~80 methods). Generic reads (counts, single-record lookups, Synchronisation Rules, settings) delegate to the shared EF repos. Hot-path bulk/batch operations (~15-20 methods) should own their implementations directly using Npgsql COPY binary imports and raw SQL.
    - **Current state (Phase 8 complete):** `SyncRepository` owns all Worker-only bulk SQL directly via partial classes. 12 public methods + 11 private helpers moved from `ActivitiesRepository` and `ConnectedSystemRepository`. Dual-called methods (CSO CRUD, PE update/delete, mark-executing) remain as delegates to shared EF repos. Dead wrappers removed from `ActivityServer` and `ConnectedSystemServer`. Shared helpers (`NullableParam`, `ChunkList`, `MaxParametersPerStatement`) deduplicated into `BulkSqlHelpers.cs`.
    - **Key principle:** `SyncRepository` does NOT duplicate methods from the shared repositories. Only Worker-only methods were moved; dual-called methods stay as delegates.
 
@@ -442,7 +442,7 @@ Keep the current architecture but surgically extract the sync processing logic i
 
 ### Estimates
 
-- **Completed (#338)**: Bulk SQL persistence for CSOs, pending exports, RPEIs; CSO lookup cache; lightweight MVO matching; `AsSplitQuery` elimination. Measured ~34% FullSync improvement, ~37% faster CSO processing
+- **Completed (#338)**: Bulk SQL persistence for CSOs, Pending Exports, RPEIs; CSO lookup cache; lightweight MVO matching; `AsSplitQuery` elimination. Measured ~34% FullSync improvement, ~37% faster CSO processing
 - **Completed (#430)**: Intra-phase parallelism; `ParallelBatchWriter` + COPY binary for CSO creates, RPEIs, sync outcomes
 - **Risk**: Medium - mechanical refactoring with clear seams; high test coverage before/after
 - **Breaking Changes**: None externally; internal restructuring only
@@ -674,19 +674,19 @@ Decompose the worker into independent, horizontally scalable processing units co
 
 2. **Independent worker types**
    - **Import Workers**: Connect to source systems, diff against DB, produce CSO change batches
-   - **Sync Workers**: Consume CSO batches, run pure sync engine, produce pending exports
-   - **Export Workers**: Consume pending export batches, write to target systems, confirm
+   - **Sync Workers**: Consume CSO batches, run pure sync engine, produce Pending Exports
+   - **Export Workers**: Consume Pending Export batches, write to target systems, confirm
    - Each type independently scalable (spin up more sync workers for large runs)
 
 3. **Shared state via Redis (optional cache layer)**
    - MVO lookup cache in Redis for sync workers (avoid each worker loading full MVO set)
-   - Sync rule cache in Redis (loaded once, shared across workers)
+   - Synchronisation Rule cache in Redis (loaded once, shared across workers)
    - Database remains source of truth; Redis is a performance optimisation only
    - Falls back to direct DB queries if Redis unavailable
-   - *CSO caching was considered but deferred*; unlike MVOs (single bounded set, read-heavy for join matching), CSOs scale per connected system (N systems x objects each), are primarily accessed during import as full-scan diffs where caching doesn't help, and their main cacheable use case (export target lookup) is not the bottleneck since connector I/O dominates export time. Revisit if export DB lookups prove costly at scale
+   - *CSO caching was considered but deferred*; unlike MVOs (single bounded set, read-heavy for join matching), CSOs scale per Connected System (N systems x objects each), are primarily accessed during import as full-scan diffs where caching doesn't help, and their main cacheable use case (export target lookup) is not the bottleneck since connector I/O dominates export time. Revisit if export DB lookups prove costly at scale
 
 4. **Work coordination**
-   - Scheduler publishes import-task messages (one per connected system per run profile)
+   - Scheduler publishes import-task messages (one per Connected System per Run Profile)
    - Import workers complete and publish sync-batch messages
    - Sync workers complete and export evaluation publishes export-task messages
    - Barrier synchronisation at phase boundaries via message counting/completion tokens
@@ -783,7 +783,7 @@ docker compose / Kubernetes:
 
 ### Empirical Memory Ceiling (April 2026)
 
-> **Finding:** Scenario 8 (cross-domain entitlement sync) Scale100K template (100K users, 50 groups) OOM-killed the worker during Full Sync on a Docker Desktop VM with 15.8 GB RAM. The worker successfully processed all 100,050 objects (projections + attribute flows) but crashed during the post-page-processing phase (pending export flush / cross-page reference resolution).
+> **Finding:** Scenario 8 (cross-domain entitlement sync) Scale100K template (100K users, 50 groups) OOM-killed the worker during Full Sync on a Docker Desktop VM with 15.8 GB RAM. The worker successfully processed all 100,050 objects (projections + Attribute Flows) but crashed during the post-page-processing phase (Pending Export flush / cross-page reference resolution).
 
 **Root causes (two major memory consumers):**
 
@@ -817,7 +817,7 @@ docker compose / Kubernetes:
 **Option C Risks:**
 - Distributed systems are inherently harder to debug and reason about
 - Redis is a new infrastructure dependency (operational burden)
-- Message ordering across workers requires careful design (e.g., sync worker must process CSO batch N before N+1 for same connected system)
+- Message ordering across workers requires careful design (e.g., sync worker must process CSO batch N before N+1 for same Connected System)
 - Phase barrier synchronisation is complex (knowing all import batches are done before sync starts)
 - Integration testing of the distributed system requires more infrastructure
 
@@ -969,7 +969,7 @@ A 5-phase surgical optimisation programme was completed in February 2026, replac
 |-------|--------|--------|
 | 1 | Service-lifetime CSO lookup cache (`IMemoryCache`) with startup warming | Eliminates N+1 import lookup queries |
 | 2 | Lightweight ID-only MVO matching with `Take(2)` (match-first, load-later) | Eliminates unnecessary full entity materialisation |
-| 3 | Raw SQL bulk insert/update for CSOs, CSO attribute values, pending exports | Bypasses EF change tracking on write hot paths |
+| 3 | Raw SQL bulk insert/update for CSOs, CSO attribute values, Pending Exports | Bypasses EF change tracking on write hot paths |
 | 4 | Removed `AsSplitQuery` from sync page loading; two-query transaction approach | Eliminated materialisation bugs; removed ~170 lines of post-load SQL repair code |
 | 5 | Raw SQL bulk insert for RPEIs with chunked parameterised queries | RPEIs detached from EF tracker after flush; prevents duplicate inserts |
 
@@ -1050,7 +1050,7 @@ A new change history subsystem was added to capture attribute-level change recor
 |--------|--------|
 | New models: `ConnectedSystemObjectChange`, `ConnectedSystemObjectChangeAttribute`, `ConnectedSystemObjectChangeAttributeValue` | Normalised change record hierarchy |
 | New models: `MetaverseObjectChange` and corresponding attribute/value models | MVO-side change tracking |
-| New utility: `ExportChangeHistoryBuilder` in JIM.Application | Builds change records from pending export data before PE deletion during export confirmation |
+| New utility: `ExportChangeHistoryBuilder` in JIM.Application | Builds change records from Pending Export data before PE deletion during export confirmation |
 | COPY binary import for change history rows (3 tables) | High-performance bulk persistence, bypassing EF entirely |
 | COPY binary import for RPEI outcome summary updates | Replaces per-RPEI UPDATE statements |
 | Deleted object final attribute snapshots on change records | Preserves CSO/MVO state at point of deletion |

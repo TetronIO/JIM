@@ -27,7 +27,7 @@ namespace JIM.Worker.Processors;
 
 /// <summary>
 /// Abstract base class containing shared logic for Full Sync and Delta Sync processors.
-/// Both sync types perform the same core operations (join, project, attribute flow, export evaluation)
+/// Both sync types perform the same core operations (join, project, Attribute Flow, export evaluation)
 /// but differ in which CSOs they process:
 /// - Full Sync: processes ALL CSOs in the Connected System
 /// - Delta Sync: processes only CSOs modified since the last sync (based on LastUpdated timestamp)
@@ -46,7 +46,7 @@ public abstract class SyncTaskProcessorBase
     protected ExportEvaluationCache? _exportEvaluationCache;
 
     // Cache for drift detection: maps (ConnectedSystemId, MvoAttributeId) to import mappings
-    // Used to check if a connected system is a legitimate contributor for an attribute
+    // Used to check if a Connected System is a legitimate contributor for an attribute
     protected Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>>? _importMappingCache;
 
     // Cache of export rules for drift detection (filtered to EnforceState = true)
@@ -66,7 +66,7 @@ public abstract class SyncTaskProcessorBase
     protected readonly List<MetaverseObject> _pendingMvoUpdates = [];
     protected readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> ChangedAttributes, HashSet<MetaverseObjectAttributeValue>? RemovedAttributes)> _pendingExportEvaluations = [];
 
-    // Batch collections for deferred pending export operations (avoid per-CSO database calls)
+    // Batch collections for deferred Pending Export operations (avoid per-CSO database calls)
     protected readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToCreate = [];
     protected readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToDelete = [];
     protected readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToUpdate = [];
@@ -134,7 +134,7 @@ public abstract class SyncTaskProcessorBase
     // Tracks CSOs with unresolved cross-page reference attributes.
     // During page processing, if ProcessDeferredReferenceAttributes finds references where
     // ReferenceValue.MetaverseObject is null (the referenced CSO is on a different page and hasn't
-    // been joined/projected yet), the CSO ID and applicable sync rule IDs are recorded here.
+    // been joined/projected yet), the CSO ID and applicable Synchronisation Rule IDs are recorded here.
     // After all pages, these CSOs are reloaded from the DB (where all MVOs now exist)
     // and reference attributes are re-processed in ResolveCrossPageReferencesAsync.
     protected readonly List<(Guid CsoId, List<int> SyncRuleIds)> _unresolvedCrossPageReferences = [];
@@ -154,7 +154,7 @@ public abstract class SyncTaskProcessorBase
         ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None;
 
     // Controls whether CSO change history records are created for PendingExportCreated outcomes.
-    // Loaded once at sync start. When enabled, snapshots pending export attribute data so the
+    // Loaded once at sync start. When enabled, snapshots Pending Export attribute data so the
     // Causality Tree can render attribute detail even after the PendingExport is deleted.
     protected bool _csoChangeTrackingEnabled;
 
@@ -168,7 +168,7 @@ public abstract class SyncTaskProcessorBase
     // After PersistPendingMetaverseObjectsAsync assigns real IDs, these are re-keyed into _mvoIdToRpei.
     private readonly List<(MetaverseObject Mvo, ActivityRunProfileExecutionItem Rpei)> _deferredMvoRpeiMappings = [];
 
-    // Expression evaluator for expression-based sync rule mappings
+    // Expression evaluator for expression-based Synchronisation Rule mappings
     protected readonly IExpressionEvaluator _expressionEvaluator = new DynamicExpressoEvaluator();
 
     /// <summary>
@@ -358,7 +358,7 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Pass 1: Processes pending export confirmations and obsolete CSO teardown for a single Connected System Object.
+    /// Pass 1: Processes Pending Export confirmations and obsolete CSO teardown for a single Connected System Object.
     /// This must run for ALL CSOs in the page BEFORE Pass 2 (ProcessActiveConnectedSystemObjectAsync) runs,
     /// so that all disconnections are recorded in _pendingDisconnectedMvoIds before any join attempts.
     /// Without this ordering guarantee, a new CSO processed before an obsolete CSO (due to GUID ordering)
@@ -372,7 +372,7 @@ public abstract class SyncTaskProcessorBase
         {
             using (Diagnostics.Sync.StartSpan("ProcessPendingExport"))
             {
-                // Note: ProcessPendingExport handles pending export confirmation, not CSO/MVO changes
+                // Note: ProcessPendingExport handles Pending Export confirmation, not CSO/MVO changes
                 // Queues operations for batch processing at end of page (avoids per-CSO database calls)
                 ProcessPendingExport(connectedSystemObject);
             }
@@ -408,7 +408,7 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Pass 2: Processes joins, projections, and attribute flow for a single non-obsolete Connected System Object.
+    /// Pass 2: Processes joins, projections, and Attribute Flow for a single non-obsolete Connected System Object.
     /// This must run AFTER Pass 1 (ProcessObsoleteAndExportConfirmationAsync) has completed for ALL CSOs in the page,
     /// ensuring _pendingDisconnectedMvoIds is fully populated before any join attempts.
     /// Skips obsolete CSOs (already handled in Pass 1).
@@ -420,13 +420,13 @@ public abstract class SyncTaskProcessorBase
             return;
 
         // Skip unchanged CSOs — their attributes haven't changed since the last completed sync,
-        // so attribute flow would produce zero changes. This avoids the overhead of loading and
+        // so Attribute Flow would produce zero changes. This avoids the overhead of loading and
         // comparing attribute values for the majority of CSOs in large-scale repeat syncs.
         if (connectedSystemObject.IsUnchangedSinceLastSync)
             return;
 
-        // Skip if no sync rules defined AND not in simple mode — nothing to join/project/flow.
-        // In simple mode, matching rules on the object type can drive joining even without sync rules.
+        // Skip if no Synchronisation Rules defined AND not in simple mode — nothing to join/project/flow.
+        // In simple mode, matching rules on the object type can drive joining even without Synchronisation Rules.
         if (activeSyncRules.Count == 0 && _connectedSystem.ObjectMatchingRuleMode != ObjectMatchingRuleMode.ConnectedSystem)
             return;
 
@@ -440,7 +440,7 @@ public abstract class SyncTaskProcessorBase
                 changeResult = await ProcessMetaverseObjectChangesAsync(activeSyncRules, connectedSystemObject);
             }
 
-            // Handle execution item for successful changes (join, projection, attribute flow)
+            // Handle execution item for successful changes (join, projection, Attribute Flow)
             if (changeResult.HasChanges)
             {
                 // Check if an RPEI was already created for this CSO (in ProcessMetaverseObjectChangesAsync when MVO changes were captured)
@@ -450,7 +450,7 @@ public abstract class SyncTaskProcessorBase
                     // Update the existing RPEI with the ObjectChangeType
                     existingRpei.ObjectChangeType = changeResult.ChangeType;
 
-                    // Propagate attribute flow count from change result (e.g., DisconnectedOutOfScope with attribute removals)
+                    // Propagate Attribute Flow count from change result (e.g., DisconnectedOutOfScope with attribute removals)
                     if (changeResult.AttributeFlowCount.HasValue)
                     {
                         existingRpei.AttributeFlowCount = changeResult.AttributeFlowCount;
@@ -471,7 +471,7 @@ public abstract class SyncTaskProcessorBase
                     runProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
                     runProfileExecutionItem.ObjectChangeType = changeResult.ChangeType;
 
-                    // Propagate attribute flow count from change result (e.g., DisconnectedOutOfScope with attribute removals)
+                    // Propagate Attribute Flow count from change result (e.g., DisconnectedOutOfScope with attribute removals)
                     if (changeResult.AttributeFlowCount.HasValue)
                     {
                         runProfileExecutionItem.AttributeFlowCount = changeResult.AttributeFlowCount;
@@ -601,7 +601,7 @@ public abstract class SyncTaskProcessorBase
     /// <summary>
     /// See if a Pending Export Object for a Connected System Object can be invalidated and deleted.
     /// This would occur when the Pending Export changes are visible on the Connected System Object after a confirming import.
-    /// Queues pending export operations for batch processing at the end of page processing (avoids per-CSO database calls).
+    /// Queues Pending Export operations for batch processing at the end of page processing (avoids per-CSO database calls).
     /// </summary>
     protected void ProcessPendingExport(ConnectedSystemObject connectedSystemObject)
     {
@@ -616,8 +616,8 @@ public abstract class SyncTaskProcessorBase
 
     /// <summary>
     /// Check if a CSO has been obsoleted and delete it, applying any joined Metaverse Object changes as necessary.
-    /// Respects the InboundOutOfScopeAction setting on import sync rules to determine whether to disconnect.
-    /// Deleting a Metaverse Object can have downstream impacts on other Connected System objects.
+    /// Respects the InboundOutOfScopeAction setting on import Synchronisation Rules to determine whether to disconnect.
+    /// Deleting a Metaverse Object can have downstream impacts on other Connected System Objects.
     /// CSO deletions are batched for performance - call FlushObsoleteCsoOperationsAsync() at page boundaries.
     /// When a joined CSO is obsoleted with Disconnect action, two RPEIs are produced:
     /// 1. Disconnected - records the CSO-MVO join being broken (with any attribute removals)
@@ -725,7 +725,7 @@ public abstract class SyncTaskProcessorBase
         var skipRecallForImmediateDeletion = mvoDeletionFate == MvoDeletionFate.DeletedImmediately;
         if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !hasGracePeriod && !skipRecallForImmediateDeletion)
         {
-            // Find all MVO attribute values contributed by this connected system and mark them for removal
+            // Find all MVO attribute values contributed by this Connected System and mark them for removal
             var contributedAttributes = mvo.AttributeValues
                 .Where(av => av.ContributedBySystemId == connectedSystemId)
                 .ToList();
@@ -739,7 +739,7 @@ public abstract class SyncTaskProcessorBase
             // Apply attribute removals and queue the MVO for export evaluation and persistence.
             // ProcessMetaverseObjectChangesAsync is skipped for obsolete CSOs (it's guarded by
             // Status != Obsolete), so we must handle this here to ensure target systems are
-            // notified of the recalled attributes via pending exports.
+            // notified of the recalled attributes via Pending Exports.
             if (mvo.PendingAttributeValueRemovals.Count > 0)
             {
                 var changedAttributes = mvo.PendingAttributeValueRemovals.ToList();
@@ -761,7 +761,7 @@ public abstract class SyncTaskProcessorBase
                 // Queue for batch persistence (MVO attributes have changed)
                 _pendingMvoUpdates.Add(mvo);
 
-                // Queue for export evaluation so target systems receive pending exports
+                // Queue for export evaluation so target systems receive Pending Exports
                 // for the recalled attribute values
                 _pendingExportEvaluations.Add((mvo, changedAttributes, removedAttributes));
             }
@@ -845,9 +845,9 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Determines the InboundOutOfScopeAction to use for a CSO by finding the applicable import sync rule.
-    /// If multiple import sync rules exist for this CSO type, the first one's setting is used.
-    /// Uses pre-loaded sync rules to avoid database round trips.
+    /// Determines the InboundOutOfScopeAction to use for a CSO by finding the applicable import Synchronisation Rule.
+    /// If multiple import Synchronisation Rules exist for this CSO type, the first one's setting is used.
+    /// Uses pre-loaded Synchronisation Rules to avoid database round trips.
     /// </summary>
     protected InboundOutOfScopeAction DetermineInboundOutOfScopeAction(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
         => _syncEngine.DetermineOutOfScopeAction(connectedSystemObject, activeSyncRules);
@@ -952,19 +952,19 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Checks if the not-Obsolete CSO is joined to a Metaverse Object and updates it per any sync rules,
-    /// or checks to see if a Metaverse Object needs creating (projecting the CSO) according to any sync rules.
-    /// Changes to Metaverse Objects can have downstream impacts on other Connected System objects.
+    /// Checks if the not-Obsolete CSO is joined to a Metaverse Object and updates it per any Synchronisation Rules,
+    /// or checks to see if a Metaverse Object needs creating (projecting the CSO) according to any Synchronisation Rules.
+    /// Changes to Metaverse Objects can have downstream impacts on other Connected System Objects.
     /// </summary>
-    /// <returns>A result indicating what MVO changes occurred (projection, join, attribute flow).</returns>
+    /// <returns>A result indicating what MVO changes occurred (projection, join, Attribute Flow).</returns>
     protected async Task<MetaverseObjectChangeResult> ProcessMetaverseObjectChangesAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
         Log.Verbose($"ProcessMetaverseObjectChangesAsync: Executing for: {connectedSystemObject}.");
         if (connectedSystemObject.Status == ConnectedSystemObjectStatus.Obsolete)
             return MetaverseObjectChangeResult.NoChanges();
 
-        // Skip if no sync rules AND not in simple mode — nothing to join/project/flow.
-        // In simple mode, matching rules on the object type can drive joining even without sync rules.
+        // Skip if no Synchronisation Rules AND not in simple mode — nothing to join/project/flow.
+        // In simple mode, matching rules on the object type can drive joining even without Synchronisation Rules.
         if (activeSyncRules.Count == 0 && _connectedSystem.ObjectMatchingRuleMode != ObjectMatchingRuleMode.ConnectedSystem)
             return MetaverseObjectChangeResult.NoChanges();
 
@@ -972,12 +972,12 @@ public abstract class SyncTaskProcessorBase
         var wasJoined = false;
         var wasProjected = false;
 
-        // Get import sync rules for this CSO type
+        // Get import Synchronisation Rules for this CSO type
         var importSyncRules = activeSyncRules
             .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId)
             .ToList();
 
-        // Check if CSO is in scope for any import sync rule before attempting join/projection
+        // Check if CSO is in scope for any import Synchronisation Rule before attempting join/projection
         List<SyncRule> inScopeImportRules;
         using (Diagnostics.Sync.StartSpan("GetInScopeImportRules"))
         {
@@ -986,8 +986,8 @@ public abstract class SyncTaskProcessorBase
 
         if (inScopeImportRules.Count == 0 && importSyncRules.Any(sr => sr.ObjectScopingCriteriaGroups.Count > 0))
         {
-            // CSO is out of scope for all import sync rules that have scoping criteria
-            Log.Debug("ProcessMetaverseObjectChangesAsync: CSO {CsoId} is out of scope for all import sync rules", connectedSystemObject.Id);
+            // CSO is out of scope for all import Synchronisation Rules that have scoping criteria
+            Log.Debug("ProcessMetaverseObjectChangesAsync: CSO {CsoId} is out of scope for all import Synchronisation Rules", connectedSystemObject.Id);
 
             // Handle out of scope based on InboundOutOfScopeAction
             using (Diagnostics.Sync.StartSpan("HandleCsoOutOfScope"))
@@ -1002,9 +1002,9 @@ public abstract class SyncTaskProcessorBase
         if (connectedSystemObject.MetaverseObject == null)
         {
             // CSO is not joined to a Metaverse Object.
-            // inspect sync rules to determine if we have any join or projection requirements.
+            // inspect Synchronisation Rules to determine if we have any join or projection requirements.
             // try to join first, then project. the aim is to ensure we don't end up with duplicate Identities in the Metaverse.
-            // Only use in-scope sync rules for join/projection
+            // Only use in-scope Synchronisation Rules for join/projection
             var scopedSyncRules = inScopeImportRules.Count > 0 ? inScopeImportRules : activeSyncRules;
 
             using (Diagnostics.Sync.StartSpan("AttemptJoin"))
@@ -1017,7 +1017,7 @@ public abstract class SyncTaskProcessorBase
             {
                 // try and project the CSO to the Metaverse.
                 // this may cause onward sync operations, so may take time.
-                // Only use in-scope sync rules for projection
+                // Only use in-scope Synchronisation Rules for projection
                 using (Diagnostics.Sync.StartSpan("AttemptProjection"))
                 {
                     wasProjected = AttemptProjection(scopedSyncRules, connectedSystemObject);
@@ -1030,12 +1030,12 @@ public abstract class SyncTaskProcessorBase
         // are we joined yet?
         if (connectedSystemObject.MetaverseObject != null)
         {
-            // Get the inbound sync rules for this CSO type
+            // Get the inbound Synchronisation Rules for this CSO type
             var inboundSyncRules = activeSyncRules
                 .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId)
                 .ToList();
 
-            // process sync rules to see if we need to flow any attribute updates from the CSO to the MVO.
+            // process Synchronisation Rules to see if we need to flow any attribute updates from the CSO to the MVO.
             // IMPORTANT: Skip reference attributes in the first pass. Reference attributes (e.g., group members)
             // may point to CSOs that haven't been processed yet (processed later in this page).
             // Reference attributes will be processed in a second pass after all CSOs have MVOs.
@@ -1044,7 +1044,7 @@ public abstract class SyncTaskProcessorBase
             {
                 foreach (var inboundSyncRule in inboundSyncRules)
                 {
-                    // evaluate inbound attribute flow rules, skipping reference attributes
+                    // evaluate inbound Attribute Flow Rules, skipping reference attributes
                     attributeFlowWarnings.AddRange(
                         ProcessInboundAttributeFlow(connectedSystemObject, inboundSyncRule, skipReferenceAttributes: true));
                 }
@@ -1096,8 +1096,8 @@ public abstract class SyncTaskProcessorBase
                 rpei.ConnectedSystemObjectId = connectedSystemObject.Id;
                 _activity.RunProfileExecutionItems.Add(rpei);
 
-                // Track attribute flow count when the primary change type is Join or Projection
-                // This prevents attribute flows from being "absorbed" into joins/projections
+                // Track Attribute Flow count when the primary change type is Join or Projection
+                // This prevents Attribute Flows from being "absorbed" into joins/projections
                 if (changeType is ObjectChangeType.Joined or ObjectChangeType.Projected)
                 {
                     rpei.AttributeFlowCount = attributesAdded + attributesRemoved;
@@ -1160,7 +1160,7 @@ public abstract class SyncTaskProcessorBase
                 _pendingMvoUpdates.Add(connectedSystemObject.MetaverseObject);
             }
 
-            // Queue for export evaluation after MVOs are persisted (need valid IDs for pending export FKs)
+            // Queue for export evaluation after MVOs are persisted (need valid IDs for Pending Export FKs)
             // Merge with existing entry if the same MVO is already queued (e.g., multiple CSOs joined
             // to the same MVO, or scalar + reference changes processed in separate passes).
             if (changedAttributes.Count > 0)
@@ -1170,7 +1170,7 @@ public abstract class SyncTaskProcessorBase
 
             // Evaluate drift detection: check if the CSO has drifted from expected state
             // This detects unauthorised changes made directly in the target system
-            // and stages corrective pending exports (added to _pendingExportsToCreate for batch save)
+            // and stages corrective Pending Exports (added to _pendingExportsToCreate for batch save)
             using (Diagnostics.Sync.StartSpan("EvaluateDrift"))
             {
                 EvaluateDriftAndEnforceState(connectedSystemObject, connectedSystemObject.MetaverseObject);
@@ -1196,12 +1196,12 @@ public abstract class SyncTaskProcessorBase
 
     /// <summary>
     /// Evaluates export rules for an MVO that has changed during inbound sync.
-    /// Creates PendingExports for any connected systems that need to be updated.
+    /// Creates PendingExports for any Connected Systems that need to be updated.
     /// Also evaluates if MVO has fallen out of scope for any export rules (deprovisioning).
     /// Implements Q1 decision: evaluate exports immediately when MVO changes.
     /// Uses pre-cached export rules and CSO lookups for O(1) access instead of O(N×M) database queries.
-    /// Includes no-net-change detection to skip creating pending exports when CSO already has current values.
-    /// Pending exports are deferred for batch saving to reduce database round trips.
+    /// Includes no-net-change detection to skip creating Pending Exports when CSO already has current values.
+    /// Pending Exports are deferred for batch saving to reduce database round trips.
     /// </summary>
     /// <param name="mvo">The Metaverse Object that changed (must have a valid Id assigned).</param>
     /// <param name="changedAttributes">The list of attribute values that changed.</param>
@@ -1218,8 +1218,8 @@ public abstract class SyncTaskProcessorBase
         }
 
         // Evaluate export rules for MVOs that are IN scope, using cached data for O(1) lookups
-        // Uses no-net-change detection (against target CSO attributes in cache) to skip pending exports when CSO already has current values
-        // Pending exports and provisioning CSOs are deferred (deferSave=true) and collected for batch saving
+        // Uses no-net-change detection (against target CSO attributes in cache) to skip Pending Exports when CSO already has current values
+        // Pending Exports and provisioning CSOs are deferred (deferSave=true) and collected for batch saving
         using (Diagnostics.Sync.StartSpan("EvaluateExportRules"))
         {
             ExportEvaluationResult result;
@@ -1253,13 +1253,13 @@ public abstract class SyncTaskProcessorBase
             // Aggregate no-net-change counts for statistics
             _totalCsoAlreadyCurrentCount += result.CsoAlreadyCurrentCount;
 
-            // Collect provisioning CSOs for batch creation at end of page (must be created before pending exports)
+            // Collect provisioning CSOs for batch creation at end of page (must be created before Pending Exports)
             if (result.ProvisioningCsosToCreate.Count > 0)
             {
                 _provisioningCsosToCreate.AddRange(result.ProvisioningCsosToCreate);
             }
 
-            // Collect pending exports for batch saving at end of page
+            // Collect Pending Exports for batch saving at end of page
             if (result.PendingExports.Count > 0)
             {
                 _pendingExportsToCreate.AddRange(result.PendingExports);
@@ -1277,7 +1277,7 @@ public abstract class SyncTaskProcessorBase
             if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
                 && _mvoIdToRpei.TryGetValue(mvo.Id, out var originatingRpei))
             {
-                // Prefer the AttributeFlow child as parent (MVO is fully formed after attribute flow),
+                // Prefer the AttributeFlow child as parent (MVO is fully formed after Attribute Flow),
                 // fall back to root outcome, fall back to creating outcomes at root level.
                 var rootOutcome = originatingRpei.SyncOutcomes.FirstOrDefault(o =>
                     !o.ParentSyncOutcomeId.HasValue);
@@ -1509,7 +1509,7 @@ public abstract class SyncTaskProcessorBase
 
     /// <summary>
     /// Processes deferred reference attributes for all CSOs queued during the current page.
-    /// This is the second pass of attribute flow processing - reference attributes are deferred
+    /// This is the second pass of Attribute Flow processing - reference attributes are deferred
     /// because they may reference CSOs that are processed later in the same page.
     /// By processing references after all CSOs have MVOs, we ensure all referenced MVOs exist.
     /// </summary>
@@ -1581,7 +1581,7 @@ public abstract class SyncTaskProcessorBase
                 Log.Verbose("ProcessDeferredReferenceAttributes: CSO {CsoId} had {Adds} reference additions, {Removes} removals",
                     cso.Id, additionsFromReferences, removalsFromReferences);
 
-                // Check if an RPEI already exists for this CSO (from projection/join/non-reference attribute flow).
+                // Check if an RPEI already exists for this CSO (from projection/join/non-reference Attribute Flow).
                 // If no RPEI exists, we need to create one because reference attribute changes are still
                 // real changes that should be visible to operators. This handles the case where ONLY
                 // reference attributes changed (e.g., group membership updated during delta sync).
@@ -1611,7 +1611,7 @@ public abstract class SyncTaskProcessorBase
                 var rpei = existingRpei;
                 if (rpei == null)
                 {
-                    // No RPEI exists for this CSO - create one for the reference attribute flow
+                    // No RPEI exists for this CSO - create one for the reference Attribute Flow
                     rpei = _activity.PrepareRunProfileExecutionItem();
                     rpei.ConnectedSystemObject = cso;
                     rpei.ConnectedSystemObjectId = cso.Id;
@@ -1645,7 +1645,7 @@ public abstract class SyncTaskProcessorBase
                         existingChangeEntry.Removals.AddRange(refRemovedAttributesList);
 
                         // If the existing entry is a Join or Projection, increment AttributeFlowCount
-                        // so reference attribute flows aren't absorbed into the primary change type
+                        // so reference Attribute Flows aren't absorbed into the primary change type
                         if (existingChangeEntry.ChangeType is ObjectChangeType.Joined or ObjectChangeType.Projected
                             && existingChangeEntry.Rpei != null)
                         {
@@ -1727,7 +1727,7 @@ public abstract class SyncTaskProcessorBase
     /// After all pages, all MVOs exist in the database. This method reloads the CSOs with
     /// unresolved references and re-processes their reference attributes.
     /// </summary>
-    /// <param name="activeSyncRules">The active sync rules for this connected system (already loaded by the caller).</param>
+    /// <param name="activeSyncRules">The active Synchronisation Rules for this Connected System (already loaded by the caller).</param>
     protected async Task ResolveCrossPageReferencesAsync(List<SyncRule> activeSyncRules)
     {
         if (_unresolvedCrossPageReferences.Count == 0)
@@ -1761,7 +1761,7 @@ public abstract class SyncTaskProcessorBase
         // from the in-memory collection would produce an empty lookup and cause cross-page
         // resolution to create duplicate AttributeFlow RPEIs instead of merging into existing ones.
         // Single-round-trip fetch: RPEIs + SyncOutcomes + RPEI→MvoChange ids via NpgsqlBatch.
-        // The MvoChange ids let cross-page attribute flows be persisted as children of the
+        // The MvoChange ids let cross-page Attribute Flows be persisted as children of the
         // already-existing parent MvoChange (enforced by the unique-per-RPEI index on
         // MetaverseObjectChanges).
         var unresolvedCsoIds = _unresolvedCrossPageReferences.Select(x => x.CsoId).ToHashSet();
@@ -1790,7 +1790,7 @@ public abstract class SyncTaskProcessorBase
         Log.Debug("ResolveCrossPageReferences: Cleared change tracker and {RpeiCount} in-memory RPEIs from activity",
             rpeiCountBeforeClear);
 
-        // Build sync rule lookup (keyed by ID) for O(1) access
+        // Build Synchronisation Rule lookup (keyed by ID) for O(1) access
         var requiredSyncRuleIds = _unresolvedCrossPageReferences
             .SelectMany(x => x.SyncRuleIds)
             .Distinct()
@@ -1845,7 +1845,7 @@ public abstract class SyncTaskProcessorBase
 
                 var mvo = cso.MetaverseObject;
 
-                // Resolve the sync rules for this CSO
+                // Resolve the Synchronisation Rules for this CSO
                 var applicableSyncRules = syncRuleIds
                     .Where(id => syncRulesById.ContainsKey(id))
                     .Select(id => syncRulesById[id])
@@ -1926,7 +1926,7 @@ public abstract class SyncTaskProcessorBase
                             }
                         }
 
-                        // Rebuild OutcomeSummary to reflect the updated attribute flow count
+                        // Rebuild OutcomeSummary to reflect the updated Attribute Flow count
                         if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
                         {
                             SyncOutcomeBuilder.BuildOutcomeSummary(rpei);
@@ -1945,7 +1945,7 @@ public abstract class SyncTaskProcessorBase
                         if (!_hasRawSqlSupport)
                             _activity.RunProfileExecutionItems.Add(rpei);
 
-                        Log.Debug("ResolveCrossPageReferences: Merged reference attribute flow into existing {ChangeType} RPEI for CSO {CsoId}",
+                        Log.Debug("ResolveCrossPageReferences: Merged reference Attribute Flow into existing {ChangeType} RPEI for CSO {CsoId}",
                             rpei.ObjectChangeType, csoId);
                     }
                     else
@@ -2001,7 +2001,7 @@ public abstract class SyncTaskProcessorBase
                 }
             }
 
-            // Batch-delete existing pending exports from DB before export evaluation.
+            // Batch-delete existing Pending Exports from DB before export evaluation.
             // During cross-page resolution, PEs from earlier pages have been flushed to DB.
             // Without this, each MVO's export evaluation hits GetPendingExportByConnectedSystemObjectIdAsync
             // individually (N+1 problem, ~1.9s per group PE due to heavy Include chains).
@@ -2029,7 +2029,7 @@ public abstract class SyncTaskProcessorBase
                     var deletedCount = await _syncRepo.DeletePendingExportsByConnectedSystemObjectIdsAsync(targetCsoIds);
                     if (deletedCount > 0)
                     {
-                        Log.Information("ResolveCrossPageReferences: Batch-deleted {Count} existing pending exports " +
+                        Log.Information("ResolveCrossPageReferences: Batch-deleted {Count} existing Pending Exports " +
                             "from earlier pages before re-evaluation with resolved references", deletedCount);
                     }
                 }
@@ -2091,7 +2091,7 @@ public abstract class SyncTaskProcessorBase
                             o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow);
                     }
 
-                    Log.Debug("ResolveCrossPageReferences: Updated {Count} existing RPEIs with merged reference attribute flows",
+                    Log.Debug("ResolveCrossPageReferences: Updated {Count} existing RPEIs with merged reference Attribute Flows",
                         updatedExistingRpeis.Count);
                     updatedExistingRpeis.Clear();
                 }
@@ -2166,7 +2166,7 @@ public abstract class SyncTaskProcessorBase
 
     /// <summary>
     /// Batch evaluates export rules for all MVOs that changed during the current page.
-    /// Must be called after PersistPendingMetaverseObjectsAsync so MVOs have valid IDs for pending export FKs.
+    /// Must be called after PersistPendingMetaverseObjectsAsync so MVOs have valid IDs for Pending Export FKs.
     /// Skips MVOs that are queued for immediate deletion (0-grace-period) because
     /// FlushPendingMvoDeletionsAsync will create the correct Delete exports via EvaluateMvoDeletionAsync.
     /// Creating Update exports for recalled attributes on a doomed MVO is spurious and can produce
@@ -2234,8 +2234,8 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Batch persists all provisioning CSOs and pending export creates, deletes, and updates collected during the current page.
-    /// CSOs must be created before pending exports since pending exports reference CSOs by ID.
+    /// Batch persists all provisioning CSOs and Pending Export creates, deletes, and updates collected during the current page.
+    /// CSOs must be created before Pending Exports since Pending Exports reference CSOs by ID.
     /// This reduces database round trips from n writes to 4 writes (CSOs, creates, deletes, updates).
     /// </summary>
     protected async Task FlushPendingExportOperationsAsync()
@@ -2250,7 +2250,7 @@ public abstract class SyncTaskProcessorBase
         span.SetTag("deleteCount", _pendingExportsToDelete.Count);
         span.SetTag("updateCount", _pendingExportsToUpdate.Count);
 
-        // Batch create provisioning CSOs first (pending exports reference CSOs by ID)
+        // Batch create provisioning CSOs first (Pending Exports reference CSOs by ID)
         if (_provisioningCsosToCreate.Count > 0)
         {
             await _syncRepo.CreateConnectedSystemObjectsAsync(_provisioningCsosToCreate);
@@ -2285,7 +2285,7 @@ public abstract class SyncTaskProcessorBase
             await ReconcileDeferredExportsAgainstPersistedDeletesAsync();
         }
 
-        // Batch create new pending exports (evaluated during export evaluation phase)
+        // Batch create new Pending Exports (evaluated during export evaluation phase)
         if (_pendingExportsToCreate.Count > 0)
         {
             // Delete any existing PEs for the same CSOs to prevent unique constraint violations.
@@ -2301,29 +2301,29 @@ public abstract class SyncTaskProcessorBase
                 var deletedCount = await _syncRepo.DeletePendingExportsByConnectedSystemObjectIdsAsync(csoIdsWithNewPes);
                 if (deletedCount > 0)
                 {
-                    Log.Information("FlushPendingExportOperationsAsync: Deleted {Count} existing pending exports to prevent duplicates before batch create",
+                    Log.Information("FlushPendingExportOperationsAsync: Deleted {Count} existing Pending Exports to prevent duplicates before batch create",
                         deletedCount);
                 }
             }
 
             await _syncRepo.CreatePendingExportsAsync(_pendingExportsToCreate);
-            Log.Verbose("FlushPendingExportOperationsAsync: Created {Count} pending exports in batch", _pendingExportsToCreate.Count);
+            Log.Verbose("FlushPendingExportOperationsAsync: Created {Count} Pending Exports in batch", _pendingExportsToCreate.Count);
             _pendingExportsToCreate.Clear();
         }
 
-        // Batch delete confirmed pending exports
+        // Batch delete confirmed Pending Exports
         if (_pendingExportsToDelete.Count > 0)
         {
             await _syncRepo.DeletePendingExportsAsync(_pendingExportsToDelete);
-            Log.Verbose("FlushPendingExportOperationsAsync: Deleted {Count} confirmed pending exports in batch", _pendingExportsToDelete.Count);
+            Log.Verbose("FlushPendingExportOperationsAsync: Deleted {Count} confirmed Pending Exports in batch", _pendingExportsToDelete.Count);
             _pendingExportsToDelete.Clear();
         }
 
-        // Batch update pending exports that need error tracking
+        // Batch update Pending Exports that need error tracking
         if (_pendingExportsToUpdate.Count > 0)
         {
             await _syncRepo.UpdatePendingExportsAsync(_pendingExportsToUpdate);
-            Log.Verbose("FlushPendingExportOperationsAsync: Updated {Count} pending exports in batch", _pendingExportsToUpdate.Count);
+            Log.Verbose("FlushPendingExportOperationsAsync: Updated {Count} Pending Exports in batch", _pendingExportsToUpdate.Count);
             _pendingExportsToUpdate.Clear();
         }
 
@@ -2331,7 +2331,7 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Checks deferred CREATE/UPDATE pending exports (in-memory) against DELETE pending exports
+    /// Checks deferred CREATE/UPDATE Pending Exports (in-memory) against DELETE Pending Exports
     /// already persisted to the DB during this page. Removes contradictory pairs:
     /// - CREATE(Pending) + DELETE(Pending) → cancel both (no net change)
     /// - UPDATE(Pending) + DELETE(Pending) → remove UPDATE (DELETE still needed)
@@ -2442,7 +2442,7 @@ public abstract class SyncTaskProcessorBase
 
     /// <summary>
     /// Batch deletes all MVOs collected for synchronous deletion during the current page.
-    /// Creates delete pending exports for any remaining Provisioned CSOs before deletion.
+    /// Creates delete Pending Exports for any remaining Provisioned CSOs before deletion.
     /// This handles 0-grace-period deletions inline during sync rather than deferring to housekeeping.
     /// </summary>
     protected async Task FlushPendingMvoDeletionsAsync()
@@ -2462,7 +2462,7 @@ public abstract class SyncTaskProcessorBase
                 // then a different CSO joined the same MVO in Pass 2), skip the deletion.
                 // Check specifically for CSOs joined during THIS sync page — identified by JoinType=Joined
                 // which is set by AttemptJoinAsync. Other join types (Provisioned, Projected) predate this page.
-                // We must also verify the CSO belongs to the current connected system being synced,
+                // We must also verify the CSO belongs to the current Connected System being synced,
                 // because CSOs from other systems (e.g., a Provisioned AD CSO) were not processed
                 // in this sync run and should not prevent intentional deletion rules.
                 if (mvo.ConnectedSystemObjects.Any(cso =>
@@ -2485,13 +2485,13 @@ public abstract class SyncTaskProcessorBase
                     continue;
                 }
 
-                // Create delete pending exports for any remaining Provisioned CSOs
+                // Create delete Pending Exports for any remaining Provisioned CSOs
                 // This handles WhenAuthoritativeSourceDisconnected where target CSOs still exist
                 var deleteExports = await _syncServer.EvaluateMvoDeletionAsync(mvo);
                 if (deleteExports.Count > 0)
                 {
                     Log.Information(
-                        "FlushPendingMvoDeletionsAsync: Created {Count} delete pending exports for MVO {MvoId}",
+                        "FlushPendingMvoDeletionsAsync: Created {Count} delete Pending Exports for MVO {MvoId}",
                         deleteExports.Count, mvo.Id);
                 }
 
@@ -2681,9 +2681,9 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Attempts to find a Metaverse Object that matches the CSO using Object Matching Rules on any applicable Sync Rules for this system and object type.
+    /// Attempts to find a Metaverse Object that matches the CSO using Object Matching Rules on any applicable Synchronisation Rules for this system and object type.
     /// </summary>
-    /// <param name="activeSyncRules">The active sync rules that contain all possible join rules to be evaluated.</param>
+    /// <param name="activeSyncRules">The active Synchronisation Rules that contain all possible join rules to be evaluated.</param>
     /// <param name="connectedSystemObject">The Connected System Object to try and find a matching Metaverse Object for.</param>
     /// <returns>True if a join was established, false if no matching MVO was found.</returns>
     /// <exception cref="SyncJoinException">Thrown when a join cannot be established due to ambiguous match or existing join.</exception>
@@ -2693,7 +2693,7 @@ public abstract class SyncTaskProcessorBase
         var isSimpleMode = _connectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem;
         var attemptedMatching = false;
 
-        // Enumerate import sync rules for this CSO type to attempt matching.
+        // Enumerate import Synchronisation Rules for this CSO type to attempt matching.
         foreach (var importSyncRule in activeSyncRules.Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId))
         {
             attemptedMatching = true;
@@ -2706,7 +2706,7 @@ public abstract class SyncTaskProcessorBase
             if (matchingRules.Count == 0)
                 continue;
 
-            // For advanced mode, set MetaverseObjectType on each rule from the sync rule
+            // For advanced mode, set MetaverseObjectType on each rule from the Synchronisation Rule
             if (!isSimpleMode)
             {
                 foreach (var rule in matchingRules)
@@ -2720,8 +2720,8 @@ public abstract class SyncTaskProcessorBase
             return await EstablishJoinAsync(connectedSystemObject, mvo);
         }
 
-        // Simple mode fallback: if no import sync rules were evaluated, try matching directly from object type rules.
-        // This enables simple mode joining without requiring empty import sync rules.
+        // Simple mode fallback: if no import Synchronisation Rules were evaluated, try matching directly from object type rules.
+        // This enables simple mode joining without requiring empty import Synchronisation Rules.
         if (!attemptedMatching && isSimpleMode)
         {
             var matchingRules = GetSimpleModeMatchingRules(connectedSystemObject.TypeId);
@@ -2773,7 +2773,7 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     private async Task<bool> EstablishJoinAsync(ConnectedSystemObject connectedSystemObject, MetaverseObject mvo)
     {
-        // MVO must not already be joined to a connected system object in this connected system. Joins are 1:1.
+        // MVO must not already be joined to a Connected System Object in this Connected System. Joins are 1:1.
         var existingCsoJoinCount = await _syncRepo.GetConnectedSystemObjectCountByMvoAsync(
             _connectedSystem.Id, mvo.Id);
 
@@ -2818,13 +2818,13 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Attempts to create a Metaverse Object from the Connected System Object using the first Sync Rule for the object type that has Projection enabled.
+    /// Attempts to create a Metaverse Object from the Connected System Object using the first Synchronisation Rule for the object type that has Projection enabled.
     /// </summary>
-    /// <param name="activeSyncRules">The active sync rules that contain projection and attribute flow information.</param>
+    /// <param name="activeSyncRules">The active Synchronisation Rules that contain projection and Attribute Flow information.</param>
     /// <param name="connectedSystemObject">The Connected System Object to attempt to project to the Metaverse.</param>
     /// <returns>True if projection occurred, false otherwise.</returns>
-    /// <exception cref="InvalidDataException">Will be thrown if not all required properties are populated on the Sync Rule.</exception>
-    /// <exception cref="NotImplementedException">Will be thrown if a Sync Rule attempts to use a Function as a source.</exception>
+    /// <exception cref="InvalidDataException">Will be thrown if not all required properties are populated on the Synchronisation Rule.</exception>
+    /// <exception cref="NotImplementedException">Will be thrown if a Synchronisation Rule attempts to use a Function as a source.</exception>
     protected bool AttemptProjection(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
         var decision = _syncEngine.EvaluateProjection(connectedSystemObject, activeSyncRules);
@@ -2845,8 +2845,8 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Assigns values to a Metaverse Object, from a Connected System Object using a Sync Rule.
-    /// Merges changed attributes and removals into an existing pending export evaluation entry for the given MVO,
+    /// Assigns values to a Metaverse Object, from a Connected System Object using a Synchronisation Rule.
+    /// Merges changed attributes and removals into an existing Pending Export evaluation entry for the given MVO,
     /// or adds a new entry if none exists. This prevents silently dropping reference attribute changes when
     /// scalar changes have already been queued for the same MVO.
     /// </summary>
@@ -2883,14 +2883,14 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Snapshots the pending export's attribute changes onto the outcome node as a
+    /// Snapshots the Pending Export's attribute changes onto the outcome node as a
     /// <see cref="ConnectedSystemObjectChange"/> record. This enables the Causality Tree to
     /// render attribute detail for PendingExportCreated outcomes even after the PendingExport
     /// is deleted during export confirmation.
     /// </summary>
     /// <remarks>
     /// For reference attributes, resolves MVO GUIDs stored in <see cref="PendingExportAttributeValueChange.UnresolvedReferenceValue"/>
-    /// to their corresponding stub CSOs in the target connected system. This allows the Causality Tree
+    /// to their corresponding stub CSOs in the target Connected System. This allows the Causality Tree
     /// to render meaningful identifiers (External ID / Secondary External ID / CSO ID) instead of
     /// raw MVO GUIDs with a misleading "unresolved reference" icon.
     /// </remarks>
@@ -2902,7 +2902,7 @@ public abstract class SyncTaskProcessorBase
             return;
 
         // Collect MVO GUIDs from reference attribute changes so we can resolve them
-        // to stub CSOs in the target connected system
+        // to stub CSOs in the target Connected System
         Dictionary<Guid, ConnectedSystemObject>? resolvedReferences = null;
         var mvoGuids = pendingExport.AttributeValueChanges
             .Where(avc => !string.IsNullOrEmpty(avc.UnresolvedReferenceValue)
@@ -2978,7 +2978,7 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Post-page resolution pass for pending export reference snapshots.
+    /// Post-page resolution pass for Pending Export reference snapshots.
     /// Called after <see cref="FlushPendingExportOperationsAsync"/> has persisted all provisioning CSOs
     /// but before <see cref="FlushRpeisAsync"/> persists RPEIs with their CSO change snapshots.
     /// </summary>
@@ -2994,7 +2994,7 @@ public abstract class SyncTaskProcessorBase
         if (!_csoChangeTrackingEnabled)
             return;
 
-        // Collect all unresolved MVO GUIDs from pending export snapshots across all RPEIs on this page
+        // Collect all unresolved MVO GUIDs from Pending Export snapshots across all RPEIs on this page
         var unresolvedByCs = new Dictionary<int, HashSet<Guid>>();
         var unresolvedValueChanges = new List<(ConnectedSystemObjectChangeAttributeValue ValueChange, int ConnectedSystemId, Guid MvoGuid)>();
 
@@ -3036,7 +3036,7 @@ public abstract class SyncTaskProcessorBase
         if (unresolvedValueChanges.Count == 0)
             return;
 
-        // Batch-resolve all MVO GUIDs per connected system
+        // Batch-resolve all MVO GUIDs per Connected System
         var resolvedLookup = new Dictionary<(int CsId, Guid MvoGuid), ConnectedSystemObject>();
         foreach (var (csId, mvoGuids) in unresolvedByCs)
         {
@@ -3063,7 +3063,7 @@ public abstract class SyncTaskProcessorBase
         }
 
         Log.Debug("ResolvePendingExportReferenceSnapshotsAsync: Resolved {ResolvedCount} of {TotalCount} " +
-            "previously unresolved pending export reference snapshots across {CsCount} connected system(s)",
+            "previously unresolved Pending Export reference snapshots across {CsCount} Connected System(s)",
             resolvedCount, unresolvedValueChanges.Count, unresolvedByCs.Count);
     }
 
@@ -3071,11 +3071,11 @@ public abstract class SyncTaskProcessorBase
     /// Does not perform any delta processing. This is for MVO create scenarios where there are not MVO attribute values already.
     /// </summary>
     /// <param name="connectedSystemObject">The source Connected System Object to map values from.</param>
-    /// <param name="syncRule">The Sync Rule to use to determine which attributes, and how should be assigned to the Metaverse Object.</param>
+    /// <param name="syncRule">The Synchronisation Rule to use to determine which attributes, and how should be assigned to the Metaverse Object.</param>
     /// <param name="skipReferenceAttributes">If true, skip reference attributes (they will be processed in a second pass after all MVOs exist).</param>
     /// <param name="onlyReferenceAttributes">If true, process ONLY reference attributes (for deferred second pass). Takes precedence over skipReferenceAttributes.</param>
-    /// <exception cref="InvalidDataException">Can be thrown if a Sync Rule Mapping Source is not properly formed.</exception>
-    /// <exception cref="NotImplementedException">Will be thrown whilst Functions have not been implemented, but are being used in the Sync Rule.</exception>
+    /// <exception cref="InvalidDataException">Can be thrown if a Synchronisation Rule Mapping Source is not properly formed.</exception>
+    /// <exception cref="NotImplementedException">Will be thrown whilst Functions have not been implemented, but are being used in the Synchronisation Rule.</exception>
     protected List<AttributeFlowWarning> ProcessInboundAttributeFlow(ConnectedSystemObject connectedSystemObject, SyncRule syncRule, bool skipReferenceAttributes = false, bool onlyReferenceAttributes = false, bool isFinalReferencePass = false)
     {
         if (_objectTypes == null)
@@ -3094,8 +3094,8 @@ public abstract class SyncTaskProcessorBase
         => _syncEngine.ApplyPendingAttributeChanges(mvo);
 
     /// <summary>
-    /// Gets the list of import sync rules for which the CSO is in scope.
-    /// If a sync rule has no scoping criteria, the CSO is considered in scope.
+    /// Gets the list of import Synchronisation Rules for which the CSO is in scope.
+    /// If a Synchronisation Rule has no scoping criteria, the CSO is considered in scope.
     /// </summary>
     protected async Task<List<SyncRule>> GetInScopeImportRulesAsync(ConnectedSystemObject connectedSystemObject, List<SyncRule> importSyncRules)
     {
@@ -3134,7 +3134,7 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Handles a CSO that has fallen out of scope for all import sync rules.
+    /// Handles a CSO that has fallen out of scope for all import Synchronisation Rules.
     /// If the CSO is currently joined to an MVO, applies the InboundOutOfScopeAction.
     /// </summary>
     /// <returns>A result indicating what happened (DisconnectedOutOfScope, OutOfScopeRetainJoin, or NoChanges).</returns>
@@ -3149,7 +3149,7 @@ public abstract class SyncTaskProcessorBase
             return MetaverseObjectChangeResult.NoChanges();
         }
 
-        // Find the first sync rule's InboundOutOfScopeAction (or default to Disconnect)
+        // Find the first Synchronisation Rule's InboundOutOfScopeAction (or default to Disconnect)
         var inboundOutOfScopeAction = importSyncRules
             .Where(sr => sr.ObjectScopingCriteriaGroups.Count > 0)
             .Select(sr => sr.InboundOutOfScopeAction)
@@ -3159,9 +3159,9 @@ public abstract class SyncTaskProcessorBase
         {
             case InboundOutOfScopeAction.RemainJoined:
                 // Keep the join intact - CSO remains connected to MVO
-                // No attribute flow will occur since CSO is out of scope
+                // No Attribute Flow will occur since CSO is out of scope
                 Log.Information("HandleCsoOutOfScopeAsync: CSO {CsoId} is out of scope but InboundOutOfScopeAction=RemainJoined. " +
-                    "Join preserved, no attribute flow.", connectedSystemObject.Id);
+                    "Join preserved, no Attribute Flow.", connectedSystemObject.Id);
                 return MetaverseObjectChangeResult.OutOfScopeRetainJoin();
 
             case InboundOutOfScopeAction.Disconnect:
@@ -3247,25 +3247,25 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Builds the drift detection cache from sync rules.
-    /// This cache is used to efficiently determine if a connected system is a legitimate
+    /// Builds the drift detection cache from Synchronisation Rules.
+    /// This cache is used to efficiently determine if a Connected System is a legitimate
     /// contributor for an attribute (has import rules) vs. just a recipient (only export rules).
-    /// Call this once at the start of sync, after loading sync rules.
+    /// Call this once at the start of sync, after loading Synchronisation Rules.
     /// </summary>
-    /// <param name="allSyncRules">All sync rules from ALL connected systems (needed to build complete import mapping cache).</param>
-    /// <param name="currentSystemSyncRules">Sync rules for the current connected system being synced.</param>
+    /// <param name="allSyncRules">All Synchronisation Rules from ALL Connected Systems (needed to build complete import mapping cache).</param>
+    /// <param name="currentSystemSyncRules">Synchronisation Rules for the current Connected System being synced.</param>
     protected void BuildDriftDetectionCache(List<SyncRule> allSyncRules, List<SyncRule> currentSystemSyncRules)
     {
         using var span = Diagnostics.Sync.StartSpan("BuildDriftDetectionCache");
 
-        // Build import mapping cache from ALL sync rules across ALL connected systems.
+        // Build import mapping cache from ALL Synchronisation Rules across ALL Connected Systems.
         // This is critical for drift detection: we need to know which systems contribute to which MVO attributes
         // so we can skip drift detection when the CSO's system is a legitimate contributor.
         // Without all import rules, export-only systems would have an empty cache and incorrectly detect
         // drift on attributes that are legitimately sourced from other systems.
         _importMappingCache = DriftDetectionService.BuildImportMappingCache(allSyncRules);
 
-        // Cache export rules with EnforceState = true for THIS connected system only
+        // Cache export rules with EnforceState = true for THIS Connected System only
         _driftDetectionExportRules = currentSystemSyncRules
             .Where(sr => sr.Enabled &&
                         sr.Direction == SyncRuleDirection.Export &&
@@ -3300,7 +3300,7 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Evaluates drift for a CSO that has been imported/synced and stages corrective pending exports.
+    /// Evaluates drift for a CSO that has been imported/synced and stages corrective Pending Exports.
     /// Only evaluates if drift detection is enabled (export rules with EnforceState = true exist).
     /// </summary>
     /// <param name="cso">The Connected System Object that was just processed.</param>
@@ -3334,13 +3334,13 @@ public abstract class SyncTaskProcessorBase
         if (result.HasDrift)
         {
             Log.Information("EvaluateDriftAndEnforceState: Detected {DriftCount} drifted attributes on CSO {CsoId}, " +
-                "staged {ExportCount} corrective pending exports for batch save",
+                "staged {ExportCount} corrective Pending Exports for batch save",
                 result.DriftedAttributes.Count, cso.Id, result.CorrectiveExports.Count);
 
             span.SetTag("driftedAttributeCount", result.DriftedAttributes.Count);
             span.SetTag("correctiveExportCount", result.CorrectiveExports.Count);
 
-            // Add corrective pending exports to the batch list for persistence during FlushPendingExportOperationsAsync.
+            // Add corrective Pending Exports to the batch list for persistence during FlushPendingExportOperationsAsync.
             // These will be merged with any export evaluation PEs for the same CSO during export evaluation.
             _pendingExportsToCreate.AddRange(result.CorrectiveExports);
 

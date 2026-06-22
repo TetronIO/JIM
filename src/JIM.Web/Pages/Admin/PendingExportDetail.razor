@@ -333,7 +333,7 @@
 }
 else if (_notFound)
 {
-    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Pending export not found.</MudAlert>
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Pending Export not found.</MudAlert>
     <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.ArrowBack"
                Href="@($"/admin/connected-systems/{ConnectedSystemId}/pending-exports")" Class="mt-4">
         Back to List
@@ -398,6 +398,7 @@ else
             _breadcrumbs = new List<BreadcrumbItem>
             {
                 new("Home", href: "/", icon: Icons.Material.Filled.Home),
+                new("Administration", href: "/admin"),
                 new("Connected Systems", href: "/admin/connected-systems/"),
                 new(_connectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(_connectedSystemHeader)),
                 new("Pending Exports", href: $"/admin/connected-systems/{ConnectedSystemId}/pending-exports"),

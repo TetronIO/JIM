@@ -8,7 +8,7 @@ public class MetaverseObjectChangeAttribute
     public Guid Id { get; set; }
 
     /// <summary>
-    /// The parent for this metaverse object change item.
+    /// The parent for this Metaverse Object change item.
     /// </summary>
     public MetaverseObjectChange MetaverseObjectChange { get; set; } = null!;
 

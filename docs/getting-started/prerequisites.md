@@ -34,7 +34,7 @@ Before deploying, configure your identity provider with a client registration fo
 
 For detailed hardware sizing and production deployment guidance, see the [Deployment Guide](../administration/deployment.md).
 
-As a general guideline, JIM's resource requirements are modest. A small deployment (a few connected systems with thousands of objects) runs comfortably on a single host with 2 CPU cores and 4 GB of RAM.
+As a general guideline, JIM's resource requirements are modest. A small deployment (a few Connected Systems with thousands of objects) runs comfortably on a single host with 2 CPU cores and 4 GB of RAM.
 
 ## Database
 

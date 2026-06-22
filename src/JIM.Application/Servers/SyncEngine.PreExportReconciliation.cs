@@ -8,8 +8,8 @@ namespace JIM.Application.Servers;
 
 /// <summary>
 /// Pre-export reconciliation logic — identifies CREATE+DELETE and UPDATE+DELETE
-/// pending export pairs targeting the same CSO that cancel each other out.
-/// This prevents unnecessary round-trips to connected systems.
+/// Pending Export pairs targeting the same CSO that cancel each other out.
+/// This prevents unnecessary round-trips to Connected Systems.
 /// </summary>
 public partial class SyncEngine
 {

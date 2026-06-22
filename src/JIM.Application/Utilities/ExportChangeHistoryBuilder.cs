@@ -10,7 +10,7 @@ using JIM.Models.Transactional;
 namespace JIM.Application.Utilities;
 
 /// <summary>
-/// Builds <see cref="ConnectedSystemObjectChange"/> records from pending export attribute data.
+/// Builds <see cref="ConnectedSystemObjectChange"/> records from Pending Export attribute data.
 /// Used to persist export change history so the Causality Tree can render attribute-level detail
 /// for export RPEIs and sync PendingExportCreated outcomes.
 /// </summary>
@@ -61,7 +61,7 @@ public static class ExportChangeHistoryBuilder
 
     /// <summary>
     /// Creates a <see cref="ConnectedSystemObjectChange"/> from a <see cref="PendingExport"/>,
-    /// used to snapshot pending export attribute data at sync time before the pending export
+    /// used to snapshot Pending Export attribute data at sync time before the Pending Export
     /// is deleted during export confirmation.
     /// </summary>
     public static ConnectedSystemObjectChange BuildFromPendingExport(
@@ -179,7 +179,7 @@ public static class ExportChangeHistoryBuilder
                     new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, true, peChange.ByteValue.Length));
                 break;
             case AttributeDataType.Reference when peChange.UnresolvedReferenceValue != null:
-                // Try to resolve the MVO GUID to a stub CSO in the target connected system.
+                // Try to resolve the MVO GUID to a stub CSO in the target Connected System.
                 // If resolved, store the display identifier as a StringValue with the IsPendingExportStub
                 // flag so the UI can render it meaningfully instead of showing a broken-link icon.
                 // We deliberately avoid setting ReferenceValue (navigation property) because the stub CSO
@@ -206,7 +206,7 @@ public static class ExportChangeHistoryBuilder
             case AttributeDataType.Reference when peChange.StringValue != null:
                 // Resolved reference — deferred exports have their UnresolvedReferenceValue cleared
                 // and the resolved identifier (e.g. DN) stored in StringValue during reference resolution.
-                // Mark as pending export stub so the UI renders a clock icon (awaiting confirmation)
+                // Mark as Pending Export stub so the UI renders a clock icon (awaiting confirmation)
                 // rather than the broken-link "unresolved" icon.
                 attributeChange.ValueChanges.Add(
                     new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.StringValue)

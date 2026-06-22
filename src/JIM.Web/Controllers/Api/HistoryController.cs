@@ -123,13 +123,13 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetConnectedSystemChangeCountAsync(int connectedSystemId)
     {
-        _logger.LogDebug("Getting change history count for connected system {ConnectedSystemId}", connectedSystemId);
+        _logger.LogDebug("Getting change history count for Connected System {ConnectedSystemId}", connectedSystemId);
 
-        // Verify connected system exists (Core retrieval — we only need Id and Name for the response).
+        // Verify Connected System exists (Core retrieval — we only need Id and Name for the response).
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
         {
-            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
         }
 
         var count = await _application.Repository.ChangeHistory.GetCsoChangeCountAsync(connectedSystemId);
@@ -185,7 +185,7 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
             page: page,
             pageSize: pageSize);
 
-        // Resolve connected system names
+        // Resolve Connected System names
         var csHeaders = await _application.ConnectedSystems.GetConnectedSystemHeadersAsync();
         var csLookup = csHeaders.ToDictionary(h => h.Id, h => h.Name);
 

@@ -59,7 +59,7 @@ public class SchedulerServerQueueAllStepsTests
             .Callback<WorkerTask>(task => _capturedTasks.Add(task))
             .Returns(Task.CompletedTask);
 
-        // Set up connected systems that pass partition validation
+        // Set up Connected Systems that pass partition validation
         var connectorDefinition = new ConnectorDefinition
         {
             Id = 1,

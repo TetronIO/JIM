@@ -268,7 +268,7 @@ public partial class SyncRepository : ISyncRepository
 
     #endregion
 
-    #region Sync Rules and Configuration
+    #region Synchronisation Rules and Configuration
 
     public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabled, bool withChangeTracking = false)
         => _repo.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, includeDisabled, withChangeTracking);

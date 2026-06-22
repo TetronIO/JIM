@@ -243,7 +243,7 @@ public class ExampleDataRepository : IExampleDataRepository
     #endregion
 
     /// <summary>
-    /// Bulk creates metaverse objects in the database using batched, COPY-based persistence.
+    /// Bulk creates Metaverse Objects in the database using batched, COPY-based persistence.
     /// Each batch streams MVOs, attribute values, and (if change tracking is enabled) change-history
     /// records to PostgreSQL via Npgsql binary COPY, mirroring the worker hot-path pattern documented
     /// in <c>src/CLAUDE.md</c>. EF Core is bypassed entirely on the write path so neither the change

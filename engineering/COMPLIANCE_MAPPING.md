@@ -245,7 +245,7 @@ This maps JIM's features to the NIST SP 800-53 control families most relevant to
 | Embrace radical transparency and accountability | SECURITY.md, vulnerability disclosure, CVE publishing via GitHub Security Advisories | Aligned |
 | Build organisational structure so secure by design is a top priority | Security requirements in CLAUDE.md take precedence over velocity | Aligned |
 | Eliminate default passwords | No default credentials; SSO/OIDC required | Aligned |
-| Conduct field testing | Integration testing framework with real connected systems | Aligned |
+| Conduct field testing | Integration testing framework with real Connected Systems | Aligned |
 | Drive adoption of MFA | OIDC with PKCE (MFA delegated to identity provider) | Aligned |
 | Reduce attack surface | Minimal container images, no unnecessary services, air-gapped support | Aligned |
 | Evidence of intrusion detection | Activity logging, RPEI error tracking, structured logging | Aligned |

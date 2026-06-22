@@ -6,12 +6,12 @@
 
 ## Overview
 
-Improve the clarity and usefulness of synchronisation statuses displayed in the Activity detail pages. The current implementation uses generic change types (Create, Update, Delete) across all run profile types, which doesn't accurately convey what operations actually occurred. This leads to user confusion when reviewing sync results.
+Improve the clarity and usefulness of synchronisation statuses displayed in the Activity detail pages. The current implementation uses generic change types (Create, Update, Delete) across all Run Profile types, which doesn't accurately convey what operations actually occurred. This leads to user confusion when reviewing sync results.
 
 ## Business Value
 
 - **Improved clarity**: Users can immediately understand what happened during each sync operation
-- **Better troubleshooting**: Distinguishing projections from joins from attribute flow helps diagnose sync issues
+- **Better troubleshooting**: Distinguishing projections from joins from Attribute Flow helps diagnose sync issues
 - **Performance improvement**: Eliminating unnecessary RPEI creation reduces database writes and storage
 - **Familiar terminology**: Using industry-standard ILM terminology helps users transitioning from other identity management systems
 
@@ -24,7 +24,7 @@ The `ObjectChangeType` enum uses the same values across different run types with
 | Run Type | "Create" Means | "Update" Means |
 |----------|----------------|----------------|
 | Import | CSO added to staging (ambiguous) | CSO attributes updated |
-| Sync | MVO projected | MVO joined OR attribute flow |
+| Sync | MVO projected | MVO joined OR Attribute Flow |
 | Export | Provisioning export | Attribute update export |
 
 ### Issue 2: Unnecessary RPEI Creation During Import
@@ -42,7 +42,7 @@ During import, an RPEI is created for **every** import object, even when the CSO
 
 ### Issue 3: No Filtering on Activity Detail Page
 
-Users cannot filter the RPEI list by change type. For a sync with 10,000 objects, finding the 5 projections among 9,995 attribute flow updates requires pagination through the entire list.
+Users cannot filter the RPEI list by change type. For a sync with 10,000 objects, finding the 5 projections among 9,995 Attribute Flow updates requires pagination through the entire list.
 
 ## Proposed Solution
 
@@ -245,7 +245,7 @@ Add a horizontal row of checkbox chips above the RPEI table for quick multi-sele
 - Multi-select with single clicks
 - Colour-coded to match the change type colours in the table
 - Badge shows count per type for quick overview
-- Context-aware: only shows change types relevant to the run profile type
+- Context-aware: only shows change types relevant to the Run Profile type
 
 **Default state:** All change types selected (show everything)
 
@@ -456,10 +456,10 @@ No database migration required. The `ObjectChangeType` is stored as an integer, 
 
 ## Success Criteria
 
-1. Activity detail pages show semantically accurate change types per run profile type
+1. Activity detail pages show semantically accurate change types per Run Profile type
 2. Import operations only create RPEIs when actual changes occur
 3. Users can filter RPEIs by change type
-4. Statistics show granular counts (projections vs joins vs attribute flow)
+4. Statistics show granular counts (projections vs joins vs Attribute Flow)
 5. All existing unit tests pass
 6. New unit tests cover:
    - Each new change type assignment

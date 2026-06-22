@@ -27,13 +27,13 @@ public class ConnectedSystemDetailDto
     /// <summary>
     /// Creates a detailed DTO from a ConnectedSystem entity.
     /// </summary>
-    /// <param name="entity">The connected system entity.</param>
+    /// <param name="entity">The Connected System entity.</param>
     /// <param name="pendingExportCount">
-    /// Pre-computed pending export count. Required because GetConnectedSystemAsync
+    /// Pre-computed Pending Export count. Required because GetConnectedSystemAsync
     /// does not load the PendingExports navigation property (too expensive).
     /// </param>
     /// <param name="objectCount">
-    /// Pre-computed connected system object count. Required because GetConnectedSystemAsync
+    /// Pre-computed Connected System Object count. Required because GetConnectedSystemAsync
     /// does not load the Objects navigation property (it can be very large).
     /// </param>
     public static ConnectedSystemDetailDto FromEntity(ConnectedSystem entity, int pendingExportCount = 0, int objectCount = 0)
@@ -124,8 +124,8 @@ public class ConnectedSystemAttributeDto
     public bool SelectionLocked { get; set; }
 
     /// <summary>
-    /// Indicates whether this attribute can be written to in the connected system.
-    /// Read-only attributes can be imported but cannot be targeted by export attribute flows.
+    /// Indicates whether this attribute can be written to in the Connected System.
+    /// Read-only attributes can be imported but cannot be targeted by export Attribute Flows.
     /// </summary>
     public string Writability { get; set; } = null!;
 

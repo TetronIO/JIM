@@ -4,9 +4,9 @@ title: Schedules
 
 # Schedules
 
-A **schedule** defines an automated sequence of operations that JIM executes on a trigger (cron-based or manual). Each schedule contains ordered steps that can run sequentially or in parallel, and supports several step types: [run profile](run-profiles.md) execution, PowerShell scripts, external executables, and SQL scripts.
+A **schedule** defines an automated sequence of operations that JIM executes on a trigger (cron-based or manual). Each schedule contains ordered steps that can run sequentially or in parallel, and supports several step types: [Run Profile](run-profiles.md) execution, PowerShell scripts, external executables, and SQL scripts.
 
-Schedules are the primary mechanism for automating identity synchronisation workflows. A typical example is a nightly schedule that imports from each connected system, runs synchronisation, and exports the results.
+Schedules are the primary mechanism for automating identity synchronisation workflows. A typical example is a nightly schedule that imports from each Connected System, runs synchronisation, and exports the results.
 
 ## Triggers
 
@@ -38,7 +38,7 @@ A `stepIndex` orders steps; multiple steps with the same index run in parallel.
 
 ### Step types
 
-- **Run profile**<br /> Execute a [run profile](run-profiles.md) against a connected system.
+- **Run Profile**<br /> Execute a [Run Profile](run-profiles.md) against a Connected System.
 - **PowerShell**<br /> Run a PowerShell script with arguments.
 - **Executable**<br /> Run an external executable.
 - **SQL script**<br /> Run a SQL script against a configured database connection.
@@ -86,5 +86,5 @@ Disabled schedules don't fire on their cron trigger and don't appear as eligible
 
 ## See also
 
-- [Run Profiles](run-profiles.md) -- the operations executed by run profile steps
+- [Run Profiles](run-profiles.md) -- the operations executed by Run Profile steps
 - [Activities](activities.md) -- each schedule execution produces a parent activity with child activities per step

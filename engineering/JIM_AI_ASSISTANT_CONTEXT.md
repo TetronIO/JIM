@@ -31,7 +31,7 @@
 
 ## 1. What is JIM?
 
-JIM is a self-hosted, on-premises identity management platform that synchronises identity data between connected systems through a central "metaverse" hub.
+JIM is a self-hosted, on-premises identity management platform that synchronises identity data between Connected Systems through a central "metaverse" hub.
 
 ### Core Value Proposition
 
@@ -66,7 +66,7 @@ JIM is a self-hosted, on-premises identity management platform that synchronises
        IMPORT                     SYNC                    EXPORT
 ```
 
-**Key Principle**: All identity data flows through the metaverse. Never sync directly between connected systems.
+**Key Principle**: All identity data flows through the metaverse. Never sync directly between Connected Systems.
 
 ### Core Entities
 
@@ -80,9 +80,9 @@ JIM is a self-hosted, on-premises identity management platform that synchronises
 
 ### Data Flow Operations
 
-1. **Import** - Pull data from connected systems into connector space (CSOs)
-2. **Sync** - Apply sync rules to project CSO data to/from MVOs
-3. **Export** - Push pending changes from connector space to connected systems
+1. **Import** - Pull data from Connected Systems into connector space (CSOs)
+2. **Sync** - Apply Synchronisation Rules to project CSO data to/from MVOs
+3. **Export** - Push pending changes from connector space to Connected Systems
 
 ### Software Components
 
@@ -217,9 +217,9 @@ Connectors also declare capability flags via `IConnectorCapabilities`:
 
 ---
 
-## 5. Sync Rules
+## 5. Synchronisation Rules
 
-Sync rules define the relationship between connected systems and the metaverse.
+Synchronisation Rules define the relationship between Connected Systems and the metaverse.
 
 ### Rule Components
 
@@ -233,7 +233,7 @@ Sync rules define the relationship between connected systems and the metaverse.
 
 ### Expression Language
 
-Attribute flows can use expressions for transformations:
+Attribute Flows can use expressions for transformations:
 
 ```
 // Simple mapping
@@ -280,7 +280,7 @@ FormatDateTime(hireDate, "yyyy-MM-dd")
 |----------|---------|
 | `GET /api/v1/metaverse/objects` | Query MVOs |
 | `GET /api/v1/metaverse/object-types` | List/manage MVO types and attributes |
-| `GET /api/v1/synchronisation/connected-systems` | List connected systems |
+| `GET /api/v1/synchronisation/connected-systems` | List Connected Systems |
 | `POST /api/v1/synchronisation/connected-systems/{csId}/run-profiles/{rpId}/execute` | Trigger sync |
 | `GET /api/v1/activities` | Monitor operations |
 | `GET /api/v1/schedules` | Manage schedules |
@@ -289,7 +289,7 @@ FormatDateTime(hireDate, "yyyy-MM-dd")
 | `GET /api/v1/certificates` | Manage trusted certificates |
 | `GET /api/v1/history/deleted-objects/mvo` | View deleted objects |
 | `GET /api/v1/logs` | Unified log viewer (app + PostgreSQL) |
-| `GET /api/v1/synchronisation/sync-rules/{id}/matching-rules` | Manage object matching rules |
+| `GET /api/v1/synchronisation/sync-rules/{id}/matching-rules` | Manage Object Matching Rules |
 
 Full interactive Scalar API reference available at `/api/reference` in all environments, including air-gapped deployments. The OpenAPI document is pre-generated at build time and served as a static file at `/api/openapi/v1.json`.
 
@@ -331,7 +331,7 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 ### Authorisation
 
 - **Role-Based**: Claims from OIDC mapped to roles
-- **Metaverse-Driven**: Roles defined in metaverse objects
+- **Metaverse-Driven**: Roles defined in Metaverse Objects
 
 ### Data Protection
 
@@ -346,7 +346,7 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 ### Core Platform (Complete)
 
 - ✅ Connector framework with LDAP, OpenLDAP, and File connectors (import and export)
-- ✅ Full inbound sync (join, project, attribute flow)
+- ✅ Full inbound sync (join, project, Attribute Flow)
 - ✅ Full outbound sync (provisioning, export)
 - ✅ LDAP/AD export (create, update, delete, container creation)
 - ✅ File connector export
@@ -373,14 +373,14 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 - ✅ **Cross-Batch Fixup Elimination** (#427) - Removes redundant cross-batch CSO reference fixup passes during synchronisation
 - ✅ **MVO COPY Binary Protocol** (#338) - Binary COPY protocol for bulk MVO persistence, dramatically reducing database round-trips
 - ✅ **Object Type Icons** (#92) - Visual object type icons throughout the UI for improved navigation
-- ✅ **Pending Export Detail** - Drill into pending export changes before they are sent to target systems
+- ✅ **Pending Export Detail** - Drill into Pending Export changes before they are sent to target systems
 - ✅ **Activity Auto-Refresh** - Activities page automatically refreshes to show real-time operation progress
-- ✅ **Run Profile Editing** - Edit existing run profile configurations without recreating them
-- ✅ **Tabs View** - Tabbed navigation for connected system and metaverse object views
+- ✅ **Run Profile Editing** - Edit existing Run Profile configurations without recreating them
+- ✅ **Tabs View** - Tabbed navigation for Connected System and Metaverse Object views
 - ✅ **Healthchecks** (#185) - Container health probes for orchestration readiness and liveness monitoring
-- ✅ **MVA to SVA Flow** (#435) - Attribute flow support for multi-valued to single-valued attribute mappings
+- ✅ **MVA to SVA Flow** (#435) - Attribute Flow support for multi-valued to single-valued attribute mappings
 - ✅ **Case-Insensitive Expression Lookups** (#341) - Expression attribute lookups are now case-insensitive, matching expected behaviour
-- ✅ **PE Reconciliation for All Data Types** (#263) - Pending export reconciliation extended to cover all attribute data types
+- ✅ **PE Reconciliation for All Data Types** (#263) - Pending Export reconciliation extended to cover all attribute data types
 
 ### Recent Enhancements (v0.10.0)
 
@@ -390,10 +390,10 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 - ✅ **System Endpoint Cmdlets** (#468) - `Get-JIMHealth`, `Get-JIMVersion`, `Get-JIMAuthConfig`, `Get-JIMUserInfo` with health/version/auth config callable without `Connect-JIM`
 - ✅ **Public API Reference** - Interactive Scalar API reference available at `/api/reference` in every environment (including air-gapped); public snapshot hosted at docs.junctional.io/api/reference/
 - ✅ **Build-Time OpenAPI Generation** - OpenAPI document pre-generated at Docker build time for instant Scalar load with zero runtime overhead
-- ✅ **Count API Endpoints** (#154) - New count endpoints for metaverse objects, connector space, and pending exports
+- ✅ **Count API Endpoints** (#154) - New count endpoints for Metaverse Objects, connector space, and Pending Exports
 - ✅ **OIDC Sign-Out** (#49) - Sign out with the identity provider, gated by `SSOEnableLogOut` service setting; new user menu with sign-out in navigation drawer
 - ✅ **EF Core AsNoTracking by Default** (#484) - All queries now default to AsNoTracking; write paths opt in via `withChangeTracking` parameter
-- ✅ **GetConnectedSystemCoreAsync** (#494) - Lightweight connected system retrieval and flat container tree loading replacing the previous 11-level Include chain
+- ✅ **GetConnectedSystemCoreAsync** (#494) - Lightweight Connected System retrieval and flat container tree loading replacing the previous 11-level Include chain
 - ✅ **Nested Container Hierarchy** (#586) - Partition hierarchy API now returns the full nested container tree so administrators can select nested OUs
 - ✅ **Partition Validation Diagnostics** (#564) - Validation errors now pinpoint the exact gap (hierarchy not imported, no partitions selected, or selected partitions have no container selected) and name the partition involved
 - ✅ **OWASP Top 10:2025 Assessment** (#500) - Full assessment completed with targeted remediation plan
@@ -415,7 +415,7 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 
 ### Recent Enhancements (v0.8.1)
 
-- ✅ **Pre-Export CREATE→DELETE Reconciliation** (#218) - When an object is created and then deleted before export runs, the redundant pending exports are automatically cancelled
+- ✅ **Pre-Export CREATE→DELETE Reconciliation** (#218) - When an object is created and then deleted before export runs, the redundant Pending Exports are automatically cancelled
 - ✅ **Export Rule Evaluation Optimisation** (#417) - Export rule evaluation optimised to reduce per-MVO processing cost
 - ✅ **AD Schema Discovery Batching** (#433) - Active Directory schema discovery now batches LDAP queries, reducing connection round-trips
 - ✅ **Cross-Page Reference Resolution Fix** (#449) - Full Sync no longer fails with entity tracking conflicts when groups share members across resolution batches (10,000+ users)
@@ -426,7 +426,7 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 ### Previous Enhancements
 
 - ✅ **Disconnection Causality Tracking** (#392) - Causality tree traces MVO attribute changes and deletion fate during disconnection and recall
-- ✅ **Self-Contained Object Matching Rules** (#386) - Sync rules carry their own matching logic for import and export, enabling portable rule definitions
+- ✅ **Self-Contained Object Matching Rules** (#386) - Synchronisation Rules carry their own matching logic for import and export, enabling portable rule definitions
 - ✅ **One-Command Deployment** - Interactive installer auto-detects latest release, configures SSO and database, and starts JIM in minutes
 - ✅ **Sync Outcome Graph** (#363) - Full causal tracing of every change during synchronisation with configurable tracking levels (None/Standard/Detailed)
 - ✅ **CSO Large MVA Pagination** (#320) - Paginated attribute values with server-side search for objects with 10K+ multi-valued attributes
@@ -446,7 +446,7 @@ Development follows sequenced milestones (see [GitHub Milestones](https://github
 | Milestone | Focus |
 |-----------|-------|
 | **v0.9-STABILISATION** | Configuration controls, identity fusing, lifecycle state management (JML triggers), sync engine refinement, architectural foundation for extensibility |
-| **v1.0-ILM-COMPLETE** | First production-ready release: robust sync rules, lifecycle automation, scheduling, error handling, operational monitoring |
+| **v1.0-ILM-COMPLETE** | First production-ready release: robust Synchronisation Rules, lifecycle automation, scheduling, error handling, operational monitoring |
 | **v1.x-CONNECTORS** | Expanding connector coverage: broader LDAP support, SQL databases, SCIM endpoints, HR systems, connector framework improvements |
 | **v2.0-IGA-FOUNDATION** | Direct in-JIM management of MVOs (no longer dependent on Source-of-Record systems): Entitlement Management (group management + governance — reviews/attestation, delegated admin, dynamic & time-based memberships, self-service, approvals, etc.), Identity Lifecycle Management (user management, self-service for locally-managed attributes, lifecycle workflows), and fine-grained RBAC for custom permission models |
 
@@ -495,7 +495,7 @@ When discussing new features:
 
 1. Review Section 2 (Architecture) for the metaverse pattern
 2. Check Section 4 (Connectors) for integration capabilities
-3. Reference Section 5 (Sync Rules) for data flow mechanics
+3. Reference Section 5 (Synchronisation Rules) for data flow mechanics
 
 ### For API/Integration Questions
 
@@ -548,12 +548,12 @@ JIM/
 | **Metaverse** | Central authoritative identity repository |
 | **MVO** | MetaverseObject - central identity entity |
 | **Obsoletion** | Marking a CSO as no longer existing in source |
-| **Partition** | Logical division within a connected system (e.g., OU) |
+| **Partition** | Logical division within a Connected System (e.g., OU) |
 | **Pending Export** | Queued change waiting to be sent to target system |
 | **Projection** | Creating a new MVO when no match found |
 | **Provisioning** | Creating accounts in target systems |
 | **Run Profile** | Configured operation (Full Import, Full Sync, Export) |
-| **Sync Rule** | Complete mapping configuration between systems and metaverse |
+| **Synchronisation Rule** | Complete mapping configuration between systems and metaverse |
 
 ---
 

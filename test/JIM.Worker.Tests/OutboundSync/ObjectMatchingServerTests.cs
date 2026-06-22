@@ -70,7 +70,7 @@ public class ObjectMatchingServerTests
         MetaverseObjectsData = TestUtilities.GetMetaverseObjectData();
         MockDbSetMetaverseObjects = MetaverseObjectsData.BuildMockDbSet();
 
-        // Set up the Sync Rule stub mocks
+        // Set up the Synchronisation Rule stub mocks
         SyncRulesData = TestUtilities.GetSyncRuleData();
         MockDbSetSyncRules = SyncRulesData.BuildMockDbSet();
 
@@ -549,7 +549,7 @@ public class ObjectMatchingServerTests
     [Test]
     public void ObjectMatchingRule_IsValid_AdvancedMode_WithMetaverseObjectTypeId_ReturnsFalse()
     {
-        // Arrange - Advanced mode rule WITH MetaverseObjectTypeId (invalid — sync rule provides MVO type)
+        // Arrange - Advanced mode rule WITH MetaverseObjectTypeId (invalid — Synchronisation Rule provides MVO type)
         var mvAttr = new MetaverseAttribute { Id = 1, Name = "EmployeeId" };
         var csAttr = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "employeeNumber" };
         var syncRule = SyncRulesData[0];
@@ -626,7 +626,7 @@ public class ObjectMatchingServerTests
 
         connectedSystem.ObjectTypes = new List<ConnectedSystemObjectType> { objectType };
 
-        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportRule.ConnectedSystem = connectedSystem;
         exportRule.ConnectedSystemObjectType = objectType;
         exportRule.ConnectedSystemObjectTypeId = objectType.Id;
@@ -643,10 +643,10 @@ public class ObjectMatchingServerTests
         var connectedSystem = ConnectedSystemsData[1]; // Target system
         connectedSystem.ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule;
 
-        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportRule.ConnectedSystem = connectedSystem;
 
-        // Add matching rules to the sync rule
+        // Add matching rules to the Synchronisation Rule
         var mvAttr = new MetaverseAttribute { Id = 1, Name = "EmployeeId" };
         var csAttr = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "employeeNumber" };
 

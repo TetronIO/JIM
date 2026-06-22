@@ -58,12 +58,12 @@ public class PredefinedSearch : IAuditable
     public string? LastUpdatedByName { get; set; }
 
     /// <summary>
-    /// The type of Metaverse object this search will result results for.
+    /// The type of Metaverse Object this search will result results for.
     /// </summary>
     public MetaverseObjectType MetaverseObjectType { get; set; } = null!;
 
     /// <summary>
-    /// If true, this is the default predefined search for the associated metaverse object type.
+    /// If true, this is the default predefined search for the associated Metaverse Object Type.
     /// This means in the web portal, a search parameter does not have to be used on the URL.
     /// </summary>
     public bool IsDefaultForMetaverseObjectType { get; set; }

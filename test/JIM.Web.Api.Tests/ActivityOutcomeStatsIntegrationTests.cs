@@ -464,7 +464,7 @@ public class ActivityOutcomeStatsIntegrationTests
         Assert.That(stats.ErrorTypeCounts[ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed], Is.EqualTo(1));
         Assert.That(stats.ErrorTypeCounts[ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed], Is.EqualTo(1));
 
-        // Pending export reconciliation stats derived from error types
+        // Pending Export reconciliation stats derived from error types
         Assert.That(stats.TotalPendingExportsRetrying, Is.EqualTo(1));
         Assert.That(stats.TotalPendingExportsFailed, Is.EqualTo(1));
 

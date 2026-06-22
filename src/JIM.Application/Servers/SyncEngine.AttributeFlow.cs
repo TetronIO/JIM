@@ -16,13 +16,13 @@ using System.Text.RegularExpressions;
 namespace JIM.Application.Servers;
 
 /// <summary>
-/// Attribute flow logic for the sync engine.
-/// Contains all sync rule mapping processing — formerly SyncRuleMappingProcessor.
+/// Attribute Flow logic for the sync engine.
+/// Contains all Synchronisation Rule mapping processing — formerly SyncRuleMappingProcessor.
 /// </summary>
 public partial class SyncEngine
 {
     /// <summary>
-    /// Processes a sync rule mapping to flow attribute values from CSO to MVO.
+    /// Processes a Synchronisation Rule mapping to flow attribute values from CSO to MVO.
     /// </summary>
     internal static void ProcessMapping(
         ConnectedSystemObject cso,
@@ -43,7 +43,7 @@ public partial class SyncEngine
 
         if (syncRuleMapping.TargetMetaverseAttribute == null)
         {
-            Log.Error("ProcessMapping: Sync Rule mapping has no TargetMetaverseAttribute set!");
+            Log.Error("ProcessMapping: Synchronisation Rule mapping has no TargetMetaverseAttribute set!");
             return;
         }
 
@@ -156,7 +156,7 @@ public partial class SyncEngine
     }
 
     /// <summary>
-    /// Processes an expression-based sync rule mapping source.
+    /// Processes an expression-based Synchronisation Rule mapping source.
     /// </summary>
     private static void ProcessExpressionMapping(
         ConnectedSystemObject cso,

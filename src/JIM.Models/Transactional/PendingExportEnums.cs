@@ -6,15 +6,15 @@ namespace JIM.Models.Transactional;
 public enum PendingExportChangeType
 {
     /// <summary>
-    /// Create an object in a connected system.
+    /// Create an object in a Connected System.
     /// </summary>
     Create = 0,
     /// <summary>
-    /// Perform updates to attribute values on an object in a connected system.
+    /// Perform updates to attribute values on an object in a Connected System.
     /// </summary>
     Update = 1,
     /// <summary>
-    /// Delete an object in a connected system.
+    /// Delete an object in a Connected System.
     /// </summary>
     Delete = 2
 }
@@ -69,24 +69,24 @@ public enum PendingExportAttributeChangeStatus
 public enum PendingExportStatus
 {
     /// <summary>
-    /// The pending export has not yet been applied against the connected system.
+    /// The Pending Export has not yet been applied against the Connected System.
     /// </summary>
     Pending = 0,
     /// <summary>
-    /// The pending export was applied against the connected system, but one or more attribute values were not confirmed
+    /// The Pending Export was applied against the Connected System, but one or more attribute values were not confirmed
     /// during the confirming import. Will be retried on the next export run.
     /// </summary>
     ExportNotConfirmed = 1,
     /// <summary>
-    /// The pending export is currently being processed by a connector.
+    /// The Pending Export is currently being processed by a connector.
     /// </summary>
     Executing = 2,
     /// <summary>
-    /// The pending export failed after maximum retry attempts and requires manual intervention.
+    /// The Pending Export failed after maximum retry attempts and requires manual intervention.
     /// </summary>
     Failed = 3,
     /// <summary>
-    /// The pending export was successfully applied to the connected system.
+    /// The Pending Export was successfully applied to the Connected System.
     /// </summary>
     Exported = 4
 }
@@ -97,12 +97,12 @@ public enum PendingExportStatus
 public enum SyncRunMode
 {
     /// <summary>
-    /// Evaluates sync rules and shows what changes would be made, but does not persist
+    /// Evaluates Synchronisation Rules and shows what changes would be made, but does not persist
     /// any Pending Exports or execute changes.
     /// </summary>
     PreviewOnly = 0,
     /// <summary>
-    /// Evaluates sync rules, shows the preview, then persists Pending Exports and executes them.
+    /// Evaluates Synchronisation Rules, shows the preview, then persists Pending Exports and executes them.
     /// </summary>
     PreviewAndSync = 1
 }

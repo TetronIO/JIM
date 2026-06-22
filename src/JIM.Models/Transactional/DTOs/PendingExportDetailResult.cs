@@ -4,7 +4,7 @@
 namespace JIM.Models.Transactional.DTOs;
 
 /// <summary>
-/// Result object for the pending export detail page. Contains the pending export
+/// Result object for the Pending Export detail page. Contains the Pending Export
 /// with capped MVA attribute changes and per-attribute total counts.
 /// </summary>
 public class PendingExportDetailResult

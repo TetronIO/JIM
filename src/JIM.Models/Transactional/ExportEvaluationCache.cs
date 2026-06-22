@@ -22,7 +22,7 @@ public class ExportEvaluationCache
     public Dictionary<int, List<SyncRule>> ExportRulesByMvoTypeId { get; }
 
     /// <summary>
-    /// Target connected system IDs (excluding source system). Stable across pages.
+    /// Target Connected System IDs (excluding source system). Stable across pages.
     /// Used to scope per-page CSO queries to only the relevant target systems.
     /// </summary>
     public IReadOnlyList<int> TargetSystemIds { get; }
@@ -46,7 +46,7 @@ public class ExportEvaluationCache
     /// <param name="exportRulesByMvoTypeId">Export rules grouped by MVO type ID.</param>
     /// <param name="csoLookup">CSO lookup dictionary (empty for deferred per-page loading).</param>
     /// <param name="csoAttributeValues">CSO attribute values lookup (empty for deferred per-page loading).</param>
-    /// <param name="targetSystemIds">Target connected system IDs for per-page CSO queries.</param>
+    /// <param name="targetSystemIds">Target Connected System IDs for per-page CSO queries.</param>
     public ExportEvaluationCache(
         Dictionary<int, List<SyncRule>> exportRulesByMvoTypeId,
         Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject> csoLookup,

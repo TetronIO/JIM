@@ -18,7 +18,7 @@ hide:
 
     ---
 
-    Central metaverse architecture for identity correlation across all connected systems. Bidirectional sync of Users, Groups, and custom object types.
+    Central metaverse architecture for identity correlation across all Connected Systems. Bidirectional sync of Users, Groups, and custom object types.
 
 -   :material-server-network:{ .lg .middle } **Multi-Directory LDAP**
 
@@ -104,7 +104,7 @@ Enterprise identity synchronisation typically requires cloud connectivity, compl
 
     ---
 
-    Understand the metaverse, connected systems, synchronisation rules, and more.
+    Understand the metaverse, Connected Systems, Synchronisation Rules, and more.
 
     [:octicons-arrow-right-24: Concepts](concepts/index.md)
 
@@ -132,7 +132,7 @@ JIM has reached MVP completion. The core identity lifecycle is fully functional:
 
 - **Import** identities from source systems (LDAP, CSV)
 - **Sync** to reconcile identities in the central metaverse
-- **Export** changes to target systems with pending export management
+- **Export** changes to target systems with Pending Export management
 - **Schedule** automated synchronisation using cron or interval-based triggers
 
 ## 💬 Community & Support

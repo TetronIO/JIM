@@ -30,8 +30,8 @@ public class ConnectedSystemObjectType
     public bool RemoveContributedAttributesOnObsoletion { get; set; } = true;
 
     /// <summary>
-    /// Object matching rules for this object type. Used when the Connected System's ObjectMatchingRuleMode
-    /// is set to ConnectedSystem (the default). These rules are shared across all sync rules for this object type.
+    /// Object Matching Rules for this object type. Used when the Connected System's ObjectMatchingRuleMode
+    /// is set to ConnectedSystem (the default). These rules are shared across all Synchronisation Rules for this object type.
     /// </summary>
     public List<ObjectMatchingRule> ObjectMatchingRules { get; set; } = new();
 

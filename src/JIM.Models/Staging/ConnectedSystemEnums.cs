@@ -24,18 +24,18 @@ public enum ConnectedSystemObjectStatus
 }
 
 /// <summary>
-/// Determines where object matching rules are configured for a Connected System.
+/// Determines where Object Matching Rules are configured for a Connected System.
 /// </summary>
 public enum ObjectMatchingRuleMode
 {
     /// <summary>
-    /// Default: Object matching rules are defined at the Connected System Object Type level.
-    /// These rules are shared across all sync rules for that object type.
+    /// Default: Object Matching Rules are defined at the Connected System Object Type level.
+    /// These rules are shared across all Synchronisation Rules for that object type.
     /// </summary>
     ConnectedSystem = 0,
     /// <summary>
-    /// Advanced: Object matching rules are defined per sync rule.
-    /// Allows different matching logic for different sync rules.
+    /// Advanced: Object Matching Rules are defined per Synchronisation Rule.
+    /// Allows different matching logic for different Synchronisation Rules.
     /// </summary>
     SyncRule = 1
 }
@@ -51,7 +51,7 @@ public enum ConnectedSystemObjectJoinType
     /// </summary>
     Projected = 1,
     /// <summary>
-    /// A sync rule required a Metaverse Object to be provisioned to the Connected System, resulting in a Connected System Object being created.
+    /// A Synchronisation Rule required a Metaverse Object to be provisioned to the Connected System, resulting in a Connected System Object being created.
     /// </summary>
     Provisioned = 2,
     /// <summary>
@@ -124,11 +124,11 @@ public enum ConnectedSystemImportObjectError
 {
     NotSet,
     /// <summary>
-    /// We were unable to determine what type of object was returned from the connected system.
+    /// We were unable to determine what type of object was returned from the Connected System.
     /// </summary>
     CouldNotDetermineObjectType,
     /// <summary>
-    /// The attribute(s) used to uniquely identify the object could not be found on the object we got from the connected system.
+    /// The attribute(s) used to uniquely identify the object could not be found on the object we got from the Connected System.
     /// </summary>
     ExternalIdAttributes,
     /// <summary>
@@ -142,7 +142,7 @@ public enum ConnectedSystemImportObjectError
 }
 
 /// <summary>
-/// Defines the type of run profile operation to execute against a Connected System.
+/// Defines the type of Run Profile operation to execute against a Connected System.
 /// </summary>
 public enum ConnectedSystemRunType
 {
@@ -160,12 +160,12 @@ public enum ConnectedSystemRunType
     DeltaImport = 2,
     /// <summary>
     /// Synchronises all Connected System Objects with the Metaverse, evaluating join/projection rules,
-    /// attribute flow, and provisioning for every object in the connector space.
+    /// Attribute Flow, and provisioning for every object in the connector space.
     /// </summary>
     FullSynchronisation = 3,
     /// <summary>
     /// Synchronises only Connected System Objects that have pending changes since the last synchronisation,
-    /// evaluating join/projection rules, attribute flow, and provisioning for those objects only.
+    /// evaluating join/projection rules, Attribute Flow, and provisioning for those objects only.
     /// </summary>
     DeltaSynchronisation = 4,
     /// <summary>

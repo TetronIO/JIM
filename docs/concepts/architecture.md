@@ -4,11 +4,11 @@ JIM is built around the **metaverse pattern** -- a hub-and-spoke architecture wh
 
 ## The Metaverse Pattern
 
-At the heart of JIM is the **metaverse**: a centralised repository of identity objects. Rather than synchronising data directly between connected systems, every change flows through the metaverse. This provides:
+At the heart of JIM is the **metaverse**: a centralised repository of identity objects. Rather than synchronising data directly between Connected Systems, every change flows through the metaverse. This provides:
 
 - **Single source of truth**<br /> One authoritative record for each identity, assembled from multiple sources.
 - **Centralised governance**<br /> All data transformations, scoping decisions, and lifecycle rules are applied in one place.
-- **Decoupled systems**<br /> Connected systems do not need to know about each other; they only interact with the metaverse.
+- **Decoupled systems**<br /> Connected Systems do not need to know about each other; they only interact with the metaverse.
 - **Auditability**<br /> Every change is tracked as it passes through the hub.
 
 ```mermaid
@@ -17,7 +17,7 @@ flowchart LR
     B -->|Export| C["Target Systems\n\nActive Directory\nEmail System"]
 ```
 
-**Key principle**: All identity data flows through the metaverse. JIM never synchronises directly between connected systems.
+**Key principle**: All identity data flows through the metaverse. JIM never synchronises directly between Connected Systems.
 
 ## System Context
 
@@ -35,7 +35,7 @@ JIM is deployed as a set of Docker containers, each with a distinct responsibili
 
 ### JIM.Web
 
-The web application provides both the **administrative user interface** (built with Blazor Server and MudBlazor) and the **REST API** (at `/api/`). Administrators use the UI to configure connected systems, define synchronisation rules, monitor operations, and browse identity data. The API enables automation and integration with external tools.
+The web application provides both the **administrative user interface** (built with Blazor Server and MudBlazor) and the **REST API** (at `/api/`). Administrators use the UI to configure Connected Systems, define Synchronisation Rules, monitor operations, and browse identity data. The API enables automation and integration with external tools.
 
 ### JIM.Worker
 
@@ -51,7 +51,7 @@ A PowerShell module for automation and scripting. It wraps the REST API and prov
 
 ### PostgreSQL Database
 
-JIM uses PostgreSQL as its sole data store. The database holds all configuration, identity data (metaverse objects, connected system objects), synchronisation rules, activity history, and credentials (encrypted at rest with AES-256-GCM).
+JIM uses PostgreSQL as its sole data store. The database holds all configuration, identity data (Metaverse Objects, Connected System Objects), Synchronisation Rules, activity history, and credentials (encrypted at rest with AES-256-GCM).
 
 ## Layered Architecture
 
@@ -74,7 +74,7 @@ flowchart TD
 
 ### Application Layer
 
-**JIM.Application** -- contains the core business logic ("Servers") that orchestrate operations. This includes the sync engine, import/export processing, run profile execution, and all domain workflows. The UI and API never access the database directly; they always go through the Application layer.
+**JIM.Application** -- contains the core business logic ("Servers") that orchestrate operations. This includes the sync engine, import/export processing, Run Profile execution, and all domain workflows. The UI and API never access the database directly; they always go through the Application layer.
 
 <img class="diagram-light" alt="Application Layer" src="../../diagrams/images/light/jim-structurizr-1-AppLayerComponents.svg">
 <img class="diagram-dark" alt="Application Layer" src="../../diagrams/images/dark/jim-structurizr-1-AppLayerComponents.svg">

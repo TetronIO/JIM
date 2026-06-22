@@ -13,7 +13,7 @@ using Serilog;
 namespace JIM.Application.Services;
 
 /// <summary>
-/// Service responsible for detecting drift in target systems and staging corrective pending exports.
+/// Service responsible for detecting drift in target systems and staging corrective Pending Exports.
 /// Drift occurs when a target system's attribute values differ from what the authoritative source dictates.
 /// </summary>
 /// <remarks>
@@ -23,7 +23,7 @@ namespace JIM.Application.Services;
 ///
 /// Key design decisions:
 /// 1. Only evaluates export rules with EnforceState = true
-/// 2. Skips attributes where the connected system is a legitimate contributor (has import rules for that attribute)
+/// 2. Skips attributes where the Connected System is a legitimate contributor (has import rules for that attribute)
 /// 3. Uses the existing PendingExport infrastructure for corrective exports
 /// </remarks>
 public class DriftDetectionService
@@ -39,11 +39,11 @@ public class DriftDetectionService
 
     /// <summary>
     /// Evaluates drift for a CSO that has been imported/synced against its joined MVO.
-    /// Checks all export rules with EnforceState = true that target this CSO's connected system.
+    /// Checks all export rules with EnforceState = true that target this CSO's Connected System.
     /// </summary>
     /// <param name="cso">The Connected System Object that was just imported/synced.</param>
     /// <param name="mvo">The Metaverse Object the CSO is joined to.</param>
-    /// <param name="exportRules">Export rules targeting this CSO's connected system (pre-loaded for efficiency).</param>
+    /// <param name="exportRules">Export rules targeting this CSO's Connected System (pre-loaded for efficiency).</param>
     /// <param name="importMappingsByAttribute">Cache of import mappings by (ConnectedSystemId, MvoAttributeId) for checking if system is a contributor.</param>
     /// <returns>Result indicating what drift was detected and corrective exports staged (not yet persisted).</returns>
     public DriftDetectionResult EvaluateDrift(
@@ -85,7 +85,7 @@ public class DriftDetectionService
         }
 
         // Filter to only export rules that:
-        // 1. Target this CSO's connected system
+        // 1. Target this CSO's Connected System
         // 2. Have EnforceState = true
         // 3. Match this CSO's object type
         // Note: targetMvo.Type is guaranteed non-null by defensive check above
@@ -112,7 +112,7 @@ public class DriftDetectionService
 
         foreach (var exportRule in applicableExportRules)
         {
-            // Check each attribute flow mapping in the export rule
+            // Check each Attribute Flow mapping in the export rule
             foreach (var mapping in exportRule.AttributeFlowRules)
             {
                 if (mapping.TargetConnectedSystemAttribute == null)
@@ -121,7 +121,7 @@ public class DriftDetectionService
                     continue;
                 }
 
-                // Check if this connected system is a legitimate contributor for this attribute
+                // Check if this Connected System is a legitimate contributor for this attribute
                 // (i.e., has an import rule that maps to the same MVO attribute)
                 foreach (var source in mapping.Sources)
                 {
@@ -192,14 +192,14 @@ public class DriftDetectionService
             }
         }
 
-        // If drift was detected, queue corrective pending exports
+        // If drift was detected, queue corrective Pending Exports
         if (result.HasDrift)
         {
             Log.Information("EvaluateDrift: Detected {DriftCount} drifted attributes on CSO {CsoId}. Staging corrective exports.",
                 result.DriftedAttributes.Count, cso.Id);
 
-            // Use the existing export evaluation infrastructure to create pending exports
-            // The existing logic already handles all the complexity of pending export creation
+            // Use the existing export evaluation infrastructure to create Pending Exports
+            // The existing logic already handles all the complexity of Pending Export creation
             var pendingExports = CreateCorrectiveExports(cso, targetMvo, result.DriftedAttributes);
             result.CorrectiveExports.AddRange(pendingExports);
         }
@@ -208,10 +208,10 @@ public class DriftDetectionService
     }
 
     /// <summary>
-    /// Checks if a connected system has import rules that flow to the specified MVO attribute.
+    /// Checks if a Connected System has import rules that flow to the specified MVO attribute.
     /// If so, changes from that system are not "drift" but legitimate updates.
     /// </summary>
-    /// <param name="connectedSystemId">The connected system to check.</param>
+    /// <param name="connectedSystemId">The Connected System to check.</param>
     /// <param name="mvoAttributeId">The MVO attribute ID to check.</param>
     /// <param name="importMappingsByAttribute">Cached import mappings lookup.</param>
     /// <returns>True if the system is a contributor for this attribute.</returns>
@@ -231,12 +231,12 @@ public class DriftDetectionService
     }
 
     /// <summary>
-    /// Checks if a connected system is a contributor for any MVO attribute referenced in an expression.
+    /// Checks if a Connected System is a contributor for any MVO attribute referenced in an expression.
     /// Expressions may reference MVO attributes using mv["attributeName"] syntax. If the system has
     /// import rules for any of those attributes, it's considered a contributor and drift detection
     /// should be skipped for this expression-based mapping.
     /// </summary>
-    /// <param name="connectedSystemId">The connected system ID to check.</param>
+    /// <param name="connectedSystemId">The Connected System ID to check.</param>
     /// <param name="expression">The expression to analyse for MVO attribute references.</param>
     /// <param name="importMappingsByAttribute">The import mapping cache.</param>
     /// <returns>True if the system is a contributor for any attribute referenced in the expression.</returns>
@@ -298,7 +298,7 @@ public class DriftDetectionService
     /// Builds a lookup dictionary of import mappings by (ConnectedSystemId, MvoAttributeId).
     /// Call this once at the start of a sync run for efficient drift detection.
     /// </summary>
-    /// <param name="syncRules">All sync rules to process.</param>
+    /// <param name="syncRules">All Synchronisation Rules to process.</param>
     /// <returns>Dictionary keyed by (ConnectedSystemId, MvoAttributeId).</returns>
     public static Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>> BuildImportMappingCache(
         List<SyncRule> syncRules)
@@ -335,7 +335,7 @@ public class DriftDetectionService
     /// For multi-valued attributes, returns a HashSet containing all values.
     /// </summary>
     /// <param name="mvo">The Metaverse Object to get the expected value from.</param>
-    /// <param name="source">The sync rule mapping source defining the attribute or expression.</param>
+    /// <param name="source">The Synchronisation Rule mapping source defining the attribute or expression.</param>
     /// <param name="mvAttributeDictionary">Pre-built dictionary of MVO attribute values for expression evaluation.</param>
     /// <param name="targetCsoAttribute">The target CSO attribute - used to determine plurality for consistent comparison.</param>
     private object? GetExpectedValue(MetaverseObject mvo, SyncRuleMappingSource source, Dictionary<string, object?> mvAttributeDictionary, ConnectedSystemObjectTypeAttribute targetCsoAttribute)
@@ -645,7 +645,7 @@ public class DriftDetectionService
     }
 
     /// <summary>
-    /// Creates corrective pending exports for drifted attributes (in-memory only, not persisted).
+    /// Creates corrective Pending Exports for drifted attributes (in-memory only, not persisted).
     /// The caller is responsible for adding these to the batch list for persistence.
     /// For multi-valued attributes, creates atomic ADD/REMOVE changes for the specific differences.
     /// </summary>
@@ -656,7 +656,7 @@ public class DriftDetectionService
     {
         var pendingExports = new List<PendingExport>();
 
-        // Group drifted attributes by export rule (one pending export per rule)
+        // Group drifted attributes by export rule (one Pending Export per rule)
         var attributesByRule = driftedAttributes
             .GroupBy(d => d.ExportRule)
             .ToList();
@@ -666,7 +666,7 @@ public class DriftDetectionService
             var exportRule = ruleGroup.Key;
             var attributes = ruleGroup.ToList();
 
-            // Create pending export attribute changes
+            // Create Pending Export attribute changes
             var attributeChanges = new List<PendingExportAttributeValueChange>();
 
             foreach (var drifted in attributes)
@@ -743,7 +743,7 @@ public class DriftDetectionService
             // This is used to defer exports with reference attributes until the referenced objects have been exported
             var hasUnresolvedReferences = attributeChanges.Any(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue));
 
-            // Create the pending export
+            // Create the Pending Export
             var pendingExport = new PendingExport
             {
                 Id = Guid.NewGuid(),

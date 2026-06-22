@@ -16,7 +16,7 @@ namespace JIM.Workflow.Tests.Scenarios.Sync;
 /// Workflow tests for drift detection - detecting and correcting unauthorised changes in target systems.
 /// These tests verify that:
 /// 1. Drift is detected when a non-contributor system's CSO value differs from MVO
-/// 2. Corrective pending exports are staged to remediate drift
+/// 2. Corrective Pending Exports are staged to remediate drift
 /// 3. EnforceState=false disables drift detection for an export rule
 /// 4. Drift is NOT flagged when the system is a legitimate contributor (has import rules)
 /// </summary>
@@ -66,15 +66,15 @@ public class DriftDetectionWorkflowTests
         await _harness.ExecuteFullSyncAsync("HR");
         var afterInitialSync = await _harness.TakeSnapshotAsync("After Initial Sync");
 
-        // Should have pending exports for the 3 users to AD
+        // Should have Pending Exports for the 3 users to AD
         Assert.That(afterInitialSync.PendingExportCount, Is.EqualTo(3),
-            "Should have 3 pending exports after initial sync");
+            "Should have 3 Pending Exports after initial sync");
 
         // Execute exports to AD and populate CSO values
         await _harness.ExecuteExportAsync("AD");
         PopulateCsoAttributeValuesFromPendingExports();
 
-        // Clear pending exports (mark as complete)
+        // Clear Pending Exports (mark as complete)
         ClearPendingExports();
         var beforeDrift = await _harness.TakeSnapshotAsync("Before Drift");
         Assert.That(beforeDrift.PendingExportCount, Is.EqualTo(0));
@@ -87,15 +87,15 @@ public class DriftDetectionWorkflowTests
         // This should:
         // 1. Compare AD CSO values against what export rules expect
         // 2. Detect that AD has drifted from expected state
-        // 3. Stage corrective pending exports to fix the drift
+        // 3. Stage corrective Pending Exports to fix the drift
         await _harness.ExecuteDeltaSyncAsync("AD");
         var afterDriftDetection = await _harness.TakeSnapshotAsync("After Drift Detection");
 
-        // Assert: Corrective pending exports should be created
+        // Assert: Corrective Pending Exports should be created
         Assert.That(afterDriftDetection.PendingExportCount, Is.GreaterThan(0),
-            "Corrective pending exports should be created when drift is detected");
+            "Corrective Pending Exports should be created when drift is detected");
 
-        // Verify the pending exports are corrective (Update type, not Create)
+        // Verify the Pending Exports are corrective (Update type, not Create)
         var pendingExports = _harness.SyncRepo.PendingExports.Values.ToList();
 
         Assert.That(pendingExports.All(pe => pe.ChangeType == PendingExportChangeType.Update),
@@ -140,9 +140,9 @@ public class DriftDetectionWorkflowTests
         await _harness.ExecuteDeltaSyncAsync("AD");
         var afterDeltaSync = await _harness.TakeSnapshotAsync("After Delta Sync");
 
-        // Assert: No pending exports because EnforceState is disabled
+        // Assert: No Pending Exports because EnforceState is disabled
         Assert.That(afterDeltaSync.PendingExportCount, Is.EqualTo(0),
-            "No pending exports should be created when EnforceState=false");
+            "No Pending Exports should be created when EnforceState=false");
     }
 
     /// <summary>
@@ -190,7 +190,7 @@ public class DriftDetectionWorkflowTests
     /// Attributes not in any export rule should not trigger drift detection.
     ///
     /// Note: This test requires a more controlled setup as delta sync evaluates regular export rules,
-    /// which may create pending exports unrelated to drift detection. The unit tests in
+    /// which may create Pending Exports unrelated to drift detection. The unit tests in
     /// DriftDetectionTests.cs provide more targeted coverage of attribute-level drift detection.
     /// </summary>
     [Test]
@@ -220,9 +220,9 @@ public class DriftDetectionWorkflowTests
         await _harness.ExecuteDeltaSyncAsync("AD");
         var afterDeltaSync = await _harness.TakeSnapshotAsync("After Delta Sync");
 
-        // Assert: No pending exports for attributes not in export rules
+        // Assert: No Pending Exports for attributes not in export rules
         Assert.That(afterDeltaSync.PendingExportCount, Is.EqualTo(0),
-            "No pending exports when drifted attribute is not in export rules");
+            "No Pending Exports when drifted attribute is not in export rules");
     }
 
     /// <summary>
@@ -232,11 +232,11 @@ public class DriftDetectionWorkflowTests
     /// Scenario:
     /// - HR is source system (has import rules → contributes to MVO)
     /// - AD is target system (has ONLY export rules → receives from MVO, not a contributor)
-    /// - Initial sync creates MVOs from HR and pending exports to AD
+    /// - Initial sync creates MVOs from HR and Pending Exports to AD
     /// - After confirming imports, AD CSOs have values from MVO
     /// - Running full sync on AD should NOT flag these values as drift because HR is the contributor
     ///
-    /// This test specifically covers the bug where BuildDriftDetectionCache only loaded sync rules
+    /// This test specifically covers the bug where BuildDriftDetectionCache only loaded Synchronisation Rules
     /// for the current system, causing the import mapping cache to be empty for export-only systems,
     /// leading to false positive drift detection.
     /// </summary>
@@ -254,24 +254,24 @@ public class DriftDetectionWorkflowTests
         await _harness.ExecuteFullSyncAsync("HR");
         var afterInitialSync = await _harness.TakeSnapshotAsync("After Initial Sync");
 
-        // Should have 5 pending exports for AD
+        // Should have 5 Pending Exports for AD
         Assert.That(afterInitialSync.PendingExportCount, Is.EqualTo(5),
-            "Should have 5 pending exports after initial sync");
+            "Should have 5 Pending Exports after initial sync");
 
         // Execute exports to AD
         await _harness.ExecuteExportAsync("AD");
 
-        // Populate CSO attribute values from pending exports (simulating confirming import)
+        // Populate CSO attribute values from Pending Exports (simulating confirming import)
         PopulateCsoAttributeValuesFromPendingExports();
 
-        // Clear pending exports (mark as complete)
+        // Clear Pending Exports (mark as complete)
         ClearPendingExports();
         var beforeFullSync = await _harness.TakeSnapshotAsync("Before Full Sync on AD");
         Assert.That(beforeFullSync.PendingExportCount, Is.EqualTo(0),
-            "Should have no pending exports before full sync");
+            "Should have no Pending Exports before full sync");
 
         // Step 2: Run FULL SYNC on AD (export-only target system)
-        // This tests the fix: BuildDriftDetectionCache must load ALL sync rules from ALL systems
+        // This tests the fix: BuildDriftDetectionCache must load ALL Synchronisation Rules from ALL systems
         // to correctly identify HR as a contributor to the MVO attributes.
         // Without the fix, the import mapping cache would be empty for AD (no import rules),
         // causing drift detection to incorrectly flag ALL objects as drift.
@@ -282,14 +282,14 @@ public class DriftDetectionWorkflowTests
         // The values in AD CSOs match the MVO values (both came from HR), so there's no drift.
         // The drift detection should correctly identify HR as the contributor and not flag this.
         Assert.That(afterFullSync.PendingExportCount, Is.EqualTo(0),
-            "Should have NO pending exports - values match MVO (no drift). " +
-            "If there are pending exports, drift detection may not be correctly identifying contributors.");
+            "Should have NO Pending Exports - values match MVO (no drift). " +
+            "If there are Pending Exports, drift detection may not be correctly identifying contributors.");
 
-        // If there were pending exports (bug scenario), it would mean drift was incorrectly detected
-        // Additional verification: check there are no pending exports in database
+        // If there were Pending Exports (bug scenario), it would mean drift was incorrectly detected
+        // Additional verification: check there are no Pending Exports in database
         var pendingExportCount = _harness.SyncRepo.PendingExports.Count;
         Assert.That(pendingExportCount, Is.EqualTo(0),
-            "Database should have no pending exports - drift detection should not create false positives");
+            "Database should have no Pending Exports - drift detection should not create false positives");
     }
 
     /// <summary>
@@ -324,11 +324,11 @@ public class DriftDetectionWorkflowTests
         await _harness.ExecuteFullSyncAsync("AD");
         var afterFullSync = await _harness.TakeSnapshotAsync("After Full Sync with Drift");
 
-        // Assert: Corrective pending exports SHOULD be created for the drifted objects
+        // Assert: Corrective Pending Exports SHOULD be created for the drifted objects
         Assert.That(afterFullSync.PendingExportCount, Is.GreaterThan(0),
-            "Should have pending exports to correct the drift");
+            "Should have Pending Exports to correct the drift");
 
-        // Verify the pending exports are corrective (Update type)
+        // Verify the Pending Exports are corrective (Update type)
         var pendingExports = _harness.SyncRepo.PendingExports.Values.ToList();
 
         Assert.That(pendingExports.All(pe => pe.ChangeType == PendingExportChangeType.Update),
@@ -439,11 +439,11 @@ public class DriftDetectionWorkflowTests
         await _harness.ExecuteFullSyncAsync("Source");
         var afterInitialSync = await _harness.TakeSnapshotAsync("After Initial Sync");
 
-        // Should have pending exports for 3 users + 1 group to Target
+        // Should have Pending Exports for 3 users + 1 group to Target
         Assert.That(afterInitialSync.PendingExportCount, Is.EqualTo(4),
-            "Should have 4 pending exports (3 users + 1 group) after initial sync");
+            "Should have 4 Pending Exports (3 users + 1 group) after initial sync");
 
-        // Capture pending export data BEFORE export execution (export will clear these)
+        // Capture Pending Export data BEFORE export execution (export will clear these)
         var pendingExportData = CapturePendingExportData();
 
         // Execute exports to Target
@@ -452,11 +452,11 @@ public class DriftDetectionWorkflowTests
         // Now populate CSO values using the captured data
         PopulateEntitlementCsoAttributeValuesFromCapturedData(pendingExportData);
 
-        // Clear pending exports
+        // Clear Pending Exports
         ClearPendingExports();
         var beforeDriftTest = await _harness.TakeSnapshotAsync("Before Drift Test");
         Assert.That(beforeDriftTest.PendingExportCount, Is.EqualTo(0),
-            "Should have no pending exports before drift test");
+            "Should have no Pending Exports before drift test");
 
         // Step 2: Run full sync on Target (export-only) to test drift detection
         // With the bug, this would incorrectly flag the group as drifted because drift detection
@@ -465,15 +465,15 @@ public class DriftDetectionWorkflowTests
         var afterTargetSync = await _harness.TakeSnapshotAsync("After Target Full Sync");
 
         // Assert: NO drift should be detected because all members match
-        // This is the key assertion - with the bug, pending exports would be created
+        // This is the key assertion - with the bug, Pending Exports would be created
         Assert.That(afterTargetSync.PendingExportCount, Is.EqualTo(0),
-            "Should have NO pending exports - multi-valued member attribute should compare ALL values, not just first. " +
-            $"Found {afterTargetSync.PendingExportCount} pending exports, which indicates drift detection bug.");
+            "Should have NO Pending Exports - multi-valued member attribute should compare ALL values, not just first. " +
+            $"Found {afterTargetSync.PendingExportCount} Pending Exports, which indicates drift detection bug.");
 
-        // Additional verification: no pending exports in database
+        // Additional verification: no Pending Exports in database
         var pendingExportCount = _harness.SyncRepo.PendingExports.Count;
         Assert.That(pendingExportCount, Is.EqualTo(0),
-            "Database should have no pending exports - drift detection should correctly compare all member values");
+            "Database should have no Pending Exports - drift detection should correctly compare all member values");
     }
 
     /// <summary>
@@ -535,7 +535,7 @@ public class DriftDetectionWorkflowTests
         await _harness.ExecuteFullImportAsync("Source");
         await _harness.ExecuteFullSyncAsync("Source");
 
-        // Capture pending export data BEFORE execution
+        // Capture Pending Export data BEFORE execution
         var pendingExportData = CapturePendingExportData();
 
         // Execute exports and populate CSO values
@@ -563,7 +563,7 @@ public class DriftDetectionWorkflowTests
             pe.ConnectedSystemObject?.Type?.Name == "Group");
 
         Assert.That(groupExport, Is.Not.Null,
-            "Should have corrective pending export for the drifted group");
+            "Should have corrective Pending Export for the drifted group");
         Assert.That(groupExport!.ChangeType, Is.EqualTo(PendingExportChangeType.Update),
             "Corrective export should be Update type");
     }
@@ -630,9 +630,9 @@ public class DriftDetectionWorkflowTests
         var afterInitialSync = await _harness.TakeSnapshotAsync("After Initial Sync");
 
         Assert.That(afterInitialSync.PendingExportCount, Is.EqualTo(1),
-            "Should have 1 pending export after initial sync");
+            "Should have 1 Pending Export after initial sync");
 
-        // Verify the pending export has the expected long value from ToFileTime expression
+        // Verify the Pending Export has the expected long value from ToFileTime expression
         var pendingExport = _harness.SyncRepo.PendingExports.Values.First();
 
         var accountExpiresChange = pendingExport.AttributeValueChanges
@@ -650,7 +650,7 @@ public class DriftDetectionWorkflowTests
 
         var beforeDriftCheck = await _harness.TakeSnapshotAsync("Before Drift Check");
         Assert.That(beforeDriftCheck.PendingExportCount, Is.EqualTo(0),
-            "Should have no pending exports before drift check");
+            "Should have no Pending Exports before drift check");
 
         // Step 3: Run full sync on AD — should detect NO drift
         // The expression will re-evaluate to the same long value that's on the CSO
@@ -658,8 +658,8 @@ public class DriftDetectionWorkflowTests
         var afterDriftCheck = await _harness.TakeSnapshotAsync("After Drift Check");
 
         Assert.That(afterDriftCheck.PendingExportCount, Is.EqualTo(0),
-            "Should have NO pending exports — expression-evaluated LongNumber value matches CSO, no drift. " +
-            "If there are pending exports, the drift detection expression evaluation may not be comparing correctly.");
+            "Should have NO Pending Exports — expression-evaluated LongNumber value matches CSO, no drift. " +
+            "If there are Pending Exports, the drift detection expression evaluation may not be comparing correctly.");
     }
 
     /// <summary>
@@ -698,10 +698,10 @@ public class DriftDetectionWorkflowTests
         await _harness.ExecuteFullSyncAsync("HR");
         var afterInitialSync = await _harness.TakeSnapshotAsync("After Initial Sync");
 
-        // The pending export should have cn and distinguishedName but accountExpires
+        // The Pending Export should have cn and distinguishedName but accountExpires
         // should either not be present or have a null LongValue (since ToFileTime(null) = null)
         Assert.That(afterInitialSync.PendingExportCount, Is.EqualTo(1),
-            "Should have 1 pending export after initial sync");
+            "Should have 1 Pending Export after initial sync");
 
         // Step 2: Execute exports and populate CSO values
         await _harness.ExecuteExportAsync("AD");
@@ -717,7 +717,7 @@ public class DriftDetectionWorkflowTests
         var afterDriftCheck = await _harness.TakeSnapshotAsync("After Drift Check");
 
         Assert.That(afterDriftCheck.PendingExportCount, Is.EqualTo(0),
-            "Should have NO pending exports — null expression result matches null CSO value, no drift. " +
+            "Should have NO Pending Exports — null expression result matches null CSO value, no drift. " +
             "In production, AD stores 9223372036854775807 for null accountExpires, but the LDAP connector " +
             "import filter converts that sentinel back to null. This test verifies the sync engine side.");
     }
@@ -760,7 +760,7 @@ public class DriftDetectionWorkflowTests
         var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
         var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
 
-        // Create import sync rule (HR → MV) - HR is the contributor
+        // Create import Synchronisation Rule (HR → MV) - HR is the contributor
         await _harness.CreateSyncRuleAsync(
             "HR Import",
             "HR",
@@ -772,7 +772,7 @@ public class DriftDetectionWorkflowTests
                 .WithAttributeFlow(mvDisplayName, hrDisplayName)
                 .WithExpressionFlow("\"PersonEntity\"", mvType));
 
-        // Create export sync rule (MV → AD) - AD is the target (non-contributor)
+        // Create export Synchronisation Rule (MV → AD) - AD is the target (non-contributor)
         await _harness.CreateSyncRuleAsync(
             "AD Export",
             "AD",
@@ -901,7 +901,7 @@ public class DriftDetectionWorkflowTests
         var mvEndDate = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Employee End Date");
         var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
 
-        // Create import sync rule (HR → MV)
+        // Create import Synchronisation Rule (HR → MV)
         await _harness.CreateSyncRuleAsync(
             "HR Import",
             "HR",
@@ -914,7 +914,7 @@ public class DriftDetectionWorkflowTests
                 .WithAttributeFlow(mvEndDate, hrEndDate)
                 .WithExpressionFlow("\"PersonEntity\"", mvType));
 
-        // Create export sync rule (MV → AD) with expression-based mapping
+        // Create export Synchronisation Rule (MV → AD) with expression-based mapping
         // ToFileTime converts DateTime to Windows FILETIME (long) — same as real accountExpires flow
         await _harness.CreateSyncRuleAsync(
             "AD Export",
@@ -976,7 +976,7 @@ public class DriftDetectionWorkflowTests
     #region Helper Methods
 
     /// <summary>
-    /// Populates CSO attribute values based on pending exports.
+    /// Populates CSO attribute values based on Pending Exports.
     /// This simulates what would happen after a confirming import.
     /// </summary>
     private void PopulateCsoAttributeValuesFromPendingExports()
@@ -1007,7 +1007,7 @@ public class DriftDetectionWorkflowTests
                     cso.AttributeValues.Add(existingAttrValue);
                 }
 
-                // Copy values from pending export
+                // Copy values from Pending Export
                 existingAttrValue.StringValue = avc.StringValue;
                 existingAttrValue.IntValue = avc.IntValue;
                 existingAttrValue.LongValue = avc.LongValue;
@@ -1027,7 +1027,7 @@ public class DriftDetectionWorkflowTests
     }
 
     /// <summary>
-    /// Clears all pending exports from the in-memory store.
+    /// Clears all Pending Exports from the in-memory store.
     /// </summary>
     private void ClearPendingExports()
     {
@@ -1077,7 +1077,7 @@ public class DriftDetectionWorkflowTests
             .WithStringAttribute("cn")
             .WithReferenceAttribute("member", isMultiValued: true));
 
-        // Get attributes for sync rules
+        // Get attributes for Synchronisation Rules
         var sourceUserType = _harness.GetObjectType("Source", "User");
         var sourceGroupType = _harness.GetObjectType("Source", "Group");
         var targetUserType = _harness.GetObjectType("Target", "User");
@@ -1100,7 +1100,7 @@ public class DriftDetectionWorkflowTests
         var mvGroupMember = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "member");
         var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type" && a.MetaverseObjectTypes.Any(t => t.Name == "Person"));
 
-        // Create Source import sync rules (Source is the contributor)
+        // Create Source import Synchronisation Rules (Source is the contributor)
         await _harness.CreateSyncRuleAsync(
             "Source User Import",
             "Source",
@@ -1123,7 +1123,7 @@ public class DriftDetectionWorkflowTests
                 .WithAttributeFlow(mvGroupCn, sourceGroupCn)
                 .WithAttributeFlow(mvGroupMember, sourceGroupMember));
 
-        // Create Target export sync rules (Target is export-only, non-contributor)
+        // Create Target export Synchronisation Rules (Target is export-only, non-contributor)
         await _harness.CreateSyncRuleAsync(
             "Target User Export",
             "Target",
@@ -1151,7 +1151,7 @@ public class DriftDetectionWorkflowTests
     }
 
     /// <summary>
-    /// Captures pending export data before export execution.
+    /// Captures Pending Export data before export execution.
     /// </summary>
     private List<CapturedPendingExport> CapturePendingExportData()
     {
@@ -1215,7 +1215,7 @@ public class DriftDetectionWorkflowTests
     }
 
     /// <summary>
-    /// Populates CSO attribute values from captured pending export data.
+    /// Populates CSO attribute values from captured Pending Export data.
     /// </summary>
     private void PopulateEntitlementCsoAttributeValuesFromCapturedData(List<CapturedPendingExport> capturedData)
     {
@@ -1341,7 +1341,7 @@ public class DriftDetectionWorkflowTests
                         cso.AttributeValues.Add(existingAttrValue);
                     }
 
-                    // Copy values from pending export
+                    // Copy values from Pending Export
                     existingAttrValue.StringValue = avc.StringValue;
                     existingAttrValue.IntValue = avc.IntValue;
                     existingAttrValue.DateTimeValue = avc.DateTimeValue;
@@ -1498,7 +1498,7 @@ public class DriftDetectionWorkflowTests
         var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
             .WithStringAttribute("displayName"));
 
-        // Get attributes for sync rule
+        // Get attributes for Synchronisation Rule
         var testUserType = _harness.GetObjectType("TestSystem", "User");
         var csoDisplayName = testUserType.Attributes.First(a => a.Name == "displayName");
         var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
@@ -1588,7 +1588,7 @@ public class DriftDetectionWorkflowTests
         var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
             .WithStringAttribute("cn"));
 
-        // Get attributes for sync rules
+        // Get attributes for Synchronisation Rules
         var sourceUserType = _harness.GetObjectType("Source", "User");
         var targetUserType = _harness.GetObjectType("Target", "User");
 
@@ -1646,7 +1646,7 @@ public class DriftDetectionWorkflowTests
         ClearPendingExports();
 
         var beforeDrift = await _harness.TakeSnapshotAsync("Before Drift");
-        Assert.That(beforeDrift.PendingExportCount, Is.EqualTo(0), "Setup: No pending exports before drift");
+        Assert.That(beforeDrift.PendingExportCount, Is.EqualTo(0), "Setup: No Pending Exports before drift");
 
         // Step 2: Simulate unauthorised change directly in Target (drift)
         var targetSystem = _harness.GetConnectedSystem("Target");
@@ -1676,17 +1676,17 @@ public class DriftDetectionWorkflowTests
         await _harness.ExecuteDeltaSyncAsync("Target");
         var afterDriftDetection = await _harness.TakeSnapshotAsync("After Drift Detection");
 
-        // Assert: Corrective pending export should be created
+        // Assert: Corrective Pending Export should be created
         Assert.That(afterDriftDetection.PendingExportCount, Is.GreaterThan(0),
-            "Drift detection should create corrective pending export(s) - " +
+            "Drift detection should create corrective Pending Export(s) - " +
             "if this fails, check that MVO.Type is loaded in GetConnectedSystemObjectsModifiedSinceAsync");
 
-        // Verify the pending export has the correct expected value
+        // Verify the Pending Export has the correct expected value
         var pendingExports = _harness.SyncRepo.PendingExports.Values
             .Where(pe => pe.ConnectedSystemId == targetSystem.Id)
             .ToList();
 
-        Assert.That(pendingExports.Count, Is.EqualTo(1), "Should have one corrective pending export");
+        Assert.That(pendingExports.Count, Is.EqualTo(1), "Should have one corrective Pending Export");
 
         var correctiveExport = pendingExports.First();
         var cnChange = correctiveExport.AttributeValueChanges

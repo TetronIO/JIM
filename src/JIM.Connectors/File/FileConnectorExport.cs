@@ -35,11 +35,11 @@ internal class FileConnectorExport
 
     internal List<ConnectedSystemExportResult> Execute()
     {
-        _logger.Debug("FileConnectorExport.Execute: Starting export of {Count} pending exports", _pendingExports.Count);
+        _logger.Debug("FileConnectorExport.Execute: Starting export of {Count} Pending Exports", _pendingExports.Count);
 
         if (_pendingExports.Count == 0)
         {
-            _logger.Information("FileConnectorExport.Execute: No pending exports to process");
+            _logger.Information("FileConnectorExport.Execute: No Pending Exports to process");
             return new List<ConnectedSystemExportResult>();
         }
 
@@ -55,29 +55,29 @@ internal class FileConnectorExport
         if (!string.IsNullOrEmpty(exportDir) && !Directory.Exists(exportDir))
             Directory.CreateDirectory(exportDir);
 
-        // Determine the External ID attribute name from the pending exports' schema metadata
+        // Determine the External ID attribute name from the Pending Exports' schema metadata
         var externalIdAttributeName = FindExternalIdAttributeName();
         if (string.IsNullOrEmpty(externalIdAttributeName))
         {
-            _logger.Error("FileConnectorExport.Execute: Could not determine External ID attribute from pending exports. Cannot proceed with full-state export.");
+            _logger.Error("FileConnectorExport.Execute: Could not determine External ID attribute from Pending Exports. Cannot proceed with full-state export.");
             return _pendingExports.Select(_ => ConnectedSystemExportResult.Failed("No External ID attribute configured for this Connected System.")).ToList();
         }
 
         _logger.Debug("FileConnectorExport.Execute: Using External ID attribute '{ExternalIdAttribute}'", externalIdAttributeName);
 
-        // Load existing file content first so we can merge its headers with the pending exports' attributes
+        // Load existing file content first so we can merge its headers with the Pending Exports' attributes
         var existingFileHeaders = new List<string>();
         var existingRows = LoadExistingFileContent(exportFilePath, delimiter, externalIdAttributeName, existingFileHeaders);
 
-        // Determine schema columns by merging existing file headers with the pending exports' attribute metadata
+        // Determine schema columns by merging existing file headers with the Pending Exports' attribute metadata
         var attributeColumns = CollectAttributeColumns(existingFileHeaders);
         if (attributeColumns.Count == 0)
         {
-            _logger.Warning("FileConnectorExport.Execute: No attribute columns found in pending exports or existing file");
-            return _pendingExports.Select(_ => ConnectedSystemExportResult.Failed("No attributes found in pending exports.")).ToList();
+            _logger.Warning("FileConnectorExport.Execute: No attribute columns found in Pending Exports or existing file");
+            return _pendingExports.Select(_ => ConnectedSystemExportResult.Failed("No attributes found in Pending Exports.")).ToList();
         }
 
-        // Process each pending export and build results
+        // Process each Pending Export and build results
         var results = new List<ConnectedSystemExportResult>();
         var createdCount = 0;
         var updatedCount = 0;
@@ -108,7 +108,7 @@ internal class FileConnectorExport
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "FileConnectorExport.Execute: Error processing pending export {PendingExportId}", pendingExport.Id);
+                _logger.Error(ex, "FileConnectorExport.Execute: Error processing Pending Export {PendingExportId}", pendingExport.Id);
                 results.Add(ConnectedSystemExportResult.Failed($"Error processing export: {ex.Message}"));
             }
         }
@@ -124,7 +124,7 @@ internal class FileConnectorExport
     }
 
     /// <summary>
-    /// Finds the External ID attribute name from the pending exports' attribute metadata.
+    /// Finds the External ID attribute name from the Pending Exports' attribute metadata.
     /// </summary>
     private string? FindExternalIdAttributeName()
     {
@@ -158,7 +158,7 @@ internal class FileConnectorExport
 
     /// <summary>
     /// Collects all attribute column names by merging existing file headers with the
-    /// pending exports' attribute metadata, in alphabetical order.
+    /// Pending Exports' attribute metadata, in alphabetical order.
     /// This ensures updates and deletes don't lose columns that were in the original file.
     /// </summary>
     private List<string> CollectAttributeColumns(List<string> existingFileHeaders)
@@ -171,7 +171,7 @@ internal class FileConnectorExport
             columns.Add(header);
         }
 
-        // Include columns from the pending exports' attribute metadata
+        // Include columns from the Pending Exports' attribute metadata
         foreach (var export in _pendingExports)
         {
             foreach (var attrChange in export.AttributeValueChanges)
@@ -264,7 +264,7 @@ internal class FileConnectorExport
     }
 
     /// <summary>
-    /// Processes a single pending export, applying changes to the existing rows dictionary.
+    /// Processes a single Pending Export, applying changes to the existing rows dictionary.
     /// Returns an ConnectedSystemExportResult with the External ID for Create operations.
     /// </summary>
     private ConnectedSystemExportResult ProcessPendingExport(
@@ -356,7 +356,7 @@ internal class FileConnectorExport
     }
 
     /// <summary>
-    /// Gets the External ID value from a pending export.
+    /// Gets the External ID value from a Pending Export.
     /// For Updates/Deletes, uses the CSO's External ID attribute value.
     /// For Creates, finds the External ID value in the attribute changes.
     /// </summary>
@@ -382,7 +382,7 @@ internal class FileConnectorExport
     }
 
     /// <summary>
-    /// Applies attribute value changes from a pending export to a row dictionary.
+    /// Applies attribute value changes from a Pending Export to a row dictionary.
     /// </summary>
     private static void ApplyAttributeChanges(
         Dictionary<string, string> row,
@@ -408,7 +408,7 @@ internal class FileConnectorExport
 
     /// <summary>
     /// Applies full state from the CSO's current attribute values to the row,
-    /// for any attributes not already present from the pending export changes.
+    /// for any attributes not already present from the Pending Export changes.
     /// This ensures the file has complete attribute data for each row.
     /// </summary>
     private void ApplyCsoFullState(
@@ -424,7 +424,7 @@ internal class FileConnectorExport
             if (attrValue.Attribute?.Name == null)
                 continue;
 
-            // Don't overwrite values that were explicitly set by the pending export changes
+            // Don't overwrite values that were explicitly set by the Pending Export changes
             if (row.ContainsKey(attrValue.Attribute.Name))
                 continue;
 

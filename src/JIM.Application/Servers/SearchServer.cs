@@ -48,7 +48,7 @@ public class SearchServer
     }
 
     /// <summary>
-    /// Attempts to retrieve a default predefined search for a given metaverse object type
+    /// Attempts to retrieve a default predefined search for a given Metaverse Object Type
     /// </summary>
     public async Task<PredefinedSearch?> GetPredefinedSearchAsync(MetaverseObjectType metaverseObjectType)
     {

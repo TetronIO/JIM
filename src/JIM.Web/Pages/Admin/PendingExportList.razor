@@ -17,7 +17,7 @@
 <MudText Typo="Typo.h4"><span>Pending Exports:</span> <span class="mud-primary-text">@_connectedSystemHeader?.Name</span></MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
-    Pending exports are changes that need to be applied to the connected system. These are created when metaverse objects
+    Pending Exports are changes that need to be applied to the Connected System. These are created when Metaverse Objects
     change and need to be synchronised to this target system.
 </MudText>
 
@@ -171,7 +171,7 @@
             </MudTd>
         </RowTemplate>
         <NoRecordsContent>
-            <MudText>There are no pending exports for this connected system.</MudText>
+            <MudText>There are no Pending Exports for this Connected System.</MudText>
         </NoRecordsContent>
         <PagerContent>
             <MudTablePager />
@@ -210,6 +210,7 @@ else
         _breadcrumbs = new List<BreadcrumbItem>
         {
             new("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new("Administration", href: "/admin"),
             new("Connected Systems", href: "/admin/connected-systems/"),
             new(_connectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(_connectedSystemHeader)),
             new("Pending Exports", href: null, disabled: true)
