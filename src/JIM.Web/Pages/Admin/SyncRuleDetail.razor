@@ -35,7 +35,8 @@
 }
 else if (_syncRule != null)
 {
-    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" TabPanelsClass="pt-5" Class="mt-2" Outlined="true">
+    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" TabPanelsClass="pt-5" Class="mt-2" Outlined="true"
+                      @bind-ActivePanelIndex="_activeTabIndex">
 
         <MudTabPanel Text="Details">
             <SyncRuleDetailsTab SyncRule="_syncRule"
@@ -73,7 +74,9 @@ else if (_syncRule != null)
 
     </NavigableMudTabs>
 
-    @* Persistent save bar - applies to the whole rule regardless of the active tab *@
+    @* Save bar - applies to the whole rule from any editing tab, but not the Danger Zone tab (which has its own delete action) *@
+    @if (!IsDangerZoneTabActive)
+    {
     <div class="mt-6">
         @if (_syncRule.Validate().Count > 0)
         {
@@ -94,6 +97,7 @@ else if (_syncRule != null)
             Disabled="!_syncRule.IsValid()" DropShadow="false">@(_syncRule.Id == 0 ? "Create" : "Update") Sync Rule
         </MudButton>
     </div>
+    }
 }
 
 @code {
@@ -111,6 +115,12 @@ else if (_syncRule != null)
     private List<MetaverseObjectType>? _metaverseObjectTypes;
     private bool _loaded;
     private int? _loadedId;
+    private int _activeTabIndex;
+
+    // The Danger Zone tab is the last panel and only exists for an existing rule (Details, Matching, Scope,
+    // Attribute Flow precede it). The save bar has no meaning there, so it is hidden when that tab is active.
+    private const int DangerZoneTabIndex = 4;
+    private bool IsDangerZoneTabActive => _syncRule is { Id: > 0 } && _activeTabIndex == DangerZoneTabIndex;
 
     // A single JimApplication (and its DbContext) is held for the whole edit session. The rule is loaded
     // change-tracked and every tab mutates that tracked graph, so the final save lets EF Core diff and
