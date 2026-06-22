@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using DynamicExpresso.Exceptions;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
@@ -166,68 +167,88 @@ public partial class SyncEngine
             return;
         }
 
+        var csAttributeDictionary = BuildCsoAttributeDictionary(cso, csoType);
+
+        Log.Debug("ProcessExpressionMapping: Evaluating expression for CSO {CsoId}. Expression: '{Expression}', Available attributes: [{Attributes}]",
+            cso.Id, source.Expression, string.Join(", ", csAttributeDictionary.Keys));
+
+        var context = new ExpressionContext(
+            metaverseAttributes: null,
+            connectedSystemAttributes: csAttributeDictionary);
+
+        // Only the evaluation itself is guarded. A thrown expression must be surfaced as an errored
+        // object, never swallowed and never conflated with a deliberate null (which clears the value).
+        // Known expression failure modes are rethrown as SyncExpressionEvaluationException for the worker
+        // to record as an ExpressionEvaluationError RPEI; anything outside the enumerated set propagates
+        // to the worker's UnhandledError handler rather than being mislabelled.
+        object? result;
         try
         {
-            var csAttributeDictionary = BuildCsoAttributeDictionary(cso, csoType);
+            result = expressionEvaluator.Evaluate(source.Expression!, context);
+        }
+        catch (DynamicExpressoException ex) { throw BuildExpressionEvaluationException(syncRuleMapping.TargetMetaverseAttribute?.Name, source, ex); }
+        catch (ArgumentException ex) { throw BuildExpressionEvaluationException(syncRuleMapping.TargetMetaverseAttribute?.Name, source, ex); }
+        catch (FormatException ex) { throw BuildExpressionEvaluationException(syncRuleMapping.TargetMetaverseAttribute?.Name, source, ex); }
+        catch (OverflowException ex) { throw BuildExpressionEvaluationException(syncRuleMapping.TargetMetaverseAttribute?.Name, source, ex); }
+        catch (InvalidOperationException ex) { throw BuildExpressionEvaluationException(syncRuleMapping.TargetMetaverseAttribute?.Name, source, ex); }
+        catch (ArithmeticException ex) { throw BuildExpressionEvaluationException(syncRuleMapping.TargetMetaverseAttribute?.Name, source, ex); }
+        catch (InvalidCastException ex) { throw BuildExpressionEvaluationException(syncRuleMapping.TargetMetaverseAttribute?.Name, source, ex); }
+        catch (KeyNotFoundException ex) { throw BuildExpressionEvaluationException(syncRuleMapping.TargetMetaverseAttribute?.Name, source, ex); }
 
-            Log.Debug("ProcessExpressionMapping: Evaluating expression for CSO {CsoId}. Expression: '{Expression}', Available attributes: [{Attributes}]",
-                cso.Id, source.Expression, string.Join(", ", csAttributeDictionary.Keys));
+        if (result == null)
+        {
+            Log.Debug("ProcessExpressionMapping: Expression '{Expression}' for CSO {CsoId} returned null. Available attributes: [{Attributes}]",
+                source.Expression, cso.Id, string.Join(", ", csAttributeDictionary.Keys));
 
-            var context = new ExpressionContext(
-                metaverseAttributes: null,
-                connectedSystemAttributes: csAttributeDictionary);
+            var mvoAttributeValuesToDelete = mvo.AttributeValues.Where(q => q.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id);
+            mvo.PendingAttributeValueRemovals.AddRange(mvoAttributeValuesToDelete);
+            return;
+        }
 
-            var result = expressionEvaluator.Evaluate(source.Expression!, context);
+        if (result is string[] stringArrayResult)
+        {
+            ProcessExpressionArrayResult(mvo, syncRuleMapping.TargetMetaverseAttribute!, stringArrayResult, contributingSystemId);
+        }
+        else if (result is IEnumerable<string> stringEnumerableResult && result is not string)
+        {
+            ProcessExpressionArrayResult(mvo, syncRuleMapping.TargetMetaverseAttribute!, stringEnumerableResult.ToArray(), contributingSystemId);
+        }
+        else
+        {
+            var existingMvoValue = mvo.AttributeValues.SingleOrDefault(
+                mvoav => mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id);
 
-            if (result == null)
+            var resultString = result.ToString();
+            var valueChanged = existingMvoValue == null ||
+                !string.Equals(existingMvoValue.StringValue, resultString, StringComparison.Ordinal);
+
+            if (valueChanged)
             {
-                Log.Debug("ProcessExpressionMapping: Expression '{Expression}' for CSO {CsoId} returned null. Available attributes: [{Attributes}]",
-                    source.Expression, cso.Id, string.Join(", ", csAttributeDictionary.Keys));
+                if (existingMvoValue != null)
+                    mvo.PendingAttributeValueRemovals.Add(existingMvoValue);
 
-                var mvoAttributeValuesToDelete = mvo.AttributeValues.Where(q => q.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id);
-                mvo.PendingAttributeValueRemovals.AddRange(mvoAttributeValuesToDelete);
-                return;
-            }
+                var newMvoValue = CreateMvoAttributeValueFromExpressionResult(
+                    mvo, syncRuleMapping.TargetMetaverseAttribute!, result, contributingSystemId);
 
-            if (result is string[] stringArrayResult)
-            {
-                ProcessExpressionArrayResult(mvo, syncRuleMapping.TargetMetaverseAttribute!, stringArrayResult, contributingSystemId);
-            }
-            else if (result is IEnumerable<string> stringEnumerableResult && result is not string)
-            {
-                ProcessExpressionArrayResult(mvo, syncRuleMapping.TargetMetaverseAttribute!, stringEnumerableResult.ToArray(), contributingSystemId);
-            }
-            else
-            {
-                var existingMvoValue = mvo.AttributeValues.SingleOrDefault(
-                    mvoav => mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id);
-
-                var resultString = result.ToString();
-                var valueChanged = existingMvoValue == null ||
-                    !string.Equals(existingMvoValue.StringValue, resultString, StringComparison.Ordinal);
-
-                if (valueChanged)
+                if (newMvoValue != null)
                 {
-                    if (existingMvoValue != null)
-                        mvo.PendingAttributeValueRemovals.Add(existingMvoValue);
-
-                    var newMvoValue = CreateMvoAttributeValueFromExpressionResult(
-                        mvo, syncRuleMapping.TargetMetaverseAttribute!, result!, contributingSystemId);
-
-                    if (newMvoValue != null)
-                    {
-                        mvo.PendingAttributeValueAdditions.Add(newMvoValue);
-                        Log.Debug("ProcessExpressionMapping: Expression-based mapping set {AttributeName} to '{Value}' on MVO {MvoId}",
-                            syncRuleMapping.TargetMetaverseAttribute!.Name, resultString, mvo.Id);
-                    }
+                    mvo.PendingAttributeValueAdditions.Add(newMvoValue);
+                    Log.Debug("ProcessExpressionMapping: Expression-based mapping set {AttributeName} to '{Value}' on MVO {MvoId}",
+                        syncRuleMapping.TargetMetaverseAttribute!.Name, resultString, mvo.Id);
                 }
             }
         }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "ProcessExpressionMapping: Error evaluating expression '{Expression}' for CSO {CsoId}: {Error}",
-                source.Expression, cso.Id, ex.Message);
-        }
+    }
+
+    /// <summary>
+    /// Builds a <see cref="SyncExpressionEvaluationException"/> carrying the failing expression and the
+    /// target metaverse attribute name, so the worker can record an ExpressionEvaluationError RPEI for
+    /// the object being processed.
+    /// </summary>
+    private static SyncExpressionEvaluationException BuildExpressionEvaluationException(
+        string? targetAttributeName, SyncRuleMappingSource source, Exception innerException)
+    {
+        return new SyncExpressionEvaluationException(source.Expression, targetAttributeName, innerException);
     }
 
     private static void ProcessTextAttribute(

@@ -294,7 +294,7 @@ When an MVO has attributes from multiple sources, which value gets exported?
 
 The MVO is the single source of truth. Attribute priority is an inbound concern; outbound sync simply exports the authoritative MVO value. There's no additional complexity needed here.
 
-> **See also**: [DRIFT_DETECTION_AND_ATTRIBUTE_PRIORITY.md](../doing/DRIFT_DETECTION_AND_ATTRIBUTE_PRIORITY.md) for the detailed design of how attribute priority is determined when multiple sources contribute to the same attribute (Issue #91).
+> **See also**: [ATTRIBUTE_PRIORITY.md](../doing/ATTRIBUTE_PRIORITY.md) for the detailed design of how attribute priority is determined when multiple sources contribute to the same attribute (Issue #91).
 
 ---
 
@@ -1141,5 +1141,6 @@ Phase 4         Phase 5                              Phase 6
 
 ### Related Design Documents
 
-- [DRIFT_DETECTION_AND_ATTRIBUTE_PRIORITY.md](../doing/DRIFT_DETECTION_AND_ATTRIBUTE_PRIORITY.md) - Extends this design with drift detection (re-evaluating exports on inbound sync) and attribute priority (determining authoritative source for multi-contributor scenarios)
+- [DRIFT_DETECTION.md](DRIFT_DETECTION.md) - Extends this design with drift detection: re-evaluating exports on inbound sync to detect and remediate unauthorised changes (shipped)
+- [ATTRIBUTE_PRIORITY.md](../doing/ATTRIBUTE_PRIORITY.md) - Determining the authoritative source when multiple systems contribute to the same attribute (Issue #91; design approved, implementation deferred)
 - [EXPORT_PERFORMANCE_OPTIMISATION.md](EXPORT_PERFORMANCE_OPTIMISATION.md) - Parallelism and performance optimisation for export execution (Phase 2-4 of Q8)

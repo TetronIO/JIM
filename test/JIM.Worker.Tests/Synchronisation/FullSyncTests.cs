@@ -1848,6 +1848,78 @@ public class FullSyncTests
     }
 
     /// <summary>
+    /// Tests that a thrown inbound attribute-flow expression is surfaced as an ExpressionEvaluationError
+    /// RPEI (never silently swallowed) and that the target metaverse attribute is left untouched (#842).
+    /// </summary>
+    [Test]
+    public async Task InboundExpressionThrows_RecordsExpressionEvaluationErrorRpei_AndLeavesTargetUntouchedAsync()
+    {
+        // get a stub import sync rule and join CSOs to existing MVOs via EmployeeId
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+        var objectMatchingRule = new ObjectMatchingRule
+        {
+            Id = 1,
+            SyncRule = importSyncRule,
+            CaseSensitive = true, // Required for in-memory test database (EF.Functions.ILike not supported)
+            TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
+                .Attributes.Single(q => q.Id == (int)MockMetaverseAttributeName.EmployeeId)
+        };
+        objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
+        objectMatchingRule.Sources.Add(new ObjectMatchingRuleSource
+        {
+            Id = 1,
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
+            ConnectedSystemAttribute = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER")
+                .Attributes.Single(q => q.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_ID)
+        });
+        importSyncRule.ObjectMatchingRules.Add(objectMatchingRule);
+
+        // add an expression-based attribute flow mapping to EmployeeStartDate whose expression cannot be
+        // evaluated (it fails to parse), so the evaluator throws when the worker flows attributes.
+        var mvUserType = MetaverseObjectTypesData.Single(q => q.Name == "User");
+        var targetAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeStartDate);
+        var badExpressionMapping = new SyncRuleMapping
+        {
+            Id = 102,
+            SyncRule = importSyncRule,
+            TargetMetaverseAttribute = targetAttribute,
+            TargetMetaverseAttributeId = targetAttribute.Id
+        };
+        badExpressionMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 1002,
+            Expression = "@@@ not a valid expression @@@",
+            Order = 1
+        });
+        importSyncRule.AttributeFlowRules.Add(badExpressionMapping);
+
+        // verify the target MVO does NOT have EmployeeStartDate before sync
+        var existingMvo = MetaverseObjectsData[0];
+        Assert.That(existingMvo.AttributeValues.SingleOrDefault(a => a.AttributeId == (int)MockMetaverseAttributeName.EmployeeStartDate),
+            Is.Null, "Expected MVO to NOT have EmployeeStartDate before sync.");
+
+        // start the test
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // verify the activity recorded an ExpressionEvaluationError (the failure was surfaced, not swallowed)
+        var errorItems = activity.RunProfileExecutionItems
+            .Where(item => item.ErrorType == ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError)
+            .ToList();
+        Assert.That(errorItems, Is.Not.Empty, "Expected an ExpressionEvaluationError RPEI for the thrown inbound expression.");
+        Assert.That(errorItems[0].ErrorMessage, Does.Contain(targetAttribute.Name),
+            "Expected the error message to identify the target attribute.");
+
+        // verify the thrown expression did NOT flow a value onto the MVO (target left untouched)
+        Assert.That(existingMvo.AttributeValues.Any(a => a.AttributeId == (int)MockMetaverseAttributeName.EmployeeStartDate),
+            Is.False, "A thrown expression must not flow a value onto the target attribute.");
+    }
+
+    /// <summary>
     /// Tests that no pending changes are created when CSO attribute values match MVO attribute values (idempotency).
     /// This verifies that Full Sync doesn't create unnecessary pending changes when values are already in sync.
     /// </summary>

@@ -8,6 +8,7 @@ using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Search;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.PostgresData;
 using JIM.Utilities;
@@ -736,6 +737,61 @@ public class ExportEvaluationTests
             "PendingExport should be a Create operation");
         Assert.That(pendingExport.ConnectedSystemObjectId, Is.EqualTo(newCso.Id),
             "PendingExport should reference the newly created CSO");
+    }
+
+    /// <summary>
+    /// Tests that a thrown outbound (export) attribute-flow expression is surfaced as a
+    /// SyncExpressionEvaluationException rather than being silently swallowed (#842).
+    /// </summary>
+    [Test]
+    public void EvaluateExportRulesAsync_WhenExpressionThrows_ThrowsSyncExpressionEvaluationExceptionAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.ProvisionToConnectedSystem = true;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+
+        // add an expression-based export mapping whose expression cannot be parsed, so the evaluator throws
+        var targetCsAttribute = targetUserType.Attributes.First();
+        var badExpressionMapping = new SyncRuleMapping
+        {
+            Id = 9001,
+            SyncRule = exportRule,
+            TargetConnectedSystemAttribute = targetCsAttribute,
+            TargetConnectedSystemAttributeId = targetCsAttribute.Id
+        };
+        badExpressionMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 9001,
+            Expression = "@@@ not a valid expression @@@",
+            Order = 1
+        });
+        exportRule.AttributeFlowRules.Add(badExpressionMapping);
+
+        // Ensure no CSO exists for this MVO so provisioning (Create) includes all mapped attributes
+        ConnectedSystemObjectsData.RemoveAll(cso => cso.MetaverseObjectId == mvo.Id && cso.ConnectedSystemId == targetSystem.Id);
+
+        var changedAttributes = mvo.AttributeValues.ToList();
+
+        // Act + Assert — the failure is surfaced, not swallowed
+        var ex = Assert.ThrowsAsync<SyncExpressionEvaluationException>(async () =>
+            await Jim.ExportEvaluation.EvaluateExportRulesAsync(mvo, changedAttributes));
+        Assert.That(ex!.TargetAttributeName, Is.EqualTo(targetCsAttribute.Name));
+        Assert.That(ex.Expression, Is.EqualTo("@@@ not a valid expression @@@"));
     }
 
     /// <summary>

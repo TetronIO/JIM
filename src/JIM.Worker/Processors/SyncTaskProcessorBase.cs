@@ -551,6 +551,23 @@ public abstract class SyncTaskProcessorBase
             Log.Warning("ProcessActiveConnectedSystemObjectAsync: Join error for {Cso}: {Message}",
                 connectedSystemObject, joinEx.Message);
         }
+        catch (SyncExpressionEvaluationException expressionEx)
+        {
+            // An inbound attribute-flow expression threw while evaluating. This is a configuration/data
+            // issue with the sync rule's expression, not a JIM bug: error the object (so it is surfaced
+            // loudly and never silently swallowed) but let the activity continue for other objects. The
+            // CSO's pending attribute changes are discarded (never applied), so the MVO is left untouched.
+            var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+            runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+            runProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
+            runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError;
+            runProfileExecutionItem.ErrorMessage = BuildExpressionEvaluationErrorMessage(expressionEx);
+            runProfileExecutionItem.ErrorStackTrace = expressionEx.StackTrace;
+            _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+            Log.Error(expressionEx, "ProcessActiveConnectedSystemObjectAsync: Expression evaluation error during pass 2 for {Cso}. Target attribute '{Attribute}', expression '{Expression}'.",
+                connectedSystemObject, LogSanitiser.Sanitise(expressionEx.TargetAttributeName), LogSanitiser.Sanitise(expressionEx.Expression));
+        }
         catch (Exception e)
         {
             // Create execution item for unhandled error tracking
@@ -565,6 +582,20 @@ public abstract class SyncTaskProcessorBase
             Log.Error(e, "ProcessActiveConnectedSystemObjectAsync: Unhandled error during pass 2 for {Cso}.",
                 connectedSystemObject);
         }
+    }
+
+    /// <summary>
+    /// Builds the RPEI error message for a failed attribute-flow expression. The expression is sanitised
+    /// (CWE-117) because it is administrator-authored but still untrusted; the inner exception message
+    /// (from the expression evaluator) describes the concrete failure.
+    /// </summary>
+    private static string BuildExpressionEvaluationErrorMessage(SyncExpressionEvaluationException expressionEx, Guid? metaverseObjectId = null)
+    {
+        var attribute = expressionEx.TargetAttributeName ?? "(unknown)";
+        var expression = LogSanitiser.Sanitise(expressionEx.Expression) ?? "(none)";
+        var reason = expressionEx.InnerException?.Message ?? expressionEx.Message;
+        var subject = metaverseObjectId.HasValue ? $" for Metaverse Object {metaverseObjectId.Value}" : string.Empty;
+        return $"Expression evaluation failed{subject} flowing to attribute '{attribute}': {reason}. Expression: {expression}";
     }
 
     /// <summary>
@@ -1191,14 +1222,33 @@ public abstract class SyncTaskProcessorBase
         // Pending Exports and provisioning CSOs are deferred (deferSave=true) and collected for batch saving
         using (Diagnostics.Sync.StartSpan("EvaluateExportRules"))
         {
-            var result = await _syncServer.EvaluateExportRulesWithNoNetChangeDetectionAsync(
-                mvo,
-                changedAttributes,
-                _connectedSystem,
-                _exportEvaluationCache,
-                deferSave: true,
-                removedAttributes: removedAttributes,
-                existingPendingExports: _pendingExportsToCreate);
+            ExportEvaluationResult result;
+            try
+            {
+                result = await _syncServer.EvaluateExportRulesWithNoNetChangeDetectionAsync(
+                    mvo,
+                    changedAttributes,
+                    _connectedSystem,
+                    _exportEvaluationCache,
+                    deferSave: true,
+                    removedAttributes: removedAttributes,
+                    existingPendingExports: _pendingExportsToCreate);
+            }
+            catch (SyncExpressionEvaluationException expressionEx)
+            {
+                // An outbound export expression threw while evaluating. Error the Metaverse Object loudly
+                // (never silently swallowed) but let the activity continue. The export evaluation aborted
+                // before any pending exports were collected, so no partial export state is persisted.
+                var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+                runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError;
+                runProfileExecutionItem.ErrorMessage = BuildExpressionEvaluationErrorMessage(expressionEx, mvo.Id);
+                runProfileExecutionItem.ErrorStackTrace = expressionEx.StackTrace;
+                _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+                Log.Error(expressionEx, "EvaluateOutboundExportsAsync: Expression evaluation error evaluating exports for MVO {MvoId}. Target attribute '{Attribute}', expression '{Expression}'.",
+                    mvo.Id, LogSanitiser.Sanitise(expressionEx.TargetAttributeName), LogSanitiser.Sanitise(expressionEx.Expression));
+                return;
+            }
 
             // Aggregate no-net-change counts for statistics
             _totalCsoAlreadyCurrentCount += result.CsoAlreadyCurrentCount;
