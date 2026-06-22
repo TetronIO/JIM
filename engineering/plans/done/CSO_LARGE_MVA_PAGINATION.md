@@ -221,7 +221,7 @@ ConnectedSystemObjectDetailDto
 
 Convert `CsoMvaDialog` from client-side filtering to `MudTable` `ServerData` callback:
 
-- Dialog receives only the attribute name, CSO ID, connected system ID, and total count
+- Dialog receives only the attribute name, CSO ID, Connected System ID, and total count
 - On open (and on search/page change), calls the application layer which calls the paginated repository method
 - Search and pagination happen in the database
 - Memory usage is bounded to one page of results

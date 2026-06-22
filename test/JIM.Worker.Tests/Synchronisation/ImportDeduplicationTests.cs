@@ -63,15 +63,15 @@ public class ImportDeduplicationTests
         TestUtilities.SetEnvironmentVariables();
         InitiatedBy = TestUtilities.GetInitiatedBy();
 
-        // set up the connected systems mock
+        // set up the Connected Systems mock
         ConnectedSystemsData = TestUtilities.GetConnectedSystemData();
         MockDbSetConnectedSystems = ConnectedSystemsData.BuildMockDbSet();
 
-        // setup up the connected system run profiles mock
+        // setup up the Connected System Run Profiles mock
         ConnectedSystemRunProfilesData = TestUtilities.GetConnectedSystemRunProfileData();
         MockDbSetConnectedSystemRunProfiles = ConnectedSystemRunProfilesData.BuildMockDbSet();
 
-        // set up the connected system object types mock. this acts as the persisted schema in JIM
+        // set up the Connected System Object Types mock. this acts as the persisted schema in JIM
         ConnectedSystemObjectTypesData = TestUtilities.GetConnectedSystemObjectTypeData();
         MockDbSetConnectedSystemObjectTypes = ConnectedSystemObjectTypesData.BuildMockDbSet();
 
@@ -88,7 +88,7 @@ public class ImportDeduplicationTests
         ServiceSettingsData = TestUtilities.GetServiceSettingsData();
         MockDbSetServiceSettings = ServiceSettingsData.BuildMockDbSet();
 
-        // set up the pending exports mock (empty - import tests don't have pending exports to reconcile)
+        // set up the Pending Exports mock (empty - import tests don't have Pending Exports to reconcile)
         PendingExportsData = new List<PendingExport>();
         MockDbSetPendingExports = PendingExportsData.BuildMockDbSet();
 
@@ -107,7 +107,7 @@ public class ImportDeduplicationTests
         SyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First());
         Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
 
-        // Set up the connected system objects mock
+        // Set up the Connected System Objects mock
         ConnectedSystemObjectsData = new List<ConnectedSystemObject>();
         var mockDbSetConnectedSystemObject = ConnectedSystemObjectsData.BuildMockDbSet();
         mockDbSetConnectedSystemObject.Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback((IEnumerable<ConnectedSystemObject> entities) =>
@@ -199,7 +199,7 @@ public class ImportDeduplicationTests
             new List<string> { "CERT-A", "CERT-B", "CERT-A", "CERT-C", "CERT-B" }
         ));
 
-        // Use the JIM API to get the connected system with all includes
+        // Use the JIM API to get the Connected System with all includes
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         Assert.That(connectedSystem, Is.Not.Null);
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);

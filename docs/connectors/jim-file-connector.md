@@ -121,14 +121,14 @@ JIM's File Connector configurations would then point at:
 
 ## Schema Discovery
 
-When you configure a File Connector connected system and trigger schema discovery, JIM performs the following steps:
+When you configure a File Connector Connected System and trigger schema discovery, JIM performs the following steps:
 
 1. **Reads the header row**<br /> Column names become attribute names in the schema.
 2. **Detects multi-valued attributes**<br /> If the same column name appears more than once in the header, the attribute is marked as multi-valued.
 3. **Infers data types**<br /> JIM reads up to 50 data rows and attempts to parse each column's values as Number, Boolean, Guid, or DateTime. If none of these match, the attribute defaults to Text.
 4. **Discovers object types**<br /> If an Object Type Column is configured, JIM reads through the file to find all unique object type values. Otherwise, it uses the fixed Object Type setting.
 
-In **Export Only** mode where no file exists yet, schema discovery creates a minimal schema with just the specified object type. Attributes are defined later by synchronisation rules.
+In **Export Only** mode where no file exists yet, schema discovery creates a minimal schema with just the specified object type. Attributes are defined later by Synchronisation Rules.
 
 ## Troubleshooting
 

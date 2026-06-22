@@ -97,7 +97,7 @@ public class GroupMembershipSyncTests
         await _harness.ExecuteFullSyncAsync("Source");
         var afterSourceSync = await _harness.TakeSnapshotAsync("After Source Sync");
 
-        // Assert: MVOs created and pending exports generated (6 users + 1 group)
+        // Assert: MVOs created and Pending Exports generated (6 users + 1 group)
         Assert.That(afterSourceSync.MvoCount, Is.EqualTo(ReferenceUsers.Count + 1),
             "Should have MVOs for all users and the group");
 
@@ -114,7 +114,7 @@ public class GroupMembershipSyncTests
             }
         }
 
-        // Debug: Check pending export for group
+        // Debug: Check Pending Export for group
         var groupPeDb = _harness.SyncRepo.PendingExports.Values
             .FirstOrDefault(pe => pe.AttributeValueChanges.Any(avc => avc.Attribute != null && avc.Attribute.Name == "cn" && avc.StringValue == "Project-Alpha"));
         Console.WriteLine($"Group Pending Export found in DB: {groupPeDb != null}");
@@ -127,22 +127,22 @@ public class GroupMembershipSyncTests
             }
         }
 
-        // Assert pending exports generated for both users and group (7 total, or just 1 for group if users already confirmed)
+        // Assert Pending Exports generated for both users and group (7 total, or just 1 for group if users already confirmed)
         Assert.That(afterSourceSync.PendingExportCount, Is.GreaterThanOrEqualTo(1),
-            "Should have at least pending export for the group");
+            "Should have at least Pending Export for the group");
 
-        // Verify group pending export exists
+        // Verify group Pending Export exists
         var groupPe = afterSourceSync.PendingExports
             .FirstOrDefault(pe => pe.AttributeValueChanges.Any(av => av.AttributeInfo?.Name == "cn" && av.StringValue == "Project-Alpha"));
 
-        Assert.That(groupPe, Is.Not.Null, "Should have a pending export for the group");
+        Assert.That(groupPe, Is.Not.Null, "Should have a Pending Export for the group");
 
         // Log member changes for diagnostic purposes
-        // Note: Reference attribute flow depends on sync ordering - when all objects are imported/synced together,
+        // Note: Reference Attribute Flow depends on sync ordering - when all objects are imported/synced together,
         // the group's references might not have MetaverseObject populated if user CSOs were processed concurrently.
         // This is a known limitation of the current sync processor implementation.
         var memberChanges = groupPe!.AttributeValueChanges.Where(av => av.AttributeInfo?.Name == "member").ToList();
-        Console.WriteLine($"Group pending export has {memberChanges.Count} member attribute changes");
+        Console.WriteLine($"Group Pending Export has {memberChanges.Count} member attribute changes");
         foreach (var mc in memberChanges)
         {
             Console.WriteLine($"  Member change: ChangeType={mc.ChangeType}, Value={mc.UnresolvedReferenceValue ?? mc.StringValue}");
@@ -152,10 +152,10 @@ public class GroupMembershipSyncTests
         await _harness.ExecuteExportAsync("Target");
         var afterExport = await _harness.TakeSnapshotAsync("After Export");
 
-        // Assert: All pending exports were executed
+        // Assert: All Pending Exports were executed
         var exportedPes = afterExport.GetPendingExportsWithStatus(PendingExportStatus.Exported);
         Assert.That(exportedPes.Count, Is.EqualTo(ReferenceUsers.Count + 1),
-            "All pending exports should be marked as Exported");
+            "All Pending Exports should be marked as Exported");
 
         // Verify the group was exported
         var targetConnector = _harness.GetConnector("Target");
@@ -183,15 +183,15 @@ public class GroupMembershipSyncTests
         var targetCsos = afterConfirmingImport.GetCsos("Target");
         var normalCsos = targetCsos.Where(c => c.Status == ConnectedSystemObjectStatus.Normal).ToList();
 
-        // Note: Due to reference attribute flow complexity, some pending exports may remain
+        // Note: Due to reference Attribute Flow complexity, some Pending Exports may remain
         // unconfirmed if reference resolution created unexpected CSOs or exports.
         Assert.That(normalCsos.Count, Is.GreaterThanOrEqualTo(ReferenceUsers.Count + 1),
             "At least all users and the group should be in Normal status after confirming import");
 
-        // Log any remaining pending exports for diagnostics
+        // Log any remaining Pending Exports for diagnostics
         if (afterConfirmingImport.PendingExportCount > 0)
         {
-            Console.WriteLine($"Note: {afterConfirmingImport.PendingExportCount} pending export(s) remain after confirming import.");
+            Console.WriteLine($"Note: {afterConfirmingImport.PendingExportCount} Pending Export(s) remain after confirming import.");
             foreach (var pe in afterConfirmingImport.PendingExports)
             {
                 Console.WriteLine($"  PE {pe.Id}: Status={pe.Status}, CSO={pe.ConnectedSystemObjectId}");
@@ -280,15 +280,15 @@ public class GroupMembershipSyncTests
         await _harness.ExecuteFullSyncAsync("Source");
         var afterDeltaSync = await _harness.TakeSnapshotAsync("After Delta Sync");
 
-        // Look for pending export with member attribute changes (delta export won't have cn since it didn't change)
+        // Look for Pending Export with member attribute changes (delta export won't have cn since it didn't change)
         var groupPe = afterDeltaSync.PendingExports
             .FirstOrDefault(pe => pe.AttributeValueChanges.Any(av => av.AttributeInfo?.Name == "member"));
 
-        Console.WriteLine($"Group pending export with member changes found: {groupPe != null}");
+        Console.WriteLine($"Group Pending Export with member changes found: {groupPe != null}");
         if (groupPe == null)
         {
-            Console.WriteLine("No pending export with member changes found.");
-            Console.WriteLine("Checking all pending exports...");
+            Console.WriteLine("No Pending Export with member changes found.");
+            Console.WriteLine("Checking all Pending Exports...");
             foreach (var pe in afterDeltaSync.PendingExports)
             {
                 var attrs = string.Join(", ", pe.AttributeNames);
@@ -298,23 +298,23 @@ public class GroupMembershipSyncTests
         else
         {
             var memberChanges = groupPe.AttributeValueChanges.Where(av => av.AttributeInfo?.Name == "member").ToList();
-            Console.WriteLine($"Group pending export has {memberChanges.Count} member changes after delta sync:");
+            Console.WriteLine($"Group Pending Export has {memberChanges.Count} member changes after delta sync:");
             foreach (var mc in memberChanges)
             {
                 Console.WriteLine($"  ChangeType={mc.ChangeType}, Value={mc.UnresolvedReferenceValue ?? mc.StringValue}");
             }
 
             Assert.That(memberChanges.Count, Is.GreaterThan(0),
-                "Group pending export should have at least one member change");
+                "Group Pending Export should have at least one member change");
         }
 
-        // Step 3: Export to Target (if there are any pending exports)
+        // Step 3: Export to Target (if there are any Pending Exports)
         await _harness.ExecuteExportAsync("Target");
         var afterExport = await _harness.TakeSnapshotAsync("After Export");
 
         // Verify exports were processed
         var exportedPes = afterExport.GetPendingExportsWithStatus(PendingExportStatus.Exported);
-        Console.WriteLine($"Total exported pending exports: {exportedPes.Count}");
+        Console.WriteLine($"Total exported Pending Exports: {exportedPes.Count}");
 
         // Check what was exported to the target - look for member attribute changes (cn won't be in delta export)
         var targetConnector = _harness.GetConnector("Target");
@@ -395,7 +395,7 @@ public class GroupMembershipSyncTests
             .WithStringAttribute("cn")
             .WithReferenceAttribute("member", isMultiValued: true));
 
-        // Get attributes for sync rules
+        // Get attributes for Synchronisation Rules
         var sourceUserType = _harness.GetObjectType("Source", "User");
         var sourceGroupType = _harness.GetObjectType("Source", "Group");
         var targetUserType = _harness.GetObjectType("Target", "User");
@@ -417,7 +417,7 @@ public class GroupMembershipSyncTests
         var mvGroupMember = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "member");
         var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type" && a.MetaverseObjectTypes.Any(t => t.Name == "Person"));
 
-        // Create Source import sync rules
+        // Create Source import Synchronisation Rules
         await _harness.CreateSyncRuleAsync(
             "Source User Import",
             "Source",
@@ -440,7 +440,7 @@ public class GroupMembershipSyncTests
                 .WithAttributeFlow(mvGroupCn, sourceGroupCn)
                 .WithAttributeFlow(mvGroupMember, sourceGroupMember));
 
-        // Create Target export sync rules
+        // Create Target export Synchronisation Rules
         await _harness.CreateSyncRuleAsync(
             "Target User Export",
             "Target",

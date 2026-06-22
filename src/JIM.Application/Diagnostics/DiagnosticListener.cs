@@ -86,7 +86,7 @@ public sealed class DiagnosticListener : IDisposable
         // rootSpanId is the unique-per-execution identifier — it's the same string
         // for the root span and every descendant within one trace. Downstream
         // (JIM-Bench) uses it to partition throughput series per sync execution
-        // so two sync runs against the same connected system in the same test
+        // so two sync runs against the same Connected System in the same test
         // run don't get collapsed into one line. Emitted on every span so the
         // join semantics in bench are uniform between root rows (test_operations)
         // and child rows (throughput_samples).

@@ -17,7 +17,7 @@ public class PendingExportHeader
     public PendingExportStatus Status { get; set; }
 
     /// <summary>
-    /// When this pending export was created.
+    /// When this Pending Export was created.
     /// </summary>
     public DateTime CreatedAt { get; set; }
 
@@ -67,7 +67,7 @@ public class PendingExportHeader
     public string? SourceMetaverseObjectDisplayName { get; set; }
 
     /// <summary>
-    /// The number of attribute value changes in this pending export.
+    /// The number of attribute value changes in this Pending Export.
     /// </summary>
     public int AttributeChangeCount { get; set; }
 

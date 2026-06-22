@@ -51,7 +51,7 @@ public class NugatoryWorkOptimisationTests : WorkflowTestBase
             MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
             gracePeriod: TimeSpan.Zero);
 
-        // Create import sync rule WITH attribute flow mappings so attributes get contributed
+        // Create import Synchronisation Rule WITH Attribute Flow mappings so attributes get contributed
         var importRule = await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
         var csoDisplayNameAttr = sourceType.Attributes.First(a => a.Name == "DisplayName");
         var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
@@ -122,14 +122,14 @@ public class NugatoryWorkOptimisationTests : WorkflowTestBase
             "AttributeFlow outcome should NOT be present when MVO is deleted immediately — " +
             "attribute recall is nugatory work and should be skipped (#390)");
 
-        // Verify the RPEI itself has no attribute flow count
+        // Verify the RPEI itself has no Attribute Flow count
         Assert.That(disconnectedRpei.AttributeFlowCount, Is.Null.Or.EqualTo(0),
             "RPEI should have no AttributeFlowCount when recall is skipped");
     }
 
     /// <summary>
-    /// Verifies that no attribute-recall Update pending exports are created when
-    /// an obsolete CSO triggers immediate MVO deletion. Delete pending exports
+    /// Verifies that no attribute-recall Update Pending Exports are created when
+    /// an obsolete CSO triggers immediate MVO deletion. Delete Pending Exports
     /// (from EvaluateMvoDeletionAsync) should still be created.
     /// </summary>
     [Test]
@@ -150,7 +150,7 @@ public class NugatoryWorkOptimisationTests : WorkflowTestBase
             gracePeriod: TimeSpan.Zero,
             triggerConnectedSystemIds: new List<int> { sourceSystem.Id });
 
-        // Create import sync rule with attribute flow mappings
+        // Create import Synchronisation Rule with Attribute Flow mappings
         var importRule = await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
         var csoDisplayNameAttr = sourceType.Attributes.First(a => a.Name == "DisplayName");
         var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
@@ -167,7 +167,7 @@ public class NugatoryWorkOptimisationTests : WorkflowTestBase
             }}
         });
 
-        // Create export sync rule for target
+        // Create export Synchronisation Rule for target
         await CreateExportSyncRuleAsync(targetSystem.Id, targetType, mvType, "AD Export");
         await CreateMatchingRuleAsync(targetType, mvType, "EmployeeId");
 
@@ -189,7 +189,7 @@ public class NugatoryWorkOptimisationTests : WorkflowTestBase
         targetCso.DateJoined = DateTime.UtcNow;
         SyncRepo.RefreshCsoMvoIndex(targetCso);
 
-        // Clear any pending exports from the Full Sync
+        // Clear any Pending Exports from the Full Sync
         SyncRepo.ClearAllPendingExports();
 
         // Mark source CSO as Obsolete and run Delta Sync
@@ -205,23 +205,23 @@ public class NugatoryWorkOptimisationTests : WorkflowTestBase
         Assert.That(SyncRepo.MetaverseObjects.GetValueOrDefault(mvoId), Is.Null,
             "MVO should be deleted immediately");
 
-        // Assert: Only Delete pending exports should exist (for the target CSO).
-        // No Update pending exports from attribute recall should be present.
+        // Assert: Only Delete Pending Exports should exist (for the target CSO).
+        // No Update Pending Exports from attribute recall should be present.
         var allPendingExports = SyncRepo.PendingExports.Values.ToList();
         var updatePendingExports = allPendingExports
             .Where(pe => pe.ChangeType == JIM.Models.Transactional.PendingExportChangeType.Update)
             .ToList();
         Assert.That(updatePendingExports, Has.Count.EqualTo(0),
-            "No Update pending exports should exist — attribute recall was skipped because " +
+            "No Update Pending Exports should exist — attribute recall was skipped because " +
             "the MVO is about to be deleted immediately (#390)");
 
-        // Delete pending exports for the target CSO should still exist
+        // Delete Pending Exports for the target CSO should still exist
         var targetDeletePendingExports = allPendingExports
             .Where(pe => pe.ChangeType == JIM.Models.Transactional.PendingExportChangeType.Delete
                         && pe.ConnectedSystemId == targetSystem.Id)
             .ToList();
         Assert.That(targetDeletePendingExports, Has.Count.GreaterThanOrEqualTo(1),
-            "Delete pending export should be created for the provisioned target CSO");
+            "Delete Pending Export should be created for the provisioned target CSO");
     }
 
     #endregion
@@ -246,7 +246,7 @@ public class NugatoryWorkOptimisationTests : WorkflowTestBase
             MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
             gracePeriod: TimeSpan.FromDays(30));
 
-        // Create import sync rule with attribute flow mappings
+        // Create import Synchronisation Rule with Attribute Flow mappings
         var importRule = await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
         var csoDisplayNameAttr = sourceType.Attributes.First(a => a.Name == "DisplayName");
         var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
@@ -321,7 +321,7 @@ public class NugatoryWorkOptimisationTests : WorkflowTestBase
             MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
             gracePeriod: TimeSpan.Zero);
 
-        // Create import sync rule with attribute flow mappings
+        // Create import Synchronisation Rule with Attribute Flow mappings
         var importRule = await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
         var csoDisplayNameAttr = sourceType.Attributes.First(a => a.Name == "DisplayName");
         var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
@@ -413,7 +413,7 @@ public class NugatoryWorkOptimisationTests : WorkflowTestBase
             MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
             gracePeriod: TimeSpan.Zero);
 
-        // Create import sync rule with attribute flow mappings AND scoping criteria
+        // Create import Synchronisation Rule with Attribute Flow mappings AND scoping criteria
         var importRule = await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
         var csoDisplayNameAttr = sourceType.Attributes.First(a => a.Name == "DisplayName");
         var csoEmployeeIdAttr = sourceType.Attributes.First(a => a.Name == "EmployeeId");
@@ -566,7 +566,7 @@ public class NugatoryWorkOptimisationTests : WorkflowTestBase
     }
 
     /// <summary>
-    /// Creates an export sync rule.
+    /// Creates an export Synchronisation Rule.
     /// </summary>
     private async Task<SyncRule> CreateExportSyncRuleAsync(
         int connectedSystemId,

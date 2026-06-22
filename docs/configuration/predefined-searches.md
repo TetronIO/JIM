@@ -12,7 +12,7 @@ Predefined searches are administrator-managed: end users do not author new searc
 
 A predefined search ties together:
 
-- **A target metaverse object type**<br /> The object type whose objects this search returns.
+- **A target Metaverse Object Type**<br /> The object type whose objects this search returns.
 - **A set of attributes**<br /> The fields surfaced as columns in the result list, in display order.
 - **A criteria tree**<br /> Groups of criteria with AND/OR logic and nested groups, controlling which objects match.
 - **A stable URI slug**<br /> The human-readable identifier (e.g. `people`, `security-groups`) that consuming code uses to invoke the search.
@@ -27,7 +27,7 @@ Searches that ship with JIM are marked **built-in** and cannot be deleted; they 
 
 ## Default for object type
 
-Each metaverse object type may have one default predefined search. The default is what the portal uses when navigating to that object type without a specific search selection.
+Each Metaverse Object Type may have one default predefined search. The default is what the portal uses when navigating to that object type without a specific search selection.
 
 ## Enabled flag
 
@@ -65,4 +65,4 @@ The administrative surface is what this page describes. The running surface is p
 
 ## See also
 
-- [Metaverse](metaverse.md) -- predefined searches return metaverse objects; the running endpoint lives with the metaverse object endpoints
+- [Metaverse](metaverse.md) -- predefined searches return Metaverse Objects; the running endpoint lives with the Metaverse Object endpoints

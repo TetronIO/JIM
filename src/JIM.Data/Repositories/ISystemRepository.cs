@@ -13,7 +13,7 @@ public interface ISystemRepository
     /// <summary>
     /// Wipes all customer data and configuration from the database in a single transaction,
     /// preserving the schema, EF Core migration history, and the rows seeded by
-    /// <c>SeedingServer</c> (built-in metaverse attributes, built-in metaverse object types,
+    /// <c>SeedingServer</c> (built-in metaverse attributes, built-in Metaverse Object Types,
     /// built-in roles, built-in connector definitions, built-in example data sets and templates,
     /// built-in predefined searches, the singleton service settings record, and infrastructure
     /// API keys).

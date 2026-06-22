@@ -33,7 +33,7 @@ public class MetaverseRepository : IMetaverseRepository
     }
     #endregion
 
-    #region metaverse object types
+    #region Metaverse Object Types
 
     public async Task<List<MetaverseObjectType>> GetMetaverseObjectTypesAsync(bool includeChildObjects)
     {
@@ -291,18 +291,18 @@ public class MetaverseRepository : IMetaverseRepository
 
     public async Task<List<SyncRuleReference>> GetSyncRulesReferencingAttributeAsync(int attributeId)
     {
-        // Sync rule mappings where this attribute is the target (import rules)
+        // Synchronisation Rule mappings where this attribute is the target (import rules)
         var fromMappings = Repository.Database.SyncRuleMappings
             .Where(m => m.TargetMetaverseAttributeId == attributeId && m.SyncRule != null)
             .Select(m => new SyncRuleReference { Id = m.SyncRule!.Id, Name = m.SyncRule.Name });
 
-        // Sync rule mapping sources where this attribute is the source (export rules)
+        // Synchronisation Rule mapping sources where this attribute is the source (export rules)
         // SyncRuleMappingSource has no navigation to SyncRuleMapping, so join through the parent
         var fromMappingSources = Repository.Database.SyncRuleMappings
             .Where(m => m.Sources.Any(s => s.MetaverseAttributeId == attributeId) && m.SyncRule != null)
             .Select(m => new SyncRuleReference { Id = m.SyncRule!.Id, Name = m.SyncRule.Name });
 
-        // Object matching rules where this attribute is the target
+        // Object Matching Rules where this attribute is the target
         var fromMatchingRules = Repository.Database.ObjectMatchingRules
             .Where(r => r.TargetMetaverseAttributeId == attributeId && r.SyncRule != null)
             .Select(r => new SyncRuleReference { Id = r.SyncRule!.Id, Name = r.SyncRule.Name });
@@ -314,7 +314,7 @@ public class MetaverseRepository : IMetaverseRepository
                        || g.ChildGroups.Any(cg => cg.Criteria.Any(c => c.MetaverseAttribute != null && c.MetaverseAttribute.Id == attributeId))))
             .Select(sr => new SyncRuleReference { Id = sr.Id, Name = sr.Name });
 
-        // Union all sources and deduplicate by sync rule ID
+        // Union all sources and deduplicate by Synchronisation Rule ID
         var allReferences = await fromMappings
             .Union(fromMappingSources)
             .Union(fromMatchingRules)
@@ -327,7 +327,7 @@ public class MetaverseRepository : IMetaverseRepository
     }
     #endregion
 
-    #region metaverse objects
+    #region Metaverse Objects
     public async Task<MetaverseObject?> GetMetaverseObjectAsync(Guid id)
     {
         return await Repository.Database.MetaverseObjects.
@@ -1307,7 +1307,7 @@ public class MetaverseRepository : IMetaverseRepository
     }
 
     /// <summary>
-    /// Gets a paginated list of metaverse objects with optional filtering by type, search query, or specific attribute value.
+    /// Gets a paginated list of Metaverse Objects with optional filtering by type, search query, or specific attribute value.
     /// </summary>
     /// <param name="page">The page number to retrieve (1-based).</param>
     /// <param name="pageSize">The number of items per page (max 100).</param>
@@ -1443,10 +1443,10 @@ public class MetaverseRepository : IMetaverseRepository
     /// </summary>
     /// <param name="connectedSystemObject">The source object to try and find a matching Metaverse Object for.</param>
     /// <param name="metaverseObjectType">The type of Metaverse Object to search for.</param>
-    /// <param name="syncRuleMapping">The Sync Rule Mapping contains the logic needed to construct a Metaverse Object query.</param>
+    /// <param name="syncRuleMapping">The Synchronisation Rule Mapping contains the logic needed to construct a Metaverse Object query.</param>
     /// <returns>A Metaverse Object if a single result is found, otherwise null.</returns>
     /// <exception cref="NotImplementedException">Will be thrown if more than one source is specified (advanced matching). This is not yet supported.</exception>
-    /// <exception cref="ArgumentNullException">Will be thrown if the sync rule mapping source connected system attribute is null.</exception>
+    /// <exception cref="ArgumentNullException">Will be thrown if the Synchronisation Rule mapping source Connected System attribute is null.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Will be thrown if an unsupported attribute type is specified.</exception>
     /// <exception cref="MultipleMatchesException">Will be thrown if there's more than one Metaverse Object that matches the matching rule criteria.</exception>
     public async Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(ConnectedSystemObject connectedSystemObject, MetaverseObjectType metaverseObjectType, ObjectMatchingRule objectMatchingRule)
@@ -1688,7 +1688,7 @@ public class MetaverseRepository : IMetaverseRepository
         // Find MVOs that:
         // 1. Are projected (not internal admin accounts)
         // 2. Have deletion rule WhenLastConnectorDisconnected
-        // 3. Have ALL their CSOs in the specified connected system (will become orphaned)
+        // 3. Have ALL their CSOs in the specified Connected System (will become orphaned)
         var orphanedMvos = await Repository.Database.MetaverseObjects
             .AsSplitQuery()
             .Include(mvo => mvo.Type)
@@ -1701,7 +1701,7 @@ public class MetaverseRepository : IMetaverseRepository
                 mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected &&
                 // Must have at least one CSO in the system being deleted
                 mvo.ConnectedSystemObjects.Any(cso => cso.ConnectedSystemId == connectedSystemId) &&
-                // Must NOT have any CSOs in OTHER connected systems (would become orphaned)
+                // Must NOT have any CSOs in OTHER Connected Systems (would become orphaned)
                 !mvo.ConnectedSystemObjects.Any(cso => cso.ConnectedSystemId != connectedSystemId))
             .ToListAsync();
 

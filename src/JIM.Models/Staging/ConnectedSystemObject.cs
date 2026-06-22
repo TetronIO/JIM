@@ -23,7 +23,7 @@ public class ConnectedSystemObject
 
     /// <summary>
     /// The partition this CSO was imported from. Nullable for CSOs created before
-    /// partition tracking was added, or for connected systems without partitions.
+    /// partition tracking was added, or for Connected Systems without partitions.
     /// Used to scope deletion detection during partition-scoped full imports,
     /// and as a prerequisite for future partition-scoped sync (#437) and export (#438).
     /// </summary>
@@ -36,16 +36,16 @@ public class ConnectedSystemObject
     public List<ActivityRunProfileExecutionItem> ActivityRunProfileExecutionItems { get; } = new();
 
     /// <summary>
-    /// The attribute that uniquely identifies this object in the connected system.
+    /// The attribute that uniquely identifies this object in the Connected System.
     /// It should be immutable (not change for the lifetime of the object). 
-    /// The connected system may author it and be made available to JIM after import, or you may specify it at provisioning time, depending on the needs of the connected system.
-    /// This is a convenience accessor. It's defined as a property on one of the connected system object type attributes. i.e. ConnectedSystemObjectTypeAttribute.IsExternalId
+    /// The Connected System may author it and be made available to JIM after import, or you may specify it at provisioning time, depending on the needs of the Connected System.
+    /// This is a convenience accessor. It's defined as a property on one of the Connected System Object Type attributes. i.e. ConnectedSystemObjectTypeAttribute.IsExternalId
     /// </summary>
     public int ExternalIdAttributeId { get; set; }
 
     /// <summary>
-    /// The attribute that may also identify the object in a connected system.
-    /// Whether this exists depends on if the connected system supports secondary external ids or not. 
+    /// The attribute that may also identify the object in a Connected System.
+    /// Whether this exists depends on if the Connected System supports secondary external ids or not. 
     /// For instance, an LDAP system will use the DN for references to other objects, even though this is not a good identifier as it's not immutable.
     /// </summary>
     public int? SecondaryExternalIdAttributeId { get; set; }
@@ -75,13 +75,13 @@ public class ConnectedSystemObject
     public DateTime? DateJoined { get; set; }
 
     /// <summary>
-    /// A list of the changes made to this connected system object.
+    /// A list of the changes made to this Connected System Object.
     /// </summary>
     public List<ConnectedSystemObjectChange> Changes { get; set; } = null!;
 
     /// <summary>
     /// Set by the page loader when a CSO's attributes have not changed since the last completed sync.
-    /// When true, the sync processor skips attribute flow, export evaluation, and drift detection
+    /// When true, the sync processor skips Attribute Flow, export evaluation, and drift detection
     /// for this CSO — avoiding the overhead of loading and comparing unchanged attribute values.
     /// </summary>
     [NotMapped]

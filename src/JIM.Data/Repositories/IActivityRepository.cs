@@ -80,7 +80,7 @@ public interface IActivityRepository
 
     /// <summary>
     /// Gets all activities for a specific step within a schedule execution.
-    /// A step may have multiple activities if it runs multiple run profiles in parallel.
+    /// A step may have multiple activities if it runs multiple Run Profiles in parallel.
     /// </summary>
     public Task<List<Activity>> GetActivitiesByScheduleExecutionStepAsync(Guid scheduleExecutionId, int stepIndex);
 

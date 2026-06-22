@@ -33,8 +33,8 @@
 <MudBreadcrumbs Items="Breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
-    A view of this object as staged within JIM. This includes any attribute values imported from the connected system,
-    as well as any pending export changes awaiting export.
+    A view of this object as staged within JIM. This includes any attribute values imported from the Connected System,
+    as well as any Pending Export changes awaiting export.
 </MudText>
 
 @if (ConnectedSystemHeader != null && ConnectedSystemObject != null)
@@ -109,7 +109,7 @@
         <MudPaper Class="pa-4 mt-6" Outlined="true">
             <MudText Typo="Typo.h6">Pending Exports</MudText>
             <MudText Typo="Typo.subtitle1" Class="my-3">
-                The following attribute changes are pending for this connected system. These may be awaiting export, or have
+                The following attribute changes are pending for this Connected System. These may be awaiting export, or have
                 already been exported
                 and are awaiting confirmation via a subsequent import. Once confirmed, these changes will be reflected in the
                 CSO attribute values below.
@@ -121,7 +121,7 @@
                 <ToolBarContent>
                     <MudTextField T="string" Value="@_pendingExportSearchText"
                                   ValueChanged="@OnPendingExportSearch"
-                                  Placeholder="Search pending exports..."
+                                  Placeholder="Search Pending Exports..."
                                   Adornment="Adornment.Start"
                                   AdornmentIcon="@Icons.Material.Filled.Search"
                                   Immediate="true" DebounceInterval="300"
@@ -418,7 +418,7 @@
         ExternalIdAttributeValue = ConnectedSystemObject.ExternalIdAttributeValue;
         SecondaryExternalIdAttributeValue = ConnectedSystemObject.SecondaryExternalIdAttributeValue;
 
-        // Fetch pending export header (without loading all attribute value changes) for this CSO
+        // Fetch Pending Export header (without loading all attribute value changes) for this CSO
         var pendingExportResult = await jim.ConnectedSystems.GetPendingExportHeaderForObjectAsync(connectedSystemObjectId);
         if (pendingExportResult.HasValue)
         {

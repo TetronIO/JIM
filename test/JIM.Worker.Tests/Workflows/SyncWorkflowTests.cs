@@ -43,7 +43,7 @@ public class SyncWorkflowTests : WorkflowTestBase
         // Create some CSOs
         await CreateCsosAsync(connectedSystem.Id, csoType, 10);
 
-        // Create run profile and activity
+        // Create Run Profile and activity
         var syncProfile = await CreateRunProfileAsync(
             connectedSystem.Id,
             "Full Sync",
@@ -95,7 +95,7 @@ public class SyncWorkflowTests : WorkflowTestBase
         // Create 100 CSOs (enough to notice a performance problem)
         await CreateCsosAsync(connectedSystem.Id, csoType, 100);
 
-        // Create run profiles
+        // Create Run Profiles
         var fullSyncProfile = await CreateRunProfileAsync(
             connectedSystem.Id,
             "Full Sync",
@@ -165,7 +165,7 @@ public class SyncWorkflowTests : WorkflowTestBase
         // Create 100 CSOs
         var csos = await CreateCsosAsync(connectedSystem.Id, csoType, 100);
 
-        // Create run profiles
+        // Create Run Profiles
         var fullSyncProfile = await CreateRunProfileAsync(
             connectedSystem.Id,
             "Full Sync",
@@ -238,7 +238,7 @@ public class SyncWorkflowTests : WorkflowTestBase
         // Create 50 CSOs
         var csos = await CreateCsosAsync(connectedSystem.Id, csoType, 50);
 
-        // Create run profiles
+        // Create Run Profiles
         var fullSyncProfile = await CreateRunProfileAsync(
             connectedSystem.Id,
             "Full Sync",
@@ -318,7 +318,7 @@ public class SyncWorkflowTests : WorkflowTestBase
 
         await CreateCsosAsync(connectedSystem.Id, csoType, 5);
 
-        // Create run profiles
+        // Create Run Profiles
         var fullSyncProfile = await CreateRunProfileAsync(
             connectedSystem.Id,
             "Full Sync",
@@ -390,7 +390,7 @@ public class SyncWorkflowTests : WorkflowTestBase
 
         var csos = await CreateCsosAsync(connectedSystem.Id, csoType, 20);
 
-        // Create run profiles
+        // Create Run Profiles
         var fullSyncProfile = await CreateRunProfileAsync(
             connectedSystem.Id,
             "Full Sync",

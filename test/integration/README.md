@@ -83,11 +83,11 @@ pwsh test/integration/Invoke-IntegrationTests.ps1 -ScenariosOnly
 - **Scenario 3: GALSYNC** - Placeholder (not implemented)
 - **Scenario 4: Deletion Rules** - MVO deletion triggers and attribute recall
 - **Scenario 5: Matching Rules** - Join logic, projection, deduplication
-- **Scenario 6: Scheduler Service** - End-to-end scheduled run profile execution
+- **Scenario 6: Scheduler Service** - End-to-end scheduled Run Profile execution
 - **Scenario 7: Clear Connected System Objects** - Bulk CSO removal workflow
 - **Scenario 8: Cross-Domain Entitlement Sync** - Large-scale group/entitlement sync
-- **Scenario 9: Partition-Scoped Imports** - Partition filtering on import run profiles
-- **Scenario 10: Sync Rule Scoping Behaviour** - Inbound/outbound scope transitions, deprovisioning actions, cross-system cascade
+- **Scenario 9: Partition-Scoped Imports** - Partition filtering on import Run Profiles
+- **Scenario 10: Synchronisation Rule Scoping Behaviour** - Inbound/outbound scope transitions, deprovisioning actions, cross-system cascade
 - **Scenario 11: Scoping Criteria Evaluation Matrix** - Operator x value-type x group-structure coverage via per-cell CSO/MV types; three coverage tiers (Quick / Default / Exhaustive), round-trip persistence and API negative-cell probes
 
 ### Phase 2 (Planned)
@@ -245,7 +245,7 @@ Names are distributed using a prime-based algorithm to ensure realistic diversit
 │                                                                 │
 │  Step 4: Run Scenarios                                          │
 │  ├─ Scenario 1: HR to Enterprise Directory                      │
-│  │   ├─ Configure JIM (Connected Systems, Sync Rules)           │
+│  │   ├─ Configure JIM (Connected Systems, Synchronisation Rules)           │
 │  │   ├─ Test: Joiner (new hire provisioning)                    │
 │  │   ├─ Test: Mover (attribute updates)                         │
 │  │   ├─ Test: Leaver (deprovisioning)                           │
@@ -272,7 +272,7 @@ This scenario tests the complete Identity Lifecycle Management (ILM) pattern:
 1. **Setup** - Automatically configures JIM with:
    - CSV Connected System (HR source at `/connector-files/test-data/hr-users.csv`)
    - LDAP Connected System (Samba AD at `samba-ad-primary:389`)
-   - Sync Rules (employeeId, firstName, lastName, email, department, etc.)
+   - Synchronisation Rules (employeeId, firstName, lastName, email, department, etc.)
    - Object Matching Rules (for CSO auto-join on provisioning)
    - Run Profiles (CSV Import, LDAP Export)
 

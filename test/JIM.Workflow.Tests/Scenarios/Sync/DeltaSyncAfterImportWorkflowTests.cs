@@ -72,7 +72,7 @@ public class DeltaSyncAfterImportWorkflowTests
     /// 2. Delta import detects group membership change (add 1 member)
     /// 3. Delta sync should process the changed group CSO
     /// 4. MVO member attribute should be updated
-    /// 5. Pending export should be created for the target system
+    /// 5. Pending Export should be created for the target system
     /// </summary>
     [Test]
     public async Task DeltaSync_AfterDeltaImportWithMembershipChange_ProcessesChangedCsoAsync()
@@ -96,9 +96,9 @@ public class DeltaSyncAfterImportWorkflowTests
             .Count(av => av.Attribute?.Name == "member");
         Console.WriteLine($"Initial group MVO has {initialMemberCount} member values");
 
-        // Verify no pending exports remain after initial sync
+        // Verify no Pending Exports remain after initial sync
         Assert.That(afterInitialSync.PendingExportCount, Is.EqualTo(0),
-            "No pending exports should remain after initial sync");
+            "No Pending Exports should remain after initial sync");
 
         // Record the watermark time (when delta sync was last completed)
         var watermarkBefore = GetSystemWatermark("Source");
@@ -172,7 +172,7 @@ public class DeltaSyncAfterImportWorkflowTests
 
         // CRITICAL: With the fix, TotalUnchanged should be 0 (not 1) because we now create RPEIs for reference-only changes
         Assert.That(totalUnchanged, Is.EqualTo(0),
-            "TotalUnchanged should be 0 because RPEI is created for reference attribute flow");
+            "TotalUnchanged should be 0 because RPEI is created for reference Attribute Flow");
         Assert.That(attributeFlowRpeis.Count, Is.EqualTo(1),
             "Should have exactly 1 AttributeFlow RPEI for the group membership change");
 
@@ -187,14 +187,14 @@ public class DeltaSyncAfterImportWorkflowTests
         Assert.That(updatedMemberCount, Is.EqualTo(3),
             "Group MVO should have 3 members after delta sync (import flowed new member)");
 
-        // Verify pending export was created for target system
+        // Verify Pending Export was created for target system
         Assert.That(afterDeltaSync.PendingExportCount, Is.GreaterThan(0),
-            "Pending export should be created for target system after member change");
+            "Pending Export should be created for target system after member change");
 
-        // Verify the pending export is for the group with member changes
+        // Verify the Pending Export is for the group with member changes
         var groupPe = afterDeltaSync.PendingExports
             .FirstOrDefault(pe => pe.AttributeValueChanges.Any(av => av.AttributeInfo?.Name == "member"));
-        Assert.That(groupPe, Is.Not.Null, "Pending export with member changes should exist");
+        Assert.That(groupPe, Is.Not.Null, "Pending Export with member changes should exist");
 
         Console.WriteLine("=== Test Complete: Delta sync correctly processed group membership change ===");
     }
@@ -283,7 +283,7 @@ public class DeltaSyncAfterImportWorkflowTests
 
         // CRITICAL: With the fix, TotalUnchanged should be 0 (not 1) because we now create RPEIs for reference-only changes
         Assert.That(totalUnchanged, Is.EqualTo(0),
-            "TotalUnchanged should be 0 because RPEI is created for reference attribute flow");
+            "TotalUnchanged should be 0 because RPEI is created for reference Attribute Flow");
         Assert.That(attributeFlowRpeis.Count, Is.EqualTo(1),
             "Should have exactly 1 AttributeFlow RPEI for the group membership removal");
 
@@ -296,9 +296,9 @@ public class DeltaSyncAfterImportWorkflowTests
         Assert.That(updatedMemberCount, Is.EqualTo(1),
             "Group MVO should have 1 member after delta sync (member removed)");
 
-        // Verify pending export was created
+        // Verify Pending Export was created
         Assert.That(afterDeltaSync.PendingExportCount, Is.GreaterThan(0),
-            "Pending export should be created after member removal");
+            "Pending Export should be created after member removal");
 
         Console.WriteLine("=== Test Complete: Delta sync correctly processed group membership removal ===");
     }
@@ -348,7 +348,7 @@ public class DeltaSyncAfterImportWorkflowTests
             .WithStringAttribute("cn")
             .WithReferenceAttribute("member", isMultiValued: true));
 
-        // Get attributes for sync rules
+        // Get attributes for Synchronisation Rules
         var sourceUserType = _harness.GetObjectType("Source", "User");
         var sourceGroupType = _harness.GetObjectType("Source", "Group");
         var targetUserType = _harness.GetObjectType("Target", "User");
@@ -370,7 +370,7 @@ public class DeltaSyncAfterImportWorkflowTests
         var mvGroupMember = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "member");
         var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type" && a.MetaverseObjectTypes.Any(t => t.Name == "Person"));
 
-        // Create Source import sync rules
+        // Create Source import Synchronisation Rules
         await _harness.CreateSyncRuleAsync(
             "Source User Import",
             "Source",
@@ -393,7 +393,7 @@ public class DeltaSyncAfterImportWorkflowTests
                 .WithAttributeFlow(mvGroupCn, sourceGroupCn)
                 .WithAttributeFlow(mvGroupMember, sourceGroupMember));
 
-        // Create Target export sync rules
+        // Create Target export Synchronisation Rules
         await _harness.CreateSyncRuleAsync(
             "Target User Export",
             "Target",
@@ -435,7 +435,7 @@ public class DeltaSyncAfterImportWorkflowTests
         targetConnector.QueueConfirmingImport();
         await _harness.ExecuteConfirmingImportAsync("Target");
 
-        // Clear any remaining pending exports
+        // Clear any remaining Pending Exports
         _harness.SyncRepo.ClearAllPendingExports();
 
         // Update the delta sync watermark so delta sync knows what's "new"

@@ -1,53 +1,53 @@
-# Sync Rule Causality Tracking
+# Synchronisation Rule Causality Tracking
 
 - **Status:** Planned
 - **Issue:** [#399](https://github.com/TetronIO/JIM/issues/399)
 
-> Track and display which sync rule caused each MVO projection, MVO attribute change, CSO provisioning, and pending export attribute change; surfaced in the UI as icon links on causality trees and attribute change tables.
+> Track and display which Synchronisation Rule caused each MVO projection, MVO attribute change, CSO provisioning, and Pending Export attribute change; surfaced in the UI as icon links on causality trees and attribute change tables.
 
 ## Overview
 
-Currently, JIM records that a sync rule was involved in a change at the `MetaverseObjectChange` level, but does not record causality at the per-attribute level, nor for pending export attribute changes. This makes it impossible for administrators to determine, when looking at an attribute flow table, which specific sync rule drove each individual attribute value. This plan closes that gap across both inbound (import/projection) and outbound (export/provisioning) flows.
+Currently, JIM records that a Synchronisation Rule was involved in a change at the `MetaverseObjectChange` level, but does not record causality at the per-attribute level, nor for Pending Export attribute changes. This makes it impossible for administrators to determine, when looking at an Attribute Flow table, which specific Synchronisation Rule drove each individual attribute value. This plan closes that gap across both inbound (import/projection) and outbound (export/provisioning) flows.
 
 ## Business Value
 
-Administrators managing complex environments with multiple sync rules flowing different attributes to the same object type have no visibility into which rule is responsible for each attribute value in the current UI. This hinders:
+Administrators managing complex environments with multiple Synchronisation Rules flowing different attributes to the same object type have no visibility into which rule is responsible for each attribute value in the current UI. This hinders:
 
 - Troubleshooting incorrect attribute values (which rule is setting the wrong value?)
-- Auditing attribute flows for compliance purposes
-- Understanding the impact of editing or disabling a specific sync rule
+- Auditing Attribute Flows for compliance purposes
+- Understanding the impact of editing or disabling a specific Synchronisation Rule
 
 ## Current State
 
-| Record | Sync Rule Field | Populated? |
+| Record | Synchronisation Rule Field | Populated? |
 |--------|----------------|------------|
 | `MetaverseObjectChange` | `SyncRuleId`, `SyncRuleName` (exist) | No; field exists from a prior migration but is never populated by the worker |
 | `MetaverseObjectChangeAttribute` | None | N/A |
 | `PendingExport` | None | N/A |
 | `PendingExportAttributeValueChange` | None | N/A |
 
-The sync rule context is available in the worker and application code at the point each record is created; it is simply not being persisted.
+The Synchronisation Rule context is available in the worker and application code at the point each record is created; it is simply not being persisted.
 
 ## Goals
 
-1. Know which sync rule caused an MVO to be projected (one rule is responsible).
-2. Know which sync rule caused each MVO attribute value to be created, updated, or removed.
-3. Know which sync rule caused a CSO to be provisioned (one rule is responsible).
-4. Know which sync rule caused each pending export attribute value change.
-5. Display these causing sync rules as icon links (with tooltip) on the causality tree and attribute change tables in the UI.
+1. Know which Synchronisation Rule caused an MVO to be projected (one rule is responsible).
+2. Know which Synchronisation Rule caused each MVO attribute value to be created, updated, or removed.
+3. Know which Synchronisation Rule caused a CSO to be provisioned (one rule is responsible).
+4. Know which Synchronisation Rule caused each Pending Export attribute value change.
+5. Display these causing Synchronisation Rules as icon links (with tooltip) on the causality tree and attribute change tables in the UI.
 
 ## Non-Goals
 
-- Tracking sync rule causality for non-sync-initiated changes (direct user edits, workflow-initiated changes).
+- Tracking Synchronisation Rule causality for non-sync-initiated changes (direct user edits, workflow-initiated changes).
 - Retroactively populating causality data for historical records.
 
 ## Technical Architecture
 
 ### Pattern
 
-All new sync rule references follow the existing pattern established on `MetaverseObjectChange`:
-- `SyncRuleId`: nullable FK to `SyncRule`, becomes null if the sync rule is deleted
-- `SyncRuleName`: snapshot string, preserved for audit trail even after sync rule deletion
+All new Synchronisation Rule references follow the existing pattern established on `MetaverseObjectChange`:
+- `SyncRuleId`: nullable FK to `SyncRule`, becomes null if the Synchronisation Rule is deleted
+- `SyncRuleName`: snapshot string, preserved for audit trail even after Synchronisation Rule deletion
 
 ### Changes Required
 
@@ -82,7 +82,7 @@ One migration covering all three model changes above.
 
 **`SyncTaskProcessorBase`**:
 - Populate `SyncRuleId` / `SyncRuleName` on `MetaverseObjectChange` when the change type is Projection, using the `projectionSyncRule` local variable already identified in `AttemptProjection()`.
-- Populate `SyncRuleId` / `SyncRuleName` on each `MetaverseObjectChangeAttribute` as it is constructed during inbound attribute flow processing, recording which inbound sync rule drove that specific attribute.
+- Populate `SyncRuleId` / `SyncRuleName` on each `MetaverseObjectChangeAttribute` as it is constructed during inbound Attribute Flow processing, recording which inbound Synchronisation Rule drove that specific attribute.
 
 #### Application (`JIM.Application`)
 
@@ -97,9 +97,9 @@ One migration covering all three model changes above.
 - When `SyncRuleId` is null but `SyncRuleName` is present (rule deleted): render a disabled icon button with the rule name and "(deleted)" in the tooltip.
 - When both are null: render nothing in that cell.
 
-**`PendingExportDetail.razor`**: apply the same icon-button pattern to the attribute change rows in the pending export attribute table.
+**`PendingExportDetail.razor`**: apply the same icon-button pattern to the attribute change rows in the Pending Export attribute table.
 
-**Causality tree (projection/provisioning rows)**: for the top-level projection and provisioning rows (not just attribute rows), display the same icon button referencing the sync rule on `MetaverseObjectChange` and `PendingExport` respectively.
+**Causality tree (projection/provisioning rows)**: for the top-level projection and provisioning rows (not just attribute rows), display the same icon button referencing the Synchronisation Rule on `MetaverseObjectChange` and `PendingExport` respectively.
 
 ## Implementation Phases
 
@@ -113,35 +113,35 @@ One migration covering all three model changes above.
 
 ### Phase 2: Worker; Inbound (Import/Projection)
 
-- Populate sync rule on `MetaverseObjectChange` for projection changes
-- Populate sync rule on `MetaverseObjectChangeAttribute` per-attribute during inbound attribute flow
+- Populate Synchronisation Rule on `MetaverseObjectChange` for projection changes
+- Populate Synchronisation Rule on `MetaverseObjectChangeAttribute` per-attribute during inbound Attribute Flow
 - Tests must pass (red → green)
 
 ### Phase 3: Application; Outbound (Export/Provisioning)
 
-- Populate sync rule on `PendingExport` at provisioning creation time
-- Populate sync rule on `PendingExportAttributeValueChange` per-attribute in `CreateAttributeValueChanges`
+- Populate Synchronisation Rule on `PendingExport` at provisioning creation time
+- Populate Synchronisation Rule on `PendingExportAttributeValueChange` per-attribute in `CreateAttributeValueChanges`
 - Tests must pass (red → green)
 
 ### Phase 4: UI
 
-- Add sync rule icon button column to `AttributeChangeTable.razor`
-- Add sync rule icon button to `PendingExportDetail.razor` attribute rows
-- Add sync rule icon button to causality tree projection/provisioning rows
+- Add Synchronisation Rule icon button column to `AttributeChangeTable.razor`
+- Add Synchronisation Rule icon button to `PendingExportDetail.razor` attribute rows
+- Add Synchronisation Rule icon button to causality tree projection/provisioning rows
 - Verify with end-to-end smoke test against the Docker stack
 
 ## Success Criteria
 
-- Every `MetaverseObjectChangeAttribute` record produced by a sync run has a non-null `SyncRuleId` (or at minimum `SyncRuleName` if the sync rule was deleted between record creation and query time).
+- Every `MetaverseObjectChangeAttribute` record produced by a sync run has a non-null `SyncRuleId` (or at minimum `SyncRuleName` if the Synchronisation Rule was deleted between record creation and query time).
 - Every `PendingExportAttributeValueChange` record produced by a sync run has a non-null `SyncRuleId`.
-- Every `PendingExport` created by a provisioning sync rule has a non-null `SyncRuleId`.
-- The attribute change table shows a sync rule icon button on each attribute row that navigates correctly to the sync rule detail page.
-- When a sync rule has been deleted, the icon is disabled but the tooltip still shows the rule name.
+- Every `PendingExport` created by a provisioning Synchronisation Rule has a non-null `SyncRuleId`.
+- The attribute change table shows a Synchronisation Rule icon button on each attribute row that navigates correctly to the Synchronisation Rule detail page.
+- When a Synchronisation Rule has been deleted, the icon is disabled but the tooltip still shows the rule name.
 
 ## Risks and Mitigations
 
 | Risk | Mitigation |
 |------|-----------|
-| Worker creates one `MetaverseObjectChange` per sync run rather than one per sync rule, meaning multiple sync rules' attribute changes are merged | Verify current worker behaviour before implementing Phase 2; if merging occurs, per-attribute tracking on `MetaverseObjectChangeAttribute` is the correct resolution |
+| Worker creates one `MetaverseObjectChange` per sync run rather than one per Synchronisation Rule, meaning multiple Synchronisation Rules' attribute changes are merged | Verify current worker behaviour before implementing Phase 2; if merging occurs, per-attribute tracking on `MetaverseObjectChangeAttribute` is the correct resolution |
 | Migration on a live database with large `MetaverseObjectChangeAttribute` or `PendingExportAttributeValueChange` tables may be slow (nullable columns) | Nullable columns require no backfill; migration should be fast |
-| Export evaluation creates pending exports across multiple code paths | Audit all `PendingExport` and `PendingExportAttributeValueChange` creation sites in `ExportEvaluationServer` before Phase 3 |
+| Export evaluation creates Pending Exports across multiple code paths | Audit all `PendingExport` and `PendingExportAttributeValueChange` creation sites in `ExportEvaluationServer` before Phase 3 |

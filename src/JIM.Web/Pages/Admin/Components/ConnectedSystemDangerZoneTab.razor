@@ -15,7 +15,7 @@
     </MudText>
     <ul class="mt-2 ml-4">
         <li>All Connected System Objects (CSOs)</li>
-        <li>All Sync Rules</li>
+        <li>All Synchronisation Rules</li>
         <li>All Run Profiles</li>
         <li>All Partitions and Containers</li>
         <li>All Pending Exports</li>
@@ -66,7 +66,7 @@
                         <td class="text-right">@_deletionPreview.ConnectedSystemObjectCount.ToString("N0")</td>
                     </tr>
                     <tr>
-                        <td>Sync Rules</td>
+                        <td>Synchronisation Rules</td>
                         <td class="text-right">@_deletionPreview.SyncRuleCount.ToString("N0")</td>
                     </tr>
                     <tr>
@@ -250,7 +250,7 @@
         catch (Exception ex)
         {
             _deletionInProgress = false;
-            Log.Error(ex, "Error deleting connected system {Id}", ConnectedSystem.Id);
+            Log.Error(ex, "Error deleting Connected System {Id}", ConnectedSystem.Id);
             Snackbar.Add($"An error occurred: {ex.Message}", Severity.Error);
         }
 

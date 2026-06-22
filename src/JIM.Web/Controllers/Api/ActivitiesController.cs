@@ -94,7 +94,7 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
             return NotFound(ApiErrorResponse.NotFound($"Activity with ID {id} not found."));
         }
 
-        // Get execution stats if this is a run profile activity
+        // Get execution stats if this is a Run Profile activity
         ActivityRunProfileExecutionStats? stats = null;
         if (activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile)
         {
@@ -130,7 +130,7 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
 
         if (activity.TargetType != ActivityTargetType.ConnectedSystemRunProfile)
         {
-            return BadRequest(ApiErrorResponse.BadRequest("Execution statistics are only available for run profile activities."));
+            return BadRequest(ApiErrorResponse.BadRequest("Execution statistics are only available for Run Profile activities."));
         }
 
         var stats = await _application.Activities.GetActivityRunProfileExecutionStatsAsync(id);
@@ -167,7 +167,7 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
 
         if (activity.TargetType != ActivityTargetType.ConnectedSystemRunProfile)
         {
-            return BadRequest(ApiErrorResponse.BadRequest("Execution items are only available for run profile activities."));
+            return BadRequest(ApiErrorResponse.BadRequest("Execution items are only available for Run Profile activities."));
         }
 
         var result = await _application.Activities.GetActivityRunProfileExecutionItemHeadersAsync(

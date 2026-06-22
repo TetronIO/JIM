@@ -14,7 +14,7 @@ using Serilog;
 namespace JIM.Application.Servers;
 
 /// <summary>
-/// Executes pending exports by calling connector export methods.
+/// Executes Pending Exports by calling connector export methods.
 /// Implements Q5 (preview mode) and Q6 (retry with backoff) decisions.
 ///
 /// Parallelism (Q8 decision): When MaxParallelism > 1, batches are processed concurrently.
@@ -40,9 +40,9 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Executes all pending exports for a connected system.
+    /// Executes all Pending Exports for a Connected System.
     /// </summary>
-    /// <param name="connectedSystem">The connected system to export to</param>
+    /// <param name="connectedSystem">The Connected System to export to</param>
     /// <param name="connector">The connector instance to use for export</param>
     /// <param name="runMode">Whether to preview only or actually sync (Q5 decision)</param>
     /// <returns>Export execution result with preview information</returns>
@@ -55,9 +55,9 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Executes all pending exports for a connected system with progress reporting and cancellation support.
+    /// Executes all Pending Exports for a Connected System with progress reporting and cancellation support.
     /// </summary>
-    /// <param name="connectedSystem">The connected system to export to</param>
+    /// <param name="connectedSystem">The Connected System to export to</param>
     /// <param name="connector">The connector instance to use for export</param>
     /// <param name="runMode">Whether to preview only or actually sync (Q5 decision)</param>
     /// <param name="options">Optional execution options for batch size and parallelism</param>
@@ -102,12 +102,12 @@ public class ExportExecutionServer
 
         if (totalExportCount == 0)
         {
-            Log.Debug("ExecuteExportsAsync: No pending exports to execute for system {SystemId}", connectedSystem.Id);
+            Log.Debug("ExecuteExportsAsync: No Pending Exports to execute for system {SystemId}", connectedSystem.Id);
             result.CompletedAt = DateTime.UtcNow;
             return result;
         }
 
-        Log.Information("ExecuteExportsAsync: Found {Count} pending exports to execute for system {SystemName} (BatchSize: {BatchSize}, MaxParallelism: {MaxParallelism})",
+        Log.Information("ExecuteExportsAsync: Found {Count} Pending Exports to execute for system {SystemName} (BatchSize: {BatchSize}, MaxParallelism: {MaxParallelism})",
             totalExportCount, connectedSystem.Name, options.BatchSize, options.MaxParallelism);
 
         // Pre-export reconciliation: detect CREATE+DELETE and UPDATE+DELETE pairs that cancel
@@ -197,9 +197,9 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Loads all executable exports for a connected system, identifies CREATE+DELETE and
+    /// Loads all executable exports for a Connected System, identifies CREATE+DELETE and
     /// UPDATE+DELETE pairs targeting the same CSO, and deletes the reconciled exports from the DB.
-    /// Returns the total number of pending exports removed.
+    /// Returns the total number of Pending Exports removed.
     /// </summary>
     private async Task<int> ReconcileCreateDeletePairsAsync(int connectedSystemId)
     {
@@ -224,7 +224,7 @@ public class ExportExecutionServer
         if (idsToDelete.Count > 0)
             await SyncRepo.DeletePendingExportsByIdsAsync(idsToDelete);
 
-        Log.Information("ReconcileCreateDeletePairsAsync: Reconciled {PairCount} pairs, cancelled {CancelledCount} pending exports for system {SystemId}",
+        Log.Information("ReconcileCreateDeletePairsAsync: Reconciled {PairCount} pairs, cancelled {CancelledCount} Pending Exports for system {SystemId}",
             result.ReconciledPairs.Count, result.TotalCancelled, connectedSystemId);
 
         span.SetTag("reconciledPairs", result.ReconciledPairs.Count);
@@ -235,7 +235,7 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Gets pending exports that are ready to be executed.
+    /// Gets Pending Exports that are ready to be executed.
     /// Uses database-level filtering for status, retry timing, and max retries (Q6 decision),
     /// then applies in-memory checks for attribute-level eligibility that can't be expressed in SQL.
     /// </summary>
@@ -251,7 +251,7 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Determines if a pending export is ready for execution.
+    /// Determines if a Pending Export is ready for execution.
     /// Applies in-memory checks that require navigation property evaluation and can't be expressed
     /// in SQL. Database-level checks (status, retry timing, max retries) are already applied by
     /// GetExecutableExportsAsync.
@@ -309,7 +309,7 @@ public class ExportExecutionServer
             await ExecuteUsingCallsWithBatchingAsync(connectedSystem, callsConnector, result, options,
                 cancellationToken, progressCallback, connectorFactory, repositoryFactory, batchCompletedCallback);
         }
-        // File-based connectors load all pending exports upfront because the connector writes the
+        // File-based connectors load all Pending Exports upfront because the connector writes the
         // full output file in a single pass. Batching the DB load would only help if the write
         // strategy also streamed; see issue #633 for that follow-up.
         else if (connector is IConnectorExportUsingFiles filesConnector)
@@ -776,7 +776,7 @@ public class ExportExecutionServer
     /// <summary>
     /// Processes multiple batches concurrently using separate DbContext and connector instances per batch.
     /// Each batch task creates its own IRepository (with its own DbContext) and connector instance.
-    /// The batch's pending exports are re-loaded by ID from the batch's context to ensure proper
+    /// The batch's Pending Exports are re-loaded by ID from the batch's context to ensure proper
     /// change tracking. Progress reporting is serialised via SemaphoreSlim to protect the caller's
     /// shared DbContext.
     /// </summary>
@@ -820,7 +820,7 @@ public class ExportExecutionServer
                 // Create per-batch repository with its own context
                 var batchRepo = repositoryFactory();
 
-                // Re-load this batch's pending exports from the batch's own context
+                // Re-load this batch's Pending Exports from the batch's own context
                 var batch = await batchRepo.GetPendingExportsByIdsAsync(batchIds);
                 if (batch.Count == 0)
                 {
@@ -1038,7 +1038,7 @@ public class ExportExecutionServer
             Log.Debug("ProcessBatchSuccessAsync: Successfully exported {ExportId}, awaiting confirmation via import", export.Id);
         }
 
-        // Batch update all pending exports
+        // Batch update all Pending Exports
         if (exportsToUpdate.Count > 0)
         {
             using (Diagnostics.Diagnostics.Database.StartSpan("UpdatePendingExports")
@@ -1514,7 +1514,7 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Collects all unresolved MVO IDs from a list of pending exports.
+    /// Collects all unresolved MVO IDs from a list of Pending Exports.
     /// Used to pre-fetch CSO mappings in bulk before resolving references.
     /// </summary>
     private static HashSet<Guid> CollectUnresolvedMvoIds(IEnumerable<PendingExport> exports)
@@ -1535,7 +1535,7 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Attempts to resolve unresolved reference attributes in a pending export using a pre-fetched CSO lookup.
+    /// Attempts to resolve unresolved reference attributes in a Pending Export using a pre-fetched CSO lookup.
     /// For LDAP systems, references like 'member' need to be resolved to Distinguished Names (DN),
     /// not the primary external ID (objectGUID). We use the secondary external ID when available.
     /// </summary>
@@ -1556,7 +1556,7 @@ public class ExportExecutionServer
             if (csoLookup.TryGetValue(referencedMvoId, out var referencedCso))
             {
                 // For reference attributes, prefer the secondary external ID (e.g., DN for LDAP)
-                // as this is what the connected system uses for references.
+                // as this is what the Connected System uses for references.
                 // Fall back to primary external ID if secondary is not available.
                 var secondaryExternalIdAttr = referencedCso.AttributeValues
                     .FirstOrDefault(av => av.Attribute?.IsSecondaryExternalId == true);
@@ -1793,7 +1793,7 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Gets the count of pending exports that require manual intervention (exceeded max retries).
+    /// Gets the count of Pending Exports that require manual intervention (exceeded max retries).
     /// </summary>
     public async Task<int> GetFailedExportsCountAsync(int connectedSystemId)
     {
@@ -1802,7 +1802,7 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Retries all failed exports for a connected system (manual intervention).
+    /// Retries all failed exports for a Connected System (manual intervention).
     /// Resets error count and status.
     /// </summary>
     public async Task RetryFailedExportsAsync(int connectedSystemId)

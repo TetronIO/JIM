@@ -10,7 +10,7 @@ public class ConnectedSystemRunProfile : IAuditable
     public int Id { get; set; }
 
     /// <summary>
-    /// The user-supplied name for this run profile.
+    /// The user-supplied name for this Run Profile.
     /// </summary>
     public string Name { get; set; } = null!;
 
@@ -62,7 +62,7 @@ public class ConnectedSystemRunProfile : IAuditable
     public int ConnectedSystemId { get; set; }
         
     /// <summary>
-    /// If the connected system implements partitions, then a run profile needs to target a partition.
+    /// If the Connected System implements partitions, then a Run Profile needs to target a partition.
     /// </summary>
     public ConnectedSystemPartition? Partition { get; set; }
 
@@ -74,7 +74,7 @@ public class ConnectedSystemRunProfile : IAuditable
     public int PageSize { get; set; } = 100;
 
     /// <summary>
-    /// If this run profile is for a file-based connector, then a full path to the file to read from/write to is required.
+    /// If this Run Profile is for a file-based connector, then a full path to the file to read from/write to is required.
     /// This enables the user to specify different files for different run types, i.e. there might be a full-import file and a delta-import file.
     /// </summary>
     public string? FilePath { get; set; }

@@ -20,7 +20,7 @@ namespace JIM.Worker.Tests.Activities;
 
 /// <summary>
 /// Tests that a confirming import (delta import after export) produces the correct RPEI outcomes.
-/// When objects are exported to a connected system and then imported back with the same attribute values,
+/// When objects are exported to a Connected System and then imported back with the same attribute values,
 /// the import phase should NOT produce a CsoUpdated outcome — no CSO attributes were actually changed.
 ///
 /// Scenario: Export creates 3 CSOs in target AD → confirming import brings them back unchanged.
@@ -103,7 +103,7 @@ public class ConfirmingImportOutcomeTests
     /// They have PendingProvisioning status. A confirming import brings back the same
     /// attribute values — no actual attribute changes.
     ///
-    /// This test validates the import phase only: with no pending exports, reconciliation
+    /// This test validates the import phase only: with no Pending Exports, reconciliation
     /// is a no-op, so we can isolate the import processing behaviour.
     ///
     /// The bug: PendingProvisioning → Normal status transition triggers a CsoUpdated outcome
@@ -143,7 +143,7 @@ public class ConfirmingImportOutcomeTests
                 cso3Guid, "Olivia Jane", "EMP003")
         };
 
-        // No pending exports — isolates the import phase from reconciliation.
+        // No Pending Exports — isolates the import phase from reconciliation.
         // This prevents ChangeTracker issues in the mocked DbContext while still
         // proving the core issue: CsoUpdated is recorded when no attributes changed.
         _pendingExportsData = new List<PendingExport>();
@@ -156,7 +156,7 @@ public class ConfirmingImportOutcomeTests
 
         // Retrieve the target system through the repository (populates ObjectTypes navigation)
         var targetSystem = await _jim.ConnectedSystems.GetConnectedSystemAsync(targetSystemId);
-        Assert.That(targetSystem, Is.Not.Null, "Target connected system should exist in test data");
+        Assert.That(targetSystem, Is.Not.Null, "Target Connected System should exist in test data");
 
         // Build import objects: connector returns the SAME attribute values that are already on the CSOs
         // This is the confirming import — AD reports exactly what JIM exported, no changes

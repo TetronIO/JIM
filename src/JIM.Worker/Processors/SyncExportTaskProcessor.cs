@@ -22,7 +22,7 @@ using Serilog;
 namespace JIM.Worker.Processors;
 
 /// <summary>
-/// Processes Export run profiles by executing pending exports via connectors.
+/// Processes Export Run Profiles by executing Pending Exports via connectors.
 /// Implements Q5 (preview mode) and Q6 (retry with backoff) decisions.
 /// </summary>
 public class SyncExportTaskProcessor
@@ -79,7 +79,7 @@ public class SyncExportTaskProcessor
     }
 
     /// <summary>
-    /// Executes the export run profile.
+    /// Executes the export Run Profile.
     /// </summary>
     public async Task PerformExportAsync()
     {
@@ -112,7 +112,7 @@ public class SyncExportTaskProcessor
 
         if (pendingExportCount == 0)
         {
-            Log.Information("PerformExportAsync: No pending exports for {SystemName}", _connectedSystem.Name);
+            Log.Information("PerformExportAsync: No Pending Exports for {SystemName}", _connectedSystem.Name);
             await _syncRepo.UpdateActivityMessageAsync(_activity, "No exports to process");
             return;
         }

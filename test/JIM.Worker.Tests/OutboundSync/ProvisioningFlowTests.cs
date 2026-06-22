@@ -301,7 +301,7 @@ public class ProvisioningFlowTests
         var targetObjectType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
         var mvo = MetaverseObjectsData[0];
 
-        // Create a pending export for a create operation
+        // Create a Pending Export for a create operation
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
@@ -402,7 +402,7 @@ public class ProvisioningFlowTests
     /// <summary>
     /// Verifies that JoinType.Provisioned is distinct from JoinType.Joined.
     /// Provisioned = created by JIM via export
-    /// Joined = matched during import via object matching rules
+    /// Joined = matched during import via Object Matching Rules
     /// </summary>
     [Test]
     public void JoinType_Provisioned_IsDifferentFromJoined()

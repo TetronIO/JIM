@@ -2,11 +2,11 @@
 
 > Last updated: 2026-04-22, JIM v0.10.0
 
-This diagram shows how objects are imported from a connected system into JIM's connector space. Both Full Import and Delta Import use the same processor (`SyncImportTaskProcessor`); the connector handles delta filtering internally via watermark/persisted data.
+This diagram shows how objects are imported from a Connected System into JIM's connector space. Both Full Import and Delta Import use the same processor (`SyncImportTaskProcessor`); the connector handles delta filtering internally via watermark/persisted data.
 
 Since v0.7.1, the import processor uses `ISyncServer` for orchestration (settings, caching, reconciliation) and `ISyncRepository` for dedicated bulk data access (CSO writes, RPEIs).
 
-Since v0.8.0, LDAP connectors for OpenLDAP/Generic directories import using **parallel connections**: each container+objectType combination runs on its own dedicated `LdapConnection`, bypassing RFC 2696 paging cookie limitations (#72). CSO persistence uses **two-phase parallel writes** when writing large batches (#427). Run profiles can optionally **target a specific partition**, filtering which containers are imported (#353).
+Since v0.8.0, LDAP connectors for OpenLDAP/Generic directories import using **parallel connections**: each container+objectType combination runs on its own dedicated `LdapConnection`, bypassing RFC 2696 paging cookie limitations (#72). CSO persistence uses **two-phase parallel writes** when writing large batches (#427). Run Profiles can optionally **target a specific partition**, filtering which containers are imported (#353).
 
 ## Overall Import Flow
 
@@ -17,7 +17,7 @@ flowchart TD
     %% --- Call-based connector (e.g., LDAP) ---
     ConnType -->|IConnectorImportUsingCalls| InjectServices[Inject CertificateProvider<br/>and CredentialProtection<br/>if connector supports them]
     InjectServices --> OpenConn[OpenImportConnection<br/>with system settings]
-    OpenConn --> PartFilter[GetTargetPartitions:<br/>Run profile partition set?<br/>Use it. Otherwise all selected.]
+    OpenConn --> PartFilter[GetTargetPartitions:<br/>Run Profile partition set?<br/>Use it. Otherwise all selected.]
     PartFilter --> InitPage[initialPage = true<br/>paginationTokens = empty<br/>Capture original PersistedConnectorData]
 
     InitPage --> PagingCheck{Connection-scoped<br/>paging? OpenLDAP/Generic}
@@ -138,7 +138,7 @@ flowchart TD
     Obsolete --> Loop
 ```
 
-**Safety rule**: If zero objects were imported, deletion detection is skipped entirely. This prevents accidental mass-deletion when the connected system returns no data due to connectivity issues.
+**Safety rule**: If zero objects were imported, deletion detection is skipped entirely. This prevents accidental mass-deletion when the Connected System returns no data due to connectivity issues.
 
 **Delta Import exception**: Deletion detection only runs for Full Import. Delta Imports handle explicit deletes via `ObjectChangeType.Deleted` from the connector (e.g., LDAP tombstone/changelog entries).
 
@@ -198,15 +198,15 @@ After CSOs are persisted, the import processor reconciles previously exported ch
 
 ```mermaid
 flowchart TD
-    Start([ReconcilePendingExportsAsync]) --> LoadPE[Bulk fetch pending exports<br/>for updated CSOs<br/>Status = Exported]
-    LoadPE --> Loop{More CSOs<br/>with pending exports?}
+    Start([ReconcilePendingExportsAsync]) --> LoadPE[Bulk fetch Pending Exports<br/>for updated CSOs<br/>Status = Exported]
+    LoadPE --> Loop{More CSOs<br/>with Pending Exports?}
     Loop -->|No| Summary[Log reconciliation summary:<br/>Confirmed / Retry / Failed]
     Summary --> Done([Done])
 
-    Loop -->|Yes| Compare[For each attribute change<br/>in pending export:<br/>Compare expected value<br/>against CSO current value]
+    Loop -->|Yes| Compare[For each attribute change<br/>in Pending Export:<br/>Compare expected value<br/>against CSO current value]
     Compare --> Result{All attributes<br/>confirmed?}
 
-    Result -->|All confirmed| Delete[Queue pending export<br/>for batch deletion<br/>Export successfully applied]
+    Result -->|All confirmed| Delete[Queue Pending Export<br/>for batch deletion<br/>Export successfully applied]
     Result -->|Some confirmed| Partial[Remove confirmed attributes<br/>Keep unconfirmed attributes<br/>If was Create, change to Update<br/>Increment error count<br/>Queue for batch update]
     Result -->|None confirmed| AllFailed[Increment error count<br/>Queue for batch update]
     Result -->|Max retries exceeded| PermanentFail[RPEI: ExportConfirmationFailed<br/>Manual intervention required]
@@ -235,7 +235,7 @@ flowchart TD
 
 - **Two-phase parallel write (#427)**<br /> CSO persistence splits INSERT into two committed phases (CSO rows first, then attribute values) so that cross-partition FK references (ReferenceValueId pointing to a CSO on a different parallel connection) succeed without post-hoc fixup. Small batches (< parallelism x 50) bypass this and write on a single connection. Write parallelism defaults to `Environment.ProcessorCount` (minimum 2) and is tuneable via `JIM_WRITE_PARALLELISM`.
 
-- **Partition-scoped imports (#353)**<br /> Run profiles can target a specific partition via `GetTargetPartitions()`. When set, only containers within that partition are imported; otherwise all selected partitions are included. This applies to both the import data collection and deletion detection scope. Deletion detection is scoped to the target partition, so CSOs in other partitions are not incorrectly marked as obsolete.
+- **Partition-scoped imports (#353)**<br /> Run Profiles can target a specific partition via `GetTargetPartitions()`. When set, only containers within that partition are imported; otherwise all selected partitions are included. This applies to both the import data collection and deletion detection scope. Deletion detection is scoped to the target partition, so CSOs in other partitions are not incorrectly marked as obsolete.
 
 - **Cancellation safety**<br /> When a cancellation is requested, the current page flush completes before exiting. This ensures no data loss; partially processed pages are fully persisted before the operation stops.
 

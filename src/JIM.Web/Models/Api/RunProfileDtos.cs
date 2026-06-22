@@ -6,22 +6,22 @@ using JIM.Models.Staging;
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// DTO for a run profile in list views.
+/// DTO for a Run Profile in list views.
 /// </summary>
 public class RunProfileDto
 {
     /// <summary>
-    /// The unique identifier of the run profile.
+    /// The unique identifier of the Run Profile.
     /// </summary>
     public int Id { get; set; }
 
     /// <summary>
-    /// The user-supplied name for this run profile.
+    /// The user-supplied name for this Run Profile.
     /// </summary>
     public string Name { get; set; } = null!;
 
     /// <summary>
-    /// The connected system this run profile belongs to.
+    /// The Connected System this Run Profile belongs to.
     /// </summary>
     public int ConnectedSystemId { get; set; }
 
@@ -36,7 +36,7 @@ public class RunProfileDto
     public int PageSize { get; set; }
 
     /// <summary>
-    /// The partition name if this run profile targets a specific partition.
+    /// The partition name if this Run Profile targets a specific partition.
     /// </summary>
     public string? PartitionName { get; set; }
 
@@ -64,7 +64,7 @@ public class RunProfileDto
 }
 
 /// <summary>
-/// Response returned when a run profile execution is triggered.
+/// Response returned when a Run Profile execution is triggered.
 /// </summary>
 public class RunProfileExecutionResponse
 {

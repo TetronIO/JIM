@@ -310,7 +310,7 @@ public class MetaverseRepositoryEligibleForDeletionTests
     [Test]
     public async Task GetMetaverseObjectsEligibleForDeletionAsync_WhenLastConnector_WithRemainingCso_DoesNotReturnMvoAsync()
     {
-        // Arrange - MVO with WhenLastConnectorDisconnected still has a connected system object
+        // Arrange - MVO with WhenLastConnectorDisconnected still has a Connected System Object
         var mvo = CreateProjectedMvo(_personTypeWithDeletionRule);
         mvo.LastConnectorDisconnectedDate = DateTime.UtcNow.AddDays(-1);
         mvo.ConnectedSystemObjects.Add(new ConnectedSystemObject

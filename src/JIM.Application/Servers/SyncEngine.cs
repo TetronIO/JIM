@@ -82,17 +82,17 @@ public partial class SyncEngine : ISyncEngine
 
         foreach (var pendingExport in pendingExportsForThisCso.ToList())
         {
-            // Skip pending exports that have not been exported yet
+            // Skip Pending Exports that have not been exported yet
             if (pendingExport.Status == PendingExportStatus.Pending)
             {
-                Log.Verbose("EvaluatePendingExportConfirmation: Skipping pending export {PeId} - not yet exported (Status=Pending).", pendingExport.Id);
+                Log.Verbose("EvaluatePendingExportConfirmation: Skipping Pending Export {PeId} - not yet exported (Status=Pending).", pendingExport.Id);
                 continue;
             }
 
-            // Skip pending exports awaiting confirmation via confirming import
+            // Skip Pending Exports awaiting confirmation via confirming import
             if (pendingExport.Status == PendingExportStatus.Exported)
             {
-                Log.Verbose("EvaluatePendingExportConfirmation: Skipping pending export {PeId} - awaiting confirmation via import (Status=Exported).", pendingExport.Id);
+                Log.Verbose("EvaluatePendingExportConfirmation: Skipping Pending Export {PeId} - awaiting confirmation via import (Status=Exported).", pendingExport.Id);
                 continue;
             }
 
@@ -110,13 +110,13 @@ public partial class SyncEngine : ISyncEngine
 
             if (failedChanges.Count == 0)
             {
-                Log.Information("EvaluatePendingExportConfirmation: All changes confirmed for pending export {PeId}. Marking for deletion.", pendingExport.Id);
+                Log.Information("EvaluatePendingExportConfirmation: All changes confirmed for Pending Export {PeId}. Marking for deletion.", pendingExport.Id);
                 toDelete.Add(pendingExport);
                 pendingExportsForThisCso.Remove(pendingExport);
             }
             else if (successfulChanges.Count > 0)
             {
-                Log.Information("EvaluatePendingExportConfirmation: Partial success for pending export {PeId}. " +
+                Log.Information("EvaluatePendingExportConfirmation: Partial success for Pending Export {PeId}. " +
                     "{SuccessCount} succeeded, {FailCount} failed. Marking for update.",
                     pendingExport.Id, successfulChanges.Count, failedChanges.Count);
 
@@ -125,7 +125,7 @@ public partial class SyncEngine : ISyncEngine
 
                 if (pendingExport.ChangeType == PendingExportChangeType.Create)
                 {
-                    Log.Information("EvaluatePendingExportConfirmation: Changing pending export {PeId} from Create to Update.", pendingExport.Id);
+                    Log.Information("EvaluatePendingExportConfirmation: Changing Pending Export {PeId} from Create to Update.", pendingExport.Id);
                     pendingExport.ChangeType = PendingExportChangeType.Update;
                 }
 
@@ -135,7 +135,7 @@ public partial class SyncEngine : ISyncEngine
             }
             else
             {
-                Log.Warning("EvaluatePendingExportConfirmation: Complete failure for pending export {PeId}. " +
+                Log.Warning("EvaluatePendingExportConfirmation: Complete failure for Pending Export {PeId}. " +
                     "All {FailCount} attribute changes failed. Marking for update.", pendingExport.Id, failedChanges.Count);
 
                 pendingExport.ErrorCount++;

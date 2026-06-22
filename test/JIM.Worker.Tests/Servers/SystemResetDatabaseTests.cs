@@ -77,7 +77,7 @@ public class SystemResetDatabaseTests
     /// <summary>
     /// Seeds a representative graph: built-in + custom roles, attributes and object type, an administrator
     /// MVO (with built-in and custom attribute values and the Administrator role membership), a non-admin MVO,
-    /// an empty connected system, and the service settings singleton. Returns the two MVO ids.
+    /// an empty Connected System, and the service settings singleton. Returns the two MVO ids.
     /// </summary>
     private async Task<(Guid adminId, Guid userId)> SeedAsync()
     {
@@ -192,7 +192,7 @@ public class SystemResetDatabaseTests
     }
 
     /// <summary>
-    /// Verifies the counts added to close the reporting completeness gap: object matching rules,
+    /// Verifies the counts added to close the reporting completeness gap: Object Matching Rules,
     /// schedule executions, change history (metaverse + connected-system object changes), and custom
     /// example data templates. Built-in example data templates must be preserved (only the custom one counted).
     /// </summary>
@@ -216,7 +216,7 @@ public class SystemResetDatabaseTests
             ctx.ExampleDataTemplates.Add(new ExampleDataTemplate { Name = "Custom Template", BuiltIn = false });
             ctx.ExampleDataTemplates.Add(new ExampleDataTemplate { Name = "Built-in Template", BuiltIn = true });
 
-            // Save the parents first so the connected system has a generated id for the CSO change FK.
+            // Save the parents first so the Connected System has a generated id for the CSO change FK.
             await ctx.SaveChangesAsync();
 
             ctx.MetaverseObjectChanges.Add(new MetaverseObjectChange

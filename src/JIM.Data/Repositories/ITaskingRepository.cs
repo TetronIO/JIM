@@ -65,7 +65,7 @@ public interface ITaskingRepository
 
     /// <summary>
     /// Gets all worker tasks for a specific step within a schedule execution.
-    /// A step may have multiple tasks if it runs multiple run profiles in parallel.
+    /// A step may have multiple tasks if it runs multiple Run Profiles in parallel.
     /// </summary>
     public Task<List<WorkerTask>> GetWorkerTasksByScheduleExecutionStepAsync(Guid scheduleExecutionId, int stepIndex);
 

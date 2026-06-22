@@ -13,12 +13,12 @@ namespace JIM.Models.Activities;
 public class ActivityRunProfileExecutionItem
 {
     /// <summary>
-    /// Unique identifier for this run profile execution item.
+    /// Unique identifier for this Run Profile execution item.
     /// </summary>
     public Guid Id { get; set; }
 
     /// <summary>
-    /// The parent activity for this run profile execution item. For EF navigation purposes.
+    /// The parent activity for this Run Profile execution item. For EF navigation purposes.
     /// </summary>
     public Activity Activity { get; set; } = null!;
 
@@ -49,8 +49,8 @@ public class ActivityRunProfileExecutionItem
     public Guid? ConnectedSystemObjectId { get; set; }
 
     /// <summary>
-    /// The pending export associated with this execution item, when ObjectChangeType is PendingExport.
-    /// Enables the detail page to load the pending export for Create-type exports that have no CSO yet.
+    /// The Pending Export associated with this execution item, when ObjectChangeType is PendingExport.
+    /// Enables the detail page to load the Pending Export for Create-type exports that have no CSO yet.
     /// </summary>
     public Guid? PendingExportId { get; set; }
 
@@ -80,7 +80,7 @@ public class ActivityRunProfileExecutionItem
     public ConnectedSystemObjectChange? ConnectedSystemObjectChange { get; set; }
 
     /// <summary>
-    /// If this is for a full, or delta sync run profile execution, what changes, if any were made to a joined Metaverse Object?
+    /// If this is for a full, or delta sync Run Profile execution, what changes, if any were made to a joined Metaverse Object?
     /// This needs populating for project, join, update and delete scenarios.
     /// </summary>
     public MetaverseObjectChange? MetaverseObjectChange { get; set; }
@@ -107,8 +107,8 @@ public class ActivityRunProfileExecutionItem
     /// <summary>
     /// When the primary ObjectChangeType is Joined, Projected, Disconnected, or DisconnectedOutOfScope,
     /// this field records how many MVO attributes were added or removed as part of the same operation.
-    /// This prevents attribute flow from being "absorbed" into the primary change type, enabling accurate
-    /// attribute flow counting alongside joins, projections, and disconnections.
+    /// This prevents Attribute Flow from being "absorbed" into the primary change type, enabling accurate
+    /// Attribute Flow counting alongside joins, projections, and disconnections.
     /// Null when no attribute changes occurred or when the primary type is already AttributeFlow.
     /// </summary>
     public int? AttributeFlowCount { get; set; }
@@ -131,7 +131,7 @@ public class ActivityRunProfileExecutionItem
     public ConnectedSystemObjectAttributeValue? GetExternalIdAttributeValue()
     {
         // try and get an external id for the target object
-        // one should exist for updates and deletes, but isn't guaranteed for creates if the connected system is
+        // one should exist for updates and deletes, but isn't guaranteed for creates if the Connected System is
         // responsible for generating it and a confirming import hasn't been completed.
         return ConnectedSystemObject != null ?
             ConnectedSystemObject.ExternalIdAttributeValue :

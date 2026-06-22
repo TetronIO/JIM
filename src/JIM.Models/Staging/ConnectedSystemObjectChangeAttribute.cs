@@ -16,7 +16,7 @@ public class ConnectedSystemObjectChangeAttribute
     public ConnectedSystemObjectChange ConnectedSystemChange { get; set; } = null!;
 
     /// <summary>
-    /// The connected system attribute definition. Nullable because the attribute may be deleted after
+    /// The Connected System attribute definition. Nullable because the attribute may be deleted after
     /// the change was recorded. When null, use <see cref="AttributeName"/> and <see cref="AttributeType"/>.
     /// </summary>
     public ConnectedSystemObjectTypeAttribute? Attribute { get; set; }

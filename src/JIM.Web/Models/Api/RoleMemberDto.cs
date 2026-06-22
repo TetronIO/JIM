@@ -11,12 +11,12 @@ namespace JIM.Web.Models.Api;
 public class RoleMemberDto
 {
     /// <summary>
-    /// The unique identifier (GUID) of the metaverse object.
+    /// The unique identifier (GUID) of the Metaverse Object.
     /// </summary>
     public Guid Id { get; set; }
 
     /// <summary>
-    /// The display name of the metaverse object.
+    /// The display name of the Metaverse Object.
     /// </summary>
     public string? DisplayName { get; set; }
 

@@ -174,7 +174,7 @@ None.
 | `isAdministrator` | `boolean` | Whether the user has the Administrator role |
 | `name` | `string` | Display name |
 | `authMethod` | `string` | `oauth` or `api_key` |
-| `metaverseObjectId` | `guid?` | The user's metaverse object ID (`$null` if not authorised) |
+| `metaverseObjectId` | `guid?` | The user's Metaverse Object ID (`$null` if not authorised) |
 | `roles` | `array` | Role names assigned to the user |
 | `message` | `string?` | Additional context (present when not authorised) |
 
@@ -242,13 +242,13 @@ Reset-JIMSystem -Force
 
 ```powershell title="Capture and report on what was removed"
 $result = Reset-JIMSystem -Force
-"Removed $($result.connectedSystemsRemoved) connected systems"
+"Removed $($result.connectedSystemsRemoved) Connected Systems"
 ```
 
 ### Notes
 
 - Requires an active connection via [Connect-JIM](connection.md#connect-jim) and the **Administrator** role.
-- **Removed:** all Connected Systems (and their objects and change history), Metaverse Objects (and their change history), Sync Rules, Object Matching Rules, Schedules (and their executions), Activities, Pending Exports, and all custom (`BuiltIn = false`) Metaverse Object Types, Attributes, Roles, Connector Definitions, Predefined Searches, Example Data Sets, and Example Data Templates, plus non-infrastructure API Keys and Trusted Certificates.
+- **Removed:** all Connected Systems (and their objects and change history), Metaverse Objects (and their change history), Synchronisation Rules, Object Matching Rules, Schedules (and their executions), Activities, Pending Exports, and all custom (`BuiltIn = false`) Metaverse Object Types, Attributes, Roles, Connector Definitions, Predefined Searches, Example Data Sets, and Example Data Templates, plus non-infrastructure API Keys and Trusted Certificates.
 - **Preserved:** the database schema and EF Core migration history, all built-in Metaverse Attributes, Object Types, Roles, Connector Definitions, Example Data Sets, and Predefined Searches, the singleton Service Settings record, infrastructure API keys (`IsInfrastructureKey = true`), and (unless `-IncludeAdministrators` is supplied) the Metaverse Objects holding the Administrator role.
 - A **Reset activity** recording who initiated the wipe is always created, and **every signed-in portal session is invalidated**; users (including administrators) must sign in again. API keys are unaffected.
 - With `-IncludeAdministrators` and no initial administrator configured (`JIM_SSO_INITIAL_ADMIN`), the reset is refused (HTTP 409) unless `-AcknowledgeAdministratorLockout` is also supplied, because the portal would otherwise be inaccessible afterwards.

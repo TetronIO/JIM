@@ -4,7 +4,7 @@ title: Example Data
 
 # Example Data
 
-Cmdlets for generating sample identity data for testing and evaluation purposes. Example data sets and templates allow you to populate the metaverse with realistic test identities without requiring a live connected system.
+Cmdlets for generating sample identity data for testing and evaluation purposes. Example data sets and templates allow you to populate the metaverse with realistic test identities without requiring a live Connected System.
 
 ---
 

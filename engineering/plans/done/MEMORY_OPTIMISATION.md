@@ -24,7 +24,7 @@ Measured from Scale100K integration tests (100K objects, 20 attributes each):
 | After GC.Collect | 696 MB | 984 MB | Import result objects released |
 | Per save batch (2000 CSOs) | +200-500 MB | +300-600 MB | CSO persistence + change objects |
 
-**Recommended host RAM by connected system size:**
+**Recommended host RAM by Connected System size:**
 
 | Connected System Size | Minimum Host RAM | Recommended Host RAM |
 |----------------------|-----------------|---------------------|
@@ -43,7 +43,7 @@ Measured from Scale100K integration tests (100K objects, 20 attributes each):
 
 - **Location**: `SyncTaskProcessorBase._allPersistedRpeis`, `SyncImportTaskProcessor._allPersistedImportRpeis`
 - **Problem**: All RPEIs from every page were accumulated across the entire sync run. At 100K objects with change tracking, each RPEI carried ConnectedSystemObjectChange graphs (~50 attribute changes each), creating ~5M objects in memory.
-- **Fix**: Added `AccumulateActivitySummaryStats` to `Worker.cs`: computes running tallies using `+=` during each `FlushRpeisAsync` call. Removed `_allPersistedRpeis` and `_allPersistedImportRpeis` accumulation lists entirely. RPEIs are released immediately after each flush. Import processor retains only a lightweight `_reconciliationRpeiLookup` dictionary for the update-phase RPEIs needed by pending export reconciliation.
+- **Fix**: Added `AccumulateActivitySummaryStats` to `Worker.cs`: computes running tallies using `+=` during each `FlushRpeisAsync` call. Removed `_allPersistedRpeis` and `_allPersistedImportRpeis` accumulation lists entirely. RPEIs are released immediately after each flush. Import processor retains only a lightweight `_reconciliationRpeiLookup` dictionary for the update-phase RPEIs needed by Pending Export reconciliation.
 - **Commits**: `ec43acee`
 
 ### 2. RPEI Error Detection ✅

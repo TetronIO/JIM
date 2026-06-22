@@ -28,7 +28,7 @@ The application currently sends all writes through a single connection per phase
 |  Polls for tasks, spawns one Task.Run per work item               |
 +------------------------------------------------------------------+
          |
-         | One task at a time per connected system
+         | One task at a time per Connected System
          v
 +------------------------------------------------------------------+
 |                    Import Processor                                |
@@ -51,7 +51,7 @@ The application currently sends all writes through a single connection per phase
 |    Pass 2: join/project/flow (ISyncEngine) <-- sequential         |
 |    Flush: 11-step persistence sequence     <-- 1 core busy       |
 |      MVO creates/updates                                           |
-|      pending exports                                               |
+|      Pending Exports                                               |
 |      RPEIs                                                         |
 |      MVO deletions                                                 |
 +------------------------------------------------------------------+
@@ -60,7 +60,7 @@ The application currently sends all writes through a single connection per phase
 +------------------------------------------------------------------+
 |                    Export Processor                                 |
 |                                                                    |
-|  for each batch of pending exports:                               |
+|  for each batch of Pending Exports:                               |
 |    SemaphoreSlim(MaxParallelism)          <-- ALREADY parallel    |
 |    per-batch connector + per-batch repo                            |
 |    Task.WhenAll(batches)                                           |
@@ -88,7 +88,7 @@ The application currently sends all writes through a single connection per phase
 |  Configurable: JIM_WRITE_PARALLELISM (default: CPU count)        |
 +------------------------------------------------------------------+
          |
-         | One task at a time per connected system
+         | One task at a time per Connected System
          v
 +------------------------------------------------------------------+
 |                    Import Processor                                |
@@ -121,8 +121,8 @@ The application currently sends all writes through a single connection per phase
 |                     Sync Processor                                 |
 |                                                                    |
 |  Shared (read-only after init):                                   |
-|    sync rules, object types, export eval cache,                   |
-|    pending exports dict, drift cache                              |
+|    Synchronisation Rules, object types, export eval cache,                   |
+|    Pending Exports dict, drift cache                              |
 |                                                                    |
 |  for each page of CSOs from DB:                                   |
 |    +-------------------------------------------+                   |
@@ -252,10 +252,10 @@ Pass 2: foreach cso -> join/flow       (sequential -- ordering matters)
   1. MVO creates/updates               v
   2. Change history                  Parallel flush (N connections):
   3. Export evaluation               +----------------------------------+
-  4. Pending exports                 | Partitioned by entity type:      |
+  4. Pending Exports                 | Partitioned by entity type:      |
   5. Reference snapshots             |                                  |
   6. Obsolete CSO cleanup            | Conn1: MVO creates/updates       |
-  7. MVO deletions                   | Conn2: Pending exports           |
+  7. MVO deletions                   | Conn2: Pending Exports           |
   8. RPEIs                           | Conn3: RPEIs + change history    |
   9. Clear tracker                   | Conn4: Obsolete CSO + MVO del   |
   10. Update activity                |                                  |
@@ -274,11 +274,11 @@ Pass 2: foreach cso -> join/flow       (sequential -- ordering matters)
 **What parallelises:**
 - The 11-step page flush is the bottleneck (bulk writes). Partition by entity type:
   - **Group A** (independent): MVO creates/updates, change history
-  - **Group B** (independent): Pending export creates/updates/deletes
+  - **Group B** (independent): Pending Export creates/updates/deletes
   - **Group C** (independent): RPEI bulk insert
   - **Group D** (independent after A): Obsolete CSO cleanup, MVO deletions
 - Export evaluation must wait for MVOs to be committed (depends on Group A)
-- Reference snapshots must wait for pending exports (depends on Group B)
+- Reference snapshots must wait for Pending Exports (depends on Group B)
 
 **Dependency graph for flush:**
 ```
@@ -305,7 +305,7 @@ Pass 2: foreach cso -> join/flow       (sequential -- ordering matters)
 Export already uses `SemaphoreSlim` + per-batch connector/repo. Phase 10 adds:
 
 - **RPEI persistence** after export completion uses the parallel batch writer
-- **Pending export status updates** use parallel batch writer
+- **Pending Export status updates** use parallel batch writer
 - No structural change to the export dispatch model
 
 ### 5. Connection Management

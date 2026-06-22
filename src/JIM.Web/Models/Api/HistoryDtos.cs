@@ -50,22 +50,22 @@ public class HistoryCleanupResponse
 }
 
 /// <summary>
-/// Response for connected system change history count query.
+/// Response for Connected System change history count query.
 /// </summary>
 public class HistoryCountResponse
 {
     /// <summary>
-    /// Connected system ID.
+    /// Connected System ID.
     /// </summary>
     public int ConnectedSystemId { get; set; }
 
     /// <summary>
-    /// Connected system name.
+    /// Connected System name.
     /// </summary>
     public required string ConnectedSystemName { get; set; }
 
     /// <summary>
-    /// Count of CSO change records for this connected system.
+    /// Count of CSO change records for this Connected System.
     /// </summary>
     public int ChangeRecordCount { get; set; }
 }

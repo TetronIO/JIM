@@ -1,19 +1,19 @@
 # Expression Language Guide
 
-When a synchronisation rule flows an attribute from one system to another, it often needs to do more than copy a value across unchanged. You might want to build an email address from a first and last name, force a username to lower case, decide whether an account should be enabled based on someone's employment status, or skip an object entirely unless it meets a condition. JIM's **expression language** is how you describe these transformations.
+When a Synchronisation Rule flows an attribute from one system to another, it often needs to do more than copy a value across unchanged. You might want to build an email address from a first and last name, force a username to lower case, decide whether an account should be enabled based on someone's employment status, or skip an object entirely unless it meets a condition. JIM's **expression language** is how you describe these transformations.
 
 An expression is a short, readable formula that JIM evaluates during synchronisation to produce the value for a target attribute. If you have ever written a formula in a spreadsheet cell, this will feel familiar: you reference attributes much as a spreadsheet references cells, combine them with operators and functions, and JIM works out the result for each object as it is synchronised. No programming experience is required.
 
 ## Where Expressions Fit
 
-Expressions live inside **synchronisation rules**, in what is known as the **attribute flow**: the part of a rule that decides which value lands in each target attribute. Most flows are a straightforward direct mapping (copy `cs["mail"]` straight into `mv["Email"]`); you only reach for an expression when a plain copy is not enough.
+Expressions live inside **Synchronisation Rules**, in what is known as the **Attribute Flow**: the part of a rule that decides which value lands in each target attribute. Most flows are a straightforward direct mapping (copy `cs["mail"]` straight into `mv["Email"]`); you only reach for an expression when a plain copy is not enough.
 
-Within a synchronisation rule, expressions are used in:
+Within a Synchronisation Rule, expressions are used in:
 
-- **Export attribute mappings**<br /> Transform metaverse attributes before sending them to a connected system.
-- **Import attribute mappings**<br /> Transform connected system attributes before storing them in the metaverse.
+- **Export attribute mappings**<br /> Transform metaverse attributes before sending them to a Connected System.
+- **Import attribute mappings**<br /> Transform Connected System attributes before storing them in the metaverse.
 - **Conditional logic**<br /> Choose different values based on conditions (e.g. enable or disable an account based on employee status).
-- **Scoping filters**<br /> Determine which objects are in scope for a synchronisation rule.
+- **Scoping filters**<br /> Determine which objects are in scope for a Synchronisation Rule.
 
 To add or edit these mappings in the admin UI, see [Synchronisation Rules](../configuration/synchronisation-rules.md). The rest of this guide focuses on the expressions themselves: the syntax, the built-in functions, and worked examples you can adapt.
 
@@ -329,7 +329,7 @@ employeeId,coursesCompleted
 E001,"SOFT101|SOFT201|SEC101"
 ```
 
-Use this expression to create individual values on the metaverse object:
+Use this expression to create individual values on the Metaverse Object:
 
 ```csharp
 Split(cs["coursesCompleted"], "|")
@@ -364,7 +364,7 @@ If the attribute has the values Admin, Users, and Developers, this produces: `Ad
 
 ### Validation
 
-JIM validates expressions when you save a synchronisation rule. If an expression has a syntax error, you will see an error message indicating what went wrong and where in the expression the problem is.
+JIM validates expressions when you save a Synchronisation Rule. If an expression has a syntax error, you will see an error message indicating what went wrong and where in the expression the problem is.
 
 Common errors:
 
@@ -380,7 +380,7 @@ When an expression does not produce the result you expect:
 1. **Check the attribute name spelling**<br /> Attribute names are matched case-insensitively, so `mv["department"]` and `mv["Department"]` are equivalent; casing is never the cause. Do check the name is spelled correctly and matches an attribute that exists in the JIM admin UI.
 2. **Use `Eq()` for text comparisons**<br /> Using `==` for text is a common mistake (see [String Comparison](#string-comparison)).
 3. **Check for missing values**<br /> If an attribute does not exist on the object, it returns nothing (null), which can affect the result. Use `Coalesce()` or `IsNullOrEmpty()` to handle this.
-4. **Test with sample data**<br /> Use the expression test feature in the synchronisation rule editor to try your expression with real attribute values before saving.
+4. **Test with sample data**<br /> Use the expression test feature in the Synchronisation Rule editor to try your expression with real attribute values before saving.
 5. **Check the worker logs**<br /> If expressions fail during sync, the worker service logs the error details.
 
 ## Best Practices
@@ -395,4 +395,4 @@ When an expression does not produce the result you expect:
 
 5. **Keep expressions simple**<br /> If an expression is getting complex, consider splitting the logic across multiple attribute mappings.
 
-6. **Document complex expressions**<br /> Add a note in the synchronisation rule's description explaining what complex expressions do, so the next person can understand them.
+6. **Document complex expressions**<br /> Add a note in the Synchronisation Rule's description explaining what complex expressions do, so the next person can understand them.

@@ -163,7 +163,7 @@ File-based exports are typically one-way integrations where no feedback mechanis
 
 If disabled, JIM uses reconciliation-based confirmation:
 
-1. FileConnector writes CSV with pending exports
+1. FileConnector writes CSV with Pending Exports
 2. External system processes the file and writes changes back to a file JIM can import
 3. On next Full Import + Sync, JIM compares `PendingExport` changes against actual CSO values
 4. When changes match, `PendingExport` is deleted (confirmed)
@@ -230,7 +230,7 @@ This approach:
 - [x] **4.3.8** Handle full state vs changes-only export
 - [x] **4.3.9** Set `SupportsExport = true` and `SupportsAutoConfirmExport = true` in capabilities
 - [x] **4.3.10** Add unit tests for export functionality
-- [x] **4.3.11** Add integration test with mock pending exports
+- [x] **4.3.11** Add integration test with mock Pending Exports
 - [ ] **4.3.12** Add test for auto-confirm behaviour in worker
 
 ### Files to Modify/Create

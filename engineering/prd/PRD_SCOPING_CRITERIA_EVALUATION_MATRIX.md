@@ -7,7 +7,7 @@
 
 ## Problem Statement
 
-Sync rule scoping in JIM is driven by `SyncRuleScopingCriteria`, which composes attribute comparisons via `SearchComparisonType` operators inside `SearchGroupType` groups (`All`/`Any`, optionally nested). Together this is a moderately large evaluation matrix: 12 operators (Equals, NotEquals, StartsWith, NotStartsWith, EndsWith, NotEndsWith, Contains, NotContains, LessThan, LessThanOrEquals, GreaterThan, GreaterThanOrEquals) × 6 typed value carriers (Text, Number, LongNumber, DateTime, Boolean, Guid) × 2 group structures × `CaseSensitive` flag for text comparisons.
+Synchronisation Rule scoping in JIM is driven by `SyncRuleScopingCriteria`, which composes attribute comparisons via `SearchComparisonType` operators inside `SearchGroupType` groups (`All`/`Any`, optionally nested). Together this is a moderately large evaluation matrix: 12 operators (Equals, NotEquals, StartsWith, NotStartsWith, EndsWith, NotEndsWith, Contains, NotContains, LessThan, LessThanOrEquals, GreaterThan, GreaterThanOrEquals) × 6 typed value carriers (Text, Number, LongNumber, DateTime, Boolean, Guid) × 2 group structures × `CaseSensitive` flag for text comparisons.
 
 Scenario 10 (`Invoke-Scenario10-SyncRuleScoping.ps1`) deliberately covers only the **common ILM shape**: text `Equals` / `StartsWith` / `Contains` in a single `All` group, exercised against the full action lifecycle (inbound enter / in-scope-update / exit-disconnect / exit-remain-joined; outbound enter / exit-disconnect / exit-delete; cross-system inline cascade). It is fast (around 2 minutes 41 seconds on Nano) precisely because it does not enumerate the evaluation matrix.
 
@@ -28,7 +28,7 @@ This PRD scopes a dedicated integration scenario whose purpose is **evaluation c
 ## Non-Goals
 
 - Cascade and lifecycle assertions (RPEI shapes, PendingExport queue contents, OutOfScope action selection, MVO obsoletion). Those live in Scenario 10 and must not be duplicated here.
-- Multi-connector / cross-system cascade. The matrix targets a single inbound rule against a single connected system; outbound cascade is Scenario 10's territory.
+- Multi-connector / cross-system cascade. The matrix targets a single inbound rule against a single Connected System; outbound cascade is Scenario 10's territory.
 - Performance / scale assertions. The matrix runs at Nano and asserts correctness, not throughput. Performance baselines remain Scenario 14's responsibility.
 - New operator types, new value carriers, or new group semantics. This scenario tests what the system already supports; it is not a vehicle for extending the scoping engine.
 - UI coverage. The matrix is driven via the REST API; the scoping rule editor in the Blazor UI is out of scope.
@@ -74,9 +74,9 @@ Cell definitions live in a checked-in **manifest** under `test/integration/scena
 #### Cell shape
 
 9. Each matrix cell is a tuple of `(operator, value-carrier-type, group-structure, case-sensitivity, expected-matching-MVO-set)`. The expected matching set is the literal set of `EmployeeId`s the rule should accept given the seed.
-10. The scenario must drive each cell via the **public REST API** (sync rule create/update + inbound sync trigger), not via direct repository writes. This is what makes the test meaningful as an end-to-end check.
+10. The scenario must drive each cell via the **public REST API** (Synchronisation Rule create/update + inbound sync trigger), not via direct repository writes. This is what makes the test meaningful as an end-to-end check.
 11. Per cell, the test must:
-    1. Configure a sandbox import sync rule against the seeded connected system with the cell's scoping criteria.
+    1. Configure a sandbox import Synchronisation Rule against the seeded Connected System with the cell's scoping criteria.
     2. Trigger an inbound sync.
     3. Read back the set of MVOs the rule projected, identified by `EmployeeId`.
     4. Assert the projected set matches the cell's expected set exactly.
@@ -111,7 +111,7 @@ The matrix runs at one of three coverage tiers, selectable via parameter or inte
 
 #### Round-trip persistence
 
-20. The scenario must include a round-trip persistence sub-test that, for each value-carrier type, configures a sync rule with a non-trivial value, fetches the rule back via the API, and asserts the value carrier (`StringValue` / `IntValue` / `LongValue` / `DateTimeValue` / `BoolValue` / `GuidValue`), `ComparisonType`, and `CaseSensitive` flag survived persistence intact.
+20. The scenario must include a round-trip persistence sub-test that, for each value-carrier type, configures a Synchronisation Rule with a non-trivial value, fetches the rule back via the API, and asserts the value carrier (`StringValue` / `IntValue` / `LongValue` / `DateTimeValue` / `BoolValue` / `GuidValue`), `ComparisonType`, and `CaseSensitive` flag survived persistence intact.
 21. The round-trip sub-test must run before the evaluation matrix; if a value carrier is silently dropped on persistence, the matrix results would be meaningless and we want to know that first. The round-trip sub-test runs in all three tiers.
 
 #### Cell isolation
@@ -119,11 +119,11 @@ The matrix runs at one of three coverage tiers, selectable via parameter or inte
 JIM does **not** currently expose a sync-preview path that evaluates scoping criteria without committing projections. The implementation must therefore use one of the strategies below. The strategy is settled in the implementation plan, not here, because the wall-clock impact depends on measurements taken during the spike.
 
 22. Cells must be isolated from each other without paying the cost of a full `Reset-JIMSystem` per cell. The implementation plan must pick one of the following, with justification grounded in a measured wall-clock spike at Nano against the canonical seed:
-    1. **Batched sync, one rule per cell, distinct projected object types** (recommended starting point): create N import sync rules in one go, each with its cell's scoping criteria and its own metaverse object type. A single inbound sync run evaluates all rules; per-cell assertions read back per-object-type. Amortises sync-run overhead across cells and is the only strategy that makes the Exhaustive tier (requirement 13) feasible inside its wall-clock budget.
-    2. **Single sync rule, mutated in place**: keep one sandbox rule, PATCH its scoping criteria between cells, full-sync each cell, expect deprovisioning to clean up the previous cell's projections. Re-exercises the deprovisioning lifecycle that Scenario 10 already covers, so cell assertions are coupled to lifecycle correctness; rejected unless the batched path is shown to be unviable.
+    1. **Batched sync, one rule per cell, distinct projected object types** (recommended starting point): create N import Synchronisation Rules in one go, each with its cell's scoping criteria and its own Metaverse Object Type. A single inbound sync run evaluates all rules; per-cell assertions read back per-object-type. Amortises sync-run overhead across cells and is the only strategy that makes the Exhaustive tier (requirement 13) feasible inside its wall-clock budget.
+    2. **Single Synchronisation Rule, mutated in place**: keep one sandbox rule, PATCH its scoping criteria between cells, full-sync each cell, expect deprovisioning to clean up the previous cell's projections. Re-exercises the deprovisioning lifecycle that Scenario 10 already covers, so cell assertions are coupled to lifecycle correctness; rejected unless the batched path is shown to be unviable.
     3. **One rule per cell, sync per cell**: simplest to reason about, but pays the sync-run overhead per cell and is the slowest of the three. Last resort only; under this strategy the Exhaustive tier must be restricted or deferred per requirement 19.
 23. If none of the three options above can keep the Default tier under its 5-minute Nano wall-clock target, the implementation plan must explicitly raise this in a follow-up issue before adopting an option that exceeds the budget. The implementation plan must not silently relax tier wall-clock targets.
-24. The scenario must complete with the JIM instance returned to a known-empty state (no sandbox rules, no leftover MVOs, no orphaned PendingExports, no leftover sandbox metaverse object types), achieved by a single `Reset-JIMSystem -Force` at scenario end. The scenario must not require any manual cleanup to leave the host re-runnable.
+24. The scenario must complete with the JIM instance returned to a known-empty state (no sandbox rules, no leftover MVOs, no orphaned PendingExports, no leftover sandbox Metaverse Object Types), achieved by a single `Reset-JIMSystem -Force` at scenario end. The scenario must not require any manual cleanup to leave the host re-runnable.
 
 #### API behaviour negative-tests
 
@@ -140,7 +140,7 @@ JIM does **not** currently expose a sync-preview path that evaluates scoping cri
 
 Every configuration knob exposed by the scenario script must be selectable in **both** ways: as a parameter on `Run-IntegrationTests.ps1` (for scripted / CI use) and via the interactive menu (for ad-hoc developer use). The two surfaces must accept the same value sets and produce identical scenario invocations.
 
-30. `Run-IntegrationTests.ps1` must register Scenario 11 in the auto-detected scenario list with a human-readable description in the `switch` block that maps scenario filenames to descriptions (currently at [test/integration/Run-IntegrationTests.ps1:480-490](../../test/integration/Run-IntegrationTests.ps1#L480-L490)). Proposed: "Sync rule scoping criteria evaluation matrix".
+30. `Run-IntegrationTests.ps1` must register Scenario 11 in the auto-detected scenario list with a human-readable description in the `switch` block that maps scenario filenames to descriptions (currently at [test/integration/Run-IntegrationTests.ps1:480-490](../../test/integration/Run-IntegrationTests.ps1#L480-L490)). Proposed: "Synchronisation Rule scoping criteria evaluation matrix".
 31. The scenario must surface its scenario-specific options as **named parameters** on the scenario script (`-Quick`, `-Exhaustive`, `-OperatorFilter`, `-IncludeNegativeCells`), with `ValidateSet` constraints where the value set is bounded. Parameters must be discoverable via `Get-Help` on the scenario script and from `Run-IntegrationTests.ps1 -?`.
 32. `Run-IntegrationTests.ps1` must accept and pass through the scenario-specific parameters introduced in requirement 31. The pass-through must not require changes to other scenarios; the runner must continue to work for any scenario that does not define those parameters.
 33. When `Run-IntegrationTests.ps1` is launched **without** the scenario-specific parameters AND the user selects Scenario 11 in the interactive menu, the runner must prompt for the same options the parameters expose, in this order:
@@ -263,7 +263,7 @@ These were open during PRD drafting and have been settled in conversation. They 
 - [ ] Each cell appears as a named pass/fail in the scenario report; the summary line shows total / pass / fail counts and the active tier.
 - [ ] Cell failures do not halt the scenario; the matrix completes regardless and the scenario fails overall only if any cell failed.
 - [ ] Scenario wall-clock at Nano: Quick under 90 s, Default under 5 min, Exhaustive under 10 min (on the standard devcontainer host, assuming batched-sync cell isolation).
-- [ ] Scenario tears down cleanly with no orphaned sandbox rules, MVOs, PendingExports, or sandbox metaverse object types; back-to-back runs at any tier produce identical results.
+- [ ] Scenario tears down cleanly with no orphaned sandbox rules, MVOs, PendingExports, or sandbox Metaverse Object Types; back-to-back runs at any tier produce identical results.
 - [ ] `engineering/INTEGRATION_TESTING.md` is updated with Scenario 11 in all the places where the existing scenarios are listed (Available Scenarios table, Quick Start commands including separate Default / `-Quick` / `-Exhaustive` examples, step example, detail section, Phase 1 status table), and the existing Phase 2 placeholders 11 / 12 / 13 are renumbered to 12 / 13 / 14 everywhere they appear.
 - [ ] `Run-IntegrationTests.ps1` registers Scenario 11 in the auto-detected scenario list with a human-readable description, exposes the scenario-specific options as named parameters that pass through to the scenario script, prompts for the same options (coverage tier, operator filter, negative cells) in the interactive menu when those parameters are not supplied, skips the prompts silently when they are, and prints the resolved values in both the pre-run banner and the end-of-run re-run hint.
 - [ ] Every scenario-specific option can be set in both ways (parameter and menu) and the two paths produce identical scenario invocations for the same selections.

@@ -95,7 +95,7 @@ flowchart TD
     TryCatch --> Normal{Normal<br/>outcome?}
     Normal -->|Projected| ProjectedRPEI[RPEI: ObjectChangeType = Projected]
     Normal -->|Joined| JoinedRPEI[RPEI: ObjectChangeType = Joined]
-    Normal -->|Attribute flow| FlowRPEI[RPEI: ObjectChangeType = AttributeFlow]
+    Normal -->|Attribute Flow| FlowRPEI[RPEI: ObjectChangeType = AttributeFlow]
     Normal -->|No changes| SkipRPEI[No RPEI created<br/>Only when HasChanges = true]
 
     TryCatch --> JoinError{SyncJoin<br/>Exception?}

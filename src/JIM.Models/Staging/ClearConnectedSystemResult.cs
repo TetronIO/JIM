@@ -4,17 +4,17 @@
 namespace JIM.Models.Staging;
 
 /// <summary>
-/// Result of clearing all objects from a connected system, including counts of removed items.
+/// Result of clearing all objects from a Connected System, including counts of removed items.
 /// </summary>
 public class ClearConnectedSystemResult
 {
     /// <summary>
-    /// Count of pending exports removed during the clear operation.
+    /// Count of Pending Exports removed during the clear operation.
     /// </summary>
     public int PendingExportsRemoved { get; set; }
 
     /// <summary>
-    /// Count of connected system objects removed during the clear operation.
+    /// Count of Connected System Objects removed during the clear operation.
     /// </summary>
     public int ConnectedSystemObjectsRemoved { get; set; }
 }

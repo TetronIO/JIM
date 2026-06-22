@@ -29,7 +29,7 @@ public class ScheduleStep : IAuditable
     /// <summary>
     /// Optional display name for the step. Used for non-RunProfile steps (PowerShell, Executable, SqlScript)
     /// where users provide a descriptive name. For RunProfile steps, the name is derived from the
-    /// connected system and run profile FKs at display time.
+    /// Connected System and Run Profile FKs at display time.
     /// </summary>
     public string? Name { get; set; }
 
@@ -51,12 +51,12 @@ public class ScheduleStep : IAuditable
 
     // RunProfile step configuration
     /// <summary>
-    /// The connected system ID for RunProfile steps.
+    /// The Connected System ID for RunProfile steps.
     /// </summary>
     public int? ConnectedSystemId { get; set; }
 
     /// <summary>
-    /// The run profile ID for RunProfile steps.
+    /// The Run Profile ID for RunProfile steps.
     /// </summary>
     public int? RunProfileId { get; set; }
 

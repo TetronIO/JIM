@@ -4,11 +4,11 @@
 - **Branch:** `feature/perf-instrumentation-mvo-detail`
 - **Implementation commit:** `09e6806a`
 
-> Investigation of the slow load on the metaverse object detail page (e.g. `/t/groups/v/{id}`), the chosen remediation, and the validation results.
+> Investigation of the slow load on the Metaverse Object detail page (e.g. `/t/groups/v/{id}`), the chosen remediation, and the validation results.
 
 ## Symptom
 
-The metaverse object detail page used to load quickly for groups of this size and is now noticeably slow. Reproduction case: `/t/groups/v/430aa262-a4b7-4a5f-9665-60caa877fe44`.
+The Metaverse Object detail page used to load quickly for groups of this size and is now noticeably slow. Reproduction case: `/t/groups/v/430aa262-a4b7-4a5f-9665-60caa877fe44`.
 
 ## Quantification
 

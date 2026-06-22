@@ -510,7 +510,7 @@ else
         /// </summary>
         public string ChangeMechanismType { get; set; } = string.Empty;
         /// <summary>
-        /// The sync rule that caused this change (if applicable).
+        /// The Synchronisation Rule that caused this change (if applicable).
         /// </summary>
         public int? SyncRuleId { get; set; }
         public string? SyncRuleName { get; set; }
@@ -519,15 +519,15 @@ else
         /// </summary>
         public Guid? ActivityRunProfileExecutionItemId { get; set; }
         /// <summary>
-        /// For CSO import changes: the connected system ID (for linking).
+        /// For CSO import changes: the Connected System ID (for linking).
         /// </summary>
         public int? ConnectedSystemId { get; set; }
         /// <summary>
-        /// For CSO import changes: the connected system name.
+        /// For CSO import changes: the Connected System name.
         /// </summary>
         public string? ConnectedSystemName { get; set; }
         /// <summary>
-        /// For CSO import changes: the run profile name (e.g., "Full Import", "Delta Import").
+        /// For CSO import changes: the Run Profile name (e.g., "Full Import", "Delta Import").
         /// </summary>
         public string? RunProfileName { get; set; }
         /// <summary>
@@ -995,7 +995,7 @@ else
         {
             int seq = 0;
 
-            // Determine if this is a sync-initiated change (by mechanism type or sync rule context)
+            // Determine if this is a sync-initiated change (by mechanism type or Synchronisation Rule context)
             bool isSyncChange = changeGroup.ChangeMechanismType == "SynchronisationRule" ||
     changeGroup.SyncRuleId != null ||
     !string.IsNullOrEmpty(changeGroup.SyncRuleName);
@@ -1051,7 +1051,7 @@ else
     {
         return builder =>
         {
-            // Check if this is a sync-initiated change (by mechanism type or sync rule context)
+            // Check if this is a sync-initiated change (by mechanism type or Synchronisation Rule context)
             bool isSyncChange = changeGroup.ChangeMechanismType == "SynchronisationRule" ||
     changeGroup.SyncRuleId != null ||
     !string.IsNullOrEmpty(changeGroup.SyncRuleName);
@@ -1072,7 +1072,7 @@ else
         {
             int seq = 0;
 
-            // Check if this is a sync-initiated change (by mechanism type or sync rule context)
+            // Check if this is a sync-initiated change (by mechanism type or Synchronisation Rule context)
             bool isSyncChange = changeGroup.ChangeMechanismType == "SynchronisationRule" ||
     changeGroup.SyncRuleId != null ||
     !string.IsNullOrEmpty(changeGroup.SyncRuleName);
@@ -1222,14 +1222,14 @@ else
                 return "Export";
         }
 
-        // Default to Import for import run profiles or unknown
+        // Default to Import for import Run Profiles or unknown
         return "Import";
     }
 
     /// <summary>
     /// Generates the text for the modal mechanism (how) display.
-    /// For sync changes, shows the sync rule as a link if available.
-    /// For import changes, shows "Import" with connected system link.
+    /// For sync changes, shows the Synchronisation Rule as a link if available.
+    /// For import changes, shows "Import" with Connected System link.
     /// </summary>
     private RenderFragment GetModalMechanismText(ChangeGroup changeGroup)
     {
@@ -1240,10 +1240,10 @@ else
             // Determine the effective mechanism type using the same logic as icon selection
             var effectiveMechanism = GetEffectiveMechanismType(changeGroup);
 
-            // Check if we have connected system info (for both CSO and MVO run profile changes)
+            // Check if we have Connected System info (for both CSO and MVO Run Profile changes)
             bool hasConnectedSystemInfo = changeGroup.ConnectedSystemId != null;
 
-            // Check if this is an MVO sync change with sync rule info
+            // Check if this is an MVO sync change with Synchronisation Rule info
             bool hasSyncRuleInfo = changeGroup.SyncRuleId != null || !string.IsNullOrEmpty(changeGroup.SyncRuleName);
 
             // Check if this is a sync-type change
@@ -1251,7 +1251,7 @@ else
 
             if (hasConnectedSystemInfo)
             {
-                // Show run profile name (e.g., "Full Import", "Delta Sync", "Export") with connected system link
+                // Show Run Profile name (e.g., "Full Import", "Delta Sync", "Export") with Connected System link
                 var runProfileDisplayName = !string.IsNullOrEmpty(changeGroup.RunProfileName) ? changeGroup.RunProfileName :
         effectiveMechanism;
                 builder.OpenComponent<MudText>(seq++);
@@ -1259,7 +1259,7 @@ else
                 builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, runProfileDisplayName)));
                 builder.CloseComponent();
 
-                // Show connected system as a link
+                // Show Connected System as a link
                 if (!string.IsNullOrEmpty(changeGroup.ConnectedSystemName))
                 {
                     builder.OpenComponent<MudText>(seq++);
@@ -1274,7 +1274,7 @@ else
                     builder.CloseComponent();
                 }
 
-                // For MVO sync changes, also show sync rule info if available
+                // For MVO sync changes, also show Synchronisation Rule info if available
                 if (hasSyncRuleInfo)
                 {
                     builder.OpenComponent<MudText>(seq++);
@@ -1287,12 +1287,12 @@ else
                         builder.OpenComponent<MudLink>(seq++);
                         builder.AddAttribute(seq++, "Href", $"/admin/sync-rules/{changeGroup.SyncRuleId}");
                         builder.AddAttribute(seq++, "Style", "margin-left: 4px;");
-                        builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.SyncRuleName ?? "Sync Rule")));
+                        builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.SyncRuleName ?? "Synchronisation Rule")));
                         builder.CloseComponent();
                     }
                     else
                     {
-                        // Sync rule was deleted, show name with "(deleted)" indicator
+                        // Synchronisation Rule was deleted, show name with "(deleted)" indicator
                         builder.OpenComponent<MudText>(seq++);
                         builder.AddAttribute(seq++, "Style", "display: inline; margin-left: 4px;");
                         builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, $"{changeGroup.SyncRuleName} (deleted)")));
@@ -1302,7 +1302,7 @@ else
             }
             else if (isSyncMechanism)
             {
-                // Sync change without sync rule or connected system info - show run profile name or "Synchronisation"
+                // Sync change without Synchronisation Rule or Connected System info - show Run Profile name or "Synchronisation"
                 var runProfileDisplayName = !string.IsNullOrEmpty(changeGroup.RunProfileName) ? changeGroup.RunProfileName :
         "Synchronisation";
                 builder.OpenComponent<MudText>(seq++);
@@ -1361,7 +1361,7 @@ else
             // MVO Sync operations
             ObjectChangeType.Projected => Color.Success, // New MVO = green (creation)
             ObjectChangeType.Joined => Color.Tertiary, // Join = purple/tertiary (linking)
-            ObjectChangeType.AttributeFlow => Color.Info, // Attribute flow = blue (update)
+            ObjectChangeType.AttributeFlow => Color.Info, // Attribute Flow = blue (update)
 
             // Direct creation
             ObjectChangeType.Created => Color.Success,

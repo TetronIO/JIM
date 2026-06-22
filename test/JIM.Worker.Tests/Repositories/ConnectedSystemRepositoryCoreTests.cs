@@ -190,7 +190,7 @@ public class ConnectedSystemRepositoryCoreTests
 
     #endregion
 
-    #region GetConnectedSystemAsync — object matching rule wire-up
+    #region GetConnectedSystemAsync — Object Matching Rule wire-up
 
     [Test]
     public async Task GetConnectedSystemAsync_WiresMatchingRulesOntoOwningObjectTypesAsync()
@@ -392,7 +392,7 @@ public class ConnectedSystemRepositoryCoreTests
     [Test]
     public async Task GetConnectedSystemAsync_LoadsNestedContainersBelowRootsAsync()
     {
-        // Arrange: a connected system with one partition, one root container ("Corp"), and three
+        // Arrange: a Connected System with one partition, one root container ("Corp"), and three
         // nested descendants ("Users", "Groups", "Entitlements") whose PartitionId is null and
         // whose ParentContainerId points at the root. This mirrors the shape that Samba AD / AD
         // LDAP imports produce: only top-level containers carry a PartitionId FK; descendants are
@@ -514,7 +514,7 @@ public class ConnectedSystemRepositoryCoreTests
     [Test]
     public async Task GetConnectedSystemAsync_ExcludesContainersFromUnrelatedPartitionsAsync()
     {
-        // Arrange: two connected systems (A and B), each with one partition and a Corp/Users tree.
+        // Arrange: two Connected Systems (A and B), each with one partition and a Corp/Users tree.
         // When loading system A, we must see A's tree only — B's containers must not leak in.
         var systemA = CreateConnectedSystem(id: 1, name: "A");
         var systemB = CreateConnectedSystem(id: 2, name: "B");

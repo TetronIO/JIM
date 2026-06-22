@@ -30,7 +30,7 @@ public class MetaverseServer
     }
     #endregion
 
-    #region metaverse object types
+    #region Metaverse Object Types
     public async Task<List<MetaverseObjectType>> GetMetaverseObjectTypesAsync(bool includeChildObjects)
     {
         return await Application.Repository.Metaverse.GetMetaverseObjectTypesAsync(includeChildObjects);
@@ -220,7 +220,7 @@ public class MetaverseServer
     /// <param name="attribute">The attribute to delete.</param>
     /// <param name="initiatedBy">The user who initiated the deletion.</param>
     /// <exception cref="MetaverseAttributeInUseException">
-    /// Thrown if the attribute is referenced by sync rules or has stored values on metaverse objects.
+    /// Thrown if the attribute is referenced by Synchronisation Rules or has stored values on Metaverse Objects.
     /// </exception>
     public async Task DeleteMetaverseAttributeAsync(MetaverseAttribute attribute, MetaverseObject? initiatedBy)
     {
@@ -302,7 +302,7 @@ public class MetaverseServer
     /// <param name="attribute">The attribute to delete.</param>
     /// <param name="initiatedByApiKey">The API key that initiated the deletion.</param>
     /// <exception cref="MetaverseAttributeInUseException">
-    /// Thrown if the attribute is referenced by sync rules or has stored values on metaverse objects.
+    /// Thrown if the attribute is referenced by Synchronisation Rules or has stored values on Metaverse Objects.
     /// </exception>
     public async Task DeleteMetaverseAttributeAsync(MetaverseAttribute attribute, ApiKey initiatedByApiKey)
     {
@@ -333,7 +333,7 @@ public class MetaverseServer
     /// <param name="attribute">The attribute with its current object type associations loaded.</param>
     /// <param name="newObjectTypeIds">The new set of object type IDs to be associated with the attribute.</param>
     /// <exception cref="MetaverseAttributeInUseException">
-    /// Thrown if any object type being removed has metaverse objects with stored values for this attribute.
+    /// Thrown if any object type being removed has Metaverse Objects with stored values for this attribute.
     /// </exception>
     public async Task ValidateObjectTypeRemovalAsync(MetaverseAttribute attribute, List<int> newObjectTypeIds)
     {
@@ -359,13 +359,13 @@ public class MetaverseServer
 
     private async Task ValidateAttributeDeletionAsync(MetaverseAttribute attribute)
     {
-        // Check sync rule references first (higher priority: removing references is prerequisite)
+        // Check Synchronisation Rule references first (higher priority: removing references is prerequisite)
         var syncRuleRefs = await Application.Repository.Metaverse.GetSyncRulesReferencingAttributeAsync(attribute.Id);
         if (syncRuleRefs.Count > 0)
         {
             var ruleNames = string.Join(", ", syncRuleRefs.Select(r => r.Name));
             throw new MetaverseAttributeInUseException(
-                $"Cannot delete attribute '{attribute.Name}': it is referenced by {syncRuleRefs.Count} sync rule(s) ({ruleNames}). Remove the references first.",
+                $"Cannot delete attribute '{attribute.Name}': it is referenced by {syncRuleRefs.Count} Synchronisation Rule(s) ({ruleNames}). Remove the references first.",
                 syncRuleRefs);
         }
 
@@ -374,13 +374,13 @@ public class MetaverseServer
         if (objectCount > 0)
         {
             throw new MetaverseAttributeInUseException(
-                $"Cannot delete attribute '{attribute.Name}': {objectCount:N0} metaverse object(s) have values stored for this attribute. Remove the values first.",
+                $"Cannot delete attribute '{attribute.Name}': {objectCount:N0} Metaverse Object(s) have values stored for this attribute. Remove the values first.",
                 objectCount);
         }
     }
     #endregion
 
-    #region metaverse objects
+    #region Metaverse Objects
     public async Task<MetaverseObject?> GetMetaverseObjectAsync(Guid id)
     {
         return await Application.Repository.Metaverse.GetMetaverseObjectAsync(id);
@@ -826,7 +826,7 @@ public class MetaverseServer
     }
 
     /// <summary>
-    /// Gets a paginated list of lightweight metaverse object headers with only the attributes defined
+    /// Gets a paginated list of lightweight Metaverse Object headers with only the attributes defined
     /// in the PredefinedSearch projected directly in SQL for optimum performance at scale.
     /// </summary>
     public async Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectHeadersPagedAsync(
@@ -842,7 +842,7 @@ public class MetaverseServer
     }
 
     /// <summary>
-    /// Gets a paginated list of metaverse objects with optional filtering by type, search query, or specific attribute value.
+    /// Gets a paginated list of Metaverse Objects with optional filtering by type, search query, or specific attribute value.
     /// </summary>
     /// <param name="page">The page number (1-based).</param>
     /// <param name="pageSize">The number of items per page.</param>
@@ -852,7 +852,7 @@ public class MetaverseServer
     /// <param name="attributes">Optional list of attribute names to include. DisplayName is always included.</param>
     /// <param name="filterAttributeName">Optional attribute name to filter by (must be used with filterAttributeValue).</param>
     /// <param name="filterAttributeValue">Optional attribute value to filter by (exact match, case-insensitive).</param>
-    /// <returns>A paged result set of metaverse object headers.</returns>
+    /// <returns>A paged result set of Metaverse Object headers.</returns>
     public async Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectsAsync(
         int page = 1,
         int pageSize = 20,
@@ -876,7 +876,7 @@ public class MetaverseServer
     /// <param name="objectMatchingRule">The Object Matching Rule contains the logic needed to construct a Metaverse Object query.</param>
     /// <returns>A Metaverse Object if a single result is found, otherwise null.</returns>
     /// <exception cref="NotImplementedException">Will be thrown if more than one source is specified (advanced matching). This is not yet supported.</exception>
-    /// <exception cref="ArgumentNullException">Will be thrown if the object matching rule source connected system attribute is null.</exception>
+    /// <exception cref="ArgumentNullException">Will be thrown if the Object Matching Rule source Connected System attribute is null.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Will be thrown if an unsupported attribute type is specified.</exception>
     /// <exception cref="MultipleMatchesException">Will be thrown if there's more than one Metaverse Object that matches the matching rule criteria.</exception>
     public async Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(ConnectedSystemObject connectedSystemObject, MetaverseObjectType metaverseObjectType, ObjectMatchingRule objectMatchingRule)

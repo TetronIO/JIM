@@ -4,7 +4,7 @@
 namespace JIM.Models.Staging;
 
 /// <summary>
-/// A copy of a connector setting that will get persisted as a definition, that connected systems can reference when collecting values for connected system settings.
+/// A copy of a connector setting that will get persisted as a definition, that Connected Systems can reference when collecting values for Connected System settings.
 /// </summary>
 public class ConnectorDefinitionSetting : ConnectorSetting
 {

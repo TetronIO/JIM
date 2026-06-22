@@ -23,9 +23,9 @@ public static class TestUtilities
     /// Asserts that a Connected System Object attribute value is the same as what was received from a Connector on import via a Connected System Import Object.
     /// Essentially, to test that the sync logic has correctly persisted the connector changes to the Connected System in Jim. 
     /// </summary>
-    /// <param name="connectedSystemObject">The persisted version of the object in Jim that correlates with the object in the connected system.</param>
+    /// <param name="connectedSystemObject">The persisted version of the object in Jim that correlates with the object in the Connected System.</param>
     /// <param name="connectedSystemImportObject">The Connected System Import Object that a Connector will return after importing data from a Connected System.</param>
-    /// <param name="sourceSystemAttributeNames">The name of the attribute in the connected system. Must match what's in the persisted schema in JIM.</param>
+    /// <param name="sourceSystemAttributeNames">The name of the attribute in the Connected System. Must match what's in the persisted schema in JIM.</param>
     /// <param name="connectedSystemObjectTypesData">The mocked database table in Jim for the Connected System Objects.</param>
     /// <exception cref="NotSupportedException">Will be thrown for unsupported attribute data types./</exception>
     public static void ValidateImportAttributesForEquality(
@@ -523,8 +523,8 @@ public static class TestUtilities
                 {
                     new()
                     {
-                        // mimicking a system identifier for the object in a connected system.
-                        // this is intended to be unique for each object in the connected system.
+                        // mimicking a system identifier for the object in a Connected System.
+                        // this is intended to be unique for each object in the Connected System.
                         // we use the term "External ID" for this in Jim.
                         Id = (int)MockSourceSystemAttributeNames.HR_ID,
                         Name = MockSourceSystemAttributeNames.HR_ID.ToString(),
@@ -536,7 +536,7 @@ public static class TestUtilities
                     {
                         // mimicking an organisational unique and immutable identifier for a person in the organisation.
                         // should be unique, but any Senior Identity Engineer will most likely have stories to tell about HR re-issuing, or changing employee ids.
-                        // intended to be used as a correlating attribute for Metaverse to Connected System object joins.
+                        // intended to be used as a correlating attribute for Metaverse to Connected System Object joins.
                         Id = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
                         Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString(),
                         Type = AttributeDataType.Text,
@@ -546,7 +546,7 @@ public static class TestUtilities
                     {
                         // mimicking another organisational unique and immutable identifier for a person in the organisation.
                         // should be unique, but any Senior Identity Engineer will most likely have stories to tell about HR re-issuing, or changing employee numbers.
-                        // intended to be used as a correlating attribute for Metaverse to Connected System object joins.
+                        // intended to be used as a correlating attribute for Metaverse to Connected System Object joins.
                         Id = (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER,
                         Name = MockSourceSystemAttributeNames.EMPLOYEE_NUMBER.ToString(),
                         Type = AttributeDataType.Number,
@@ -723,8 +723,8 @@ public static class TestUtilities
                 {
                     new()
                     {
-                        // mimicking a system identifier for the object in a connected system.
-                        // this is intended to be unique for each object in the connected system.
+                        // mimicking a system identifier for the object in a Connected System.
+                        // this is intended to be unique for each object in the Connected System.
                         // we use the term "External ID" for this in Jim.
                         Id = (int)MockSourceSystemAttributeNames.GROUP_UID,
                         Name = MockSourceSystemAttributeNames.GROUP_UID.ToString(),
@@ -759,8 +759,8 @@ public static class TestUtilities
                 {
                     new()
                     {
-                        // mimicking a system identifier for the object in a connected system.
-                        // this is intended to be unique for each object in the connected system.
+                        // mimicking a system identifier for the object in a Connected System.
+                        // this is intended to be unique for each object in the Connected System.
                         // we use the term "External ID" for this in Jim.
                         Id = (int)MockTargetSystemAttributeNames.ObjectGuid,
                         Name = MockTargetSystemAttributeNames.ObjectGuid.ToString(),
@@ -772,7 +772,7 @@ public static class TestUtilities
                     {
                         // mimicking the organisational unique and immutable identifier for a person in the organisation.
                         // should be unique, but any Senior Identity Engineer will most likely have stories to tell about HR re-issuing, or changing employee ids.
-                        // intended to be used as the correlating attribute for Metaverse to Connected System object joins.
+                        // intended to be used as the correlating attribute for Metaverse to Connected System Object joins.
                         Id = (int)MockTargetSystemAttributeNames.EmployeeId,
                         Name = MockTargetSystemAttributeNames.EmployeeId.ToString(),
                         Type = AttributeDataType.Text,
@@ -850,7 +850,7 @@ public static class TestUtilities
     }
 
     /// <summary>
-    /// Returns test user and group metaverse object types.
+    /// Returns test user and group Metaverse Object Types.
     /// </summary>
     public static List<MetaverseObjectType> GetMetaverseObjectTypeData()
     {
@@ -1033,7 +1033,7 @@ public static class TestUtilities
     }
 
     /// <summary>
-    /// Returns stub test user and group, inbound and outbound sync rules for individual unit tests to customise for specific scenarios.
+    /// Returns stub test user and group, inbound and outbound Synchronisation Rules for individual unit tests to customise for specific scenarios.
     /// </summary>
     public static List<SyncRule> GetSyncRuleData()
     {
@@ -1051,7 +1051,7 @@ public static class TestUtilities
             {
                 Id = 1,
                 ConnectedSystemId = 1,
-                Name = "Dummy User Import Sync Rule 1",
+                Name = "Dummy User Import Synchronisation Rule 1",
                 Direction = SyncRuleDirection.Import,
                 Enabled = true,
                 ConnectedSystemObjectTypeId = csUserType.Id,
@@ -1063,7 +1063,7 @@ public static class TestUtilities
             {
                 Id = 2,
                 ConnectedSystemId = 1,
-                Name = "Dummy User Export Sync Rule 1",
+                Name = "Dummy User Export Synchronisation Rule 1",
                 Direction = SyncRuleDirection.Export,
                 Enabled = true,
                 ConnectedSystemObjectTypeId = csUserType.Id,
@@ -1075,7 +1075,7 @@ public static class TestUtilities
             {
                 Id = 3,
                 ConnectedSystemId = 1,
-                Name = "Dummy Group Import Sync Rule 1",
+                Name = "Dummy Group Import Synchronisation Rule 1",
                 Direction = SyncRuleDirection.Import,
                 Enabled = true,
                 ConnectedSystemObjectTypeId = csGroupType.Id,
@@ -1087,7 +1087,7 @@ public static class TestUtilities
             {
                 Id = 4,
                 ConnectedSystemId = 1,
-                Name = "Dummy Group Export Sync Rule 1",
+                Name = "Dummy Group Export Synchronisation Rule 1",
                 Direction = SyncRuleDirection.Export,
                 Enabled = true,
                 ConnectedSystemObjectTypeId = csGroupType.Id,
@@ -1158,8 +1158,8 @@ public static class TestUtilities
 
     /// <summary>
     /// Creates and seeds an InMemoryData.SyncRepository with the standard test data.
-    /// Seeds connected systems, object types, sync rules, and configures settings.
-    /// Optionally seeds CSOs, MVOs, pending exports, and activities.
+    /// Seeds Connected Systems, object types, Synchronisation Rules, and configures settings.
+    /// Optionally seeds CSOs, MVOs, Pending Exports, and activities.
     /// </summary>
     public static SyncRepository CreateSyncRepository(
         List<ConnectedSystemObject>? csos = null,
@@ -1172,7 +1172,7 @@ public static class TestUtilities
         syncRepo.SetSyncOutcomeTrackingLevel(
             ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed);
 
-        // Seed connected systems
+        // Seed Connected Systems
         foreach (var cs in GetConnectedSystemData())
             syncRepo.SeedConnectedSystem(cs);
 
@@ -1180,7 +1180,7 @@ public static class TestUtilities
         foreach (var ot in GetConnectedSystemObjectTypeData())
             syncRepo.SeedObjectType(ot);
 
-        // Seed sync rules — use provided instances so test-level modifications are visible to the processor
+        // Seed Synchronisation Rules — use provided instances so test-level modifications are visible to the processor
         var rulesToSeed = syncRules ?? GetSyncRuleData();
         foreach (var sr in rulesToSeed)
             syncRepo.SeedSyncRule(sr);

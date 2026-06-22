@@ -11,7 +11,7 @@ public class ConnectorSchemaAttribute
     public string? Description { get; set; }
 
     /// <summary>
-    /// Some types of connected systems have a concept of hierarchy where an attribute is inherited from a class that the object type inherits, i.e. an LDAP object class.
+    /// Some types of Connected Systems have a concept of hierarchy where an attribute is inherited from a class that the object type inherits, i.e. an LDAP object class.
     /// Storing this information in JIM and presenting it to the user when configuring a Connected System can help them with understanding what might or might not need managing, attribute wise.
     /// </summary>
     public string? ClassName { get; set; }
@@ -33,8 +33,8 @@ public class ConnectorSchemaAttribute
     public bool Required { get; set; }
 
     /// <summary>
-    /// Indicates whether this attribute can be written to in the connected system.
-    /// Read-only attributes (system-managed, constructed, back-links) can still be imported but cannot be targeted by export attribute flows.
+    /// Indicates whether this attribute can be written to in the Connected System.
+    /// Read-only attributes (system-managed, constructed, back-links) can still be imported but cannot be targeted by export Attribute Flows.
     /// </summary>
     public AttributeWritability Writability { get; set; }
 

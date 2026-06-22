@@ -2,7 +2,7 @@
 
 > Last updated: 2026-04-22, JIM v0.10.0
 
-This diagram shows how pending exports are executed against connected systems via connectors. The export processor (`SyncExportTaskProcessor`) uses `ISyncServer` to delegate to `ExportExecutionServer` for the core execution logic, and `ISyncRepository` for bulk data access. Supports batching, parallelism, deferred reference resolution, and retry with backoff.
+This diagram shows how Pending Exports are executed against Connected Systems via connectors. The export processor (`SyncExportTaskProcessor`) uses `ISyncServer` to delegate to `ExportExecutionServer` for the core execution logic, and `ISyncRepository` for bulk data access. Supports batching, parallelism, deferred reference resolution, and retry with backoff.
 
 Since v0.10.0, connector exceptions thrown during export are always reported as RPEIs. Three catch paths (the file-based outer catch in `ExportExecutionServer`, the call-based sequential-batch catch, and the parallel-batch catch) each create `ProcessedExportItems` for every export in the affected scope. Previously, a thrown connector exception set `FailedCount` without creating RPEIs, so the activity could complete successfully despite silent export failures. Per-batch streaming via `batchCompletedCallback` keeps in-memory `ProcessedExportItem` accumulation bounded at 100K+ exports.
 
@@ -10,8 +10,8 @@ Since v0.10.0, connector exceptions thrown during export are always reported as 
 
 ```mermaid
 flowchart TD
-    Start([PerformExportAsync]) --> CountPE[Count pending exports<br/>for connected system]
-    CountPE --> HasExports{Pending exports<br/>> 0?}
+    Start([PerformExportAsync]) --> CountPE[Count Pending Exports<br/>for Connected System]
+    CountPE --> HasExports{Pending Exports<br/>> 0?}
     HasExports -->|No| NoWork[Update activity:<br/>No exports to process]
     NoWork --> Done([Return])
 
@@ -37,7 +37,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     Start([ExecuteExportsAsync]) --> Reconcile[Pre-export CREATE to DELETE<br/>reconciliation: cancel contradictory<br/>pairs persisted across sync runs<br/>CREATE+DELETE cancels both<br/>UPDATE+DELETE cancels UPDATE]
-    Reconcile --> GetExecutable[Get executable pending exports<br/>Database filter: Status, NextRetryAt, ErrorCount<br/>In-memory filter: has exportable attribute changes<br/>Delete exports already exported are skipped]
+    Reconcile --> GetExecutable[Get executable Pending Exports<br/>Database filter: Status, NextRetryAt, ErrorCount<br/>In-memory filter: has exportable attribute changes<br/>Delete exports already exported are skipped]
     GetExecutable --> HasExports{Exports<br/>found?}
     HasExports -->|No| EmptyResult([Return empty result])
 
@@ -96,7 +96,7 @@ flowchart TD
 
     CheckResult -->|Yes, Create| HandleCreate[Record Exported<br/>Capture new external ID<br/>from ExportResult<br/>Set Status = Exported]
     CheckResult -->|Yes, Update| HandleUpdate[Record Exported<br/>Set Status = Exported]
-    CheckResult -->|Yes, Delete| HandleDelete[Record Deprovisioned<br/>Delete pending export<br/>Delete CSO]
+    CheckResult -->|Yes, Delete| HandleDelete[Record Deprovisioned<br/>Delete Pending Export<br/>Delete CSO]
     CheckResult -->|Failed| HandleFail[Increment ErrorCount<br/>Set error message<br/>Calculate NextRetryAt<br/>with exponential backoff]
 
     HandleCreate --> Persist
@@ -108,7 +108,7 @@ flowchart TD
     MarkFailed --> Persist
     SetRetry --> Persist
 
-    Persist[Batch persist via ParallelBatchWriter<br/>CSO updates, RPEIs, pending export status<br/>split across N concurrent PostgreSQL connections]
+    Persist[Batch persist via ParallelBatchWriter<br/>CSO updates, RPEIs, Pending Export status<br/>split across N concurrent PostgreSQL connections]
     Persist --> CaptureItems[Capture ProcessedExportItems<br/>for RPEI creation by caller]
     CaptureItems --> Done([Batch complete])
 ```
@@ -163,7 +163,7 @@ flowchart TD
 
 ## Key Design Decisions
 
-- **Pre-export CREATE→DELETE reconciliation** (#218)<br /> Before fetching executable exports, `ReconcileCreateDeletePairsAsync` scans all pending exports for contradictory pairs targeting the same CSO. CREATE+DELETE pairs cancel both (object was never exported), UPDATE+DELETE cancels the UPDATE (deletion makes it redundant). This catches pairs persisted across different sync runs; the flush-time reconciliation in `SyncTaskProcessorBase` handles same-page pairs.
+- **Pre-export CREATE→DELETE reconciliation** (#218)<br /> Before fetching executable exports, `ReconcileCreateDeletePairsAsync` scans all Pending Exports for contradictory pairs targeting the same CSO. CREATE+DELETE pairs cancel both (object was never exported), UPDATE+DELETE cancels the UPDATE (deletion makes it redundant). This catches pairs persisted across different sync runs; the flush-time reconciliation in `SyncTaskProcessorBase` handles same-page pairs.
 
 - **Two-pass export**<br /> Exports without unresolved references are executed first (immediate). Exports with unresolved MVO references are deferred, with references bulk-resolved in a single query, then executed in a second pass.
 
@@ -177,7 +177,7 @@ flowchart TD
 
 - **Per-batch isolation**<br /> Each parallel batch gets its own `DbContext` and connector instance. EF Core is not thread-safe, so sharing a context across batches would cause data corruption.
 
-- **ParallelBatchWriter (#394)**<br /> The persistence phase of each batch (CSO updates, RPEI persistence, pending export status updates) is split across N concurrent PostgreSQL connections via `ParallelBatchWriter`. This parallelises the bulk database writes that were previously sequential, significantly reducing batch persistence time.
+- **ParallelBatchWriter (#394)**<br /> The persistence phase of each batch (CSO updates, RPEI persistence, Pending Export status updates) is split across N concurrent PostgreSQL connections via `ParallelBatchWriter`. This parallelises the bulk database writes that were previously sequential, significantly reducing batch persistence time.
 
 - **LDAP consolidation**<br /> Multiple changes to the same attribute with the same operation type (e.g., 200 individual "member Add" operations) are consolidated into a single `DirectoryAttributeModification` before sending to the directory server. This is the correct RFC 4511 pattern and dramatically reduces the number of LDAP modify requests.
 

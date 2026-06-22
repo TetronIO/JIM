@@ -1,6 +1,6 @@
 # Core Concepts
 
-JIM (Junctional Identity Manager) is a self-hosted identity lifecycle management platform that synchronises identity data between connected systems through a centralised metaverse hub. This section introduces the foundational concepts you need to understand how JIM works.
+JIM (Junctional Identity Manager) is a self-hosted identity lifecycle management platform that synchronises identity data between Connected Systems through a centralised metaverse hub. This section introduces the foundational concepts you need to understand how JIM works.
 
 For per-object documentation (Connected Systems, Synchronisation Rules, Schedules, etc.) see the [Configuration](../configuration/index.md) section.
 
@@ -9,7 +9,7 @@ For per-object documentation (Connected Systems, Synchronisation Rules, Schedule
 
 ## 🏗️ Architecture
 
-JIM follows a hub-and-spoke **metaverse pattern** where all identity data flows through a central authoritative repository. No data moves directly between connected systems -- every change passes through the metaverse, giving you a single point of governance and control. Learn about JIM's components, layers, and deployment model in the [Architecture](architecture.md) guide.
+JIM follows a hub-and-spoke **metaverse pattern** where all identity data flows through a central authoritative repository. No data moves directly between Connected Systems -- every change passes through the metaverse, giving you a single point of governance and control. Learn about JIM's components, layers, and deployment model in the [Architecture](architecture.md) guide.
 
 ## ⚙️ Synchronisation Pipeline
 
