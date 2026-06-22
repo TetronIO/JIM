@@ -9,15 +9,14 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <MudPaper Class="pa-4" Outlined="true">
-    <div class="d-flex justify-space-between align-center">
-        <MudText Typo="Typo.h5">Matching Rules</MudText>
-        @if (SyncRule.ConnectedSystem?.ObjectMatchingRuleMode == ObjectMatchingRuleMode.SyncRule)
-        {
+    @if (SyncRule.ConnectedSystem?.ObjectMatchingRuleMode == ObjectMatchingRuleMode.SyncRule)
+    {
+        <div class="d-flex justify-end">
             <MudTooltip Text="Matching rules are specific to this Sync Rule." Arrow="true" Placement="Placement.Top">
                 <MudChip T="string" Variant="Variant.Text" Text="Advanced Mode" Color="Color.Info" />
             </MudTooltip>
-        }
-    </div>
+        </div>
+    }
 
     @if (SyncRule.ConnectedSystem?.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem)
     {
