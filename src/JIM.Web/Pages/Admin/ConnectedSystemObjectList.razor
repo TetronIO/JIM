@@ -347,6 +347,7 @@ else
         _breadcrumbs = new List<BreadcrumbItem>
         {
             new("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new("Administration", href: "/admin"),
             new("Connected Systems", href: "/admin/connected-systems/"),
             new(_connectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(_connectedSystemHeader)),
             new("Connector Space", href: null, disabled: true)
