@@ -159,29 +159,29 @@ public class SyncRule : IAuditable, IValidated
         var response = new List<ValidityStatusItem>();
 
         if (string.IsNullOrEmpty(Name))
-            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, "Name must be set."));
+            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, "Name must be set"));
 
         if (ConnectedSystem == null)
-            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, "Connected System must be set."));
+            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, "Connected System must be set"));
 
         if (ConnectedSystemObjectType == null)
-            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, "Connected System Object Type must be set."));
+            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, "Connected System Object Type must be set"));
 
         if (MetaverseObjectType == null)
-            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, "Metaverse Object Type must be set."));
+            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, "Metaverse Object Type must be set"));
 
         if (Direction == SyncRuleDirection.NotSet)
-            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, "Direction must be set."));
+            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Error, "Direction must be set"));
 
         // Only warn about missing matching rules if this sync rule manages its own matching rules (Advanced Mode)
         // In Simple Mode (ObjectMatchingRuleMode.ConnectedSystem), matching rules are defined on the Connected System
         if (Direction == SyncRuleDirection.Import &&
             ObjectMatchingRules.Count == 0 &&
             ConnectedSystem?.ObjectMatchingRuleMode != ObjectMatchingRuleMode.ConnectedSystem)
-            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Warning, "No object matching rules have been defined. Whilst valid, this is not recommended. Object Matching rules help minimise synchronisation errors in uncommon, but important scenarios."));
+            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Warning, "No object matching rules have been defined. Whilst valid, this is not recommended. Object Matching rules help minimise synchronisation errors in uncommon, but important scenarios"));
 
         if (AttributeFlowRules.Count == 0)
-            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Warning, "No attribute flow rules have been defined. Whilst valid, this means objects will lack nearly all attributes."));
+            response.Add(new ValidityStatusItem(ValidityStatusItemLevel.Warning, "No attribute flow rules have been defined. Whilst valid, this means no data will flow between the two systems"));
 
         return response;
     }

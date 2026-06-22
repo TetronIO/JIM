@@ -22,8 +22,18 @@
     @if (SyncRule.ConnectedSystem?.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem)
     {
         <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3" Icon="@Icons.Material.Outlined.Info">
-            This Connected System uses <strong>Simple Mode</strong> for object matching.
-            <MudLink Href="@($"/admin/connected-systems/{SyncRule.ConnectedSystemId}")" Underline="Underline.Always" Class="ms-1">
+            <MudText>
+                This Connected System uses <strong>Simple Mode</strong> for object matching. In Simple Mode, matching
+                rules are defined once on the Connected System (per object type) and shared by every Synchronisation
+                Rule that targets this system, so you do not have to repeat the same matching logic on each rule. As a
+                result, this rule cannot define its own matching rules here.
+            </MudText>
+            <MudText Class="mt-2">
+                Switch the Connected System to <strong>Advanced Mode</strong> if you need matching logic that is specific
+                to an individual Synchronisation Rule.
+            </MudText>
+            <MudLink Href="@($"/admin/connected-systems/{SyncRule.ConnectedSystemId}?t=object-matching")"
+                     Target="_blank" rel="noopener" Underline="Underline.Always" Class="d-inline-flex align-center mt-2">
                 <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Class="me-1" Style="vertical-align: middle;" />Configure Matching Rules
             </MudLink>
         </MudAlert>
