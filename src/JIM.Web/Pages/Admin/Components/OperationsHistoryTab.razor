@@ -85,7 +85,7 @@
 
     @* Top pager *@
     <div class="d-flex justify-space-between align-center flex-wrap pa-2"
-         style="border: 1px solid var(--mud-palette-table-lines); border-bottom: none; border-radius: var(--mud-default-borderradius) var(--mud-default-borderradius) 0 0;">
+         style="border: 1px solid var(--mud-palette-table-lines); border-bottom: none; border-radius: var(--mud-default-borderradius) var(--mud-default-borderradius) 0 0; background-color: var(--mud-palette-surface);">
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
             <MudText Typo="Typo.body2" Class="mud-text-secondary">Rows per page:</MudText>
             <MudSelect T="int" Value="@_rowsPerPage" ValueChanged="OnRowsPerPageChanged"
@@ -413,7 +413,7 @@
 
     @* Bottom pager *@
     <div class="d-flex justify-space-between align-center flex-wrap pa-2"
-         style="border: 1px solid var(--mud-palette-table-lines); border-top: none; border-radius: 0 0 var(--mud-default-borderradius) var(--mud-default-borderradius);">
+         style="border: 1px solid var(--mud-palette-table-lines); border-top: none; border-radius: 0 0 var(--mud-default-borderradius) var(--mud-default-borderradius); background-color: var(--mud-palette-surface);">
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
             <MudText Typo="Typo.body2" Class="mud-text-secondary">Rows per page:</MudText>
             <MudSelect T="int" Value="@_rowsPerPage" ValueChanged="OnRowsPerPageChanged"
