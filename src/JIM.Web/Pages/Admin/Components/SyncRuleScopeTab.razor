@@ -7,7 +7,13 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@if (SyncRule.Id > 0 && SyncRule.MetaverseObjectType != null && SyncRule.ConnectedSystemObjectType != null)
+@if (SyncRule.MetaverseObjectType == null || SyncRule.ConnectedSystemObjectType == null)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+        Choose the Connected System, direction and object types on the <strong>Details</strong> tab first; scoping then applies to objects of those types.
+    </MudAlert>
+}
+else
 {
     <MudPaper Class="pa-4" Outlined="true">
         @if (SyncRule.Direction == SyncRuleDirection.Export)

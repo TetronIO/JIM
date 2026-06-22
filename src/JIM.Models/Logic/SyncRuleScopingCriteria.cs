@@ -15,12 +15,14 @@ public class SyncRuleScopingCriteria
     /// One of MetaverseAttribute or ConnectedSystemAttribute must be set.
     /// </summary>
     public MetaverseAttribute? MetaverseAttribute { get; set; }
+    public int? MetaverseAttributeId { get; set; }
 
     /// <summary>
     /// The Connected System Object Type Attribute to evaluate for inbound (import) sync rules.
     /// One of MetaverseAttribute or ConnectedSystemAttribute must be set.
     /// </summary>
     public ConnectedSystemObjectTypeAttribute? ConnectedSystemAttribute { get; set; }
+    public int? ConnectedSystemAttributeId { get; set; }
 
     public SearchComparisonType ComparisonType { get; set; } = SearchComparisonType.NotSet;
 

@@ -4221,6 +4221,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task CreateSyncRuleAsync(SyncRule syncRule)
     {
+        // The caller (ConnectedSystemServer.CreateOrUpdateSyncRuleAsync) has already detached every reference to an
+        // existing entity (connected system, object types and the attributes used by matching rules, attribute flow
+        // and scoping criteria), leaving only FK scalars set. The graph reaching Add() therefore contains only the
+        // new rows to insert, so EF does not attempt to re-insert existing entities or trip over the duplicate
+        // entity instances the editor's loaded graph can contain.
         Repository.Database.SyncRules.Add(syncRule);
         await Repository.Database.SaveChangesAsync();
     }

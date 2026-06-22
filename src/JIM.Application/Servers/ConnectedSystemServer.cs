@@ -4118,18 +4118,107 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Checks if any run profile types are not supported by the connectors capabilities.
+    /// Captures the foreign-key id of every navigation property on a new sync rule that points to an
+    /// already-persisted entity (the connected system, the object types, and the attributes referenced by its
+    /// matching rules, attribute flow mappings and scoping criteria), then nulls those navigation properties.
+    /// The web and API callers build the rule from entities loaded in an earlier, now-disposed scope: the FK
+    /// scalars are unset and the loaded graph can contain duplicate instances of the same entity. Reducing every
+    /// reference to an FK scalar leaves the repository's Add() with only the new rows to insert, so EF neither
+    /// re-inserts existing entities (FK violations / duplicate-key errors) nor trips over duplicate-instance
+    /// tracking conflicts.
     /// </summary>
-    /// <summary>
-    /// Clears navigation properties on a new SyncRule that reference existing entities,
-    /// so that EF Core's Add() graph traversal does not attempt to insert them as duplicates.
-    /// The FK IDs (ConnectedSystemId, ConnectedSystemObjectTypeId, MetaverseObjectTypeId) remain set.
-    /// </summary>
-    private static void ClearSyncRuleNavigationProperties(SyncRule syncRule)
+    private static void DetachExistingEntityReferences(SyncRule syncRule)
     {
-        syncRule.ConnectedSystem = null!;
-        syncRule.ConnectedSystemObjectType = null!;
-        syncRule.MetaverseObjectType = null!;
+        if (syncRule.ConnectedSystem != null)
+        {
+            syncRule.ConnectedSystemId = syncRule.ConnectedSystem.Id;
+            syncRule.ConnectedSystem = null!;
+        }
+        if (syncRule.ConnectedSystemObjectType != null)
+        {
+            syncRule.ConnectedSystemObjectTypeId = syncRule.ConnectedSystemObjectType.Id;
+            syncRule.ConnectedSystemObjectType = null!;
+        }
+        if (syncRule.MetaverseObjectType != null)
+        {
+            syncRule.MetaverseObjectTypeId = syncRule.MetaverseObjectType.Id;
+            syncRule.MetaverseObjectType = null!;
+        }
+
+        foreach (var matchingRule in syncRule.ObjectMatchingRules)
+        {
+            if (matchingRule.TargetMetaverseAttribute != null)
+            {
+                matchingRule.TargetMetaverseAttributeId = matchingRule.TargetMetaverseAttribute.Id;
+                matchingRule.TargetMetaverseAttribute = null;
+            }
+            foreach (var source in matchingRule.Sources)
+            {
+                if (source.ConnectedSystemAttribute != null)
+                {
+                    source.ConnectedSystemAttributeId = source.ConnectedSystemAttribute.Id;
+                    source.ConnectedSystemAttribute = null;
+                }
+                if (source.MetaverseAttribute != null)
+                {
+                    source.MetaverseAttributeId = source.MetaverseAttribute.Id;
+                    source.MetaverseAttribute = null;
+                }
+            }
+        }
+
+        foreach (var mapping in syncRule.AttributeFlowRules)
+        {
+            if (mapping.TargetMetaverseAttribute != null)
+            {
+                mapping.TargetMetaverseAttributeId = mapping.TargetMetaverseAttribute.Id;
+                mapping.TargetMetaverseAttribute = null;
+            }
+            if (mapping.TargetConnectedSystemAttribute != null)
+            {
+                mapping.TargetConnectedSystemAttributeId = mapping.TargetConnectedSystemAttribute.Id;
+                mapping.TargetConnectedSystemAttribute = null;
+            }
+            foreach (var source in mapping.Sources)
+            {
+                if (source.ConnectedSystemAttribute != null)
+                {
+                    source.ConnectedSystemAttributeId = source.ConnectedSystemAttribute.Id;
+                    source.ConnectedSystemAttribute = null;
+                }
+                if (source.MetaverseAttribute != null)
+                {
+                    source.MetaverseAttributeId = source.MetaverseAttribute.Id;
+                    source.MetaverseAttribute = null;
+                }
+            }
+        }
+
+        foreach (var group in syncRule.ObjectScopingCriteriaGroups)
+            DetachScopingGroupReferences(group);
+    }
+
+    /// <summary>
+    /// Recursively detaches the attribute references on a scoping criteria group and its child groups,
+    /// capturing each criterion's FK id and nulling its navigation property. See <see cref="DetachExistingEntityReferences"/>.
+    /// </summary>
+    private static void DetachScopingGroupReferences(SyncRuleScopingCriteriaGroup group)
+    {
+        foreach (var criteria in group.Criteria)
+        {
+            if (criteria.MetaverseAttribute != null)
+            {
+                criteria.MetaverseAttributeId = criteria.MetaverseAttribute.Id;
+                criteria.MetaverseAttribute = null;
+            }
+            if (criteria.ConnectedSystemAttribute != null)
+            {
+                criteria.ConnectedSystemAttributeId = criteria.ConnectedSystemAttribute.Id;
+                criteria.ConnectedSystemAttribute = null;
+            }
+        }
+        foreach (var child in group.ChildGroups)
+            DetachScopingGroupReferences(child);
     }
 
     /// <summary>
@@ -4485,9 +4574,8 @@ public class ConnectedSystemServer
             activity.TargetOperationType = ActivityTargetOperationType.Create;
             AuditHelper.SetCreated(syncRule, initiatedBy);
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
-            // Clear navigation properties that reference existing entities before Add() to prevent
-            // EF Core graph traversal from inserting them as duplicates. FKs are already set.
-            ClearSyncRuleNavigationProperties(syncRule);
+            // Detach references to existing entities (capture FK ids, null navs) so the insert adds only the new rows.
+            DetachExistingEntityReferences(syncRule);
             await Application.Repository.ConnectedSystems.CreateSyncRuleAsync(syncRule);
         }
         else
@@ -4561,9 +4649,8 @@ public class ConnectedSystemServer
             activity.TargetOperationType = ActivityTargetOperationType.Create;
             AuditHelper.SetCreated(syncRule, initiatedByApiKey);
             await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
-            // Clear navigation properties that reference existing entities before Add() to prevent
-            // EF Core graph traversal from inserting them as duplicates. FKs are already set.
-            ClearSyncRuleNavigationProperties(syncRule);
+            // Detach references to existing entities (capture FK ids, null navs) so the insert adds only the new rows.
+            DetachExistingEntityReferences(syncRule);
             await Application.Repository.ConnectedSystems.CreateSyncRuleAsync(syncRule);
         }
         else

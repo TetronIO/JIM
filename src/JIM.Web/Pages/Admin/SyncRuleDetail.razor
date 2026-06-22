@@ -42,15 +42,15 @@ else if (_syncRule != null)
                                 OnChanged="OnChildChanged" />
         </MudTabPanel>
 
-        <MudTabPanel Text="Matching" Disabled="@NonDetailTabsDisabled">
+        <MudTabPanel Text="Matching">
             <SyncRuleMatchingTab SyncRule="_syncRule" OnChanged="OnChildChanged" />
         </MudTabPanel>
 
-        <MudTabPanel Text="Scope" Disabled="@NonDetailTabsDisabled">
+        <MudTabPanel Text="Scope">
             <SyncRuleScopeTab SyncRule="_syncRule" OnChanged="OnChildChanged" />
         </MudTabPanel>
 
-        <MudTabPanel Text="Attribute Flow" Disabled="@NonDetailTabsDisabled">
+        <MudTabPanel Text="Attribute Flow">
             <SyncRuleAttributeFlowTab SyncRule="_syncRule" OnChanged="OnChildChanged" />
         </MudTabPanel>
 
@@ -107,11 +107,6 @@ else if (_syncRule != null)
     private bool _isLoading = true;
     private List<ConnectedSystemHeader>? _connectedSystemHeaders;
     private List<MetaverseObjectType>? _metaverseObjectTypes;
-
-    // For a brand-new (unsaved) rule, only the Details tab is usable; the rule must be created
-    // (Connected System, direction and object types chosen) before matching, scope and attribute
-    // flow can be configured against it.
-    private bool NonDetailTabsDisabled => _syncRule is not { Id: > 0 };
 
     protected override async Task OnInitializedAsync()
     {
