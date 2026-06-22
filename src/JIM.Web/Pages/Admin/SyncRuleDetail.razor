@@ -194,7 +194,10 @@ else if (_syncRule != null)
         {
             // send the user to the existing-sync-rule view.
             // this helps ensure links are good to be shared/bookmarked, etc.
+            // the snackbar is enqueued before navigating; ISnackbar is circuit-scoped and the provider
+            // lives in the layout, so the message survives the soft navigation and shows on the edit page.
             case true when isSyncRuleNew:
+                Snackbar.Add("Synchronisation rule created.", Severity.Success);
                 NavManager.NavigateTo($"/admin/sync-rules/{_syncRule.Id}");
                 break;
             case true:
