@@ -754,7 +754,7 @@ public class ExportEvaluationTests
         var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
         var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
 
-        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportRule.Enabled = true;
         exportRule.Direction = SyncRuleDirection.Export;
         exportRule.MetaverseObjectTypeId = mvUserType.Id;
