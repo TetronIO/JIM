@@ -127,27 +127,25 @@
     {
         <MudSwitch Class="mt-5" @bind-Value="@SyncRule.ProjectToMetaverse" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary"
                    Label="@($"Project {SyncRule.MetaverseObjectType?.PluralName ?? "objects"} to the Metaverse?")" />
-        <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Outlined">By default, objects imported from this
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">By default, objects imported from this
             Connected System will not result in a Metaverse object being projected if no match is found.
             Enabling this option causes the object to be projected to the Metaverse, allowing it to be managed within
             JIM and synchronised to other Connected Systems. You would typically enable this for a source system, i.e. a
-            HR system.</MudAlert>
+            HR system.</MudText>
     }
 
     @if (SyncRule.Direction == SyncRuleDirection.Export)
     {
         <MudSwitch Class="mt-5" @bind-Value="@SyncRule.ProvisionToConnectedSystem" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary"
                    Label="@($"Provision {(SyncRule.ConnectedSystemObjectType?.Name ?? "objects").Pluralise()} to the Connected System?")" />
-        <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Outlined">By default, Metaverse objects scoped to
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">By default, Metaverse objects scoped to
             this synchronisation rule will not be created (provisioned) in the Connected Systems. Enabling this
             option will cause the Metaverse object to be created in the Connected System. You would typically enable
-            this option for a destination system, i.e. when trying to implement a HR to Active Directory flow.
-        </MudAlert>
+            this option for a destination system, i.e. when trying to implement a HR to Active Directory flow.</MudText>
     }
-    <MudTooltip Text="Synchronisation Rules will not be evaluated when disabled. This allows to either prepare a rule in advance of it being needed, or to temporarily stop a sync rule from being evaluated."
-                Arrow="true" Placement="Placement.Top">
-        <MudSwitch Class="mt-5" @bind-Value="@SyncRule.Enabled" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary" Label="Enabled?" />
-    </MudTooltip>
+    <MudSwitch Class="mt-5" @bind-Value="@SyncRule.Enabled" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary" Label="Enabled?" />
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">Synchronisation rules are not evaluated when disabled. Use
+        this to prepare a rule in advance of it being needed, or to temporarily stop a rule from being evaluated.</MudText>
 </MudPaper>
 
 @* Advanced Options - Only show for Export rules *@
@@ -162,19 +160,14 @@
                 </div>
             </TitleContent>
             <ChildContent>
-                <MudStack Spacing="4" Class="pa-2">
-                    <MudTooltip Text="When enabled, changes made directly in the target system (drift) will be automatically corrected during the next sync run. Disable this only if you need to allow emergency manual changes in the target system."
-                                Arrow="true" Placement="Placement.Right">
-                        <MudSwitch @bind-Value="@SyncRule.EnforceState" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary"
-                                   Label="Enforce State (Auto-correct drift)" />
-                    </MudTooltip>
-                    <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true">
-                        <strong>Enforce State</strong> enables drift detection and automatic correction. When a target system
-                        attribute differs from what this export rule dictates, JIM will create a corrective pending export
-                        to restore the authoritative value. Disable this option only for scenarios where you need to allow
-                        temporary manual overrides in the target system (e.g., emergency access scenarios).
-                    </MudAlert>
-                </MudStack>
+                <div class="pa-2">
+                    <MudSwitch @bind-Value="@SyncRule.EnforceState" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary"
+                               Label="Enforce State (Auto-correct drift)" />
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">Enables drift detection and automatic
+                        correction. When a target system attribute differs from what this export rule dictates, JIM creates a
+                        corrective pending export to restore the authoritative value. Disable only where you need to allow
+                        temporary manual overrides in the target system (e.g. emergency access scenarios).</MudText>
+                </div>
             </ChildContent>
         </MudExpansionPanel>
     </MudExpansionPanels>
