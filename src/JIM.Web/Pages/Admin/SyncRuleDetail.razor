@@ -6,10 +6,12 @@
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Utility
 @using JIM.Web.Pages.Admin.Components
+@using JIM.Application
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@implements IDisposable
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -110,6 +112,12 @@ else if (_syncRule != null)
     private bool _loaded;
     private int? _loadedId;
 
+    // A single JimApplication (and its DbContext) is held for the whole edit session. The rule is loaded
+    // change-tracked and every tab mutates that tracked graph, so the final save lets EF Core diff and
+    // persist the changes. A fresh context per handler would leave the rule detached at save time and the
+    // update would silently persist nothing (e.g. toggling Enabled was lost this way).
+    private JimApplication? _jim;
+
     // Both /admin/sync-rules/new and /admin/sync-rules/{id} resolve to this component, so creating a rule and
     // navigating from /new to /{id} reuses the instance (OnInitializedAsync does not run again). Load from
     // OnParametersSetAsync keyed on the route id so the page re-loads cleanly into edit mode after a create.
@@ -127,7 +135,11 @@ else if (_syncRule != null)
 
     private async Task LoadSyncRuleAsync()
     {
-        using var jim = JimFactory.Create();
+        // Start a fresh context for this (re)load and hold it for the edit session; dispose any prior one
+        // (e.g. the context used while creating, before navigating to the new rule's edit URL).
+        _jim?.Dispose();
+        _jim = JimFactory.Create();
+
         _breadcrumbs =
         [
             new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
@@ -136,8 +148,8 @@ else if (_syncRule != null)
 
         if (Id != null)
         {
-            // edit an existing sync rule
-            _syncRule = await jim.ConnectedSystems.GetSyncRuleAsync(Id.Value);
+            // edit an existing sync rule - loaded change-tracked so edits persist on save
+            _syncRule = await _jim.ConnectedSystems.GetSyncRuleAsync(Id.Value);
             if (_syncRule == null)
             {
                 // sync rule not found, redirect to index page
@@ -155,8 +167,8 @@ else if (_syncRule != null)
             _syncRule = new SyncRule();
             _syncRuleNameOrCreate = "New";
             _breadcrumbs.Add(new BreadcrumbItem("New", href: null, disabled: true));
-            _connectedSystemHeaders = await jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
-            _metaverseObjectTypes = await jim.Metaverse.GetMetaverseObjectTypesAsync(true);
+            _connectedSystemHeaders = await _jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+            _metaverseObjectTypes = await _jim.Metaverse.GetMetaverseObjectTypesAsync(true);
         }
     }
 
@@ -169,16 +181,15 @@ else if (_syncRule != null)
 
     private async Task HandleCreateOrUpdateSyncRuleAsync()
     {
-        if (_syncRule == null)
+        if (_syncRule == null || _jim == null)
             return;
 
         // are we transitioning from new to existing?
         var isSyncRuleNew = _syncRule.Id == 0;
 
-        // attribute the operation to the user
-        using var jim = JimFactory.Create();
-        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-        var wasSuccessful = await jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(_syncRule, user);
+        // save on the SAME context the rule was loaded on, so EF Core's change tracker sees the edits
+        var user = await Helpers.GetUserAsync(_jim, AuthenticationStateTask);
+        var wasSuccessful = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(_syncRule, user);
         switch (wasSuccessful)
         {
             // send the user to the existing-sync-rule view.
@@ -197,17 +208,21 @@ else if (_syncRule != null)
 
     private async Task HandleDeleteSyncRuleAsync()
     {
-        if (_syncRule == null)
+        if (_syncRule == null || _jim == null)
             return;
 
         var confirmationResult = await DialogService.ShowMessageBoxAsync("Warning", "Are you sure you want to delete this Synchronisation Rule?", yesText: "Delete!", cancelText: "Cancel");
         if (confirmationResult.HasValue && confirmationResult.Value)
         {
-            // attribute the operation to the signed-in user
-            using var jim = JimFactory.Create();
-            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-            await jim.ConnectedSystems.DeleteSyncRuleAsync(_syncRule, user);
+            // attribute the operation to the signed-in user; use the edit session's context
+            var user = await Helpers.GetUserAsync(_jim, AuthenticationStateTask);
+            await _jim.ConnectedSystems.DeleteSyncRuleAsync(_syncRule, user);
             NavManager.NavigateTo("/admin/sync-rules");
         }
+    }
+
+    public void Dispose()
+    {
+        _jim?.Dispose();
     }
 }

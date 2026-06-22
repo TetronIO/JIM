@@ -4232,19 +4232,26 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task UpdateSyncRuleAsync(SyncRule syncRule)
     {
-        // All current callers pass a SyncRule already tracked by the change tracker
-        // (loaded via GetSyncRuleAsync earlier in the same request scope). Relying on
-        // EF Core's change detection during SaveChanges persists property mutations,
-        // collection adds (e.g. a new ObjectScopingCriteriaGroup) and collection
-        // removals (e.g. cleared ObjectMatchingRules) without us needing to walk the
-        // graph ourselves.
+        // Callers MUST load the rule via GetSyncRuleAsync (which tracks it) and mutate it on the SAME
+        // JimApplication/DbContext before calling here, so EF Core's change detection persists property
+        // mutations, collection adds (e.g. a new ObjectScopingCriteriaGroup) and collection removals
+        // (e.g. cleared ObjectMatchingRules) without us walking the graph ourselves.
         //
-        // Database.Update(syncRule) used to be called here, but it traverses the full
-        // navigation graph and re-attaches every reachable entity as Modified. The
-        // SyncRule graph reaches the same ConnectedSystemAttribute via two paths
-        // (ObjectType.Attributes and AttributeFlowRules.Sources.ConnectedSystemAttribute),
-        // and re-attaching either of those collided with the existing tracker entries
-        // — throwing "another instance with the same key value is already being tracked".
+        // If the rule is detached (loaded in a different, now-disposed context, as the web editor used to do
+        // by creating a fresh context per handler), SaveChanges would silently persist nothing and report
+        // success. Toggling Enabled on an existing rule was lost exactly this way. Synchronisation integrity
+        // demands a fast, loud failure over silent data loss, so reject a detached entity outright.
+        if (Repository.Database.Entry(syncRule).State == EntityState.Detached)
+            throw new InvalidOperationException(
+                $"UpdateSyncRuleAsync requires a change-tracked SyncRule (Id {syncRule.Id}), but the supplied " +
+                "instance is detached from this DbContext, so no changes would be persisted. Load the rule via " +
+                "GetSyncRuleAsync and mutate it on the same JimApplication instance used to save it.");
+
+        // Database.Update(syncRule) is deliberately NOT used: it traverses the full navigation graph and
+        // re-attaches every reachable entity as Modified. The SyncRule graph reaches the same
+        // ConnectedSystemAttribute via two paths (ObjectType.Attributes and
+        // AttributeFlowRules.Sources.ConnectedSystemAttribute), and re-attaching either of those collided with
+        // the existing tracker entries ("another instance with the same key value is already being tracked").
         await Repository.Database.SaveChangesAsync();
     }
         
