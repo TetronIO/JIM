@@ -315,7 +315,7 @@
                                                          ValueChanged="@(_ => ConnectedSystemContainerSelectedChanged(item.Value))"
                                                          title="@(item.Value.Selected ? "Selected" : string.Empty)"/>
                                         }
-                                        <MudText>@item.Value.Name</MudText>
+                                        <span class="jim-code-inline">@item.Value.Name</span>
                                     }
                                 </BodyContent>
                             </MudTreeViewItem>
