@@ -196,6 +196,16 @@ JIM follows strict security development practices aligned with NCSC, CISA, OWASP
 
 ---
 
+## Keeping Documentation Current
+
+Documentation is part of the definition of done, not a follow-up. Any change that alters behaviour an administrator can observe must update the relevant documentation **in the same PR**:
+
+- **Public documentation (`docs/`)** is the customer-facing how-to, reference, and concept material. New features and changed behaviour must be documented here. This is mechanically enforced: a PR that adds a ✨ (new feature) or 🔄 (changed behaviour) entry to the changelog must also change a file under `docs/`, or opt out explicitly (see Enforcement below).
+- **Engineering reference documentation (`engineering/`)** is the architecture guide, developer guide, and living design docs. Keep these current when a change makes them stale (a new component, a changed data flow, a superseded design decision). This is a judgement call, not mechanically enforced; the PR template prompts for it.
+- **Point-in-time records are exempt.** Do **not** retro-edit completed plans (`engineering/plans/done/`) or PRDs to reflect later changes; they capture a decision at a moment in time. Update the living reference docs instead.
+
+If documentation genuinely is not needed for a user-facing change, say why: add a `Docs: n/a - <reason>` line to the PR description, or apply the `docs-not-needed` label.
+
 ## Changelog Maintenance
 
 The project uses [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Entries must be kept up to date as changes are made, not deferred until release time.
@@ -244,7 +254,9 @@ The changelog is a **customer-facing product document**. The audience is adminis
 - Keep entries concise: one line per change, describe what changed from the user's perspective
 - Lead each entry with an appropriate emoji (✨ new, 🐛 fix, ⚡ performance, 🔄 changed, 🗑️ removed, 🔒 security, 📦 deployment/infrastructure, 🖥️ UI/UX)
 
-**Enforcement:** `scripts/Lint-Changelog.ps1` (run on PRs touching `CHANGELOG.md` via the `changelog-lint` workflow, and at release time) hard-fails any entry that does not lead with one of the canonical emojis above, and warns on entries that look internal (test scenarios, EF Core internals, `*Async` names) or are too long. An off-list emoji almost always means the entry is not customer-facing and should be removed.
+**Enforcement:** `scripts/Lint-Changelog.ps1` (run on PRs via the `changelog-lint` workflow, and at release time) hard-fails any entry that does not lead with one of the canonical emojis above, and warns on entries that look internal (test scenarios, EF Core internals, `*Async` names) or are too long. An off-list emoji almost always means the entry is not customer-facing and should be removed.
+
+The same `changelog-lint` workflow also runs `scripts/Lint-DocsCoupling.ps1`, which enforces **public docs coupling**: a PR that adds a ✨ or 🔄 entry must also change a file under `docs/`, or opt out with a `Docs: n/a - <reason>` line in the PR body (a reason is required) or the `docs-not-needed` label. This is the mechanical backstop for the "Keeping Documentation Current" rule above; it covers public docs only, because engineering-doc staleness cannot be inferred from a changelog entry.
 
 **At release time:** Move all `[Unreleased]` entries to a new version section and update comparison links at the bottom of the file. See Release Process below.
 
