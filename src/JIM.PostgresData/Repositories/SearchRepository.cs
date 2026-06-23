@@ -17,6 +17,21 @@ public class SearchRepository : ISearchRepository
         Repository = dataRepository;
     }
 
+    /// <summary>
+    /// Guards against silent data loss on a load-mutate-save path. The Blazor DbContext defaults to NoTracking
+    /// (see JIM.Web Program.cs), so an entity loaded without an explicit AsTracking() comes back detached and a
+    /// subsequent SaveChanges persists nothing while falsely reporting success. Every mutating method here loads
+    /// change-tracked; this asserts that contract and fails fast if a future change drops the AsTracking(), rather
+    /// than silently discarding the edit. Mirrors the guard in ConnectedSystemRepository.UpdateSyncRuleAsync.
+    /// </summary>
+    private void GuardTracked<T>(T entity, string operation) where T : class
+    {
+        if (Repository.Database.Entry(entity).State == EntityState.Detached)
+            throw new InvalidOperationException(
+                $"{operation} requires a change-tracked {typeof(T).Name}, but the supplied instance is detached " +
+                "from this DbContext, so no changes would be persisted. The query that loaded it must call AsTracking().");
+    }
+
     public async Task<IList<PredefinedSearchHeader>> GetPredefinedSearchHeadersAsync()
     {
         var predefinedSearchHeaders = await Repository.Database.PredefinedSearches.OrderBy(d => d.Name).Select(d => new PredefinedSearchHeader
@@ -119,17 +134,21 @@ public class SearchRepository : ISearchRepository
         if (parentGroupId.HasValue)
         {
             var parent = await Repository.Database.PredefinedSearchCriteriaGroups
+                .AsTracking()
                 .Include(g => g.ChildGroups)
                 .SingleOrDefaultAsync(g => g.Id == parentGroupId.Value)
                 ?? throw new ArgumentException($"Parent criteria group with ID {parentGroupId.Value} not found.");
+            GuardTracked(parent, nameof(CreatePredefinedSearchCriteriaGroupAsync));
             parent.ChildGroups.Add(group);
         }
         else
         {
             var search = await Repository.Database.PredefinedSearches
+                .AsTracking()
                 .Include(s => s.CriteriaGroups)
                 .SingleOrDefaultAsync(s => s.Id == predefinedSearchId)
                 ?? throw new ArgumentException($"Predefined search with ID {predefinedSearchId} not found.");
+            GuardTracked(search, nameof(CreatePredefinedSearchCriteriaGroupAsync));
             search.CriteriaGroups.Add(group);
         }
 
@@ -139,10 +158,11 @@ public class SearchRepository : ISearchRepository
 
     public async Task<PredefinedSearchCriteriaGroup?> UpdatePredefinedSearchCriteriaGroupAsync(int groupId, SearchGroupType type, int position)
     {
-        var group = await Repository.Database.PredefinedSearchCriteriaGroups.SingleOrDefaultAsync(g => g.Id == groupId);
+        var group = await Repository.Database.PredefinedSearchCriteriaGroups.AsTracking().SingleOrDefaultAsync(g => g.Id == groupId);
         if (group == null)
             return null;
 
+        GuardTracked(group, nameof(UpdatePredefinedSearchCriteriaGroupAsync));
         group.Type = type;
         group.Position = position;
         await Repository.Database.SaveChangesAsync();
@@ -168,12 +188,14 @@ public class SearchRepository : ISearchRepository
     private async Task RemoveCriteriaGroupSubtreeAsync(int groupId)
     {
         var group = await Repository.Database.PredefinedSearchCriteriaGroups
+            .AsTracking()
             .Include(g => g.Criteria)
             .Include(g => g.ChildGroups)
             .SingleOrDefaultAsync(g => g.Id == groupId);
         if (group == null)
             return;
 
+        GuardTracked(group, nameof(DeletePredefinedSearchCriteriaGroupAsync));
         foreach (var child in group.ChildGroups.ToList())
             await RemoveCriteriaGroupSubtreeAsync(child.Id);
 
@@ -195,11 +217,13 @@ public class SearchRepository : ISearchRepository
     public async Task<PredefinedSearchCriteria?> CreatePredefinedSearchCriterionAsync(int groupId, PredefinedSearchCriteria criterion)
     {
         var group = await Repository.Database.PredefinedSearchCriteriaGroups
+            .AsTracking()
             .Include(g => g.Criteria)
             .SingleOrDefaultAsync(g => g.Id == groupId);
         if (group == null)
             return null;
 
+        GuardTracked(group, nameof(CreatePredefinedSearchCriterionAsync));
         // Persist via the FK scalar only; the navigation is ignored so EF does not try to re-insert the attribute.
         criterion.MetaverseAttribute = null!;
         group.Criteria.Add(criterion);
@@ -209,10 +233,11 @@ public class SearchRepository : ISearchRepository
 
     public async Task<PredefinedSearchCriteria?> UpdatePredefinedSearchCriterionAsync(PredefinedSearchCriteria criterion)
     {
-        var existing = await Repository.Database.PredefinedSearchCriteria.SingleOrDefaultAsync(c => c.Id == criterion.Id);
+        var existing = await Repository.Database.PredefinedSearchCriteria.AsTracking().SingleOrDefaultAsync(c => c.Id == criterion.Id);
         if (existing == null)
             return null;
 
+        GuardTracked(existing, nameof(UpdatePredefinedSearchCriterionAsync));
         existing.ComparisonType = criterion.ComparisonType;
         existing.MetaverseAttributeId = criterion.MetaverseAttributeId;
         existing.StringValue = criterion.StringValue;
@@ -232,10 +257,11 @@ public class SearchRepository : ISearchRepository
 
     public async Task<bool> DeletePredefinedSearchCriterionAsync(int criterionId)
     {
-        var criterion = await Repository.Database.PredefinedSearchCriteria.SingleOrDefaultAsync(c => c.Id == criterionId);
+        var criterion = await Repository.Database.PredefinedSearchCriteria.AsTracking().SingleOrDefaultAsync(c => c.Id == criterionId);
         if (criterion == null)
             return false;
 
+        GuardTracked(criterion, nameof(DeletePredefinedSearchCriterionAsync));
         Repository.Database.PredefinedSearchCriteria.Remove(criterion);
         await Repository.Database.SaveChangesAsync();
         return true;
