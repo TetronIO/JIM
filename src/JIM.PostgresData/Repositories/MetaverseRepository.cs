@@ -12,6 +12,7 @@ using JIM.Models.Staging;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using NpgsqlTypes;
 using Serilog;
 using System.Diagnostics;
 namespace JIM.PostgresData.Repositories;
@@ -916,48 +917,43 @@ public class MetaverseRepository : IMetaverseRepository
         {
             foreach (var criteria in group.Criteria)
             {
+                // NOTE: this EF-based query path is currently unused; the live predefined-search query path is the
+                // raw-SQL GetMetaverseObjectHeadersPagedAsync below, which implements full typed comparison. This
+                // method is retained as the EF reference; it handles text criteria only. The null-coalesce keeps the
+                // string operators below null-safe now that StringValue is nullable.
+                var criteriaStringValue = criteria.StringValue ?? string.Empty;
                 switch (criteria.ComparisonType)
                 {
                     case SearchComparisonType.Equals:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && av.StringValue == criteria.StringValue));
+                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttributeId && av.StringValue == criteria.StringValue));
                         break;
                     case SearchComparisonType.NotEquals:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && av.StringValue != criteria.StringValue));
+                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttributeId && av.StringValue != criteria.StringValue));
                         break;
                     case SearchComparisonType.StartsWith:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && av.StringValue != null && av.StringValue.StartsWith(criteria.StringValue)));
+                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttributeId && av.StringValue != null && av.StringValue.StartsWith(criteriaStringValue)));
                         break;
                     case SearchComparisonType.NotStartsWith:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && (av.StringValue == null || !av.StringValue.StartsWith(criteria.StringValue))));
+                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttributeId && (av.StringValue == null || !av.StringValue.StartsWith(criteriaStringValue))));
                         break;
                     case SearchComparisonType.EndsWith:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && av.StringValue != null && av.StringValue.EndsWith(criteria.StringValue)));
+                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttributeId && av.StringValue != null && av.StringValue.EndsWith(criteriaStringValue)));
                         break;
                     case SearchComparisonType.NotEndsWith:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && (av.StringValue == null || !av.StringValue.EndsWith(criteria.StringValue))));
+                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttributeId && (av.StringValue == null || !av.StringValue.EndsWith(criteriaStringValue))));
                         break;
 
-                    case SearchComparisonType.Contains: // need to lookup if we need to handle contains different with postgres
+                    case SearchComparisonType.Contains:
                     case SearchComparisonType.NotContains:
-                    case SearchComparisonType.LessThan: // for numbers, we need a number value property on the criteria object
+                    case SearchComparisonType.LessThan:
                     case SearchComparisonType.LessThanOrEquals:
                     case SearchComparisonType.GreaterThan:
                     case SearchComparisonType.GreaterThanOrEquals:
-                        throw new NotSupportedException($"Not currently supporting PredefinedSearchComparisonType.{criteria.ComparisonType}");
+                        throw new NotSupportedException($"The EF predefined-search query path does not support SearchComparisonType.{criteria.ComparisonType}; use GetMetaverseObjectHeadersPagedAsync.");
                 }
             }
 
-            if (group.Type == SearchGroupType.All)
-            {
-                // err?
-            }
-            else
-            {
-                // Any
-                // More err...
-            }
-
-            // todo: handle group nesting as well
+            // Group AND/OR and nesting semantics are applied by the live raw-SQL path; this EF reference flattens to AND.
         }
 
         // Apply search filter - searches across all attribute values
@@ -1040,6 +1036,135 @@ public class MetaverseRepository : IMetaverseRepository
         return pagedResultSet;
     }
 
+    /// <summary>
+    /// Builds a parameterised EXISTS / NOT EXISTS SQL fragment for a single predefined-search criterion.
+    /// The attribute-value column is selected to match the attribute's data type (Text, Number, LongNumber,
+    /// DateTime, Boolean, Guid) so the per-column indexes on MetaverseObjectAttributeValues stay usable, and
+    /// the requested comparison operator is validated against that data type. Adds the attribute-id and value
+    /// parameters to <paramref name="parameters"/>. Throws <see cref="NotSupportedException"/> for an operator
+    /// that does not apply to the attribute's data type (callers validate at the API boundary before reaching here).
+    /// </summary>
+    private static string BuildPredefinedSearchCriterionSql(PredefinedSearchCriteria criteria, int index, List<NpgsqlParameter> parameters)
+    {
+        var attrParam = $"@criteriaAttrId{index}";
+        var valParamName = $"criteriaVal{index}";
+        var valParam = $"@{valParamName}";
+        parameters.Add(new NpgsqlParameter($"criteriaAttrId{index}", criteria.MetaverseAttributeId));
+
+        var dataType = criteria.GetAttributeDataType()
+            ?? throw new NotSupportedException("Predefined search criterion has no resolvable attribute data type.");
+
+        // EXISTS: at least one of the object's values for this attribute satisfies the predicate.
+        string Exists(string predicate) =>
+            $"""EXISTS (SELECT 1 FROM "MetaverseObjectAttributeValues" cav WHERE cav."MetaverseObjectId" = m."Id" AND cav."AttributeId" = {attrParam} AND {predicate})""";
+        // NOT EXISTS: none of the object's values for this attribute satisfies the predicate (negative text operators).
+        string NotExists(string predicate) =>
+            $"""NOT EXISTS (SELECT 1 FROM "MetaverseObjectAttributeValues" cav WHERE cav."MetaverseObjectId" = m."Id" AND cav."AttributeId" = {attrParam} AND {predicate})""";
+
+        NotSupportedException Unsupported() =>
+            new($"SearchComparisonType.{criteria.ComparisonType} is not supported for {dataType} attributes.");
+
+        switch (dataType)
+        {
+            case AttributeDataType.Text:
+            {
+                parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Text) { Value = (object?)criteria.StringValue ?? DBNull.Value });
+                const string col = "cav.\"StringValue\"";
+                // ILIKE is case-insensitive; LIKE / = are case-sensitive. lower() keeps equality case-insensitive.
+                return criteria.ComparisonType switch
+                {
+                    SearchComparisonType.Equals => criteria.CaseSensitive
+                        ? Exists($"{col} = {valParam}")
+                        : Exists($"lower({col}) = lower({valParam})"),
+                    SearchComparisonType.NotEquals => criteria.CaseSensitive
+                        ? Exists($"{col} <> {valParam}")
+                        : Exists($"lower({col}) <> lower({valParam})"),
+                    SearchComparisonType.StartsWith => Exists(criteria.CaseSensitive
+                        ? $"{col} IS NOT NULL AND {col} LIKE {valParam} || '%'"
+                        : $"{col} IS NOT NULL AND {col} ILIKE {valParam} || '%'"),
+                    SearchComparisonType.NotStartsWith => NotExists(criteria.CaseSensitive
+                        ? $"{col} IS NOT NULL AND {col} LIKE {valParam} || '%'"
+                        : $"{col} IS NOT NULL AND {col} ILIKE {valParam} || '%'"),
+                    SearchComparisonType.EndsWith => Exists(criteria.CaseSensitive
+                        ? $"{col} IS NOT NULL AND {col} LIKE '%' || {valParam}"
+                        : $"{col} IS NOT NULL AND {col} ILIKE '%' || {valParam}"),
+                    SearchComparisonType.NotEndsWith => NotExists(criteria.CaseSensitive
+                        ? $"{col} IS NOT NULL AND {col} LIKE '%' || {valParam}"
+                        : $"{col} IS NOT NULL AND {col} ILIKE '%' || {valParam}"),
+                    SearchComparisonType.Contains => Exists(criteria.CaseSensitive
+                        ? $"{col} IS NOT NULL AND {col} LIKE '%' || {valParam} || '%'"
+                        : $"{col} IS NOT NULL AND {col} ILIKE '%' || {valParam} || '%'"),
+                    SearchComparisonType.NotContains => NotExists(criteria.CaseSensitive
+                        ? $"{col} IS NOT NULL AND {col} LIKE '%' || {valParam} || '%'"
+                        : $"{col} IS NOT NULL AND {col} ILIKE '%' || {valParam} || '%'"),
+                    _ => throw Unsupported()
+                };
+            }
+            case AttributeDataType.Number:
+                parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Integer) { Value = (object?)criteria.IntValue ?? DBNull.Value });
+                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"IntValue\"", valParam, Exists, Unsupported);
+            case AttributeDataType.LongNumber:
+                parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Bigint) { Value = (object?)criteria.LongValue ?? DBNull.Value });
+                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"LongValue\"", valParam, Exists, Unsupported);
+            case AttributeDataType.DateTime:
+                parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.TimestampTz) { Value = (object?)NormaliseToUtc(criteria.DateTimeValue) ?? DBNull.Value });
+                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"DateTimeValue\"", valParam, Exists, Unsupported);
+            case AttributeDataType.Boolean:
+                parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Boolean) { Value = (object?)criteria.BoolValue ?? DBNull.Value });
+                return criteria.ComparisonType switch
+                {
+                    SearchComparisonType.Equals => Exists($"cav.\"BoolValue\" = {valParam}"),
+                    SearchComparisonType.NotEquals => Exists($"cav.\"BoolValue\" <> {valParam}"),
+                    _ => throw Unsupported()
+                };
+            case AttributeDataType.Guid:
+                parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Uuid) { Value = (object?)criteria.GuidValue ?? DBNull.Value });
+                return criteria.ComparisonType switch
+                {
+                    SearchComparisonType.Equals => Exists($"cav.\"GuidValue\" = {valParam}"),
+                    SearchComparisonType.NotEquals => Exists($"cav.\"GuidValue\" <> {valParam}"),
+                    _ => throw Unsupported()
+                };
+            default:
+                throw new NotSupportedException($"Predefined search criteria are not supported for {dataType} attributes.");
+        }
+    }
+
+    /// <summary>
+    /// Builds the SQL predicate for an ordered (Number / LongNumber / DateTime) comparison, supporting
+    /// equality and the four ordering operators. Throws for any operator that does not apply.
+    /// </summary>
+    private static string BuildOrderedComparisonSql(SearchComparisonType comparisonType, string column, string valParam, Func<string, string> exists, Func<NotSupportedException> unsupported)
+    {
+        return comparisonType switch
+        {
+            SearchComparisonType.Equals => exists($"{column} = {valParam}"),
+            SearchComparisonType.NotEquals => exists($"{column} <> {valParam}"),
+            SearchComparisonType.LessThan => exists($"{column} < {valParam}"),
+            SearchComparisonType.LessThanOrEquals => exists($"{column} <= {valParam}"),
+            SearchComparisonType.GreaterThan => exists($"{column} > {valParam}"),
+            SearchComparisonType.GreaterThanOrEquals => exists($"{column} >= {valParam}"),
+            _ => throw unsupported()
+        };
+    }
+
+    /// <summary>
+    /// Ensures a DateTime is expressed as UTC before it is bound to a 'timestamp with time zone' parameter.
+    /// Values stored by JIM are UTC (see DateTime handling in src/CLAUDE.md); Unspecified-kind values are treated as UTC.
+    /// </summary>
+    private static DateTime? NormaliseToUtc(DateTime? value)
+    {
+        if (!value.HasValue)
+            return null;
+
+        return value.Value.Kind switch
+        {
+            DateTimeKind.Utc => value.Value,
+            DateTimeKind.Local => value.Value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)
+        };
+    }
+
     /// <inheritdoc/>
     public async Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectHeadersPagedAsync(
         PredefinedSearch predefinedSearch,
@@ -1090,35 +1215,16 @@ public class MetaverseRepository : IMetaverseRepository
             sharedParams.Add(new NpgsqlParameter("searchPattern", $"%{searchQuery}%"));
         }
 
-        // Criteria group filters
+        // Criteria group filters.
+        // Phase 1: criteria within and across groups are combined with AND. Each criterion compares the
+        // typed attribute-value column that matches the attribute's data type, so the per-column indexes on
+        // MetaverseObjectAttributeValues remain usable. Group All/Any and nesting semantics arrive in Phase 2.
         var criteriaIdx = 0;
         foreach (var group in predefinedSearch.CriteriaGroups)
         {
             foreach (var criteria in group.Criteria)
             {
-                var attrParam = $"@criteriaAttrId{criteriaIdx}";
-                var valParam = $"@criteriaVal{criteriaIdx}";
-                sharedParams.Add(new NpgsqlParameter($"criteriaAttrId{criteriaIdx}", criteria.MetaverseAttribute.Id));
-                sharedParams.Add(new NpgsqlParameter($"criteriaVal{criteriaIdx}", criteria.StringValue));
-
-                var subquery = criteria.ComparisonType switch
-                {
-                    SearchComparisonType.Equals =>
-                        $"""EXISTS (SELECT 1 FROM "MetaverseObjectAttributeValues" cav WHERE cav."MetaverseObjectId" = m."Id" AND cav."AttributeId" = {attrParam} AND cav."StringValue" = {valParam})""",
-                    SearchComparisonType.NotEquals =>
-                        $"""EXISTS (SELECT 1 FROM "MetaverseObjectAttributeValues" cav WHERE cav."MetaverseObjectId" = m."Id" AND cav."AttributeId" = {attrParam} AND cav."StringValue" != {valParam})""",
-                    SearchComparisonType.StartsWith =>
-                        $"""EXISTS (SELECT 1 FROM "MetaverseObjectAttributeValues" cav WHERE cav."MetaverseObjectId" = m."Id" AND cav."AttributeId" = {attrParam} AND cav."StringValue" IS NOT NULL AND cav."StringValue" LIKE {valParam} || '%')""",
-                    SearchComparisonType.NotStartsWith =>
-                        $"""NOT EXISTS (SELECT 1 FROM "MetaverseObjectAttributeValues" cav WHERE cav."MetaverseObjectId" = m."Id" AND cav."AttributeId" = {attrParam} AND cav."StringValue" IS NOT NULL AND cav."StringValue" LIKE {valParam} || '%')""",
-                    SearchComparisonType.EndsWith =>
-                        $"""EXISTS (SELECT 1 FROM "MetaverseObjectAttributeValues" cav WHERE cav."MetaverseObjectId" = m."Id" AND cav."AttributeId" = {attrParam} AND cav."StringValue" IS NOT NULL AND cav."StringValue" LIKE '%' || {valParam})""",
-                    SearchComparisonType.NotEndsWith =>
-                        $"""NOT EXISTS (SELECT 1 FROM "MetaverseObjectAttributeValues" cav WHERE cav."MetaverseObjectId" = m."Id" AND cav."AttributeId" = {attrParam} AND cav."StringValue" IS NOT NULL AND cav."StringValue" LIKE '%' || {valParam})""",
-                    _ => throw new NotSupportedException($"Not currently supporting PredefinedSearchComparisonType.{criteria.ComparisonType}")
-                };
-
-                whereClause += $" AND {subquery}";
+                whereClause += $" AND {BuildPredefinedSearchCriterionSql(criteria, criteriaIdx, sharedParams)}";
                 criteriaIdx++;
             }
         }

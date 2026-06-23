@@ -86,4 +86,144 @@ public class SearchRepository : ISearchRepository
         Repository.Database.PredefinedSearches.Update(predefinedSearch);
         await Repository.Database.SaveChangesAsync();
     }
+
+    #region predefined search criteria groups
+
+    public async Task<PredefinedSearchCriteriaGroup?> GetPredefinedSearchCriteriaGroupAsync(int groupId)
+    {
+        return await Repository.Database.PredefinedSearchCriteriaGroups
+            .AsSplitQuery()
+            .Include(g => g.Criteria)
+            .ThenInclude(c => c.MetaverseAttribute)
+            .Include(g => g.ChildGroups)
+            .Include(g => g.ParentGroup)
+            .SingleOrDefaultAsync(g => g.Id == groupId);
+    }
+
+    public async Task<PredefinedSearchCriteriaGroup> CreatePredefinedSearchCriteriaGroupAsync(int predefinedSearchId, int? parentGroupId, SearchGroupType type, int position)
+    {
+        var group = new PredefinedSearchCriteriaGroup { Type = type, Position = position };
+
+        if (parentGroupId.HasValue)
+        {
+            var parent = await Repository.Database.PredefinedSearchCriteriaGroups
+                .Include(g => g.ChildGroups)
+                .SingleOrDefaultAsync(g => g.Id == parentGroupId.Value)
+                ?? throw new ArgumentException($"Parent criteria group with ID {parentGroupId.Value} not found.");
+            parent.ChildGroups.Add(group);
+        }
+        else
+        {
+            var search = await Repository.Database.PredefinedSearches
+                .Include(s => s.CriteriaGroups)
+                .SingleOrDefaultAsync(s => s.Id == predefinedSearchId)
+                ?? throw new ArgumentException($"Predefined search with ID {predefinedSearchId} not found.");
+            search.CriteriaGroups.Add(group);
+        }
+
+        await Repository.Database.SaveChangesAsync();
+        return group;
+    }
+
+    public async Task<PredefinedSearchCriteriaGroup?> UpdatePredefinedSearchCriteriaGroupAsync(int groupId, SearchGroupType type, int position)
+    {
+        var group = await Repository.Database.PredefinedSearchCriteriaGroups.SingleOrDefaultAsync(g => g.Id == groupId);
+        if (group == null)
+            return null;
+
+        group.Type = type;
+        group.Position = position;
+        await Repository.Database.SaveChangesAsync();
+        return group;
+    }
+
+    public async Task<bool> DeletePredefinedSearchCriteriaGroupAsync(int groupId)
+    {
+        var exists = await Repository.Database.PredefinedSearchCriteriaGroups.AnyAsync(g => g.Id == groupId);
+        if (!exists)
+            return false;
+
+        await RemoveCriteriaGroupSubtreeAsync(groupId);
+        await Repository.Database.SaveChangesAsync();
+        return true;
+    }
+
+    /// <summary>
+    /// Recursively removes a criteria group, its nested child groups and all contained criteria from the
+    /// change tracker. The caller is responsible for the single SaveChanges. The foreign keys use NO ACTION,
+    /// so each child must be removed before its parent.
+    /// </summary>
+    private async Task RemoveCriteriaGroupSubtreeAsync(int groupId)
+    {
+        var group = await Repository.Database.PredefinedSearchCriteriaGroups
+            .Include(g => g.Criteria)
+            .Include(g => g.ChildGroups)
+            .SingleOrDefaultAsync(g => g.Id == groupId);
+        if (group == null)
+            return;
+
+        foreach (var child in group.ChildGroups.ToList())
+            await RemoveCriteriaGroupSubtreeAsync(child.Id);
+
+        Repository.Database.PredefinedSearchCriteria.RemoveRange(group.Criteria);
+        Repository.Database.PredefinedSearchCriteriaGroups.Remove(group);
+    }
+
+    #endregion
+
+    #region predefined search criteria
+
+    public async Task<PredefinedSearchCriteria?> GetPredefinedSearchCriterionAsync(int criterionId)
+    {
+        return await Repository.Database.PredefinedSearchCriteria
+            .Include(c => c.MetaverseAttribute)
+            .SingleOrDefaultAsync(c => c.Id == criterionId);
+    }
+
+    public async Task<PredefinedSearchCriteria?> CreatePredefinedSearchCriterionAsync(int groupId, PredefinedSearchCriteria criterion)
+    {
+        var group = await Repository.Database.PredefinedSearchCriteriaGroups
+            .Include(g => g.Criteria)
+            .SingleOrDefaultAsync(g => g.Id == groupId);
+        if (group == null)
+            return null;
+
+        // Persist via the FK scalar only; the navigation is ignored so EF does not try to re-insert the attribute.
+        criterion.MetaverseAttribute = null!;
+        group.Criteria.Add(criterion);
+        await Repository.Database.SaveChangesAsync();
+        return criterion;
+    }
+
+    public async Task<PredefinedSearchCriteria?> UpdatePredefinedSearchCriterionAsync(PredefinedSearchCriteria criterion)
+    {
+        var existing = await Repository.Database.PredefinedSearchCriteria.SingleOrDefaultAsync(c => c.Id == criterion.Id);
+        if (existing == null)
+            return null;
+
+        existing.ComparisonType = criterion.ComparisonType;
+        existing.MetaverseAttributeId = criterion.MetaverseAttributeId;
+        existing.StringValue = criterion.StringValue;
+        existing.IntValue = criterion.IntValue;
+        existing.LongValue = criterion.LongValue;
+        existing.DateTimeValue = criterion.DateTimeValue;
+        existing.BoolValue = criterion.BoolValue;
+        existing.GuidValue = criterion.GuidValue;
+        existing.CaseSensitive = criterion.CaseSensitive;
+        await Repository.Database.SaveChangesAsync();
+        return existing;
+    }
+
+    public async Task<bool> DeletePredefinedSearchCriterionAsync(int criterionId)
+    {
+        var criterion = await Repository.Database.PredefinedSearchCriteria.SingleOrDefaultAsync(c => c.Id == criterionId);
+        if (criterion == null)
+            return false;
+
+        Repository.Database.PredefinedSearchCriteria.Remove(criterion);
+        await Repository.Database.SaveChangesAsync();
+        return true;
+    }
+
+    #endregion
 }
