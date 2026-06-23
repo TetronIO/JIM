@@ -812,18 +812,18 @@ public class MetaverseRepository : IMetaverseRepository
     /// the in-memory semantics of <see cref="JIM.Application"/>'s scoping evaluator. The shared
     /// <paramref name="criteriaIndex"/> is incremented per criterion so parameter names stay unique across the tree.
     /// </summary>
-    private static string BuildPredefinedSearchGroupSql(PredefinedSearchCriteriaGroup group, ref int criteriaIndex, List<NpgsqlParameter> parameters)
+    private static string BuildPredefinedSearchGroupSql(PredefinedSearchCriteriaGroup group, ref int criteriaIndex, List<NpgsqlParameter> parameters, DateTime nowUtc)
     {
         var clauses = new List<string>();
 
         foreach (var criteria in group.Criteria)
         {
-            clauses.Add(BuildPredefinedSearchCriterionSql(criteria, criteriaIndex, parameters));
+            clauses.Add(BuildPredefinedSearchCriterionSql(criteria, criteriaIndex, parameters, nowUtc));
             criteriaIndex++;
         }
 
         foreach (var childGroup in group.ChildGroups)
-            clauses.Add(BuildPredefinedSearchGroupSql(childGroup, ref criteriaIndex, parameters));
+            clauses.Add(BuildPredefinedSearchGroupSql(childGroup, ref criteriaIndex, parameters, nowUtc));
 
         // An empty group matches everything (parity with ScopingEvaluationServer's empty-group handling).
         if (clauses.Count == 0)
@@ -841,7 +841,7 @@ public class MetaverseRepository : IMetaverseRepository
     /// parameters to <paramref name="parameters"/>. Throws <see cref="NotSupportedException"/> for an operator
     /// that does not apply to the attribute's data type (callers validate at the API boundary before reaching here).
     /// </summary>
-    private static string BuildPredefinedSearchCriterionSql(PredefinedSearchCriteria criteria, int index, List<NpgsqlParameter> parameters)
+    private static string BuildPredefinedSearchCriterionSql(PredefinedSearchCriteria criteria, int index, List<NpgsqlParameter> parameters, DateTime nowUtc)
     {
         var attrParam = $"@criteriaAttrId{index}";
         var valParamName = $"criteriaVal{index}";
@@ -904,7 +904,12 @@ public class MetaverseRepository : IMetaverseRepository
                 parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Bigint) { Value = (object?)criteria.LongValue ?? DBNull.Value });
                 return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"LongValue\"", valParam, Exists, Unsupported);
             case AttributeDataType.DateTime:
-                parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.TimestampTz) { Value = (object?)NormaliseToUtc(criteria.DateTimeValue) ?? DBNull.Value });
+                // Resolve a relative criterion to a literal boundary before binding, so the SQL sees a constant
+                // and the DateTimeValue index stays usable. Absolute criteria use their stored value.
+                var dateBoundary = criteria.ValueMode == DateCriteriaValueMode.Relative && criteria.RelativeCount.HasValue && criteria.RelativeUnit.HasValue && criteria.RelativeDirection.HasValue
+                    ? RelativeDateResolver.Resolve(criteria.RelativeCount.Value, criteria.RelativeUnit.Value, criteria.RelativeDirection.Value, nowUtc)
+                    : NormaliseToUtc(criteria.DateTimeValue);
+                parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.TimestampTz) { Value = (object?)dateBoundary ?? DBNull.Value });
                 return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"DateTimeValue\"", valParam, Exists, Unsupported);
             case AttributeDataType.Boolean:
                 parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Boolean) { Value = (object?)criteria.BoolValue ?? DBNull.Value });
@@ -1021,9 +1026,11 @@ public class MetaverseRepository : IMetaverseRepository
         if (predefinedSearch.CriteriaGroups.Count > 0)
         {
             var criteriaIdx = 0;
+            // Resolve "now" once for the whole query so every relative date criterion shares one boundary.
+            var nowUtc = DateTime.UtcNow;
             var groupClauses = new List<string>();
             foreach (var group in predefinedSearch.CriteriaGroups)
-                groupClauses.Add(BuildPredefinedSearchGroupSql(group, ref criteriaIdx, sharedParams));
+                groupClauses.Add(BuildPredefinedSearchGroupSql(group, ref criteriaIdx, sharedParams, nowUtc));
 
             // Top-level groups are OR-ed. (A single seeded group reduces to just that group's clause.)
             whereClause += $" AND ({string.Join(" OR ", groupClauses)})";
