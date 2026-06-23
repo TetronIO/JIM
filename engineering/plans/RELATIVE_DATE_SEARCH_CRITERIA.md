@@ -78,7 +78,7 @@ Predefined Search: "Distribution groups"                  [ Run ]
 -----------------------------------------------------------------
  Object type: Group
 
- CRITERIA GROUP    logic type: ALL                          [del]
+ CRITERIA GROUP    logic type: ALL                        [del]
 
   (MV) GroupType     equals         Text: Distribution    [del]
   (MV) MemberCount   greater than   Number: 0             [del]
@@ -98,7 +98,7 @@ For a `DateTime` attribute in this phase the value control is the existing `MudD
 +----------------------------------------------------------+
 | Metaverse Attribute     [ MemberCount             v ]    |
 | Comparison Type         [ Greater Than            v ]    |
-| Number Value            [ 0                          ]   |
+| Number Value            [ 0                         ]    |
 +----------------------------------------------------------+
 |                     [ Cancel ]      [ Add Criteria ]     |
 +----------------------------------------------------------+
