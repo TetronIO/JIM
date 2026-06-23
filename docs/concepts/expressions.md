@@ -218,6 +218,12 @@ This is the most important section to read before you write an expression that r
 
 When you reference an attribute the object does not have (for example `cs["middleName"]` on a person with no middle name), the expression sees **null**. There are three behaviours to understand.
 
+<!-- MAINTENANCE (#91 attribute priority): point 1 below describes today's unconditional clear on
+     null (SyncEngine.AttributeFlow.cs:204), correct only for a single contributor. When #91 lands,
+     a null becomes ConnectedNoValue and the resolver decides based on priority/NullIsValue, so a
+     null from a non-winning rule no longer clears. Reconcile this section and the date-function
+     note that links here. Points 2 and 3 remain valid. Tracked in
+     engineering/plans/doing/ATTRIBUTE_PRIORITY.md Phase 5. -->
 ### 1. A null result means "no value", and clears the target
 
 When an expression evaluates to null, JIM treats that as a **deliberate assertion that the attribute should have no value**, not as "no opinion, leave it alone". For an import mapping, JIM removes any existing value from the target Metaverse attribute.
