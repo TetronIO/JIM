@@ -808,23 +808,6 @@ public class MetaverseServer
         return await Application.Repository.Metaverse.GetMetaverseObjectOfTypeCountAsync(metaverseObjectType.Id);
     }
 
-    public async Task<PagedResultSet<MetaverseObject>> GetMetaverseObjectsOfTypeAsync(MetaverseObjectType metaverseObjectType, int page = 1, int pageSize = 20)
-    {
-        return await Application.Repository.Metaverse.GetMetaverseObjectsOfTypeAsync(metaverseObjectType.Id, page, pageSize);
-    }
-
-    public async Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectsOfTypeAsync(
-        PredefinedSearch predefinedSearch,
-        int page = 1,
-        int pageSize = 20,
-        string? searchQuery = null,
-        string? sortBy = null,
-        bool sortDescending = true)
-    {
-        return await Application.Repository.Metaverse.GetMetaverseObjectsOfTypeAsync(
-            predefinedSearch, page, pageSize, searchQuery, sortBy, sortDescending);
-    }
-
     /// <summary>
     /// Gets a paginated list of lightweight Metaverse Object headers with only the attributes defined
     /// in the PredefinedSearch projected directly in SQL for optimum performance at scale.

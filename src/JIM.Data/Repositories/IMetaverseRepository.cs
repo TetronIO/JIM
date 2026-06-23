@@ -99,21 +99,6 @@ public interface IMetaverseRepository
         string? filterAttributeName = null,
         string? filterAttributeValue = null);
 
-    public Task<PagedResultSet<MetaverseObject>> GetMetaverseObjectsOfTypeAsync(
-        int metaverseObjectTypeId,
-        int page,
-        int pageSize,
-        QuerySortBy querySortBy = QuerySortBy.DateCreated,
-        QueryRange queryRange = QueryRange.Forever);
-
-    public Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectsOfTypeAsync(
-        PredefinedSearch predefinedSearch,
-        int page,
-        int pageSize,
-        string? searchQuery = null,
-        string? sortBy = null,
-        bool sortDescending = true);
-
     /// <summary>
     /// Gets a paginated list of lightweight Metaverse Object headers with only the attributes defined
     /// in the PredefinedSearch projected directly in SQL. No EF Include chain is used — attribute values

@@ -45,6 +45,10 @@ public class SearchRepository : ISearchRepository
             Include(q => q.CriteriaGroups).
             ThenInclude(cg => cg.Criteria).
             ThenInclude(c => c.MetaverseAttribute).
+            Include(q => q.CriteriaGroups).
+            ThenInclude(cg => cg.ChildGroups).
+            ThenInclude(cg => cg.Criteria).
+            ThenInclude(c => c.MetaverseAttribute).
             SingleOrDefaultAsync(q => q.Id == id);
     }
 
@@ -58,6 +62,10 @@ public class SearchRepository : ISearchRepository
             Include(q => q.CriteriaGroups).
             ThenInclude(cg => cg.Criteria).
             ThenInclude(c => c.MetaverseAttribute).
+            Include(q => q.CriteriaGroups).
+            ThenInclude(cg => cg.ChildGroups).
+            ThenInclude(cg => cg.Criteria).
+            ThenInclude(c => c.MetaverseAttribute).
             SingleOrDefaultAsync(q => q.Uri == uri);
     }
 
@@ -69,6 +77,10 @@ public class SearchRepository : ISearchRepository
             ThenInclude(a => a.MetaverseAttribute).
             Include(q => q.MetaverseObjectType).
             Include(q => q.CriteriaGroups).
+            ThenInclude(cg => cg.Criteria).
+            ThenInclude(c => c.MetaverseAttribute).
+            Include(q => q.CriteriaGroups).
+            ThenInclude(cg => cg.ChildGroups).
             ThenInclude(cg => cg.Criteria).
             ThenInclude(c => c.MetaverseAttribute).
             SingleOrDefaultAsync(q => q.MetaverseObjectType.Id == metaverseObjectType.Id && q.IsDefaultForMetaverseObjectType && q.IsEnabled);

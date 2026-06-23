@@ -805,235 +805,32 @@ public class MetaverseRepository : IMetaverseRepository
         return await Repository.Database.MetaverseObjects.Where(x => x.Type.Id == metaverseObjectTypeId).CountAsync();
     }
 
-    public async Task<PagedResultSet<MetaverseObject>> GetMetaverseObjectsOfTypeAsync(
-        int metaverseObjectTypeId,
-        int page = 1,
-        int pageSize = 20,
-        QuerySortBy querySortBy = QuerySortBy.DateCreated,
-        QueryRange queryRange = QueryRange.Forever)
+    /// <summary>
+    /// Recursively builds a parenthesised SQL boolean expression for a predefined-search criteria group:
+    /// its criteria and nested child groups combined with AND (group type All) or OR (group type Any).
+    /// An empty group (no criteria and no child groups) is always-true and renders as <c>TRUE</c>, matching
+    /// the in-memory semantics of <see cref="JIM.Application"/>'s scoping evaluator. The shared
+    /// <paramref name="criteriaIndex"/> is incremented per criterion so parameter names stay unique across the tree.
+    /// </summary>
+    private static string BuildPredefinedSearchGroupSql(PredefinedSearchCriteriaGroup group, ref int criteriaIndex, List<NpgsqlParameter> parameters)
     {
-        if (pageSize < 1)
-            throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
+        var clauses = new List<string>();
 
-        if (page < 1)
-            page = 1;
-
-        // limit page size to avoid increasing latency unnecessarily
-        if (pageSize > 100)
-            pageSize = 100;
-
-        var objects = from o in Repository.Database.MetaverseObjects.
-                AsSplitQuery(). // Use split query to avoid cartesian explosion from collection includes
-                Include(mo => mo.AttributeValues).
-                ThenInclude(av => av.Attribute).
-                Where(q => q.Type.Id == metaverseObjectTypeId)
-            select o;
-
-        if (queryRange != QueryRange.Forever)
+        foreach (var criteria in group.Criteria)
         {
-            switch (queryRange)
-            {
-                case QueryRange.LastYear:
-                    objects = objects.Where(q => q.Created >= DateTime.UtcNow - TimeSpan.FromDays(365));
-                    break;
-                case QueryRange.LastMonth:
-                    objects = objects.Where(q => q.Created >= DateTime.UtcNow - TimeSpan.FromDays(30));
-                    break;
-                case QueryRange.LastWeek:
-                    objects = objects.Where(q => q.Created >= DateTime.UtcNow - TimeSpan.FromDays(7));
-                    break;
-            }
+            clauses.Add(BuildPredefinedSearchCriterionSql(criteria, criteriaIndex, parameters));
+            criteriaIndex++;
         }
 
-        switch (querySortBy)
-        {
-            case QuerySortBy.DateCreated:
-                objects = objects.OrderByDescending(q => q.Created);
-                break;
+        foreach (var childGroup in group.ChildGroups)
+            clauses.Add(BuildPredefinedSearchGroupSql(childGroup, ref criteriaIndex, parameters));
 
-            // todo: support more ways of sorting, i.e. by attribute value
-        }
+        // An empty group matches everything (parity with ScopingEvaluationServer's empty-group handling).
+        if (clauses.Count == 0)
+            return "TRUE";
 
-        // now just retrieve a page's worth of images from the results
-        var grossCount = objects.Count();
-        var offset = (page - 1) * pageSize;
-        var itemsToGet = grossCount >= pageSize ? pageSize : grossCount;
-        var results = await objects.Skip(offset).Take(itemsToGet).ToListAsync();
-
-        // now with all the ids we know how many total results there are and so can populate paging info
-        var pagedResultSet = new PagedResultSet<MetaverseObject>
-        {
-            PageSize = pageSize,
-            TotalResults = grossCount,
-            CurrentPage = page,
-            QuerySortBy = querySortBy,
-            QueryRange = queryRange,
-            Results = results
-        };
-
-        if (page == 1 && pagedResultSet.TotalPages == 0)
-            return pagedResultSet;
-
-        // don't let users try and request a page that doesn't exist
-        if (page <= pagedResultSet.TotalPages) 
-            return pagedResultSet;
-            
-        pagedResultSet.TotalResults = 0;
-        pagedResultSet.Results.Clear();
-        return pagedResultSet;
-
-    }
-
-    public async Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectsOfTypeAsync(
-        PredefinedSearch predefinedSearch,
-        int page,
-        int pageSize,
-        string? searchQuery = null,
-        string? sortBy = null,
-        bool sortDescending = true)
-    {
-        if (pageSize < 1)
-            throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
-
-        if (page < 1)
-            page = 1;
-
-        // limit page size to avoid increasing latency unnecessarily
-        if (pageSize > 100)
-            pageSize = 100;
-
-        // construct the base query.
-        // No AsSplitQuery: the query is paginated (max 100 rows) so cartesian explosion is bounded,
-        // and AsSplitQuery can fail to correlate split queries correctly at scale.
-        var objects = from o in Repository.Database.MetaverseObjects.
-                Include(mo => mo.Type).
-                Include(mo => mo.AttributeValues).
-                ThenInclude(av => av.Attribute).
-                Where(q => q.Type.Id == predefinedSearch.MetaverseObjectType.Id)
-            select o;
-
-        // is there criteria to use in the predefined search criteria groups?
-        foreach (var group in predefinedSearch.CriteriaGroups)
-        {
-            foreach (var criteria in group.Criteria)
-            {
-                // NOTE: this EF-based query path is currently unused; the live predefined-search query path is the
-                // raw-SQL GetMetaverseObjectHeadersPagedAsync below, which implements full typed comparison. This
-                // method is retained as the EF reference; it handles text criteria only. The null-coalesce keeps the
-                // string operators below null-safe now that StringValue is nullable.
-                var criteriaStringValue = criteria.StringValue ?? string.Empty;
-                switch (criteria.ComparisonType)
-                {
-                    case SearchComparisonType.Equals:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttributeId && av.StringValue == criteria.StringValue));
-                        break;
-                    case SearchComparisonType.NotEquals:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttributeId && av.StringValue != criteria.StringValue));
-                        break;
-                    case SearchComparisonType.StartsWith:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttributeId && av.StringValue != null && av.StringValue.StartsWith(criteriaStringValue)));
-                        break;
-                    case SearchComparisonType.NotStartsWith:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttributeId && (av.StringValue == null || !av.StringValue.StartsWith(criteriaStringValue))));
-                        break;
-                    case SearchComparisonType.EndsWith:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttributeId && av.StringValue != null && av.StringValue.EndsWith(criteriaStringValue)));
-                        break;
-                    case SearchComparisonType.NotEndsWith:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttributeId && (av.StringValue == null || !av.StringValue.EndsWith(criteriaStringValue))));
-                        break;
-
-                    case SearchComparisonType.Contains:
-                    case SearchComparisonType.NotContains:
-                    case SearchComparisonType.LessThan:
-                    case SearchComparisonType.LessThanOrEquals:
-                    case SearchComparisonType.GreaterThan:
-                    case SearchComparisonType.GreaterThanOrEquals:
-                        throw new NotSupportedException($"The EF predefined-search query path does not support SearchComparisonType.{criteria.ComparisonType}; use GetMetaverseObjectHeadersPagedAsync.");
-                }
-            }
-
-            // Group AND/OR and nesting semantics are applied by the live raw-SQL path; this EF reference flattens to AND.
-        }
-
-        // Apply search filter - searches across all attribute values
-        // Search is case-insensitive for user convenience
-        if (!string.IsNullOrWhiteSpace(searchQuery))
-        {
-            var searchPattern = $"%{searchQuery}%";
-            objects = objects.Where(o => o.AttributeValues.Any(av =>
-                av.StringValue != null && EF.Functions.ILike(av.StringValue, searchPattern)));
-        }
-
-        // Apply sorting - sort by attribute value if specified, otherwise by Created date
-        // The sortBy parameter corresponds to the attribute name
-        if (!string.IsNullOrWhiteSpace(sortBy))
-        {
-            // Sort by the specified attribute's string value
-            objects = sortDescending
-                ? objects.OrderByDescending(o => o.AttributeValues
-                    .Where(av => av.Attribute.Name == sortBy)
-                    .Select(av => av.StringValue)
-                    .FirstOrDefault())
-                : objects.OrderBy(o => o.AttributeValues
-                    .Where(av => av.Attribute.Name == sortBy)
-                    .Select(av => av.StringValue)
-                    .FirstOrDefault());
-        }
-        else
-        {
-            // Default sort by Created date
-            objects = sortDescending
-                ? objects.OrderByDescending(q => q.Created)
-                : objects.OrderBy(q => q.Created);
-        }
-
-        // Get total count for pagination
-        var grossCount = await objects.CountAsync();
-        var offset = (page - 1) * pageSize;
-
-        // Materialise a page of full entities so that Include chains are honoured
-        // (Include is ignored when projecting via .Select(), leaving navigation properties null).
-        // Max page size is 100 so the overhead of loading full entities is negligible.
-        var predefinedSearchAttributeIds = predefinedSearch.Attributes
-            .Select(a => a.MetaverseAttribute.Id)
-            .ToHashSet();
-
-        var pageEntities = await objects.Skip(offset).Take(pageSize).ToListAsync();
-
-        // Project to headers in memory where Attribute navigations are populated
-        var results = pageEntities.Select(d => new MetaverseObjectHeader
-        {
-            Id = d.Id,
-            Created = d.Created,
-            Status = d.Status,
-            TypeId = d.Type.Id,
-            TypeName = d.Type.Name,
-            TypePluralName = d.Type.PluralName,
-            AttributeValues = d.AttributeValues
-                .Where(av => predefinedSearchAttributeIds.Contains(av.Attribute.Id))
-                .ToList()
-        }).ToList();
-
-        // now with all the ids we know how many total results there are and so can populate paging info
-        var pagedResultSet = new PagedResultSet<MetaverseObjectHeader>
-        {
-            PageSize = pageSize,
-            TotalResults = grossCount,
-            CurrentPage = page,
-            Results = results
-        };
-
-        if (page == 1 && pagedResultSet.TotalPages == 0)
-            return pagedResultSet;
-
-        // don't let users try and request a page that doesn't exist
-        if (page <= pagedResultSet.TotalPages)
-            return pagedResultSet;
-
-        pagedResultSet.TotalResults = 0;
-        pagedResultSet.Results.Clear();
-        return pagedResultSet;
+        var joiner = group.Type == SearchGroupType.All ? " AND " : " OR ";
+        return $"({string.Join(joiner, clauses)})";
     }
 
     /// <summary>
@@ -1216,17 +1013,20 @@ public class MetaverseRepository : IMetaverseRepository
         }
 
         // Criteria group filters.
-        // Phase 1: criteria within and across groups are combined with AND. Each criterion compares the
-        // typed attribute-value column that matches the attribute's data type, so the per-column indexes on
-        // MetaverseObjectAttributeValues remain usable. Group All/Any and nesting semantics arrive in Phase 2.
-        var criteriaIdx = 0;
-        foreach (var group in predefinedSearch.CriteriaGroups)
+        // Each criterion compares the typed attribute-value column that matches the attribute's data type
+        // (so the per-column indexes on MetaverseObjectAttributeValues remain usable). Within a group, criteria
+        // and nested child groups are combined with AND (group type All) or OR (group type Any); the top-level
+        // groups are OR-ed together, matching the in-memory semantics of ScopingEvaluationServer. An empty group
+        // is always-true. No criteria groups means no filter (all objects of the type).
+        if (predefinedSearch.CriteriaGroups.Count > 0)
         {
-            foreach (var criteria in group.Criteria)
-            {
-                whereClause += $" AND {BuildPredefinedSearchCriterionSql(criteria, criteriaIdx, sharedParams)}";
-                criteriaIdx++;
-            }
+            var criteriaIdx = 0;
+            var groupClauses = new List<string>();
+            foreach (var group in predefinedSearch.CriteriaGroups)
+                groupClauses.Add(BuildPredefinedSearchGroupSql(group, ref criteriaIdx, sharedParams));
+
+            // Top-level groups are OR-ed. (A single seeded group reduces to just that group's clause.)
+            whereClause += $" AND ({string.Join(" OR ", groupClauses)})";
         }
 
         // Count query — lean, no joins
