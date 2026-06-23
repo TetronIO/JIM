@@ -7,7 +7,7 @@ namespace JIM.Models.Search;
 /// <summary>
 /// A single search criterion that compares a Metaverse attribute against a value using a specified comparison operator.
 /// </summary>
-public class PredefinedSearchCriteria
+public class PredefinedSearchCriteria : ICriterionValues
 {
     public int Id { get; set; }
 

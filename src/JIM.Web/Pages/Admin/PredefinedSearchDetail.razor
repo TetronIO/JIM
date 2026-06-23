@@ -123,10 +123,10 @@
         </DialogActions>
     </MudDialog>
 
-    @* ─── Add Criteria dialog ─── *@
+    @* ─── Add/Edit Criteria dialog ─── *@
     <MudDialog @bind-Visible="_addCriteriaDialogVisible" Options="_dialogOptions">
         <TitleContent>
-            <MudText Typo="Typo.h6"><MudIcon Icon="@Icons.Material.Filled.Compare" Class="mr-3" /> Add Criteria</MudText>
+            <MudText Typo="Typo.h6"><MudIcon Icon="@Icons.Material.Filled.Compare" Class="mr-3" /> @(_editingCriterionId.HasValue ? "Edit Criteria" : "Add Criteria")</MudText>
         </TitleContent>
         <DialogContent>
             @if (_newCriterion != null)
@@ -161,37 +161,13 @@
                         }
                     </MudSelect>
 
-                    @switch (_newCriterionAttribute.Type)
-                    {
-                        case AttributeDataType.Text:
-                            <MudTextField @bind-Value="_newCriterion.StringValue" Required="true" Label="Text Value" Variant="Variant.Outlined" Class="mt-5" />
-                            <MudCheckBox @bind-Value="_newCriterion.CaseSensitive" Label="Case-sensitive" Class="mt-2" />
-                            break;
-                        case AttributeDataType.Guid:
-                            <MudTextField @bind-Value="_newCriterion.GuidValue" Required="true" Label="Guid Value" Variant="Variant.Outlined" Class="mt-5" />
-                            break;
-                        case AttributeDataType.Number:
-                            <MudNumericField @bind-Value="_newCriterion.IntValue" Label="Number Value" Variant="Variant.Outlined" Class="mt-5" />
-                            break;
-                        case AttributeDataType.LongNumber:
-                            <MudNumericField @bind-Value="_newCriterion.LongValue" Label="Long Number Value" Variant="Variant.Outlined" Class="mt-5" />
-                            break;
-                        case AttributeDataType.DateTime:
-                            <MudDatePicker @bind-Date="_newCriterion.DateTimeValue" Label="Date Value" Variant="Variant.Outlined" Class="mt-5" />
-                            break;
-                        case AttributeDataType.Boolean:
-                            <MudCheckBox @bind-Value="_newCriterion.BoolValue" TriState="true" Class="mt-5" Label="Boolean Value">: @(!_newCriterion.BoolValue.HasValue ? "Null" : _newCriterion.BoolValue.ToString())</MudCheckBox>
-                            break;
-                        default:
-                            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-5">This attribute type is not supported in search criteria.</MudAlert>
-                            break;
-                    }
+                    <CriterionValueEditor Criterion="_newCriterion" AttributeType="_newCriterionAttribute.Type" />
                 }
             }
         </DialogContent>
         <DialogActions>
             <MudButton DropShadow="false" Variant="Variant.Filled" Color="Color.Default" OnClick="@(() => _addCriteriaDialogVisible = false)" Class="me-2">Cancel</MudButton>
-            <MudButton Disabled="DisableAddCriteriaButton()" Variant="Variant.Filled" DropShadow="false" Color="Color.Primary" OnClick="HandleAddCriterionAsync">Add Criteria</MudButton>
+            <MudButton Disabled="DisableAddCriteriaButton()" Variant="Variant.Filled" DropShadow="false" Color="Color.Primary" OnClick="HandleSaveCriterionAsync">@(_editingCriterionId.HasValue ? "Save" : "Add Criteria")</MudButton>
         </DialogActions>
     </MudDialog>
 }
@@ -213,9 +189,10 @@
     private string? _newGroupType;
     private int? _addGroupParentId;
 
-    // Add Criteria dialog state.
+    // Add/Edit Criteria dialog state.
     private bool _addCriteriaDialogVisible;
     private int _addCriteriaGroupId;
+    private int? _editingCriterionId;
     private PredefinedSearchCriteria? _newCriterion;
     private MetaverseAttribute? _newCriterionAttribute;
 
@@ -249,6 +226,10 @@
                 </MudChip>
                 <MudChip T="string">@FriendlyComparison(criteria)</MudChip>
                 <MudChip T="string">@criteria.ToString()</MudChip>
+                <MudTooltip Text="Edit criteria" Arrow="true" Placement="Placement.Top">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small" DropShadow="false"
+                                   aria-label="edit criteria" OnClick="@(() => HandleOpenEditCriteriaDialog(criteria))" />
+                </MudTooltip>
                 <MudTooltip Text="Delete criteria" Arrow="true" Placement="Placement.Top">
                     <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" DropShadow="false"
                                    aria-label="delete criteria" OnClick="@(() => HandleDeleteCriterionAsync(criteria.Id))" />
@@ -379,8 +360,35 @@
     private void HandleOpenAddCriteriaDialog(int groupId)
     {
         _addCriteriaGroupId = groupId;
+        _editingCriterionId = null;
         _newCriterion = new PredefinedSearchCriteria();
         _newCriterionAttribute = null;
+        _addCriteriaDialogVisible = true;
+    }
+
+    private void HandleOpenEditCriteriaDialog(PredefinedSearchCriteria criteria)
+    {
+        _editingCriterionId = criteria.Id;
+        // Work on a copy so cancelling the dialog leaves the displayed criterion untouched.
+        _newCriterion = new PredefinedSearchCriteria
+        {
+            Id = criteria.Id,
+            ComparisonType = criteria.ComparisonType,
+            MetaverseAttributeId = criteria.MetaverseAttribute?.Id ?? criteria.MetaverseAttributeId,
+            StringValue = criteria.StringValue,
+            IntValue = criteria.IntValue,
+            LongValue = criteria.LongValue,
+            DateTimeValue = criteria.DateTimeValue,
+            BoolValue = criteria.BoolValue,
+            GuidValue = criteria.GuidValue,
+            CaseSensitive = criteria.CaseSensitive,
+            ValueMode = criteria.ValueMode,
+            RelativeCount = criteria.RelativeCount,
+            RelativeUnit = criteria.RelativeUnit,
+            RelativeDirection = criteria.RelativeDirection
+        };
+        var attributeId = criteria.MetaverseAttribute?.Id ?? criteria.MetaverseAttributeId;
+        _newCriterionAttribute = _objectTypeAttributes.FirstOrDefault(a => a.Id == attributeId) ?? criteria.MetaverseAttribute;
         _addCriteriaDialogVisible = true;
     }
 
@@ -400,25 +408,31 @@
         }
     }
 
-    private async Task HandleAddCriterionAsync()
+    private async Task HandleSaveCriterionAsync()
     {
         if (_predefinedSearch == null || _newCriterion == null || _newCriterionAttribute == null)
             return;
 
         _newCriterion.MetaverseAttributeId = _newCriterionAttribute.Id;
+        var editing = _editingCriterionId.HasValue;
         try
         {
             using var jim = JimFactory.Create();
-            await jim.Search.CreatePredefinedSearchCriterionAsync(_addCriteriaGroupId, _newCriterion);
+            if (editing)
+                await jim.Search.UpdatePredefinedSearchCriterionAsync(_newCriterion);
+            else
+                await jim.Search.CreatePredefinedSearchCriterionAsync(_addCriteriaGroupId, _newCriterion);
+
             _addCriteriaDialogVisible = false;
             _newCriterion = null;
             _newCriterionAttribute = null;
+            _editingCriterionId = null;
             await ReloadAsync();
-            Snackbar.Add("Criteria added.", Severity.Success);
+            Snackbar.Add(editing ? "Criteria updated." : "Criteria added.", Severity.Success);
         }
         catch (ArgumentException ex)
         {
-            Snackbar.Add($"Failed to add criteria: {ex.Message}", Severity.Error);
+            Snackbar.Add($"Failed to save criteria: {ex.Message}", Severity.Error);
         }
     }
 
@@ -450,7 +464,9 @@
             AttributeDataType.Guid => !_newCriterion.GuidValue.HasValue,
             AttributeDataType.Number => !_newCriterion.IntValue.HasValue,
             AttributeDataType.LongNumber => !_newCriterion.LongValue.HasValue,
-            AttributeDataType.DateTime => !_newCriterion.DateTimeValue.HasValue,
+            AttributeDataType.DateTime => _newCriterion.ValueMode == DateCriteriaValueMode.Relative
+                ? !(_newCriterion.RelativeCount.HasValue && _newCriterion.RelativeUnit.HasValue && _newCriterion.RelativeDirection.HasValue)
+                : !_newCriterion.DateTimeValue.HasValue,
             AttributeDataType.Boolean => !_newCriterion.BoolValue.HasValue,
             _ => true
         };

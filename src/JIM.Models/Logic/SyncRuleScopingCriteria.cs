@@ -6,7 +6,7 @@ using JIM.Models.Search;
 using JIM.Models.Staging;
 namespace JIM.Models.Logic;
 
-public class SyncRuleScopingCriteria
+public class SyncRuleScopingCriteria : ICriterionValues
 {
     public int Id { get; set; }
 

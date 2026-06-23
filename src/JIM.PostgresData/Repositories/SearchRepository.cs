@@ -222,6 +222,10 @@ public class SearchRepository : ISearchRepository
         existing.BoolValue = criterion.BoolValue;
         existing.GuidValue = criterion.GuidValue;
         existing.CaseSensitive = criterion.CaseSensitive;
+        existing.ValueMode = criterion.ValueMode;
+        existing.RelativeCount = criterion.RelativeCount;
+        existing.RelativeUnit = criterion.RelativeUnit;
+        existing.RelativeDirection = criterion.RelativeDirection;
         await Repository.Database.SaveChangesAsync();
         return existing;
     }

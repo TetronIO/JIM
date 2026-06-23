@@ -166,36 +166,7 @@
 
         @if (GetSelectedAttributeType() is { } attributeType && _newSyncRuleScopingCriteria != null)
         {
-            @switch (attributeType)
-            {
-                case AttributeDataType.Text:
-                    <MudTextField @bind-Value="_newSyncRuleScopingCriteria.StringValue" Required="true" Label="Text Value" Variant="Variant.Outlined" Class="mt-5"></MudTextField>
-                    break;
-                case AttributeDataType.Guid:
-                    <MudTextField @bind-Value="_newSyncRuleScopingCriteria.GuidValue" Required="true" Label="Guid Value" Variant="Variant.Outlined" Class="mt-5"></MudTextField>
-                    break;
-                case AttributeDataType.Number:
-                    <MudNumericField @bind-Value="_newSyncRuleScopingCriteria.IntValue" Label="Number Value" Variant="Variant.Outlined" Class="mt-5" />
-                    break;
-                case AttributeDataType.LongNumber:
-                    <MudNumericField @bind-Value="_newSyncRuleScopingCriteria.LongValue" Label="Long Number Value" Variant="Variant.Outlined" Class="mt-5" />
-                    break;
-                case AttributeDataType.DateTime:
-                    <MudDatePicker @bind-Date="_newSyncRuleScopingCriteria.DateTimeValue" Label="Date Value" Variant="Variant.Outlined" Class="mt-5" />
-                    break;
-                case AttributeDataType.Boolean:
-                    <MudCheckBox @bind-Value="_newSyncRuleScopingCriteria.BoolValue" TriState="true" Class="mt-5" Label="Boolean Value">: @(!_newSyncRuleScopingCriteria.BoolValue.HasValue ? "Null" : _newSyncRuleScopingCriteria.BoolValue.ToString())</MudCheckBox>
-                    break;
-                case AttributeDataType.Reference:
-                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-5">Apologies, references are not yet supported here.</MudAlert>
-                    break;
-                case AttributeDataType.Binary:
-                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-5">Apologies, binary types are not yet supported here.</MudAlert>
-                    break;
-                case AttributeDataType.NotSet:
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
+            <CriterionValueEditor Criterion="_newSyncRuleScopingCriteria" AttributeType="attributeType" />
         }
 
     </DialogContent>
@@ -285,6 +256,12 @@
 
         if (_newSyncRuleScopingCriteria.ComparisonType == SearchComparisonType.NotSet)
             return true;
+
+        // A relative DateTime criterion is valid once its count, unit and direction are set (no absolute value).
+        if (_newSyncRuleScopingCriteria.ValueMode == DateCriteriaValueMode.Relative)
+            return !(_newSyncRuleScopingCriteria.RelativeCount.HasValue &&
+                     _newSyncRuleScopingCriteria.RelativeUnit.HasValue &&
+                     _newSyncRuleScopingCriteria.RelativeDirection.HasValue);
 
         if (!_newSyncRuleScopingCriteria.IntValue.HasValue &&
             string.IsNullOrEmpty(_newSyncRuleScopingCriteria.StringValue) &&
