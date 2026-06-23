@@ -1,6 +1,6 @@
 # Relative Date/Time Search and Scoping Criteria: Implementation Plan
 
-- **Status:** Doing (Phases 1-2 complete)
+- **Status:** Doing (Phases 1-3 implemented; UI pending runtime verification)
 - **Issue:** [#85](https://github.com/TetronIO/JIM/issues/85) (sub-tasks [#849](https://github.com/TetronIO/JIM/issues/849), [#850](https://github.com/TetronIO/JIM/issues/850))
 - **PRD:** [`engineering/prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md`](../prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md)
 
@@ -185,9 +185,11 @@ A child group renders indented inside its parent with its own logic type, mirror
 
 ---
 
-## Phase 3: Relative date/time criteria (#85)
+## Phase 3: Relative date/time criteria (#85) ✅
 
 **Goal:** relative dates work end-to-end on both surfaces, plus the criterion in-place-edit retrofit.
+
+**Delivered** (commits on `claude/gh-issue-85-prd-oizdqr`): shared enums + pure `RelativeDateResolver` (whole-day rounding, Hours-exact, calendar-correct, UTC); `ValueMode`/relative fields on both criterion models with an append-only migration (verified against PostgreSQL); scoping evaluator resolves once per pass (injectable `nowUtc`); raw-SQL search resolves to a literal before binding; relative fields + validation on both criterion APIs and the new scoping criterion `PUT`; relative parameters across the PowerShell criterion cmdlets plus `Set-JIMScopingCriterion`; a shared `CriterionValueEditor` (via `ICriterionValues`) giving both editors the value-mode toggle and relative sub-form, with in-place edit on the predefined-search editor; docs (config, PowerShell, `SYNC_RULE_SCOPING.md`) and a changelog entry. Resolver, scoping and search relative paths verified by unit tests and end-to-end against PostgreSQL; full build and all C#/Pester tests green; `mkdocs build --strict` and the lints pass. **Verification gap:** the Blazor UI is build-verified only (no runtime/browser test in this environment); the relative editor and in-place edit need a manual portal check before the feature is marked fully Done.
 
 ### Model and persistence
 - Add the shared enums and `RelativeDateResolver` (see Shared design decisions).
