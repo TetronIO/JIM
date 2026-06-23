@@ -69,6 +69,41 @@ Sequencing rationale and resolved decisions (whole-day rounding with an Hours ex
 ### UI (`PredefinedSearchDetail.razor`)
 - Replace the read-only criteria display with an editor. Reuse the "Add Criteria" dialog pattern from `SyncRuleDetailScopingCriteriaGroup.razor` (which is the candidate to extract into a shared component, since two pages will now use it; see Risks). Per-type value inputs as in the scoping editor. Friendly operator labels for `DateTime`.
 
+#### UI mock: predefined-search criteria editor (was read-only)
+
+The Criteria panel gains the same add/remove affordances the scoping editor already has. Today it only lists `StringValue`; after Phase 1 it edits typed criteria.
+
+```
+Predefined Search: "Distribution groups"            [ Run ]
+------------------------------------------------------------------
+ Object type: Group
+
+ CRITERIA GROUP. LOGIC TYPE: ALL                          [ 🗑 ]
+
+   (MV) GroupType    [ Equals ]          [ Text: Distribution ]  🗑
+   (MV) MemberCount  [ Greater Than ]    [ Number: 0 ]           🗑
+
+            [ + Add Criteria Group ]   [ + Add Criteria ]
+------------------------------------------------------------------
+ Results (live):  37 groups
+```
+
+#### UI mock: "Add Criteria" dialog, literal typed value (Number shown)
+
+```
++------------------------------------------------------------+
+|  ⚖  Add Criteria                                           |
++------------------------------------------------------------+
+|  Metaverse Attribute            [ MemberCount        ▼ ]   |
+|  Comparison Type                [ Greater Than       ▼ ]   |
+|  Number Value                   [ 0                    ]   |
++------------------------------------------------------------+
+|                                   [ Cancel ]  [ Add Criteria ]
++------------------------------------------------------------+
+```
+
+For a `DateTime` attribute in this phase the value control is the existing `MudDatePicker`, and the Comparison Type dropdown shows the friendly labels ("before", "on or before", "after", "on or after", "equals", "does not equal") mapping to the `SearchComparisonType` values.
+
 ### Tests
 - `JIM.Models.Tests`: criterion typed-value round-trip / mapping.
 - `JIM.Web.Api.Tests`: each new endpoint, plus validation (`400`) cases.
@@ -91,6 +126,26 @@ Sequencing rationale and resolved decisions (whole-day rounding with an Hours ex
 
 ### UI
 - Ensure the Phase 1 predefined-search editor supports adding nested groups and choosing group type (the scoping editor already does; the shared component should cover both).
+
+#### UI mock: nested groups in the predefined-search editor
+
+A child group renders indented inside its parent with its own logic type, mirroring the scoping editor. This expresses `(A OR B) AND C`.
+
+```
+ CRITERIA GROUP. LOGIC TYPE: ALL                          [ 🗑 ]
+
+   (MV) IsActive    [ Equals ]            [ Boolean: true ]      🗑
+
+   ┌── CRITERIA GROUP. LOGIC TYPE: ANY                    [ 🗑 ] ┐
+   │                                                            │
+   │   (MV) Department [ Equals ]   [ Text: Finance ]       🗑  │
+   │   (MV) Department [ Equals ]   [ Text: Sales ]         🗑  │
+   │                                                            │
+   │        [ + Add Criteria Group ]   [ + Add Criteria ]       │
+   └────────────────────────────────────────────────────────────┘
+
+            [ + Add Criteria Group ]   [ + Add Criteria ]
+```
 
 **Phase 2 done when:** multi-criteria and nested predefined searches return correct results; build and full test suite green.
 
@@ -120,6 +175,46 @@ Sequencing rationale and resolved decisions (whole-day rounding with an Hours ex
 
 ### UI
 - Scoping and predefined-search editors: when the selected attribute is `DateTime`, show a `ValueMode` toggle (Absolute/Relative). Absolute keeps `MudDatePicker`; Relative shows count (`MudNumericField`, min 0) + unit (`MudSelect`) + direction (`MudSelect`) with a live plain-language preview. Support editing an existing criterion in place. Relative criterion chips render plain language. (See PRD UI Mocks.)
+
+#### UI mock: "Add/Edit Criteria" dialog, DateTime attribute, Relative mode
+
+The `Value mode` toggle and the Relative sub-form appear only for `DateTime` attributes; all other types are unchanged from Phase 1. In Edit mode the dialog opens pre-populated with the existing criterion's values (in-place edit, requirement 24).
+
+```
++------------------------------------------------------------+
+|  ⚖  Edit Criteria                                          |
++------------------------------------------------------------+
+|  Metaverse Attribute            [ AccountExpiry      ▼ ]   |
+|  Comparison Type                [ On or before       ▼ ]   |
+|                                                            |
+|  Value mode      ( ○ Absolute )  ( • Relative )            |
+|                                                            |
+|   Count            Unit                Direction           |
+|  [   7   ]        [ Days        ▼ ]   [ From now    ▼ ]    |
+|                    Hours / Days / Weeks / Months / Years   |
+|                    Ago / From now                          |
+|                                                            |
+|  ┌──────────────────────────────────────────────────┐     |
+|  │ ℹ Matches when AccountExpiry is on or before      │     |
+|  │   7 days from now (re-evaluated each run).         │     |
+|  └──────────────────────────────────────────────────┘     |
++------------------------------------------------------------+
+|                                   [ Cancel ]  [ Save ]      |
++------------------------------------------------------------+
+```
+
+#### UI mock: relative criterion chips (both editors)
+
+Saved relative criteria read as plain language, never a resolved literal date, and each row gains an Edit affordance (the in-place edit path).
+
+```
+ CRITERIA GROUP. LOGIC TYPE: ALL                          [ 🗑 ]
+
+   (MV) AccountExpiry  [ On or before ]  [ 7 days from now ]  ✎  🗑
+   (MV) Department     [ Equals ]        [ Text: Finance ]    ✎  🗑
+```
+
+Notes: `Value mode` is a `MudRadioGroup`; the Relative inputs are `MudNumericField` (min 0) + two `MudSelect`s. The preview restates the resolved meaning and that it re-evaluates each run. The `Hours` unit gives instant precision; `Days` and coarser round to midnight UTC (Resolved Decision 1).
 
 ### Docs
 - `engineering/SYNC_RULE_SCOPING.md`: add relative-date examples (two worked examples). Update changelog under `[Unreleased]` for the user-facing capability.
