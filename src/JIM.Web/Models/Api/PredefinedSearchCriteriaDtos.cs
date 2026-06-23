@@ -120,8 +120,8 @@ public class PredefinedSearchCriteriaGroupDto
     public List<PredefinedSearchCriteriaDto> Criteria { get; set; } = new();
 
     /// <summary>
-    /// Nested child groups. Note: in the current release, criteria are combined with AND across groups;
-    /// All/Any group logic and nested-group evaluation are honoured in a later release.
+    /// Nested child groups. A group combines its criteria and child groups with AND (type All) or OR (type Any);
+    /// top-level groups are combined with OR. Nesting is supported one level deep.
     /// </summary>
     public List<PredefinedSearchCriteriaGroupDto> ChildGroups { get; set; } = new();
 

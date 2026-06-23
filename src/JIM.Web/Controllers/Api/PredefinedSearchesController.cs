@@ -143,8 +143,8 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
     /// List the criteria groups (and their criteria) for a predefined search.
     /// </summary>
     /// <remarks>
-    /// Criteria filter the objects a search returns. In the current release, all criteria across all
-    /// groups are combined with AND; All/Any group logic and nested-group evaluation are honoured in a later release.
+    /// Criteria filter the objects a search returns. A group combines its criteria and child groups with AND
+    /// (type All) or OR (type Any); top-level groups are combined with OR, and groups can nest one level deep.
     /// </remarks>
     /// <param name="id">The unique identifier of the predefined search.</param>
     /// <returns>The criteria groups; 404 Not Found if no search has that ID.</returns>
@@ -190,6 +190,41 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
             return BadRequest(ApiErrorResponse.BadRequest($"Invalid group type '{request.Type}'. Use 'All' or 'Any'."));
 
         var created = await _application.Search.CreatePredefinedSearchCriteriaGroupAsync(id, null, groupType, request.Position);
+        return CreatedAtRoute("GetPredefinedSearchCriteriaGroups", new { id }, PredefinedSearchCriteriaGroupDto.FromEntity(created));
+    }
+
+    /// <summary>
+    /// Add a nested child group to an existing criteria group.
+    /// </summary>
+    /// <remarks>
+    /// Child groups let you express mixed logic, for example <c>(A OR B) AND C</c>: a parent group with type
+    /// All containing criterion C and a child group with type Any containing A and B.
+    /// </remarks>
+    /// <param name="id">The unique identifier of the predefined search.</param>
+    /// <param name="groupId">The unique identifier of the parent criteria group.</param>
+    /// <param name="request">The child group to create.</param>
+    /// <returns>The created child group; 404 Not Found if the search or parent group does not exist.</returns>
+    [HttpPost("{id:int}/criteria-groups/{groupId:int}/child-groups", Name = "CreatePredefinedSearchChildCriteriaGroup")]
+    [ProducesResponseType(typeof(PredefinedSearchCriteriaGroupDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> CreateChildCriteriaGroupAsync([FromRoute] int id, [FromRoute] int groupId, [FromBody] CreatePredefinedSearchCriteriaGroupRequest request)
+    {
+        _logger.LogInformation("Creating child criteria group under group {GroupId} for predefined search {Id}", groupId, id);
+
+        var search = await _application.Search.GetPredefinedSearchAsync(id);
+        if (search == null)
+            return NotFound(ApiErrorResponse.NotFound($"Predefined search with ID {id} not found."));
+
+        if (FindCriteriaGroup(search, groupId) == null)
+            return NotFound(ApiErrorResponse.NotFound($"Criteria group with ID {groupId} not found on predefined search {id}."));
+
+        if (!Enum.TryParse<SearchGroupType>(request.Type, true, out var groupType))
+            return BadRequest(ApiErrorResponse.BadRequest($"Invalid group type '{request.Type}'. Use 'All' or 'Any'."));
+
+        var created = await _application.Search.CreatePredefinedSearchCriteriaGroupAsync(id, groupId, groupType, request.Position);
         return CreatedAtRoute("GetPredefinedSearchCriteriaGroups", new { id }, PredefinedSearchCriteriaGroupDto.FromEntity(created));
     }
 

@@ -79,40 +79,25 @@
                 @foreach (var criteriaGroup in _predefinedSearch.CriteriaGroups.OrderBy(g => g.Position))
                 {
                     <MudPaper Class="pa-5" Outlined="true">
-                        <div class="d-flex justify-space-between align-center">
-                            <MudText Typo="Typo.overline"><span class="mud-text-secondary">CRITERIA GROUP. LOGIC TYPE:</span> @criteriaGroup.Type.ToString().SplitOnCapitalLetters().ToUpper()</MudText>
-                            <MudTooltip Text="Delete group" Arrow="true" Placement="Placement.Top">
-                                <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error" Size="Size.Small" DropShadow="false"
-                                               aria-label="delete group" OnClick="@(() => HandleDeleteGroupAsync(criteriaGroup.Id))" />
-                            </MudTooltip>
+                        @RenderGroupHeader(criteriaGroup)
+                        @RenderCriteria(criteriaGroup)
+
+                        <div class="mt-4">
+                            <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Class="me-3"
+                                       OnClick="@(() => HandleOpenAddCriteriaDialog(criteriaGroup.Id))" DropShadow="false">Add Criteria</MudButton>
+                            <MudButton StartIcon="@Icons.Material.Filled.AccountTree" Variant="Variant.Filled"
+                                       OnClick="@(() => HandleOpenAddChildGroupDialog(criteriaGroup.Id))" DropShadow="false">Add Criteria Group</MudButton>
                         </div>
 
-                        @if (criteriaGroup.Criteria.Count == 0)
+                        @foreach (var childGroup in criteriaGroup.ChildGroups.OrderBy(g => g.Position))
                         {
-                            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">No criteria in this group yet.</MudAlert>
+                            <MudPaper Class="pa-5 mt-4 ml-6" Outlined="true">
+                                @RenderGroupHeader(childGroup)
+                                @RenderCriteria(childGroup)
+                                <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Class="mt-4"
+                                           OnClick="@(() => HandleOpenAddCriteriaDialog(childGroup.Id))" DropShadow="false">Add Criteria</MudButton>
+                            </MudPaper>
                         }
-                        @foreach (var criteria in criteriaGroup.Criteria)
-                        {
-                            <div class="mt-3 d-flex align-center">
-                                <MudChip T="string">
-                                    <AvatarContent>
-                                        <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
-                                            <MudAvatar Color="Color.Primary">MV</MudAvatar>
-                                        </MudTooltip>
-                                    </AvatarContent>
-                                    <ChildContent>@criteria.GetAttributeName()</ChildContent>
-                                </MudChip>
-                                <MudChip T="string">@FriendlyComparison(criteria)</MudChip>
-                                <MudChip T="string">@criteria.ToString()</MudChip>
-                                <MudTooltip Text="Delete criteria" Arrow="true" Placement="Placement.Top">
-                                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" DropShadow="false"
-                                                   aria-label="delete criteria" OnClick="@(() => HandleDeleteCriterionAsync(criteria.Id))" />
-                                </MudTooltip>
-                            </div>
-                        }
-
-                        <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Class="mt-4"
-                                   OnClick="@(() => HandleOpenAddCriteriaDialog(criteriaGroup.Id))" DropShadow="false">Add Criteria</MudButton>
                     </MudPaper>
                 }
             </MudStack>
@@ -226,6 +211,7 @@
     // Add Criteria Group dialog state.
     private bool _addGroupDialogVisible;
     private string? _newGroupType;
+    private int? _addGroupParentId;
 
     // Add Criteria dialog state.
     private bool _addCriteriaDialogVisible;
@@ -234,6 +220,42 @@
     private MetaverseAttribute? _newCriterionAttribute;
 
     private sealed record OperatorOption(SearchComparisonType Operator, string Label);
+
+    // ─── Render helpers (shared by top-level and nested groups) ───
+
+    private RenderFragment RenderGroupHeader(PredefinedSearchCriteriaGroup group) =>@<div class="d-flex justify-space-between align-center">
+        <MudText Typo="Typo.overline"><span class="mud-text-secondary">CRITERIA GROUP. LOGIC TYPE:</span> @group.Type.ToString().SplitOnCapitalLetters().ToUpper()</MudText>
+        <MudTooltip Text="Delete group" Arrow="true" Placement="Placement.Top">
+            <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error" Size="Size.Small" DropShadow="false"
+                           aria-label="delete group" OnClick="@(() => HandleDeleteGroupAsync(group.Id))" />
+        </MudTooltip>
+    </div>;
+
+    private RenderFragment RenderCriteria(PredefinedSearchCriteriaGroup group) =>@<text>
+        @if (group.Criteria.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">No criteria in this group yet.</MudAlert>
+        }
+        @foreach (var criteria in group.Criteria)
+        {
+            <div class="mt-3 d-flex align-center">
+                <MudChip T="string">
+                    <AvatarContent>
+                        <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
+                            <MudAvatar Color="Color.Primary">MV</MudAvatar>
+                        </MudTooltip>
+                    </AvatarContent>
+                    <ChildContent>@criteria.GetAttributeName()</ChildContent>
+                </MudChip>
+                <MudChip T="string">@FriendlyComparison(criteria)</MudChip>
+                <MudChip T="string">@criteria.ToString()</MudChip>
+                <MudTooltip Text="Delete criteria" Arrow="true" Placement="Placement.Top">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" DropShadow="false"
+                                   aria-label="delete criteria" OnClick="@(() => HandleDeleteCriterionAsync(criteria.Id))" />
+                </MudTooltip>
+            </div>
+        }
+    </text>;
 
     protected override async Task OnInitializedAsync()
     {
@@ -279,7 +301,15 @@
 
     private void HandleOpenAddGroupDialog()
     {
+        _addGroupParentId = null;
         _newGroupType = SearchGroupType.All.ToString();
+        _addGroupDialogVisible = true;
+    }
+
+    private void HandleOpenAddChildGroupDialog(int parentGroupId)
+    {
+        _addGroupParentId = parentGroupId;
+        _newGroupType = SearchGroupType.Any.ToString();
         _addGroupDialogVisible = true;
     }
 
@@ -289,11 +319,23 @@
             return;
 
         var type = (SearchGroupType)Enum.Parse(typeof(SearchGroupType), _newGroupType);
-        var position = _predefinedSearch.CriteriaGroups.Count;
+
+        // Position among siblings: child groups order within their parent, top-level groups among themselves.
+        int position;
+        if (_addGroupParentId.HasValue)
+        {
+            var parent = FindGroup(_predefinedSearch.CriteriaGroups, _addGroupParentId.Value);
+            position = parent?.ChildGroups.Count ?? 0;
+        }
+        else
+        {
+            position = _predefinedSearch.CriteriaGroups.Count;
+        }
+
         try
         {
             using var jim = JimFactory.Create();
-            await jim.Search.CreatePredefinedSearchCriteriaGroupAsync(_predefinedSearch.Id, null, type, position);
+            await jim.Search.CreatePredefinedSearchCriteriaGroupAsync(_predefinedSearch.Id, _addGroupParentId, type, position);
             _addGroupDialogVisible = false;
             await ReloadAsync();
             Snackbar.Add("Criteria group added.", Severity.Success);
@@ -302,6 +344,19 @@
         {
             Snackbar.Add($"Failed to add criteria group: {ex.Message}", Severity.Error);
         }
+    }
+
+    private static PredefinedSearchCriteriaGroup? FindGroup(IEnumerable<PredefinedSearchCriteriaGroup> groups, int groupId)
+    {
+        foreach (var group in groups)
+        {
+            if (group.Id == groupId)
+                return group;
+            var match = FindGroup(group.ChildGroups, groupId);
+            if (match != null)
+                return match;
+        }
+        return null;
     }
 
     private async Task HandleDeleteGroupAsync(int groupId)

@@ -7,16 +7,20 @@ function New-JIMPredefinedSearchCriteriaGroup {
         Creates a new criteria group on a Predefined Search.
 
     .DESCRIPTION
-        Creates a top-level criteria group on a Predefined Search. The group type determines how
-        criteria within it are evaluated:
+        Creates a criteria group on a Predefined Search, either top-level or nested under an existing
+        group. The group type determines how criteria within it are evaluated:
         - All: All criteria must match (AND logic)
         - Any: At least one criterion must match (OR logic)
 
-        Note: in the current release, criteria are combined with AND across groups; All/Any group
-        logic and nested groups are honoured in a later release.
+        Within a group, criteria and nested child groups are combined per the group's type; top-level
+        groups are combined with OR. Use -ParentGroupId to nest a group, for example to express
+        (A OR B) AND C.
 
     .PARAMETER PredefinedSearchId
         The unique identifier of the Predefined Search.
+
+    .PARAMETER ParentGroupId
+        Optional. The ID of an existing group to nest this group within. If omitted, creates a top-level group.
 
     .PARAMETER Type
         The logical operator for this group: 'All' (AND) or 'Any' (OR). Defaults to 'All'.
@@ -35,6 +39,11 @@ function New-JIMPredefinedSearchCriteriaGroup {
 
         Creates a top-level criteria group with AND logic.
 
+    .EXAMPLE
+        New-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId 3 -ParentGroupId 10 -Type Any -PassThru
+
+        Creates a child group with OR logic nested under group 10.
+
     .LINK
         Get-JIMPredefinedSearchCriteriaGroup
         Set-JIMPredefinedSearchCriteriaGroup
@@ -47,6 +56,9 @@ function New-JIMPredefinedSearchCriteriaGroup {
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('Id')]
         [int]$PredefinedSearchId,
+
+        [Parameter()]
+        [int]$ParentGroupId,
 
         [Parameter()]
         [ValidateSet('All', 'Any')]
@@ -69,10 +81,24 @@ function New-JIMPredefinedSearchCriteriaGroup {
             position = $Position
         }
 
-        if ($PSCmdlet.ShouldProcess("Predefined Search $PredefinedSearchId", "Create Criteria Group ($Type)")) {
+        $endpoint = if ($PSBoundParameters.ContainsKey('ParentGroupId')) {
+            "/api/v1/predefined-searches/$PredefinedSearchId/criteria-groups/$ParentGroupId/child-groups"
+        }
+        else {
+            "/api/v1/predefined-searches/$PredefinedSearchId/criteria-groups"
+        }
+
+        $target = if ($PSBoundParameters.ContainsKey('ParentGroupId')) {
+            "Predefined Search $PredefinedSearchId (under group $ParentGroupId)"
+        }
+        else {
+            "Predefined Search $PredefinedSearchId"
+        }
+
+        if ($PSCmdlet.ShouldProcess($target, "Create Criteria Group ($Type)")) {
             Write-Verbose "Creating criteria group for Predefined Search $PredefinedSearchId"
             try {
-                $result = Invoke-JIMApi -Endpoint "/api/v1/predefined-searches/$PredefinedSearchId/criteria-groups" -Method 'POST' -Body $body
+                $result = Invoke-JIMApi -Endpoint $endpoint -Method 'POST' -Body $body
                 Write-Verbose "Created criteria group ID: $($result.id)"
                 if ($PassThru) {
                     $result | Add-Member -NotePropertyName 'PredefinedSearchId' -NotePropertyValue $PredefinedSearchId -PassThru -Force
