@@ -77,6 +77,8 @@ Each criterion combines:
 
 For **Date/Time** attributes the editor shows the operators in calendar wording: *before*, *on or before*, *after*, *on or after*, *equals*, *does not equal*. Date/Time values are stored and compared in UTC.
 
+A Date/Time criterion can compare against either a fixed date (**Absolute**) or a date worked out **Relative** to now (a count, a unit of Hours/Days/Weeks/Months/Years, and a direction of Ago or From now). Relative criteria are re-evaluated every time the search runs, so "expiring within the next 7 days" keeps moving with time. Days and coarser units round to midnight UTC; Hours keeps exact-instant precision; month and year offsets are calendar-correct. See [relative dates in scope filters](synchronisation-rules.md#relative-dates-in-scope-filters) for the shared behaviour.
+
 **Text comparisons are case-sensitive by default.** Switch a text criterion to case-insensitive when you want, for example, `Finance` and `finance` to match the same value.
 
 ### How criteria combine

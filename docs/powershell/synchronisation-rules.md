@@ -652,6 +652,10 @@ New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
 | `BoolValue` | `bool` | No | | Boolean value to compare against |
 | `GuidValue` | `guid` | No | | GUID value to compare against |
 | `CaseSensitive` | `bool` | No | `$false` | If `$true`, string comparisons are case-sensitive. Only meaningful with `StringValue`. |
+| `ValueMode` | `string` | No | `Absolute` | For Date/Time attributes: `Absolute` (use `DateTimeValue`) or `Relative` (compare against a date relative to now). |
+| `RelativeCount` | `int` | No | | Relative offset count, zero or positive (with `ValueMode Relative`). |
+| `RelativeUnit` | `string` | No | | Relative offset unit: `Hours`, `Days`, `Weeks`, `Months`, `Years` (with `ValueMode Relative`). |
+| `RelativeDirection` | `string` | No | | Relative offset direction: `Ago` or `FromNow` (with `ValueMode Relative`). |
 | `PassThru` | `switch` | No | `$false` | Returns the created criterion object |
 
 ### Output
@@ -664,6 +668,7 @@ With `-PassThru`, returns the created scoping criterion object. Without it, retu
 
 - Export rules only support metaverse attributes. Import rules only support Connected System attributes.
 - Exactly one comparison value parameter should be provided; the correct parameter depends on the attribute's data type.
+- For a Date/Time attribute, set `-ValueMode Relative` with `-RelativeCount`/`-RelativeUnit`/`-RelativeDirection` to compare against a date resolved relative to now (re-evaluated each run); this is mutually exclusive with `-DateTimeValue`. See [relative dates](../configuration/synchronisation-rules.md#relative-dates-in-scope-filters).
 
 ### Examples
 
@@ -701,6 +706,42 @@ New-JIMScopingCriterion -SyncRuleId 8 -GroupId 3 `
     -ComparisonType GreaterThanOrEquals `
     -DateTimeValue "2025-01-01T00:00:00Z"
 ```
+
+```powershell title="Export scope: terminated within the last year (relative date)"
+New-JIMScopingCriterion -SyncRuleId 8 -GroupId 3 `
+    -MetaverseAttributeName "Employee End Date" `
+    -ComparisonType GreaterThanOrEquals `
+    -ValueMode Relative -RelativeCount 364 -RelativeUnit Days -RelativeDirection Ago
+```
+
+---
+
+## Set-JIMScopingCriterion
+
+Updates an existing scoping criterion (a full replacement of its attribute, operator and value). Takes the same parameters as `New-JIMScopingCriterion` plus `-CriterionId`, including the relative-date parameters for Date/Time attributes.
+
+### Syntax
+
+```powershell
+Set-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int>
+    (-MetaverseAttributeId <int> | -MetaverseAttributeName <string> | -ConnectedSystemAttributeId <int> | -ConnectedSystemAttributeName <string>)
+    -ComparisonType <string>
+    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
+    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
+    [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>]
+    [-PassThru]
+```
+
+### Examples
+
+```powershell title="Change a criterion to a relative date (on or before 7 days from now)"
+Set-JIMScopingCriterion -SyncRuleId 8 -GroupId 3 -CriterionId 12 `
+    -MetaverseAttributeName "AccountExpiry" `
+    -ComparisonType LessThanOrEquals `
+    -ValueMode Relative -RelativeCount 7 -RelativeUnit Days -RelativeDirection FromNow
+```
+
+**ShouldProcess impact level:** Medium.
 
 ---
 

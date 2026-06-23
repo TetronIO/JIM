@@ -155,6 +155,8 @@ All the write cmdlets support `ShouldProcess`; use `-WhatIf` or `-Confirm` to pr
 
 `New-JIMPredefinedSearchCriterion` and `Set-JIMPredefinedSearchCriterion` take the attribute (by `-MetaverseAttributeId` or `-MetaverseAttributeName`), a `-ComparisonType`, and the value parameter that matches the attribute's data type (`-StringValue`, `-IntValue`, `-LongValue`, `-DateTimeValue`, `-BoolValue`, or `-GuidValue`). `-CaseSensitive $false` makes a text comparison case-insensitive.
 
+For a Date/Time attribute you can compare against a date relative to now instead of a fixed `-DateTimeValue`: pass `-ValueMode Relative` with `-RelativeCount`, `-RelativeUnit` (Hours, Days, Weeks, Months, Years) and `-RelativeDirection` (Ago or FromNow). Relative is mutually exclusive with `-DateTimeValue`. See [relative dates](../configuration/synchronisation-rules.md#relative-dates-in-scope-filters) for the resolution rules.
+
 | Cmdlet | Purpose |
 |--------|---------|
 | `New-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> ...` | Add a criterion to a group. |
@@ -177,6 +179,12 @@ New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId 10 `
 ```powershell title="Filter on a date attribute (compared in UTC)"
 New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId 10 `
     -MetaverseAttributeName 'AccountExpiry' -ComparisonType LessThan -DateTimeValue '2026-01-01'
+```
+
+```powershell title="Filter on a date relative to now (expiring within the next 7 days)"
+New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId 10 `
+    -MetaverseAttributeName 'AccountExpiry' -ComparisonType LessThanOrEquals `
+    -ValueMode Relative -RelativeCount 7 -RelativeUnit Days -RelativeDirection FromNow
 ```
 
 ```powershell title="Mixed logic: (Department = Finance OR Sales) AND IsActive"
