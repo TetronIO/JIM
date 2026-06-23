@@ -166,7 +166,7 @@
 
         @if (GetSelectedAttributeType() is { } attributeType && _newSyncRuleScopingCriteria != null)
         {
-            <CriterionValueEditor Criterion="_newSyncRuleScopingCriteria" AttributeType="attributeType" />
+            <CriterionValueEditor Criterion="_newSyncRuleScopingCriteria" AttributeType="attributeType" OnChanged="StateHasChanged" />
         }
 
     </DialogContent>
@@ -298,6 +298,10 @@
         // all done, reset
         _addCriteriaDialogVisible = false;
         _newSyncRuleScopingCriteria = null;
+
+        // Bubble up so the page save bar (rule validity, "Update" button) re-evaluates; the mutation is on the
+        // shared SyncRule graph, which the host page renders against.
+        HandleStateHasChanged();
     }
 
     private void HandleOpenAddCriteriaGroupDialog()
@@ -332,6 +336,9 @@
         // all done, reset
         _addCriteriaGroupDialogVisible = false;
         _newChildCriteriaGroup = null;
+
+        // Bubble up so the page save bar re-evaluates against the mutated shared SyncRule graph.
+        HandleStateHasChanged();
     }
 
     private bool DisableAddCriteriaGroupFormButton()
@@ -346,5 +353,8 @@
             return;
 
         SyncRuleScopingCriteriaGroup.Criteria.Remove(criteriaToDelete);
+
+        // Bubble up so the page save bar re-evaluates against the mutated shared SyncRule graph.
+        HandleStateHasChanged();
     }
 }
