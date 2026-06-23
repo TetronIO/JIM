@@ -144,7 +144,7 @@ Source text is often dirty: stray padding, inconsistent casing, or a "value" tha
 Four controls are available:
 
 - **Treat whitespace as no value**<br /> A whitespace-only or empty value is treated as no value: it does not flow, and clears any existing Metaverse value. This is **on by default**, so a stray space no longer masquerades as a real value. Switch it off where whitespace is genuinely meaningful.
-- **Trim leading and trailing whitespace**<br /> Removes surrounding whitespace, so `" John "` becomes `"John"`.
+- **Trim leading and trailing whitespace**<br /> Removes surrounding whitespace, so `··John··` becomes `John` (each `·` represents a space).
 - **Collapse internal whitespace**<br /> Reduces runs of consecutive whitespace inside the value to a single space, so multiple spaces or tabs between words collapse to one. For example, `John···Smith` becomes `John Smith` (each `·` represents a space).
 - **Case normalisation**<br /> Converts the value to `Upper`, `Lower`, or `Title` case, or leaves it unchanged (`None`). Useful for folding usernames or email addresses to a consistent case.
 
